@@ -57,4 +57,22 @@ mod tests {
         );
         assert!(parse(b"JASC-PAL\n0100\n1\n256 0 0\n").is_err());
     }
+
+    #[test]
+    fn rejects_truncated_and_ambiguous_palettes() {
+        for data in [
+            &b""[..],
+            &b"JASC-PAL\n0001\n1\n1 2 3\n"[..],
+            &b"JASC-PAL\n0100\n"[..],
+            &b"JASC-PAL\n0100\nnope\n"[..],
+            &b"JASC-PAL\n0100\n0\n"[..],
+            &b"JASC-PAL\n0100\n1\n"[..],
+            &b"JASC-PAL\n0100\n1\n1 2\n"[..],
+            &b"JASC-PAL\n0100\n1\n1 x 3\n"[..],
+            &b"JASC-PAL\n0100\n1\n1 2 3\n4 5 6\n"[..],
+            &b"JASC-PAL\n0100\n1\n\xFF 2 3\n"[..],
+        ] {
+            assert!(parse(data).is_err(), "accepted malformed palette: {data:?}");
+        }
+    }
 }

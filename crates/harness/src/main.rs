@@ -1,16 +1,28 @@
 mod architecture;
+mod coverage;
+mod dev;
 mod e2e;
+mod fuzz;
 mod gates;
+mod mutation;
 mod perf;
+mod perf_hardware;
 mod perf_micro;
+mod perf_pressure;
 mod perf_size;
+mod perf_soak;
+mod perf_stress;
+mod perf_timing;
 mod policy;
 mod process;
 mod qa;
 mod qa_mcp;
 mod release;
+mod release_promotion;
+mod release_publish;
 mod release_stack;
 mod repo_policy;
+mod wasm_test;
 
 use clap::{Parser, Subcommand};
 use std::{
@@ -33,23 +45,51 @@ enum Command {
         command: AssetCommand,
     },
     Doctor,
+    Dev {
+        #[command(subcommand)]
+        command: DevCommand,
+    },
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    CoverageCheck {
+        file: Option<PathBuf>,
+    },
     Impact {
         #[arg(long)]
         base: Option<String>,
         paths: Vec<String>,
     },
+    CiSelect,
+    CiCheck,
     Fmt,
     FmtCheck,
     Lint,
     TestUnit,
+    TestWasm,
     TestE2e,
+    FuzzSmoke,
+    FuzzNightly,
+    MutationNightly,
     PerfSmoke,
     PerfCi,
     PerfFull,
+    PerfPressure,
+    PerfStress,
+    PerfTimingReport,
+    #[command(name = "perf-soak-10")]
+    PerfSoak10,
+    #[command(name = "perf-soak-30")]
+    PerfSoak30,
     PerfBaselinePropose,
+    PerfHardwareCheck {
+        #[arg(long, default_value = "reports/perf/hardware-environment.json")]
+        environment: PathBuf,
+        #[arg(long, default_value = "reports/perf/hardware-samples.json")]
+        samples: PathBuf,
+        #[arg(long, default_value = "baselines/perf/hardware.json")]
+        baseline: PathBuf,
+    },
     QaValidate {
         file: Option<PathBuf>,
     },
@@ -62,6 +102,12 @@ enum Command {
     HooksInstall,
     HooksCheck,
     ReleaseBuild,
+    ReleasePublish,
+    ReleaseSourceCheck,
+    ReleaseMainSourceCheck,
+    ReleaseVerifyPublished,
+    ReleaseRehearsePublished,
+    ReleaseSmokePublished,
     ReleaseVerify {
         manifest: Option<PathBuf>,
     },
@@ -70,6 +116,14 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+}
+
+#[derive(Subcommand)]
+enum DevCommand {
+    Start,
+    Down,
+    Status,
+    Logs,
 }
 
 #[derive(Subcommand)]
@@ -124,10 +178,21 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
             }
         }
+        Command::Dev { command } => match command {
+            DevCommand::Start => dev::start()?,
+            DevCommand::Down => dev::down()?,
+            DevCommand::Status => dev::status()?,
+            DevCommand::Logs => dev::logs()?,
+        },
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::CoverageCheck { file } => {
+            coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
+        }
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
+        Command::CiSelect => gates::ci_select()?,
+        Command::CiCheck => gates::ci_check()?,
         Command::Fmt => process::run("cargo", &["fmt", "--all"], Duration::from_secs(120))?,
         Command::FmtCheck => process::run(
             "cargo",
@@ -147,19 +212,46 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             ],
             Duration::from_secs(600),
         )?,
-        Command::TestUnit => process::run(
-            "cargo",
-            &["test", "--workspace", "--locked"],
-            Duration::from_secs(600),
-        )?,
+        Command::TestUnit => {
+            process::run(
+                "cargo",
+                &[
+                    "nextest",
+                    "run",
+                    "--workspace",
+                    "--locked",
+                    "--no-fail-fast",
+                ],
+                Duration::from_secs(600),
+            )?;
+            process::run(
+                "cargo",
+                &["test", "--workspace", "--doc", "--locked"],
+                Duration::from_secs(600),
+            )?;
+        }
+        Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
+        Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
+        Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
+        Command::MutationNightly => mutation::run()?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,
+        Command::PerfPressure => perf_pressure::run()?,
+        Command::PerfStress => perf_stress::run()?,
+        Command::PerfTimingReport => perf_timing::report()?,
+        Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
+        Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {
             perf_micro::propose()?;
             perf_size::propose()?;
         }
+        Command::PerfHardwareCheck {
+            environment,
+            samples,
+            baseline,
+        } => perf_hardware::check(&environment, &samples, &baseline)?,
         Command::QaValidate { file } => {
             qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
         }
@@ -210,6 +302,12 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Command::ReleaseBuild => release::build()?,
+        Command::ReleasePublish => release_publish::publish()?,
+        Command::ReleaseSourceCheck => release_promotion::source()?,
+        Command::ReleaseMainSourceCheck => release_promotion::main_source()?,
+        Command::ReleaseVerifyPublished => release_promotion::verify()?,
+        Command::ReleaseRehearsePublished => release_promotion::rehearse()?,
+        Command::ReleaseSmokePublished => release_promotion::smoke()?,
         Command::ReleaseVerify { manifest } => {
             let manifest = manifest
                 .or_else(|| std::env::var_os("AOE_RELEASE_MANIFEST").map(PathBuf::from))

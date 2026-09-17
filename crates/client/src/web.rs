@@ -12,6 +12,9 @@ use web_sys::{
     RequestInit, Response, WebSocket, WheelEvent,
 };
 
+mod metrics;
+use metrics::{Metrics, now_ms, sample};
+
 struct Client {
     document: Document,
     canvas: HtmlCanvasElement,
@@ -31,6 +34,8 @@ struct Client {
     status: String,
     paused: bool,
     counters: Counters,
+    metrics: Metrics,
+    first_visible_ms: Option<f64>,
 }
 
 fn set_text(document: &Document, id: &str, value: &str) {
@@ -113,6 +118,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
 
     let received = shared.clone();
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
+        let started = now_ms();
         let bytes = Uint8Array::new(&event.data()).to_vec();
         let mut client = received.borrow_mut();
         if client.connection_id != connection_id {
@@ -171,6 +177,10 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             _ => client.status = "protocol error".to_owned(),
         }
+        sample(&mut client.metrics.decode_update_ms, now_ms() - started);
+        client.metrics.messages += 1;
+        client.metrics.maximum_resident =
+            client.metrics.maximum_resident.max(client.entities.len());
     });
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     onmessage.forget();
@@ -278,9 +288,14 @@ async fn change_scenario(name: &str) -> Result<(), JsValue> {
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut(f64)>>));
     let next = callback.clone();
-    *callback.borrow_mut() = Some(Closure::new(move |_time: f64| {
+    *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
+        let started = now_ms();
         let mut client = shared.borrow_mut();
         if !client.paused {
+            if let Some(previous) = client.metrics.last_frame_time {
+                sample(&mut client.metrics.frame_intervals_ms, time - previous);
+            }
+            client.metrics.last_frame_time = Some(time);
             let width = client.canvas.client_width().max(1) as u32;
             let height = client.canvas.client_height().max(1) as u32;
             if client.canvas.width() != width {
@@ -297,6 +312,15 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 Ok(counters) => client.counters = counters,
                 Err(error) => client.status = error,
             }
+            client.metrics.frames += 1;
+            if client.counters.visible > 0 {
+                client.first_visible_ms.get_or_insert_with(now_ms);
+            }
+            client.metrics.maximum_visible =
+                client.metrics.maximum_visible.max(client.counters.visible);
+            sample(&mut client.metrics.cpu_submission_ms, now_ms() - started);
+        } else {
+            client.metrics.last_frame_time = None;
         }
         let diagnostics = format!(
             "build: {} | scenario: {} | adapter: {} | connection: {} | tick: {} | camera: {},{} | zoom: {:.2} | resident: {} / {} | visible: {} | chunks: {} | draws: {} | GPU buffer: {} B | {}{}",
@@ -343,6 +367,20 @@ async fn initialize() -> Result<(), JsValue> {
         .await
         .map_err(|error| JsValue::from_str(&error))?;
     let adapter = renderer.adapter_label().to_owned();
+    let query = web_sys::UrlSearchParams::new_with_str(&window.location().search()?)?;
+    if let Some(name) = query.get("scenario") {
+        if ["smoke", "target-distributed", "target-hotspot"].contains(&name.as_str()) {
+            if let Err(error) = change_scenario(&name).await {
+                set_text(
+                    &document,
+                    "unsupported",
+                    &format!("Scenario configuration failed: {error:?}"),
+                );
+            }
+        } else {
+            set_text(&document, "unsupported", "Unknown scenario configuration");
+        }
+    }
     let shared = Rc::new(RefCell::new(Client {
         document,
         canvas,
@@ -366,7 +404,10 @@ async fn initialize() -> Result<(), JsValue> {
         status: "starting".to_owned(),
         paused: false,
         counters: Counters::default(),
+        metrics: Metrics::default(),
+        first_visible_ms: None,
     }));
+    metrics::set_active(&shared);
     install_controls(shared.clone())?;
     connect(shared.clone())?;
     animate(shared)?;

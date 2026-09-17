@@ -15,7 +15,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      manifest: ${{ steps.manifest.outputs.manifest }}
+      native_coverage: ${{ steps.manifest.outputs.native_coverage }}
+      browser: ${{ steps.manifest.outputs.browser }}
+      target_performance: ${{ steps.manifest.outputs.target_performance }}
+      fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - run: make tools
+      - id: manifest
+        env:
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: make ci-select
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ci-selection
+          path: reports/gates/selection.json
+          retention-days: 7
+
   static:
+    needs: select
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -23,29 +48,60 @@ jobs:
       - run: make bootstrap
       - run: make preflight
 
+  native-coverage:
+    needs: select
+    if: ${{ needs.select.outputs.native_coverage == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: make coverage
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-coverage-report
+          path: reports/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
   browser:
+    needs: select
+    if: ${{ needs.select.outputs.browser == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: make bootstrap
       - run: make browser-check
+      - run: make test-wasm
       - run: make test-e2e
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: browser-diagnostics
-          path: browser/test-results/
+          path: |
+            browser/test-results/
+            reports/perf/browser.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wasm-browser-report
+          path: reports/wasm/
           retention-days: 7
           if-no-files-found: ignore
 
   target-performance:
+    needs: select
+    if: ${{ needs.select.outputs.target_performance == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: make bootstrap
       - run: make perf-ci
+      - run: make perf-pressure
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -54,15 +110,300 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  fuzz-smoke:
+    needs: select
+    if: ${{ needs.select.outputs.fuzz_smoke == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: make fuzz-smoke
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: parser-fuzz-smoke
+          path: |
+            reports/fuzz/
+            fuzz/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+
   required:
     if: always()
-    needs: [static, browser, target-performance]
+    needs: [select, static, native-coverage, browser, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
-      - name: Require all selected jobs
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - run: make tools
+      - name: Validate selection and selected jobs
         env:
-          STATIC: ${{ needs.static.result }}
-          BROWSER: ${{ needs.browser.result }}
-          PERFORMANCE: ${{ needs.target-performance.result }}
-        run: test "$STATIC" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
+          AOE_JOB_RESULTS_JSON: >-
+            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
+        run: make ci-check
+
+  dev-artifacts:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: make bootstrap
+      - run: make coverage
+      - run: make browser-check
+      - run: make test-wasm
+      - run: make test-e2e
+      - run: make perf-ci
+      - run: make perf-full
+      - run: make release-build
+      - run: make release-verify
+        env:
+          AOE_RELEASE_MANIFEST: reports/release/${{ github.sha }}/manifest.json
+      - name: Server SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
+        with:
+          image: aoeworld/server:${{ github.sha }}
+          format: spdx-json
+          syft-version: v1.52.0
+          output-file: reports/release/${{ github.sha }}/server.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Browser SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
+        with:
+          image: aoeworld/browser:${{ github.sha }}
+          format: spdx-json
+          syft-version: v1.52.0
+          output-file: reports/release/${{ github.sha }}/browser.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Static bundle SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
+        with:
+          path: reports/release/${{ github.sha }}/bundle
+          format: spdx-json
+          syft-version: v1.52.0
+          output-file: reports/release/${{ github.sha }}/bundle.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - id: published
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-publish
+      - name: Log in for registry attestations
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Attest server provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.published.outputs.server_name }}
+          subject-digest: ${{ steps.published.outputs.server_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest browser provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.published.outputs.browser_name }}
+          subject-digest: ${{ steps.published.outputs.browser_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest server SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.published.outputs.server_name }}
+          subject-digest: ${{ steps.published.outputs.server_digest }}
+          sbom-path: ${{ steps.published.outputs.release_dir }}/server.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest browser SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.published.outputs.browser_name }}
+          subject-digest: ${{ steps.published.outputs.browser_digest }}
+          sbom-path: ${{ steps.published.outputs.release_dir }}/browser.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest static bundle
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.published.outputs.release_dir }}/bundle.tar
+          sbom-path: ${{ steps.published.outputs.release_dir }}/bundle.spdx.json
+      - name: Attest published manifest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.published.outputs.release_dir }}/published.json
+      - name: Publish verified dev build assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "build-${GITHUB_SHA}"
+          "reports/release/${GITHUB_SHA}/published.json"
+          "reports/release/${GITHUB_SHA}/bundle.tar"
+          "reports/release/${GITHUB_SHA}/checksums.txt"
+          "reports/release/${GITHUB_SHA}/server.spdx.json"
+          "reports/release/${GITHUB_SHA}/browser.spdx.json"
+          "reports/release/${GITHUB_SHA}/bundle.spdx.json"
+          "reports/release/${GITHUB_SHA}/e2e.json"
+          "reports/release/${GITHUB_SHA}/perf.json"
+          --target "${GITHUB_SHA}"
+          --title "Verified dev build ${GITHUB_SHA}"
+          --notes "Immutable AoeWorld Harness Lab build from verified dev source."
+          --prerelease
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dev-release-diagnostics
+          path: reports/release/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  release-candidate:
+    if: >-
+      ${{ github.event_name == 'pull_request' && github.base_ref == 'main' &&
+          github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - id: source
+        env:
+          AOE_RELEASE_BRANCH: ${{ github.head_ref }}
+        run: make release-source-check
+      - name: Download the verified dev build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download "build-${{ steps.source.outputs.source_sha }}"
+          --dir "reports/release/${{ steps.source.outputs.source_sha }}"
+      - id: verified
+        env:
+          AOE_RELEASE_BRANCH: ${{ github.head_ref }}
+          AOE_RELEASE_SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-verify-published
+      - name: Authenticate for attestation verification
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Verify image and file OIDC attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/published.json" --repo "$GITHUB_REPOSITORY"
+      - id: previous
+        name: Download previous promoted release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download --pattern '*.json' --pattern '*.tar'
+          --pattern '*.txt' --dir reports/release/previous
+      - name: Verify previous release attestation
+        if: steps.previous.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh attestation verify reports/release/previous/published.json
+          --repo "$GITHUB_REPOSITORY"
+      - name: Rehearse exact digest promotion and rollback
+        if: steps.previous.outcome == 'success'
+        env:
+          AOE_RELEASE_BRANCH: ${{ github.head_ref }}
+          AOE_PREVIOUS_MANIFEST: reports/release/previous/published.json
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-rehearse-published
+      - name: Rehearse first published candidate
+        if: steps.previous.outcome != 'success'
+        env:
+          AOE_RELEASE_BRANCH: ${{ github.head_ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-smoke-published
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-candidate-diagnostics
+          path: reports/release/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  main-promotion:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: source
+        run: make release-main-source-check
+      - name: Download existing verified dev build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download "build-${{ steps.source.outputs.source_sha }}"
+          --dir "reports/release/${{ steps.source.outputs.source_sha }}"
+      - id: verified
+        env:
+          AOE_RELEASE_BRANCH: release/${{ steps.source.outputs.source_sha }}
+          AOE_RELEASE_SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-verify-published
+      - name: Authenticate for attestation verification
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Verify existing build attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/published.json" --repo "$GITHUB_REPOSITORY"
+      - name: Promote existing digests without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release edit "build-${{ steps.source.outputs.source_sha }}"
+          --prerelease=false --latest
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: main-promotion-diagnostics
+          path: reports/release/
+          retention-days: 30
+          if-no-files-found: ignore

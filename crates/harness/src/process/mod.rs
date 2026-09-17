@@ -258,8 +258,31 @@ pub fn run_cancellable(
     cancellation: &Cancellation,
 ) -> Result<(), ProcessError> {
     let mut command = Command::new(program);
+    command.args(args.iter().map(OsStr::new));
+    supervise(program, command, deadline, cancellation)
+}
+
+pub fn run_with_env(
+    program: &str,
+    args: &[&str],
+    environment: &[(&str, &str)],
+    deadline: Duration,
+) -> Result<(), ProcessError> {
+    let mut command = Command::new(program);
+    command.args(args.iter().map(OsStr::new));
+    for (name, value) in environment {
+        command.env(name, value);
+    }
+    supervise(program, command, deadline, &Cancellation::default())
+}
+
+fn supervise(
+    program: &str,
+    mut command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+) -> Result<(), ProcessError> {
     command
-        .args(args.iter().map(OsStr::new))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -426,6 +449,17 @@ mod tests {
             run("sleep", &["2"], Duration::from_millis(10)),
             Err(ProcessError::Deadline { .. })
         ));
+    }
+
+    #[test]
+    fn supervised_child_receives_explicit_environment() {
+        run_with_env(
+            "sh",
+            &["-c", "test \"$AOE_TEST_VALUE\" = expected"],
+            &[("AOE_TEST_VALUE", "expected")],
+            Duration::from_secs(2),
+        )
+        .expect("child environment");
     }
 
     #[test]

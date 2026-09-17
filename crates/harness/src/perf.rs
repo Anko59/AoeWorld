@@ -2,7 +2,8 @@
 use aoe_core::Region;
 use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_client};
 use aoe_scenario::{
-    SMOKE, SPARSE_LARGE, SPARSE_SMALL, Scenario, TARGET_DISTRIBUTED, TARGET_HOTSPOT,
+    POPULATION_8K, POPULATION_32K, POPULATION_64K, POPULATION_128K, SMOKE, SPARSE_LARGE,
+    SPARSE_SMALL, Scenario, TARGET_DISTRIBUTED, TARGET_HOTSPOT,
 };
 use aoe_server::{AppState, Config, app};
 use aoe_simulation::World;
@@ -40,8 +41,6 @@ pub fn compare(metric: &str, observed: Option<u64>, baseline: Option<u64>) -> Co
     let verdict = match (observed, baseline) {
         (None, _) => Verdict::Inconclusive,
         (Some(_), None) => Verdict::Unbaselined,
-        (Some(0), Some(0)) => Verdict::Pass,
-        (Some(_), Some(0)) => Verdict::Regression,
         (Some(actual), Some(reference))
             if u128::from(actual) * 100 > u128::from(reference) * 105 =>
         {
@@ -121,7 +120,7 @@ fn rustc_version() -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-fn region(scenario: Scenario, client: u16) -> Region {
+pub(crate) fn region(scenario: Scenario, client: u16) -> Region {
     if scenario.hotspot_entities > 0 && client == 0 {
         return Region {
             x: 0,
@@ -171,7 +170,7 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
     })
 }
 
-async fn receive(
+pub(crate) async fn receive(
     socket: &mut tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
@@ -185,7 +184,7 @@ async fn receive(
     Ok((decode_server(&bytes)?, bytes.len()))
 }
 
-async fn send(
+pub(crate) async fn send(
     socket: &mut tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
@@ -198,12 +197,19 @@ async fn send(
 }
 
 #[derive(Default)]
-struct ClientResult {
-    snapshots: u16,
-    deltas: u64,
+pub(crate) struct ClientResult {
+    pub(crate) snapshots: u16,
+    pub(crate) deltas: u64,
     replicated: u64,
-    bytes: u64,
+    pub(crate) bytes: u64,
     visible: usize,
+}
+
+fn initial_client_result(handshake_bytes: usize) -> ClientResult {
+    ClientResult {
+        bytes: handshake_bytes as u64,
+        ..Default::default()
+    }
 }
 
 async fn client(
@@ -227,10 +233,7 @@ async fn client(
     ) {
         return Err("handshake mismatch".into());
     }
-    let mut result = ClientResult {
-        bytes: size as u64,
-        ..Default::default()
-    };
+    let mut result = initial_client_result(size);
     send(
         &mut socket,
         ClientMessage::Subscribe {
@@ -265,7 +268,7 @@ async fn client(
     Ok(result)
 }
 
-async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn Error>> {
+pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let config = Config {
@@ -300,6 +303,10 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             SMOKE,
             TARGET_DISTRIBUTED,
             TARGET_HOTSPOT,
+            POPULATION_8K,
+            POPULATION_32K,
+            POPULATION_64K,
+            POPULATION_128K,
             SPARSE_SMALL,
             SPARSE_LARGE,
         ],
@@ -356,8 +363,14 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
         workloads.push(result);
     }
     if mode == "full" {
-        let small = &workloads[3];
-        let large = &workloads[4];
+        let small = workloads
+            .iter()
+            .find(|result| result.scenario == "sparse-small")
+            .ok_or("sparse-small workload missing")?;
+        let large = workloads
+            .iter()
+            .find(|result| result.scenario == "sparse-large")
+            .ok_or("sparse-large workload missing")?;
         if small.loaded_chunks != large.loaded_chunks
             || small.query_visited_chunks != large.query_visited_chunks
             || small.query_candidates != large.query_candidates
@@ -452,6 +465,7 @@ mod tests {
 
     #[test]
     fn comparator_rejects_missing_and_regressed_samples() {
+        assert_eq!(initial_client_result(37).bytes, 37);
         assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);
         assert_eq!(compare("x", Some(100), None).verdict, Verdict::Unbaselined);
         assert_eq!(compare("x", Some(105), Some(100)).verdict, Verdict::Pass);

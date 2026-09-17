@@ -29,6 +29,13 @@ The budgets are **fast: 15 minutes**, **full: 45 minutes**, and **extended:
 5. Invalid scenario or configuration feedback.
 6. Unsupported browser capability feedback.
 
+For the last two journeys, `open_session` accepts the bounded options
+`configuration: "invalid-scenario"` and `capability: "webgpu-disabled"`.
+The first loads a visible invalid URL scenario and the second disables WebGPU
+only in that isolated browser context. Browser sessions run under Xvfb with
+Vulkan SwiftShader so screenshots capture the WebGPU canvas. Each screenshot
+returns the count of visible sprite-colored pixels in the canvas.
+
 Use `record_journey` with an existing evidence file for each completed journey.
 Use `record_finding` for any issue, then `finish` with `FINDINGS`. If access or
 time prevents completion, finish with `BLOCKED`. `PASS` requires all journeys

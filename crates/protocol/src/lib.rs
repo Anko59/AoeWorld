@@ -135,18 +135,7 @@ pub fn encode_server(message: &ServerMessage) -> Result<Vec<u8>, Error> {
 pub fn decode_server(bytes: &[u8]) -> Result<ServerMessage, Error> {
     check_size(bytes)?;
     // This early byte limit bounds the largest allocation Postcard can request.
-    let message: ServerMessage = postcard::from_bytes(bytes)?;
-    match &message {
-        ServerMessage::Snapshot { entities, .. } if entities.len() > MAX_ENTITIES => {
-            Err(Error::TooManyEntities)
-        }
-        ServerMessage::Delta {
-            upserts, removals, ..
-        } if upserts.len() > MAX_ENTITIES || removals.len() > MAX_ENTITIES => {
-            Err(Error::TooManyEntities)
-        }
-        _ => Ok(message),
-    }
+    Ok(postcard::from_bytes(bytes)?)
 }
 
 #[cfg(test)]
@@ -205,5 +194,86 @@ mod tests {
         let position = bytes.len() - 3;
         bytes.splice(position..position + 1, [0xff, 0xff, 0xff, 0xff, 0x0f]);
         assert!(decode_server(&bytes).is_err());
+    }
+
+    #[test]
+    fn enforces_wire_and_collection_limits_for_both_directions() {
+        assert!(matches!(decode_client(&[255]), Err(Error::Invalid(_))));
+        assert!(matches!(
+            decode_server(&[0; MAX_MESSAGE + 1]),
+            Err(Error::TooLarge)
+        ));
+        let region = Region {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        };
+        let entity = EntityState {
+            id: EntityId(1),
+            player: PlayerId(1),
+            position: Position { x: 0, y: 0 },
+        };
+        let too_many = vec![entity; MAX_ENTITIES + 1];
+        assert!(matches!(
+            encode_server(&ServerMessage::Snapshot {
+                tick: Tick(0),
+                region,
+                entities: too_many.clone(),
+                loaded_chunks: 0,
+                total_entities: 0,
+            }),
+            Err(Error::TooManyEntities)
+        ));
+        assert!(matches!(
+            encode_server(&ServerMessage::Delta {
+                tick: Tick(0),
+                upserts: too_many,
+                removals: Vec::new(),
+            }),
+            Err(Error::TooManyEntities)
+        ));
+        assert!(matches!(
+            encode_server(&ServerMessage::Delta {
+                tick: Tick(0),
+                upserts: Vec::new(),
+                removals: vec![EntityId(1); MAX_ENTITIES + 1],
+            }),
+            Err(Error::TooManyEntities)
+        ));
+    }
+
+    #[test]
+    fn bounded_collection_handles_advertised_and_streamed_lengths() {
+        use serde::de::value::{Error as ValueError, SeqDeserializer, U8Deserializer};
+
+        let advertised =
+            SeqDeserializer::<_, ValueError>::new(std::iter::repeat_n(1u8, MAX_ENTITIES + 1));
+        assert!(bounded_vec::<_, u8>(advertised).is_err());
+
+        let mut remaining = MAX_ENTITIES + 1;
+        let unknown_length = std::iter::from_fn(move || {
+            if remaining == 0 {
+                None
+            } else {
+                remaining -= 1;
+                Some(1u8)
+            }
+        });
+        assert!(
+            bounded_vec::<_, u8>(SeqDeserializer::<_, ValueError>::new(unknown_length)).is_err()
+        );
+
+        let exactly_limit =
+            SeqDeserializer::<_, ValueError>::new(std::iter::repeat_n(1u8, MAX_ENTITIES));
+        assert_eq!(
+            bounded_vec::<_, u8>(exactly_limit)
+                .expect("exactly at limit")
+                .len(),
+            MAX_ENTITIES
+        );
+
+        let wrong_type = bounded_vec::<_, u8>(U8Deserializer::<ValueError>::new(1));
+        assert!(wrong_type.is_err());
     }
 }
