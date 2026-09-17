@@ -15,6 +15,12 @@ They check every cycle's snapshots and deltas, report cumulative encoded
 traffic and retained process RSS, and fail if retained RSS exceeds 1 GiB.
 Nightly and weekly workflows dispatch the respective durations after the
 workflow reaches the default branch.
+`make perf-stress` starts the 256,000-entity, 128-client beyond-target
+scenario. It requires 127 subscribed clients to receive snapshots and deltas,
+and the 20,000-entity hotspot client to receive an explicit protocol-limit
+error. This reports bounded overload behavior; it is not a beyond-target
+timing or rendering pass. The weekly workflow runs this scenario after it
+reaches the default branch.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot

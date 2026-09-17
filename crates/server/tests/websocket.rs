@@ -1,6 +1,6 @@
 use aoe_core::Region;
 use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_client};
-use aoe_scenario::SMOKE;
+use aoe_scenario::{BEYOND_TARGET, SMOKE, Scenario};
 use aoe_server::{AppState, Config, app};
 use futures_util::{SinkExt, StreamExt};
 use std::{
@@ -13,13 +13,13 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
-async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
+async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let state = AppState::new(
         &Config {
             bind: address,
-            scenario: SMOKE,
+            scenario,
             tick_hz: 20,
         },
         "test-build",
@@ -29,6 +29,10 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
         axum::serve(listener, app(state)).await.unwrap();
     });
     (address, server, ticker)
+}
+
+async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
+    setup_scenario(SMOKE).await
 }
 
 async fn receive(socket: &mut Socket) -> ServerMessage {
@@ -182,6 +186,31 @@ async fn stale_version_and_invalid_region_are_rejected() {
     assert!(matches!(
         receive(&mut invalid).await,
         ServerMessage::Error { code: 400, .. }
+    ));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test]
+async fn beyond_target_hotspot_reports_explicit_protocol_overload() {
+    let (address, server, ticker) = setup_scenario(BEYOND_TARGET).await;
+    let mut client = open(address).await;
+    send(
+        &mut client,
+        ClientMessage::Subscribe {
+            region: Region {
+                x: 0,
+                y: 0,
+                width: 128,
+                height: 128,
+            },
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut client).await,
+        ServerMessage::Error { code: 413, message }
+            if message.contains("protocol entity limit")
     ));
     server.abort();
     ticker.abort();

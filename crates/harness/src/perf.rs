@@ -122,7 +122,7 @@ fn rustc_version() -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-fn region(scenario: Scenario, client: u16) -> Region {
+pub(crate) fn region(scenario: Scenario, client: u16) -> Region {
     if scenario.hotspot_entities > 0 && client == 0 {
         return Region {
             x: 0,
@@ -172,7 +172,7 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
     })
 }
 
-async fn receive(
+pub(crate) async fn receive(
     socket: &mut tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
@@ -186,7 +186,7 @@ async fn receive(
     Ok((decode_server(&bytes)?, bytes.len()))
 }
 
-async fn send(
+pub(crate) async fn send(
     socket: &mut tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,

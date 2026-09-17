@@ -4,7 +4,7 @@ pub use config::Config;
 
 use aoe_core::{EntityId, Region, Tick};
 use aoe_protocol::{
-    ClientMessage, EntityState, ServerMessage, VERSION, decode_client, encode_server,
+    ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
 use aoe_simulation::{Entity, World};
 use axum::{
@@ -193,6 +193,16 @@ async fn snapshot(
     let world = state.world.read().await;
     let tick = world.tick();
     let entities = states(world.query(region));
+    if entities.len() > MAX_ENTITIES {
+        drop(world);
+        error(
+            socket,
+            413,
+            "subscribed region exceeds protocol entity limit",
+        )
+        .await;
+        return None;
+    }
     let response = ServerMessage::Snapshot {
         tick,
         region,
@@ -275,6 +285,10 @@ async fn client(mut socket: WebSocket, state: AppState) {
                 let tick = world.tick();
                 let next = states(world.query(requested));
                 drop(world);
+                if next.len() > MAX_ENTITIES {
+                    error(&mut socket, 413, "subscribed region exceeds protocol entity limit").await;
+                    break;
+                }
                 let upserts = next.iter().filter_map(|(id, value)| (previous.get(id) != Some(value)).then_some(*value)).collect();
                 let removals = previous.keys().filter(|id| !next.contains_key(id)).copied().collect();
                 if !send(&mut socket, ServerMessage::Delta { tick, upserts, removals }).await { break; }

@@ -31,3 +31,22 @@ jobs:
             reports/perf/soak-30.md
           retention-days: 30
           if-no-files-found: ignore
+
+  beyond-target-stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make bootstrap
+      - run: make perf-stress
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: weekly-beyond-target-stress
+          path: |
+            reports/perf/stress.json
+            reports/perf/stress.md
+          retention-days: 30
+          if-no-files-found: ignore
