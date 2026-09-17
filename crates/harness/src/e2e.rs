@@ -4,6 +4,8 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     process::{Child, Command, Stdio},
+    sync::mpsc,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -108,7 +110,36 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "test:e2e".to_owned(),
     ];
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    process::run("docker", &refs, Duration::from_secs(180))?;
+    let cancellation = process::Cancellation::default();
+    thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
+        let worker_cancellation = cancellation.clone();
+        let (sender, receiver) = mpsc::channel();
+        scope.spawn(move || {
+            let result = process::run_cancellable(
+                "docker",
+                &refs,
+                Duration::from_secs(180),
+                &worker_cancellation,
+            );
+            let _ = sender.send(result);
+        });
+        loop {
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(result) => return result.map_err(Into::into),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("browser test worker disconnected".into());
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if let Some(status) = server.0.try_wait()? {
+                        cancellation.cancel();
+                        return Err(
+                            format!("test server exited during browser run: {status}").into()
+                        );
+                    }
+                }
+            }
+        }
+    })?;
     let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if !revision.status.success() {
         return Err("cannot identify E2E source revision".into());
