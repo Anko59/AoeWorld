@@ -24,5 +24,7 @@ Local image IDs are content hashes on this Docker host; they are not published
 registry digests. Registry publication, SBOMs, GitHub OIDC signing, provenance,
 release branches, and promotion to `main` still require implementation. The
 initial bootstrap commit on `main` was the one-time exception to the intended
-PR flow. Protected `dev` and `main` settings will be enabled after branch
-policy and required checks are verified.
+PR flow. `make repo-policy-check` audits the GitHub default branch, squash-only
+merges, strict `required` check, pull-request requirement, signed commits, and
+force-push/deletion restrictions on `dev` and `main`. Pass `GITHUB_TOKEN` for
+authenticated API access when needed.

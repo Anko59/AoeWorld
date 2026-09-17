@@ -10,6 +10,7 @@ mod qa;
 mod qa_mcp;
 mod release;
 mod release_stack;
+mod repo_policy;
 
 use clap::{Parser, Subcommand};
 use std::{
@@ -68,6 +69,7 @@ enum Command {
         candidate: Option<PathBuf>,
         previous: Option<PathBuf>,
     },
+    RepoPolicyCheck,
 }
 
 #[derive(Subcommand)]
@@ -226,6 +228,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("previous release required")?;
             release::rehearse(&candidate, &previous)?;
         }
+        Command::RepoPolicyCheck => repo_policy::check()?,
     }
     Ok(())
 }

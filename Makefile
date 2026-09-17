@@ -9,7 +9,7 @@ ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
 DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -v $(ROOT):$(ROOT) -w $(ROOT) $(TOOL_IMAGE)
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -v $(ROOT):$(ROOT) -w $(ROOT)/browser $(BROWSER_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools browser-tools orchestrator-tools browser-deps browser-check test-e2e doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint test-unit pre-commit preflight build build-wasm dev assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse
+.PHONY: help bootstrap tools analysis-tools browser-tools orchestrator-tools browser-deps browser-check test-e2e doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint test-unit pre-commit preflight build build-wasm dev assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -42,6 +42,7 @@ help:
 	@echo '  make release-build  Build local runtime images from clean dev with evidence'
 	@echo '  AOE_RELEASE_MANIFEST=... make release-verify  Verify a local release'
 	@echo '  AOE_RELEASE_CANDIDATE=... AOE_RELEASE_PREVIOUS=... make release-rehearse'
+	@echo '  make repo-policy-check  Audit GitHub branch and merge settings'
 
 .cache/cargo:
 	@mkdir -p .cache/cargo
@@ -167,3 +168,6 @@ release-verify: orchestrator-tools
 
 release-rehearse: orchestrator-tools
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_CANDIDATE -e AOE_RELEASE_PREVIOUS -v $(ROOT):$(ROOT) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse
+
+repo-policy-check:
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN -v $(ROOT):$(ROOT) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check
