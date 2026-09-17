@@ -84,9 +84,12 @@ fn samples(path: &Path) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
     Ok(result)
 }
 
-fn observed_samples() -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
-    let mut observed = samples(Path::new("reports/perf/simulation.ndjson"))?;
-    for (name, value) in samples(Path::new("reports/perf/protocol.ndjson"))? {
+fn observed_samples_at(
+    simulation: &Path,
+    protocol: &Path,
+) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
+    let mut observed = samples(simulation)?;
+    for (name, value) in samples(protocol)? {
         if observed.insert(name, value).is_some() {
             return Err("duplicate cross-crate microbenchmark".into());
         }
@@ -94,12 +97,11 @@ fn observed_samples() -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
     Ok(observed)
 }
 
-pub fn propose() -> Result<(), Box<dyn Error>> {
-    let observed = observed_samples()?;
+fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Error>> {
     if observed.len() != 3 {
         return Err("initial proposal requires three benchmark cases".into());
     }
-    let proposal = Baseline {
+    Ok(Baseline {
         version: 1,
         toolchain: "rustc 1.93.1".into(),
         gungraun: "0.19.4".into(),
@@ -118,18 +120,30 @@ pub fn propose() -> Result<(), Box<dyn Error>> {
             .iter()
             .map(|(name, value)| (name.clone(), value.allocation_count))
             .collect(),
-    };
-    fs::create_dir_all("reports/perf")?;
-    fs::write(
-        "reports/perf/micro-proposal.json",
-        serde_json::to_vec_pretty(&proposal)?,
-    )?;
+    })
+}
+
+pub fn propose() -> Result<(), Box<dyn Error>> {
+    propose_at(
+        Path::new("reports/perf/simulation.ndjson"),
+        Path::new("reports/perf/protocol.ndjson"),
+        Path::new("reports/perf/micro-proposal.json"),
+    )
+}
+
+fn propose_at(simulation: &Path, protocol: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
+    let observed = observed_samples_at(simulation, protocol)?;
+    let proposal = proposal(&observed)?;
+    fs::create_dir_all(output.parent().ok_or("proposal has no parent")?)?;
+    fs::write(output, serde_json::to_vec_pretty(&proposal)?)?;
     println!("review reports/perf/micro-proposal.json; baseline was not changed");
     Ok(())
 }
 
-pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
-    let baseline: Baseline = serde_json::from_slice(&fs::read("baselines/perf/micro.json")?)?;
+fn compare_observed(
+    baseline: Baseline,
+    observed: BTreeMap<String, Metrics>,
+) -> Result<Vec<Comparison>, Box<dyn Error>> {
     if baseline.version != 1
         || baseline.toolchain != "rustc 1.93.1"
         || baseline.gungraun != "0.19.4"
@@ -139,7 +153,6 @@ pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
     {
         return Err("microbenchmark baseline identity is incompatible".into());
     }
-    let observed = observed_samples()?;
     let expected: Vec<_> = baseline.instructions.keys().collect();
     if expected != observed.keys().collect::<Vec<_>>()
         || expected != baseline.allocation_bytes.keys().collect::<Vec<_>>()
@@ -168,12 +181,146 @@ pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
     Ok(results)
 }
 
+pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
+    comparisons_at(
+        Path::new("baselines/perf/micro.json"),
+        Path::new("reports/perf/simulation.ndjson"),
+        Path::new("reports/perf/protocol.ndjson"),
+    )
+}
+
+fn comparisons_at(
+    baseline: &Path,
+    simulation: &Path,
+    protocol: &Path,
+) -> Result<Vec<Comparison>, Box<dyn Error>> {
+    let baseline: Baseline = serde_json::from_slice(&fs::read(baseline)?)?;
+    compare_observed(baseline, observed_samples_at(simulation, protocol)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::perf::Verdict;
+
+    fn line(name: &str, instructions: u64) -> String {
+        serde_json::json!({
+            "version": "6",
+            "module_path": name,
+            "profiles": [
+                {
+                    "tool": "Callgrind",
+                    "summaries": {"total": {"summary": {
+                        "Callgrind": {"Ir": {"metrics": {"Both": [{"Int": instructions}]}}}
+                    }}}
+                },
+                {
+                    "tool": "DHAT",
+                    "summaries": {"total": {"summary": {
+                        "Dhat": {
+                            "TotalBytes": {"metrics": {"Both": [{"Int": 80}]}},
+                            "TotalBlocks": {"metrics": {"Both": [{"Int": 2}]}}
+                        }
+                    }}}
+                }
+            ]
+        })
+        .to_string()
+    }
 
     #[test]
     fn missing_samples_cannot_pass() {
         assert!(sample("{\"version\":\"6\",\"module_path\":\"x\"}").is_err());
+        assert!(
+            sample(&line("kernel", 100).replace("\"version\":\"6\"", "\"version\":\"5\"")).is_err()
+        );
+        let (name, counts) = sample(&line("kernel", 100)).expect("sample");
+        assert_eq!(name, "kernel");
+        assert_eq!(
+            (
+                counts.instructions,
+                counts.allocation_bytes,
+                counts.allocation_count
+            ),
+            (100, 80, 2)
+        );
+
+        let temp = tempfile::NamedTempFile::new().expect("file");
+        assert!(samples(temp.path()).is_err());
+        fs::write(
+            temp.path(),
+            format!("{}\n{}\n", line("same", 100), line("same", 100)),
+        )
+        .expect("samples");
+        assert!(samples(temp.path()).is_err());
+    }
+
+    #[test]
+    fn baseline_identity_case_set_and_regressions_are_checked() {
+        let mut observed = BTreeMap::new();
+        for name in ["a", "b", "c"] {
+            observed.insert(
+                name.to_owned(),
+                Metrics {
+                    instructions: 100,
+                    allocation_bytes: 80,
+                    allocation_count: 2,
+                },
+            );
+        }
+        assert!(proposal(&BTreeMap::new()).is_err());
+        let baseline = proposal(&observed).expect("proposal");
+        assert!(compare_observed(baseline, BTreeMap::new()).is_err());
+
+        let mut baseline = proposal(&observed).expect("proposal");
+        baseline.toolchain = "different".to_owned();
+        assert!(compare_observed(baseline, observed.clone()).is_err());
+
+        let baseline = proposal(&observed).expect("proposal");
+        observed.get_mut("a").expect("case").instructions = 106;
+        let results = compare_observed(baseline, observed).expect("comparison");
+        assert_eq!(results.len(), 9);
+        assert_eq!(results[0].verdict, Verdict::Regression);
+        assert!(
+            results[1..]
+                .iter()
+                .all(|item| item.verdict == Verdict::Pass)
+        );
+    }
+
+    #[test]
+    fn proposal_reads_both_suite_files_without_changing_baseline() {
+        let temp = tempfile::tempdir().expect("directory");
+        let simulation = temp.path().join("simulation.ndjson");
+        let protocol = temp.path().join("protocol.ndjson");
+        let baseline = temp.path().join("baseline.json");
+        let proposed = temp.path().join("proposal/micro.json");
+        fs::write(
+            &simulation,
+            format!("{}\n{}\n", line("a", 100), line("b", 100)),
+        )
+        .expect("simulation samples");
+        fs::write(&protocol, format!("{}\n", line("c", 100))).expect("protocol samples");
+        assert_eq!(
+            observed_samples_at(&simulation, &protocol)
+                .expect("samples")
+                .len(),
+            3
+        );
+        let original = proposal(&observed_samples_at(&simulation, &protocol).expect("samples"))
+            .expect("baseline");
+        let original_bytes = serde_json::to_vec(&original).expect("JSON");
+        fs::write(&baseline, &original_bytes).expect("baseline");
+        propose_at(&simulation, &protocol, &proposed).expect("proposal");
+        assert_eq!(fs::read(&baseline).expect("baseline"), original_bytes);
+        assert_eq!(
+            comparisons_at(&baseline, &simulation, &protocol)
+                .expect("comparison")
+                .len(),
+            9
+        );
+        assert!(proposed.is_file());
+        fs::write(&protocol, format!("{}\n", line("a", 100))).expect("duplicate");
+        assert!(observed_samples_at(&simulation, &protocol).is_err());
     }
 }

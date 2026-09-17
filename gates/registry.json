@@ -10,6 +10,7 @@
     {"id":"test-unit","command":"make test-unit","requires":["lint"],"select":"code","evidence":"native unit, integration, and doctest results"},
     {"id":"coverage","command":"make coverage","requires":["test-unit"],"select":"code","evidence":"LCOV production-line thresholds and JSON report"},
     {"id":"browser-check","command":"make browser-check","requires":[],"select":"browser","evidence":"TypeScript, ESLint, and Prettier results"},
+    {"id":"test-wasm","command":"make test-wasm","requires":["test-unit","browser-check"],"select":"browser","evidence":"wasm-bindgen-test in pinned Chromium and JSON report"},
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},
     {"id":"perf-smoke","command":"make perf-smoke","requires":["test-unit"],"select":"code","evidence":"versioned synthetic JSON report"},
     {"id":"perf-ci","command":"make perf-ci","requires":["perf-smoke"],"select":"performance","evidence":"target counts and baseline comparisons"}

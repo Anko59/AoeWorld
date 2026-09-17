@@ -5,7 +5,7 @@ use std::{
     error::Error,
     fs,
     io::{self, BufRead, BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     time::{Duration, Instant},
 };
@@ -30,13 +30,21 @@ struct Worker {
     name: String,
 }
 
+trait BrowserWorker {
+    fn call(&mut self, name: &str, args: &Value) -> Result<Value, Box<dyn Error>>;
+}
+
 impl Worker {
     fn start() -> Result<Self, Box<dyn Error>> {
-        let root = std::env::current_dir()?.canonicalize()?;
-        let name = format!("aoeworld-qa-{}", std::process::id());
         let base =
             std::env::var("AOE_QA_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
-        let parsed = url::Url::parse(&base)?;
+        Self::start_at(&base)
+    }
+
+    fn start_at(base: &str) -> Result<Self, Box<dyn Error>> {
+        let root = std::env::current_dir()?.canonicalize()?;
+        let name = format!("aoeworld-qa-{}", std::process::id());
+        let parsed = url::Url::parse(base)?;
         if parsed.scheme() != "http"
             || !matches!(parsed.host_str(), Some("127.0.0.1" | "localhost"))
             || parsed.port().is_none()
@@ -91,24 +99,35 @@ impl Worker {
             name,
         })
     }
+}
 
+impl BrowserWorker for Worker {
     fn call(&mut self, name: &str, args: &Value) -> Result<Value, Box<dyn Error>> {
-        writeln!(self.input, "{}", json!({"name": name, "args": args}))?;
-        self.input.flush()?;
-        let mut line = String::new();
-        if self.output.read_line(&mut line)? == 0 {
-            return Err("QA worker closed".into());
-        }
-        let result: Value = serde_json::from_str(&line)?;
-        if result["ok"] != true {
-            return Err(result["error"]
-                .as_str()
-                .unwrap_or("QA worker failed")
-                .to_owned()
-                .into());
-        }
-        Ok(result["result"].clone())
+        exchange(&mut self.input, &mut self.output, name, args)
     }
+}
+
+fn exchange<W: Write, R: BufRead>(
+    input: &mut W,
+    output: &mut R,
+    name: &str,
+    args: &Value,
+) -> Result<Value, Box<dyn Error>> {
+    writeln!(input, "{}", json!({"name": name, "args": args}))?;
+    input.flush()?;
+    let mut line = String::new();
+    if output.read_line(&mut line)? == 0 {
+        return Err("QA worker closed".into());
+    }
+    let result: Value = serde_json::from_str(&line)?;
+    if result["ok"] != true {
+        return Err(result["error"]
+            .as_str()
+            .unwrap_or("QA worker failed")
+            .to_owned()
+            .into());
+    }
+    Ok(result["result"].clone())
 }
 
 impl Drop for Worker {
@@ -126,7 +145,8 @@ impl Drop for Worker {
 struct Server {
     start: Instant,
     budget: Duration,
-    worker: Option<Worker>,
+    worker: Option<Box<dyn BrowserWorker>>,
+    evidence_dir: PathBuf,
     report: Report,
 }
 
@@ -215,6 +235,10 @@ fn validate_action(name: &str, args: &Value) -> Result<(), String> {
 
 impl Server {
     fn new(budget: &str) -> Result<Self, Box<dyn Error>> {
+        Self::new_at(budget, PathBuf::from("reports/qa"))
+    }
+
+    fn new_at(budget: &str, evidence_dir: PathBuf) -> Result<Self, Box<dyn Error>> {
         let minutes = match budget {
             "fast" => 15,
             "full" => 45,
@@ -225,6 +249,7 @@ impl Server {
             start: Instant::now(),
             budget: Duration::from_secs(minutes * 60),
             worker: None,
+            evidence_dir,
             report: Report {
                 version: 1,
                 budget: budget.to_owned(),
@@ -244,7 +269,9 @@ impl Server {
         if BROWSER_ACTIONS.contains(&name) {
             validate_action(name, args)?;
             if self.worker.is_none() {
-                self.worker = Some(Worker::start().map_err(|error| error.to_string())?);
+                self.worker = Some(Box::new(
+                    Worker::start().map_err(|error| error.to_string())?,
+                ));
             }
             let result = self
                 .worker
@@ -265,7 +292,7 @@ impl Server {
                     return Err("unknown required journey".into());
                 }
                 let evidence = required(args, "evidence", 256)?;
-                qa::validate_evidence(PathBuf::from(evidence).as_path())?;
+                qa::validate_evidence_at(&self.evidence_dir, Path::new(evidence))?;
                 if self.report.journeys.iter().any(|item| item.name == journey) {
                     return Err("journey already recorded".into());
                 }
@@ -278,7 +305,7 @@ impl Server {
             }
             "record_finding" => {
                 let evidence = required(args, "evidence", 256)?;
-                qa::validate_evidence(PathBuf::from(evidence).as_path())?;
+                qa::validate_evidence_at(&self.evidence_dir, Path::new(evidence))?;
                 let finding = Finding {
                     title: required(args, "title", 100)?.to_owned(),
                     reproduction: required(args, "reproduction", 1000)?.to_owned(),
@@ -297,8 +324,8 @@ impl Server {
                     _ => return Err("invalid QA status".into()),
                 };
                 qa::validate(&self.report)?;
-                fs::create_dir_all("reports/qa").map_err(|error| error.to_string())?;
-                let path = PathBuf::from("reports/qa/session.json");
+                fs::create_dir_all(&self.evidence_dir).map_err(|error| error.to_string())?;
+                let path = self.evidence_dir.join("session.json");
                 fs::write(
                     &path,
                     serde_json::to_vec_pretty(&self.report).map_err(|error| error.to_string())?,
@@ -365,7 +392,15 @@ pub fn serve(budget: &str) -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(budget)?;
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
-    for line in stdin.lock().lines() {
+    serve_io(&mut server, stdin.lock(), &mut stdout)
+}
+
+fn serve_io<R: BufRead, W: Write>(
+    server: &mut Server,
+    input: R,
+    output: &mut W,
+) -> Result<(), Box<dyn Error>> {
+    for line in input.lines() {
         let line = line?;
         if line.len() > 1_048_576 {
             return Err("MCP request exceeds 1 MiB".into());
@@ -374,10 +409,10 @@ pub fn serve(budget: &str) -> Result<(), Box<dyn Error>> {
             Ok(value) => value,
             Err(_) => continue,
         };
-        if let Some(response) = handle(&mut server, &request) {
-            serde_json::to_writer(&mut stdout, &response)?;
-            stdout.write_all(b"\n")?;
-            stdout.flush()?;
+        if let Some(response) = handle(server, &request) {
+            serde_json::to_writer(&mut *output, &response)?;
+            output.write_all(b"\n")?;
+            output.flush()?;
         }
     }
     Ok(())

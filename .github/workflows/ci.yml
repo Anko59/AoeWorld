@@ -44,12 +44,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: make bootstrap
       - run: make browser-check
+      - run: make test-wasm
       - run: make test-e2e
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: browser-diagnostics
           path: browser/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wasm-browser-report
+          path: reports/wasm/
           retention-days: 7
           if-no-files-found: ignore
 

@@ -41,3 +41,29 @@ fn checkout_policies_and_synthetic_protocol_smoke_execute_through_cli() {
     invoke(&["release-rehearse"], false);
     invoke(&["qa-validate", "missing-report.json"], false);
 }
+
+#[test]
+fn hooks_install_and_check_in_disposable_git_repository() {
+    let directory = tempfile::tempdir().expect("temporary repository");
+    let init = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(directory.path())
+        .output()
+        .expect("git init");
+    assert!(init.status.success());
+    let command = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+            .args(args)
+            .current_dir(directory.path())
+            .output()
+            .expect("harness hooks command")
+    };
+    assert!(command(&["hooks-install"]).status.success());
+    assert!(command(&["hooks-check"]).status.success());
+    std::fs::write(
+        directory.path().join(".git/hooks/pre-commit"),
+        b"#!/bin/sh\nexit 0\n",
+    )
+    .expect("tamper hook");
+    assert!(!command(&["hooks-check"]).status.success());
+}

@@ -13,6 +13,7 @@ mod qa_mcp;
 mod release;
 mod release_stack;
 mod repo_policy;
+mod wasm_test;
 
 use clap::{Parser, Subcommand};
 use std::{
@@ -54,6 +55,7 @@ enum Command {
     FmtCheck,
     Lint,
     TestUnit,
+    TestWasm,
     TestE2e,
     PerfSmoke,
     PerfCi,
@@ -191,6 +193,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 Duration::from_secs(600),
             )?;
         }
+        Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,

@@ -10,6 +10,36 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
+trait Runtime {
+    fn output(&self, program: &str, args: &[&str]) -> Result<String>;
+    fn checked(&self, program: &str, args: &[&str]) -> Result<()>;
+}
+
+struct RealRuntime;
+
+impl Runtime for RealRuntime {
+    fn output(&self, program: &str, args: &[&str]) -> Result<String> {
+        output(program, args)
+    }
+
+    fn checked(&self, program: &str, args: &[&str]) -> Result<()> {
+        checked(program, args)
+    }
+}
+
+struct Staging {
+    path: PathBuf,
+    published: bool,
+}
+
+impl Drop for Staging {
+    fn drop(&mut self) {
+        if !self.published {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub version: u32,
@@ -98,8 +128,8 @@ fn evidence(path: &Path, revision: &str, result_key: &str) -> Result<String> {
     Ok(blake3::hash(&bytes).to_hex().to_string())
 }
 
-fn image_id(tag: &str) -> Result<String> {
-    let id = output("docker", &["image", "inspect", "--format", "{{.Id}}", tag])?;
+fn image_id<R: Runtime>(runtime: &R, tag: &str) -> Result<String> {
+    let id = runtime.output("docker", &["image", "inspect", "--format", "{{.Id}}", tag])?;
     if !id.starts_with("sha256:") {
         return Err(format!("invalid image ID for {tag}").into());
     }
@@ -107,28 +137,41 @@ fn image_id(tag: &str) -> Result<String> {
 }
 
 pub fn build() -> Result<()> {
-    let revision = output("git", &["rev-parse", "HEAD"])?;
-    if !output("git", &["status", "--porcelain"])?.is_empty() {
+    build_with(&RealRuntime, Path::new("."))
+}
+
+fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
+    let revision = runtime.output("git", &["rev-parse", "HEAD"])?;
+    if !runtime
+        .output("git", &["status", "--porcelain"])?
+        .is_empty()
+    {
         return Err("release build requires a clean source tree".into());
     }
-    if output("git", &["branch", "--show-current"])? != "dev" {
+    if runtime.output("git", &["branch", "--show-current"])? != "dev" {
         return Err("release build must start from dev".into());
     }
-    let tree = output("git", &["rev-parse", "HEAD^{tree}"])?;
-    let e2e = evidence(Path::new("reports/e2e/pass.json"), &revision, "result")?;
-    let perf = evidence(Path::new("reports/perf/ci.json"), &revision, "verdict")?;
-    let final_dir = PathBuf::from("reports/release").join(&revision);
+    let tree = runtime.output("git", &["rev-parse", "HEAD^{tree}"])?;
+    let e2e = evidence(&root.join("reports/e2e/pass.json"), &revision, "result")?;
+    let perf = evidence(&root.join("reports/perf/ci.json"), &revision, "verdict")?;
+    let release_dir = root.join("reports/release");
+    let final_dir = release_dir.join(&revision);
     if final_dir.exists() {
         return Err(format!("release already exists: {}", final_dir.display()).into());
     }
-    let staging =
-        PathBuf::from("reports/release").join(format!("{revision}.staging-{}", std::process::id()));
-    fs::create_dir_all(staging.join("bundle"))?;
+    fs::create_dir_all(&release_dir)?;
+    let staging_path = release_dir.join(format!("{revision}.staging-{}", std::process::id()));
+    fs::create_dir(&staging_path)?;
+    let mut staging = Staging {
+        path: staging_path,
+        published: false,
+    };
+    fs::create_dir(staging.path.join("bundle"))?;
     let artifact_tag = format!("aoeworld/artifacts:{revision}");
     let server_tag = format!("aoeworld/server:{revision}");
     let browser_tag = format!("aoeworld/browser:{revision}");
     let build_arg = format!("SOURCE_SHA={revision}");
-    checked(
+    runtime.checked(
         "docker",
         &[
             "build",
@@ -142,7 +185,7 @@ pub fn build() -> Result<()> {
         ],
     )?;
     let image_arg = format!("BUILD_IMAGE={artifact_tag}");
-    checked(
+    runtime.checked(
         "docker",
         &[
             "build",
@@ -155,7 +198,7 @@ pub fn build() -> Result<()> {
             ".",
         ],
     )?;
-    checked(
+    runtime.checked(
         "docker",
         &[
             "build",
@@ -168,46 +211,58 @@ pub fn build() -> Result<()> {
             ".",
         ],
     )?;
-    let container = output("docker", &["create", &artifact_tag])?;
-    let copy_result = checked(
+    let container = runtime.output("docker", &["create", &artifact_tag])?;
+    let copy_result = runtime.checked(
         "docker",
         &[
             "cp",
             &format!("{container}:/source/web/."),
             staging
+                .path
                 .join("bundle")
                 .to_str()
                 .ok_or("non-UTF-8 staging path")?,
         ],
     );
-    let remove_result = checked("docker", &["rm", "-f", &container]);
+    let remove_result = runtime.checked("docker", &["rm", "-f", &container]);
     copy_result?;
     remove_result?;
     let manifest = Manifest {
         version: 1,
         source_commit: revision,
         source_tree: tree,
-        server_image_id: image_id(&server_tag)?,
-        browser_image_id: image_id(&browser_tag)?,
-        bundle_hash: hash_bundle(&staging.join("bundle"))?,
+        server_image_id: image_id(runtime, &server_tag)?,
+        browser_image_id: image_id(runtime, &browser_tag)?,
+        bundle_hash: hash_bundle(&staging.path.join("bundle"))?,
         protocol_version: aoe_protocol::VERSION,
         asset_pack_version: 1,
-        rustc: output("rustc", &["--version"])?,
+        rustc: runtime.output("rustc", &["--version"])?,
         e2e_report_hash: e2e,
         perf_report_hash: perf,
     };
-    fs::copy("reports/e2e/pass.json", staging.join("e2e.json"))?;
-    fs::copy("reports/perf/ci.json", staging.join("perf.json"))?;
+    fs::copy(
+        root.join("reports/e2e/pass.json"),
+        staging.path.join("e2e.json"),
+    )?;
+    fs::copy(
+        root.join("reports/perf/ci.json"),
+        staging.path.join("perf.json"),
+    )?;
     fs::write(
-        staging.join("manifest.json"),
+        staging.path.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
-    fs::rename(&staging, &final_dir)?;
+    fs::rename(&staging.path, &final_dir)?;
+    staging.published = true;
     println!("{}", final_dir.join("manifest.json").display());
     Ok(())
 }
 
 pub fn load_and_verify(path: &Path) -> Result<Manifest> {
+    load_and_verify_with(&RealRuntime, path)
+}
+
+fn load_and_verify_with<R: Runtime>(runtime: &R, path: &Path) -> Result<Manifest> {
     let manifest: Manifest = serde_json::from_slice(&fs::read(path)?)?;
     if manifest.version != 1
         || manifest.protocol_version != aoe_protocol::VERSION
@@ -223,7 +278,7 @@ pub fn load_and_verify(path: &Path) -> Result<Manifest> {
     {
         return Err("invalid source commit in release manifest".into());
     }
-    let actual_tree = output(
+    let actual_tree = runtime.output(
         "git",
         &["rev-parse", &format!("{}^{{tree}}", manifest.source_commit)],
     )?;
@@ -236,8 +291,8 @@ pub fn load_and_verify(path: &Path) -> Result<Manifest> {
     }
     let server_tag = format!("aoeworld/server:{}", manifest.source_commit);
     let browser_tag = format!("aoeworld/browser:{}", manifest.source_commit);
-    if image_id(&server_tag)? != manifest.server_image_id
-        || image_id(&browser_tag)? != manifest.browser_image_id
+    if image_id(runtime, &server_tag)? != manifest.server_image_id
+        || image_id(runtime, &browser_tag)? != manifest.browser_image_id
     {
         return Err("release image ID mismatch".into());
     }
@@ -273,15 +328,4 @@ pub fn rehearse(candidate: &Path, previous: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bundle_hash_changes_on_tamper() {
-        let directory = tempfile::tempdir().expect("tempdir");
-        fs::write(directory.path().join("index.html"), "original").expect("write");
-        let first = hash_bundle(directory.path()).expect("hash");
-        fs::write(directory.path().join("index.html"), "tampered").expect("write");
-        assert_ne!(first, hash_bundle(directory.path()).expect("hash"));
-    }
-}
+mod tests;

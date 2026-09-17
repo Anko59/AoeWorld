@@ -162,12 +162,15 @@ fn parse(root: &Path, data: &str, expected: &BTreeSet<String>) -> Result<Report,
 }
 
 pub fn check(path: &Path) -> Result<(), Box<dyn Error>> {
-    let root = Path::new(".");
+    check_at(Path::new("."), path)
+}
+
+fn check_at(root: &Path, path: &Path) -> Result<(), Box<dyn Error>> {
     let expected = expected_sources(root)?;
     let report = parse(root, &fs::read_to_string(path)?, &expected)?;
-    fs::create_dir_all("reports/coverage")?;
+    fs::create_dir_all(root.join("reports/coverage"))?;
     fs::write(
-        "reports/coverage/summary.json",
+        root.join("reports/coverage/summary.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
     println!("{}", serde_json::to_string_pretty(&report)?);
@@ -205,5 +208,54 @@ mod tests {
         assert_eq!(report.protocol.covered, 0);
         assert_eq!(report.missing_sources, ["crates/core/src/lib.rs"]);
         assert_eq!(report.verdict, "REGRESSION");
+    }
+
+    #[test]
+    fn coverage_gate_inventories_sources_and_rejects_duplicate_or_missing_records() {
+        let temp = tempfile::tempdir().expect("repository");
+        let root = temp.path();
+        let status = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+        let names = [
+            "crates/harness/src/qa.rs",
+            "crates/protocol/src/lib.rs",
+            "crates/assets/src/drs.rs",
+            "crates/core/src/lib.rs",
+        ];
+        let mut lcov = String::new();
+        for name in names {
+            let source = root.join(name);
+            fs::create_dir_all(source.parent().expect("parent")).expect("source directory");
+            fs::write(&source, "pub fn covered() {}\n").expect("source");
+            lcov.push_str(&format!("SF:{}\nDA:1,1\nend_of_record\n", source.display()));
+        }
+        let excluded = root.join("crates/client/src/lib.rs");
+        fs::create_dir_all(excluded.parent().expect("parent")).expect("client directory");
+        fs::write(excluded, "pub fn browser() {}\n").expect("client source");
+        assert_eq!(
+            expected_sources(root).expect("inventory").len(),
+            names.len()
+        );
+        let report_path = root.join("native.lcov");
+        fs::write(&report_path, &lcov).expect("LCOV");
+        check_at(root, &report_path).expect("complete report");
+        let summary: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join("reports/coverage/summary.json")).expect("summary"),
+        )
+        .expect("JSON");
+        assert_eq!(summary["verdict"], "PASS");
+        let duplicate = lcov.replace("DA:1,1\n", "DA:1,1\nDA:1,1\n");
+        fs::write(&report_path, duplicate).expect("duplicate LCOV");
+        assert!(check_at(root, &report_path).is_err());
+        fs::write(
+            &report_path,
+            lcov.lines().skip(3).collect::<Vec<_>>().join("\n"),
+        )
+        .expect("missing source");
+        assert!(check_at(root, &report_path).is_err());
     }
 }
