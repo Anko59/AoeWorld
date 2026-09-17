@@ -37,6 +37,7 @@ use tower_http::services::ServeDir;
 pub struct AppState {
     world: Arc<RwLock<World>>,
     generation: Arc<AtomicU64>,
+    tick_deadline_misses: Arc<AtomicU64>,
     build: Arc<str>,
     tick_period: Duration,
 }
@@ -46,6 +47,7 @@ impl AppState {
         Self {
             world: Arc::new(RwLock::new(World::new(config.scenario))),
             generation: Arc::new(AtomicU64::new(0)),
+            tick_deadline_misses: Arc::new(AtomicU64::new(0)),
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
         }
@@ -55,9 +57,19 @@ impl AppState {
         let mut interval = tokio::time::interval(self.tick_period);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
-            interval.tick().await;
+            let scheduled = interval.tick().await;
+            let started = tokio::time::Instant::now();
             self.world.write().await.advance();
+            if started.duration_since(scheduled) > self.tick_period
+                || started.elapsed() > self.tick_period
+            {
+                self.tick_deadline_misses.fetch_add(1, Ordering::Relaxed);
+            }
         }
+    }
+
+    pub fn tick_deadline_misses(&self) -> u64 {
+        self.tick_deadline_misses.load(Ordering::Relaxed)
     }
 }
 
@@ -69,6 +81,7 @@ struct Health {
     tick: u64,
     entities: usize,
     loaded_chunks: usize,
+    tick_deadline_misses: u64,
 }
 
 async fn health(State(state): State<AppState>) -> Json<Health> {
@@ -80,6 +93,7 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
         tick: world.tick().0,
         entities: world.entities().len(),
         loaded_chunks: world.loaded_chunks(),
+        tick_deadline_misses: state.tick_deadline_misses(),
     })
 }
 

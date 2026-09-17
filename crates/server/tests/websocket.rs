@@ -223,6 +223,7 @@ async fn http_health_replay_and_scenario_validation_use_authoritative_state() {
     assert!(health.starts_with("HTTP/1.1 200"));
     assert!(health.contains("\"build\":\"test-build\""));
     assert!(health.contains("\"entities\":8000"));
+    assert!(health.contains("\"tick_deadline_misses\":"));
 
     let replay = http(address, "GET", "/replay-hash?scenario=smoke&ticks=2");
     assert!(replay.starts_with("HTTP/1.1 200"));

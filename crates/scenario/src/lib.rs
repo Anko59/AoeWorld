@@ -44,6 +44,16 @@ pub const TARGET_HOTSPOT: Scenario = Scenario {
     entities: 128_000,
     hotspot_entities: 10_000,
 };
+pub const NETWORK_PRESSURE: Scenario = Scenario {
+    version: 1,
+    name: "network-pressure",
+    seed: Seed(19),
+    world_size: 16_384,
+    active_extent: 16_384,
+    players: 64,
+    entities: 128_000,
+    hotspot_entities: 10_000,
+};
 
 pub const POPULATION_8K: Scenario = Scenario {
     version: 1,
@@ -136,6 +146,7 @@ pub fn named(name: &str) -> Option<Scenario> {
         "smoke" => Some(SMOKE),
         "target-distributed" => Some(TARGET_DISTRIBUTED),
         "target-hotspot" => Some(TARGET_HOTSPOT),
+        "network-pressure" => Some(NETWORK_PRESSURE),
         "population-8k" => Some(POPULATION_8K),
         "population-32k" => Some(POPULATION_32K),
         "population-64k" => Some(POPULATION_64K),
@@ -168,5 +179,10 @@ mod tests {
             assert_eq!(named(scenario.name), Some(scenario));
         }
         assert_ne!(series[0].workload_hash(), series[3].workload_hash());
+        assert_eq!(named(NETWORK_PRESSURE.name), Some(NETWORK_PRESSURE));
+        assert_eq!(
+            NETWORK_PRESSURE.hotspot_entities,
+            TARGET_HOTSPOT.hotspot_entities
+        );
     }
 }

@@ -6,6 +6,7 @@ mod fuzz;
 mod gates;
 mod perf;
 mod perf_micro;
+mod perf_pressure;
 mod perf_size;
 mod perf_soak;
 mod perf_stress;
@@ -67,6 +68,7 @@ enum Command {
     PerfSmoke,
     PerfCi,
     PerfFull,
+    PerfPressure,
     PerfStress,
     #[command(name = "perf-soak-10")]
     PerfSoak10,
@@ -214,6 +216,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,
+        Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,

@@ -21,6 +21,13 @@ and the 20,000-entity hotspot client to receive an explicit protocol-limit
 error. This reports bounded overload behavior; it is not a beyond-target
 timing or rendering pass. The weekly workflow runs this scenario after it
 reaches the default branch.
+`make perf-pressure` schedules 10 subscriptions per client at fixed intervals
+for a 64-client hotspot scenario. Camera regions and sizes change at every
+offer, independently of response completion. The report records every offer,
+snapshot latency, missed offer deadline, maximum response backlog, server tick
+deadline misses, four reconnects under load, and a paused slow reader. Hosted
+timing samples are informational; missing scheduled work or protocol responses
+fail the workload.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
