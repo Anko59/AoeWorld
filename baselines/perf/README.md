@@ -7,6 +7,11 @@ Three repeated local runs produced the same instruction, allocation byte, and
 allocation count values for all three kernels. The file binds the smoke
 scenario hash to the measurements. This initial baseline is a reviewable
 starting point for synthetic kernels, not a game performance qualification.
+The fourth case, a bounded 256-color JASC palette decode, was added on the
+same pinned image. Three separate runs each measured 238,987 instructions,
+17,152 allocated bytes, and 257 allocations. The proposal changed only the
+case set: the original three values, tool identities, and workload hash stayed
+identical. This extends the required comparison to asset decoding.
 `wasm.json` records the 81,750-byte gzip size of the Binaryen 108 optimized
 WASM bundle, using gzip 1.12 with `-n -9` for repeatable output.
 

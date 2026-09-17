@@ -31,8 +31,8 @@ fail the workload.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
-pass. The pinned Gungraun/Callgrind and DHAT analysis image measures three
-simulation/protocol kernels. Binaryen optimizes the WASM bundle before gzip
+pass. The pinned Gungraun/Callgrind and DHAT analysis image measures four
+simulation, protocol, and palette-decoding kernels. Binaryen optimizes the WASM bundle before gzip
 size comparison. Their reviewed initial baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports
 without changing the baselines. These measured deterministic comparisons pass

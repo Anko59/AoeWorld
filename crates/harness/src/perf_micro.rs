@@ -87,19 +87,22 @@ fn samples(path: &Path) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
 fn observed_samples_at(
     simulation: &Path,
     protocol: &Path,
+    assets: &Path,
 ) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
     let mut observed = samples(simulation)?;
-    for (name, value) in samples(protocol)? {
-        if observed.insert(name, value).is_some() {
-            return Err("duplicate cross-crate microbenchmark".into());
+    for suite in [protocol, assets] {
+        for (name, value) in samples(suite)? {
+            if observed.insert(name, value).is_some() {
+                return Err("duplicate cross-crate microbenchmark".into());
+            }
         }
     }
     Ok(observed)
 }
 
 fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Error>> {
-    if observed.len() != 3 {
-        return Err("initial proposal requires three benchmark cases".into());
+    if observed.len() != 4 {
+        return Err("initial proposal requires four benchmark cases".into());
     }
     Ok(Baseline {
         version: 1,
@@ -127,12 +130,18 @@ pub fn propose() -> Result<(), Box<dyn Error>> {
     propose_at(
         Path::new("reports/perf/simulation.ndjson"),
         Path::new("reports/perf/protocol.ndjson"),
+        Path::new("reports/perf/assets.ndjson"),
         Path::new("reports/perf/micro-proposal.json"),
     )
 }
 
-fn propose_at(simulation: &Path, protocol: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
-    let observed = observed_samples_at(simulation, protocol)?;
+fn propose_at(
+    simulation: &Path,
+    protocol: &Path,
+    assets: &Path,
+    output: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let observed = observed_samples_at(simulation, protocol, assets)?;
     let proposal = proposal(&observed)?;
     fs::create_dir_all(output.parent().ok_or("proposal has no parent")?)?;
     fs::write(output, serde_json::to_vec_pretty(&proposal)?)?;
@@ -186,6 +195,7 @@ pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
         Path::new("baselines/perf/micro.json"),
         Path::new("reports/perf/simulation.ndjson"),
         Path::new("reports/perf/protocol.ndjson"),
+        Path::new("reports/perf/assets.ndjson"),
     )
 }
 
@@ -193,9 +203,10 @@ fn comparisons_at(
     baseline: &Path,
     simulation: &Path,
     protocol: &Path,
+    assets: &Path,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
     let baseline: Baseline = serde_json::from_slice(&fs::read(baseline)?)?;
-    compare_observed(baseline, observed_samples_at(simulation, protocol)?)
+    compare_observed(baseline, observed_samples_at(simulation, protocol, assets)?)
 }
 
 #[cfg(test)]
@@ -258,7 +269,7 @@ mod tests {
     #[test]
     fn baseline_identity_case_set_and_regressions_are_checked() {
         let mut observed = BTreeMap::new();
-        for name in ["a", "b", "c"] {
+        for name in ["a", "b", "c", "d"] {
             observed.insert(
                 name.to_owned(),
                 Metrics {
@@ -279,7 +290,7 @@ mod tests {
         let baseline = proposal(&observed).expect("proposal");
         observed.get_mut("a").expect("case").instructions = 106;
         let results = compare_observed(baseline, observed).expect("comparison");
-        assert_eq!(results.len(), 9);
+        assert_eq!(results.len(), 12);
         assert_eq!(results[0].verdict, Verdict::Regression);
         assert!(
             results[1..]
@@ -293,6 +304,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("directory");
         let simulation = temp.path().join("simulation.ndjson");
         let protocol = temp.path().join("protocol.ndjson");
+        let assets = temp.path().join("assets.ndjson");
         let baseline = temp.path().join("baseline.json");
         let proposed = temp.path().join("proposal/micro.json");
         fs::write(
@@ -301,26 +313,28 @@ mod tests {
         )
         .expect("simulation samples");
         fs::write(&protocol, format!("{}\n", line("c", 100))).expect("protocol samples");
+        fs::write(&assets, format!("{}\n", line("d", 100))).expect("asset samples");
         assert_eq!(
-            observed_samples_at(&simulation, &protocol)
+            observed_samples_at(&simulation, &protocol, &assets)
                 .expect("samples")
                 .len(),
-            3
+            4
         );
-        let original = proposal(&observed_samples_at(&simulation, &protocol).expect("samples"))
-            .expect("baseline");
+        let original =
+            proposal(&observed_samples_at(&simulation, &protocol, &assets).expect("samples"))
+                .expect("baseline");
         let original_bytes = serde_json::to_vec(&original).expect("JSON");
         fs::write(&baseline, &original_bytes).expect("baseline");
-        propose_at(&simulation, &protocol, &proposed).expect("proposal");
+        propose_at(&simulation, &protocol, &assets, &proposed).expect("proposal");
         assert_eq!(fs::read(&baseline).expect("baseline"), original_bytes);
         assert_eq!(
-            comparisons_at(&baseline, &simulation, &protocol)
+            comparisons_at(&baseline, &simulation, &protocol, &assets)
                 .expect("comparison")
                 .len(),
-            9
+            12
         );
         assert!(proposed.is_file());
         fs::write(&protocol, format!("{}\n", line("a", 100))).expect("duplicate");
-        assert!(observed_samples_at(&simulation, &protocol).is_err());
+        assert!(observed_samples_at(&simulation, &protocol, &assets).is_err());
     }
 }
