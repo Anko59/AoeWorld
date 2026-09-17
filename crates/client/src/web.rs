@@ -374,6 +374,7 @@ async fn initialize() -> Result<(), JsValue> {
     if let Some(name) = query.get("scenario") {
         if ["smoke", "target-distributed", "target-hotspot"].contains(&name.as_str()) {
             if let Err(error) = change_scenario(&name).await {
+                set_text(&document, "unit-status", "Unavailable");
                 set_text(
                     &document,
                     "unsupported",
@@ -422,6 +423,7 @@ pub fn start() {
     spawn_local(async {
         if let Err(error) = initialize().await {
             if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+                set_text(&document, "unit-status", "Unavailable");
                 set_text(
                     &document,
                     "unsupported",

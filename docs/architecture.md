@@ -12,7 +12,8 @@ synthetic mask atlas. Camera movement and zoom change the subscription; two
 browser sessions receive independent snapshots and can reconnect. The client
 records bounded frame, decode/update, and CPU submission timing samples for
 informational hosted reports. The main `/` game runs a local single-unit integer
-simulation at 50 Hz with click-to-move commands and the shared WebGPU renderer. The client loads the selected local pack,
+simulation at 50 Hz with click-to-move commands and shared sprite layouts. Rendering prefers WebGPU and falls back to Canvas
+2D if GPU initialization fails. The client loads the selected local pack,
 combines terrain, cavalry, player-color and shadow pixels into one atlas, and
 animates five stored directions with mirrored east-facing sprites.
 It has no networked gameplay, collision obstacles, or persistence. The server's environment reads are isolated in

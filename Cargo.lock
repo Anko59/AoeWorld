@@ -165,6 +165,7 @@ version = "0.1.0"
 dependencies = [
  "aoe-protocol",
  "bytemuck",
+ "wasm-bindgen",
  "web-sys",
  "wgpu",
 ]

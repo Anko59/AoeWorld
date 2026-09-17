@@ -15,8 +15,8 @@ as described in [asset setup](docs/assets.md). Start with:
 AOE_ASSET_PACK=local-assets/packs/<pack-hash> make dev
 ```
 
-Open [AoeWorld](http://localhost:8080/) in a WebGPU-capable desktop Chrome or
-Edge browser. The server stays running until `make down`. Restart with the pack
+Open [AoeWorld](http://localhost:8080/) in your browser. WebGPU is preferred, with an automatic
+Canvas 2D compatibility renderer when WebGPU is unavailable. The server stays running until `make down`. Restart with the pack
 setting if a server was already running. Original assets remain local and are
 never included in Git or Docker images.
 

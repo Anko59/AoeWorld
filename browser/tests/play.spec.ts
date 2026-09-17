@@ -14,6 +14,12 @@ test("AoE II scout moves to clicks, redirects, resets, and survives resizing", a
   const position = page.locator("#position");
   const canvas = page.locator("canvas");
   await expect(status).toHaveText("Ready", { timeout: 30_000 });
+  if (testInfo.project.name === "webgpu") {
+    await expect(page.locator("#playground")).toHaveAttribute(
+      "data-renderer",
+      "webgpu",
+    );
+  }
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-assets",
     "aoe2-local",
@@ -73,13 +79,54 @@ test("AoE II scout moves to clicks, redirects, resets, and survives resizing", a
   expect(errors).toEqual([]);
 });
 
-test("playground reports unavailable WebGPU", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "gpu", { value: undefined });
+for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
+  test(`game remains playable after WebGPU ${failure}`, async ({ page }) => {
+    await gameAssets(page);
+    await page.addInitScript((mode) => {
+      if (mode === "missing-api") {
+        Object.defineProperty(navigator, "gpu", { value: undefined });
+      } else if (mode === "no-adapter") {
+        const gpu = (navigator as Navigator & { gpu?: object }).gpu;
+        if (gpu)
+          Object.defineProperty(gpu, "requestAdapter", {
+            value: async () => null,
+          });
+      } else {
+        const original = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (
+          this: HTMLCanvasElement,
+          type: string,
+          ...args: unknown[]
+        ) {
+          if (type === "webgpu") return null;
+          return Reflect.apply(original, this, [type, ...args]);
+        } as typeof original;
+      }
+    }, failure);
+    await page.goto("/");
+    await expect(page.getByRole("status")).toHaveText("Ready", {
+      timeout: 30_000,
+    });
+    await expect(page.locator("#playground")).toHaveAttribute(
+      "data-renderer",
+      "canvas2d",
+    );
+    await expect(page.getByRole("alert")).toBeEmpty();
+    const canvas = page.locator("canvas");
+    const image = PNG.sync.read(await canvas.screenshot());
+    let colored = 0;
+    for (let i = 0; i < image.data.length; i += 4) {
+      if ((image.data[i + 1] ?? 0) > (image.data[i] ?? 0) + 15) colored += 1;
+    }
+    expect(colored).toBeGreaterThan(image.width * image.height * 0.7);
+    await canvas.click({ position: { x: 40, y: 90 } });
+    await expect(page.getByRole("status")).toHaveText("Moving");
+    await expect(page.locator("#position")).not.toHaveText("480, 320");
+    await expect(page.getByRole("status")).toHaveText("Ready");
+    await page.getByRole("button", { name: "Reset position" }).click();
+    await expect(page.locator("#position")).toHaveText("480, 320");
   });
-  await page.goto("/");
-  await expect(page.getByRole("alert")).toContainText("WebGPU unavailable");
-});
+}
 
 test("missing local assets show an actionable error", async ({ page }) => {
   await page.route("**/asset-pack/manifest.json", (route) =>
@@ -87,4 +134,25 @@ test("missing local assets show an actionable error", async ({ page }) => {
   );
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("local asset pack");
+  await expect(page.getByRole("status")).toHaveText("Unavailable");
+  await expect(
+    page.getByRole("button", { name: "Reset position" }),
+  ).toBeDisabled();
+});
+
+test("unavailable renderers stop loading and disable controls", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "gpu", { value: undefined });
+    HTMLCanvasElement.prototype.getContext = () => null;
+  });
+  await page.goto("/");
+  await expect(page.getByRole("status")).toHaveText("Unavailable");
+  await expect(page.getByRole("alert")).toContainText(
+    "Canvas 2D is unavailable",
+  );
+  await expect(
+    page.getByRole("button", { name: "Reset position" }),
+  ).toBeDisabled();
 });

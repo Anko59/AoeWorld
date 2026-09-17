@@ -1,6 +1,6 @@
 //! Browser input and fixed-step scheduling for the local playground.
 use aoe_core::Position;
-use aoe_rendering::Renderer;
+use aoe_rendering::GameRenderer;
 use aoe_simulation::playground::{HEIGHT, Playground, WIDTH};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -11,9 +11,13 @@ pub async fn initialize(document: Document) -> Result<(), JsValue> {
         .get_element_by_id("scene")
         .ok_or("No canvas")?
         .dyn_into()?;
-    let mut renderer = Renderer::new(canvas.clone())
+    let (mut renderer, canvas) = GameRenderer::new(canvas)
         .await
-        .map_err(|e| JsValue::from_str(&format!("WebGPU unavailable: {e}")))?;
+        .map_err(|e| JsValue::from_str(&e))?;
+    document
+        .get_element_by_id("playground")
+        .ok_or("No game")?
+        .set_attribute("data-renderer", renderer.backend())?;
     let (art, pixels) = crate::game_assets::load().await?;
     renderer
         .upload_game_atlas(&pixels)
@@ -52,6 +56,7 @@ pub async fn initialize(document: Document) -> Result<(), JsValue> {
     let button = document
         .get_element_by_id("reset")
         .ok_or("No reset button")?;
+    button.remove_attribute("disabled")?;
     let onreset =
         Closure::<dyn FnMut(Event)>::new(move |_| *reset.borrow_mut() = Playground::default());
     button.add_event_listener_with_callback("click", onreset.as_ref().unchecked_ref())?;
@@ -128,6 +133,7 @@ pub async fn initialize(document: Document) -> Result<(), JsValue> {
             animation / 4,
             facing,
         ) {
+            status.set_text_content(Some("Unavailable"));
             alert.set_text_content(Some(&error));
             return;
         }

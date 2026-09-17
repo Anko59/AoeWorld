@@ -39,14 +39,14 @@
   <div class="bar">
     <div class="unit"><span class="badge" aria-hidden="true">◆</span><div><strong>Cavalry</strong><small>Selected · <span id="unit-status" role="status">Loading…</span></small></div></div>
     <div class="coordinates"><span class="eyebrow">Map position</span><small id="position">480, 320</small></div>
-    <button id="reset" type="button">Reset position</button>
+    <button id="reset" type="button" disabled>Reset position</button>
   </div>
   <p id="unsupported" role="alert"></p>
   <footer><span>Click to move · Arrow keys / WASD when map is focused</span><span>AoeWorld · Age of Empires II local assets</span></footer>
 </main>
 <script type="module">
   import init from '/pkg/aoe_client.js';
-  init().catch(error => { document.getElementById('unsupported').textContent = `Unable to load the game: ${error}. Reload to retry.`; });
+  init().catch(error => { document.getElementById('unit-status').textContent = 'Unavailable'; document.getElementById('unsupported').textContent = `Unable to load the game: ${error}. Reload to retry.`; });
 </script>
 </body>
 </html>

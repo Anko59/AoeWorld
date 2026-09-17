@@ -88,62 +88,74 @@ impl Renderer {
         animation: usize,
         facing: (usize, bool),
     ) -> Result<Counters, String> {
-        let mut sprites = Vec::new();
-        for row in -1_i32..28 {
-            for column in -1_i32..11 {
-                let frame =
-                    art.grass[(row * 7 + column * 13).unsigned_abs() as usize % art.grass.len()];
-                push(
-                    &mut sprites,
-                    frame,
-                    [
-                        column as f32 * 96.0 + (row % 2) as f32 * 48.0,
-                        row as f32 * 24.0,
-                    ],
-                    1.0,
-                    false,
-                );
-            }
-        }
-        // Trees sit outside the traversable clearing.
-        for i in 0..12 {
-            let frame = art.trees[i % art.trees.len()];
-            push(
-                &mut sprites,
-                frame,
-                [i as f32 * 95.0 - 30.0, 20.0],
-                1.0,
-                i % 2 == 0,
-            );
-        }
-        for i in 0..8 {
-            let frame = art.trees[i % art.trees.len()];
-            push(
-                &mut sprites,
-                frame,
-                [-15.0, i as f32 * 95.0 + 70.0],
-                1.0,
-                false,
-            );
-            push(
-                &mut sprites,
-                frame,
-                [985.0, i as f32 * 95.0 + 70.0],
-                1.0,
-                true,
-            );
-        }
-        if moving {
-            ring(&mut sprites, target, [0.95, 0.79, 0.3, 1.0], 12.0);
-        }
-        ring(&mut sprites, unit, [0.85, 0.95, 0.65, 1.0], 22.0);
-        let frames = if moving { &art.walking } else { &art.standing };
-        let frame = frames[facing.0 * 10 + if moving { animation % 10 } else { 0 }];
-        push(&mut sprites, frame, unit, 1.35, facing.1);
+        let sprites = game_sprites(art, unit, target, moving, animation, facing);
         let mut counters = self.render_sprites(&sprites)?;
         counters.atlas_bytes = (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize;
         Ok(counters)
     }
+}
+
+pub(crate) fn game_sprites(
+    art: &GameArt,
+    unit: [f32; 2],
+    target: [f32; 2],
+    moving: bool,
+    animation: usize,
+    facing: (usize, bool),
+) -> Vec<Sprite> {
+    let mut sprites = Vec::new();
+    for row in -1_i32..28 {
+        for column in -1_i32..11 {
+            let frame =
+                art.grass[(row * 7 + column * 13).unsigned_abs() as usize % art.grass.len()];
+            push(
+                &mut sprites,
+                frame,
+                [
+                    column as f32 * 96.0 + (row % 2) as f32 * 48.0,
+                    row as f32 * 24.0,
+                ],
+                1.0,
+                false,
+            );
+        }
+    }
+    // Trees sit outside the traversable clearing.
+    for i in 0..12 {
+        let frame = art.trees[i % art.trees.len()];
+        push(
+            &mut sprites,
+            frame,
+            [i as f32 * 95.0 - 30.0, 20.0],
+            1.0,
+            i % 2 == 0,
+        );
+    }
+    for i in 0..8 {
+        let frame = art.trees[i % art.trees.len()];
+        push(
+            &mut sprites,
+            frame,
+            [-15.0, i as f32 * 95.0 + 70.0],
+            1.0,
+            false,
+        );
+        push(
+            &mut sprites,
+            frame,
+            [985.0, i as f32 * 95.0 + 70.0],
+            1.0,
+            true,
+        );
+    }
+    if moving {
+        ring(&mut sprites, target, [0.95, 0.79, 0.3, 1.0], 12.0);
+    }
+    ring(&mut sprites, unit, [0.85, 0.95, 0.65, 1.0], 22.0);
+    let frames = if moving { &art.walking } else { &art.standing };
+    let frame = frames[facing.0 * 10 + if moving { animation % 10 } else { 0 }];
+    push(&mut sprites, frame, unit, 1.35, facing.1);
+    sprites
 }
 
 fn push(
