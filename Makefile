@@ -53,7 +53,7 @@ help:
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
 	@echo '  make perf-ci         Run target workloads and required comparisons'
-	@echo '  make perf-full       Add sparse-world scaling workload'
+	@echo '  make perf-full       Add population and sparse-world scaling workloads'
 	@echo '  make perf-instructions Run pinned Gungraun/Callgrind kernels'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
 	@echo '  make qa-validate     Validate reports/qa/session.json'

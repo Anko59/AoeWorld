@@ -2,7 +2,8 @@
 use aoe_core::Region;
 use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_client};
 use aoe_scenario::{
-    SMOKE, SPARSE_LARGE, SPARSE_SMALL, Scenario, TARGET_DISTRIBUTED, TARGET_HOTSPOT,
+    POPULATION_8K, POPULATION_32K, POPULATION_64K, POPULATION_128K, SMOKE, SPARSE_LARGE,
+    SPARSE_SMALL, Scenario, TARGET_DISTRIBUTED, TARGET_HOTSPOT,
 };
 use aoe_server::{AppState, Config, app};
 use aoe_simulation::World;
@@ -300,6 +301,10 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             SMOKE,
             TARGET_DISTRIBUTED,
             TARGET_HOTSPOT,
+            POPULATION_8K,
+            POPULATION_32K,
+            POPULATION_64K,
+            POPULATION_128K,
             SPARSE_SMALL,
             SPARSE_LARGE,
         ],
@@ -356,8 +361,14 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
         workloads.push(result);
     }
     if mode == "full" {
-        let small = &workloads[3];
-        let large = &workloads[4];
+        let small = workloads
+            .iter()
+            .find(|result| result.scenario == "sparse-small")
+            .ok_or("sparse-small workload missing")?;
+        let large = workloads
+            .iter()
+            .find(|result| result.scenario == "sparse-large")
+            .ok_or("sparse-large workload missing")?;
         if small.loaded_chunks != large.loaded_chunks
             || small.query_visited_chunks != large.query_visited_chunks
             || small.query_candidates != large.query_candidates

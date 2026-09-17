@@ -2,9 +2,11 @@
 
 `make perf-smoke` runs the 8-client, 8,000-entity scenario through actual local
 WebSocket connections. `make perf-ci` adds the 64-client, 128,000-entity
-distributed and hotspot scenarios. `make perf-full` adds two sparse-world
-scenarios: they contain identical active entities in 1,024² and 16,384²
-logical maps. The runner verifies client and population counts, two deltas per
+distributed and hotspot scenarios. `make perf-full` adds a comparable
+8k/32k/64k/128k population series with 2,000 units per client and fixed seed
+and map dimensions. It also adds two sparse-world scenarios: they contain
+identical active entities in 1,024² and 16,384² logical maps. The runner
+verifies client and population counts, two deltas per
 client, hotspot visibility of at least 10,000 sprites, and equal sparse-query
 work. Reports are written to ignored `reports/perf/*.json` and Markdown.
 

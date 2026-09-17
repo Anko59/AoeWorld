@@ -45,6 +45,16 @@ pub const TARGET_HOTSPOT: Scenario = Scenario {
     hotspot_entities: 10_000,
 };
 
+pub const POPULATION_8K: Scenario = Scenario {
+    version: 1,
+    name: "population-8k",
+    seed: Seed(23),
+    world_size: 16_384,
+    active_extent: 16_384,
+    players: 4,
+    entities: 8_000,
+    hotspot_entities: 0,
+};
 pub const POPULATION_32K: Scenario = Scenario {
     version: 1,
     name: "population-32k",
@@ -63,6 +73,16 @@ pub const POPULATION_64K: Scenario = Scenario {
     active_extent: 16_384,
     players: 32,
     entities: 64_000,
+    hotspot_entities: 0,
+};
+pub const POPULATION_128K: Scenario = Scenario {
+    version: 1,
+    name: "population-128k",
+    seed: Seed(23),
+    world_size: 16_384,
+    active_extent: 16_384,
+    players: 64,
+    entities: 128_000,
     hotspot_entities: 0,
 };
 pub const SPARSE_SMALL: Scenario = Scenario {
@@ -116,11 +136,37 @@ pub fn named(name: &str) -> Option<Scenario> {
         "smoke" => Some(SMOKE),
         "target-distributed" => Some(TARGET_DISTRIBUTED),
         "target-hotspot" => Some(TARGET_HOTSPOT),
+        "population-8k" => Some(POPULATION_8K),
         "population-32k" => Some(POPULATION_32K),
         "population-64k" => Some(POPULATION_64K),
+        "population-128k" => Some(POPULATION_128K),
         "sparse-small" => Some(SPARSE_SMALL),
         "sparse-large" => Some(SPARSE_LARGE),
         "beyond-target" => Some(BEYOND_TARGET),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn population_series_keeps_workload_shape_comparable() {
+        let series = [
+            POPULATION_8K,
+            POPULATION_32K,
+            POPULATION_64K,
+            POPULATION_128K,
+        ];
+        for scenario in series {
+            assert_eq!(scenario.version, 1);
+            assert_eq!(scenario.seed, Seed(23));
+            assert_eq!(scenario.world_size, 16_384);
+            assert_eq!(scenario.active_extent, 16_384);
+            assert_eq!(scenario.entities, u32::from(scenario.players) * 2_000);
+            assert_eq!(named(scenario.name), Some(scenario));
+        }
+        assert_ne!(series[0].workload_hash(), series[3].workload_hash());
     }
 }
