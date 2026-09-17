@@ -1,0 +1,23 @@
+{
+  "name": "aoeworld-browser-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format-check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "9.34.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.3.0",
+    "@types/pngjs": "6.0.5",
+    "eslint": "9.34.0",
+    "pngjs": "7.0.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.41.0"
+  }
+}

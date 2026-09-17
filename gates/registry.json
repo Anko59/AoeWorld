@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "gates": [
+    {"id":"fmt-check","command":"make fmt-check","requires":[],"select":"all","evidence":"rustfmt exit status"},
+    {"id":"structure-check","command":"make structure-check","requires":[],"select":"all","evidence":"tracked file and directory audit"},
+    {"id":"architecture-check","command":"make architecture-check","requires":[],"select":"code","evidence":"Cargo metadata and source boundary audit"},
+    {"id":"docs-check","command":"make docs-check","requires":[],"select":"all","evidence":"registry table and local link validation"},
+    {"id":"lint","command":"make lint","requires":["fmt-check"],"select":"code","evidence":"Clippy exit status"},
+    {"id":"test-unit","command":"make test-unit","requires":["lint"],"select":"code","evidence":"native unit, integration, and doctest results"},
+    {"id":"browser-check","command":"make browser-check","requires":[],"select":"browser","evidence":"TypeScript, ESLint, and Prettier results"},
+    {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},
+    {"id":"perf-smoke","command":"make perf-smoke","requires":["test-unit"],"select":"code","evidence":"versioned synthetic JSON report"},
+    {"id":"perf-ci","command":"make perf-ci","requires":["perf-smoke"],"select":"performance","evidence":"target counts and baseline comparisons"}
+  ]
+}

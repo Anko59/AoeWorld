@@ -1,0 +1,257 @@
+use aoe_protocol::EntityState;
+use bytemuck::{Pod, Zeroable};
+use std::borrow::Cow;
+use web_sys::HtmlCanvasElement;
+use wgpu::SurfaceTarget;
+
+const CAPACITY: usize = 16_384;
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct Sprite {
+    position: [f32; 2],
+    radius: [f32; 2],
+    color: [f32; 4],
+}
+
+pub struct Renderer {
+    adapter_label: String,
+    surface: wgpu::Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    buffer: wgpu::Buffer,
+}
+
+#[derive(Clone, Copy)]
+pub struct Camera {
+    pub x: f32,
+    pub y: f32,
+    pub zoom: f32,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct Counters {
+    pub visible: usize,
+    pub draw_calls: usize,
+    pub gpu_buffer_bytes: usize,
+}
+
+impl Renderer {
+    pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::BROWSER_WEBGPU;
+        let instance = wgpu::Instance::new(descriptor);
+        let surface = instance
+            .create_surface(SurfaceTarget::Canvas(canvas.clone()))
+            .map_err(|e| format!("WebGPU surface: {e}"))?;
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                compatible_surface: Some(&surface),
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| format!("No WebGPU adapter: {e}"))?;
+        let info = adapter.get_info();
+        let adapter_label = format!("{:?}: {}", info.backend, info.name);
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor::default())
+            .await
+            .map_err(|e| format!("WebGPU device: {e}"))?;
+        let width = canvas.width().max(1);
+        let height = canvas.height().max(1);
+        let config = surface
+            .get_default_config(&adapter, width, height)
+            .ok_or("No compatible canvas format")?;
+        surface.configure(&device, &config);
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("synthetic sprites"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sprites.wgsl"))),
+        });
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("sprite instances"),
+            size: (CAPACITY * std::mem::size_of::<Sprite>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sprites"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sprite data"),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("sprite pipeline layout"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("sprite pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        Ok(Self {
+            adapter_label,
+            surface,
+            device,
+            queue,
+            config,
+            pipeline,
+            bind_group,
+            buffer,
+        })
+    }
+
+    pub fn adapter_label(&self) -> &str {
+        &self.adapter_label
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 || (self.config.width == width && self.config.height == height)
+        {
+            return;
+        }
+        self.config.width = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
+    }
+
+    pub fn render(
+        &mut self,
+        entities: impl Iterator<Item = EntityState>,
+        camera: Camera,
+    ) -> Result<Counters, String> {
+        let width = self.config.width as f32;
+        let height = self.config.height as f32;
+        let mut sprites = Vec::new();
+        for entity in entities {
+            let x = (entity.position.x as f32 - camera.x) * camera.zoom;
+            let y = (entity.position.y as f32 - camera.y) * camera.zoom;
+            if x < -8.0 || y < -8.0 || x > width + 8.0 || y > height + 8.0 {
+                continue;
+            }
+            if sprites.len() == CAPACITY {
+                break;
+            }
+            let palette = [
+                [0.32, 0.73, 0.95, 1.0],
+                [0.97, 0.53, 0.36, 1.0],
+                [0.53, 0.89, 0.54, 1.0],
+                [0.96, 0.77, 0.32, 1.0],
+            ];
+            sprites.push(Sprite {
+                position: [x / width * 2.0 - 1.0, 1.0 - y / height * 2.0],
+                radius: [3.0 * camera.zoom / width, 3.0 * camera.zoom / height],
+                color: palette[entity.player.0 as usize % palette.len()],
+            });
+        }
+        if !sprites.is_empty() {
+            self.queue
+                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&sprites));
+        }
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(Counters {
+                    visible: sprites.len(),
+                    draw_calls: 0,
+                    gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                });
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &self.config);
+                return Ok(Counters {
+                    visible: sprites.len(),
+                    draw_calls: 0,
+                    gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                });
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                return Err("WebGPU surface lost; reload to restore it".to_owned());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err("WebGPU surface validation failed".to_owned());
+            }
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("sprites"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sprites"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.055,
+                            g: 0.08,
+                            b: 0.12,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.draw(0..6, 0..sprites.len() as u32);
+        }
+        self.queue.submit(Some(encoder.finish()));
+        self.queue.present(frame);
+        Ok(Counters {
+            visible: sprites.len(),
+            draw_calls: 1,
+            gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+        })
+    }
+}

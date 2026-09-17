@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "toolchain": "rustc 1.93.1",
+  "gungraun": "0.19.4",
+  "valgrind": "3.19.0",
+  "allow_aslr": true,
+  "smoke_workload_hash": "c068a47ebd635279753bfe7d8b630de70a1164e3ec1c92139c1c56d6c323ad56",
+  "instructions": {
+    "instructions::protocol::snapshot_encode": 207527,
+    "instructions::simulation::advance": 683783,
+    "instructions::simulation::viewport_query": 284813
+  },
+  "allocation_bytes": {
+    "instructions::protocol::snapshot_encode": 16376,
+    "instructions::simulation::advance": 0,
+    "instructions::simulation::viewport_query": 54024
+  },
+  "allocation_count": {
+    "instructions::protocol::snapshot_encode": 11,
+    "instructions::simulation::advance": 0,
+    "instructions::simulation::viewport_query": 84
+  }
+}

@@ -1,0 +1,9 @@
+/target/
+/local-assets/
+/reports/
+/coverage/
+/browser/node_modules/
+/browser/test-results/
+/web/pkg/
+/.cache/
+.env

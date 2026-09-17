@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AoeWorld Harness Lab</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0e151f; color: #e8edf5; font: 14px system-ui, sans-serif; }
+    main { display: flex; flex-direction: column; height: 100%; }
+    header { padding: 12px 18px; display: flex; align-items: center; gap: 18px; background: #172334; }
+    h1 { font-size: 18px; margin: 0; }
+    p { margin: 0; }
+    button, select { color: white; background: #345a80; border: 0; border-radius: 4px; padding: 8px 12px; cursor: pointer; }
+    #scene { width: 100%; height: calc(100% - 112px); display: block; }
+    footer { min-height: 36px; padding: 10px 18px; background: #172334; }
+    #unsupported { color: #ffb2a6; }
+  </style>
+</head>
+<body>
+<main>
+  <header><h1>AoeWorld Harness Lab</h1><label for="scenario">Scenario</label><select id="scenario"><option value="smoke">Smoke</option><option value="target-distributed">Target distributed</option><option value="target-hotspot">Target hotspot</option></select><p>Arrows/WASD move · +/- or wheel zoom · Space pauses view</p><button id="reconnect">Reconnect</button></header>
+  <canvas id="scene" width="1280" height="720" aria-label="Synthetic entity field"></canvas>
+  <footer><div id="diagnostics" role="status">Starting…</div><div id="unsupported" role="alert"></div></footer>
+</main>
+<script type="module">import init from '/pkg/aoe_client.js'; init();</script>
+</body>
+</html>
