@@ -19,6 +19,11 @@ pack-manifest parser. It uses a separately pinned nightly toolchain and keeps
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
 each target a 300-second campaign. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
+`make mutation-nightly` runs pinned cargo-mutants against the impact
+classifier, CI selection check, and 5% performance comparator. It requires a
+completed, nonempty campaign with no missed or timed-out mutations and writes
+`reports/mutation/nightly.json`. Mutations that cannot compile are reported
+as unviable, separately from caught mutations.
 Pull-request CI runs `make ci-select` against the base commit and records the
 selected jobs in `reports/gates/selection.json`. Unknown paths and missing
 base information select every job. The aggregate `required` check recomputes

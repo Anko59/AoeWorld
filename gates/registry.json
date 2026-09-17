@@ -11,6 +11,7 @@
     {"id":"coverage","command":"make coverage","requires":["test-unit"],"select":"code","evidence":"LCOV production-line thresholds and JSON report"},
     {"id":"fuzz-smoke","command":"make fuzz-smoke","requires":["test-unit"],"select":"code","evidence":"512 bounded libFuzzer runs per parser and JSON report"},
     {"id":"fuzz-nightly","command":"make fuzz-nightly","requires":["fuzz-smoke"],"select":"nightly","evidence":"300-second libFuzzer campaign per parser and JSON report"},
+    {"id":"mutation-nightly","command":"make mutation-nightly","requires":["test-unit"],"select":"nightly","evidence":"pinned comparator and CI-selection mutation outcomes"},
     {"id":"browser-check","command":"make browser-check","requires":[],"select":"browser","evidence":"TypeScript, ESLint, and Prettier results"},
     {"id":"test-wasm","command":"make test-wasm","requires":["test-unit","browser-check"],"select":"browser","evidence":"wasm-bindgen-test in pinned Chromium and JSON report"},
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},

@@ -14,6 +14,7 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 | coverage | `make coverage` | test-unit | code | LCOV production-line thresholds and JSON report |
 | fuzz-smoke | `make fuzz-smoke` | test-unit | code | 512 bounded libFuzzer runs per parser and JSON report |
 | fuzz-nightly | `make fuzz-nightly` | fuzz-smoke | nightly | 300-second libFuzzer campaign per parser and JSON report |
+| mutation-nightly | `make mutation-nightly` | test-unit | nightly | pinned comparator and CI-selection mutation outcomes |
 | browser-check | `make browser-check` | — | browser | TypeScript, ESLint, and Prettier results |
 | test-wasm | `make test-wasm` | test-unit, browser-check | browser | wasm-bindgen-test in pinned Chromium and JSON report |
 | test-e2e | `make test-e2e` | test-unit, browser-check | browser | Playwright result and screenshots |

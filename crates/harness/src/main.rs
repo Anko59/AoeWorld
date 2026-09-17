@@ -4,6 +4,7 @@ mod dev;
 mod e2e;
 mod fuzz;
 mod gates;
+mod mutation;
 mod perf;
 mod perf_micro;
 mod perf_pressure;
@@ -65,6 +66,7 @@ enum Command {
     TestE2e,
     FuzzSmoke,
     FuzzNightly,
+    MutationNightly,
     PerfSmoke,
     PerfCi,
     PerfFull,
@@ -213,6 +215,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::TestE2e => e2e::run()?,
         Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
         Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
+        Command::MutationNightly => mutation::run()?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,

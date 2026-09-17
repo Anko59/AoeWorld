@@ -41,8 +41,6 @@ pub fn compare(metric: &str, observed: Option<u64>, baseline: Option<u64>) -> Co
     let verdict = match (observed, baseline) {
         (None, _) => Verdict::Inconclusive,
         (Some(_), None) => Verdict::Unbaselined,
-        (Some(0), Some(0)) => Verdict::Pass,
-        (Some(_), Some(0)) => Verdict::Regression,
         (Some(actual), Some(reference))
             if u128::from(actual) * 100 > u128::from(reference) * 105 =>
         {
@@ -207,6 +205,13 @@ pub(crate) struct ClientResult {
     visible: usize,
 }
 
+fn initial_client_result(handshake_bytes: usize) -> ClientResult {
+    ClientResult {
+        bytes: handshake_bytes as u64,
+        ..Default::default()
+    }
+}
+
 async fn client(
     address: SocketAddr,
     scenario: Scenario,
@@ -228,10 +233,7 @@ async fn client(
     ) {
         return Err("handshake mismatch".into());
     }
-    let mut result = ClientResult {
-        bytes: size as u64,
-        ..Default::default()
-    };
+    let mut result = initial_client_result(size);
     send(
         &mut socket,
         ClientMessage::Subscribe {
@@ -463,6 +465,7 @@ mod tests {
 
     #[test]
     fn comparator_rejects_missing_and_regressed_samples() {
+        assert_eq!(initial_client_result(37).bytes, 37);
         assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);
         assert_eq!(compare("x", Some(100), None).verdict, Verdict::Unbaselined);
         assert_eq!(compare("x", Some(105), Some(100)).verdict, Verdict::Pass);

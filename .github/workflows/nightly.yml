@@ -54,6 +54,22 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  critical-mutation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make mutation-nightly
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nightly-critical-mutation
+          path: reports/mutation/
+          retention-days: 7
+          if-no-files-found: ignore
+
   target-performance:
     runs-on: ubuntu-24.04
     timeout-minutes: 90

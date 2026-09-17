@@ -9,6 +9,7 @@ ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
 POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
+MUTATION_IMAGE := aoeworld/mutation:27.1.0
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
@@ -18,7 +19,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -51,6 +52,7 @@ help:
 	@echo '  make test-wasm       Execute wasm-bindgen tests in pinned Chromium'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
+	@echo '  make mutation-nightly  Check critical gate and comparator mutations'
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
 	@echo '  make perf-ci         Run target workloads and required comparisons'
 	@echo '  make perf-full       Add population and sparse-world scaling workloads'
@@ -87,6 +89,9 @@ coverage-tools: tools
 
 fuzz-tools: tools
 	@docker build -f docker/fuzz.Dockerfile -t $(FUZZ_IMAGE) .
+
+mutation-tools:
+	@docker build -f docker/mutation.Dockerfile -t $(MUTATION_IMAGE) .
 
 orchestrator-tools: tools
 	@docker build -f docker/orchestrator.Dockerfile -t $(ORCH_IMAGE) .
@@ -145,6 +150,10 @@ fuzz-smoke: fuzz-tools
 
 fuzz-nightly: fuzz-tools
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
+
+mutation-nightly: mutation-tools
+	@mkdir -p reports/mutation
+	@docker run --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e CARGO_HOME=$(ROOT)/.cache/cargo -e CARGO_TARGET_DIR=/tmp/aoeworld-mutation-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
 
 coverage: coverage-tools browser-deps orchestrator-tools build-wasm
 	@mkdir -p reports/coverage
