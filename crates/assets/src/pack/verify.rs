@@ -27,8 +27,8 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
             let mut decoder = png::Decoder::new(Cursor::new(&data));
             decoder.set_transformations(png::Transformations::IDENTITY);
             let mut reader = decoder.read_info()?;
-            if reader.info().width != PAGE as u32
-                || reader.info().height != PAGE as u32
+            if reader.info().width != u32::from(page.width)
+                || reader.info().height != u32::from(page.height)
                 || reader.info().color_type != png::ColorType::Rgba
                 || reader.info().bit_depth != png::BitDepth::Eight
             {
@@ -36,8 +36,8 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
             }
             let mut pixels = vec![0; reader.output_buffer_size()];
             let details = reader.next_frame(&mut pixels)?;
-            if details.width != PAGE as u32
-                || details.height != PAGE as u32
+            if details.width != u32::from(page.width)
+                || details.height != u32::from(page.height)
                 || details.color_type != png::ColorType::Rgba
                 || details.bit_depth != png::BitDepth::Eight
             {
@@ -64,7 +64,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         return Err(invalid("manifest", 0, "invalid input hash"));
     }
     for page in &manifest.pages {
-        if page.width as usize != PAGE || page.height as usize != PAGE {
+        if page.width != page.height || !matches!(page.width as usize, 1_024 | PAGE) {
             return Err(invalid("manifest", 0, "atlas page dimensions"));
         }
         for name in [&page.color, &page.player, &page.shadow, &page.outline] {

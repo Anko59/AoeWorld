@@ -21,6 +21,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -40,6 +41,7 @@ pub struct AppState {
     tick_deadline_misses: Arc<AtomicU64>,
     build: Arc<str>,
     tick_period: Duration,
+    asset_pack: Option<PathBuf>,
 }
 
 impl AppState {
@@ -50,6 +52,7 @@ impl AppState {
             tick_deadline_misses: Arc::new(AtomicU64::new(0)),
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
+            asset_pack: config.asset_pack.clone(),
         }
     }
 
@@ -151,13 +154,19 @@ async fn websocket(State(state): State<AppState>, upgrade: WebSocketUpgrade) -> 
 }
 
 pub fn app(state: AppState) -> Router {
-    Router::new()
+    let asset_pack = state.asset_pack.clone();
+    let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
-        .with_state(state)
+        .with_state(state);
+    if let Some(pack) = asset_pack {
+        router.nest_service("/asset-pack", ServeDir::new(pack))
+    } else {
+        router
+    }
 }
 
 fn states(entities: Vec<Entity>) -> BTreeMap<EntityId, EntityState> {

@@ -134,6 +134,7 @@ async fn network() -> Result<Sample> {
         bind: address,
         scenario: BEYOND_TARGET,
         tick_hz: 20,
+        asset_pack: None,
     };
     let state = AppState::new(&config, "perf-stress-local");
     let ticker = tokio::spawn(state.clone().run_ticks());

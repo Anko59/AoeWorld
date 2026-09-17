@@ -275,6 +275,7 @@ pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn 
         bind: address,
         scenario,
         tick_hz: 20,
+        asset_pack: None,
     };
     let state = AppState::new(&config, "perf-local");
     let ticker = tokio::spawn(state.clone().run_ticks());

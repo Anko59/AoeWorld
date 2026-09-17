@@ -144,7 +144,11 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             AssetCommand::Import { input } => {
-                let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial"));
+                let input = input.unwrap_or_else(|| {
+                    let trial = PathBuf::from("local-assets/trial");
+                    let game_data = trial.join("Data");
+                    if game_data.is_dir() { game_data } else { trial }
+                });
                 println!(
                     "{}",
                     aoe_assets::pack::import(&input, Path::new("local-assets/packs"))?.display()

@@ -21,6 +21,7 @@ async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, Join
             bind: address,
             scenario,
             tick_hz: 20,
+            asset_pack: None,
         },
         "test-build",
     );
@@ -33,6 +34,42 @@ async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, Join
 
 async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     setup_scenario(SMOKE).await
+}
+
+#[tokio::test]
+async fn selected_local_pack_is_served_only_when_configured() {
+    let pack = tempfile::tempdir().expect("pack directory");
+    std::fs::write(pack.path().join("manifest.json"), b"local-pack-test")
+        .expect("manifest fixture");
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let config = Config {
+        bind: address,
+        scenario: SMOKE,
+        tick_hz: 20,
+        asset_pack: Some(pack.path().to_owned()),
+    };
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app(AppState::new(&config, "test")))
+            .await
+            .expect("server");
+    });
+    let response =
+        tokio::task::spawn_blocking(move || http(address, "GET", "/asset-pack/manifest.json"))
+            .await
+            .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("local-pack-test"));
+    server.abort();
+
+    let (address, server, ticker) = setup().await;
+    let response =
+        tokio::task::spawn_blocking(move || http(address, "GET", "/asset-pack/manifest.json"))
+            .await
+            .expect("response");
+    assert!(response.starts_with("HTTP/1.1 404"));
+    server.abort();
+    ticker.abort();
 }
 
 async fn receive(socket: &mut Socket) -> ServerMessage {

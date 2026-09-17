@@ -227,6 +227,7 @@ pub(super) async fn network() -> Result<Sample> {
         bind: address,
         scenario: NETWORK_PRESSURE,
         tick_hz: 20,
+        asset_pack: None,
     };
     let state = AppState::new(&config, "perf-pressure-local");
     let ticker = tokio::spawn(state.clone().run_ticks());
