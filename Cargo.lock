@@ -113,6 +113,7 @@ dependencies = [
  "aoe-server",
  "aoe-simulation",
  "axum",
+ "blake3",
  "clap",
  "futures-util",
  "nix",

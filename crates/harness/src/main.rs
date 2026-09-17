@@ -8,6 +8,8 @@ mod policy;
 mod process;
 mod qa;
 mod qa_mcp;
+mod release;
+mod release_stack;
 
 use clap::{Parser, Subcommand};
 use std::{
@@ -58,6 +60,14 @@ enum Command {
     Preflight,
     HooksInstall,
     HooksCheck,
+    ReleaseBuild,
+    ReleaseVerify {
+        manifest: Option<PathBuf>,
+    },
+    ReleaseRehearse {
+        candidate: Option<PathBuf>,
+        previous: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -196,6 +206,25 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+        }
+        Command::ReleaseBuild => release::build()?,
+        Command::ReleaseVerify { manifest } => {
+            let manifest = manifest
+                .or_else(|| std::env::var_os("AOE_RELEASE_MANIFEST").map(PathBuf::from))
+                .ok_or("release manifest required")?;
+            release::verify(&manifest)?;
+        }
+        Command::ReleaseRehearse {
+            candidate,
+            previous,
+        } => {
+            let candidate = candidate
+                .or_else(|| std::env::var_os("AOE_RELEASE_CANDIDATE").map(PathBuf::from))
+                .ok_or("release candidate required")?;
+            let previous = previous
+                .or_else(|| std::env::var_os("AOE_RELEASE_PREVIOUS").map(PathBuf::from))
+                .ok_or("previous release required")?;
+            release::rehearse(&candidate, &previous)?;
         }
     }
     Ok(())

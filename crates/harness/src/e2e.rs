@@ -109,5 +109,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     ];
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     process::run("docker", &refs, Duration::from_secs(180))?;
+    let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
+    if !revision.status.success() {
+        return Err("cannot identify E2E source revision".into());
+    }
+    let report = serde_json::json!({
+        "version": 1,
+        "revision": String::from_utf8(revision.stdout)?.trim(),
+        "result": "PASS"
+    });
+    std::fs::create_dir_all("reports/e2e")?;
+    std::fs::write("reports/e2e/pass.json", serde_json::to_vec_pretty(&report)?)?;
     Ok(())
 }
