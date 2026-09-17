@@ -6,6 +6,7 @@
     {"id":"architecture-check","command":"make architecture-check","requires":[],"select":"code","evidence":"Cargo metadata and source boundary audit"},
     {"id":"docs-check","command":"make docs-check","requires":[],"select":"all","evidence":"registry table and local link validation"},
     {"id":"lint","command":"make lint","requires":["fmt-check"],"select":"code","evidence":"Clippy exit status"},
+    {"id":"deny","command":"make deny","requires":[],"select":"code","evidence":"Cargo advisory, source, license, and bans audit"},
     {"id":"test-unit","command":"make test-unit","requires":["lint"],"select":"code","evidence":"native unit, integration, and doctest results"},
     {"id":"browser-check","command":"make browser-check","requires":[],"select":"browser","evidence":"TypeScript, ESLint, and Prettier results"},
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},
