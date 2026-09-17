@@ -3,46 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AoeWorld Harness Lab</title>
+  <title>AoeWorld</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #0e151f; color: #e8edf5; font: 14px system-ui, sans-serif; }
-    main { display: flex; flex-direction: column; height: 100%; }
-    header { padding: 12px 18px; display: flex; align-items: center; gap: 18px; background: #172334; }
-    h1 { font-size: 18px; margin: 0; }
-    p { margin: 0; }
-    button, select { color: white; background: #345a80; border: 0; border-radius: 4px; padding: 8px 12px; cursor: pointer; }
-    #scene { width: 100%; height: calc(100% - 112px); display: block; }
-    #asset-viewer-frame { width: 100%; height: calc(100% - 112px); border: 0; }
-    #scene[hidden], #asset-viewer-frame[hidden] { display: none; }
-    footer { min-height: 36px; padding: 10px 18px; background: #172334; }
-    #unsupported { color: #ffb2a6; }
-    header a { color: #9ed6ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #101b19; color: #e3e8d7; font: 15px system-ui, sans-serif; }
+    main { max-width: 1120px; margin: auto; padding: 18px 24px; }
+    header, .bar, footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    header { margin-bottom: 14px; }
+    .brand { font-weight: 650; letter-spacing: .12em; font-size: 16px; }
+    .tag, .eyebrow { color: #a9b8a0; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; }
+    .tag { border: 1px solid #405246; border-radius: 30px; padding: 8px 12px; }
+    h1 { font: 38px Georgia, serif; margin: 10px 0; font-weight: normal; }
+    .intro { color: #aab7ac; margin: 0 0 14px; line-height: 1.6; }
+    .map { width: min(100%, calc((100dvh - 220px) * 1.5)); margin: auto; border: 1px solid #56664b; padding: 7px; background: #25362a; box-shadow: 0 18px 65px #0004; }
+    canvas { display: block; width: 100%; aspect-ratio: 3 / 2; cursor: crosshair; touch-action: none; }
+    canvas:focus-visible { outline: 2px solid #e8cb80; outline-offset: 3px; }
+    .bar { width: min(100%, calc((100dvh - 220px) * 1.5)); margin: auto; padding: 16px 18px; background: #1c2a24; border: 1px solid #354739; border-top: 0; }
+    .unit { display: flex; align-items: center; gap: 12px; }
+    .badge { color: #8dcbea; font-size: 26px; }
+    small { color: #9bad9e; display: block; margin-top: 4px; }
+    #unit-status { color: #c8d99e; }
+    button { color: #e2e7d6; border: 1px solid #52634d; background: #2b3b2d; padding: 10px 16px; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #3c5039; }
+    footer { color: #84988b; font-size: 12px; margin-top: 18px; flex-wrap: wrap; }
+    a { color: #b8c7ad; }
+    #unsupported { color: #ffd09b; line-height: 1.6; }
+    @media (max-width: 600px) { main { padding: 20px 12px; } h1 { font-size: 30px; } .coordinates { display: none; } }
   </style>
 </head>
 <body>
-<main>
-  <header><h1>AoeWorld Harness Lab</h1><label for="scenario">Scenario</label><select id="scenario"><option value="smoke">Smoke</option><option value="target-distributed">Target distributed</option><option value="target-hotspot">Target hotspot</option></select><p>Arrows/WASD move · +/- or wheel zoom · Space pauses view</p><button id="reconnect">Reconnect</button><select id="asset-mode" aria-label="Asset view" hidden><option value="synthetic">Synthetic lab</option><option value="imported">Imported sprites</option></select><a id="assets" href="/asset-viewer.html" hidden>Open viewer</a></header>
-  <canvas id="scene" width="1280" height="720" aria-label="Synthetic entity field"></canvas>
-  <iframe id="asset-viewer-frame" title="Imported sprite viewer" hidden></iframe>
-  <footer><div id="diagnostics" role="status">Starting…</div><div id="unsupported" role="alert"></div></footer>
+<main id="playground">
+  <header><span class="brand">AoeWorld</span><span class="tag">Single player</span></header>
+  <p class="intro">Your cavalry is selected. Click or tap the map to move. Click again to change direction.</p>
+  <div class="map"><canvas id="scene" width="960" height="640" tabindex="0" aria-label="AoeWorld map. Click to move, or focus and use arrow keys or WASD."></canvas></div>
+  <div class="bar">
+    <div class="unit"><span class="badge" aria-hidden="true">◆</span><div><strong>Cavalry</strong><small>Selected · <span id="unit-status" role="status">Loading…</span></small></div></div>
+    <div class="coordinates"><span class="eyebrow">Map position</span><small id="position">480, 320</small></div>
+    <button id="reset" type="button">Reset position</button>
+  </div>
+  <p id="unsupported" role="alert"></p>
+  <footer><span>Click to move · Arrow keys / WASD when map is focused</span><span>AoeWorld · Age of Empires II local assets</span></footer>
 </main>
-<script type="module">import init from '/pkg/aoe_client.js'; init();</script>
 <script type="module">
-  const mode = document.getElementById('asset-mode');
-  const scene = document.getElementById('scene');
-  const viewer = document.getElementById('asset-viewer-frame');
-  mode.addEventListener('change', () => {
-    const imported = mode.value === 'imported';
-    scene.hidden = imported;
-    viewer.hidden = !imported;
-    if (imported && !viewer.src) viewer.src = '/asset-viewer.html';
-  });
-  fetch('/asset-pack/manifest.json', { method: 'HEAD' }).then(response => {
-    if (response.ok) {
-      mode.hidden = false;
-      document.getElementById('assets').hidden = false;
-    }
-  });
+  import init from '/pkg/aoe_client.js';
+  init().catch(error => { document.getElementById('unsupported').textContent = `Unable to load the game: ${error}. Reload to retry.`; });
 </script>
 </body>
 </html>

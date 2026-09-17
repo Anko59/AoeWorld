@@ -57,8 +57,8 @@ async function execute(name, args) {
     );
     const url =
       args.configuration === "invalid-scenario"
-        ? new URL("/?scenario=invalid-demo", base).href
-        : base;
+        ? new URL("/diagnostics.html?scenario=invalid-demo", base).href
+        : new URL("/diagnostics.html", base).href;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
     const response = await page.request.get(`${base}/health`);
     if (!response.ok()) throw new Error("health endpoint is unavailable");

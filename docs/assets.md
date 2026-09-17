@@ -24,10 +24,10 @@ decoding, creates deterministic padded PNG atlas pages with separate player,
 shadow, and outline masks, and writes a versioned manifest.
 
 To inspect a pack in the local app, start `make dev` with
-`AOE_ASSET_PACK=local-assets/packs/<pack-hash>` and select **Imported sprites**
-in the header, or open `http://127.0.0.1:8080/asset-viewer.html`. The synthetic
-lab and imported sprite viewer are separate views of the local harness. The
-viewer renders imported frames and their masks. Stop an existing
-lab with `make down` before changing the selected pack. Public builds do not
+`AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game uses terrain resource 15008, cavalry walking/standing resources
+3008/3004, and border trees from resource 435. It preserves frame anchors,
+player color, and shadows. The viewer renders imported frames and their masks.
+Synthetic diagnostics are at `/diagnostics.html`. Stop an existing
+server with `make down` before changing the selected pack. Public builds do not
 contain trial files or local packs. Fixture tests run in public CI; actual trial
 import and visual inspection are reported separately.

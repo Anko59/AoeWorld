@@ -10,22 +10,23 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct Sprite {
-    position: [f32; 2],
-    radius: [f32; 2],
-    color: [f32; 4],
+pub(crate) struct Sprite {
+    pub(crate) position: [f32; 2],
+    pub(crate) radius: [f32; 2],
+    pub(crate) color: [f32; 4],
+    pub(crate) uv: [f32; 4],
 }
 
 pub struct Renderer {
     adapter_label: String,
     surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    pipeline: wgpu::RenderPipeline,
-    bind_group: wgpu::BindGroup,
-    buffer: wgpu::Buffer,
-    _atlas: wgpu::Texture,
+    pub(crate) pipeline: wgpu::RenderPipeline,
+    pub(crate) bind_group: wgpu::BindGroup,
+    pub(crate) buffer: wgpu::Buffer,
+    pub(crate) _atlas: wgpu::Texture,
 }
 
 #[derive(Clone, Copy)]
@@ -273,11 +274,16 @@ impl Renderer {
                 position: [x / width * 2.0 - 1.0, 1.0 - y / height * 2.0],
                 radius: [3.0 * camera.zoom / width, 3.0 * camera.zoom / height],
                 color: palette[entity.player.0 as usize % palette.len()],
+                uv: [0.0, 0.0, 1.0, 1.0],
             });
         }
+        self.render_sprites(&sprites)
+    }
+
+    pub(crate) fn render_sprites(&mut self, sprites: &[Sprite]) -> Result<Counters, String> {
         if !sprites.is_empty() {
             self.queue
-                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&sprites));
+                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(sprites));
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)

@@ -260,3 +260,6 @@ mod tests {
         }
     }
 }
+
+/// Local single-unit playground simulation.
+pub mod playground;
