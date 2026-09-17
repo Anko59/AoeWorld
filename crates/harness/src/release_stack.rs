@@ -56,7 +56,13 @@ struct Stack {
     browser: String,
 }
 
-fn start<R: Runtime>(resources: &mut Resources<'_, R>, manifest: &Manifest) -> Result<Stack> {
+struct Images<'a> {
+    revision: &'a str,
+    server: &'a str,
+    browser: &'a str,
+}
+
+fn start<R: Runtime>(resources: &mut Resources<'_, R>, images: &Images<'_>) -> Result<Stack> {
     let server = resources.runtime.docker(&[
         "run",
         "-d",
@@ -68,7 +74,7 @@ fn start<R: Runtime>(resources: &mut Resources<'_, R>, manifest: &Manifest) -> R
         "--read-only",
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=64m",
-        &manifest.server_image_id,
+        images.server,
     ])?;
     resources.containers.push(server.clone());
     let browser = resources.runtime.docker(&[
@@ -82,11 +88,11 @@ fn start<R: Runtime>(resources: &mut Resources<'_, R>, manifest: &Manifest) -> R
         "/tmp:rw,nosuid,size=64m",
         "--publish",
         "127.0.0.1::8080",
-        &manifest.browser_image_id,
+        images.browser,
     ])?;
     resources.containers.push(browser.clone());
     let stack = Stack { server, browser };
-    wait_healthy(resources.runtime, &stack.browser, &manifest.source_commit)?;
+    wait_healthy(resources.runtime, &stack.browser, images.revision)?;
     Ok(stack)
 }
 
@@ -139,7 +145,27 @@ fn wait_healthy<R: Runtime>(runtime: &R, browser: &str, revision: &str) -> Resul
 }
 
 fn rehearse_with<R: Runtime>(runtime: &R, candidate: &Manifest, previous: &Manifest) -> Result<()> {
-    if candidate.source_commit == previous.source_commit {
+    rehearse_images_with(
+        runtime,
+        &Images {
+            revision: &candidate.source_commit,
+            server: &candidate.server_image_id,
+            browser: &candidate.browser_image_id,
+        },
+        &Images {
+            revision: &previous.source_commit,
+            server: &previous.server_image_id,
+            browser: &previous.browser_image_id,
+        },
+    )
+}
+
+fn rehearse_images_with<R: Runtime>(
+    runtime: &R,
+    candidate: &Images<'_>,
+    previous: &Images<'_>,
+) -> Result<()> {
+    if candidate.revision == previous.revision {
         return Err("promotion rehearsal requires two distinct source revisions".into());
     }
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -157,14 +183,61 @@ fn rehearse_with<R: Runtime>(runtime: &R, candidate: &Manifest, previous: &Manif
     let rollback_stack = start(&mut resources, previous)?;
     stop(runtime, rollback_stack)?;
     println!(
-        "promoted {} and rolled back to {} using exact local image IDs",
-        candidate.source_commit, previous.source_commit
+        "promoted {} and rolled back to {} using exact image references",
+        candidate.revision, previous.revision
     );
     Ok(())
 }
 
 pub fn rehearse(candidate: &Manifest, previous: &Manifest) -> Result<()> {
     rehearse_with(&RealRuntime, candidate, previous)
+}
+
+pub fn rehearse_references(
+    candidate_revision: &str,
+    candidate_server: &str,
+    candidate_browser: &str,
+    previous_revision: &str,
+    previous_server: &str,
+    previous_browser: &str,
+) -> Result<()> {
+    rehearse_images_with(
+        &RealRuntime,
+        &Images {
+            revision: candidate_revision,
+            server: candidate_server,
+            browser: candidate_browser,
+        },
+        &Images {
+            revision: previous_revision,
+            server: previous_server,
+            browser: previous_browser,
+        },
+    )
+}
+
+fn smoke_images_with<R: Runtime>(runtime: &R, images: &Images<'_>) -> Result<()> {
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let network = format!("aoeworld-release-{}-{nonce}", std::process::id());
+    runtime.docker(&["network", "create", &network])?;
+    let mut resources = Resources {
+        runtime,
+        network,
+        containers: Vec::new(),
+    };
+    stop(runtime, start(&mut resources, images)?)?;
+    Ok(())
+}
+
+pub fn smoke_reference(revision: &str, server: &str, browser: &str) -> Result<()> {
+    smoke_images_with(
+        &RealRuntime,
+        &Images {
+            revision,
+            server,
+            browser,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -289,6 +362,22 @@ mod tests {
                 .iter()
                 .any(|args| args.iter().any(|value| value == "container-2"))
         );
+    }
+
+    #[test]
+    fn first_published_candidate_starts_without_a_previous_release() {
+        let runtime = FakeRuntime::default();
+        let images = Images {
+            revision: "candidate",
+            server: "ghcr.io/example/server@sha256:server",
+            browser: "ghcr.io/example/browser@sha256:browser",
+        };
+        smoke_images_with(&runtime, &images).expect("candidate smoke");
+        assert_eq!(runtime.runs.get(), 2);
+        assert!(runtime.calls.borrow().iter().any(|args| {
+            args.first().is_some_and(|name| name == "run")
+                && args.last().is_some_and(|name| name == images.browser)
+        }));
     }
 
     #[test]

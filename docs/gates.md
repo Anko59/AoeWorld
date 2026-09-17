@@ -29,5 +29,10 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 | release-verify | `make release-verify` | release-build | dev | exact local images, bundle, and report hashes |
 | release-publish | `make release-publish` | release-verify | dev | registry digests, SBOM hashes, bundle export, and GitHub outputs |
 | release-rehearse | `make release-rehearse` | release-verify | manual | local exact-image promotion and rollback health checks |
+| release-source-check | `make release-source-check` | ci-check | release PR | release branch SHA, dev ancestry, and exact source-tree match |
+| release-main-source-check | `make release-main-source-check` | ci-check | main push | unique dev commit whose tree equals the promoted main tree |
+| release-verify-published | `make release-verify-published` | release-source-check | release PR | published manifest, evidence, SBOM, bundle, and registry digest verification |
+| release-smoke-published | `make release-smoke-published` | release-verify-published | first release | initial published candidate health; rollback unavailable |
+| release-rehearse-published | `make release-rehearse-published` | release-verify-published | release PR | previous, candidate, and rollback stacks use exact published digests |
 | ci-select | `make ci-select` | — | CI | revision-bound job selection manifest |
 | ci-check | `make ci-check` | ci-select | CI | selected job results and manifest recomputation |

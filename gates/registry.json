@@ -26,6 +26,11 @@
     {"id":"release-verify","command":"make release-verify","requires":["release-build"],"select":"dev","evidence":"exact local images, bundle, and report hashes"},
     {"id":"release-publish","command":"make release-publish","requires":["release-verify"],"select":"dev","evidence":"registry digests, SBOM hashes, bundle export, and GitHub outputs"},
     {"id":"release-rehearse","command":"make release-rehearse","requires":["release-verify"],"select":"manual","evidence":"local exact-image promotion and rollback health checks"},
+    {"id":"release-source-check","command":"make release-source-check","requires":["ci-check"],"select":"release PR","evidence":"release branch SHA, dev ancestry, and exact source-tree match"},
+    {"id":"release-main-source-check","command":"make release-main-source-check","requires":["ci-check"],"select":"main push","evidence":"unique dev commit whose tree equals the promoted main tree"},
+    {"id":"release-verify-published","command":"make release-verify-published","requires":["release-source-check"],"select":"release PR","evidence":"published manifest, evidence, SBOM, bundle, and registry digest verification"},
+    {"id":"release-smoke-published","command":"make release-smoke-published","requires":["release-verify-published"],"select":"first release","evidence":"initial published candidate health; rollback unavailable"},
+    {"id":"release-rehearse-published","command":"make release-rehearse-published","requires":["release-verify-published"],"select":"release PR","evidence":"previous, candidate, and rollback stacks use exact published digests"},
     {"id":"ci-select","command":"make ci-select","requires":[],"select":"CI","evidence":"revision-bound job selection manifest"},
     {"id":"ci-check","command":"make ci-check","requires":["ci-select"],"select":"CI","evidence":"selected job results and manifest recomputation"}
   ]

@@ -17,6 +17,7 @@ mod process;
 mod qa;
 mod qa_mcp;
 mod release;
+mod release_promotion;
 mod release_publish;
 mod release_stack;
 mod repo_policy;
@@ -100,6 +101,11 @@ enum Command {
     HooksCheck,
     ReleaseBuild,
     ReleasePublish,
+    ReleaseSourceCheck,
+    ReleaseMainSourceCheck,
+    ReleaseVerifyPublished,
+    ReleaseRehearsePublished,
+    ReleaseSmokePublished,
     ReleaseVerify {
         manifest: Option<PathBuf>,
     },
@@ -294,6 +300,11 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
+        Command::ReleaseSourceCheck => release_promotion::source()?,
+        Command::ReleaseMainSourceCheck => release_promotion::main_source()?,
+        Command::ReleaseVerifyPublished => release_promotion::verify()?,
+        Command::ReleaseRehearsePublished => release_promotion::rehearse()?,
+        Command::ReleaseSmokePublished => release_promotion::smoke()?,
         Command::ReleaseVerify { manifest } => {
             let manifest = manifest
                 .or_else(|| std::env::var_os("AOE_RELEASE_MANIFEST").map(PathBuf::from))

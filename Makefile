@@ -19,7 +19,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -264,6 +264,21 @@ release-build: orchestrator-tools
 
 release-publish: orchestrator-tools
 	@docker run --rm --init --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish
+
+release-source-check: tools
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
+
+release-main-source-check: tools
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
+
+release-verify-published: orchestrator-tools
+	@docker run --rm --init --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_RELEASE_SOURCE_SHA -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify-published
+
+release-rehearse-published: orchestrator-tools
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_PREVIOUS_MANIFEST -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse-published
+
+release-smoke-published: orchestrator-tools
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-smoke-published
 
 release-verify: orchestrator-tools
 	@docker run --rm --init --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_MANIFEST $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify

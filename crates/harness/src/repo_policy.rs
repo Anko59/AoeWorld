@@ -101,8 +101,9 @@ fn validate(repo: &Value, branch: &Value, signatures: &Value, name: &str) -> Res
         .ok_or("required status checks missing")?;
     if branch["required_status_checks"]["strict"] != true
         || !contexts.iter().any(|value| value == "required")
+        || (name == "main" && !contexts.iter().any(|value| value == "release-candidate"))
     {
-        return Err(format!("{name}: strict aggregate check missing").into());
+        return Err(format!("{name}: required checks or strict mode missing").into());
     }
     if branch["enforce_admins"]["enabled"] != true
         || branch["required_pull_request_reviews"].is_null()
@@ -156,6 +157,10 @@ mod tests {
         assert!(validate(&repo, &branch, &serde_json::json!({"enabled":false}), "dev").is_err());
         let wrong_repo = serde_json::json!({"default_branch":"dev","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false});
         assert!(validate(&wrong_repo, &branch, &signatures, "main").is_err());
+        assert!(validate(&repo, &branch, &signatures, "main").is_err());
+        branch["required_status_checks"]["contexts"] =
+            serde_json::json!(["required", "release-candidate"]);
+        assert!(validate(&repo, &branch, &signatures, "main").is_ok());
     }
 
     #[test]
@@ -182,7 +187,7 @@ mod tests {
     #[test]
     fn audit_fetches_both_protected_branches_and_detects_drift() {
         let repo = serde_json::json!({"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false});
-        let branch = serde_json::json!({"required_status_checks":{"strict":true,"contexts":["required"]},"enforce_admins":{"enabled":true},"required_pull_request_reviews":{},"required_linear_history":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}});
+        let branch = serde_json::json!({"required_status_checks":{"strict":true,"contexts":["required","release-candidate"]},"enforce_admins":{"enabled":true},"required_pull_request_reviews":{},"required_linear_history":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}});
         let signature = serde_json::json!({"enabled":true});
         let mut paths = Vec::new();
         check_with("owner/repo", |path| {

@@ -66,7 +66,7 @@ fn digest(bytes: &[u8]) -> String {
     format!("blake3:{}", blake3::hash(bytes).to_hex())
 }
 
-fn valid_registry(repository: &str) -> Result<String> {
+pub(crate) fn valid_registry(repository: &str) -> Result<String> {
     let normalized = repository.to_ascii_lowercase();
     let Some((owner, name)) = normalized.split_once('/') else {
         return Err("GITHUB_REPOSITORY must be owner/repository".into());
@@ -82,7 +82,7 @@ fn valid_registry(repository: &str) -> Result<String> {
     Ok(format!("ghcr.io/{owner}/{name}"))
 }
 
-fn valid_sha256(value: &str) -> bool {
+pub(crate) fn valid_sha256(value: &str) -> bool {
     value
         .strip_prefix("sha256:")
         .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
@@ -104,7 +104,7 @@ fn repo_digest(output: &str, name: &str) -> Result<String> {
     Ok(result)
 }
 
-fn sbom_hashes(directory: &Path) -> Result<BTreeMap<String, String>> {
+pub(crate) fn sbom_hashes(directory: &Path) -> Result<BTreeMap<String, String>> {
     let mut result = BTreeMap::new();
     for name in ["server.spdx.json", "browser.spdx.json", "bundle.spdx.json"] {
         let bytes = fs::read(directory.join(name))?;
@@ -182,7 +182,7 @@ fn push_with<R: Runtime>(
     })
 }
 
-fn login(token: &str, actor: &str) -> Result<()> {
+pub(crate) fn login(token: &str, actor: &str) -> Result<()> {
     if let Ok(directory) = env::var("DOCKER_CONFIG") {
         fs::create_dir_all(directory)?;
     }

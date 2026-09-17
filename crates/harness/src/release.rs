@@ -116,7 +116,7 @@ pub fn hash_bundle(root: &Path) -> Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-fn evidence(path: &Path, revision: &str, result_key: &str) -> Result<String> {
+pub(crate) fn evidence(path: &Path, revision: &str, result_key: &str) -> Result<String> {
     let bytes = fs::read(path)?;
     let value: Value = serde_json::from_slice(&bytes)?;
     if value["revision"] != revision || value[result_key] != "PASS" {
