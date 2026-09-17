@@ -32,6 +32,7 @@ jobs:
           path: |
             reports/coverage/
             reports/wasm/
+            reports/perf/browser.json
             browser/test-results/
           retention-days: 7
           if-no-files-found: ignore
@@ -79,6 +80,7 @@ jobs:
           ref: dev
       - run: make bootstrap
       - run: make perf-full
+      - run: make perf-timing
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

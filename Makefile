@@ -19,7 +19,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -62,6 +62,7 @@ help:
 	@echo '  make perf-soak-10    Repeat target network lifecycle for 10 minutes'
 	@echo '  make perf-soak-30    Repeat target network lifecycle for 30 minutes'
 	@echo '  make perf-instructions Run pinned Gungraun/Callgrind kernels'
+	@echo '  make perf-timing    Collect informational Criterion microbenchmarks'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
 	@echo '  make qa-validate     Validate reports/qa/session.json'
 	@echo '  make qa-serve        Serve restricted MCP browser tools on stdio'
@@ -207,6 +208,12 @@ perf-instructions: analysis-tools
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-simulation --bench instructions -- --output-format=json > reports/perf/simulation.ndjson
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-protocol --bench instructions -- --output-format=json > reports/perf/protocol.ndjson
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-assets --bench instructions -- --output-format=json > reports/perf/assets.ndjson
+
+perf-timing: tools
+	@$(DOCKER_RUN) cargo bench --locked -p aoe-simulation --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
+	@$(DOCKER_RUN) cargo bench --locked -p aoe-protocol --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
+	@$(DOCKER_RUN) cargo bench --locked -p aoe-assets --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-timing-report
 
 perf-wasm-size: build-wasm analysis-tools
 	@mkdir -p reports/perf

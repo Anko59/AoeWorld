@@ -12,8 +12,16 @@ same pinned image. Three separate runs each measured 238,987 instructions,
 17,152 allocated bytes, and 257 allocations. The proposal changed only the
 case set: the original three values, tool identities, and workload hash stayed
 identical. This extends the required comparison to asset decoding.
-`wasm.json` records the 81,750-byte gzip size of the Binaryen 108 optimized
-WASM bundle, using gzip 1.12 with `-n -9` for repeatable output.
+`wasm.json` initially recorded the 81,750-byte gzip size of the Binaryen 108
+optimized WASM bundle, using gzip 1.12 with `-n -9` for repeatable output.
+The browser timing and atlas change raised it to 86,725 bytes (6.09%). The
+original 5% gate reported `REGRESSION` at 102,588 bytes when Rust JSON
+serialization was used. Moving serialization into the browser reduced the
+bundle by 15,863 bytes. The reviewed proposal at 86,725 bytes keeps all
+required timing, memory, and resource measurements and is accepted as the new
+baseline. The four instruction and allocation cases in the same proposal
+remained identical. Future compressed WASM growth is still gated at 5% from
+86,725 bytes; this baseline change and rationale are part of the feature PR.
 
 `make perf-baseline-propose` writes fresh measurements to the ignored
 `reports/perf/micro-proposal.json`; it does not change this baseline. Review

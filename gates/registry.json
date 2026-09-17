@@ -17,6 +17,7 @@
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},
     {"id":"perf-smoke","command":"make perf-smoke","requires":["test-unit"],"select":"code","evidence":"versioned synthetic JSON report"},
     {"id":"perf-ci","command":"make perf-ci","requires":["perf-smoke"],"select":"performance","evidence":"target counts and baseline comparisons"},
+    {"id":"perf-timing","command":"make perf-timing","requires":["perf-ci"],"select":"nightly","evidence":"informational Criterion raw samples and versioned report"},
     {"id":"perf-pressure","command":"make perf-pressure","requires":["perf-ci"],"select":"performance","evidence":"clock-scheduled subscriptions, backlog, slow reader, and reconnect report"},
     {"id":"perf-stress","command":"make perf-stress","requires":["perf-ci"],"select":"weekly","evidence":"256k-entity protocol load and explicit overload report"},
     {"id":"perf-soak-10","command":"make perf-soak-10","requires":["perf-ci"],"select":"nightly","evidence":"10-minute target network lifecycle and retained-memory report"},

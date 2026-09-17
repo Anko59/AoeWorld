@@ -20,6 +20,7 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 | test-e2e | `make test-e2e` | test-unit, browser-check | browser | Playwright result and screenshots |
 | perf-smoke | `make perf-smoke` | test-unit | code | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke | performance | target counts and baseline comparisons |
+| perf-timing | `make perf-timing` | perf-ci | nightly | informational Criterion raw samples and versioned report |
 | perf-pressure | `make perf-pressure` | perf-ci | performance | clock-scheduled subscriptions, backlog, slow reader, and reconnect report |
 | perf-stress | `make perf-stress` | perf-ci | weekly | 256k-entity protocol load and explicit overload report |
 | perf-soak-10 | `make perf-soak-10` | perf-ci | nightly | 10-minute target network lifecycle and retained-memory report |

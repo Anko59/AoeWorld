@@ -12,6 +12,7 @@ mod perf_pressure;
 mod perf_size;
 mod perf_soak;
 mod perf_stress;
+mod perf_timing;
 mod policy;
 mod process;
 mod qa;
@@ -75,6 +76,7 @@ enum Command {
     PerfFull,
     PerfPressure,
     PerfStress,
+    PerfTimingReport,
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]
@@ -238,6 +240,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::PerfFull => perf::run("full")?,
         Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,
+        Command::PerfTimingReport => perf_timing::report()?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {

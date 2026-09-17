@@ -29,6 +29,25 @@ deadline misses, four reconnects under load, and a paused slow reader. Hosted
 timing samples are informational; missing scheduled work or protocol responses
 fail the workload.
 
+`make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic
+simulation tick, viewport query, 1,000-entity snapshot encode/decode, and
+256-color palette decode. Nightly CI uploads `reports/perf/timing.json` and
+`timing.md`. The versioned JSON contains the exact revision, dirty status,
+workload identity, toolchain, raw Criterion samples, and estimate intervals.
+Its `INCONCLUSIVE` verdict means hosted elapsed time does not establish a
+hardware timing pass. Criterion timings never block a merge for regression.
+
+The Playwright hotspot camera test uses a 1920×1080 browser viewport and
+collects bounded frame-interval, client decode/update, and CPU render-submit
+samples from the Rust/WASM client. It records navigation-relative first-visible
+time, WASM memory size, resident and
+visible counts, and persistent GPU resources in its JSON attachment. The
+synthetic renderer uploads one small mask atlas on initialization and tints it
+per player. This test checks that the atlas and other persistent resources are
+reused through camera churn and zoom. Browser timings are informational on
+shared hosts. The raw samples and browser identity are saved to ignored
+`reports/perf/browser.json` and uploaded as CI diagnostics.
+
 Dedicated machines can submit `reports/perf/hardware-environment.json` and
 `reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
 `--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The
