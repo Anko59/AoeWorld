@@ -14,4 +14,14 @@ thiserror.workspace = true
 walkdir = "2.5"
 
 [dev-dependencies]
+criterion = "=0.8.2"
+gungraun = "=0.19.4"
 tempfile = "3.27"
+
+[[bench]]
+name = "instructions"
+harness = false
+
+[[bench]]
+name = "timings"
+harness = false

@@ -100,6 +100,10 @@ pub fn validate(report: &Report) -> Result<(), String> {
 }
 
 pub fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
+    validate_file_at(path, Path::new("reports/qa"))
+}
+
+fn validate_file_at(path: &Path, evidence_root: &Path) -> Result<(), Box<dyn Error>> {
     let report: Report = serde_json::from_slice(&fs::read(path)?)?;
     validate(&report).map_err(|error| -> Box<dyn Error> { error.into() })?;
     for evidence in report
@@ -108,7 +112,7 @@ pub fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
         .flat_map(|journey| &journey.evidence)
         .chain(report.findings.iter().flat_map(|finding| &finding.evidence))
     {
-        validate_evidence(Path::new(evidence))
+        validate_evidence_at(evidence_root, Path::new(evidence))
             .map_err(|error| -> Box<dyn Error> { error.into() })?;
     }
     println!(
@@ -119,10 +123,8 @@ pub fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn validate_evidence(path: &Path) -> Result<(), String> {
-    let root = Path::new("reports/qa")
-        .canonicalize()
-        .map_err(|error| error.to_string())?;
+pub(crate) fn validate_evidence_at(root: &Path, path: &Path) -> Result<(), String> {
+    let root = root.canonicalize().map_err(|error| error.to_string())?;
     let candidate = path.canonicalize().map_err(|error| error.to_string())?;
     if !candidate.starts_with(root) || !candidate.is_file() {
         return Err("QA evidence must be an existing file under reports/qa".into());
@@ -171,5 +173,67 @@ mod tests {
             evidence: vec!["shot.png".into()],
         });
         assert!(validate(&item).is_err());
+    }
+
+    #[test]
+    fn report_status_and_evidence_validation_rejects_ambiguous_claims() {
+        let mut item = report(Status::Pass);
+        item.version = 2;
+        assert!(validate(&item).is_err());
+        item.version = 1;
+        item.budget = "infinite".into();
+        assert!(validate(&item).is_err());
+        item.budget = "fast".into();
+        item.journeys.push(Journey {
+            name: REQUIRED[0].into(),
+            completed: true,
+            evidence: vec!["screen.png".into()],
+        });
+        assert!(validate(&item).is_err());
+        item.journeys.pop();
+        item.journeys.remove(0);
+        assert!(validate(&item).is_err());
+        item.status = Status::Findings;
+        assert!(validate(&item).is_err());
+        item.status = Status::Blocked;
+        assert!(validate(&item).is_ok());
+
+        let temp = tempfile::tempdir().expect("directory");
+        let root = temp.path().join("reports/qa");
+        fs::create_dir_all(&root).expect("evidence directory");
+        let inside = root.join("screen.png");
+        let outside = temp.path().join("outside.png");
+        fs::write(&inside, b"screen").expect("inside");
+        fs::write(&outside, b"outside").expect("outside");
+        assert!(validate_evidence_at(&root, &inside).is_ok());
+        assert!(validate_evidence_at(&root, &outside).is_err());
+        assert!(validate_evidence_at(&root, &root.join("missing.png")).is_err());
+    }
+
+    #[test]
+    fn report_file_requires_existing_evidence_within_the_qa_directory() {
+        let temp = tempfile::tempdir().expect("directory");
+        let root = temp.path().join("qa");
+        fs::create_dir_all(&root).expect("evidence directory");
+        let inside = root.join("screen.png");
+        let outside = temp.path().join("outside.png");
+        fs::write(&inside, b"screen").expect("inside");
+        fs::write(&outside, b"outside").expect("outside");
+        let path = root.join("session.json");
+        let mut item = report(Status::Pass);
+        for journey in &mut item.journeys {
+            journey.evidence = vec![inside.to_string_lossy().into_owned()];
+        }
+        fs::write(&path, serde_json::to_vec(&item).expect("JSON")).expect("report");
+        validate_file_at(&path, &root).expect("valid evidence");
+        item.journeys[0].evidence = vec![outside.to_string_lossy().into_owned()];
+        fs::write(&path, serde_json::to_vec(&item).expect("JSON")).expect("report");
+        assert!(validate_file_at(&path, &root).is_err());
+        item.journeys[0].evidence = vec!["missing.png".into()];
+        fs::write(&path, serde_json::to_vec(&item).expect("JSON")).expect("report");
+        assert!(validate_file_at(&path, &root).is_err());
+        item.journeys[0].evidence.clear();
+        fs::write(&path, serde_json::to_vec(&item).expect("JSON")).expect("report");
+        assert!(validate_file_at(&path, &root).is_err());
     }
 }
