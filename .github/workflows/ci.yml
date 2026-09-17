@@ -313,9 +313,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY"
-          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY"
-          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3
           gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/published.json" --repo "$GITHUB_REPOSITORY"
       - id: previous
         name: Download previous promoted release
@@ -390,9 +392,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY"
-          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY"
-          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci
+          gh attestation verify "oci://${{ steps.verified.outputs.server_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "oci://${{ steps.verified.outputs.browser_image }}" --repo "$GITHUB_REPOSITORY" --bundle-from-oci --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/bundle.tar" --repo "$GITHUB_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3
           gh attestation verify "reports/release/${{ steps.source.outputs.source_sha }}/published.json" --repo "$GITHUB_REPOSITORY"
       - name: Promote existing digests without rebuilding
         env:
