@@ -21,10 +21,23 @@ the previous exact image IDs again as rollback. It creates and removes only its
 own Docker network and containers. No live service is changed.
 
 Local image IDs are content hashes on this Docker host; they are not published
-registry digests. Registry publication, SBOMs, GitHub OIDC signing, provenance,
-release branches, and promotion to `main` still require implementation. The
-initial bootstrap commit on `main` was the one-time exception to the intended
-PR flow. `make repo-policy-check` audits the GitHub default branch, squash-only
+registry digests. On a verified `dev` push, the `dev-artifacts` job performs
+complete functional and target-scale verification, builds the local release
+once, generates SPDX SBOMs for both runtime images and the static bundle,
+and runs `make release-publish`. The Rust publisher checks the local manifest,
+logs into GHCR with the job token, pushes the exact local images, captures
+registry digests, and writes `published.json`, `bundle.tar`, and checksums.
+Pinned GitHub Actions use OIDC to attest the image digests, SBOMs, bundle,
+and published manifest. The job attaches the manifest, evidence, bundle, SBOMs,
+and checksums to a `build-<dev commit>` prerelease. It has write permissions
+only on the trusted `dev` push, after the aggregate required check passes.
+
+The workflow has not run on `dev` yet. Published digests, signatures, and SBOMs
+must be verified from that run before they are reported as evidence. Release
+branches, exact published-digest promotion and rollback, and promotion to
+`main` still require implementation. The initial bootstrap commit on `main`
+was the one-time exception to the intended PR flow. `make repo-policy-check`
+audits the GitHub default branch, squash-only
 merges, strict `required` check, pull-request requirement, signed commits, and
 force-push/deletion restrictions on `dev` and `main`. Pass `GITHUB_TOKEN` for
 authenticated API access when needed.

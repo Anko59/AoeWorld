@@ -25,5 +25,9 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 | perf-soak-10 | `make perf-soak-10` | perf-ci | nightly | 10-minute target network lifecycle and retained-memory report |
 | perf-soak-30 | `make perf-soak-30` | perf-ci | weekly | 30-minute target network lifecycle and retained-memory report |
 | perf-hardware-check | `make perf-hardware-check` | perf-ci | dedicated hardware | environment-bound 1080p timing samples and three-run baseline |
+| release-build | `make release-build` | test-e2e, perf-ci | dev | verified local image IDs, bundle hash, and source evidence |
+| release-verify | `make release-verify` | release-build | dev | exact local images, bundle, and report hashes |
+| release-publish | `make release-publish` | release-verify | dev | registry digests, SBOM hashes, bundle export, and GitHub outputs |
+| release-rehearse | `make release-rehearse` | release-verify | manual | local exact-image promotion and rollback health checks |
 | ci-select | `make ci-select` | — | CI | revision-bound job selection manifest |
 | ci-check | `make ci-check` | ci-select | CI | selected job results and manifest recomputation |
