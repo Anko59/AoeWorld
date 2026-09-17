@@ -38,9 +38,11 @@ branch starts from `main`, is named `release/<verified dev SHA>`, and carries
 the exact tree of that dev commit. A PR to `main` runs the read-only release
 candidate job: it rejects a different tree or dev ancestry, downloads the
 matching `build-<SHA>` assets, checks the manifest, checksums, evidence, SBOMs,
-and registry digests, and verifies the OIDC attestations. It starts candidate
-images by digest in a disposable stack. When a previous promoted release
-exists, it also starts that release and rolls back to its exact digests. The
+and registry digests, and verifies the OIDC attestations. Image attestations
+are fetched from GHCR OCI referrers; image and static-bundle SBOMs are verified
+with the SPDX v2.3 predicate. It starts candidate images by digest in a
+disposable stack. When a previous promoted release exists, it also starts
+that release and rolls back to its exact digests. The
 first release can only test candidate health; its report records
 `rollback_rehearsed: false`. Once `main` moves beyond the initial bootstrap
 commit, failure to obtain a previous release blocks the rollback gate.
