@@ -384,41 +384,4 @@ pub fn serve(budget: &str) -> Result<(), Box<dyn Error>> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn contract_exposes_only_restricted_tools() {
-        let available = tools();
-        let names: Vec<_> = available["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|item| item["name"].as_str())
-            .collect();
-        assert!(names.contains(&"observe"));
-        assert!(!names.contains(&"evaluate"));
-        assert!(
-            validate_action(
-                "activate",
-                &json!({"session":"first","role":"button","label":"Reconnect"})
-            )
-            .is_ok()
-        );
-        assert!(
-            validate_action(
-                "activate",
-                &json!({"session":"first","role":"script","label":"x"})
-            )
-            .is_err()
-        );
-        let mut server = Server::new("fast").unwrap();
-        let response = handle(&mut server, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":VERSION}})).unwrap();
-        assert_eq!(response["result"]["protocolVersion"], VERSION);
-        assert!(
-            server
-                .tool_call("finish", &json!({"status":"PASS"}))
-                .is_err()
-        );
-    }
-}
+mod tests;

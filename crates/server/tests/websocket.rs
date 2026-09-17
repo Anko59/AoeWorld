@@ -3,7 +3,11 @@ use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_
 use aoe_scenario::SMOKE;
 use aoe_server::{AppState, Config, app};
 use futures_util::{SinkExt, StreamExt};
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
+    time::Duration,
+};
 use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 
@@ -55,6 +59,18 @@ async fn open(address: SocketAddr) -> Socket {
         }
     ));
     socket
+}
+
+fn http(address: SocketAddr, method: &str, path: &str) -> String {
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(stream, "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
 }
 
 #[tokio::test]
@@ -165,6 +181,91 @@ async fn stale_version_and_invalid_region_are_rejected() {
     .await;
     assert!(matches!(
         receive(&mut invalid).await,
+        ServerMessage::Error { code: 400, .. }
+    ));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn http_health_replay_and_scenario_validation_use_authoritative_state() {
+    let (address, server, ticker) = setup().await;
+    let health = http(address, "GET", "/health");
+    assert!(health.starts_with("HTTP/1.1 200"));
+    assert!(health.contains("\"build\":\"test-build\""));
+    assert!(health.contains("\"entities\":8000"));
+
+    let replay = http(address, "GET", "/replay-hash?scenario=smoke&ticks=2");
+    assert!(replay.starts_with("HTTP/1.1 200"));
+    assert!(replay.contains("\"ticks\":2"));
+    assert!(replay.contains("\"hash\":\""));
+    assert!(
+        http(address, "GET", "/replay-hash?scenario=missing&ticks=1").starts_with("HTTP/1.1 400")
+    );
+    assert!(
+        http(address, "GET", "/replay-hash?scenario=smoke&ticks=65").starts_with("HTTP/1.1 400")
+    );
+    assert!(http(address, "POST", "/scenario/missing").starts_with("HTTP/1.1 400"));
+    assert!(http(address, "POST", "/scenario/smoke").starts_with("HTTP/1.1 200"));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn malformed_handshakes_resync_and_scenario_change_are_visible() {
+    let (address, server, ticker) = setup().await;
+    let (mut malformed, _) = connect_async(format!("ws://{address}/ws"))
+        .await
+        .expect("connect");
+    malformed
+        .send(Message::Binary(vec![255].into()))
+        .await
+        .expect("send bad hello");
+    assert!(matches!(
+        receive(&mut malformed).await,
+        ServerMessage::Error { code: 400, .. }
+    ));
+
+    let mut client = open(address).await;
+    send(&mut client, ClientMessage::Resync).await;
+    assert!(matches!(
+        receive(&mut client).await,
+        ServerMessage::Error { code: 400, .. }
+    ));
+    send(
+        &mut client,
+        ClientMessage::Subscribe {
+            region: Region {
+                x: 0,
+                y: 0,
+                width: 64,
+                height: 64,
+            },
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut client).await,
+        ServerMessage::Snapshot { .. }
+    ));
+    send(&mut client, ClientMessage::Resync).await;
+    assert!(matches!(
+        receive(&mut client).await,
+        ServerMessage::Snapshot { .. }
+    ));
+
+    assert!(http(address, "POST", "/scenario/smoke").starts_with("HTTP/1.1 200"));
+    let mut changed = false;
+    for _ in 0..5 {
+        if matches!(receive(&mut client).await, ServerMessage::Hello { .. }) {
+            changed = true;
+            break;
+        }
+    }
+    assert!(changed, "scenario change must reset the client visibly");
+    send(&mut client, ClientMessage::Hello { version: VERSION }).await;
+    assert!(matches!(
+        receive(&mut client).await,
         ServerMessage::Error { code: 400, .. }
     ));
     server.abort();

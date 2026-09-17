@@ -238,6 +238,14 @@ mod tests {
                 .contains("performance")
         );
         assert_eq!(classify(&["Cargo.lock".into()]).suites.len(), 6);
+        assert_eq!(
+            classify(&["crates/assets/src/slp.rs".into()]).suites,
+            BTreeSet::from(["static".into(), "native".into(), "assets".into()])
+        );
+        assert_eq!(
+            classify(&["crates/client/src/lib.rs".into()]).suites,
+            BTreeSet::from(["static".into(), "native".into(), "browser".into()])
+        );
     }
 
     #[test]

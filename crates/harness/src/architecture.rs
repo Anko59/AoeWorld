@@ -34,6 +34,9 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
                 .join(name.trim_start_matches("aoe-"))
                 .join("src");
             for source in sources(&path)? {
+                if test_only(&source)? {
+                    continue;
+                }
                 let content = fs::read_to_string(&source)?;
                 let production = content.split("#[cfg(test)]").next().unwrap_or(&content);
                 for api in [
@@ -53,10 +56,10 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
         }
     }
     for source in sources(&root.join("crates"))? {
-        let content = fs::read_to_string(&source)?;
-        if source.components().any(|part| part.as_os_str() == "tests") {
+        if test_only(&source)? {
             continue;
         }
+        let content = fs::read_to_string(&source)?;
         let production = content.split("#[cfg(test)]").next().unwrap_or(&content);
         for marker in [
             "unsafe {",
@@ -77,6 +80,23 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
     } else {
         Err(violations.join("\n").into())
     }
+}
+
+fn test_only(source: &Path) -> Result<bool, Box<dyn Error>> {
+    if source.components().any(|part| part.as_os_str() == "tests") {
+        return Ok(true);
+    }
+    if source.file_name().is_none_or(|name| name != "tests.rs") {
+        return Ok(false);
+    }
+    let parent = source.parent().ok_or("test source has no parent")?;
+    let module_name = parent.file_name().ok_or("test module has no name")?;
+    let parent_module = parent.with_file_name(format!("{}.rs", module_name.to_string_lossy()));
+    let declaration = fs::read_to_string(parent_module)?;
+    if !declaration.contains("#[cfg(test)]\nmod tests;") {
+        return Err("tests.rs must be declared behind #[cfg(test)]".into());
+    }
+    Ok(true)
 }
 
 fn forbidden(package: &str, dependency: &str) -> bool {

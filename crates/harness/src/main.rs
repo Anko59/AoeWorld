@@ -1,4 +1,6 @@
 mod architecture;
+mod coverage;
+mod dev;
 mod e2e;
 mod gates;
 mod perf;
@@ -33,9 +35,16 @@ enum Command {
         command: AssetCommand,
     },
     Doctor,
+    Dev {
+        #[command(subcommand)]
+        command: DevCommand,
+    },
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    CoverageCheck {
+        file: Option<PathBuf>,
+    },
     Impact {
         #[arg(long)]
         base: Option<String>,
@@ -70,6 +79,14 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+}
+
+#[derive(Subcommand)]
+enum DevCommand {
+    Start,
+    Down,
+    Status,
+    Logs,
 }
 
 #[derive(Subcommand)]
@@ -124,9 +141,18 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
             }
         }
+        Command::Dev { command } => match command {
+            DevCommand::Start => dev::start()?,
+            DevCommand::Down => dev::down()?,
+            DevCommand::Status => dev::status()?,
+            DevCommand::Logs => dev::logs()?,
+        },
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::CoverageCheck { file } => {
+            coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
+        }
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
         Command::Fmt => process::run("cargo", &["fmt", "--all"], Duration::from_secs(120))?,
         Command::FmtCheck => process::run(
@@ -147,11 +173,24 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             ],
             Duration::from_secs(600),
         )?,
-        Command::TestUnit => process::run(
-            "cargo",
-            &["test", "--workspace", "--locked"],
-            Duration::from_secs(600),
-        )?,
+        Command::TestUnit => {
+            process::run(
+                "cargo",
+                &[
+                    "nextest",
+                    "run",
+                    "--workspace",
+                    "--locked",
+                    "--no-fail-fast",
+                ],
+                Duration::from_secs(600),
+            )?;
+            process::run(
+                "cargo",
+                &["test", "--workspace", "--doc", "--locked"],
+                Duration::from_secs(600),
+            )?;
+        }
         Command::TestE2e => e2e::run()?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,

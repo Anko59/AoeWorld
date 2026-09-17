@@ -7,14 +7,16 @@ BROWSER_IMAGE := aoeworld/browser-tools:1.63.0
 ORCH_IMAGE := aoeworld/orchestrator:1.93.1
 ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
 POLICY_IMAGE := aoeworld/policy:0.20.2
+COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
 ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT)
 DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
+DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools browser-tools orchestrator-tools browser-deps browser-check test-e2e doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit pre-commit preflight build build-wasm dev assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools browser-tools orchestrator-tools browser-deps browser-check test-e2e doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -28,11 +30,15 @@ help:
 	@echo '  make lint            Run strict Clippy'
 	@echo '  make deny            Audit Cargo advisories, licenses, bans, and sources'
 	@echo '  make test-unit       Run native tests'
+	@echo '  make coverage        Check native production-line coverage floors'
 	@echo '  make pre-commit      Local static gate'
 	@echo '  make preflight       Static gate plus native tests'
 	@echo '  make build           Build workspace'
 	@echo '  make build-wasm      Build and bind the Rust/WebGPU client'
-	@echo '  make dev             Start synthetic server on localhost:8080'
+	@echo '  make dev             Start checkout-scoped lab on localhost:8080'
+	@echo '  make down            Stop this checkout’s lab'
+	@echo '  make status          Show this checkout’s lab status'
+	@echo '  make logs            Show recent lab logs'
 	@echo '  make assets-inspect  Inspect ignored local-assets/trial'
 	@echo '  make assets-import   Import ignored local-assets/trial'
 	@echo '  make assets-verify   Verify all ignored local packs'
@@ -64,6 +70,9 @@ analysis-tools: tools
 
 policy-tools: tools
 	@docker build -f docker/policy.Dockerfile -t $(POLICY_IMAGE) .
+
+coverage-tools: tools
+	@docker build -f docker/coverage.Dockerfile -t $(COVERAGE_IMAGE) .
 
 orchestrator-tools: tools
 	@docker build -f docker/orchestrator.Dockerfile -t $(ORCH_IMAGE) .
@@ -114,6 +123,15 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
+coverage: coverage-tools
+	@mkdir -p reports/coverage
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked --workspace --lcov --output-path reports/coverage/native.lcov
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --json --output-path reports/coverage/native.json
+	@$(MAKE) --no-print-directory coverage-check
+
+coverage-check:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- coverage-check
+
 perf-smoke:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-smoke
 
@@ -160,8 +178,18 @@ test-e2e: build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
-dev: build-wasm
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BIND=0.0.0.0:8080 -e AOE_SCENARIO -p 127.0.0.1:8080:8080 $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked --release -p aoe-server
+dev: build-wasm orchestrator-tools
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
+
+down: orchestrator-tools
+	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev down
+
+status: orchestrator-tools
+	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev status
+
+logs: orchestrator-tools
+	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev logs
 
 assets-inspect:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets inspect

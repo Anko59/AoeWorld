@@ -310,4 +310,61 @@ mod tests {
         assert!(parse(&fixture(&[0x8E, 0x0F], 1)).is_err());
         assert!(parse(&fixture(&[0x08, 5, 6, 0x0F], 1)).is_err());
     }
+
+    #[test]
+    fn decodes_run_commands_and_preserves_separate_masks() {
+        let cases: &[(&[u8], &[Pixel])] = &[
+            (
+                &[0x01, 1, 0x04, 9, 0x0F],
+                &[Pixel::Transparent, Pixel::Color(9)],
+            ),
+            (&[0x02, 2, 3, 4, 0x0F], &[Pixel::Color(3), Pixel::Color(4)]),
+            (
+                &[0x03, 1, 0x04, 5, 0x0F],
+                &[Pixel::Transparent, Pixel::Color(5)],
+            ),
+            (
+                &[0x06, 2, 7, 8, 0x0F],
+                &[Pixel::Player(7), Pixel::Player(8)],
+            ),
+            (&[0x27, 4, 0x0F], &[Pixel::Color(4), Pixel::Color(4)]),
+            (&[0x2A, 6, 0x0F], &[Pixel::Player(6), Pixel::Player(6)]),
+            (&[0x2B, 0x0F], &[Pixel::Shadow, Pixel::Shadow]),
+            (&[0x5E, 2, 0x0F], &[Pixel::Outline1, Pixel::Outline1]),
+            (&[0x7E, 2, 0x0F], &[Pixel::Outline2, Pixel::Outline2]),
+        ];
+        for (commands, expected) in cases {
+            let frames = parse(&fixture(commands, 2))
+                .unwrap_or_else(|error| panic!("commands {commands:?}: {error}"));
+            assert_eq!(&frames[0].pixels, expected, "commands {commands:?}");
+        }
+    }
+
+    #[test]
+    fn malformed_runs_and_bounds_fail_without_painting_past_row() {
+        for (commands, width) in [
+            (&[0x02, 0, 0x0F][..], 1),
+            (&[0x03, 0, 0x0F], 1),
+            (&[0x05, 0, 0x0F], 1),
+            (&[0x05, 2, 0x0F], 1),
+            (&[0x04, 1, 0x04, 2, 0x0F], 1),
+            (&[0x06, 2, 7, 0x0F], 2),
+            (&[0x4E, 0x0F], 2),
+            (&[0x5E, 3, 0x0F], 2),
+        ] {
+            assert!(
+                parse(&fixture(commands, width)).is_err(),
+                "commands {commands:?}"
+            );
+        }
+        let mut zero_frames = fixture(&[0x04, 1, 0x0F], 1);
+        zero_frames[4..8].copy_from_slice(&0u32.to_le_bytes());
+        assert!(parse(&zero_frames).is_err());
+        let mut huge_frame = fixture(&[0x04, 1, 0x0F], 1);
+        huge_frame[48..52].copy_from_slice(&4097u32.to_le_bytes());
+        assert!(parse(&huge_frame).is_err());
+        let mut invalid_edges = fixture(&[0x04, 1, 0x0F], 1);
+        invalid_edges[64..66].copy_from_slice(&2u16.to_le_bytes());
+        assert!(parse(&invalid_edges).is_err());
+    }
 }

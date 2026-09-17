@@ -109,4 +109,32 @@ mod tests {
         corrupt[80..84].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(parse(&corrupt).is_err());
     }
+
+    #[test]
+    fn rejects_invalid_tables_offsets_and_resource_ids() {
+        let original = fixture();
+        assert!(parse(&original[..40]).is_err());
+        for (range, value) in [
+            (40..44, 0u32),
+            (56..60, 33u32),
+            (60..64, 96u32),
+            (68..72, u32::MAX),
+            (72..76, 100_001u32),
+            (80..84, 91u32),
+        ] {
+            let mut bytes = original.clone();
+            bytes[range].copy_from_slice(&value.to_le_bytes());
+            assert!(parse(&bytes).is_err());
+        }
+        let mut duplicate = original;
+        duplicate.resize(107, 0);
+        duplicate[60..64].copy_from_slice(&104u32.to_le_bytes());
+        duplicate[72..76].copy_from_slice(&2u32.to_le_bytes());
+        duplicate[80..84].copy_from_slice(&104u32.to_le_bytes());
+        duplicate[88..92].copy_from_slice(&50500u32.to_le_bytes());
+        duplicate[92..96].copy_from_slice(&104u32.to_le_bytes());
+        duplicate[96..100].copy_from_slice(&0u32.to_le_bytes());
+        duplicate[104..107].copy_from_slice(b"abc");
+        assert!(parse(&duplicate).is_err());
+    }
 }
