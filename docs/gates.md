@@ -19,3 +19,5 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 | test-e2e | `make test-e2e` | test-unit, browser-check | browser | Playwright result and screenshots |
 | perf-smoke | `make perf-smoke` | test-unit | code | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke | performance | target counts and baseline comparisons |
+| ci-select | `make ci-select` | — | CI | revision-bound job selection manifest |
+| ci-check | `make ci-check` | ci-select | CI | selected job results and manifest recomputation |

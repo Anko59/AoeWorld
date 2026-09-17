@@ -15,6 +15,8 @@
     {"id":"test-wasm","command":"make test-wasm","requires":["test-unit","browser-check"],"select":"browser","evidence":"wasm-bindgen-test in pinned Chromium and JSON report"},
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},
     {"id":"perf-smoke","command":"make perf-smoke","requires":["test-unit"],"select":"code","evidence":"versioned synthetic JSON report"},
-    {"id":"perf-ci","command":"make perf-ci","requires":["perf-smoke"],"select":"performance","evidence":"target counts and baseline comparisons"}
+    {"id":"perf-ci","command":"make perf-ci","requires":["perf-smoke"],"select":"performance","evidence":"target counts and baseline comparisons"},
+    {"id":"ci-select","command":"make ci-select","requires":[],"select":"CI","evidence":"revision-bound job selection manifest"},
+    {"id":"ci-check","command":"make ci-check","requires":["ci-select"],"select":"CI","evidence":"selected job results and manifest recomputation"}
   ]
 }

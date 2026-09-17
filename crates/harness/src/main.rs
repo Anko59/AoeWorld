@@ -52,6 +52,8 @@ enum Command {
         base: Option<String>,
         paths: Vec<String>,
     },
+    CiSelect,
+    CiCheck,
     Fmt,
     FmtCheck,
     Lint,
@@ -159,6 +161,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
         }
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
+        Command::CiSelect => gates::ci_select()?,
+        Command::CiCheck => gates::ci_check()?,
         Command::Fmt => process::run("cargo", &["fmt", "--all"], Duration::from_secs(120))?,
         Command::FmtCheck => process::run(
             "cargo",

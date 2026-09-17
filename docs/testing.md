@@ -19,4 +19,10 @@ pack-manifest parser. It uses a separately pinned nightly toolchain and keeps
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
 each target a 300-second campaign. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
+Pull-request CI runs `make ci-select` against the base commit and records the
+selected jobs in `reports/gates/selection.json`. Unknown paths and missing
+base information select every job. The aggregate `required` check recomputes
+the selection at the checked-out revision and requires success for each selected
+job; only unselected jobs may be skipped. `make ci-check` validates that
+contract locally when supplied the manifest and job results.
 Do not claim a complete gate until they exist and pass at the exact revision.

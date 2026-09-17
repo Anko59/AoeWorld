@@ -15,7 +15,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      manifest: ${{ steps.manifest.outputs.manifest }}
+      native_coverage: ${{ steps.manifest.outputs.native_coverage }}
+      browser: ${{ steps.manifest.outputs.browser }}
+      target_performance: ${{ steps.manifest.outputs.target_performance }}
+      fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - run: make tools
+      - id: manifest
+        env:
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: make ci-select
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ci-selection
+          path: reports/gates/selection.json
+          retention-days: 7
+
   static:
+    needs: select
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -24,6 +49,8 @@ jobs:
       - run: make preflight
 
   native-coverage:
+    needs: select
+    if: ${{ needs.select.outputs.native_coverage == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -38,6 +65,8 @@ jobs:
           if-no-files-found: ignore
 
   browser:
+    needs: select
+    if: ${{ needs.select.outputs.browser == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -62,6 +91,8 @@ jobs:
           if-no-files-found: ignore
 
   target-performance:
+    needs: select
+    if: ${{ needs.select.outputs.target_performance == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -77,6 +108,8 @@ jobs:
           if-no-files-found: ignore
 
   fuzz-smoke:
+    needs: select
+    if: ${{ needs.select.outputs.fuzz_smoke == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -94,15 +127,18 @@ jobs:
 
   required:
     if: always()
-    needs: [static, native-coverage, browser, target-performance, fuzz-smoke]
+    needs: [select, static, native-coverage, browser, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
-      - name: Require all selected jobs
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - run: make tools
+      - name: Validate selection and selected jobs
         env:
-          STATIC: ${{ needs.static.result }}
-          COVERAGE: ${{ needs['native-coverage'].result }}
-          BROWSER: ${{ needs.browser.result }}
-          PERFORMANCE: ${{ needs.target-performance.result }}
-          FUZZ: ${{ needs['fuzz-smoke'].result }}
-        run: test "$STATIC" = success && test "$COVERAGE" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success && test "$FUZZ" = success
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
+          AOE_JOB_RESULTS_JSON: >-
+            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
+        run: make ci-check

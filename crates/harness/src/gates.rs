@@ -1,9 +1,10 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -159,6 +160,12 @@ fn classify(paths: &[String]) -> Impact {
     .collect();
     let mut suites = BTreeSet::new();
     suites.insert("static".to_owned());
+    if paths.is_empty() {
+        return Impact {
+            suites: all,
+            paths: Vec::new(),
+        };
+    }
     for path in paths {
         if path.starts_with("docs/")
             || path.ends_with(".md")
@@ -174,9 +181,12 @@ fn classify(paths: &[String]) -> Impact {
         {
             suites.insert("browser".to_owned());
             suites.insert("native".to_owned());
+            suites.insert("performance".to_owned());
         } else if path.starts_with("crates/assets/") {
             suites.insert("assets".to_owned());
             suites.insert("native".to_owned());
+            suites.insert("browser".to_owned());
+            suites.insert("performance".to_owned());
         } else if path.starts_with("crates/server/")
             || path.starts_with("crates/core/")
             || path.starts_with("crates/scenario/")
@@ -201,20 +211,147 @@ fn classify(paths: &[String]) -> Impact {
     }
 }
 
+const CI_JOBS: [&str; 5] = [
+    "static",
+    "native-coverage",
+    "browser",
+    "target-performance",
+    "fuzz-smoke",
+];
+
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+struct Selection {
+    version: u16,
+    revision: String,
+    base: Option<String>,
+    paths: Vec<String>,
+    jobs: BTreeMap<String, bool>,
+}
+
+fn git_output(args: &[&str]) -> Result<String, Box<dyn Error>> {
+    let output = Command::new("git").args(args).output()?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
+    }
+    Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+}
+
+fn changed_paths(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let output = Command::new("git")
+        .args(["diff", "--name-only", "-z", base, "HEAD"])
+        .output()?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
+    }
+    Ok(output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|name| !name.is_empty())
+        .map(|name| String::from_utf8_lossy(name).to_string())
+        .collect())
+}
+
+fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
+    let suites = classify(&paths).suites;
+    let jobs = CI_JOBS
+        .into_iter()
+        .map(|job| {
+            let selected = match job {
+                "static" => true,
+                "native-coverage" => suites.contains("native"),
+                "browser" => suites.contains("browser"),
+                "target-performance" => suites.contains("performance"),
+                "fuzz-smoke" => suites.contains("assets") || suites.contains("release"),
+                _ => false,
+            };
+            (job.to_owned(), selected)
+        })
+        .collect();
+    Selection {
+        version: 1,
+        revision,
+        base,
+        paths,
+        jobs,
+    }
+}
+
+fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
+    let revision = git_output(&["rev-parse", "HEAD"])?;
+    let paths = match base {
+        Some(base) => changed_paths(base)?,
+        None => Vec::new(),
+    };
+    Ok(selection(revision, base.map(str::to_owned), paths))
+}
+
+pub fn ci_select() -> Result<(), Box<dyn Error>> {
+    let base = std::env::var("AOE_BASE_SHA")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let selection = current_selection(base.as_deref())?;
+    let json = serde_json::to_string(&selection)?;
+    fs::create_dir_all("reports/gates")?;
+    fs::write("reports/gates/selection.json", format!("{json}\n"))?;
+    if let Some(path) = std::env::var_os("GITHUB_OUTPUT") {
+        let mut output = OpenOptions::new().append(true).open(path)?;
+        writeln!(output, "manifest={json}")?;
+        for (job, selected) in &selection.jobs {
+            writeln!(output, "{}={selected}", job.replace('-', "_"))?;
+        }
+    }
+    println!("{json}");
+    Ok(())
+}
+
+fn check_selection(
+    manifest: &str,
+    results: &str,
+    expected: &Selection,
+) -> Result<(), Box<dyn Error>> {
+    let actual: Selection = serde_json::from_str(manifest)?;
+    if &actual != expected {
+        return Err(
+            "CI selection manifest differs from the checked-out revision and changed paths".into(),
+        );
+    }
+    let results: BTreeMap<String, String> = serde_json::from_str(results)?;
+    if results.get("select").map(String::as_str) != Some("success")
+        || results.len() != CI_JOBS.len() + 1
+    {
+        return Err("CI selection job failed or result set is incomplete".into());
+    }
+    for job in CI_JOBS {
+        let wanted = if *expected.jobs.get(job).ok_or("missing selected job")? {
+            "success"
+        } else {
+            "skipped"
+        };
+        if results.get(job).map(String::as_str) != Some(wanted) {
+            return Err(format!("CI job {job} must be {wanted}").into());
+        }
+    }
+    Ok(())
+}
+
+pub fn ci_check() -> Result<(), Box<dyn Error>> {
+    let manifest = std::env::var("AOE_SELECTION_JSON")?;
+    let results = std::env::var("AOE_JOB_RESULTS_JSON")?;
+    let base = std::env::var("AOE_BASE_SHA")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let expected = current_selection(base.as_deref())?;
+    check_selection(&manifest, &results, &expected)?;
+    println!(
+        "CI selection and all selected jobs passed for {}",
+        expected.revision
+    );
+    Ok(())
+}
+
 pub fn impact(base: Option<&str>, paths: Vec<String>) -> Result<(), Box<dyn Error>> {
     let paths = if let Some(base) = base {
-        let output = Command::new("git")
-            .args(["diff", "--name-only", "-z", base, "HEAD"])
-            .output()?;
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
-        }
-        output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|name| !name.is_empty())
-            .map(|name| String::from_utf8_lossy(name).to_string())
-            .collect()
+        changed_paths(base)?
     } else {
         paths
     };
@@ -240,11 +377,69 @@ mod tests {
         assert_eq!(classify(&["Cargo.lock".into()]).suites.len(), 6);
         assert_eq!(
             classify(&["crates/assets/src/slp.rs".into()]).suites,
-            BTreeSet::from(["static".into(), "native".into(), "assets".into()])
+            BTreeSet::from([
+                "static".into(),
+                "native".into(),
+                "assets".into(),
+                "browser".into(),
+                "performance".into()
+            ])
         );
         assert_eq!(
             classify(&["crates/client/src/lib.rs".into()]).suites,
-            BTreeSet::from(["static".into(), "native".into(), "browser".into()])
+            BTreeSet::from([
+                "static".into(),
+                "native".into(),
+                "browser".into(),
+                "performance".into()
+            ])
+        );
+        assert_eq!(classify(&[]).suites.len(), 6);
+    }
+
+    #[test]
+    fn ci_selection_requires_exact_manifest_and_job_outcomes() {
+        let docs = selection(
+            "a".repeat(40),
+            Some("b".repeat(40)),
+            vec!["docs/testing.md".into()],
+        );
+        assert_eq!(docs.jobs.get("static"), Some(&true));
+        assert_eq!(docs.jobs.get("browser"), Some(&false));
+        let assets = selection(
+            "a".repeat(40),
+            None,
+            vec!["crates/assets/src/slp.rs".into()],
+        );
+        assert_eq!(assets.jobs.get("fuzz-smoke"), Some(&true));
+        assert_eq!(assets.jobs.get("native-coverage"), Some(&true));
+        assert_eq!(assets.jobs.get("browser"), Some(&true));
+        let all = selection("a".repeat(40), None, Vec::new());
+        assert!(all.jobs.values().all(|selected| *selected));
+        let manifest = serde_json::to_string(&docs).expect("manifest");
+        let results = serde_json::json!({
+            "select":"success", "static":"success", "native-coverage":"skipped",
+            "browser":"skipped", "target-performance":"skipped", "fuzz-smoke":"skipped"
+        })
+        .to_string();
+        check_selection(&manifest, &results, &docs).expect("matching selection");
+        assert!(check_selection(&manifest, &results, &assets).is_err());
+        assert!(check_selection(&manifest, "{}", &docs).is_err());
+        assert!(
+            check_selection(
+                &manifest,
+                &results.replace("\"skipped\"", "\"success\""),
+                &docs
+            )
+            .is_err()
+        );
+        assert!(
+            check_selection(
+                &manifest,
+                &results.replace("\"select\":\"success\"", "\"select\":\"failure\""),
+                &docs
+            )
+            .is_err()
         );
     }
 

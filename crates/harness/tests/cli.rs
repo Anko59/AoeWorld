@@ -67,3 +67,47 @@ fn hooks_install_and_check_in_disposable_git_repository() {
     .expect("tamper hook");
     assert!(!command(&["hooks-check"]).status.success());
 }
+
+#[test]
+fn ci_selection_manifest_and_aggregate_execute_through_cli() {
+    let directory = tempfile::tempdir().expect("temporary output");
+    let output_path = directory.path().join("github-output");
+    std::fs::write(&output_path, "").expect("output file");
+    let select = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        .arg("ci-select")
+        .env_remove("AOE_BASE_SHA")
+        .env("GITHUB_OUTPUT", &output_path)
+        .current_dir(root())
+        .output()
+        .expect("selection");
+    assert!(
+        select.status.success(),
+        "{}",
+        String::from_utf8_lossy(&select.stderr)
+    );
+    let manifest = String::from_utf8(select.stdout).expect("manifest");
+    let output = std::fs::read_to_string(output_path).expect("GitHub outputs");
+    assert!(output.contains(&format!("manifest={}", manifest.trim())));
+    assert!(output.contains("native_coverage=true"));
+    let results = serde_json::json!({
+        "select":"success", "static":"success", "native-coverage":"success",
+        "browser":"success", "target-performance":"success", "fuzz-smoke":"success"
+    })
+    .to_string();
+    let check = |results: &str| {
+        Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+            .arg("ci-check")
+            .env_remove("AOE_BASE_SHA")
+            .env("AOE_SELECTION_JSON", manifest.trim())
+            .env("AOE_JOB_RESULTS_JSON", results)
+            .current_dir(root())
+            .output()
+            .expect("aggregate")
+    };
+    assert!(check(&results).status.success());
+    assert!(
+        !check(&results.replace("\"browser\":\"success\"", "\"browser\":\"failure\""))
+            .status
+            .success()
+    );
+}
