@@ -32,8 +32,8 @@ and published manifest. The job attaches the manifest, evidence, bundle, SBOMs,
 and checksums to a `build-<dev commit>` prerelease. It has write permissions
 only on the trusted `dev` push, after the aggregate required check passes.
 
-The workflow has not run on `dev` yet. Published digests, signatures, and SBOMs
-must be verified from that run before they are reported as evidence. A release
+Published digests, signatures, and SBOMs must be verified from the exact
+`dev-artifacts` run before they are reported as evidence. A release
 branch starts from `main`, is named `release/<verified dev SHA>`, and carries
 the exact tree of that dev commit. A PR to `main` runs the read-only release
 candidate job: it rejects a different tree or dev ancestry, downloads the
@@ -48,9 +48,9 @@ commit, failure to obtain a previous release blocks the rollback gate.
 After merging the release PR, the `main-promotion` job finds the unique `dev`
 commit with the same source tree, downloads and verifies that existing build,
 checks its attestations again, and marks its `build-<SHA>` prerelease as the
-latest promoted release. It does not build or retag the images. This path has
-not run yet; its outcome must be checked on the exact `main` revision before
-claiming promotion. The initial bootstrap commit on `main` was the one-time
+latest promoted release. It does not build or retag the images. Check the job
+on the exact `main` revision before claiming promotion. The initial bootstrap
+commit on `main` was the one-time
 exception to the intended PR flow. `make repo-policy-check`
 audits the GitHub default branch, squash-only
 merges, strict `required` check, pull-request requirement, signed commits, and
