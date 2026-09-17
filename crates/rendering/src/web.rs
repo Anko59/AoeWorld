@@ -5,6 +5,8 @@ use web_sys::HtmlCanvasElement;
 use wgpu::SurfaceTarget;
 
 const CAPACITY: usize = 16_384;
+const ATLAS_SIDE: u32 = 8;
+const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -23,6 +25,7 @@ pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     buffer: wgpu::Buffer,
+    _atlas: wgpu::Texture,
 }
 
 #[derive(Clone, Copy)]
@@ -37,6 +40,10 @@ pub struct Counters {
     pub visible: usize,
     pub draw_calls: usize,
     pub gpu_buffer_bytes: usize,
+    pub persistent_gpu_resources: usize,
+    pub atlas_pages: usize,
+    pub atlas_uploads: usize,
+    pub atlas_bytes: usize,
 }
 
 impl Renderer {
@@ -77,26 +84,110 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let atlas = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("synthetic sprite atlas"),
+            size: wgpu::Extent3d {
+                width: ATLAS_SIDE,
+                height: ATLAS_SIDE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let mut pixels = [0_u8; ATLAS_BYTES];
+        for y in 0..ATLAS_SIDE {
+            for x in 0..ATLAS_SIDE {
+                let pixel = &mut pixels[((y * ATLAS_SIDE + x) * 4) as usize..][..4];
+                pixel.copy_from_slice(&[
+                    255,
+                    255,
+                    255,
+                    if (1..7).contains(&x) && (1..7).contains(&y) {
+                        255
+                    } else {
+                        0
+                    },
+                ]);
+            }
+        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(ATLAS_SIDE * 4),
+                rows_per_image: Some(ATLAS_SIDE),
+            },
+            wgpu::Extent3d {
+                width: ATLAS_SIDE,
+                height: ATLAS_SIDE,
+                depth_or_array_layers: 1,
+            },
+        );
+        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("synthetic sprite sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sprites"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sprite data"),
             layout: &layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&atlas_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sprite pipeline layout"),
@@ -137,6 +228,7 @@ impl Renderer {
             pipeline,
             bind_group,
             buffer,
+            _atlas: atlas,
         })
     }
 
@@ -195,6 +287,10 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                    persistent_gpu_resources: 6,
+                    atlas_pages: 1,
+                    atlas_uploads: 1,
+                    atlas_bytes: ATLAS_BYTES,
                 });
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
@@ -203,6 +299,10 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                    persistent_gpu_resources: 6,
+                    atlas_pages: 1,
+                    atlas_uploads: 1,
+                    atlas_bytes: ATLAS_BYTES,
                 });
             }
             wgpu::CurrentSurfaceTexture::Lost => {
@@ -252,6 +352,10 @@ impl Renderer {
             visible: sprites.len(),
             draw_calls: 1,
             gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+            persistent_gpu_resources: 6,
+            atlas_pages: 1,
+            atlas_uploads: 1,
+            atlas_bytes: ATLAS_BYTES,
         })
     }
 }

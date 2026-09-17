@@ -1,0 +1,6 @@
+{
+  "goog:chromeOptions": {
+    "binary": "/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+  }
+}

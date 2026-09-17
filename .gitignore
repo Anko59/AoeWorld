@@ -6,4 +6,8 @@
 /browser/test-results/
 /web/pkg/
 /.cache/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/corpus/*/*
 .env

@@ -418,7 +418,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
 }
 
 mod verify;
-pub use verify::verify;
+pub use verify::{parse_manifest, verify};
 
 #[cfg(test)]
 mod tests {
