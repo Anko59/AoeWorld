@@ -1,0 +1,72 @@
+name: AoeWorld nightly validation
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-functional:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make bootstrap
+      - run: make preflight
+      - run: make coverage
+      - run: make browser-check
+      - run: make test-e2e
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nightly-functional
+          path: |
+            reports/coverage/
+            reports/wasm/
+            browser/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  parser-fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make fuzz-nightly
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nightly-parser-fuzz
+          path: |
+            reports/fuzz/
+            fuzz/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  target-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make bootstrap
+      - run: make perf-full
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nightly-performance
+          path: reports/perf/
+          retention-days: 30
+          if-no-files-found: ignore

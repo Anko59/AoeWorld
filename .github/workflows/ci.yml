@@ -76,9 +76,25 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  fuzz-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: make fuzz-smoke
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: parser-fuzz-smoke
+          path: |
+            reports/fuzz/
+            fuzz/artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+
   required:
     if: always()
-    needs: [static, native-coverage, browser, target-performance]
+    needs: [static, native-coverage, browser, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -88,4 +104,5 @@ jobs:
           COVERAGE: ${{ needs['native-coverage'].result }}
           BROWSER: ${{ needs.browser.result }}
           PERFORMANCE: ${{ needs.target-performance.result }}
-        run: test "$STATIC" = success && test "$COVERAGE" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success
+          FUZZ: ${{ needs['fuzz-smoke'].result }}
+        run: test "$STATIC" = success && test "$COVERAGE" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success && test "$FUZZ" = success

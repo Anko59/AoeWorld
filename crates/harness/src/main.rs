@@ -2,6 +2,7 @@ mod architecture;
 mod coverage;
 mod dev;
 mod e2e;
+mod fuzz;
 mod gates;
 mod perf;
 mod perf_micro;
@@ -57,6 +58,8 @@ enum Command {
     TestUnit,
     TestWasm,
     TestE2e,
+    FuzzSmoke,
+    FuzzNightly,
     PerfSmoke,
     PerfCi,
     PerfFull,
@@ -195,6 +198,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
+        Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
+        Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,

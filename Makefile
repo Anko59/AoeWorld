@@ -8,6 +8,7 @@ ORCH_IMAGE := aoeworld/orchestrator:1.93.1
 ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
 POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
+FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
@@ -16,7 +17,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-instructions perf-wasm-size perf-baseline-propose qa-validate qa-serve release-build release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld Harness Lab'
@@ -45,6 +46,8 @@ help:
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
 	@echo '  make test-wasm       Execute wasm-bindgen tests in pinned Chromium'
+	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
+	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
 	@echo '  make perf-ci         Run target workloads and required comparisons'
 	@echo '  make perf-full       Add sparse-world scaling workload'
@@ -74,6 +77,9 @@ policy-tools: tools
 
 coverage-tools: tools
 	@docker build -f docker/coverage.Dockerfile -t $(COVERAGE_IMAGE) .
+
+fuzz-tools: tools
+	@docker build -f docker/fuzz.Dockerfile -t $(FUZZ_IMAGE) .
 
 orchestrator-tools: tools
 	@docker build -f docker/orchestrator.Dockerfile -t $(ORCH_IMAGE) .
@@ -126,6 +132,12 @@ test-unit:
 
 test-wasm: browser-tools orchestrator-tools
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+
+fuzz-smoke: fuzz-tools
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
+
+fuzz-nightly: fuzz-tools
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
 
 coverage: coverage-tools browser-deps orchestrator-tools build-wasm
 	@mkdir -p reports/coverage

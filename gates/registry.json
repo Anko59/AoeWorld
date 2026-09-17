@@ -9,6 +9,8 @@
     {"id":"deny","command":"make deny","requires":[],"select":"code","evidence":"Cargo advisory, source, license, and bans audit"},
     {"id":"test-unit","command":"make test-unit","requires":["lint"],"select":"code","evidence":"native unit, integration, and doctest results"},
     {"id":"coverage","command":"make coverage","requires":["test-unit"],"select":"code","evidence":"LCOV production-line thresholds and JSON report"},
+    {"id":"fuzz-smoke","command":"make fuzz-smoke","requires":["test-unit"],"select":"code","evidence":"512 bounded libFuzzer runs per parser and JSON report"},
+    {"id":"fuzz-nightly","command":"make fuzz-nightly","requires":["fuzz-smoke"],"select":"nightly","evidence":"300-second libFuzzer campaign per parser and JSON report"},
     {"id":"browser-check","command":"make browser-check","requires":[],"select":"browser","evidence":"TypeScript, ESLint, and Prettier results"},
     {"id":"test-wasm","command":"make test-wasm","requires":["test-unit","browser-check"],"select":"browser","evidence":"wasm-bindgen-test in pinned Chromium and JSON report"},
     {"id":"test-e2e","command":"make test-e2e","requires":["test-unit","browser-check"],"select":"browser","evidence":"Playwright result and screenshots"},

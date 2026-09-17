@@ -14,4 +14,9 @@ protocol, asset parsers, and policy/report logic. A missing group fails.
 The coverage run includes both instrumented Playwright E2E and the browser
 WASM runner. Browser, WASM, asset, performance, QA, and artifact gates need
 separate evidence.
+`make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette, and
+pack-manifest parser. It uses a separately pinned nightly toolchain and keeps
+new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
+each target a 300-second campaign. Both write versioned reports under
+`reports/fuzz/`; a discovered crash fails the gate.
 Do not claim a complete gate until they exist and pass at the exact revision.

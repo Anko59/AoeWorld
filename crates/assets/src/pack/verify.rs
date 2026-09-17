@@ -7,30 +7,14 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
     if fs::metadata(&manifest_path)?.len() > 16 * 1024 * 1024 {
         return Err(invalid("manifest", 0, "manifest exceeds 16 MiB"));
     }
-    let manifest: Manifest = serde_json::from_slice(&fs::read(manifest_path)?)?;
-    if manifest.version != 1
-        || manifest.pages.is_empty()
-        || manifest.pages.len() > MAX_PAGES
-        || manifest.frames.len() > MAX_FRAMES
-    {
-        return Err(invalid("manifest", 0, "unsupported version or counts"));
-    }
-    if !valid_hash(&manifest.input_hash) {
-        return Err(invalid("manifest", 0, "invalid input hash"));
-    }
+    let manifest = parse_manifest(&fs::read(manifest_path)?)?;
     for page in &manifest.pages {
-        if page.width as usize != PAGE || page.height as usize != PAGE {
-            return Err(invalid("manifest", 0, "atlas page dimensions"));
-        }
         for (name, expected) in [
             (&page.color, &page.color_hash),
             (&page.player, &page.player_hash),
             (&page.shadow, &page.shadow_hash),
             (&page.outline, &page.outline_hash),
         ] {
-            if Path::new(name).components().count() != 1 {
-                return Err(invalid("manifest", 0, "invalid page path"));
-            }
             let path = pack.join(name);
             let metadata = fs::symlink_metadata(&path)?;
             if metadata.file_type().is_symlink() || metadata.len() > 32 * 1024 * 1024 {
@@ -61,6 +45,34 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
             }
         }
     }
+    Ok(manifest)
+}
+
+pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
+    if bytes.len() > 16 * 1024 * 1024 {
+        return Err(invalid("manifest", 0, "manifest exceeds 16 MiB"));
+    }
+    let manifest: Manifest = serde_json::from_slice(bytes)?;
+    if manifest.version != 1
+        || manifest.pages.is_empty()
+        || manifest.pages.len() > MAX_PAGES
+        || manifest.frames.len() > MAX_FRAMES
+    {
+        return Err(invalid("manifest", 0, "unsupported version or counts"));
+    }
+    if !valid_hash(&manifest.input_hash) {
+        return Err(invalid("manifest", 0, "invalid input hash"));
+    }
+    for page in &manifest.pages {
+        if page.width as usize != PAGE || page.height as usize != PAGE {
+            return Err(invalid("manifest", 0, "atlas page dimensions"));
+        }
+        for name in [&page.color, &page.player, &page.shadow, &page.outline] {
+            if Path::new(name).components().count() != 1 {
+                return Err(invalid("manifest", 0, "invalid page path"));
+            }
+        }
+    }
     let mut ids = BTreeSet::new();
     for frame in &manifest.frames {
         if !valid_hash(&frame.source_hash) {
@@ -85,4 +97,46 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
 
 fn valid_hash(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_parser_checks_counts_paths_and_frame_bounds_before_file_access() {
+        let hash = "a".repeat(64);
+        let mut value = serde_json::json!({
+            "version":1,"converter":"test","input_hash":hash,
+            "pages":[{
+                "color":"color.png","color_hash":hash,
+                "player":"player.png","player_hash":hash,
+                "shadow":"shadow.png","shadow_hash":hash,
+                "outline":"outline.png","outline_hash":hash,
+                "width":1024,"height":1024
+            }],
+            "frames":[{
+                "source":"fixture","source_hash":hash,"frame":0,"page":0,
+                "x":0,"y":0,"width":1,"height":1,"anchor_x":0,"anchor_y":0
+            }]
+        });
+        let parse =
+            |value: &serde_json::Value| parse_manifest(&serde_json::to_vec(value).expect("JSON"));
+        assert_eq!(parse(&value).expect("valid manifest").frames.len(), 1);
+        value["frames"][0]["x"] = 1024.into();
+        assert!(parse(&value).is_err());
+        value["frames"][0]["x"] = 0.into();
+        value["pages"][0]["color"] = "../escape.png".into();
+        assert!(parse(&value).is_err());
+        value["pages"][0]["color"] = "color.png".into();
+        let duplicate = value["frames"][0].clone();
+        value["frames"]
+            .as_array_mut()
+            .expect("frames")
+            .push(duplicate);
+        assert!(parse(&value).is_err());
+        value["version"] = 2.into();
+        assert!(parse(&value).is_err());
+        assert!(parse_manifest(&vec![0u8; 16 * 1024 * 1024 + 1]).is_err());
+    }
 }

@@ -7,4 +7,7 @@ browser/node_modules
 browser/test-results
 web/pkg
 .cache
+fuzz/target
+fuzz/artifacts
+fuzz/coverage
 .env
