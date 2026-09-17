@@ -38,6 +38,26 @@ fn name(root: &Path) -> String {
     format!("aoeworld-dev-{}", &hash[..12])
 }
 
+fn git(root: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git").args(args).current_dir(root).output()?;
+    if !output.status.success() {
+        return Err(format!("git {args:?}: {}", String::from_utf8_lossy(&output.stderr)).into());
+    }
+    Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+}
+
+fn build_identity(root: &Path) -> Result<String> {
+    let revision = git(root, &["rev-parse", "HEAD"])?;
+    if revision.len() != 40 || !revision.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("invalid checkout revision".into());
+    }
+    if git(root, &["status", "--porcelain"])?.is_empty() {
+        Ok(revision)
+    } else {
+        Ok(format!("{revision}-dirty"))
+    }
+}
+
 fn docker(args: &[&str]) -> Result<String> {
     let output = Command::new("docker").args(args).output()?;
     if !output.status.success() {
@@ -112,10 +132,11 @@ fn healthy() -> bool {
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
-    start_with(&RealRuntime, &root, &scenario)
+    let build = build_identity(&root)?;
+    start_with(&RealRuntime, &root, &scenario, &build)
 }
 
-fn start_with<R: Runtime>(runtime: &R, root: &Path, scenario: &str) -> Result<()> {
+fn start_with<R: Runtime>(runtime: &R, root: &Path, scenario: &str, build: &str) -> Result<()> {
     let name = name(root);
     if running(runtime, &name)? {
         println!("AoeWorld Harness Lab already running: http://127.0.0.1:8080");
@@ -134,6 +155,7 @@ fn start_with<R: Runtime>(runtime: &R, root: &Path, scenario: &str) -> Result<()
     );
     let mount = format!("{}:{}:ro", root.display(), root.display());
     let scenario_env = format!("AOE_SCENARIO={scenario}");
+    let build_env = format!("AOE_BUILD_SHA={build}");
     let executable = root.join("target/release/aoe-server");
     if !executable.is_file() || !root.join("web/pkg/aoe_client_bg.wasm").is_file() {
         return Err("build-wasm and the release server build are required".into());
@@ -156,6 +178,8 @@ fn start_with<R: Runtime>(runtime: &R, root: &Path, scenario: &str) -> Result<()
         "AOE_BIND=0.0.0.0:8080",
         "-e",
         &scenario_env,
+        "-e",
+        &build_env,
         "-p",
         "127.0.0.1:8080:8080",
         "-v",
@@ -288,12 +312,44 @@ mod tests {
     }
 
     #[test]
+    fn development_build_identity_tracks_revision_and_dirty_state() {
+        let checkout = tempfile::tempdir().expect("repository");
+        assert!(build_identity(checkout.path()).is_err());
+        git(checkout.path(), &["init", "-q"]).expect("init");
+        std::fs::write(checkout.path().join("sample"), "initial").expect("file");
+        git(checkout.path(), &["add", "sample"]).expect("add");
+        git(
+            checkout.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "-m",
+                "seed",
+            ],
+        )
+        .expect("commit");
+        let revision = git(checkout.path(), &["rev-parse", "HEAD"]).expect("revision");
+        assert_eq!(build_identity(checkout.path()).expect("clean"), revision);
+        std::fs::write(checkout.path().join("sample"), "changed").expect("change");
+        assert_eq!(
+            build_identity(checkout.path()).expect("dirty"),
+            format!("{revision}-dirty")
+        );
+    }
+
+    #[test]
     fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
         let checkout = built_checkout();
         let runtime = FakeRuntime::default();
         runtime.exists.set(true);
         runtime.healthy.set(true);
-        start_with(&runtime, checkout.path(), "smoke").expect("start");
+        start_with(&runtime, checkout.path(), "smoke", "revision").expect("start");
         let calls = runtime.calls.borrow();
         assert!(
             calls
@@ -306,6 +362,7 @@ mod tests {
             .expect("Docker run");
         assert!(run.contains(&name(checkout.path())));
         assert!(run.contains(&"AOE_SCENARIO=smoke".to_owned()));
+        assert!(run.contains(&"AOE_BUILD_SHA=revision".to_owned()));
         assert!(run.contains(&"--read-only".to_owned()));
         drop(calls);
         status_with(&runtime, &name(checkout.path())).expect("running status");
@@ -321,10 +378,10 @@ mod tests {
     fn invalid_configuration_or_missing_build_never_launches_docker_container() {
         let checkout = built_checkout();
         let runtime = FakeRuntime::default();
-        assert!(start_with(&runtime, checkout.path(), "unknown").is_err());
+        assert!(start_with(&runtime, checkout.path(), "unknown", "revision").is_err());
         std::fs::remove_file(checkout.path().join("web/pkg/aoe_client_bg.wasm"))
             .expect("remove WASM");
-        assert!(start_with(&runtime, checkout.path(), "smoke").is_err());
+        assert!(start_with(&runtime, checkout.path(), "smoke", "revision").is_err());
         assert!(
             !runtime
                 .calls
@@ -341,7 +398,7 @@ mod tests {
             dies_on_start: true,
             ..Default::default()
         };
-        let error = start_with(&runtime, checkout.path(), "smoke")
+        let error = start_with(&runtime, checkout.path(), "smoke", "revision")
             .expect_err("failed start")
             .to_string();
         assert!(error.contains("startup failed"));
@@ -359,7 +416,7 @@ mod tests {
         let runtime = FakeRuntime::default();
         runtime.exists.set(true);
         runtime.running.set(true);
-        start_with(&runtime, checkout.path(), "smoke").expect("already running");
+        start_with(&runtime, checkout.path(), "smoke", "revision").expect("already running");
         assert!(
             !runtime
                 .calls
