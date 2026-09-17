@@ -9,6 +9,12 @@ identical active entities in 1,024² and 16,384² logical maps. The runner
 verifies client and population counts, two deltas per
 client, hotspot visibility of at least 10,000 sprites, and equal sparse-query
 work. Reports are written to ignored `reports/perf/*.json` and Markdown.
+`make perf-soak-10` and `make perf-soak-30` repeatedly start the target
+server and connect all 64 protocol clients for fixed 10- and 30-minute runs.
+They check every cycle's snapshots and deltas, report cumulative encoded
+traffic and retained process RSS, and fail if retained RSS exceeds 1 GiB.
+Nightly and weekly workflows dispatch the respective durations after the
+workflow reaches the default branch.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot

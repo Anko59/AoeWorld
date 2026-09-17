@@ -1,0 +1,33 @@
+name: AoeWorld weekly validation
+
+on:
+  schedule:
+    - cron: '43 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  network-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make bootstrap
+      - run: make perf-soak-30
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: weekly-network-soak
+          path: |
+            reports/perf/soak-30.json
+            reports/perf/soak-30.md
+          retention-days: 30
+          if-no-files-found: ignore

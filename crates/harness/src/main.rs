@@ -7,6 +7,7 @@ mod gates;
 mod perf;
 mod perf_micro;
 mod perf_size;
+mod perf_soak;
 mod policy;
 mod process;
 mod qa;
@@ -65,6 +66,10 @@ enum Command {
     PerfSmoke,
     PerfCi,
     PerfFull,
+    #[command(name = "perf-soak-10")]
+    PerfSoak10,
+    #[command(name = "perf-soak-30")]
+    PerfSoak30,
     PerfBaselinePropose,
     QaValidate {
         file: Option<PathBuf>,
@@ -207,6 +212,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,
+        Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
+        Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {
             perf_micro::propose()?;
             perf_size::propose()?;

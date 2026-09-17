@@ -199,11 +199,11 @@ async fn send(
 }
 
 #[derive(Default)]
-struct ClientResult {
-    snapshots: u16,
-    deltas: u64,
+pub(crate) struct ClientResult {
+    pub(crate) snapshots: u16,
+    pub(crate) deltas: u64,
     replicated: u64,
-    bytes: u64,
+    pub(crate) bytes: u64,
     visible: usize,
 }
 
@@ -266,7 +266,7 @@ async fn client(
     Ok(result)
 }
 
-async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn Error>> {
+pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let config = Config {
