@@ -23,6 +23,20 @@ jobs:
       - run: make bootstrap
       - run: make preflight
 
+  native-coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: make coverage
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-coverage-report
+          path: reports/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
   browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -56,13 +70,14 @@ jobs:
 
   required:
     if: always()
-    needs: [static, browser, target-performance]
+    needs: [static, native-coverage, browser, target-performance]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require all selected jobs
         env:
           STATIC: ${{ needs.static.result }}
+          COVERAGE: ${{ needs['native-coverage'].result }}
           BROWSER: ${{ needs.browser.result }}
           PERFORMANCE: ${{ needs.target-performance.result }}
-        run: test "$STATIC" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success
+        run: test "$STATIC" = success && test "$COVERAGE" = success && test "$BROWSER" = success && test "$PERFORMANCE" = success
