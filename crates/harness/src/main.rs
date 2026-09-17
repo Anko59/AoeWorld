@@ -6,6 +6,7 @@ mod fuzz;
 mod gates;
 mod mutation;
 mod perf;
+mod perf_hardware;
 mod perf_micro;
 mod perf_pressure;
 mod perf_size;
@@ -77,6 +78,14 @@ enum Command {
     #[command(name = "perf-soak-30")]
     PerfSoak30,
     PerfBaselinePropose,
+    PerfHardwareCheck {
+        #[arg(long, default_value = "reports/perf/hardware-environment.json")]
+        environment: PathBuf,
+        #[arg(long, default_value = "reports/perf/hardware-samples.json")]
+        samples: PathBuf,
+        #[arg(long, default_value = "baselines/perf/hardware.json")]
+        baseline: PathBuf,
+    },
     QaValidate {
         file: Option<PathBuf>,
     },
@@ -227,6 +236,11 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             perf_micro::propose()?;
             perf_size::propose()?;
         }
+        Command::PerfHardwareCheck {
+            environment,
+            samples,
+            baseline,
+        } => perf_hardware::check(&environment, &samples, &baseline)?,
         Command::QaValidate { file } => {
             qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
         }

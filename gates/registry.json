@@ -21,6 +21,7 @@
     {"id":"perf-stress","command":"make perf-stress","requires":["perf-ci"],"select":"weekly","evidence":"256k-entity protocol load and explicit overload report"},
     {"id":"perf-soak-10","command":"make perf-soak-10","requires":["perf-ci"],"select":"nightly","evidence":"10-minute target network lifecycle and retained-memory report"},
     {"id":"perf-soak-30","command":"make perf-soak-30","requires":["perf-ci"],"select":"weekly","evidence":"30-minute target network lifecycle and retained-memory report"},
+    {"id":"perf-hardware-check","command":"make perf-hardware-check","requires":["perf-ci"],"select":"dedicated hardware","evidence":"environment-bound 1080p timing samples and three-run baseline"},
     {"id":"ci-select","command":"make ci-select","requires":[],"select":"CI","evidence":"revision-bound job selection manifest"},
     {"id":"ci-check","command":"make ci-check","requires":["ci-select"],"select":"CI","evidence":"selected job results and manifest recomputation"}
   ]

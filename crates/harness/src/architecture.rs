@@ -91,7 +91,12 @@ fn test_only(source: &Path) -> Result<bool, Box<dyn Error>> {
     }
     let parent = source.parent().ok_or("test source has no parent")?;
     let module_name = parent.file_name().ok_or("test module has no name")?;
-    let parent_module = parent.with_file_name(format!("{}.rs", module_name.to_string_lossy()));
+    let sibling_module = parent.with_file_name(format!("{}.rs", module_name.to_string_lossy()));
+    let parent_module = if sibling_module.exists() {
+        sibling_module
+    } else {
+        parent.join("mod.rs")
+    };
     let declaration = fs::read_to_string(parent_module)?;
     if !declaration.contains("#[cfg(test)]\nmod tests;") {
         return Err("tests.rs must be declared behind #[cfg(test)]".into());
@@ -153,5 +158,15 @@ mod tests {
         assert!(forbidden("aoe-protocol", "aoe-simulation"));
         assert!(forbidden("aoe-server", "aoe-harness"));
         assert!(!forbidden("aoe-server", "aoe-simulation"));
+    }
+
+    #[test]
+    fn test_module_guard_accepts_directory_module_layout() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let module = directory.path().join("feature");
+        fs::create_dir(&module).expect("module directory");
+        fs::write(module.join("mod.rs"), "#[cfg(test)]\nmod tests;\n").expect("module declaration");
+        fs::write(module.join("tests.rs"), "#[test] fn sample() {}\n").expect("test source");
+        assert!(test_only(&module.join("tests.rs")).expect("guard"));
     }
 }

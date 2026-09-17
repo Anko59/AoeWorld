@@ -29,6 +29,31 @@ deadline misses, four reconnects under load, and a paused slow reader. Hosted
 timing samples are informational; missing scheduled work or protocol responses
 fail the workload.
 
+Dedicated machines can submit `reports/perf/hardware-environment.json` and
+`reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
+`--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The
+environment manifest has `version: 1` and records CPU/GPU models, GPU driver,
+OS/kernel, browser name/version, Rust toolchain, a map of full `sha256:`
+container digests, memory and CPU limits, CPU governor, GPU power mode,
+concurrent job count, and viewport dimensions. The checker requires one
+concurrent job and a 1920×1080 viewport. It rejects missing identifiers and
+any difference from a reviewed baseline environment.
+
+The versioned sample input records the exact source revision and target-hotspot
+workload hash, 128,000 total/resident entities, at least 10,000 visible
+sprites, at least 60 seconds of raw tick and frame interval samples, CPU
+submission samples, optional GPU timings, and missed tick/dropped frame counts.
+It requires at least 20 tick and 60 frame samples per second. A reviewed
+`baselines/perf/hardware.json` must contain three distinct sample hashes with
+tick and frame p99 values within 5% across runs before a timing result can
+pass. The candidate must satisfy 50 ms tick and 16.667 ms frame p99 limits,
+zero missed deadlines/dropped frames, and no more than 5% drift from the
+baseline median. Missing hardware baseline yields `UNBASELINED`; incompatible
+environment or incomplete samples are rejected. The checker retains raw
+samples and environment in versioned JSON plus a Markdown summary. No
+dedicated hardware or reviewed timing baseline is available yet, so hardware
+qualification remains **not established**.
+
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
 pass. The pinned Gungraun/Callgrind and DHAT analysis image measures four
