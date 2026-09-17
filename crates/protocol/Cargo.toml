@@ -12,8 +12,13 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+criterion = "=0.8.2"
 gungraun = "=0.19.4"
 
 [[bench]]
 name = "instructions"
+harness = false
+
+[[bench]]
+name = "timings"
 harness = false

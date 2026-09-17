@@ -3,6 +3,8 @@
 Read [the engineering guide](docs/agent-engineering.md), then the scoped
 `AGENTS.md` for any subsystem you change. Use Dockerized Make targets for
 compilation and checks. Keep original game assets outside Git and images.
+The provider-neutral task guides in `skills/` route focused work to the same
+canonical documentation and commands.
 
 Before committing, run `make hooks-install`, `make hooks-check`, and the focused
 gate plus `make preflight`. Never bypass hooks or reduce a gate/baseline to obtain
