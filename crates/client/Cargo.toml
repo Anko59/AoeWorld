@@ -17,7 +17,7 @@ aoe-rendering = { path = "../rendering" }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["BinaryType", "Document", "Element", "Event", "EventTarget", "HtmlCanvasElement", "HtmlElement", "HtmlSelectElement", "KeyboardEvent", "MessageEvent", "Location", "Performance", "Request", "RequestInit", "Response", "WebSocket", "WheelEvent", "Window"] }
+web-sys = { version = "0.3", features = ["BinaryType", "Document", "Element", "Event", "EventTarget", "HtmlCanvasElement", "HtmlElement", "HtmlSelectElement", "KeyboardEvent", "MessageEvent", "Location", "Performance", "Request", "RequestInit", "Response", "UrlSearchParams", "WebSocket", "WheelEvent", "Window"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "=0.3.78"

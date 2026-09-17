@@ -367,6 +367,20 @@ async fn initialize() -> Result<(), JsValue> {
         .await
         .map_err(|error| JsValue::from_str(&error))?;
     let adapter = renderer.adapter_label().to_owned();
+    let query = web_sys::UrlSearchParams::new_with_str(&window.location().search()?)?;
+    if let Some(name) = query.get("scenario") {
+        if ["smoke", "target-distributed", "target-hotspot"].contains(&name.as_str()) {
+            if let Err(error) = change_scenario(&name).await {
+                set_text(
+                    &document,
+                    "unsupported",
+                    &format!("Scenario configuration failed: {error:?}"),
+                );
+            }
+        } else {
+            set_text(&document, "unsupported", "Unknown scenario configuration");
+        }
+    }
     let shared = Rc::new(RefCell::new(Client {
         document,
         canvas,

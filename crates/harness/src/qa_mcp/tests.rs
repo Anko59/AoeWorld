@@ -191,6 +191,11 @@ fn contract_exposes_only_restricted_tools() {
 fn browser_actions_reject_unbounded_or_hidden_inputs() {
     for (name, args) in [
         ("observe", json!({"session":"UPPER"})),
+        ("open_session", json!({"session":"a","capability":"script"})),
+        (
+            "open_session",
+            json!({"session":"a","configuration":"arbitrary-url"}),
+        ),
         (
             "select_scenario",
             json!({"session":"a","scenario":"secret"}),
@@ -215,6 +220,13 @@ fn browser_actions_reject_unbounded_or_hidden_inputs() {
     ] {
         assert!(validate_action(name, &args).is_err(), "{name}: {args}");
     }
+    assert!(
+        validate_action(
+            "open_session",
+            &json!({"session":"a","capability":"webgpu-disabled","configuration":"invalid-scenario"})
+        )
+        .is_ok()
+    );
     assert!(
         validate_action(
             "canvas_input",

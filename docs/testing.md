@@ -6,8 +6,9 @@ native tests through pinned cargo-nextest, followed by separate doctests and a
 WASM build. `make test-wasm` runs Rust `wasm-bindgen-test` cases in pinned
 headless Chromium through a disposable ChromeDriver container. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
-this gate. `make test-e2e` separately exercises rendering and reconnect with
-Playwright.
+this gate. `make test-e2e` runs Playwright under Xvfb with Vulkan SwiftShader
+and checks actual canvas background and four sprite colors in a full-page
+screenshot, along with reconnect and independent subscriptions.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
 production-line denominator, and rejects less than 85% overall or 90% in
 protocol, asset parsers, and policy/report logic. A missing group fails.

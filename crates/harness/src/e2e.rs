@@ -105,6 +105,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "-w".to_owned(),
         workdir.display().to_string(),
         "aoeworld/browser-tools:1.63.0".to_owned(),
+        "xvfb-run".to_owned(),
+        "-a".to_owned(),
         "npm".to_owned(),
         "run".to_owned(),
         "test:e2e".to_owned(),

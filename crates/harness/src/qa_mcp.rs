@@ -71,6 +71,8 @@ impl Worker {
                 "-i",
                 "--network",
                 "host",
+                "--ipc",
+                "host",
                 "--user",
                 &user,
                 "--name",
@@ -84,7 +86,13 @@ impl Worker {
                 "-w",
             ])
             .arg(root.join("browser"))
-            .args(["aoeworld/browser-tools:1.63.0", "node", "qa-worker.mjs"])
+            .args([
+                "aoeworld/browser-tools:1.63.0",
+                "xvfb-run",
+                "-a",
+                "node",
+                "qa-worker.mjs",
+            ])
             .env("AOE_QA_BASE_URL", base)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -169,6 +177,14 @@ fn validate_action(name: &str, args: &Value) -> Result<(), String> {
         return Err("invalid session name".into());
     }
     match name {
+        "open_session" => {
+            if !args["capability"].is_null() && args["capability"] != "webgpu-disabled" {
+                return Err("unsupported capability mode".into());
+            }
+            if !args["configuration"].is_null() && args["configuration"] != "invalid-scenario" {
+                return Err("unsupported configuration mode".into());
+            }
+        }
         "activate" => {
             let role = required(args, "role", 20)?;
             if !["button", "link"].contains(&role) {
@@ -345,7 +361,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 fn tools() -> Value {
     let session = json!({"session":{"type":"string"}});
     json!({"tools": [
-        tool("open_session", "Open one isolated local browser session", session.clone(), &["session"]),
+        tool("open_session", "Open one isolated local browser session, optionally with a bounded capability or configuration failure", json!({"session":{"type":"string"},"capability":{"type":"string","enum":["webgpu-disabled"]},"configuration":{"type":"string","enum":["invalid-scenario"]}}), &["session"]),
         tool("observe", "Read accessible page observations and visible diagnostics", session.clone(), &["session"]),
         tool("activate", "Activate one visible button or link by exact accessible name", json!({"session":{"type":"string"},"role":{"type":"string"},"label":{"type":"string"}}), &["session","role","label"]),
         tool("select_scenario", "Select a supported scenario in the visible control", json!({"session":{"type":"string"},"scenario":{"type":"string"}}), &["session","scenario"]),
