@@ -1,11 +1,12 @@
 use aoe_scenario::{Scenario, named};
-use std::{env, net::SocketAddr};
+use std::{env, net::SocketAddr, path::PathBuf};
 
 #[derive(Debug)]
 pub struct Config {
     pub bind: SocketAddr,
     pub scenario: Scenario,
     pub tick_hz: u32,
+    pub asset_pack: Option<PathBuf>,
 }
 
 impl Config {
@@ -13,7 +14,23 @@ impl Config {
         let bind = env::var("AOE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
         let name = env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
         let tick_hz = env::var("AOE_TICK_HZ").unwrap_or_else(|_| "20".to_owned());
-        Self::parse(&bind, &name, &tick_hz)
+        let mut config = Self::parse(&bind, &name, &tick_hz)?;
+        if let Some(path) = env::var_os("AOE_ASSET_PACK").filter(|value| !value.is_empty()) {
+            let root = PathBuf::from("local-assets/packs")
+                .canonicalize()
+                .map_err(|e| format!("invalid AOE_ASSET_PACK root: {e}"))?;
+            let pack = PathBuf::from(path)
+                .canonicalize()
+                .map_err(|e| format!("invalid AOE_ASSET_PACK: {e}"))?;
+            if pack.parent() != Some(root.as_path()) || !pack.join("manifest.json").is_file() {
+                return Err(
+                    "AOE_ASSET_PACK must name a local-assets/packs child with a manifest"
+                        .to_owned(),
+                );
+            }
+            config.asset_pack = Some(pack);
+        }
+        Ok(config)
     }
 
     fn parse(bind: &str, name: &str, tick_hz: &str) -> Result<Self, String> {
@@ -29,6 +46,7 @@ impl Config {
             bind,
             scenario,
             tick_hz,
+            asset_pack: None,
         })
     }
 }

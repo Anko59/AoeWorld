@@ -13,9 +13,9 @@ use std::{
 };
 use walkdir::WalkDir;
 
-const PAGE: usize = 1_024;
+const PAGE: usize = 2_048;
 const MAX_INPUT: u64 = 512 * 1024 * 1024;
-const MAX_FRAMES: usize = 20_000;
+const MAX_FRAMES: usize = 25_000;
 const MAX_PAGES: usize = 256;
 
 #[derive(Clone, Debug, Serialize)]
@@ -284,35 +284,31 @@ fn write_png(path: &Path, pixels: &[u8]) -> Result<String, Error> {
     Ok(blake3::hash(&fs::read(path)?).to_hex().to_string())
 }
 
-fn save_pages(directory: &Path, pages: Vec<PageData>) -> Result<Vec<AtlasPage>, Error> {
-    let mut records = Vec::new();
-    for (index, page) in pages.into_iter().enumerate() {
-        let names = [
-            format!("color-{index:03}.png"),
-            format!("player-{index:03}.png"),
-            format!("shadow-{index:03}.png"),
-            format!("outline-{index:03}.png"),
-        ];
-        let hashes = [
-            write_png(&directory.join(&names[0]), &page.color)?,
-            write_png(&directory.join(&names[1]), &page.player)?,
-            write_png(&directory.join(&names[2]), &page.shadow)?,
-            write_png(&directory.join(&names[3]), &page.outline)?,
-        ];
-        records.push(AtlasPage {
-            color: names[0].clone(),
-            color_hash: hashes[0].clone(),
-            player: names[1].clone(),
-            player_hash: hashes[1].clone(),
-            shadow: names[2].clone(),
-            shadow_hash: hashes[2].clone(),
-            outline: names[3].clone(),
-            outline_hash: hashes[3].clone(),
-            width: PAGE as u16,
-            height: PAGE as u16,
-        });
-    }
-    Ok(records)
+fn save_page(directory: &Path, index: usize, page: PageData) -> Result<AtlasPage, Error> {
+    let names = [
+        format!("color-{index:03}.png"),
+        format!("player-{index:03}.png"),
+        format!("shadow-{index:03}.png"),
+        format!("outline-{index:03}.png"),
+    ];
+    let hashes = [
+        write_png(&directory.join(&names[0]), &page.color)?,
+        write_png(&directory.join(&names[1]), &page.player)?,
+        write_png(&directory.join(&names[2]), &page.shadow)?,
+        write_png(&directory.join(&names[3]), &page.outline)?,
+    ];
+    Ok(AtlasPage {
+        color: names[0].clone(),
+        color_hash: hashes[0].clone(),
+        player: names[1].clone(),
+        player_hash: hashes[1].clone(),
+        shadow: names[2].clone(),
+        shadow_hash: hashes[2].clone(),
+        outline: names[3].clone(),
+        outline_hash: hashes[3].clone(),
+        width: PAGE as u16,
+        height: PAGE as u16,
+    })
 }
 
 fn output_path(root: &Path) -> Result<PathBuf, Error> {
@@ -361,23 +357,19 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
     let temporary = output_root.join(format!(".tmp-{hash}-{}", std::process::id()));
     fs::create_dir(&temporary)?;
     let result = (|| {
-        let mut pages = vec![PageData::new()];
+        let mut page = PageData::new();
+        let mut pages = Vec::new();
         let mut frames = Vec::new();
         for sprite in sprites {
             for (frame_index, frame) in sprite.frames.iter().enumerate() {
-                let mut location = pages
-                    .last_mut()
-                    .ok_or_else(|| invalid("atlas", 0, "no page"))?
-                    .place(frame, &palette)?;
+                let mut location = page.place(frame, &palette)?;
                 if location.is_none() {
-                    if pages.len() == MAX_PAGES {
+                    if pages.len() + 1 == MAX_PAGES {
                         return Err(invalid("atlas", 0, "too many atlas pages"));
                     }
-                    pages.push(PageData::new());
-                    location = pages
-                        .last_mut()
-                        .ok_or_else(|| invalid("atlas", 0, "no page"))?
-                        .place(frame, &palette)?;
+                    pages.push(save_page(&temporary, pages.len(), page)?);
+                    page = PageData::new();
+                    location = page.place(frame, &palette)?;
                 }
                 let (x, y) = location
                     .ok_or_else(|| invalid("atlas", 0, "frame does not fit an empty page"))?;
@@ -385,7 +377,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
                     source: sprite.id.clone(),
                     source_hash: sprite.hash.clone(),
                     frame: frame_index as u32,
-                    page: (pages.len() - 1) as u16,
+                    page: pages.len() as u16,
                     x: x as u16,
                     y: y as u16,
                     width: frame.width,
@@ -395,7 +387,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
                 });
             }
         }
-        let pages = save_pages(&temporary, pages)?;
+        pages.push(save_page(&temporary, pages.len(), page)?);
         let manifest = Manifest {
             version: 1,
             converter: env!("CARGO_PKG_VERSION").to_owned(),
@@ -443,7 +435,7 @@ mod tests {
         assert_eq!(&page.color[pixel..pixel + 4], &[12, 34, 56, 255]);
         assert_eq!(&page.player[pixel + 4..pixel + 8], &[7, 0, 0, 255]);
         assert_eq!(&page.outline[pixel + 8..pixel + 12], &[1, 0, 0, 255]);
-        let pages = save_pages(temp.path(), vec![page]).unwrap();
+        let pages = vec![save_page(temp.path(), 0, page).unwrap()];
         let manifest = Manifest {
             version: 1,
             converter: "test".to_owned(),

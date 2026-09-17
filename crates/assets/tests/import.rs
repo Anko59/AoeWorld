@@ -137,7 +137,7 @@ fn imported_fixture_is_deterministic_and_verified() {
     assert!(pack::verify(&first).is_err());
     fs::write(&manifest_path, &original_manifest).expect("restore manifest");
     let mut outside: serde_json::Value = serde_json::from_slice(&original_manifest).expect("JSON");
-    outside["frames"][0]["x"] = serde_json::json!(1024);
+    outside["frames"][0]["x"] = serde_json::json!(2048);
     fs::write(
         &manifest_path,
         serde_json::to_vec(&outside).expect("encode"),
