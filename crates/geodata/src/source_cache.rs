@@ -243,9 +243,11 @@ impl SourceCache {
             match download_once(&source.url, source.bytes, &partial, cancelled) {
                 Ok(()) => {
                     let (sha256, md5) = file_hashes(&partial)?;
-                    if md5 != source.provider_md5 {
+                    if !source.expected_checksum.matches(&sha256, &md5) {
                         fs::remove_file(&partial)?;
-                        return Err(CacheError::Integrity("provider MD5 differs from catalog"));
+                        return Err(CacheError::Integrity(
+                            "catalog checksum differs from source",
+                        ));
                     }
                     let sha256 = digest_hex(&sha256);
                     let lock = SourceLock {

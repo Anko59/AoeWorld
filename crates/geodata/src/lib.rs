@@ -24,7 +24,10 @@ pub use source_cache::{
 mod source_manifest;
 
 mod source_catalog;
-pub use source_catalog::{KnownSource, SourceCatalogError, potential_biome_sources};
+pub use source_catalog::{
+    ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface,
+    potential_biome_sources,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterDimensions {

@@ -5,9 +5,28 @@ use std::{io::Read, sync::Arc};
 const POTENTIAL_BIOME_RECORD_URL: &str = "https://zenodo.org/api/records/3526620";
 const BIOME_RASTER: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif";
 const BIOME_CLASSES: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv";
+const ETOPO_60S_SURFACE_URL: &str = "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_surface_elev_gtif/ETOPO_2022_v1_60s_N90W180_surface.tif";
 
-/// Provider-published metadata resolved from a fixed catalog entry. The MD5
-/// is checked during acquisition; the resulting source lock records SHA-256.
+/// A checksum resolved from provider metadata or pinned after a verified,
+/// explicitly reviewed acquisition when the provider publishes no digest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case", tag = "algorithm", content = "digest")]
+pub enum ExpectedChecksum {
+    Md5([u8; 16]),
+    Sha256([u8; 32]),
+}
+
+impl ExpectedChecksum {
+    pub(crate) fn matches(self, sha256: &[u8; 32], md5: &[u8; 16]) -> bool {
+        match self {
+            Self::Md5(expected) => expected == *md5,
+            Self::Sha256(expected) => expected == *sha256,
+        }
+    }
+}
+
+/// Allowlisted metadata resolved from a fixed catalog entry. Its checksum is
+/// checked during acquisition; the resulting source lock records SHA-256.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct KnownSource {
     pub id: String,
@@ -15,7 +34,7 @@ pub struct KnownSource {
     pub release: String,
     pub url: String,
     pub bytes: u64,
-    pub provider_md5: [u8; 16],
+    pub expected_checksum: ExpectedChecksum,
     pub native_resolution: String,
     pub crs: String,
     pub vertical_datum: String,
@@ -61,7 +80,7 @@ fn parse_potential_biome_sources(payload: &str) -> Result<Vec<KnownSource>, Sour
                 release: "Zenodo record 3526620, potential biome v0.2".to_owned(),
                 url: file.links.content.clone(),
                 bytes: file.size,
-                provider_md5: parse_md5(checksum, expected)?,
+                expected_checksum: ExpectedChecksum::Md5(parse_md5(checksum, expected)?),
                 native_resolution: "250 meters".to_owned(),
                 crs: "EPSG:4326".to_owned(),
                 vertical_datum: "not applicable".to_owned(),
@@ -69,6 +88,28 @@ fn parse_potential_biome_sources(payload: &str) -> Result<Vec<KnownSource>, Sour
             })
         })
         .collect()
+}
+
+/// Pinned global overview source. NOAA's public directory exposes no checksum;
+/// this SHA-256 was acquired from that fixed HTTPS URL and is checked before
+/// every subsequent use.
+pub fn etopo_2022_60s_surface() -> KnownSource {
+    KnownSource {
+        id: "etopo-2022-v1-60s-surface".to_owned(),
+        provider: Provider::Noaa,
+        release: "ETOPO 2022 v1".to_owned(),
+        url: ETOPO_60S_SURFACE_URL.to_owned(),
+        bytes: 465_969_062,
+        expected_checksum: ExpectedChecksum::Sha256([
+            0x9d, 0x27, 0xd4, 0xb8, 0xea, 0x8e, 0x76, 0x97, 0x7e, 0x29, 0x88, 0xbc, 0xa6, 0x67,
+            0xd7, 0xc8, 0xfa, 0x68, 0xb9, 0x27, 0x35, 0x5f, 0xef, 0xfc, 0xdd, 0xd6, 0xb4, 0x87,
+            0x5a, 0x7f, 0xd0, 0x8e,
+        ]),
+        native_resolution: "60 arc-seconds".to_owned(),
+        crs: "EPSG:4326".to_owned(),
+        vertical_datum: "EGM2008 orthometric".to_owned(),
+        license_reference: "NOAA public domain".to_owned(),
+    }
 }
 
 fn parse_md5(value: &str, name: &'static str) -> Result<[u8; 16], SourceCatalogError> {
@@ -132,11 +173,21 @@ mod tests {
         assert_eq!(sources.len(), 2);
         assert_eq!(sources[0].bytes, 210_668_848);
         assert_eq!(
-            sources[1].provider_md5,
-            [
+            sources[1].expected_checksum,
+            ExpectedChecksum::Md5([
                 0x87, 0x4f, 0x16, 0x9f, 0x96, 0x6e, 0x03, 0x99, 0x35, 0x10, 0x8b, 0xc3, 0x66, 0x77,
                 0x3f, 0x80
-            ]
+            ])
         );
+    }
+
+    #[test]
+    fn overview_source_has_a_reviewed_sha256_checksum() {
+        let source = etopo_2022_60s_surface();
+        assert_eq!(source.bytes, 465_969_062);
+        assert!(matches!(
+            source.expected_checksum,
+            ExpectedChecksum::Sha256([0x9d, 0x27, 0xd4, 0xb8, ..])
+        ));
     }
 }
