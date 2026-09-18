@@ -120,7 +120,57 @@ fn next_random(state: &mut u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aoe_map::{FieldPyramid, PyramidLevel};
+    use aoe_map::{
+        EnvironmentalProvenance, FieldPyramid, MapRequest, ProjectionMetadata, PyramidLevel,
+    };
+
+    fn pyramid() -> FieldPyramid {
+        FieldPyramid {
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: [1; 32],
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [2; 32],
+                },
+            ],
+        }
+    }
+
+    fn prepared_ocean_package() -> MapPackage {
+        let environment = PreparedEnvironment {
+            samples_per_axis: 2,
+            geographic_millimeters_per_sample: 1,
+            page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+            elevation: pyramid(),
+            water: Some(pyramid()),
+            vegetation: None,
+            historical_land_use: None,
+        };
+        MapPackage::with_prepared_environment(
+            1,
+            MapRequest::default(),
+            Vec::new(),
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance::default(),
+            environment,
+        )
+        .expect("package")
+    }
+
+    fn ocean_root(coverage: u8) -> WaterPage {
+        WaterPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            ocean_coverage_percent: vec![coverage],
+            inland_coverage_percent: vec![0],
+        }
+    }
 
     #[test]
     fn all_ocean_root_skips_virtual_start_search() {
@@ -135,12 +185,7 @@ mod tests {
         };
         let page = WaterPage {
             level: 0,
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-            ocean_coverage_percent: vec![100],
-            inland_coverage_percent: vec![0],
+            ..ocean_root(100)
         };
         assert!(all_ocean(&environment, &[page]));
     }
@@ -158,13 +203,21 @@ mod tests {
         };
         let page = WaterPage {
             level: 0,
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-            ocean_coverage_percent: vec![99],
-            inland_coverage_percent: vec![0],
+            ..ocean_root(99)
         };
         assert!(!all_ocean(&environment, &[page]));
+    }
+
+    #[test]
+    fn all_ocean_package_is_preview_only() {
+        let service = GameplayService::from_prepared_map(
+            prepared_ocean_package(),
+            Vec::new(),
+            vec![ocean_root(100)],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("preview-only result");
+        assert!(service.is_none());
     }
 }
