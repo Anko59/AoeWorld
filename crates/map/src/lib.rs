@@ -7,7 +7,10 @@ mod terrain;
 
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
-pub use package::{MapPackage, ProjectionMetadata, SourceLock, VerticalDatum};
+pub use package::{
+    EnvironmentalProvenance, LayerProvenance, MapPackage, ProjectionMetadata, SourceLock,
+    VerticalDatum,
+};
 pub use request::{
     DetailProfile, MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile,
 };

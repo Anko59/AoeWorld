@@ -23,6 +23,35 @@ pub enum VerticalDatum {
     UnspecifiedFallback,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayerProvenance {
+    SourceDerived,
+    ModelDerived,
+    Procedural,
+    Fallback,
+    HistoricallyCorrected,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct EnvironmentalProvenance {
+    pub elevation: LayerProvenance,
+    pub water: LayerProvenance,
+    pub vegetation: LayerProvenance,
+    pub historical_land_use: LayerProvenance,
+}
+
+impl Default for EnvironmentalProvenance {
+    fn default() -> Self {
+        Self {
+            elevation: LayerProvenance::Fallback,
+            water: LayerProvenance::Fallback,
+            vegetation: LayerProvenance::Procedural,
+            historical_land_use: LayerProvenance::Fallback,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SourceLock {
     pub id: String,
@@ -42,6 +71,7 @@ pub struct MapPackage {
     pub estimate: MapEstimate,
     pub source_locks: Vec<SourceLock>,
     pub projection: ProjectionMetadata,
+    pub provenance: EnvironmentalProvenance,
     pub content_hash: [u8; 32],
 }
 
@@ -62,8 +92,24 @@ impl MapPackage {
     pub fn with_projection(
         generator_version: u16,
         request: MapRequest,
+        source_locks: Vec<SourceLock>,
+        projection: ProjectionMetadata,
+    ) -> Result<Self, MapPackageError> {
+        Self::with_environment(
+            generator_version,
+            request,
+            source_locks,
+            projection,
+            EnvironmentalProvenance::default(),
+        )
+    }
+
+    pub fn with_environment(
+        generator_version: u16,
+        request: MapRequest,
         mut source_locks: Vec<SourceLock>,
         projection: ProjectionMetadata,
+        provenance: EnvironmentalProvenance,
     ) -> Result<Self, MapPackageError> {
         let request = request.normalized()?;
         let estimate = request.estimate()?;
@@ -76,8 +122,14 @@ impl MapPackage {
         if projection.horizontal_crs.trim().is_empty() {
             return Err(MapPackageError::InvalidProjection);
         }
-        let content_hash =
-            hash_package(generator_version, request, &source_locks, &projection, true);
+        let content_hash = hash_package(
+            generator_version,
+            request,
+            &source_locks,
+            &projection,
+            &provenance,
+            true,
+        );
         Ok(Self {
             schema_version: 1,
             generator_version,
@@ -85,6 +137,7 @@ impl MapPackage {
             estimate,
             source_locks,
             projection,
+            provenance,
             content_hash,
         })
     }
@@ -102,11 +155,12 @@ impl MapPackage {
     /// its chunks. It rejects stale estimates, reordered source locks, and a
     /// content hash that no longer covers the package inputs.
     pub fn validate(&self) -> Result<(), MapPackageError> {
-        let canonical = Self::with_projection(
+        let canonical = Self::with_environment(
             self.generator_version,
             self.request,
             self.source_locks.clone(),
             self.projection.clone(),
+            self.provenance.clone(),
         )?;
         (canonical == *self)
             .then_some(())
@@ -119,6 +173,7 @@ impl MapPackage {
             self.request,
             &self.source_locks,
             &self.projection,
+            &self.provenance,
             false,
         );
         MapChunkGenerator::new(
@@ -150,6 +205,7 @@ fn hash_package(
     request: MapRequest,
     source_locks: &[SourceLock],
     projection: &ProjectionMetadata,
+    provenance: &EnvironmentalProvenance,
     include_seed: bool,
 ) -> [u8; 32] {
     let mut hash = blake3::Hasher::new();
@@ -169,6 +225,12 @@ fn hash_package(
     }
     hash_field(&mut hash, projection.horizontal_crs.as_bytes());
     hash.update(&[projection.vertical_datum as u8]);
+    hash.update(&[
+        provenance.elevation as u8,
+        provenance.water as u8,
+        provenance.vegetation as u8,
+        provenance.historical_land_use as u8,
+    ]);
     for source in source_locks {
         hash_field(&mut hash, source.id.as_bytes());
         hash_field(&mut hash, source.release.as_bytes());
@@ -276,5 +338,24 @@ mod tests {
         )
         .expect("package");
         assert_ne!(first.content_hash, second.content_hash);
+    }
+
+    #[test]
+    fn packages_hash_environmental_provenance() {
+        let fallback = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+        let sourced = MapPackage::with_environment(
+            1,
+            MapRequest::default(),
+            Vec::new(),
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance {
+                elevation: LayerProvenance::SourceDerived,
+                water: LayerProvenance::HistoricallyCorrected,
+                vegetation: LayerProvenance::ModelDerived,
+                historical_land_use: LayerProvenance::SourceDerived,
+            },
+        )
+        .expect("package");
+        assert_ne!(fallback.content_hash, sourced.content_hash);
     }
 }

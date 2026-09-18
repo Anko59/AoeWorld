@@ -48,7 +48,7 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            map_package_directory: Some(PathBuf::from("local-assets/maps-v2")),
+            map_package_directory: Some(PathBuf::from("local-assets/maps-v3")),
         })
     }
 }
@@ -64,7 +64,7 @@ mod tests {
         assert_eq!(config.scenario.name, "target-hotspot");
         assert_eq!(
             config.map_package_directory,
-            Some(PathBuf::from("local-assets/maps-v2"))
+            Some(PathBuf::from("local-assets/maps-v3"))
         );
         assert!(Config::parse("bad", "smoke", "20").is_err());
         assert!(Config::parse("127.0.0.1:0", "missing", "20").is_err());
