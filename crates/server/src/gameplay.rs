@@ -26,6 +26,7 @@ pub struct GameplayService {
     pub(super) ownership: Arc<Mutex<Ownership>>,
     next_session: Arc<AtomicU64>,
     pub(super) world_id: u64,
+    map_content_hash: Option<[u8; 32]>,
     primary_unit_id: EntityId,
 }
 
@@ -72,7 +73,7 @@ pub(super) struct Ownership {
 impl GameplayService {
     pub fn new(seed: Seed) -> Self {
         let (world, primary_unit_id) = GameWorld::default_with_cavalry(seed);
-        Self::from_world(world, primary_unit_id)
+        Self::from_world(world, primary_unit_id, None)
     }
 
     pub fn with_population(
@@ -92,10 +93,14 @@ impl GameplayService {
         if !world.unit_exists(EntityId(0)) {
             return Err(GameWorldError::EntityIdExhausted);
         }
-        Ok(Self::from_world(world, EntityId(0)))
+        Ok(Self::from_world(world, EntityId(0), None))
     }
 
-    pub(super) fn from_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
+    pub(super) fn from_world(
+        world: GameWorld,
+        primary_unit_id: EntityId,
+        map_content_hash: Option<[u8; 32]>,
+    ) -> Self {
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -109,6 +114,7 @@ impl GameplayService {
             })),
             next_session: Arc::new(AtomicU64::new(1)),
             world_id,
+            map_content_hash,
             primary_unit_id,
         }
     }
@@ -314,6 +320,7 @@ impl GameplayService {
         let welcome = GameplayServerMessage::Welcome {
             version: GAMEPLAY_VERSION,
             world_id: self.world_id,
+            map_content_hash: self.map_content_hash,
             width_tiles: config.width_tiles,
             height_tiles: config.height_tiles,
             coordinate_precision: FIXED_SUBUNITS_PER_TILE as u16,

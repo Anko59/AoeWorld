@@ -44,6 +44,7 @@ pub(super) struct Client {
     pub config: WorldConfig,
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
+    pub map_content_hash: Option<[u8; 32]>,
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
@@ -267,6 +268,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
                 height_tiles,
+                map_content_hash,
                 role,
                 primary_unit_id,
                 resume_token,
@@ -275,6 +277,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
                 client.role = Some(role);
+                client.map_content_hash = map_content_hash;
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
                 save_token(resume_token);
@@ -324,6 +327,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.history.clear();
                 client.role = None;
                 client.primary = None;
+                client.map_content_hash = None;
                 client.token = None;
                 save_token(None);
                 client.status = "map changed; reconnecting".to_owned();

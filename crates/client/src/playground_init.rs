@@ -41,6 +41,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         config,
         primary: None,
         role: None,
+        map_content_hash: None,
         token: stored_token(),
         revision: 0,
         sent_region: None,

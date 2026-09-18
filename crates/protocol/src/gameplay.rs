@@ -5,7 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -67,6 +67,7 @@ pub enum ServerMessage {
     Welcome {
         version: u16,
         world_id: u64,
+        map_content_hash: Option<[u8; 32]>,
         width_tiles: i32,
         height_tiles: i32,
         coordinate_precision: u16,
@@ -226,6 +227,7 @@ mod tests {
         let welcome = ServerMessage::Welcome {
             version: VERSION,
             world_id: 11,
+            map_content_hash: None,
             width_tiles: WorldConfig::new(16_384, 16_384, Seed(1))
                 .unwrap()
                 .width_tiles,

@@ -5,6 +5,7 @@ use aoe_simulation::{GameWorld, GameWorldError};
 
 impl GameplayService {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
+        let content_hash = package.content_hash;
         let mut world = GameWorld::from_map(package)?;
         let config = world.config();
         let mut state = config.seed.0.max(1);
@@ -20,7 +21,7 @@ impl GameplayService {
             let position = WorldPosition::from_tile_center(tile)
                 .map_err(|_| GameWorldError::InvalidPosition)?;
             let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
-            return Ok(Self::from_world(world, primary_unit_id));
+            return Ok(Self::from_world(world, primary_unit_id, Some(content_hash)));
         }
         Err(GameWorldError::InvalidPosition)
     }

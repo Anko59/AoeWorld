@@ -356,6 +356,22 @@ async fn map_activation_resets_existing_gameplay_sessions() {
     .await
     .expect("response");
     assert!(response.starts_with("HTTP/1.1 200"));
+    let body = response.split_once("\r\n\r\n").expect("HTTP body").1;
+    let content_hash: [u8; 32] = serde_json::from_str::<serde_json::Value>(body)
+        .expect("activation JSON")["content_hash"]
+        .as_str()
+        .expect("content hash")
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|value| u8::from_str_radix(value, 16).ok())
+                .expect("hex byte")
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("32-byte content hash");
     let mut replacement_world_id = None;
     for _ in 0..4 {
         if let GameplayServerMessage::WorldReset { world_id } = receive(&mut controller).await {
@@ -368,7 +384,11 @@ async fn map_activation_resets_existing_gameplay_sessions() {
     let (_replacement, welcome) = open(address, None).await;
     assert!(matches!(
         welcome,
-        GameplayServerMessage::Welcome { world_id, .. } if world_id == replacement_world_id
+        GameplayServerMessage::Welcome {
+            world_id,
+            map_content_hash: Some(hash),
+            ..
+        } if world_id == replacement_world_id && hash == content_hash
     ));
     server.abort();
     ticker.abort();
