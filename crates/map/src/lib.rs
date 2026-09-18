@@ -10,6 +10,7 @@ mod package;
 mod request;
 mod terrain;
 mod water;
+mod wire;
 
 pub use biome_rules::Biome;
 pub use environment::{
@@ -31,6 +32,7 @@ pub use terrain::{
     Chunk, EdgePassability, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance,
     ResourceKind, ResourceNode, SurfaceDiagonal, SurfaceKind, Tile, TileSurface, WaterKind,
 };
+pub use wire::{CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 
 pub const CHUNK_TILES: i32 = 32;
 /// Version 8 adds separately persisted inland-lake coverage.

@@ -1,5 +1,5 @@
 use crate::{AppState, GameplayService, map_jobs, map_store};
-use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
+use aoe_map::{CompactChunk, MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
 use axum::{
     Json,
@@ -243,7 +243,7 @@ pub(super) async fn package(
 pub(super) async fn chunk(
     Path((content_hash, x, y)): Path<(String, i32, i32)>,
     State(state): State<AppState>,
-) -> Result<Json<aoe_map::Chunk>, StatusCode> {
+) -> Result<Json<CompactChunk>, StatusCode> {
     let package = state
         .map_packages
         .read()
@@ -266,15 +266,17 @@ pub(super) async fn chunk(
             .map_err(|_| StatusCode::NOT_FOUND)?;
         let land_use_pages = map_store::load_land_use_pages(directory.as_deref(), &package)
             .map_err(|_| StatusCode::NOT_FOUND)?;
-        package
+        let generator = package
             .generator_with_environment(
                 elevation_pages,
                 water_pages,
                 vegetation_pages,
                 land_use_pages,
             )
-            .map(|generator| Json(generator.chunk(x, y)))
-            .map_err(|_| StatusCode::NOT_FOUND)
+            .map_err(|_| StatusCode::NOT_FOUND)?;
+        CompactChunk::encode(&generator.chunk(x, y))
+            .map(Json)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
