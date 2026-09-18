@@ -4,5 +4,5 @@
   "wasm_bindgen": "0.2.128",
   "binaryen": "108",
   "gzip": "1.12 -n -9",
-  "optimized_gzip_bytes": 86725
+  "optimized_gzip_bytes": 217240
 }
