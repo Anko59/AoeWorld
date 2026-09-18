@@ -60,12 +60,13 @@ impl Default for EnvironmentalProvenance {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SourceLock {
     pub id: String,
+    pub provider: String,
     pub release: String,
     pub url: String,
     pub sha256: [u8; 32],
     /// Informational acquisition time, excluded from canonical map identity.
     pub acquired_at: String,
-    pub native_resolution_millimeters: u64,
+    pub native_resolution: String,
     pub crs: String,
     pub vertical_datum: String,
     pub license: String,
@@ -145,10 +146,11 @@ impl MapPackage {
         if source_locks.windows(2).any(|pair| pair[0].id == pair[1].id)
             || source_locks.iter().any(|source| {
                 source.id.is_empty()
+                    || source.provider.is_empty()
                     || source.release.is_empty()
                     || source.url.is_empty()
                     || source.acquired_at.is_empty()
-                    || source.native_resolution_millimeters == 0
+                    || source.native_resolution.is_empty()
                     || source.crs.is_empty()
                     || source.vertical_datum.is_empty()
                     || source.license.is_empty()
@@ -284,12 +286,13 @@ fn hash_package(
     environment.hash_into(&mut hash);
     for source in source_locks {
         hash_field(&mut hash, source.id.as_bytes());
+        hash_field(&mut hash, source.provider.as_bytes());
         hash_field(&mut hash, source.release.as_bytes());
         hash_field(&mut hash, source.url.as_bytes());
         hash.update(&source.sha256);
         // Acquisition time is provenance, not a prepared input. It must not
         // make identical packages hash differently across cache refreshes.
-        hash.update(&source.native_resolution_millimeters.to_le_bytes());
+        hash_field(&mut hash, source.native_resolution.as_bytes());
         hash_field(&mut hash, source.crs.as_bytes());
         hash_field(&mut hash, source.vertical_datum.as_bytes());
         hash_field(&mut hash, source.license.as_bytes());
@@ -334,11 +337,12 @@ mod tests {
     fn source(id: &str) -> SourceLock {
         SourceLock {
             id: id.to_owned(),
+            provider: "fixture".to_owned(),
             release: "test".to_owned(),
             url: "https://example.invalid/test".to_owned(),
             sha256: [7; 32],
             acquired_at: "2026-09-18T00:00:00Z".to_owned(),
-            native_resolution_millimeters: 30_000,
+            native_resolution: "30 meters".to_owned(),
             crs: "EPSG:4326".to_owned(),
             vertical_datum: "EGM2008".to_owned(),
             license: "test-only".to_owned(),

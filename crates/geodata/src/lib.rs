@@ -17,9 +17,11 @@ pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, pr
 
 mod source_cache;
 pub use source_cache::{
-    DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider,
-    SourceCache, SourceLock,
+    CacheError, DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy,
+    Provider, SourceCache, SourceLock,
 };
+
+mod source_manifest;
 
 mod source_catalog;
 pub use source_catalog::{KnownSource, SourceCatalogError, potential_biome_sources};
