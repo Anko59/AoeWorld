@@ -11,6 +11,12 @@ use gdal::{
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+mod source_cache;
+pub use source_cache::{
+    DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider,
+    SourceCache, SourceLock,
+};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterDimensions {
     pub width: usize,
