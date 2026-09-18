@@ -3,7 +3,7 @@ use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::game_path::{next_waypoint, segment_length};
 
@@ -52,12 +52,13 @@ pub enum GameWorldError {
     EntityIdExhausted,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub(crate) struct StoredUnit {
-    state: GameUnit,
-    order: Option<MovementOrder>,
-    bucket: ChunkCoord,
-    bucket_slot: usize,
+    pub(crate) state: GameUnit,
+    pub(crate) order: Option<MovementOrder>,
+    pub(crate) bucket: ChunkCoord,
+    pub(crate) bucket_slot: usize,
+    pub(crate) route: VecDeque<TileCoord>,
 }
 
 #[derive(Debug)]
@@ -247,6 +248,7 @@ impl GameWorld {
             order: None,
             bucket,
             bucket_slot,
+            route: VecDeque::new(),
         });
         Ok(id)
     }
@@ -268,13 +270,31 @@ impl GameWorld {
             return Ok(false);
         }
         let target_tile = destination.tile_floor();
-        let waypoint = next_waypoint(origin, target_tile, destination);
+        let (waypoint, route) =
+            if let Some(path) = self.terrain.route(origin.tile_floor(), target_tile) {
+                let mut route = VecDeque::from(path);
+                if route.is_empty() {
+                    return Err(GameWorldError::InvalidPosition);
+                }
+                let _ = route.pop_front();
+                let waypoint = route
+                    .pop_front()
+                    .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
+                    .unwrap_or(destination);
+                (waypoint, route)
+            } else {
+                (
+                    next_waypoint(origin, target_tile, destination),
+                    VecDeque::new(),
+                )
+            };
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let length = segment_length(dx, dy);
         self.units[index].state.previous_position = origin;
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
         self.units[index].state.moving = true;
+        self.units[index].route = route;
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,
@@ -291,68 +311,6 @@ impl GameWorld {
             self.active_movers.insert(insert_at, id);
         }
         Ok(true)
-    }
-
-    pub fn advance(&mut self) -> Vec<GameUnit> {
-        let movers = std::mem::take(&mut self.active_movers);
-        let mut still_moving = Vec::with_capacity(movers.len());
-        let mut changed = Vec::with_capacity(movers.len());
-        for id in movers {
-            let Some(&index) = self.lookup.get(&id) else {
-                continue;
-            };
-            let Some(mut order) = self.units[index].order else {
-                continue;
-            };
-            self.units[index].state.previous_position = self.units[index].state.position;
-            let remaining = order.segment_length.saturating_sub(order.travelled);
-            let step = remaining.min(self.config.move_speed_subunits_per_tick as u32);
-            order.travelled += step;
-            let arrived = order.travelled >= order.segment_length;
-            let position = if arrived {
-                order.waypoint
-            } else {
-                interpolate(order, order.travelled)
-            };
-            if !self.terrain.passable(position.tile_floor(), self.config) {
-                self.units[index].state.moving = false;
-                self.units[index].order = None;
-                changed.push(self.units[index].state);
-                continue;
-            }
-            self.units[index].state.position = position;
-            if self.units[index].bucket != ChunkCoord::from_position(position) {
-                self.move_bucket(index, ChunkCoord::from_position(position));
-            }
-            if arrived {
-                if order.waypoint == order.destination {
-                    self.units[index].state.moving = false;
-                    self.units[index].order = None;
-                } else {
-                    let next = next_waypoint(order.waypoint, order.target_tile, order.destination);
-                    let dx = i64::from(next.x) - i64::from(order.waypoint.x);
-                    let dy = i64::from(next.y) - i64::from(order.waypoint.y);
-                    order.origin = order.waypoint;
-                    order.waypoint = next;
-                    order.segment_length = segment_length(dx, dy);
-                    order.travelled = 0;
-                    self.units[index].state.facing =
-                        facing_for(dx, dy, self.units[index].state.facing);
-                    self.units[index].state.moving = true;
-                    self.units[index].order = Some(order);
-                    still_moving.push(id);
-                }
-            } else {
-                self.units[index].state.moving = true;
-                self.units[index].order = Some(order);
-                still_moving.push(id);
-            }
-            changed.push(self.units[index].state);
-        }
-        self.active_movers = still_moving;
-        self.tick.0 = self.tick.0.saturating_add(1);
-        changed.sort_by_key(|unit| unit.id);
-        changed
     }
 
     pub fn query(&self, rect: TileRect) -> (Vec<GameUnit>, GameQueryStats) {
@@ -416,6 +374,11 @@ impl GameWorld {
             } else {
                 hash.update(&[0; 40]);
             }
+            hash.update(&(unit.route.len() as u64).to_le_bytes());
+            for tile in &unit.route {
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+            }
         }
         *hash.finalize().as_bytes()
     }
@@ -427,7 +390,7 @@ impl GameWorld {
             .collect()
     }
 
-    fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
+    pub(crate) fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
         let old = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
         let Some(ids) = self.chunks.get_mut(&old) else {
@@ -451,7 +414,7 @@ impl GameWorld {
     }
 }
 
-fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
+pub(crate) fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
     let t = i128::from(travelled);
     let length = i128::from(order.segment_length);
     let x = i128::from(order.origin.x)
@@ -468,7 +431,7 @@ fn next_random(state: &mut u64) -> u64 {
     *state
 }
 
-fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {
+pub(crate) fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {
     let sx = dx - dy;
     let sy = dx + dy;
     if sx == 0 && sy == 0 {

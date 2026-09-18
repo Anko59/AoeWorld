@@ -1,5 +1,7 @@
 use aoe_core::{TileCoord, WorldConfig};
-use aoe_map::{MapChunkGenerator, MapPackage, ResourceOverlay};
+use aoe_map::{
+    MapChunkGenerator, MapPackage, MovementOutcome, ResourceOverlay, find_path_with_overlay,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniformGrass {
@@ -57,6 +59,18 @@ impl Terrain {
                         .object_at(tile)
                         .is_none_or(|node| !overlay.blocks(*generator, node.id))
             }),
+        }
+    }
+
+    pub fn route(&self, origin: TileCoord, destination: TileCoord) -> Option<Vec<TileCoord>> {
+        let Self::Map { generator, overlay } = self else {
+            return None;
+        };
+        match find_path_with_overlay(*generator, overlay, origin, destination, 4_096) {
+            MovementOutcome::Path(path) => Some(path.tiles),
+            MovementOutcome::InvalidDestination
+            | MovementOutcome::Unreachable
+            | MovementOutcome::BudgetExceeded => Some(Vec::new()),
         }
     }
 }

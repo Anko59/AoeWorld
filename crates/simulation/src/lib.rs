@@ -1,5 +1,6 @@
 //! Deterministic integer-only synthetic motion with a sparse spatial index.
 mod game_map;
+mod game_movement;
 mod game_path;
 mod game_query;
 mod game_world;

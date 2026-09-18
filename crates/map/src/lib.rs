@@ -5,7 +5,7 @@ mod package;
 mod request;
 mod terrain;
 
-pub use navigation::{MovementOutcome, Path, find_path};
+pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
 pub use package::{MapPackage, SourceLock};
 pub use request::{MapEstimate, MapRequest, MapRequestError, Ratio};

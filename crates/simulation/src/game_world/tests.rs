@@ -1,6 +1,6 @@
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
-use aoe_map::{MapPackage, MapRequest};
+use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
 
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()
@@ -226,4 +226,58 @@ fn map_world_rejects_blocked_ground_before_spawning_or_ordering() {
         world.issue_move(unit, blocked),
         Err(GameWorldError::InvalidPosition)
     );
+}
+
+#[test]
+fn map_world_follows_a_passable_route_to_its_destination() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let mut route_fixture = None;
+    'origins: for y in 1..config.height_tiles - 1 {
+        for x in 1..config.width_tiles - 2 {
+            let origin = TileCoord::new(x, y);
+            let destination = TileCoord::new(x + 1, y);
+            if let Some(path) = terrain.route(origin, destination) {
+                route_fixture = Some((origin, destination, path));
+                break 'origins;
+            }
+        }
+    }
+    let (origin, destination, path) = route_fixture.expect("generated terrain has a route");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let target = WorldPosition::from_tile_center(destination).expect("destination");
+    assert!(world.issue_move(unit, target).expect("route"));
+    assert_eq!(
+        world.movement_order(unit).expect("order").waypoint,
+        WorldPosition::from_tile_center(path[1]).expect("first route waypoint")
+    );
+    for _ in 0..512 {
+        for changed in world.advance() {
+            assert!(
+                world
+                    .terrain()
+                    .passable(changed.position.tile_floor(), config)
+            );
+        }
+        if !world.unit(unit).expect("unit").moving {
+            break;
+        }
+    }
+    let arrived = world.unit(unit).expect("unit");
+    assert_eq!(arrived.position, target);
+    assert!(!arrived.moving);
 }
