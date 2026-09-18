@@ -1,5 +1,5 @@
 use crate::GameplayService;
-use aoe_core::{PlayerId, TileCoord, WorldPosition};
+use aoe_core::{PlayerId, WorldPosition};
 use aoe_map::{
     ElevationPage, GAME_TILE_METERS, HistoricalLandUsePage, MAP_SCHEMA_VERSION, MapPackage,
     PotentialBiomePage, PreparedEnvironment, WaterPage,
@@ -13,27 +13,19 @@ impl GameplayService {
         let metadata = map_metadata(&package);
         let mut world = GameWorld::from_map(package)?;
         let config = world.config();
-        let mut state = config.seed.0.max(1);
-        for _ in 0..4_096 {
-            state = next_random(&mut state);
-            let tile = TileCoord::new(
-                (state % config.width_tiles as u64) as i32,
-                (state.rotate_left(29) % config.height_tiles as u64) as i32,
-            );
-            if !world.terrain().passable(tile, config) {
-                continue;
-            }
-            let position = WorldPosition::from_tile_center(tile)
-                .map_err(|_| GameWorldError::InvalidPosition)?;
-            let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
-            return Ok(Self::from_world(
-                world,
-                primary_unit_id,
-                Some(content_hash),
-                Some(metadata),
-            ));
-        }
-        Err(GameWorldError::InvalidPosition)
+        let tile = world
+            .terrain()
+            .starting_tile(config)
+            .ok_or(GameWorldError::InvalidPosition)?;
+        let position =
+            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
+        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        Ok(Self::from_world(
+            world,
+            primary_unit_id,
+            Some(content_hash),
+            Some(metadata),
+        ))
     }
 
     pub fn from_prepared_map(
@@ -56,27 +48,18 @@ impl GameplayService {
             land_use_pages,
         )?;
         let config = world.config();
-        let mut state = config.seed.0.max(1);
-        for _ in 0..4_096 {
-            state = next_random(&mut state);
-            let tile = TileCoord::new(
-                (state % config.width_tiles as u64) as i32,
-                (state.rotate_left(29) % config.height_tiles as u64) as i32,
-            );
-            if !world.terrain().passable(tile, config) {
-                continue;
-            }
-            let position = WorldPosition::from_tile_center(tile)
-                .map_err(|_| GameWorldError::InvalidPosition)?;
-            let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
-            return Ok(Some(Self::from_world(
-                world,
-                primary_unit_id,
-                Some(content_hash),
-                Some(metadata),
-            )));
-        }
-        Err(GameWorldError::InvalidPosition)
+        let Some(tile) = world.terrain().starting_tile(config) else {
+            return Ok(None);
+        };
+        let position =
+            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
+        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        Ok(Some(Self::from_world(
+            world,
+            primary_unit_id,
+            Some(content_hash),
+            Some(metadata),
+        )))
     }
 }
 
@@ -108,13 +91,6 @@ fn map_metadata(package: &MapPackage) -> MapMetadata {
         compression_denominator: package.request.compression.denominator,
         terrain_schema_version: MAP_SCHEMA_VERSION,
     }
-}
-
-fn next_random(state: &mut u64) -> u64 {
-    *state ^= *state << 13;
-    *state ^= *state >> 7;
-    *state ^= *state << 17;
-    *state
 }
 
 #[cfg(test)]

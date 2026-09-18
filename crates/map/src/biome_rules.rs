@@ -36,7 +36,8 @@ pub(crate) fn material_for(biome: Biome, height: i32) -> GroundMaterial {
     }
     match biome {
         Biome::Tropical => GroundMaterial::LushGrass,
-        Biome::Boreal | Biome::Tundra | Biome::Polar => GroundMaterial::Snow,
+        Biome::Boreal | Biome::Tundra => GroundMaterial::Snow,
+        Biome::Polar => GroundMaterial::Ice,
         Biome::Woodland => GroundMaterial::ForestFloor,
         Biome::Savanna | Biome::Steppe => GroundMaterial::DryGrass,
         Biome::Desert => GroundMaterial::Sand,
@@ -100,6 +101,12 @@ mod tests {
         assert_eq!(tree_density_per_thousand(Biome::Savanna), 80);
         assert_eq!(tree_density_per_thousand(Biome::Steppe), 10);
         assert_eq!(tree_density_per_thousand(Biome::Desert), 0);
+    }
+
+    #[test]
+    fn polar_biomes_are_ice_and_cannot_supply_a_land_start() {
+        assert_eq!(material_for(Biome::Tundra, 0), GroundMaterial::Snow);
+        assert_eq!(material_for(Biome::Polar, 0), GroundMaterial::Ice);
     }
 
     #[test]

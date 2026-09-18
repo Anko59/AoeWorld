@@ -1,5 +1,5 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
-use aoe_map::{MAP_SCHEMA_VERSION, MapRequest};
+use aoe_map::{MapRequest, Ratio};
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -321,7 +321,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
 }
 
 #[tokio::test]
-async fn map_activation_resets_existing_gameplay_sessions() {
+async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
     let (address, server, ticker) = setup().await;
     let (mut controller, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
@@ -344,7 +344,14 @@ async fn map_activation_resets_existing_gameplay_sessions() {
         receive(&mut controller).await,
         GameplayServerMessage::Snapshot { .. }
     ));
-    let request = serde_json::to_string(&MapRequest::default()).expect("request JSON");
+    let request = serde_json::to_string(&MapRequest {
+        center_latitude_e7: 600_000_000,
+        center_longitude_e7: 250_000_000,
+        requested_side_meters: 256,
+        compression: Ratio::new(2, 1).expect("ratio"),
+        ..MapRequest::default()
+    })
+    .expect("request JSON");
     let unauthorized_request = request.clone();
     let response = tokio::task::spawn_blocking(move || {
         http_json(address, "/maps/activate", &unauthorized_request)
@@ -359,46 +366,20 @@ async fn map_activation_resets_existing_gameplay_sessions() {
     .expect("response");
     assert!(response.starts_with("HTTP/1.1 200"));
     let body = response.split_once("\r\n\r\n").expect("HTTP body").1;
-    let content_hash: [u8; 32] = serde_json::from_str::<serde_json::Value>(body)
-        .expect("activation JSON")["content_hash"]
-        .as_str()
-        .expect("content hash")
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|value| u8::from_str_radix(value, 16).ok())
-                .expect("hex byte")
-        })
-        .collect::<Vec<_>>()
-        .try_into()
-        .expect("32-byte content hash");
-    let mut replacement_world_id = None;
-    for _ in 0..4 {
-        if let GameplayServerMessage::WorldReset { world_id } = receive(&mut controller).await {
-            replacement_world_id = Some(world_id);
-            break;
-        }
-    }
-    let replacement_world_id = replacement_world_id.expect("world reset");
-    assert_ne!(replacement_world_id, previous_world_id);
-    let (_replacement, welcome) = open(address, None).await;
+    let activation = serde_json::from_str::<serde_json::Value>(body).expect("activation JSON");
+    assert_eq!(activation["start_available"], false);
+    assert_eq!(activation["message"], "no suitable land start.");
+    let (_observer, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
         world_id,
-        map_content_hash: Some(hash),
-        map_metadata: Some(metadata),
+        map_content_hash: None,
+        map_metadata: None,
         ..
     } = welcome
     else {
-        panic!("replacement welcome must identify its physical map");
+        panic!("existing gameplay must remain active");
     };
-    assert_eq!(world_id, replacement_world_id);
-    assert_eq!(hash, content_hash);
-    assert_eq!(metadata.tile_size_meters, 2);
-    assert_eq!(metadata.compression_numerator, 30);
-    assert_eq!(metadata.compression_denominator, 1);
-    assert_eq!(metadata.terrain_schema_version, MAP_SCHEMA_VERSION);
+    assert_eq!(world_id, previous_world_id);
     server.abort();
     ticker.abort();
 }
