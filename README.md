@@ -1,9 +1,10 @@
 # AoeWorld
 
 A browser RTS project built with Rust, WASM, and WebGPU. The first playable
-feature is one cavalry unit on a grass map using local Age of Empires II
-assets. Click or tap to move; click again to redirect. With the map focused,
-use arrows/WASD. Reset returns the unit to its starting position.
+feature is one server-authoritative cavalry unit on a grass map using local
+Age of Empires II assets. Click or tap to select; right-click to move or
+redirect. Orders snap to tile centers while movement remains continuous
+between waypoints. With the map focused, use arrows/WASD to pan.
 
 ## Play locally
 
@@ -20,9 +21,10 @@ Canvas 2D compatibility renderer when WebGPU is unavailable. The server stays ru
 setting if a server was already running. Original assets remain local and are
 never included in Git or Docker images.
 
-Movement is a deterministic fixed-step simulation running locally in WASM.
-This first feature has no multiplayer, persistence, combat, economy, or obstacle
-pathfinding. Refresh resets the map. Border trees are scenery.
+Movement is a deterministic fixed-step simulation owned by the server and
+interpolated in the browser. This first feature has no combat, economy, or
+obstacle/collision pathfinding yet; the tile lattice currently provides the
+legal movement waypoints. Border trees are scenery.
 
 ## Development
 

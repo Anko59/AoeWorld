@@ -45,13 +45,43 @@ fn exact_arrival_and_mid_move_redirection_are_deterministic() {
         first.unit(a),
         second.unit(b).map(|unit| GameUnit { id: a, ..unit })
     );
-    assert_eq!(first.unit(a).unwrap().position, target);
+    assert_eq!(
+        first.unit(a).unwrap().position,
+        WorldConfig::default().snap_ground_position(target)
+    );
     assert!(!first.unit(a).unwrap().moving);
     first
         .issue_move(a, WorldPosition::new(25_000, 24_000))
         .unwrap();
     first.advance();
     assert!(first.unit(a).unwrap().moving);
+}
+
+#[test]
+fn move_destinations_snap_to_tile_centers() {
+    let mut world = world();
+    let unit = world
+        .spawn_unit(PlayerId(0), WorldPosition::new(20_000, 20_000))
+        .unwrap();
+    world
+        .issue_move(unit, WorldPosition::new(23_000, 24_000))
+        .unwrap();
+    assert_eq!(
+        world.movement_order(unit).unwrap().destination,
+        WorldConfig::default().snap_ground_position(WorldPosition::new(23_000, 24_000))
+    );
+    assert_ne!(
+        world.movement_order(unit).unwrap().waypoint,
+        world.movement_order(unit).unwrap().destination
+    );
+}
+
+#[test]
+fn default_cavalry_starts_at_a_tile_center() {
+    let (world, unit) = GameWorld::default_with_cavalry(Seed(7));
+    let position = world.unit(unit).unwrap().position;
+    assert_eq!(position.x.rem_euclid(FIXED_SUBUNITS_PER_TILE), 512);
+    assert_eq!(position.y.rem_euclid(FIXED_SUBUNITS_PER_TILE), 512);
 }
 
 #[test]

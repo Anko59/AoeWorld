@@ -6,7 +6,9 @@ occupied 32×32 chunks, and sends bounded snapshots and tick deltas for each
 client's tile subscription. The gameplay protocol is independently versioned
 from the diagnostic protocol. The first controller receives an opaque resume
 token; later connections spectate, and a disconnected controller has a
-30-second lease before the oldest spectator is promoted.
+30-second lease before the oldest spectator is promoted. Move orders are
+canonicalized to the center of a valid tile; fixed-point interpolation carries
+units continuously between those lattice waypoints.
 
 The `/diagnostics.html` adapter retains the synthetic compatibility world and
 wire format for regression evidence. Its world is initialized only when a

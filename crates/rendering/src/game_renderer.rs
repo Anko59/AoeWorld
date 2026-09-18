@@ -1,6 +1,8 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
-use crate::{GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, playground::game_sprites, web::Sprite};
-use aoe_core::{Camera, EntityId, ScreenPoint};
+use crate::{
+    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites, web::Sprite,
+};
+use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
@@ -190,7 +192,7 @@ impl GameRenderer {
                 context.fill_rect(0.0, 0.0, width, height);
                 context.set_image_smoothing_enabled(false);
                 if grid {
-                    draw_grid(context, camera);
+                    game_grid::draw_grid(context, camera);
                 }
                 for (sprite, frame, selected) in world_sprite_frames(art, units, camera, animation)
                 {
@@ -210,14 +212,14 @@ fn world_sprites(
     grid: bool,
 ) -> Vec<Sprite> {
     let mut sprites = if grid {
-        grid_sprites(camera)
+        game_grid::grid_sprites(camera)
     } else {
         Vec::new()
     };
     let frames = world_sprite_frames(art, units, camera, animation);
     sprites.extend(frames.iter().map(|(sprite, _, _)| *sprite));
     for unit in units.iter().filter(|unit| unit.selected) {
-        sprites.extend(selection_ring(camera, unit.position));
+        sprites.extend(game_grid::selection_ring(camera, unit.position));
     }
     sprites
 }
@@ -254,7 +256,7 @@ fn world_sprite_frames(
         if frames.is_empty() {
             continue;
         }
-        let direction = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(unit.facing) % 8];
+        let (direction, flipped) = sprite_direction(unit.facing);
         let frame = frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }];
         let scale = camera.zoom as f32;
         let width = f64::from(frame.size[0]) * camera.zoom;
@@ -267,7 +269,6 @@ fn world_sprite_frames(
             continue;
         }
         let mut uv = frame.uv;
-        let flipped = unit.facing >= 5;
         if flipped {
             uv[0] += uv[2];
             uv[2] = -uv[2];
@@ -299,90 +300,10 @@ fn world_sprite_frames(
     result
 }
 
-fn selection_ring(camera: SceneCamera, position: [f64; 2]) -> Vec<Sprite> {
-    let screen = Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-    }
-    .world_to_screen(position);
-    (0..32)
-        .map(|index| {
-            let angle = f64::from(index) * std::f64::consts::TAU / 32.0;
-            let x = screen.x + angle.cos() * 24.0 * camera.zoom;
-            let y = screen.y + angle.sin() * 8.0 * camera.zoom;
-            Sprite {
-                position: [
-                    (x / camera.viewport[0] * 2.0 - 1.0) as f32,
-                    (1.0 - y / camera.viewport[1] * 2.0) as f32,
-                ],
-                radius: [
-                    1.5 / camera.viewport[0] as f32,
-                    1.5 / camera.viewport[1] as f32,
-                ],
-                color: [0.95, 0.85, 0.35, 1.0],
-                uv: [
-                    1.0 / GAME_ATLAS_SIDE as f32,
-                    0.0,
-                    1.0 / GAME_ATLAS_SIDE as f32,
-                    1.0 / GAME_ATLAS_SIDE as f32,
-                ],
-            }
-        })
-        .collect()
-}
-
-fn grid_sprites(camera: SceneCamera) -> Vec<Sprite> {
-    let projection = Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-    };
-    let visible = projection.visible_tiles(aoe_core::WorldConfig::default(), 2.0);
-    let mut sprites = Vec::new();
-    let width = camera.viewport[0].max(1.0);
-    let height = camera.viewport[1].max(1.0);
-    for tile in visible.min.x..=visible.max.x {
-        let a = projection.world_to_screen([f64::from(tile), f64::from(visible.min.y)]);
-        let b = projection.world_to_screen([f64::from(tile), f64::from(visible.max.y)]);
-        add_line(&mut sprites, a, b, width, height);
-    }
-    for tile in visible.min.y..=visible.max.y {
-        let a = projection.world_to_screen([f64::from(visible.min.x), f64::from(tile)]);
-        let b = projection.world_to_screen([f64::from(visible.max.x), f64::from(tile)]);
-        add_line(&mut sprites, a, b, width, height);
-    }
-    sprites
-}
-
-fn add_line(sprites: &mut Vec<Sprite>, a: ScreenPoint, b: ScreenPoint, width: f64, height: f64) {
-    let distance = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
-    let steps = (distance / 18.0).ceil() as usize;
-    if steps == 0 {
-        return;
-    }
-    for step in 0..steps {
-        let start = f64::from(step as u32) / f64::from(steps as u32);
-        let end = f64::from((step + 1) as u32) / f64::from(steps as u32);
-        let x = a.x + (b.x - a.x) * (start + end) * 0.5;
-        let y = a.y + (b.y - a.y) * (start + end) * 0.5;
-        let w = (b.x - a.x).abs() / f64::from(steps as u32) + 1.0;
-        let h = (b.y - a.y).abs() / f64::from(steps as u32) + 1.0;
-        sprites.push(Sprite {
-            position: [
-                (x / width * 2.0 - 1.0) as f32,
-                (1.0 - y / height * 2.0) as f32,
-            ],
-            radius: [w as f32 / width as f32, h as f32 / height as f32],
-            color: [0.75, 0.9, 0.6, 0.16],
-            uv: [
-                1.0 / GAME_ATLAS_SIDE as f32,
-                0.0,
-                1.0 / GAME_ATLAS_SIDE as f32,
-                1.0 / GAME_ATLAS_SIDE as f32,
-            ],
-        });
-    }
+fn sprite_direction(facing: u8) -> (usize, bool) {
+    let facing = facing % 8;
+    let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
+    (row, matches!(facing, 1..=3))
 }
 
 fn draw_scene_sprite(
@@ -397,22 +318,46 @@ fn draw_scene_sprite(
     let height = f64::from(canvas.height());
     let x = (f64::from(sprite.position[0]) + 1.0) * width / 2.0 - f64::from(frame.size[0]) / 2.0;
     let y = (1.0 - f64::from(sprite.position[1])) * height / 2.0 - f64::from(frame.anchor[1]);
-    let [sx, sy, sw, sh] = frame
+    let [mut sx, sy, sw, sh] = sprite
         .uv
         .map(|value| f64::from(value) * f64::from(GAME_ATLAS_SIDE));
-    context
-        .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-            atlas,
-            sx,
-            sy,
-            sw,
-            sh,
-            x,
-            y,
-            f64::from(frame.size[0]),
-            f64::from(frame.size[1]),
-        )
-        .map_err(error)?;
+    context.save();
+    let result = if sw < 0.0 {
+        sx += sw;
+        context
+            .translate(x + f64::from(frame.size[0]), y)
+            .map_err(error)?;
+        context.scale(-1.0, 1.0).map_err(error)?;
+        context
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                atlas,
+                sx,
+                sy,
+                sw.abs(),
+                sh,
+                0.0,
+                0.0,
+                f64::from(frame.size[0]),
+                f64::from(frame.size[1]),
+            )
+            .map_err(error)
+    } else {
+        context
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                atlas,
+                sx,
+                sy,
+                sw,
+                sh,
+                x,
+                y,
+                f64::from(frame.size[0]),
+                f64::from(frame.size[1]),
+            )
+            .map_err(error)
+    };
+    context.restore();
+    result?;
     if selected {
         context.begin_path();
         context.set_stroke_style_str("#f2dc78");
@@ -420,8 +365,8 @@ fn draw_scene_sprite(
             .ellipse(
                 x + f64::from(frame.size[0]) / 2.0,
                 y + f64::from(frame.size[1]),
-                22.0,
-                8.0,
+                f64::from(frame.size[0]) * 0.55,
+                f64::from(frame.size[1]) * 0.105,
                 0.0,
                 0.0,
                 std::f64::consts::TAU,
@@ -430,32 +375,4 @@ fn draw_scene_sprite(
         context.stroke();
     }
     Ok(())
-}
-
-fn draw_grid(context: &CanvasRenderingContext2d, camera: SceneCamera) {
-    let projection = Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-    };
-    let left = projection.screen_to_world(ScreenPoint { x: 0.0, y: 0.0 });
-    let right = projection.screen_to_world(ScreenPoint {
-        x: camera.viewport[0],
-        y: camera.viewport[1],
-    });
-    context.begin_path();
-    context.set_stroke_style_str("rgba(220,235,170,.18)");
-    let min = left[0].min(left[1]).floor() as i32 - 2;
-    let max = right[0].max(right[1]).ceil() as i32 + 2;
-    for index in min..=max {
-        let a = projection.world_to_screen([f64::from(index), 0.0]);
-        let b = projection.world_to_screen([f64::from(index), f64::from(max)]);
-        context.move_to(a.x, a.y);
-        context.line_to(b.x, b.y);
-        let a = projection.world_to_screen([0.0, f64::from(index)]);
-        let b = projection.world_to_screen([f64::from(max), f64::from(index)]);
-        context.move_to(a.x, a.y);
-        context.line_to(b.x, b.y);
-    }
-    context.stroke();
 }

@@ -155,14 +155,15 @@ impl GameplayService {
                 CommandResult::RejectedNotController
             } else if !world.unit_exists(command.entity_id) {
                 CommandResult::RejectedUnknownEntity
-            } else if !world.config().valid_ground_position(command.destination)
-                || world
-                    .issue_move(command.entity_id, command.destination)
-                    .is_err()
-            {
+            } else if !world.config().valid_map_position(command.destination) {
                 CommandResult::RejectedInvalidDestination
             } else {
-                CommandResult::Accepted
+                let destination = world.config().snap_ground_position(command.destination);
+                if world.issue_move(command.entity_id, destination).is_ok() {
+                    CommandResult::Accepted
+                } else {
+                    CommandResult::RejectedInvalidDestination
+                }
             };
             let tick = world.tick();
             acknowledgements.push((

@@ -1,9 +1,11 @@
 use crate::terrain::UniformGrass;
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
-    TILE_GROUND_RADIUS_SUBUNITS, Tick, TileRect, WorldConfig, WorldPosition, WorldRect,
+    TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+use crate::game_path::{next_waypoint, segment_length};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -32,6 +34,8 @@ pub struct GameUnit {
 pub struct MovementOrder {
     pub origin: WorldPosition,
     pub destination: WorldPosition,
+    pub waypoint: WorldPosition,
+    pub target_tile: TileCoord,
     pub segment_length: u32,
     pub travelled: u32,
 }
@@ -94,7 +98,7 @@ impl GameWorld {
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
             config.height_tiles * FIXED_SUBUNITS_PER_TILE / 2,
         );
-        let id = world.spawn_unit(PlayerId(0), center)?;
+        let id = world.spawn_unit(PlayerId(0), config.snap_ground_position(center))?;
         Ok((world, id))
     }
 
@@ -173,7 +177,9 @@ impl GameWorld {
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
             config.height_tiles * FIXED_SUBUNITS_PER_TILE / 2,
         );
-        let id = world.spawn_unit(PlayerId(0), center).unwrap_or(EntityId(0));
+        let id = world
+            .spawn_unit(PlayerId(0), config.snap_ground_position(center))
+            .unwrap_or(EntityId(0));
         (world, id)
     }
 
@@ -256,24 +262,27 @@ impl GameWorld {
         destination: WorldPosition,
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
-        let destination = self.config.clamp_ground_position(destination);
+        let destination = self.config.snap_ground_position(destination);
         let origin = self.units[index].state.position;
         if origin == destination {
             self.units[index].order = None;
             self.units[index].state.moving = false;
             return Ok(false);
         }
-        let dx = i64::from(destination.x) - i64::from(origin.x);
-        let dy = i64::from(destination.y) - i64::from(origin.y);
-        let length =
-            ceil_sqrt_u128((dx.unsigned_abs() as u128).pow(2) + (dy.unsigned_abs() as u128).pow(2));
+        let target_tile = destination.tile_floor();
+        let waypoint = next_waypoint(origin, target_tile, destination);
+        let dx = i64::from(waypoint.x) - i64::from(origin.x);
+        let dy = i64::from(waypoint.y) - i64::from(origin.y);
+        let length = segment_length(dx, dy);
         self.units[index].state.previous_position = origin;
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
         self.units[index].state.moving = true;
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,
-            segment_length: length.max(1),
+            waypoint,
+            target_tile,
+            segment_length: length,
             travelled: 0,
         });
         if self.active_movers.binary_search(&id).is_err() {
@@ -303,7 +312,7 @@ impl GameWorld {
             order.travelled += step;
             let arrived = order.travelled >= order.segment_length;
             let position = if arrived {
-                order.destination
+                order.waypoint
             } else {
                 interpolate(order, order.travelled)
             };
@@ -312,8 +321,23 @@ impl GameWorld {
                 self.move_bucket(index, ChunkCoord::from_position(position));
             }
             if arrived {
-                self.units[index].state.moving = false;
-                self.units[index].order = None;
+                if order.waypoint == order.destination {
+                    self.units[index].state.moving = false;
+                    self.units[index].order = None;
+                } else {
+                    let next = next_waypoint(order.waypoint, order.target_tile, order.destination);
+                    let dx = i64::from(next.x) - i64::from(order.waypoint.x);
+                    let dy = i64::from(next.y) - i64::from(order.waypoint.y);
+                    order.origin = order.waypoint;
+                    order.waypoint = next;
+                    order.segment_length = segment_length(dx, dy);
+                    order.travelled = 0;
+                    self.units[index].state.facing =
+                        facing_for(dx, dy, self.units[index].state.facing);
+                    self.units[index].state.moving = true;
+                    self.units[index].order = Some(order);
+                    still_moving.push(id);
+                }
             } else {
                 self.units[index].state.moving = true;
                 self.units[index].order = Some(order);
@@ -379,10 +403,14 @@ impl GameWorld {
                 hash.update(&order.origin.y.to_le_bytes());
                 hash.update(&order.destination.x.to_le_bytes());
                 hash.update(&order.destination.y.to_le_bytes());
+                hash.update(&order.waypoint.x.to_le_bytes());
+                hash.update(&order.waypoint.y.to_le_bytes());
+                hash.update(&order.target_tile.x.to_le_bytes());
+                hash.update(&order.target_tile.y.to_le_bytes());
                 hash.update(&order.segment_length.to_le_bytes());
                 hash.update(&order.travelled.to_le_bytes());
             } else {
-                hash.update(&[0; 24]);
+                hash.update(&[0; 40]);
             }
         }
         *hash.finalize().as_bytes()
@@ -423,9 +451,9 @@ fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
     let t = i128::from(travelled);
     let length = i128::from(order.segment_length);
     let x = i128::from(order.origin.x)
-        + (i128::from(order.destination.x) - i128::from(order.origin.x)) * t / length;
+        + (i128::from(order.waypoint.x) - i128::from(order.origin.x)) * t / length;
     let y = i128::from(order.origin.y)
-        + (i128::from(order.destination.y) - i128::from(order.origin.y)) * t / length;
+        + (i128::from(order.waypoint.y) - i128::from(order.origin.y)) * t / length;
     WorldPosition::new(x as i32, y as i32)
 }
 
@@ -434,16 +462,6 @@ fn next_random(state: &mut u64) -> u64 {
     *state ^= *state >> 7;
     *state ^= *state << 17;
     *state
-}
-
-fn ceil_sqrt_u128(value: u128) -> u32 {
-    let floor = value.isqrt();
-    u32::try_from(if floor * floor == value {
-        floor
-    } else {
-        floor + 1
-    })
-    .unwrap_or(u32::MAX)
 }
 
 fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {

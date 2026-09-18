@@ -54,6 +54,14 @@ impl WorldPosition {
         Self::from_i64(x, y)
     }
 
+    pub fn from_tile_center(tile: TileCoord) -> Result<Self, CoordinateError> {
+        let origin = Self::from_tile(tile)?;
+        Self::from_i64(
+            i64::from(origin.x) + i64::from(FIXED_SUBUNITS_PER_TILE / 2),
+            i64::from(origin.y) + i64::from(FIXED_SUBUNITS_PER_TILE / 2),
+        )
+    }
+
     pub fn from_i64(x: i64, y: i64) -> Result<Self, CoordinateError> {
         Ok(Self {
             x: i32::try_from(x).map_err(|_| CoordinateError::Overflow)?,
@@ -239,6 +247,16 @@ impl WorldConfig {
             && position.y < height - TILE_GROUND_RADIUS_SUBUNITS
     }
 
+    pub fn valid_map_position(self, position: WorldPosition) -> bool {
+        let Ok((width, height)) = self
+            .world_width_subunits()
+            .and_then(|width| self.world_height_subunits().map(|height| (width, height)))
+        else {
+            return false;
+        };
+        position.x >= 0 && position.y >= 0 && position.x < width && position.y < height
+    }
+
     pub fn clamp_ground_position(self, position: WorldPosition) -> WorldPosition {
         let width = self.world_width_subunits().unwrap_or(i32::MAX);
         let height = self.world_height_subunits().unwrap_or(i32::MAX);
@@ -252,6 +270,16 @@ impl WorldConfig {
                 height - TILE_GROUND_RADIUS_SUBUNITS,
             ),
         )
+    }
+
+    pub fn snap_ground_position(self, position: WorldPosition) -> WorldPosition {
+        let position = self.clamp_ground_position(position);
+        let tile = position.tile_floor();
+        let tile = TileCoord::new(
+            tile.x.clamp(0, self.width_tiles.saturating_sub(1)),
+            tile.y.clamp(0, self.height_tiles.saturating_sub(1)),
+        );
+        WorldPosition::from_tile_center(tile).unwrap_or(position)
     }
 }
 
@@ -284,6 +312,10 @@ mod tests {
             WorldPosition::new(-1, -1).tile_floor(),
             TileCoord::new(-1, -1)
         );
+        assert_eq!(
+            WorldPosition::from_tile_center(TileCoord::new(4, 9)).unwrap(),
+            WorldPosition::new(4_608, 9_728)
+        );
     }
 
     #[test]
@@ -294,6 +326,11 @@ mod tests {
         assert!(config.valid_ground_position(WorldPosition::new(256, 256)));
         assert!(!config.valid_ground_position(WorldPosition::new(0, 0)));
         assert!(config.valid_ground_position(WorldPosition::new(16_776_959, 16_776_959)));
+        assert_eq!(
+            config.snap_ground_position(WorldPosition::new(8_388_608, 8_388_608)),
+            WorldPosition::new(8_389_120, 8_389_120)
+        );
+        assert!(config.valid_map_position(WorldPosition::new(0, 0)));
     }
 
     #[test]

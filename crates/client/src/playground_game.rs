@@ -377,6 +377,7 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
         (world[1] * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64,
     );
     let Ok(destination) = destination else { return };
+    let destination = client.config.snap_ground_position(destination);
     let message = GameplayClientMessage::MoveOrder {
         sequence: client.next_sequence,
         entity_id: client.primary.unwrap_or(EntityId(0)),
