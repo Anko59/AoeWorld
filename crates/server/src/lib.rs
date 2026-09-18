@@ -49,6 +49,7 @@ pub struct AppState {
     build: Arc<str>,
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
+    map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
     gameplay: Arc<RwLock<GameplayService>>,
 }
 
@@ -62,6 +63,7 @@ impl AppState {
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
+            map_packages: Arc::new(RwLock::new(BTreeMap::new())),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         }
     }
@@ -208,7 +210,7 @@ async fn activate_map(
     State(state): State<AppState>,
     Json(request): Json<MapRequest>,
 ) -> Result<Json<MapActivation>, (StatusCode, String)> {
-    let (activation, gameplay) = tokio::task::spawn_blocking(move || {
+    let (activation, package, gameplay) = tokio::task::spawn_blocking(move || {
         let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
             .map_err(|error| error.to_string())?;
         let activation = MapActivation {
@@ -217,8 +219,9 @@ async fn activate_map(
             source_lock_count: package.source_locks.len(),
             uses_fallback_data: package.source_locks.is_empty(),
         };
-        let gameplay = GameplayService::from_map(package).map_err(|error| error.to_string())?;
-        Ok::<_, String>((activation, gameplay))
+        let gameplay =
+            GameplayService::from_map(package.clone()).map_err(|error| error.to_string())?;
+        Ok::<_, String>((activation, package, gameplay))
     })
     .await
     .map_err(|_| {
@@ -228,6 +231,11 @@ async fn activate_map(
         )
     })?
     .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+    state
+        .map_packages
+        .write()
+        .await
+        .insert(activation.content_hash.clone(), package);
     *state.gameplay.write().await = gameplay;
     state.generation.fetch_add(1, Ordering::SeqCst);
     Ok(Json(activation))
@@ -237,6 +245,39 @@ async fn reset_map(State(state): State<AppState>) -> StatusCode {
     *state.gameplay.write().await = GameplayService::new(state.diagnostic_scenario.seed);
     state.generation.fetch_add(1, Ordering::SeqCst);
     StatusCode::NO_CONTENT
+}
+
+async fn map_package(
+    Path(content_hash): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<MapPackage>, StatusCode> {
+    state
+        .map_packages
+        .read()
+        .await
+        .get(&content_hash)
+        .cloned()
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn map_chunk(
+    Path((content_hash, x, y)): Path<(String, i32, i32)>,
+    State(state): State<AppState>,
+) -> Result<Json<aoe_map::Chunk>, StatusCode> {
+    let package = state
+        .map_packages
+        .read()
+        .await
+        .get(&content_hash)
+        .cloned()
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let chunks =
+        i32::try_from(package.chunk_count_per_side()).map_err(|_| StatusCode::NOT_FOUND)?;
+    if x < 0 || y < 0 || x >= chunks || y >= chunks {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(Json(package.generator().chunk(x, y)))
 }
 
 async fn select_scenario(
@@ -277,6 +318,8 @@ pub fn app(state: AppState) -> Router {
         .route("/maps/estimate", post(estimate_map))
         .route("/maps/activate", post(activate_map))
         .route("/maps/reset", post(reset_map))
+        .route("/maps/{content_hash}", get(map_package))
+        .route("/maps/{content_hash}/chunks/{x}/{y}", get(map_chunk))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
