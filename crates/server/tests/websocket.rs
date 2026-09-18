@@ -1,4 +1,5 @@
 use aoe_core::Region;
+use aoe_map::MapRequest;
 use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_client};
 use aoe_scenario::{BEYOND_TARGET, SMOKE, Scenario};
 use aoe_server::{AppState, Config, app};
@@ -112,6 +113,47 @@ fn http(address: SocketAddr, method: &str, path: &str) -> String {
     let mut result = String::new();
     stream.read_to_string(&mut result).expect("response");
     result
+}
+
+fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
+}
+
+#[tokio::test]
+async fn map_estimates_are_validated_without_creating_a_world() {
+    let (address, server, ticker) = setup().await;
+    let request = serde_json::to_string(&MapRequest::default()).expect("request JSON");
+    let response =
+        tokio::task::spawn_blocking(move || http_json(address, "/maps/estimate", &request))
+            .await
+            .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("\"tiles_per_side\":500"));
+    let response = tokio::task::spawn_blocking(move || {
+        http_json(
+            address,
+            "/maps/estimate",
+            "{\"schema_version\":1,\"center_latitude_e7\":0,\"center_longitude_e7\":0,\"requested_side_meters\":1,\"compression\":{\"numerator\":1,\"denominator\":1},\"year_ce\":600,\"seed\":1}",
+        )
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 400"));
+    server.abort();
+    ticker.abort();
 }
 
 #[tokio::test]

@@ -6,6 +6,7 @@ pub use config::Config;
 pub use gameplay::GameplayService;
 
 use aoe_core::{EntityId, Region, Tick};
+use aoe_map::{MapEstimate, MapRequest};
 use aoe_protocol::{
     ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
@@ -185,6 +186,15 @@ async fn replay_hash(Query(query): Query<ReplayQuery>) -> Result<Json<ReplayResu
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+async fn estimate_map(
+    Json(request): Json<MapRequest>,
+) -> Result<Json<MapEstimate>, (StatusCode, String)> {
+    request
+        .estimate()
+        .map(Json)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
 async fn select_scenario(
     Path(name): Path<String>,
     State(state): State<AppState>,
@@ -220,6 +230,7 @@ pub fn app(state: AppState) -> Router {
     let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
+        .route("/maps/estimate", post(estimate_map))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))

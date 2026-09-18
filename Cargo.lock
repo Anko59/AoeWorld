@@ -196,12 +196,14 @@ name = "aoe-server"
 version = "0.1.0"
 dependencies = [
  "aoe-core",
+ "aoe-map",
  "aoe-protocol",
  "aoe-scenario",
  "aoe-simulation",
  "axum",
  "futures-util",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
