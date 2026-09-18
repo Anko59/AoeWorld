@@ -1,6 +1,7 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    MapChunkGenerator, MapPackage, MovementOutcome, ResourceOverlay, find_path_with_overlay,
+    ElevationPage, MapChunkGenerator, MapPackage, MovementOutcome, ResourceOverlay,
+    find_path_with_overlay,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -45,6 +46,16 @@ impl Terrain {
         }
     }
 
+    pub fn from_prepared_package(
+        package: &MapPackage,
+        pages: Vec<ElevationPage>,
+    ) -> Result<Self, aoe_map::MapPackageError> {
+        Ok(Self::Map {
+            generator: package.generator_with_elevation(pages)?,
+            overlay: ResourceOverlay::default(),
+        })
+    }
+
     pub fn passable(&self, tile: TileCoord, config: WorldConfig) -> bool {
         match self {
             Self::Uniform(_) => {
@@ -57,7 +68,7 @@ impl Terrain {
                 sample.passable
                     && generator
                         .object_at(tile)
-                        .is_none_or(|node| !overlay.blocks(*generator, node.id))
+                        .is_none_or(|node| !overlay.blocks(generator, node.id))
             }),
         }
     }
@@ -66,7 +77,7 @@ impl Terrain {
         let Self::Map { generator, overlay } = self else {
             return None;
         };
-        match find_path_with_overlay(*generator, overlay, origin, destination, 4_096) {
+        match find_path_with_overlay(generator, overlay, origin, destination, 4_096) {
             MovementOutcome::Path(path) => Some(path.tiles),
             MovementOutcome::InvalidDestination
             | MovementOutcome::Unreachable

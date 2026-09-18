@@ -233,7 +233,7 @@ fn map_world_follows_a_passable_route_to_its_destination() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
     let terrain = Terrain::Map {
-        generator,
+        generator: generator.clone(),
         overlay: ResourceOverlay::default(),
     };
     let mut route_fixture = None;

@@ -20,7 +20,7 @@ pub enum MovementOutcome {
 }
 
 pub fn find_path(
-    terrain: MapChunkGenerator,
+    terrain: &MapChunkGenerator,
     origin: TileCoord,
     destination: TileCoord,
     max_expansions: u32,
@@ -31,7 +31,7 @@ pub fn find_path(
 }
 
 pub fn find_path_with_overlay(
-    terrain: MapChunkGenerator,
+    terrain: &MapChunkGenerator,
     overlay: &ResourceOverlay,
     origin: TileCoord,
     destination: TileCoord,
@@ -48,7 +48,7 @@ pub fn find_path_with_overlay(
 }
 
 fn find_path_with<F>(
-    terrain: MapChunkGenerator,
+    terrain: &MapChunkGenerator,
     origin: TileCoord,
     destination: TileCoord,
     max_expansions: u32,
@@ -126,7 +126,7 @@ fn path(
     MovementOutcome::Path(Path { tiles, cost })
 }
 
-fn neighbors<F>(terrain: MapChunkGenerator, tile: TileCoord, passable: &F) -> Vec<(TileCoord, u32)>
+fn neighbors<F>(terrain: &MapChunkGenerator, tile: TileCoord, passable: &F) -> Vec<(TileCoord, u32)>
 where
     F: Fn(TileCoord) -> bool,
 {
@@ -164,11 +164,11 @@ where
     result
 }
 
-fn walkable(terrain: MapChunkGenerator, tile: TileCoord) -> bool {
+fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
     terrain.tile_at(tile).is_some_and(|sample| sample.passable) && terrain.object_at(tile).is_none()
 }
 
-fn crossable(terrain: MapChunkGenerator, from: TileCoord, to: TileCoord) -> bool {
+fn crossable(terrain: &MapChunkGenerator, from: TileCoord, to: TileCoord) -> bool {
     let Some(from) = terrain.tile_at(from) else {
         return false;
     };
@@ -202,9 +202,9 @@ mod tests {
             for x in 1..62 {
                 let origin = TileCoord::new(x, y);
                 let destination = TileCoord::new(x + 1, y);
-                if walkable(terrain(), origin)
-                    && walkable(terrain(), destination)
-                    && crossable(terrain(), origin, destination)
+                if walkable(&terrain(), origin)
+                    && walkable(&terrain(), destination)
+                    && crossable(&terrain(), origin, destination)
                 {
                     return (origin, destination);
                 }
@@ -216,7 +216,10 @@ mod tests {
     fn resource() -> (MapChunkGenerator, crate::ResourceNode) {
         let terrain = MapChunkGenerator::new([3; 32], 1, 128);
         let node = (0..4)
-            .flat_map(|y| (0..4).flat_map(move |x| terrain.chunk(x, y).resources))
+            .flat_map(|y| {
+                let terrain = terrain.clone();
+                (0..4).flat_map(move |x| terrain.chunk(x, y).resources)
+            })
             .next()
             .expect("test terrain resource");
         (terrain, node)
@@ -225,11 +228,11 @@ mod tests {
     #[test]
     fn route_is_deterministic_and_bounded() {
         let (origin, destination) = neighboring_land();
-        let first = find_path(terrain(), origin, destination, 4_096);
-        let second = find_path(terrain(), origin, destination, 4_096);
+        let first = find_path(&terrain(), origin, destination, 4_096);
+        let second = find_path(&terrain(), origin, destination, 4_096);
         assert_eq!(first, second);
         assert!(matches!(
-            find_path(terrain(), origin, destination, 0),
+            find_path(&terrain(), origin, destination, 0),
             MovementOutcome::BudgetExceeded
         ));
     }
@@ -238,7 +241,7 @@ mod tests {
     fn blocked_or_outside_destinations_are_rejected() {
         assert_eq!(
             find_path(
-                terrain(),
+                &terrain(),
                 TileCoord::new(2, 2),
                 TileCoord::new(-1, 2),
                 4_096
@@ -252,14 +255,14 @@ mod tests {
         let (terrain, node) = resource();
         let mut overlay = ResourceOverlay::default();
         assert_eq!(
-            find_path_with_overlay(terrain, &overlay, node.tile, node.tile, 4_096),
+            find_path_with_overlay(&terrain, &overlay, node.tile, node.tile, 4_096),
             MovementOutcome::InvalidDestination
         );
         overlay
-            .deplete(terrain, node.id, node.initial_amount)
+            .deplete(&terrain, node.id, node.initial_amount)
             .expect("resource");
         assert!(matches!(
-            find_path_with_overlay(terrain, &overlay, node.tile, node.tile, 4_096),
+            find_path_with_overlay(&terrain, &overlay, node.tile, node.tile, 4_096),
             MovementOutcome::Path(_)
         ));
     }

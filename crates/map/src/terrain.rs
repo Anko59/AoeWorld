@@ -1,6 +1,10 @@
-use crate::{CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS};
+use crate::{
+    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PreparedEnvironment,
+    Ratio,
+};
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -103,11 +107,19 @@ pub struct Chunk {
     pub resources: Vec<ResourceNode>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MapChunkGenerator {
     geography_key: [u8; 32],
     procedural_seed: u64,
     width_tiles: i32,
+    elevation: Option<Arc<PreparedElevation>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PreparedElevation {
+    samples_per_axis: u16,
+    compression: Ratio,
+    pages: BTreeMap<(u16, u16), ElevationPage>,
 }
 
 impl MapChunkGenerator {
@@ -116,15 +128,38 @@ impl MapChunkGenerator {
             geography_key,
             procedural_seed,
             width_tiles,
+            elevation: None,
         }
     }
 
-    pub fn tile_at(self, tile: TileCoord) -> Option<Tile> {
+    /// Binds verified level-zero elevation pages to this otherwise pure terrain
+    /// query. Callers retain page loading in an adapter and pass only the
+    /// complete page set for the immutable package.
+    pub fn with_prepared_elevation(
+        self,
+        compression: Ratio,
+        environment: &PreparedEnvironment,
+        pages: Vec<ElevationPage>,
+    ) -> Result<Self, EnvironmentError> {
+        let level_zero = crate::environment::level_zero_pages(environment, pages)?;
+        Ok(Self {
+            geography_key: self.geography_key,
+            procedural_seed: self.procedural_seed,
+            width_tiles: self.width_tiles,
+            elevation: Some(Arc::new(PreparedElevation {
+                samples_per_axis: environment.samples_per_axis,
+                compression,
+                pages: level_zero,
+            })),
+        })
+    }
+
+    pub fn tile_at(&self, tile: TileCoord) -> Option<Tile> {
         (tile.x >= 0 && tile.y >= 0 && tile.x < self.width_tiles && tile.y < self.width_tiles)
             .then(|| self.sample_tile(tile))
     }
 
-    pub fn chunk(self, x: i32, y: i32) -> Chunk {
+    pub fn chunk(&self, x: i32, y: i32) -> Chunk {
         let mut tiles = Vec::with_capacity((CHUNK_TILES * CHUNK_TILES) as usize);
         let mut resources = Vec::new();
         for local_y in 0..CHUNK_TILES {
@@ -147,12 +182,12 @@ impl MapChunkGenerator {
         }
     }
 
-    pub fn object_at(self, tile: TileCoord) -> Option<ResourceNode> {
+    pub fn object_at(&self, tile: TileCoord) -> Option<ResourceNode> {
         self.tile_at(tile)
             .and_then(|sample| self.resource_at(tile, sample))
     }
 
-    pub fn resource_by_id(self, id: u64) -> Option<ResourceNode> {
+    pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {
         if id & 1 != 0 {
             return None;
         }
@@ -160,7 +195,7 @@ impl MapChunkGenerator {
         self.object_at(tile).filter(|node| node.id == id)
     }
 
-    fn sample_tile(self, tile: TileCoord) -> Tile {
+    fn sample_tile(&self, tile: TileCoord) -> Tile {
         let broad = signed_noise(
             self.geography_key,
             b"relief",
@@ -168,7 +203,7 @@ impl MapChunkGenerator {
             tile.y.div_euclid(8),
         );
         let local = signed_noise(self.geography_key, b"relief-detail", tile.x, tile.y) / 8;
-        let geographic_height_centimeters = broad.saturating_mul(25).saturating_add(local);
+        let fallback_height = broad.saturating_mul(25).saturating_add(local);
         let water = if unsigned_noise(
             self.geography_key,
             b"water",
@@ -208,6 +243,33 @@ impl MapChunkGenerator {
             8 => Biome::Polar,
             _ => Biome::Temperate,
         };
+        let (geographic_height_centimeters, game_height_level, elevation_provenance) = self
+            .elevation
+            .as_ref()
+            .and_then(|elevation| elevation.height_at(tile, self.width_tiles))
+            .map(|height| {
+                let game_height = i64::from(height).saturating_mul(i64::from(
+                    self.elevation
+                        .as_ref()
+                        .map_or(1, |value| value.compression.denominator),
+                )) / (i64::from(ELEVATION_LEVEL_CENTIMETERS)
+                    * i64::from(
+                        self.elevation
+                            .as_ref()
+                            .map_or(1, |value| value.compression.numerator),
+                    ));
+                (
+                    height,
+                    game_height.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
+                    Provenance::SourceDerived,
+                )
+            })
+            .unwrap_or((
+                fallback_height,
+                (fallback_height / ELEVATION_LEVEL_CENTIMETERS)
+                    .clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                Provenance::Fallback,
+            ));
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -215,19 +277,17 @@ impl MapChunkGenerator {
         };
         Tile {
             geographic_height_centimeters,
-            game_height_level: (geographic_height_centimeters / ELEVATION_LEVEL_CENTIMETERS)
-                .clamp(i32::from(i16::MIN), i32::from(i16::MAX))
-                as i16,
+            game_height_level,
             material,
             biome,
             water,
-            elevation_provenance: Provenance::Fallback,
+            elevation_provenance,
             water_provenance: Provenance::Fallback,
             passable: water == WaterKind::None && material != GroundMaterial::Ice,
         }
     }
 
-    fn resource_at(self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
+    fn resource_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
         if !sample.passable {
             return None;
         }
@@ -247,6 +307,45 @@ impl MapChunkGenerator {
             object,
             initial_amount: amount,
             visual_variant: (value >> 8) as u8,
+        })
+    }
+}
+
+impl crate::MapPackage {
+    /// Creates pure terrain queries backed by the complete, verified page set
+    /// supplied by the server storage adapter.
+    pub fn generator_with_elevation(
+        &self,
+        pages: Vec<ElevationPage>,
+    ) -> Result<MapChunkGenerator, crate::MapPackageError> {
+        if self.environment.samples_per_axis == 0 {
+            return pages
+                .is_empty()
+                .then(|| self.generator())
+                .ok_or(crate::MapPackageError::InvalidEnvironment);
+        }
+        self.generator()
+            .with_prepared_elevation(self.request.compression, &self.environment, pages)
+            .map_err(|_| crate::MapPackageError::InvalidEnvironment)
+    }
+}
+
+impl PreparedElevation {
+    fn height_at(&self, tile: TileCoord, width_tiles: i32) -> Option<i32> {
+        let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
+        let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
+        let x =
+            u16::try_from((u64::try_from(tile.x).ok()? * source_axis + tile_axis / 2) / tile_axis)
+                .ok()?;
+        let y =
+            u16::try_from((u64::try_from(tile.y).ok()? * source_axis + tile_axis / 2) / tile_axis)
+                .ok()?;
+        let page_size = u16::from(crate::ENVIRONMENT_PAGE_SAMPLES);
+        let page = self.pages.get(&(x / page_size, y / page_size))?;
+        let local_x = usize::from(x % page_size);
+        let local_y = usize::from(y % page_size);
+        (local_x < usize::from(page.width) && local_y < usize::from(page.height)).then(|| {
+            page.geographic_height_centimeters[local_y * usize::from(page.width) + local_x]
         })
     }
 }

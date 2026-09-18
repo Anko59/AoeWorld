@@ -164,9 +164,20 @@ fn page_root(directory: &Path, package: &MapPackage) -> PathBuf {
 }
 
 fn verify_environment(directory: &Path, package: &MapPackage) -> Result<(), MapStoreError> {
+    load_elevation_pages(Some(directory), package).map(|_| ())
+}
+
+pub(super) fn load_elevation_pages(
+    directory: Option<&Path>,
+    package: &MapPackage,
+) -> Result<Vec<ElevationPage>, MapStoreError> {
     if package.environment.samples_per_axis == 0 {
-        return Ok(());
+        return Ok(Vec::new());
     }
+    let directory = directory.ok_or_else(|| MapStoreError::InvalidPackage {
+        path: PathBuf::from("prepared-environment"),
+        reason: "prepared package requires a page directory".to_owned(),
+    })?;
     let mut pages = Vec::new();
     for (level, metadata) in package.environment.elevation.levels.iter().enumerate() {
         let count = metadata
@@ -190,7 +201,7 @@ fn verify_environment(directory: &Path, package: &MapPackage) -> Result<(), MapS
             });
         }
     }
-    Ok(())
+    Ok(pages)
 }
 
 fn verify_pages(package: &MapPackage, pages: &[ElevationPage]) -> Result<(), String> {
@@ -359,6 +370,10 @@ mod tests {
         let (package, pages) = prepared();
         persist_prepared(Some(directory.path()), &package, &pages).expect("persist");
         assert_eq!(load(Some(directory.path())).expect("load").len(), 1);
+        assert_eq!(
+            load_elevation_pages(Some(directory.path()), &package).expect("pages"),
+            pages
+        );
         let missing = page_root(directory.path(), &package).join("0-0-0.json");
         fs::remove_file(missing).expect("remove page");
         assert!(matches!(

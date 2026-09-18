@@ -50,6 +50,8 @@ pub enum GameWorldError {
     UnknownEntity,
     #[error("entity id space is exhausted")]
     EntityIdExhausted,
+    #[error("prepared map terrain is invalid")]
+    InvalidTerrain,
 }
 
 #[derive(Debug)]

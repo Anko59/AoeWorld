@@ -158,7 +158,12 @@ async fn activate_completed(
     };
     let gameplay = tokio::task::spawn_blocking({
         let package = package.clone();
-        move || GameplayService::from_map(package).map_err(|error| error.to_string())
+        let directory = state.map_package_directory.clone();
+        move || {
+            let pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+                .map_err(|error| error.to_string())?;
+            GameplayService::from_prepared_map(package, pages).map_err(|error| error.to_string())
+        }
     })
     .await
     .map_err(|_| {
@@ -238,5 +243,15 @@ pub(super) async fn chunk(
     if x < 0 || y < 0 || x >= chunks || y >= chunks {
         return Err(StatusCode::NOT_FOUND);
     }
-    Ok(Json(package.generator().chunk(x, y)))
+    let directory = state.map_package_directory.clone();
+    tokio::task::spawn_blocking(move || {
+        let pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+            .map_err(|_| StatusCode::NOT_FOUND)?;
+        package
+            .generator_with_elevation(pages)
+            .map(|generator| Json(generator.chunk(x, y)))
+            .map_err(|_| StatusCode::NOT_FOUND)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }

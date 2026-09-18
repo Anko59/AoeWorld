@@ -27,7 +27,7 @@ impl ResourceOverlay {
         self.revision
     }
 
-    pub fn remaining(&self, terrain: MapChunkGenerator, id: u64) -> Option<u16> {
+    pub fn remaining(&self, terrain: &MapChunkGenerator, id: u64) -> Option<u16> {
         terrain.resource_by_id(id).map(|node| {
             self.remaining
                 .get(&id)
@@ -36,13 +36,13 @@ impl ResourceOverlay {
         })
     }
 
-    pub fn blocks(&self, terrain: MapChunkGenerator, id: u64) -> bool {
+    pub fn blocks(&self, terrain: &MapChunkGenerator, id: u64) -> bool {
         self.remaining(terrain, id).is_some_and(|amount| amount > 0)
     }
 
     pub fn deplete(
         &mut self,
-        terrain: MapChunkGenerator,
+        terrain: &MapChunkGenerator,
         id: u64,
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
@@ -83,7 +83,10 @@ mod tests {
     fn resource() -> (MapChunkGenerator, ResourceNode) {
         let terrain = MapChunkGenerator::new([3; 32], 1, 128);
         let node = (0..4)
-            .flat_map(|y| (0..4).flat_map(move |x| terrain.chunk(x, y).resources))
+            .flat_map(|y| {
+                let terrain = terrain.clone();
+                (0..4).flat_map(move |x| terrain.chunk(x, y).resources)
+            })
             .next()
             .expect("test terrain resource");
         (terrain, node)
@@ -95,15 +98,15 @@ mod tests {
         assert_eq!(terrain.resource_by_id(node.id), Some(node));
         let mut overlay = ResourceOverlay::default();
         let first = overlay
-            .deplete(terrain, node.id, node.initial_amount - 1)
+            .deplete(&terrain, node.id, node.initial_amount - 1)
             .expect("resource");
         assert_eq!(first.remaining, 1);
         assert!(!first.became_nonblocking);
-        let final_depletion = overlay.deplete(terrain, node.id, 100).expect("resource");
+        let final_depletion = overlay.deplete(&terrain, node.id, 100).expect("resource");
         assert_eq!(final_depletion.removed, 1);
         assert!(final_depletion.became_nonblocking);
-        assert!(!overlay.blocks(terrain, node.id));
-        let exhausted = overlay.deplete(terrain, node.id, 1).expect("resource");
+        assert!(!overlay.blocks(&terrain, node.id));
+        let exhausted = overlay.deplete(&terrain, node.id, 1).expect("resource");
         assert_eq!(exhausted.removed, 0);
         assert!(!exhausted.became_nonblocking);
         assert_eq!(overlay.revision(), 2);
@@ -114,7 +117,7 @@ mod tests {
         let (terrain, _) = resource();
         let mut overlay = ResourceOverlay::default();
         assert_eq!(
-            overlay.deplete(terrain, u64::MAX, 1),
+            overlay.deplete(&terrain, u64::MAX, 1),
             Err(ResourceOverlayError::UnknownResource)
         );
         assert_eq!(overlay.revision(), 0);
