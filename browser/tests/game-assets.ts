@@ -22,7 +22,11 @@ export async function gameAssets(page: Page): Promise<string> {
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
-    ["terrain", 15008, 10],
+    ...[15008, 15007, 15000, 15010, 15018, 15002].map((id) => [
+      "terrain",
+      id,
+      10,
+    ]),
     ["graphics", 435, 4],
   ].flatMap(([archive, id, count]) =>
     Array.from({ length: Number(count) }, (_, frame) => ({

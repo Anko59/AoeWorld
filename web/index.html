@@ -221,6 +221,10 @@
         await refreshPackages();
         estimate.className = '';
         const source = value.uses_fallback_data ? 'Fallback' : 'Source-backed';
+        if (!value.start_available) {
+          estimate.textContent = `${source} package available for preview: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\n${value.message || 'No suitable land start.'} Open its terrain preview; gameplay was not replaced.`;
+          return;
+        }
         estimate.textContent = `${source} package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
       } catch (error) {
         estimate.className = 'error';
@@ -246,6 +250,10 @@
       try {
         const value = await readJson(await fetch(`/maps/${encodeURIComponent(packageSelect.value)}`, { method: 'POST', headers: controllerHeaders() }));
         estimate.className = '';
+        if (!value.start_available) {
+          estimate.textContent = `Saved map available for preview: ${value.message || 'No suitable land start.'} Gameplay was not replaced.`;
+          return;
+        }
         estimate.textContent = `Saved map active: ${value.content_hash.slice(0, 12)}… Reconnect to join the activated world.`;
       } catch (error) {
         estimate.className = 'error';
