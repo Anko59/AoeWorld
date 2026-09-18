@@ -217,6 +217,7 @@ name = "aoe-simulation"
 version = "0.1.0"
 dependencies = [
  "aoe-core",
+ "aoe-map",
  "aoe-scenario",
  "blake3",
  "criterion",

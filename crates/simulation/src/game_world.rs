@@ -1,4 +1,4 @@
-use crate::terrain::UniformGrass;
+use crate::{GameQueryStats, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
@@ -40,13 +40,6 @@ pub struct MovementOrder {
     pub travelled: u32,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct GameQueryStats {
-    pub visited_chunks: u32,
-    pub candidate_units: u32,
-    pub returned_units: u32,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GameWorldError {
     #[error("world configuration is invalid: {0}")]
@@ -60,7 +53,7 @@ pub enum GameWorldError {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct StoredUnit {
+pub(crate) struct StoredUnit {
     state: GameUnit,
     order: Option<MovementOrder>,
     bucket: ChunkCoord,
@@ -69,20 +62,20 @@ struct StoredUnit {
 
 #[derive(Debug)]
 pub struct GameWorld {
-    config: WorldConfig,
-    tick: Tick,
-    units: Vec<StoredUnit>,
-    lookup: BTreeMap<EntityId, usize>,
-    chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
-    active_movers: Vec<EntityId>,
-    terrain: UniformGrass,
+    pub(crate) config: WorldConfig,
+    pub(crate) tick: Tick,
+    pub(crate) units: Vec<StoredUnit>,
+    pub(crate) lookup: BTreeMap<EntityId, usize>,
+    pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
+    pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) terrain: Terrain,
 }
 
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
         config.validate()?;
         Ok(Self {
-            terrain: UniformGrass::new(config.seed.0),
+            terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
             units: Vec::new(),
@@ -165,7 +158,7 @@ impl GameWorld {
             ..WorldConfig::default()
         };
         let mut world = Self {
-            terrain: UniformGrass::new(config.seed.0),
+            terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
             units: Vec::new(),
@@ -191,8 +184,8 @@ impl GameWorld {
         self.tick
     }
 
-    pub fn terrain(&self) -> UniformGrass {
-        self.terrain
+    pub fn terrain(&self) -> &Terrain {
+        &self.terrain
     }
 
     pub fn unit_count(&self) -> usize {
@@ -230,7 +223,9 @@ impl GameWorld {
         player: PlayerId,
         position: WorldPosition,
     ) -> Result<EntityId, GameWorldError> {
-        if !self.config.valid_ground_position(position) {
+        if !self.config.valid_ground_position(position)
+            || !self.terrain.passable(position.tile_floor(), self.config)
+        {
             return Err(GameWorldError::InvalidPosition);
         }
         let id = EntityId(
@@ -263,6 +258,9 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         let destination = self.config.snap_ground_position(destination);
+        if !self.terrain.passable(destination.tile_floor(), self.config) {
+            return Err(GameWorldError::InvalidPosition);
+        }
         let origin = self.units[index].state.position;
         if origin == destination {
             self.units[index].order = None;
@@ -316,6 +314,12 @@ impl GameWorld {
             } else {
                 interpolate(order, order.travelled)
             };
+            if !self.terrain.passable(position.tile_floor(), self.config) {
+                self.units[index].state.moving = false;
+                self.units[index].order = None;
+                changed.push(self.units[index].state);
+                continue;
+            }
             self.units[index].state.position = position;
             if self.units[index].bucket != ChunkCoord::from_position(position) {
                 self.move_bucket(index, ChunkCoord::from_position(position));

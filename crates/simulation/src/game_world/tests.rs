@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
+use aoe_map::{MapPackage, MapRequest};
 
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()
@@ -188,4 +189,41 @@ fn deterministic_population_supports_hotspots_and_sparse_extents() {
     assert_eq!(world.unit_count(), 8_000);
     assert!(units.len() >= 1_000);
     assert!(stats.candidate_units >= stats.returned_units);
+}
+
+#[test]
+fn map_world_rejects_blocked_ground_before_spawning_or_ordering() {
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let mut world = GameWorld::from_map(package).expect("map world");
+    let config = world.config();
+    let mut passable = None;
+    let mut blocked = None;
+    for y in 0..config.height_tiles {
+        for x in 0..config.width_tiles {
+            let tile = TileCoord::new(x, y);
+            if world.terrain().passable(tile, config) {
+                passable.get_or_insert(tile);
+            } else {
+                blocked.get_or_insert(tile);
+            }
+            if passable.is_some() && blocked.is_some() {
+                break;
+            }
+        }
+        if passable.is_some() && blocked.is_some() {
+            break;
+        }
+    }
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(passable.expect("land")).expect("position"),
+        )
+        .expect("spawn on land");
+    let blocked =
+        WorldPosition::from_tile_center(blocked.expect("blocked tile")).expect("position");
+    assert_eq!(
+        world.issue_move(unit, blocked),
+        Err(GameWorldError::InvalidPosition)
+    );
 }

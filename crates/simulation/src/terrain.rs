@@ -1,4 +1,5 @@
 use aoe_core::{TileCoord, WorldConfig};
+use aoe_map::{MapChunkGenerator, MapPackage, ResourceOverlay};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniformGrass {
@@ -18,5 +19,44 @@ impl UniformGrass {
         let x = tile.x.rem_euclid(8) as u64;
         let y = tile.y.rem_euclid(8) as u64;
         Some(((x.wrapping_mul(37) + y.wrapping_mul(17) + self.seed) % 8) as u8)
+    }
+}
+
+#[derive(Debug)]
+pub enum Terrain {
+    Uniform(UniformGrass),
+    Map {
+        generator: MapChunkGenerator,
+        overlay: ResourceOverlay,
+    },
+}
+
+impl Terrain {
+    pub const fn uniform(seed: u64) -> Self {
+        Self::Uniform(UniformGrass::new(seed))
+    }
+
+    pub fn from_package(package: &MapPackage) -> Self {
+        Self::Map {
+            generator: package.generator(),
+            overlay: ResourceOverlay::default(),
+        }
+    }
+
+    pub fn passable(&self, tile: TileCoord, config: WorldConfig) -> bool {
+        match self {
+            Self::Uniform(_) => {
+                tile.x >= 0
+                    && tile.y >= 0
+                    && tile.x < config.width_tiles
+                    && tile.y < config.height_tiles
+            }
+            Self::Map { generator, overlay } => generator.tile_at(tile).is_some_and(|sample| {
+                sample.passable
+                    && generator
+                        .object_at(tile)
+                        .is_none_or(|node| !overlay.blocks(*generator, node.id))
+            }),
+        }
     }
 }

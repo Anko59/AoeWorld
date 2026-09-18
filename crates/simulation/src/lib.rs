@@ -1,13 +1,16 @@
 //! Deterministic integer-only synthetic motion with a sparse spatial index.
+mod game_map;
 mod game_path;
+mod game_query;
 mod game_world;
 mod terrain;
 
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
-pub use game_world::{Facing, GameQueryStats, GameUnit, GameWorld, GameWorldError, MovementOrder};
+pub use game_query::GameQueryStats;
+pub use game_world::{Facing, GameUnit, GameWorld, GameWorldError, MovementOrder};
 use std::collections::{BTreeMap, BTreeSet};
-pub use terrain::UniformGrass;
+pub use terrain::{Terrain, UniformGrass};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entity {
