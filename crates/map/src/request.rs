@@ -94,8 +94,14 @@ impl MapRequest {
             .ok_or(MapRequestError::Overflow)?
             / denominator;
         if !(MIN_TILES_PER_SIDE..=MAX_TILES_PER_SIDE).contains(&(tiles as u64)) {
+            let tiles = tiles.min(u128::from(u64::MAX)) as u64;
+            let Some(suggestion) = request.compatible_compression() else {
+                return Err(MapRequestError::NoCompatibleCompression { tiles });
+            };
             return Err(MapRequestError::TileEnvelope {
-                tiles: tiles.min(u128::from(u64::MAX)) as u64,
+                tiles,
+                suggested_numerator: suggestion.numerator,
+                suggested_denominator: suggestion.denominator,
             });
         }
         let tiles = u64::try_from(tiles).map_err(|_| MapRequestError::Overflow)?;
@@ -125,6 +131,41 @@ impl MapRequest {
                 .map_err(|_| MapRequestError::Overflow)?,
             cavalry_crossing_seconds: game_side_meters / u64::from(CAVALRY_METERS_PER_SECOND),
         })
+    }
+
+    pub fn compatible_compression(self) -> Option<Ratio> {
+        let request = self.normalized_without_estimate().ok()?;
+        let numerator = u128::from(request.requested_side_meters)
+            .checked_mul(u128::from(request.compression.denominator))?;
+        let denominator =
+            u128::from(GAME_TILE_METERS).checked_mul(u128::from(request.compression.numerator))?;
+        let tiles = numerator.checked_add(denominator - 1)? / denominator;
+        if (MIN_TILES_PER_SIDE..=MAX_TILES_PER_SIDE).contains(&(tiles as u64)) {
+            return Some(request.compression);
+        }
+        let target = if tiles > u128::from(MAX_TILES_PER_SIDE) {
+            MAX_TILES_PER_SIDE
+        } else {
+            MIN_TILES_PER_SIDE
+        };
+        let denominator = u64::from(GAME_TILE_METERS).checked_mul(target)?;
+        let raw = if target == MAX_TILES_PER_SIDE {
+            request.requested_side_meters.div_ceil(denominator)
+        } else {
+            request.requested_side_meters / denominator
+        };
+        let raw = raw.clamp(1, 10_000);
+        let ratio = Ratio::new(u32::try_from(raw).ok()?, 1).ok()?;
+        request
+            .with_compression(ratio)
+            .estimate()
+            .ok()
+            .map(|_| ratio)
+    }
+
+    fn with_compression(mut self, compression: Ratio) -> Self {
+        self.compression = compression;
+        self
     }
 
     fn normalized_without_estimate(mut self) -> Result<Self, MapRequestError> {
@@ -169,9 +210,17 @@ pub enum MapRequestError {
     #[error("only 600 CE is supported")]
     UnsupportedYear,
     #[error(
-        "request produces {tiles} tiles per side; choose a compression that produces 64 through 262144"
+        "request produces {tiles} tiles per side; try compression {suggested_numerator}:{suggested_denominator} to stay within 64 through 262144"
     )]
-    TileEnvelope { tiles: u64 },
+    TileEnvelope {
+        tiles: u64,
+        suggested_numerator: u32,
+        suggested_denominator: u32,
+    },
+    #[error(
+        "request produces {tiles} tiles per side and no compression within 1:1 through 10000:1 can fit the supported envelope"
+    )]
+    NoCompatibleCompression { tiles: u64 },
     #[error("map-size arithmetic overflowed")]
     Overflow,
 }
@@ -232,7 +281,15 @@ mod tests {
         };
         assert!(matches!(
             request.estimate(),
-            Err(MapRequestError::TileEnvelope { .. })
+            Err(MapRequestError::TileEnvelope {
+                suggested_numerator: 1,
+                suggested_denominator: 1,
+                ..
+            })
         ));
+        assert_eq!(
+            request.compatible_compression(),
+            Some(Ratio::new(1, 1).expect("ratio"))
+        );
     }
 }
