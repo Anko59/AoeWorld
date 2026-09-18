@@ -271,7 +271,7 @@ mod tests {
             y: 0,
             width: 2,
             height: 2,
-            geographic_height_centimeters: vec![100, 200, 300, 400],
+            geographic_height_centimeters: vec![-100, 200, 300, 400],
         };
         let second = ElevationPage {
             level: 1,
@@ -317,6 +317,12 @@ mod tests {
         let terrain = package
             .generator_with_elevation(vec![first, second])
             .expect("prepared terrain");
+        let coast = terrain
+            .tile_at(aoe_core::TileCoord::new(0, 0))
+            .expect("coast");
+        assert_eq!(coast.water, crate::WaterKind::Ocean);
+        assert_eq!(coast.water_provenance, crate::Provenance::SourceDerived);
+        assert!(!coast.passable);
         let tile = terrain
             .tile_at(aoe_core::TileCoord::new(124, 124))
             .expect("tile");

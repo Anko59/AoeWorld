@@ -204,7 +204,7 @@ impl MapChunkGenerator {
         );
         let local = signed_noise(self.geography_key, b"relief-detail", tile.x, tile.y) / 8;
         let fallback_height = broad.saturating_mul(25).saturating_add(local);
-        let water = if unsigned_noise(
+        let fallback_water = if unsigned_noise(
             self.geography_key,
             b"water",
             tile.x.div_euclid(16),
@@ -243,31 +243,46 @@ impl MapChunkGenerator {
             8 => Biome::Polar,
             _ => Biome::Temperate,
         };
-        let (geographic_height_centimeters, game_height_level, elevation_provenance) = self
+        let (
+            geographic_height_centimeters,
+            game_height_level,
+            elevation_provenance,
+            water,
+            water_provenance,
+        ) = self
             .elevation
             .as_ref()
-            .and_then(|elevation| elevation.height_at(tile, self.width_tiles))
-            .map(|height| {
-                let game_height = i64::from(height).saturating_mul(i64::from(
-                    self.elevation
-                        .as_ref()
-                        .map_or(1, |value| value.compression.denominator),
-                )) / (i64::from(ELEVATION_LEVEL_CENTIMETERS)
-                    * i64::from(
-                        self.elevation
-                            .as_ref()
-                            .map_or(1, |value| value.compression.numerator),
-                    ));
+            .and_then(|elevation| {
+                elevation
+                    .height_at(tile, self.width_tiles)
+                    .map(|height| (height, elevation.compression))
+            })
+            .map(|(height, compression)| {
+                let game_height = i64::from(height)
+                    .saturating_mul(i64::from(compression.denominator))
+                    / (i64::from(ELEVATION_LEVEL_CENTIMETERS) * i64::from(compression.numerator));
                 (
                     height,
                     game_height.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
                     Provenance::SourceDerived,
+                    if height <= 0 {
+                        WaterKind::Ocean
+                    } else {
+                        fallback_water
+                    },
+                    if height <= 0 {
+                        Provenance::SourceDerived
+                    } else {
+                        Provenance::Fallback
+                    },
                 )
             })
             .unwrap_or((
                 fallback_height,
                 (fallback_height / ELEVATION_LEVEL_CENTIMETERS)
                     .clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                Provenance::Fallback,
+                fallback_water,
                 Provenance::Fallback,
             ));
         let material = match water {
@@ -282,7 +297,7 @@ impl MapChunkGenerator {
             biome,
             water,
             elevation_provenance,
-            water_provenance: Provenance::Fallback,
+            water_provenance,
             passable: water == WaterKind::None && material != GroundMaterial::Ice,
         }
     }
