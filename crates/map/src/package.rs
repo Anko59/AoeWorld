@@ -1,4 +1,6 @@
-use crate::{CHUNK_TILES, MapChunkGenerator, MapEstimate, MapRequest, MapRequestError};
+use crate::{
+    CHUNK_TILES, MapChunkGenerator, MapEstimate, MapRequest, MapRequestError, PreparedEnvironment,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -79,6 +81,7 @@ pub struct MapPackage {
     pub source_locks: Vec<SourceLock>,
     pub projection: ProjectionMetadata,
     pub provenance: EnvironmentalProvenance,
+    pub environment: PreparedEnvironment,
     pub content_hash: [u8; 32],
 }
 
@@ -114,9 +117,27 @@ impl MapPackage {
     pub fn with_environment(
         generator_version: u16,
         request: MapRequest,
+        source_locks: Vec<SourceLock>,
+        projection: ProjectionMetadata,
+        provenance: EnvironmentalProvenance,
+    ) -> Result<Self, MapPackageError> {
+        Self::with_prepared_environment(
+            generator_version,
+            request,
+            source_locks,
+            projection,
+            provenance,
+            PreparedEnvironment::default(),
+        )
+    }
+
+    pub fn with_prepared_environment(
+        generator_version: u16,
+        request: MapRequest,
         mut source_locks: Vec<SourceLock>,
         projection: ProjectionMetadata,
         provenance: EnvironmentalProvenance,
+        environment: PreparedEnvironment,
     ) -> Result<Self, MapPackageError> {
         let request = request.normalized()?;
         let estimate = request.estimate()?;
@@ -140,12 +161,16 @@ impl MapPackage {
         {
             return Err(MapPackageError::InvalidProjection);
         }
+        environment
+            .validate()
+            .map_err(|_| MapPackageError::InvalidEnvironment)?;
         let content_hash = hash_package(
             generator_version,
             request,
             &source_locks,
             &projection,
             &provenance,
+            &environment,
             true,
         );
         Ok(Self {
@@ -156,6 +181,7 @@ impl MapPackage {
             source_locks,
             projection,
             provenance,
+            environment,
             content_hash,
         })
     }
@@ -173,12 +199,13 @@ impl MapPackage {
     /// its chunks. It rejects stale estimates, reordered source locks, and a
     /// content hash that no longer covers the package inputs.
     pub fn validate(&self) -> Result<(), MapPackageError> {
-        let canonical = Self::with_environment(
+        let canonical = Self::with_prepared_environment(
             self.generator_version,
             self.request,
             self.source_locks.clone(),
             self.projection.clone(),
             self.provenance.clone(),
+            self.environment.clone(),
         )?;
         (canonical == *self)
             .then_some(())
@@ -192,6 +219,7 @@ impl MapPackage {
             &self.source_locks,
             &self.projection,
             &self.provenance,
+            &self.environment,
             false,
         );
         MapChunkGenerator::new(
@@ -214,6 +242,8 @@ pub enum MapPackageError {
     InvalidSourceLocks,
     #[error("projection metadata requires a horizontal CRS")]
     InvalidProjection,
+    #[error("prepared environmental index is invalid")]
+    InvalidEnvironment,
     #[error("package fields do not reproduce the canonical package")]
     NonCanonicalFields,
 }
@@ -224,6 +254,7 @@ fn hash_package(
     source_locks: &[SourceLock],
     projection: &ProjectionMetadata,
     provenance: &EnvironmentalProvenance,
+    environment: &PreparedEnvironment,
     include_seed: bool,
 ) -> [u8; 32] {
     let mut hash = blake3::Hasher::new();
@@ -250,6 +281,7 @@ fn hash_package(
         provenance.vegetation as u8,
         provenance.historical_land_use as u8,
     ]);
+    environment.hash_into(&mut hash);
     for source in source_locks {
         hash_field(&mut hash, source.id.as_bytes());
         hash_field(&mut hash, source.release.as_bytes());
@@ -274,6 +306,30 @@ fn hash_field(hash: &mut blake3::Hasher, bytes: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn environment() -> PreparedEnvironment {
+        PreparedEnvironment {
+            samples_per_axis: 4,
+            geographic_millimeters_per_sample: 30_000,
+            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+            elevation: crate::FieldPyramid {
+                levels: vec![
+                    crate::PyramidLevel {
+                        samples_per_axis: 4,
+                        ordered_page_root: [1; 32],
+                    },
+                    crate::PyramidLevel {
+                        samples_per_axis: 2,
+                        ordered_page_root: [2; 32],
+                    },
+                    crate::PyramidLevel {
+                        samples_per_axis: 1,
+                        ordered_page_root: [3; 32],
+                    },
+                ],
+            },
+        }
+    }
 
     fn source(id: &str) -> SourceLock {
         SourceLock {
@@ -385,6 +441,32 @@ mod tests {
         )
         .expect("package");
         assert_ne!(fallback.content_hash, sourced.content_hash);
+    }
+
+    #[test]
+    fn packages_hash_prepared_environment_roots() {
+        let package = MapPackage::with_prepared_environment(
+            1,
+            MapRequest::default(),
+            vec![source("elevation")],
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance::default(),
+            environment(),
+        )
+        .expect("prepared package");
+        let mut changed_environment = environment();
+        changed_environment.elevation.levels[0].ordered_page_root = [4; 32];
+        let changed = MapPackage::with_prepared_environment(
+            1,
+            MapRequest::default(),
+            vec![source("elevation")],
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance::default(),
+            changed_environment,
+        )
+        .expect("changed package");
+        assert_ne!(package.content_hash, changed.content_hash);
+        assert!(package.validate().is_ok());
     }
 
     #[test]
