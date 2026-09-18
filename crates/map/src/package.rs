@@ -54,6 +54,22 @@ impl MapPackage {
             .collect()
     }
 
+    /// Verifies that serialized fields still reproduce the canonical package.
+    ///
+    /// Callers that load a package from storage must use this before exposing
+    /// its chunks. It rejects stale estimates, reordered source locks, and a
+    /// content hash that no longer covers the package inputs.
+    pub fn validate(&self) -> Result<(), MapPackageError> {
+        let canonical = Self::new(
+            self.generator_version,
+            self.request,
+            self.source_locks.clone(),
+        )?;
+        (canonical == *self)
+            .then_some(())
+            .ok_or(MapPackageError::NonCanonicalFields)
+    }
+
     pub fn generator(&self) -> MapChunkGenerator {
         let geography_key = hash_package(
             self.generator_version,
@@ -79,6 +95,8 @@ pub enum MapPackageError {
     Request(#[from] MapRequestError),
     #[error("source locks require unique nonempty identifiers")]
     InvalidSourceLocks,
+    #[error("package fields do not reproduce the canonical package")]
+    NonCanonicalFields,
 }
 
 fn hash_package(
@@ -172,5 +190,12 @@ mod tests {
             ),
             Err(MapPackageError::InvalidSourceLocks)
         ));
+    }
+
+    #[test]
+    fn validation_rejects_a_tampered_serialized_field() {
+        let mut package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
+        package.estimate.tiles_per_side += 1;
+        assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
     }
 }

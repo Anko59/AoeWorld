@@ -7,6 +7,7 @@ pub struct Config {
     pub scenario: Scenario,
     pub tick_hz: u32,
     pub asset_pack: Option<PathBuf>,
+    pub map_package_directory: Option<PathBuf>,
 }
 
 impl Config {
@@ -47,6 +48,7 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
+            map_package_directory: Some(PathBuf::from("local-assets/maps")),
         })
     }
 }
@@ -60,6 +62,10 @@ mod tests {
         let config = Config::parse("127.0.0.1:0", "target-hotspot", "20").expect("valid config");
         assert_eq!(config.tick_hz, 20);
         assert_eq!(config.scenario.name, "target-hotspot");
+        assert_eq!(
+            config.map_package_directory,
+            Some(PathBuf::from("local-assets/maps"))
+        );
         assert!(Config::parse("bad", "smoke", "20").is_err());
         assert!(Config::parse("127.0.0.1:0", "missing", "20").is_err());
         assert!(Config::parse("127.0.0.1:0", "smoke", "bad").is_err());

@@ -216,8 +216,9 @@ pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn 
         scenario,
         tick_hz: 20,
         asset_pack: None,
+        map_package_directory: None,
     };
-    let state = AppState::new(&config, "perf-local");
+    let state = AppState::new(&config, "perf-local")?;
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server = tokio::spawn(async move { axum::serve(listener, app(state)).await });
     let clients =
@@ -235,6 +236,7 @@ pub(crate) async fn gameplay_network(scenario: Scenario) -> Result<ClientResult,
         scenario,
         tick_hz: 20,
         asset_pack: None,
+        map_package_directory: None,
     };
     let state = AppState::with_gameplay_population(&config, "perf-gameplay")?;
     let ticker = tokio::spawn(state.clone().run_ticks());

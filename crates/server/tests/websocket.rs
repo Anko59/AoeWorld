@@ -23,9 +23,11 @@ async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, Join
             scenario,
             tick_hz: 20,
             asset_pack: None,
+            map_package_directory: None,
         },
         "test-build",
-    );
+    )
+    .expect("state");
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server = tokio::spawn(async move {
         axum::serve(listener, app(state)).await.unwrap();
@@ -49,11 +51,15 @@ async fn selected_local_pack_is_served_only_when_configured() {
         scenario: SMOKE,
         tick_hz: 20,
         asset_pack: Some(pack.path().to_owned()),
+        map_package_directory: None,
     };
     let server = tokio::spawn(async move {
-        axum::serve(listener, app(AppState::new(&config, "test")))
-            .await
-            .expect("server");
+        axum::serve(
+            listener,
+            app(AppState::new(&config, "test").expect("state")),
+        )
+        .await
+        .expect("server");
     });
     let response =
         tokio::task::spawn_blocking(move || http(address, "GET", "/asset-pack/manifest.json"))
@@ -153,11 +159,19 @@ async fn map_estimates_are_validated_without_creating_a_world() {
     assert!(response.contains("\"source_lock_count\":0"));
     let body = response.split_once("\r\n\r\n").expect("HTTP body").1;
     let activation: serde_json::Value = serde_json::from_str(body).expect("activation JSON");
-    let hash = activation["content_hash"].as_str().expect("package hash");
+    let hash = activation["content_hash"]
+        .as_str()
+        .expect("package hash")
+        .to_owned();
     let package_path = format!("/maps/{hash}");
     let response = tokio::task::spawn_blocking(move || http(address, "GET", &package_path))
         .await
         .expect("package response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("\"source_locks\":[]"));
+    let response = tokio::task::spawn_blocking(move || http(address, "GET", "/maps"))
+        .await
+        .expect("list response");
     assert!(response.starts_with("HTTP/1.1 200"));
     assert!(response.contains("\"source_locks\":[]"));
     let chunk_path = format!("/maps/{hash}/chunks/0/0");

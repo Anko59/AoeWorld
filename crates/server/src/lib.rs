@@ -3,11 +3,14 @@ mod config;
 mod gameplay;
 mod gameplay_map;
 mod gameplay_transport;
+mod map_store;
+mod maps;
 pub use config::Config;
 pub use gameplay::GameplayService;
+pub use map_store::MapStoreError;
 
 use aoe_core::{EntityId, Region, Tick};
-use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
+use aoe_map::MapPackage;
 use aoe_protocol::{
     ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
@@ -49,13 +52,14 @@ pub struct AppState {
     build: Arc<str>,
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
+    map_package_directory: Option<PathBuf>,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
     gameplay: Arc<RwLock<GameplayService>>,
 }
 
 impl AppState {
-    pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Self {
-        Self {
+    pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Result<Self, AppStateError> {
+        Ok(Self {
             world: Arc::new(RwLock::new(None)),
             diagnostic_scenario: config.scenario,
             generation: Arc::new(AtomicU64::new(0)),
@@ -63,16 +67,19 @@ impl AppState {
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
-            map_packages: Arc::new(RwLock::new(BTreeMap::new())),
+            map_package_directory: config.map_package_directory.clone(),
+            map_packages: Arc::new(RwLock::new(map_store::load(
+                config.map_package_directory.as_deref(),
+            )?)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
-        }
+        })
     }
 
     pub fn with_gameplay_population(
         config: &Config,
         build: impl Into<Arc<str>>,
-    ) -> Result<Self, GameWorldError> {
-        let mut state = Self::new(config, build);
+    ) -> Result<Self, AppStateError> {
+        let mut state = Self::new(config, build)?;
         let gameplay_config = aoe_core::WorldConfig {
             width_tiles: config.scenario.world_size,
             height_tiles: config.scenario.world_size,
@@ -117,6 +124,14 @@ impl AppState {
     pub fn tick_deadline_misses(&self) -> u64 {
         self.tick_deadline_misses.load(Ordering::Relaxed)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AppStateError {
+    #[error(transparent)]
+    MapStore(#[from] MapStoreError),
+    #[error(transparent)]
+    GameWorld(#[from] GameWorldError),
 }
 
 #[derive(Serialize)]
@@ -189,97 +204,6 @@ async fn replay_hash(Query(query): Query<ReplayQuery>) -> Result<Json<ReplayResu
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-async fn estimate_map(
-    Json(request): Json<MapRequest>,
-) -> Result<Json<MapEstimate>, (StatusCode, String)> {
-    request
-        .estimate()
-        .map(Json)
-        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
-}
-
-#[derive(Serialize)]
-struct MapActivation {
-    content_hash: String,
-    tiles_per_side: u64,
-    source_lock_count: usize,
-    uses_fallback_data: bool,
-}
-
-async fn activate_map(
-    State(state): State<AppState>,
-    Json(request): Json<MapRequest>,
-) -> Result<Json<MapActivation>, (StatusCode, String)> {
-    let (activation, package, gameplay) = tokio::task::spawn_blocking(move || {
-        let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
-            .map_err(|error| error.to_string())?;
-        let activation = MapActivation {
-            content_hash: package.content_hash_hex(),
-            tiles_per_side: package.estimate.tiles_per_side,
-            source_lock_count: package.source_locks.len(),
-            uses_fallback_data: package.source_locks.is_empty(),
-        };
-        let gameplay =
-            GameplayService::from_map(package.clone()).map_err(|error| error.to_string())?;
-        Ok::<_, String>((activation, package, gameplay))
-    })
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "map creation task failed".to_owned(),
-        )
-    })?
-    .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
-    state
-        .map_packages
-        .write()
-        .await
-        .insert(activation.content_hash.clone(), package);
-    *state.gameplay.write().await = gameplay;
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    Ok(Json(activation))
-}
-
-async fn reset_map(State(state): State<AppState>) -> StatusCode {
-    *state.gameplay.write().await = GameplayService::new(state.diagnostic_scenario.seed);
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    StatusCode::NO_CONTENT
-}
-
-async fn map_package(
-    Path(content_hash): Path<String>,
-    State(state): State<AppState>,
-) -> Result<Json<MapPackage>, StatusCode> {
-    state
-        .map_packages
-        .read()
-        .await
-        .get(&content_hash)
-        .cloned()
-        .map(Json)
-        .ok_or(StatusCode::NOT_FOUND)
-}
-
-async fn map_chunk(
-    Path((content_hash, x, y)): Path<(String, i32, i32)>,
-    State(state): State<AppState>,
-) -> Result<Json<aoe_map::Chunk>, StatusCode> {
-    let package = state
-        .map_packages
-        .read()
-        .await
-        .get(&content_hash)
-        .cloned()
-        .ok_or(StatusCode::NOT_FOUND)?;
-    let chunks =
-        i32::try_from(package.chunk_count_per_side()).map_err(|_| StatusCode::NOT_FOUND)?;
-    if x < 0 || y < 0 || x >= chunks || y >= chunks {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    Ok(Json(package.generator().chunk(x, y)))
-}
-
 async fn select_scenario(
     Path(name): Path<String>,
     State(state): State<AppState>,
@@ -315,11 +239,12 @@ pub fn app(state: AppState) -> Router {
     let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
-        .route("/maps/estimate", post(estimate_map))
-        .route("/maps/activate", post(activate_map))
-        .route("/maps/reset", post(reset_map))
-        .route("/maps/{content_hash}", get(map_package))
-        .route("/maps/{content_hash}/chunks/{x}/{y}", get(map_chunk))
+        .route("/maps/estimate", post(maps::estimate))
+        .route("/maps/activate", post(maps::activate))
+        .route("/maps/reset", post(maps::reset))
+        .route("/maps", get(maps::list))
+        .route("/maps/{content_hash}", get(maps::package))
+        .route("/maps/{content_hash}/chunks/{x}/{y}", get(maps::chunk))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))

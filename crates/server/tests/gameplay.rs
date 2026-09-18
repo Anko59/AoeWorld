@@ -21,9 +21,11 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
             scenario: SMOKE,
             tick_hz: 20,
             asset_pack: None,
+            map_package_directory: None,
         },
         "game-test",
-    );
+    )
+    .expect("state");
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server = tokio::spawn(async move {
         axum::serve(listener, app(state)).await.unwrap();

@@ -135,8 +135,9 @@ async fn network() -> Result<Sample> {
         scenario: BEYOND_TARGET,
         tick_hz: 20,
         asset_pack: None,
+        map_package_directory: None,
     };
-    let state = AppState::new(&config, "perf-stress-local");
+    let state = AppState::new(&config, "perf-stress-local")?;
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server = tokio::spawn(async move { axum::serve(listener, app(state)).await });
     let clients = join_all((0..BEYOND_TARGET.players).map(|index| client(address, index))).await;
