@@ -317,12 +317,15 @@ mod tests {
         let terrain = package
             .generator_with_elevation(vec![first, second])
             .expect("prepared terrain");
-        let coast = terrain
+        let low_elevation = terrain
             .tile_at(aoe_core::TileCoord::new(0, 0))
-            .expect("coast");
-        assert_eq!(coast.water, crate::WaterKind::Ocean);
-        assert_eq!(coast.water_provenance, crate::Provenance::SourceDerived);
-        assert!(!coast.passable);
+            .expect("low elevation");
+        assert_eq!(low_elevation.geographic_height_centimeters, -100);
+        assert_eq!(
+            low_elevation.elevation_provenance,
+            crate::Provenance::SourceDerived
+        );
+        assert_eq!(low_elevation.water_provenance, crate::Provenance::Fallback);
         let tile = terrain
             .tile_at(aoe_core::TileCoord::new(124, 124))
             .expect("tile");

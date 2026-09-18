@@ -265,16 +265,10 @@ impl MapChunkGenerator {
                     height,
                     game_height.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
                     Provenance::SourceDerived,
-                    if height <= 0 {
-                        WaterKind::Ocean
-                    } else {
-                        fallback_water
-                    },
-                    if height <= 0 {
-                        Provenance::SourceDerived
-                    } else {
-                        Provenance::Fallback
-                    },
+                    // Elevation cannot identify water: inland depressions can be dry,
+                    // while coastlines require independent, coherent water geometry.
+                    fallback_water,
+                    Provenance::Fallback,
                 )
             })
             .unwrap_or((
