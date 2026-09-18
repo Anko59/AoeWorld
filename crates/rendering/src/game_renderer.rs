@@ -1,6 +1,7 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
-    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites, web::Sprite,
+    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites,
+    terrain::visible_grass_frames, web::Sprite,
 };
 use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
@@ -230,7 +231,10 @@ fn world_sprite_frames(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, bool)> {
-    let mut result = Vec::with_capacity(units.len());
+    let mut result = visible_grass_frames(art, camera)
+        .into_iter()
+        .map(|(sprite, frame)| (sprite, frame, false))
+        .collect::<Vec<_>>();
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,

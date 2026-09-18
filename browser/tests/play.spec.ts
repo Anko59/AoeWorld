@@ -54,15 +54,18 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   const image = PNG.sync.read(first);
   let green = 0;
   let blue = 0;
+  let terrainTiles = 0;
   for (let i = 0; i < image.data.length; i += 4) {
     const r = image.data[i] ?? 0;
     const g = image.data[i + 1] ?? 0;
     const b = image.data[i + 2] ?? 0;
     if (g > r + 8 && g > b + 4) green += 1;
     if (b > 150 && b > r + 30) blue += 1;
+    if (r >= 60 && r <= 80 && g > 100 && b >= 40 && b <= 70) terrainTiles += 1;
   }
   expect(green).toBeGreaterThan(image.width * image.height * 0.6);
   expect(blue).toBeGreaterThan(10);
+  expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");
