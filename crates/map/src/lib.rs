@@ -1,8 +1,12 @@
 //! Deterministic, environment-independent geographic map contracts.
+mod navigation;
+mod overlay;
 mod package;
 mod request;
 mod terrain;
 
+pub use navigation::{MovementOutcome, Path, find_path};
+pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
 pub use package::{MapPackage, SourceLock};
 pub use request::{MapEstimate, MapRequest, MapRequestError, Ratio};
 pub use terrain::{

@@ -147,6 +147,19 @@ impl MapChunkGenerator {
         }
     }
 
+    pub fn object_at(self, tile: TileCoord) -> Option<ResourceNode> {
+        self.tile_at(tile)
+            .and_then(|sample| self.resource_at(tile, sample))
+    }
+
+    pub fn resource_by_id(self, id: u64) -> Option<ResourceNode> {
+        if id & 1 != 0 {
+            return None;
+        }
+        let tile = TileCoord::new(((id >> 1) & 0x3_ffff) as i32, (id >> 19) as i32);
+        self.object_at(tile).filter(|node| node.id == id)
+    }
+
     fn sample_tile(self, tile: TileCoord) -> Tile {
         let broad = signed_noise(
             self.geography_key,
