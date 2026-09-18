@@ -21,7 +21,10 @@
     #map-creator h1 { margin: 0 0 10px; font-size: 16px; }
     #map-creator p { margin: 0 0 10px; color: #c8d8ae; line-height: 1.35; }
     #map-creator label { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; margin: 6px 0; }
-    #map-creator input { width: 100%; color: #eef6dc; background: #1c301d; border: 1px solid #78915d; border-radius: 3px; padding: 5px; }
+    #map-creator input, #map-creator select { width: 100%; color: #eef6dc; background: #1c301d; border: 1px solid #78915d; border-radius: 3px; padding: 5px; }
+    #map-preview { margin: 10px 0; border: 1px solid #60764d; border-radius: 3px; overflow: hidden; background: #1b3440; }
+    #map-preview svg { display: block; width: 100%; height: 86px; }
+    #map-location { margin: 5px 0 0; color: #c8d8ae; font-size: 12px; }
     #creator-actions { display: flex; gap: 7px; margin-top: 10px; }
     #map-estimate { min-height: 36px; margin: 10px 0 0; color: #dce9c9; white-space: pre-line; }
     #map-estimate.error { color: #ffd29a; }
@@ -39,9 +42,20 @@
     </nav>
     <section id="map-creator" hidden aria-labelledby="map-creator-title">
       <h1 id="map-creator-title">Create geographic map</h1>
-      <p>Modern terrain adapted into a plausible circa-600 landscape. When a configured native map worker has verified sources cached, generation prepares source-backed terrain; otherwise it reports deterministic fallback terrain.</p>
-      <label>Latitude <input id="map-latitude" type="number" min="-90" max="90" step="0.0000001" value="48.85"></label>
-      <label>Longitude <input id="map-longitude" type="number" min="-180" max="180" step="0.0000001" value="2.35"></label>
+      <p>Choose a region and map size for a plausible circa-600 landscape. Verified source preparation supplies terrain when available; otherwise generation labels deterministic fallback terrain.</p>
+      <label>Region <select id="map-region" aria-label="Region"><option value="paris">Paris Basin</option><option value="tiber">Tiber Valley</option><option value="constantinople">Bosporus</option><option value="nile">Nile Delta</option><option value="niger">Niger Inland Delta</option><option value="yangtze">Lower Yangtze</option><option value="custom">Custom coordinates</option></select></label>
+      <div id="map-preview" aria-label="Selected geographic footprint preview">
+        <svg viewBox="0 0 360 180" role="img" aria-label="Selected geographic footprint on a world grid">
+          <rect width="360" height="180" fill="#244a58"></rect>
+          <path d="M0 45h360M0 90h360M0 135h360M90 0v180M180 0v180M270 0v180" stroke="#7ba5a5" stroke-opacity=".45" stroke-width="1"></path>
+          <rect id="map-footprint" x="180" y="90" width="4" height="4" fill="#f4d577" fill-opacity=".7" stroke="#fff0a4" stroke-width="1"></rect>
+        </svg>
+      </div>
+      <p id="map-location" aria-live="polite"></p>
+      <div id="map-coordinates" hidden>
+        <label>Latitude <input id="map-latitude" type="number" min="-90" max="90" step="0.0000001" value="48.8566"></label>
+        <label>Longitude <input id="map-longitude" type="number" min="-180" max="180" step="0.0000001" value="2.3522"></label>
+      </div>
       <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
@@ -61,8 +75,51 @@
     const generate = document.getElementById('generate-map');
     const cancel = document.getElementById('cancel-map');
     const packageSelect = document.getElementById('map-package');
+    const region = document.getElementById('map-region');
+    const coordinates = document.getElementById('map-coordinates');
+    const footprint = document.getElementById('map-footprint');
+    const location = document.getElementById('map-location');
+    const regions = Object.freeze({
+      paris: { name: 'Paris Basin', latitude: 48.8566, longitude: 2.3522 },
+      tiber: { name: 'Tiber Valley', latitude: 41.9028, longitude: 12.4964 },
+      constantinople: { name: 'Bosporus', latitude: 41.0082, longitude: 28.9784 },
+      nile: { name: 'Nile Delta', latitude: 30.0444, longitude: 31.2357 },
+      niger: { name: 'Niger Inland Delta', latitude: 14.4974, longitude: -4.1956 },
+      yangtze: { name: 'Lower Yangtze', latitude: 31.2304, longitude: 121.4737 }
+    });
     let activeJob = null;
     const number = id => Number(document.getElementById(id).value);
+    const updatePreview = () => {
+      const latitude = number('map-latitude');
+      const longitude = number('map-longitude');
+      const sideKm = number('map-side-km');
+      const valid = Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(sideKm);
+      if (!valid) {
+        footprint.setAttribute('visibility', 'hidden');
+        location.textContent = 'Enter a valid location and square size to preview the geographic footprint.';
+        return;
+      }
+      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
+      const latitudeSpan = Math.min(180, Math.max(0.05, sideKm / 111.32));
+      const longitudeSpan = Math.min(360, Math.max(0.05, sideKm / (111.32 * Math.max(0.1, Math.cos(latitude * Math.PI / 180)))));
+      footprint.setAttribute('visibility', 'visible');
+      footprint.setAttribute('x', String(Math.min(360, Math.max(0, normalizedLongitude + 180 - longitudeSpan / 2))));
+      footprint.setAttribute('y', String(Math.min(180, Math.max(0, 90 - latitude - latitudeSpan / 2))));
+      footprint.setAttribute('width', String(longitudeSpan));
+      footprint.setAttribute('height', String(latitudeSpan));
+      const selected = regions[region.value];
+      const label = selected ? selected.name : 'Custom coordinates';
+      location.textContent = `${label}: ${latitude.toFixed(4)}°, ${normalizedLongitude.toFixed(4)}° · ${sideKm.toLocaleString()} km square footprint`;
+    };
+    const selectRegion = () => {
+      const selected = regions[region.value];
+      coordinates.hidden = Boolean(selected);
+      if (selected) {
+        document.getElementById('map-latitude').value = String(selected.latitude);
+        document.getElementById('map-longitude').value = String(selected.longitude);
+      }
+      updatePreview();
+    };
     const controllerHeaders = () => {
       const token = sessionStorage.getItem('aoeworld.resume-token');
       if (!/^[0-9a-f]{48}$/i.test(token || '')) throw new Error('Map creation requires the current game controller. Reconnect, then try again.');
@@ -94,6 +151,9 @@
         detail_profile: 'standard_v1'
       };
     };
+    region.addEventListener('change', selectRegion);
+    for (const id of ['map-latitude', 'map-longitude', 'map-side-km']) document.getElementById(id).addEventListener('input', updatePreview);
+    selectRegion();
     const readJson = async response => {
       if (!response.ok) throw new Error(await response.text());
       return response.json();

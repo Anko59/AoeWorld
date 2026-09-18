@@ -88,6 +88,19 @@ test("map creator estimates and activates a bounded circa-600 fallback request",
   await page.goto("/");
   await waitForGame(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
+  await expect(page.getByLabel("Region")).toHaveValue("paris");
+  await expect(page.locator("#map-coordinates")).toBeHidden();
+  await expect(page.locator("#map-location")).toContainText("Paris Basin");
+  await expect(page.locator("#map-footprint")).toHaveAttribute(
+    "visibility",
+    "visible",
+  );
+  await page.getByLabel("Region").selectOption("nile");
+  await expect(page.locator("#map-location")).toContainText("Nile Delta");
+  await page.getByLabel("Region").selectOption("custom");
+  await expect(page.locator("#map-coordinates")).toBeVisible();
+  await page.getByLabel("Latitude").fill("48.8566");
+  await page.getByLabel("Longitude").fill("2.3522");
   await page.getByLabel("Square km").fill("30");
   await page.getByLabel("Compression").fill("30");
   await page.getByRole("button", { name: "Estimate" }).click();
