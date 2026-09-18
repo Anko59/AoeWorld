@@ -55,6 +55,7 @@ pub enum GeodataError {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerRequest {
+    ListOverviewSources,
     ListPotentialBiomeSources,
     InspectRaster {
         path: PathBuf,
@@ -94,6 +95,9 @@ pub enum WorkerResponse {
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
     match request {
+        WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
+            sources: vec![etopo_2022_60s_surface()],
+        }),
         WorkerRequest::ListPotentialBiomeSources => Ok(WorkerResponse::KnownSources {
             sources: potential_biome_sources()?,
         }),
@@ -199,5 +203,14 @@ mod tests {
                 north_meters: 0,
             }
         );
+    }
+
+    #[test]
+    fn worker_lists_only_the_allowlisted_global_overview() {
+        let response = execute(WorkerRequest::ListOverviewSources).expect("sources");
+        let WorkerResponse::KnownSources { sources } = response else {
+            panic!("source response");
+        };
+        assert_eq!(sources, vec![etopo_2022_60s_surface()]);
     }
 }
