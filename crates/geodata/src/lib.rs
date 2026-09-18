@@ -4,7 +4,7 @@
 //! validates local rasters and evaluates the documented azimuthal-equidistant
 //! projection before a future preparation pipeline freezes map inputs.
 
-use aoe_map::{MapRequest, PreparedEnvironment};
+use aoe_map::{ElevationPage, MapRequest, PreparedEnvironment};
 use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
@@ -83,7 +83,7 @@ pub enum WorkerResponse {
     },
     PreparedElevation {
         environment: PreparedEnvironment,
-        page_count: usize,
+        pages: Vec<ElevationPage>,
     },
 }
 
@@ -120,7 +120,7 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             let prepared = prepare_elevation(&path, request, samples_per_axis)?;
             Ok(WorkerResponse::PreparedElevation {
                 environment: prepared.environment,
-                page_count: prepared.pages.len(),
+                pages: prepared.pages,
             })
         }
     }

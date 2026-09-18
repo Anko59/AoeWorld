@@ -2,6 +2,7 @@ use aoe_geodata::{WorkerRequest, execute};
 use std::{io::Read, process::ExitCode};
 
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
+const MAX_RESPONSE_BYTES: usize = 512 * 1024;
 
 fn main() -> ExitCode {
     match run() {
@@ -25,8 +26,14 @@ fn run() -> Result<(), String> {
     let request = serde_json::from_slice::<WorkerRequest>(&bytes)
         .map_err(|error| format!("invalid worker request: {error}"))?;
     let response = execute(request).map_err(|error| error.to_string())?;
-    let output = serde_json::to_string(&response)
+    let output = serde_json::to_vec(&response)
         .map_err(|error| format!("could not encode worker response: {error}"))?;
-    println!("{output}");
+    if output.len() > MAX_RESPONSE_BYTES {
+        return Err(format!(
+            "worker response exceeds {MAX_RESPONSE_BYTES} bytes"
+        ));
+    }
+    std::io::Write::write_all(&mut std::io::stdout(), &output)
+        .map_err(|error| format!("could not write worker response: {error}"))?;
     Ok(())
 }

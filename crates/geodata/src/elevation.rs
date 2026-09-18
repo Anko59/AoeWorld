@@ -12,7 +12,7 @@ use std::path::Path;
 
 /// Direct preparation remains intentionally bounded until page streaming is
 /// introduced. Larger requests must use the streaming worker path.
-pub const MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS: u16 = 256;
+pub const MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS: u16 = 128;
 
 #[derive(Clone, Debug)]
 pub struct PreparedElevation {
