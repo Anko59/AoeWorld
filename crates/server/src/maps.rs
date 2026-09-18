@@ -53,6 +53,8 @@ pub(super) struct Activation {
     tiles_per_side: u64,
     source_lock_count: usize,
     uses_fallback_data: bool,
+    start_available: bool,
+    message: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -155,6 +157,8 @@ async fn activate_completed(
         tiles_per_side: package.estimate.tiles_per_side,
         source_lock_count: package.source_locks.len(),
         uses_fallback_data: package.source_locks.is_empty(),
+        start_available: true,
+        message: None,
     };
     let gameplay = tokio::task::spawn_blocking({
         let package = package.clone();
@@ -191,6 +195,13 @@ async fn activate_completed(
         .write()
         .await
         .insert(activation.content_hash.clone(), package);
+    let Some(gameplay) = gameplay else {
+        return Ok(Json(Activation {
+            start_available: false,
+            message: Some("no suitable land start."),
+            ..activation
+        }));
+    };
     let previous = {
         let mut active = state.gameplay.write().await;
         let previous = active.clone();
