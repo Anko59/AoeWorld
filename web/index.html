@@ -46,7 +46,9 @@
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
+      <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
       <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
+      <div id="creator-actions"><button id="refresh-maps" type="button">Refresh maps</button><button id="open-map" type="button">Open saved</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
     <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
@@ -58,6 +60,7 @@
     const estimate = document.getElementById('map-estimate');
     const generate = document.getElementById('generate-map');
     const cancel = document.getElementById('cancel-map');
+    const packageSelect = document.getElementById('map-package');
     let activeJob = null;
     const number = id => Number(document.getElementById(id).value);
     const controllerHeaders = () => {
@@ -95,6 +98,16 @@
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     };
+    const refreshPackages = async () => {
+      const packages = await readJson(await fetch('/maps'));
+      packageSelect.replaceChildren(new Option(packages.length ? 'Select a saved map' : 'No saved maps', ''));
+      for (const item of packages) {
+        const latitude = (item.request.center_latitude_e7 / 1e7).toFixed(3);
+        const longitude = (item.request.center_longitude_e7 / 1e7).toFixed(3);
+        const detail = item.uses_fallback_data ? 'fallback' : `${item.source_lock_count} sources`;
+        packageSelect.add(new Option(`${latitude}, ${longitude} · ${item.estimate.tiles_per_side.toLocaleString()} tiles · ${detail}`, item.content_hash));
+      }
+    };
     const waitForJob = async id => {
       for (;;) {
         const job = await readJson(await fetch(`/maps/jobs/${id}`));
@@ -108,6 +121,16 @@
     };
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
+      if (!creator.hidden) refreshPackages().catch(error => {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to list saved maps.';
+      });
+    });
+    document.getElementById('refresh-maps').addEventListener('click', () => {
+      refreshPackages().catch(error => {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to list saved maps.';
+      });
     });
     document.getElementById('estimate-map').addEventListener('click', async () => {
       try {
@@ -128,6 +151,7 @@
         activeJob = job.id;
         const completed = await waitForJob(job.id);
         const value = await readJson(await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() }));
+        await refreshPackages();
         estimate.className = '';
         estimate.textContent = `Fallback package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
       } catch (error) {
@@ -147,6 +171,17 @@
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to cancel map creation.';
+      }
+    });
+    document.getElementById('open-map').addEventListener('click', async () => {
+      if (!packageSelect.value) return;
+      try {
+        const value = await readJson(await fetch(`/maps/${encodeURIComponent(packageSelect.value)}`, { method: 'POST', headers: controllerHeaders() }));
+        estimate.className = '';
+        estimate.textContent = `Saved map active: ${value.content_hash.slice(0, 12)}… Reconnect to join the activated world.`;
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to open this map.';
       }
     });
     init().catch(error => {

@@ -55,6 +55,15 @@ pub(super) struct Activation {
     uses_fallback_data: bool,
 }
 
+#[derive(Serialize)]
+pub(super) struct PackageSummary {
+    content_hash: String,
+    request: MapRequest,
+    estimate: MapEstimate,
+    source_lock_count: usize,
+    uses_fallback_data: bool,
+}
+
 pub(super) async fn activate(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -175,8 +184,22 @@ async fn activate_completed(
     Ok(Json(activation))
 }
 
-pub(super) async fn list(State(state): State<AppState>) -> Json<Vec<MapPackage>> {
-    Json(state.map_packages.read().await.values().cloned().collect())
+pub(super) async fn list(State(state): State<AppState>) -> Json<Vec<PackageSummary>> {
+    Json(
+        state
+            .map_packages
+            .read()
+            .await
+            .values()
+            .map(|package| PackageSummary {
+                content_hash: package.content_hash_hex(),
+                request: package.request,
+                estimate: package.estimate,
+                source_lock_count: package.source_locks.len(),
+                uses_fallback_data: package.source_locks.is_empty(),
+            })
+            .collect(),
+    )
 }
 
 pub(super) async fn reset(State(state): State<AppState>) -> StatusCode {
