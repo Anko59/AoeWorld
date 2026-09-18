@@ -4,6 +4,7 @@ mod gameplay;
 mod gameplay_map;
 mod gameplay_sessions;
 mod gameplay_transport;
+mod map_jobs;
 mod map_store;
 mod maps;
 pub use config::Config;
@@ -39,7 +40,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::RwLock,
+    sync::{Mutex, RwLock},
     time::{MissedTickBehavior, timeout},
 };
 use tower_http::services::ServeDir;
@@ -55,6 +56,7 @@ pub struct AppState {
     asset_pack: Option<PathBuf>,
     map_package_directory: Option<PathBuf>,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
+    map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
 }
 
@@ -72,6 +74,7 @@ impl AppState {
             map_packages: Arc::new(RwLock::new(map_store::load(
                 config.map_package_directory.as_deref(),
             )?)),
+            map_jobs: Arc::new(Mutex::new(map_jobs::Manager::default())),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         })
     }
@@ -241,10 +244,16 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
         .route("/maps/estimate", post(maps::estimate))
+        .route("/maps/jobs", post(maps::create_job))
+        .route("/maps/jobs/{job_id}", get(maps::job_status))
+        .route("/maps/jobs/{job_id}/cancel", post(maps::cancel_job))
         .route("/maps/activate", post(maps::activate))
         .route("/maps/reset", post(maps::reset))
         .route("/maps", get(maps::list))
-        .route("/maps/{content_hash}", get(maps::package))
+        .route(
+            "/maps/{content_hash}",
+            get(maps::package).post(maps::activate_package),
+        )
         .route("/maps/{content_hash}/chunks/{x}/{y}", get(maps::chunk))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))

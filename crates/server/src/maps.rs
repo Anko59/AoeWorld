@@ -1,4 +1,4 @@
-use crate::{AppState, GameplayService, map_store};
+use crate::{AppState, GameplayService, map_jobs, map_store};
 use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use axum::{
     Json,
@@ -30,26 +30,90 @@ pub(super) async fn activate(
     Json(request): Json<MapRequest>,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
     let map_package_directory = state.map_package_directory.clone();
-    let (activation, package, gameplay) = tokio::task::spawn_blocking(move || {
+    let package = tokio::task::spawn_blocking(move || {
         let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
             .map_err(|error| error.to_string())?;
-        let activation = Activation {
-            content_hash: package.content_hash_hex(),
-            tiles_per_side: package.estimate.tiles_per_side,
-            source_lock_count: package.source_locks.len(),
-            uses_fallback_data: package.source_locks.is_empty(),
-        };
         map_store::persist(map_package_directory.as_deref(), &package)
             .map_err(|error| error.to_string())?;
-        let gameplay =
-            GameplayService::from_map(package.clone()).map_err(|error| error.to_string())?;
-        Ok::<_, String>((activation, package, gameplay))
+        Ok::<_, String>(package)
     })
     .await
     .map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "map creation task failed".to_owned(),
+        )
+    })?
+    .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+    activate_completed(state, package).await
+}
+
+pub(super) async fn create_job(
+    State(state): State<AppState>,
+    Json(request): Json<MapRequest>,
+) -> Result<(StatusCode, Json<map_jobs::Job>), (StatusCode, String)> {
+    request
+        .estimate()
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let job = map_jobs::start(&state, request)
+        .await
+        .map_err(|error| (StatusCode::TOO_MANY_REQUESTS, error))?;
+    Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
+pub(super) async fn job_status(
+    Path(job_id): Path<u64>,
+    State(state): State<AppState>,
+) -> Result<Json<map_jobs::Job>, StatusCode> {
+    map_jobs::status(&state, job_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub(super) async fn cancel_job(
+    Path(job_id): Path<u64>,
+    State(state): State<AppState>,
+) -> Result<Json<map_jobs::Job>, StatusCode> {
+    map_jobs::cancel(&state, job_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub(super) async fn activate_package(
+    Path(content_hash): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<Activation>, (StatusCode, String)> {
+    let package = state
+        .map_packages
+        .read()
+        .await
+        .get(&content_hash)
+        .cloned()
+        .ok_or((StatusCode::NOT_FOUND, "unknown map package".to_owned()))?;
+    activate_completed(state, package).await
+}
+
+async fn activate_completed(
+    state: AppState,
+    package: MapPackage,
+) -> Result<Json<Activation>, (StatusCode, String)> {
+    let activation = Activation {
+        content_hash: package.content_hash_hex(),
+        tiles_per_side: package.estimate.tiles_per_side,
+        source_lock_count: package.source_locks.len(),
+        uses_fallback_data: package.source_locks.is_empty(),
+    };
+    let gameplay = tokio::task::spawn_blocking({
+        let package = package.clone();
+        move || GameplayService::from_map(package).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "map activation task failed".to_owned(),
         )
     })?
     .map_err(|error| (StatusCode::BAD_REQUEST, error))?;

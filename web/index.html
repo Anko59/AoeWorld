@@ -46,7 +46,7 @@
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
-      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button></div>
+      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
     <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
@@ -57,6 +57,8 @@
     const creator = document.getElementById('map-creator');
     const estimate = document.getElementById('map-estimate');
     const generate = document.getElementById('generate-map');
+    const cancel = document.getElementById('cancel-map');
+    let activeJob = null;
     const number = id => Number(document.getElementById(id).value);
     const ratio = value => {
       const text = String(value).trim();
@@ -82,15 +84,27 @@
         seed: Math.round(number('map-seed'))
       };
     };
+    const readJson = async response => {
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    };
+    const waitForJob = async id => {
+      for (;;) {
+        const job = await readJson(await fetch(`/maps/jobs/${id}`));
+        if (job.state === 'completed') return job;
+        if (job.state === 'cancelled') throw new Error('Map creation cancelled.');
+        if (job.state === 'failed') throw new Error(job.error || 'Map creation failed.');
+        estimate.textContent = job.state === 'queued' ? 'Map creation queued.' : 'Preparing fallback map package…';
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    };
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
     });
     document.getElementById('estimate-map').addEventListener('click', async () => {
       try {
         const request = mapRequest();
-        const response = await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
-        if (!response.ok) throw new Error(await response.text());
-        const value = await response.json();
+        const value = await readJson(await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }));
         estimate.className = '';
         estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nEffective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}`;
       } catch (error) {
@@ -100,17 +114,31 @@
     });
     generate.addEventListener('click', async () => {
       generate.disabled = true;
+      cancel.disabled = false;
       try {
-        const response = await fetch('/maps/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapRequest()) });
-        if (!response.ok) throw new Error(await response.text());
-        const value = await response.json();
+        const job = await readJson(await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapRequest()) }));
+        activeJob = job.id;
+        const completed = await waitForJob(job.id);
+        const value = await readJson(await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST' }));
         estimate.className = '';
         estimate.textContent = `Fallback package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to activate this map.';
       } finally {
+        activeJob = null;
         generate.disabled = false;
+        cancel.disabled = true;
+      }
+    });
+    cancel.addEventListener('click', async () => {
+      if (activeJob === null) return;
+      cancel.disabled = true;
+      try {
+        await readJson(await fetch(`/maps/jobs/${activeJob}/cancel`, { method: 'POST' }));
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to cancel map creation.';
       }
     });
     init().catch(error => {
