@@ -103,6 +103,7 @@ version = "0.1.0"
 dependencies = [
  "aoe-assets",
  "aoe-core",
+ "aoe-map",
  "aoe-protocol",
  "aoe-rendering",
  "aoe-scenario",

@@ -14,6 +14,10 @@ pub struct GameArt {
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
+    /// Local terrain groups in this order: temperate grass, dry grass, dirt,
+    /// sand, rock, and water. Map material binding stays in the client so the
+    /// renderer remains independent from geographic map contracts.
+    pub terrain: [Vec<GameFrame>; 6],
 }
 
 impl Renderer {

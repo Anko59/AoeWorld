@@ -13,6 +13,7 @@ aoe-assets = { path = "../assets" }
 serde_json = "1.0"
 png = "0.17"
 aoe-core.workspace = true
+aoe-map.workspace = true
 aoe-protocol.workspace = true
 aoe-simulation.workspace = true
 aoe-scenario.workspace = true

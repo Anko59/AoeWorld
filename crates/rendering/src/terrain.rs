@@ -1,14 +1,21 @@
-use crate::{GameArt, GameFrame, SceneCamera, web::Sprite};
+use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, web::Sprite};
 use aoe_core::{Camera, ScreenPoint, TileCoord};
 
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
 
 /// Builds a bounded layer of local terrain sprites beneath world entities.
-/// Source-specific tile materials join this layer when terrain pages are
-/// streamed to the renderer.
-pub(crate) fn visible_grass_frames(art: &GameArt, camera: SceneCamera) -> Vec<(Sprite, GameFrame)> {
+/// A map supplies semantic material groups; diagnostic worlds retain the
+/// existing grass fallback before any immutable chunks arrive.
+pub(crate) fn visible_terrain_frames(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    camera: SceneCamera,
+) -> Vec<(Sprite, GameFrame)> {
     if art.grass.is_empty() {
         return Vec::new();
+    }
+    if !terrain.is_empty() {
+        return visible_map_terrain_frames(art, terrain, camera);
     }
     let projection = Camera {
         center: camera.center,
@@ -55,6 +62,61 @@ pub(crate) fn visible_grass_frames(art: &GameArt, camera: SceneCamera) -> Vec<(S
                 scaled(frame, camera.zoom as f32),
             ));
         }
+    }
+    result
+}
+
+fn visible_map_terrain_frames(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    camera: SceneCamera,
+) -> Vec<(Sprite, GameFrame)> {
+    let projection = Camera {
+        center: camera.center,
+        zoom: camera.zoom,
+        viewport: camera.viewport,
+    };
+    let stride = (terrain.len().div_ceil(MAX_VISIBLE_TERRAIN_SPRITES) as f64)
+        .sqrt()
+        .ceil()
+        .max(1.0) as usize;
+    let mut result = Vec::with_capacity(terrain.len().div_ceil(stride * stride));
+    for sample in terrain.iter().step_by(stride * stride) {
+        let frames = art
+            .terrain
+            .get(usize::from(sample.material))
+            .filter(|frames| !frames.is_empty())
+            .unwrap_or(&art.grass);
+        let frame = frames[((sample.position[0] as i32 * 7 + sample.position[1] as i32 * 13)
+            .unsigned_abs() as usize)
+            % frames.len()];
+        let screen = projection.world_to_screen(sample.position);
+        let width = f64::from(frame.size[0]) * camera.zoom;
+        let height = f64::from(frame.size[1]) * camera.zoom;
+        if screen.x + width < 0.0
+            || screen.y + height < 0.0
+            || screen.x - width > camera.viewport[0]
+            || screen.y - height > camera.viewport[1]
+        {
+            continue;
+        }
+        let x = screen.x - f64::from(frame.anchor[0]) * camera.zoom;
+        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+        result.push((
+            Sprite {
+                position: [
+                    ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+                    (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+                ],
+                radius: [
+                    (width / camera.viewport[0]) as f32,
+                    (height / camera.viewport[1]) as f32,
+                ],
+                color: [1.0; 4],
+                uv: frame.uv,
+            },
+            scaled(frame, camera.zoom as f32),
+        ));
     }
     result
 }

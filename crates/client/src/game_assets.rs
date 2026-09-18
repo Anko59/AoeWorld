@@ -56,6 +56,11 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         ("graphics.drs", 3008, 50),
         ("graphics.drs", 3004, 50),
         ("terrain.drs", 15008, 10),
+        ("terrain.drs", 15007, 10),
+        ("terrain.drs", 15000, 10),
+        ("terrain.drs", 15010, 10),
+        ("terrain.drs", 15018, 10),
+        ("terrain.drs", 15002, 10),
     ];
     let mut selected = Vec::new();
     for (archive, id, count) in groups {
@@ -147,11 +152,16 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             }
         }
     }
+    let terrain = std::array::from_fn(|index| {
+        let start = 100 + index * 10;
+        records[start..start + 10].to_vec()
+    });
     Ok((
         GameArt {
             walking: records[..50].to_vec(),
             standing: records[50..100].to_vec(),
-            grass: records[100..110].to_vec(),
+            grass: terrain[0].clone(),
+            terrain,
         },
         pixels,
     ))

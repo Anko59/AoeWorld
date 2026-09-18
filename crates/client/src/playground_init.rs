@@ -42,6 +42,8 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         primary: None,
         role: None,
         map_content_hash: None,
+        terrain_chunks: BTreeMap::new(),
+        terrain_inflight: Default::default(),
         token: stored_token(),
         revision: 0,
         sent_region: None,

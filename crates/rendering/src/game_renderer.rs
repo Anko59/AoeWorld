@@ -1,7 +1,7 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
     GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites,
-    terrain::visible_grass_frames, web::Sprite,
+    terrain::visible_terrain_frames, web::Sprite,
 };
 use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
@@ -30,6 +30,13 @@ pub struct SceneUnit {
     pub moving: bool,
     pub facing: u8,
     pub selected: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct SceneTerrain {
+    pub position: [f64; 2],
+    /// One of the six `GameArt::terrain` groups.
+    pub material: u8,
 }
 
 fn error(e: impl Into<JsValue>) -> String {
@@ -172,12 +179,13 @@ impl GameRenderer {
     pub fn render_world(
         &mut self,
         art: &GameArt,
+        terrain: &[SceneTerrain],
         units: &[SceneUnit],
         camera: SceneCamera,
         animation: usize,
         grid: bool,
     ) -> Result<(), String> {
-        let sprites = world_sprites(art, units, camera, animation, grid);
+        let sprites = world_sprites(art, terrain, units, camera, animation, grid);
         match self {
             Self::WebGpu(renderer) => renderer
                 .render_sprites_with_clear(&sprites, [0.16, 0.29, 0.14, 1.0])
@@ -195,7 +203,8 @@ impl GameRenderer {
                 if grid {
                     game_grid::draw_grid(context, camera);
                 }
-                for (sprite, frame, selected) in world_sprite_frames(art, units, camera, animation)
+                for (sprite, frame, selected) in
+                    world_sprite_frames(art, terrain, units, camera, animation)
                 {
                     draw_scene_sprite(context, atlas, canvas, (sprite, frame), selected)?;
                 }
@@ -207,6 +216,7 @@ impl GameRenderer {
 
 fn world_sprites(
     art: &GameArt,
+    terrain: &[SceneTerrain],
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
@@ -217,7 +227,7 @@ fn world_sprites(
     } else {
         Vec::new()
     };
-    let frames = world_sprite_frames(art, units, camera, animation);
+    let frames = world_sprite_frames(art, terrain, units, camera, animation);
     sprites.extend(frames.iter().map(|(sprite, _, _)| *sprite));
     for unit in units.iter().filter(|unit| unit.selected) {
         sprites.extend(game_grid::selection_ring(camera, unit.position));
@@ -227,11 +237,12 @@ fn world_sprites(
 
 fn world_sprite_frames(
     art: &GameArt,
+    terrain: &[SceneTerrain],
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, bool)> {
-    let mut result = visible_grass_frames(art, camera)
+    let mut result = visible_terrain_frames(art, terrain, camera)
         .into_iter()
         .map(|(sprite, frame)| (sprite, frame, false))
         .collect::<Vec<_>>();

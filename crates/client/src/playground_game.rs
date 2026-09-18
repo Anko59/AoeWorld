@@ -1,6 +1,7 @@
 use aoe_core::{
     Camera, EntityId, FIXED_SUBUNITS_PER_TILE, ScreenPoint, TileRect, WorldConfig, WorldPosition,
 };
+use aoe_map::Chunk;
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     GameplayUnitState, ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -9,7 +10,7 @@ use aoe_rendering::{GameArt, GameRenderer, SceneCamera, SceneUnit};
 use js_sys::Uint8Array;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -19,6 +20,8 @@ use web_sys::{Document, Event, HtmlCanvasElement, MessageEvent, WebSocket};
 mod controls;
 #[path = "playground_init.rs"]
 mod init;
+#[path = "playground_map.rs"]
+mod map;
 
 #[derive(Clone, Copy)]
 pub(super) struct Sample {
@@ -45,6 +48,8 @@ pub(super) struct Client {
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
     pub map_content_hash: Option<[u8; 32]>,
+    pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
+    pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
@@ -278,6 +283,8 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.config.height_tiles = height_tiles;
                 client.role = Some(role);
                 client.map_content_hash = map_content_hash;
+                client.terrain_chunks.clear();
+                client.terrain_inflight.clear();
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
                 save_token(resume_token);
@@ -328,6 +335,8 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.role = None;
                 client.primary = None;
                 client.map_content_hash = None;
+                client.terrain_chunks.clear();
+                client.terrain_inflight.clear();
                 client.token = None;
                 save_token(None);
                 client.status = "map changed; reconnecting".to_owned();
@@ -435,10 +444,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             zoom: client.camera.zoom,
             viewport: client.camera.viewport,
         };
+        let terrain = map::scene_terrain(&client);
         let grid = client.grid;
         let animation = (time / 100.0) as usize;
         let Client { renderer, art, .. } = &mut *client;
-        if let Err(error) = renderer.render_world(art, &units, camera, animation, grid) {
+        if let Err(error) = renderer.render_world(art, &terrain, &units, camera, animation, grid) {
             client.status = error;
         }
         set_text(&client.document, "connection", &client.status);
@@ -451,6 +461,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             ),
         );
         drop(client);
+        map::request_visible(shared.clone());
         if let Some(window) = web_sys::window()
             && let Some(cb) = next.borrow().as_ref()
         {
