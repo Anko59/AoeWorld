@@ -6,6 +6,8 @@ const POTENTIAL_BIOME_RECORD_URL: &str = "https://zenodo.org/api/records/3526620
 const BIOME_RASTER: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif";
 const BIOME_CLASSES: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv";
 const ETOPO_60S_SURFACE_URL: &str = "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_surface_elev_gtif/ETOPO_2022_v1_60s_N90W180_surface.tif";
+const NATURAL_EARTH_10M_LAND_URL: &str =
+    "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip";
 
 /// A checksum resolved from provider metadata or pinned after a verified,
 /// explicitly reviewed acquisition when the provider publishes no digest.
@@ -134,6 +136,27 @@ pub fn etopo_2022_60s_surface() -> KnownSource {
     }
 }
 
+/// Pinned coarse land polygons for source-derived ocean coverage. This is a
+/// coastline fallback only; it cannot classify lakes or rivers.
+pub fn natural_earth_10m_land() -> KnownSource {
+    KnownSource {
+        id: "natural-earth-10m-land-v5.1.1".to_owned(),
+        provider: Provider::NaturalEarth,
+        release: "Natural Earth 5.1.1, 1:10m land".to_owned(),
+        url: NATURAL_EARTH_10M_LAND_URL.to_owned(),
+        bytes: 3_269_070,
+        expected_checksum: ExpectedChecksum::Sha256([
+            0xe5, 0x47, 0xd7, 0x49, 0x44, 0x5e, 0xaa, 0x09, 0x64, 0xab, 0xa7, 0x67, 0x38, 0x09,
+            0x0e, 0xc8, 0x8f, 0x5e, 0x63, 0xc4, 0x58, 0x51, 0x22, 0x17, 0x0f, 0x98, 0xc6, 0x7a,
+            0x7e, 0xa9, 0x22, 0xdc,
+        ]),
+        native_resolution: "1:10,000,000 physical vector scale".to_owned(),
+        crs: "EPSG:4326".to_owned(),
+        vertical_datum: "not applicable".to_owned(),
+        license_reference: "Natural Earth public-domain terms".to_owned(),
+    }
+}
+
 fn parse_md5(value: &str, name: &'static str) -> Result<[u8; 16], SourceCatalogError> {
     if value.len() != 32 {
         return Err(SourceCatalogError::UnexpectedChecksum(name));
@@ -214,6 +237,17 @@ mod tests {
         assert_eq!(
             source.cache_lock().expect("cache lock").sha256,
             "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
+        );
+    }
+
+    #[test]
+    fn coastline_fallback_is_a_pinned_independent_source() {
+        let source = natural_earth_10m_land();
+        assert_eq!(source.provider, Provider::NaturalEarth);
+        assert_eq!(source.bytes, 3_269_070);
+        assert_eq!(
+            source.cache_lock().expect("cache lock").sha256,
+            "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
         );
     }
 }

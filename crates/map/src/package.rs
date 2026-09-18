@@ -331,6 +331,7 @@ mod tests {
                     },
                 ],
             },
+            water: None,
         }
     }
 

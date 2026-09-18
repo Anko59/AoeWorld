@@ -1,14 +1,17 @@
 //! Deterministic, environment-independent geographic map contracts.
 mod environment;
+mod generator;
 mod navigation;
 mod overlay;
 mod package;
 mod request;
 mod terrain;
+mod water;
 
 pub use environment::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, FieldPyramid,
-    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PreparedEnvironment, PyramidLevel, ordered_page_root,
+    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PreparedEnvironment, PyramidLevel, WaterPage,
+    ordered_page_root, ordered_water_page_root,
 };
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};

@@ -6,7 +6,7 @@
 
 use aoe_map::{
     ElevationPage, EnvironmentalProvenance, LayerProvenance, MapRequest, PreparedEnvironment,
-    ProjectionMetadata, VerticalDatum,
+    ProjectionMetadata, VerticalDatum, WaterPage,
 };
 use gdal::{
     Dataset,
@@ -26,10 +26,13 @@ pub use source_cache::{
 
 mod source_manifest;
 
+mod water;
+pub use water::{PreparedWater, prepare_ocean_coverage};
+
 mod source_catalog;
 pub use source_catalog::{
     ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface,
-    potential_biome_sources,
+    natural_earth_10m_land, potential_biome_sources,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,6 +43,8 @@ pub struct RasterDimensions {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GeodataError {
+    #[error("geographic source I/O failed: {0}")]
+    Io(#[from] std::io::Error),
     #[error("GDAL could not open the source raster: {0}")]
     Gdal(#[from] gdal::errors::GdalError),
     #[error("PROJ could not create the requested local projection")]
@@ -108,10 +113,12 @@ pub enum WorkerResponse {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct PreparedOverview {
     source_lock: aoe_map::SourceLock,
+    water_source_lock: aoe_map::SourceLock,
     projection: ProjectionMetadata,
     provenance: EnvironmentalProvenance,
     environment: PreparedEnvironment,
     pages: Vec<ElevationPage>,
+    water_pages: Vec<WaterPage>,
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -170,14 +177,26 @@ fn prepare_overview_elevation(
     let lock = source
         .cache_lock()
         .ok_or(GeodataError::Preparation("overview source lacks SHA-256"))?;
+    let water_source = natural_earth_10m_land();
+    let water_lock = water_source
+        .cache_lock()
+        .ok_or(GeodataError::Preparation("coastline source lacks SHA-256"))?;
     let cache = SourceCache::new(cache_root, DownloadPolicy::default())?;
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let path = cache.acquire(&lock, &cancelled)?;
-    let prepared = prepare_elevation(&path, request, samples_per_axis)?;
+    let water_path = cache.acquire(&water_lock, &cancelled)?;
+    let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
+    let water = prepare_ocean_coverage(&water_path, request, samples_per_axis)?;
+    prepared.environment.water = Some(water.field);
+    prepared.environment.validate()?;
     Ok(WorkerResponse::PreparedOverview(Box::new(
         PreparedOverview {
             source_lock: lock
                 .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
+            water_source_lock: water_lock.to_map_source_lock(
+                acquisition_marker(),
+                "natural-earth-coastline-gdal-0.19".to_owned(),
+            )?,
             projection: ProjectionMetadata {
                 horizontal_crs: local_aeqd_definition(
                     request.center_latitude_e7,
@@ -188,12 +207,13 @@ fn prepare_overview_elevation(
             },
             provenance: EnvironmentalProvenance {
                 elevation: LayerProvenance::SourceDerived,
-                water: LayerProvenance::Fallback,
+                water: LayerProvenance::SourceDerived,
                 vegetation: LayerProvenance::Procedural,
                 historical_land_use: LayerProvenance::Fallback,
             },
             environment: prepared.environment,
             pages: prepared.pages,
+            water_pages: water.pages,
         },
     )))
 }
@@ -301,14 +321,29 @@ mod tests {
                 license: "test".to_owned(),
                 preprocessing_version: "test".to_owned(),
             },
+            water_source_lock: aoe_map::SourceLock {
+                id: "coastline".to_owned(),
+                provider: "provider".to_owned(),
+                release: "release".to_owned(),
+                url: "https://example.invalid/land.zip".to_owned(),
+                sha256: [8; 32],
+                acquired_at: "2026-09-18".to_owned(),
+                native_resolution: "1:10m".to_owned(),
+                crs: "EPSG:4326".to_owned(),
+                vertical_datum: "not applicable".to_owned(),
+                license: "test".to_owned(),
+                preprocessing_version: "test".to_owned(),
+            },
             projection: ProjectionMetadata::default(),
             provenance: EnvironmentalProvenance::default(),
             environment: PreparedEnvironment::default(),
             pages: Vec::new(),
+            water_pages: Vec::new(),
         }));
         let encoded = serde_json::to_value(response).expect("serializes");
         assert_eq!(encoded["operation"], "prepared_overview");
         assert_eq!(encoded["source_lock"]["id"], "overview");
+        assert_eq!(encoded["water_source_lock"]["id"], "coastline");
         assert!(encoded.get("value").is_none());
     }
 }

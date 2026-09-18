@@ -130,6 +130,7 @@ fn prepare_elevation_dataset(
         geographic_millimeters_per_sample,
         page_samples: ENVIRONMENT_PAGE_SAMPLES,
         elevation: FieldPyramid { levels },
+        water: None,
     };
     environment.validate()?;
     Ok(PreparedElevation { environment, pages })

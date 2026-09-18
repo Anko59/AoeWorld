@@ -160,9 +160,12 @@ async fn activate_completed(
         let package = package.clone();
         let directory = state.map_package_directory.clone();
         move || {
-            let pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+            let elevation_pages = map_store::load_elevation_pages(directory.as_deref(), &package)
                 .map_err(|error| error.to_string())?;
-            GameplayService::from_prepared_map(package, pages).map_err(|error| error.to_string())
+            let water_pages = map_store::load_water_pages(directory.as_deref(), &package)
+                .map_err(|error| error.to_string())?;
+            GameplayService::from_prepared_map(package, elevation_pages, water_pages)
+                .map_err(|error| error.to_string())
         }
     })
     .await
@@ -245,10 +248,12 @@ pub(super) async fn chunk(
     }
     let directory = state.map_package_directory.clone();
     tokio::task::spawn_blocking(move || {
-        let pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+        let elevation_pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+            .map_err(|_| StatusCode::NOT_FOUND)?;
+        let water_pages = map_store::load_water_pages(directory.as_deref(), &package)
             .map_err(|_| StatusCode::NOT_FOUND)?;
         package
-            .generator_with_elevation(pages)
+            .generator_with_environment(elevation_pages, water_pages)
             .map(|generator| Json(generator.chunk(x, y)))
             .map_err(|_| StatusCode::NOT_FOUND)
     })

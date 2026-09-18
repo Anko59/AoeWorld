@@ -13,6 +13,9 @@ pub struct PreparedEnvironment {
     pub geographic_millimeters_per_sample: u64,
     pub page_samples: u8,
     pub elevation: FieldPyramid,
+    /// Optional independently prepared water coverage. Its page grid is
+    /// aligned with elevation but may be absent while a source is unavailable.
+    pub water: Option<FieldPyramid>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -38,6 +41,19 @@ pub struct ElevationPage {
     pub geographic_height_centimeters: Vec<i32>,
 }
 
+/// One bounded water-coverage page. Values are percent coverage, so a source
+/// can retain coastlines below the game tile lattice without deriving water
+/// from elevation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WaterPage {
+    pub level: u8,
+    pub x: u16,
+    pub y: u16,
+    pub width: u8,
+    pub height: u8,
+    pub ocean_coverage_percent: Vec<u8>,
+}
+
 impl PreparedEnvironment {
     pub fn validate(&self) -> Result<(), EnvironmentError> {
         if self.samples_per_axis == 0 {
@@ -54,7 +70,10 @@ impl PreparedEnvironment {
         {
             return Err(EnvironmentError::InvalidIndex);
         }
-        self.elevation.validate(self.samples_per_axis)
+        self.elevation.validate(self.samples_per_axis)?;
+        self.water
+            .as_ref()
+            .map_or(Ok(()), |water| water.validate(self.samples_per_axis))
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {
@@ -65,6 +84,14 @@ impl PreparedEnvironment {
         for level in &self.elevation.levels {
             hash.update(&level.samples_per_axis.to_le_bytes());
             hash.update(&level.ordered_page_root);
+        }
+        hash.update(&[u8::from(self.water.is_some())]);
+        if let Some(water) = &self.water {
+            hash.update(&(water.levels.len() as u64).to_le_bytes());
+            for level in &water.levels {
+                hash.update(&level.samples_per_axis.to_le_bytes());
+                hash.update(&level.ordered_page_root);
+            }
         }
     }
 }
@@ -116,6 +143,33 @@ impl ElevationPage {
     }
 }
 
+impl WaterPage {
+    pub fn validate(&self) -> Result<(), EnvironmentError> {
+        if self.width == 0
+            || self.height == 0
+            || self.width > ENVIRONMENT_PAGE_SAMPLES
+            || self.height > ENVIRONMENT_PAGE_SAMPLES
+            || self.ocean_coverage_percent.len()
+                != usize::from(self.width) * usize::from(self.height)
+        {
+            return Err(EnvironmentError::InvalidPage);
+        }
+        Ok(())
+    }
+
+    pub fn content_hash(&self) -> Result<[u8; 32], EnvironmentError> {
+        self.validate()?;
+        let mut hash = blake3::Hasher::new();
+        hash.update(b"aoe-water-page-v1\0");
+        hash.update(&[self.level]);
+        hash.update(&self.x.to_le_bytes());
+        hash.update(&self.y.to_le_bytes());
+        hash.update(&[self.width, self.height]);
+        hash.update(&self.ocean_coverage_percent);
+        Ok(*hash.finalize().as_bytes())
+    }
+}
+
 pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], EnvironmentError> {
     if pages.is_empty() {
         return Err(EnvironmentError::InvalidPyramid);
@@ -130,6 +184,29 @@ pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], Environmen
     }
     let mut hash = blake3::Hasher::new();
     hash.update(b"aoe-environment-page-root-v1\0");
+    hash.update(&(ordered.len() as u64).to_le_bytes());
+    for page in ordered {
+        hash.update(&page.content_hash()?);
+    }
+    Ok(*hash.finalize().as_bytes())
+}
+
+/// Computes the canonical identity of water coverage pages independently from
+/// elevation values, while retaining the same ordering guarantees.
+pub fn ordered_water_page_root(pages: &[WaterPage]) -> Result<[u8; 32], EnvironmentError> {
+    if pages.is_empty() {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut ordered = pages.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|page| (page.y, page.x));
+    if ordered
+        .windows(2)
+        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
+    {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut hash = blake3::Hasher::new();
+    hash.update(b"aoe-water-page-root-v1\0");
     hash.update(&(ordered.len() as u64).to_le_bytes());
     for page in ordered {
         hash.update(&page.content_hash()?);
@@ -256,6 +333,7 @@ mod tests {
                     },
                 ],
             },
+            water: None,
         };
         assert!(field.validate().is_ok());
         let mut invalid = field;
@@ -299,6 +377,7 @@ mod tests {
                     },
                 ],
             },
+            water: None,
         };
         let request = crate::MapRequest {
             requested_side_meters: 250,

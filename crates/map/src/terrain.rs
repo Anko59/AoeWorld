@@ -1,6 +1,7 @@
+use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
     CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PreparedEnvironment,
-    Ratio,
+    Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -113,6 +114,7 @@ pub struct MapChunkGenerator {
     procedural_seed: u64,
     width_tiles: i32,
     elevation: Option<Arc<PreparedElevation>>,
+    water: Option<Arc<PreparedWater>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -129,6 +131,7 @@ impl MapChunkGenerator {
             procedural_seed,
             width_tiles,
             elevation: None,
+            water: None,
         }
     }
 
@@ -151,6 +154,33 @@ impl MapChunkGenerator {
                 compression,
                 pages: level_zero,
             })),
+            water: self.water,
+        })
+    }
+
+    /// Binds independently prepared water coverage to a terrain query. A
+    /// missing water pyramid is valid only when no pages were supplied.
+    pub fn with_prepared_water(
+        self,
+        environment: &PreparedEnvironment,
+        pages: Vec<WaterPage>,
+    ) -> Result<Self, EnvironmentError> {
+        let Some(field) = &environment.water else {
+            return pages
+                .is_empty()
+                .then_some(self)
+                .ok_or(EnvironmentError::InvalidPyramid);
+        };
+        let level_zero = level_zero_water_pages(field, pages)?;
+        Ok(Self {
+            geography_key: self.geography_key,
+            procedural_seed: self.procedural_seed,
+            width_tiles: self.width_tiles,
+            elevation: self.elevation,
+            water: Some(Arc::new(PreparedWater::new(
+                environment.samples_per_axis,
+                level_zero,
+            ))),
         })
     }
 
@@ -279,6 +309,16 @@ impl MapChunkGenerator {
                 fallback_water,
                 Provenance::Fallback,
             ));
+        let (water, water_provenance) = self
+            .water
+            .as_ref()
+            .and_then(|water| water.coverage_at(tile, self.width_tiles))
+            .map(|coverage| match coverage {
+                0 => (fallback_water, Provenance::Fallback),
+                1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
+                _ => (WaterKind::Ocean, Provenance::SourceDerived),
+            })
+            .unwrap_or((water, water_provenance));
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -317,25 +357,6 @@ impl MapChunkGenerator {
             initial_amount: amount,
             visual_variant: (value >> 8) as u8,
         })
-    }
-}
-
-impl crate::MapPackage {
-    /// Creates pure terrain queries backed by the complete, verified page set
-    /// supplied by the server storage adapter.
-    pub fn generator_with_elevation(
-        &self,
-        pages: Vec<ElevationPage>,
-    ) -> Result<MapChunkGenerator, crate::MapPackageError> {
-        if self.environment.samples_per_axis == 0 {
-            return pages
-                .is_empty()
-                .then(|| self.generator())
-                .ok_or(crate::MapPackageError::InvalidEnvironment);
-        }
-        self.generator()
-            .with_prepared_elevation(self.request.compression, &self.environment, pages)
-            .map_err(|_| crate::MapPackageError::InvalidEnvironment)
     }
 }
 
