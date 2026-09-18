@@ -1,7 +1,7 @@
 use super::{MAX_PAGE_BYTES, MapStoreError, write_json};
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, MapPackage, PotentialBiomePage, WaterPage, ordered_biome_page_root,
-    ordered_water_page_root,
+    ENVIRONMENT_PAGE_SAMPLES, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage,
+    ordered_biome_page_root, ordered_land_use_page_root, ordered_water_page_root,
 };
 use std::{
     fs,
@@ -22,6 +22,14 @@ pub(super) fn persist_vegetation(
     pages: &[PotentialBiomePage],
 ) -> Result<(), MapStoreError> {
     persist(directory, package, "vegetation", pages)
+}
+
+pub(super) fn persist_land_use(
+    directory: &Path,
+    package: &MapPackage,
+    pages: &[HistoricalLandUsePage],
+) -> Result<(), MapStoreError> {
+    persist(directory, package, "historical-land-use", pages)
 }
 
 pub(super) fn load_water(
@@ -57,6 +65,30 @@ pub(super) fn load_vegetation(
     let directory = prepared_directory(directory, "vegetation")?;
     let pages = load(directory, package, "vegetation", levels, read_vegetation)?;
     verify_vegetation(package, &pages).map_err(|reason| invalid(directory, reason))?;
+    Ok(pages)
+}
+
+pub(super) fn load_land_use(
+    directory: Option<&Path>,
+    package: &MapPackage,
+) -> Result<Vec<HistoricalLandUsePage>, MapStoreError> {
+    let Some(levels) = package
+        .environment
+        .historical_land_use
+        .as_ref()
+        .map(|field| &field.levels)
+    else {
+        return Ok(Vec::new());
+    };
+    let directory = prepared_directory(directory, "historical land-use")?;
+    let pages = load(
+        directory,
+        package,
+        "historical-land-use",
+        levels,
+        read_land_use,
+    )?;
+    verify_land_use(package, &pages).map_err(|reason| invalid(directory, reason))?;
     Ok(pages)
 }
 
@@ -114,6 +146,37 @@ pub(super) fn verify_vegetation(
             || ordered_biome_page_root(&level_pages).ok() != Some(metadata.ordered_page_root)
         {
             return Err("prepared package vegetation page index is incomplete".to_owned());
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn verify_land_use(
+    package: &MapPackage,
+    pages: &[HistoricalLandUsePage],
+) -> Result<(), String> {
+    let Some(field) = &package.environment.historical_land_use else {
+        return pages
+            .is_empty()
+            .then_some(())
+            .ok_or_else(|| "historical land-use pages require an index".to_owned());
+    };
+    if pages.iter().any(|page| page.validate().is_err()) {
+        return Err("prepared package has invalid historical land-use pages".to_owned());
+    }
+    for (level, metadata) in field.levels.iter().enumerate() {
+        let level_pages = pages
+            .iter()
+            .filter(|page| usize::from(page.level) == level)
+            .cloned()
+            .collect::<Vec<_>>();
+        let count = metadata
+            .samples_per_axis
+            .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
+        if level_pages.len() != usize::from(count).pow(2)
+            || ordered_land_use_page_root(&level_pages).ok() != Some(metadata.ordered_page_root)
+        {
+            return Err("prepared package historical land-use index is incomplete".to_owned());
         }
     }
     Ok(())
@@ -187,6 +250,10 @@ fn read_water(path: &Path) -> Result<WaterPage, MapStoreError> {
 
 fn read_vegetation(path: &Path) -> Result<PotentialBiomePage, MapStoreError> {
     read(path, "vegetation")
+}
+
+fn read_land_use(path: &Path) -> Result<HistoricalLandUsePage, MapStoreError> {
+    read(path, "historical land-use")
 }
 
 fn read<T: serde::de::DeserializeOwned>(path: &Path, layer: &str) -> Result<T, MapStoreError> {

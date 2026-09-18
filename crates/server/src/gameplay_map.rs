@@ -1,7 +1,8 @@
 use crate::GameplayService;
 use aoe_core::{PlayerId, TileCoord, WorldPosition};
 use aoe_map::{
-    ElevationPage, GAME_TILE_METERS, MAP_SCHEMA_VERSION, MapPackage, PotentialBiomePage, WaterPage,
+    ElevationPage, GAME_TILE_METERS, HistoricalLandUsePage, MAP_SCHEMA_VERSION, MapPackage,
+    PotentialBiomePage, WaterPage,
 };
 use aoe_protocol::MapMetadata;
 use aoe_simulation::{GameWorld, GameWorldError};
@@ -40,11 +41,17 @@ impl GameplayService {
         elevation_pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
         vegetation_pages: Vec<PotentialBiomePage>,
+        land_use_pages: Vec<HistoricalLandUsePage>,
     ) -> Result<Self, GameWorldError> {
         let content_hash = package.content_hash;
         let metadata = map_metadata(&package);
-        let mut world =
-            GameWorld::from_prepared_map(package, elevation_pages, water_pages, vegetation_pages)?;
+        let mut world = GameWorld::from_prepared_map(
+            package,
+            elevation_pages,
+            water_pages,
+            vegetation_pages,
+            land_use_pages,
+        )?;
         let config = world.config();
         let mut state = config.seed.0.max(1);
         for _ in 0..4_096 {

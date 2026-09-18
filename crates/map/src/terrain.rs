@@ -2,10 +2,11 @@ use crate::biome::{PreparedBiome, level_zero_biome_pages};
 use crate::biome_rules::{
     Biome, biome_from_potential_class, material_for, resource_modulus, tree_present,
 };
+use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
-    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PotentialBiomePage,
-    PreparedEnvironment, Ratio, WaterPage,
+    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError,
+    HistoricalLandUsePage, PotentialBiomePage, PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -106,6 +107,7 @@ pub struct MapChunkGenerator {
     elevation: Option<Arc<PreparedElevation>>,
     water: Option<Arc<PreparedWater>>,
     biome: Option<Arc<PreparedBiome>>,
+    historical_land_use: Option<Arc<HistoricalLandUse>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -124,6 +126,7 @@ impl MapChunkGenerator {
             elevation: None,
             water: None,
             biome: None,
+            historical_land_use: None,
         }
     }
 
@@ -148,6 +151,7 @@ impl MapChunkGenerator {
             })),
             water: self.water,
             biome: self.biome,
+            historical_land_use: self.historical_land_use,
         })
     }
 
@@ -175,6 +179,7 @@ impl MapChunkGenerator {
                 level_zero,
             ))),
             biome: self.biome,
+            historical_land_use: self.historical_land_use,
         })
     }
 
@@ -199,6 +204,34 @@ impl MapChunkGenerator {
             elevation: self.elevation,
             water: self.water,
             biome: Some(Arc::new(PreparedBiome::new(
+                environment.samples_per_axis,
+                level_zero,
+            ))),
+            historical_land_use: self.historical_land_use,
+        })
+    }
+
+    /// Binds verified HYDE 600 AD land-use fields to the terrain query.
+    pub fn with_historical_land_use(
+        self,
+        environment: &PreparedEnvironment,
+        pages: Vec<HistoricalLandUsePage>,
+    ) -> Result<Self, EnvironmentError> {
+        let Some(field) = &environment.historical_land_use else {
+            return pages
+                .is_empty()
+                .then_some(self)
+                .ok_or(EnvironmentError::InvalidPyramid);
+        };
+        let level_zero = level_zero_land_use_pages(field, pages)?;
+        Ok(Self {
+            geography_key: self.geography_key,
+            procedural_seed: self.procedural_seed,
+            width_tiles: self.width_tiles,
+            elevation: self.elevation,
+            water: self.water,
+            biome: self.biome,
+            historical_land_use: Some(Arc::new(HistoricalLandUse::new(
                 environment.samples_per_axis,
                 level_zero,
             ))),
@@ -371,7 +404,14 @@ impl MapChunkGenerator {
         }
         let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
             ^ self.procedural_seed.rotate_left(17);
-        if tree_present(self.geography_key, tile.x, tile.y, sample.biome) {
+        let historically_cleared = self
+            .historical_land_use
+            .as_ref()
+            .and_then(|land_use| land_use.at(tile, self.width_tiles))
+            .is_some_and(|land_use| {
+                value % 100 < u64::from(land_use.crop_percent + land_use.grazing_percent)
+            });
+        if !historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome) {
             return Some(ResourceNode {
                 id: resource_id(tile, 0),
                 tile,
@@ -435,56 +475,4 @@ fn signed_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn generator(seed: u64) -> MapChunkGenerator {
-        MapChunkGenerator::new([3; 32], seed, 128)
-    }
-
-    #[test]
-    fn chunks_are_order_independent_and_have_stable_shared_tiles() {
-        let first = generator(1).chunk(0, 0);
-        let second = generator(1).chunk(0, 0);
-        assert_eq!(first, second);
-        assert_eq!(
-            generator(1).tile_at(TileCoord::new(31, 5)),
-            generator(1).chunk(0, 0).tiles.get(5 * 32 + 31).copied()
-        );
-    }
-
-    #[test]
-    fn procedural_seed_changes_objects_without_moving_relief() {
-        let tile = TileCoord::new(13, 8);
-        assert_eq!(
-            generator(1)
-                .tile_at(tile)
-                .expect("tile")
-                .geographic_height_centimeters,
-            generator(2)
-                .tile_at(tile)
-                .expect("tile")
-                .geographic_height_centimeters
-        );
-        let first = (0..4)
-            .flat_map(|y| (0..4).flat_map(move |x| generator(1).chunk(x, y).resources))
-            .collect::<Vec<_>>();
-        let second = (0..4)
-            .flat_map(|y| (0..4).flat_map(move |x| generator(2).chunk(x, y).resources))
-            .collect::<Vec<_>>();
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn resources_have_one_collision_free_slot_per_tile() {
-        let chunk = generator(1).chunk(0, 0);
-        let mut ids = chunk
-            .resources
-            .iter()
-            .map(|node| node.id)
-            .collect::<Vec<_>>();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), chunk.resources.len());
-    }
-}
+mod tests;

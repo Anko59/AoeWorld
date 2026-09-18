@@ -3,9 +3,10 @@ use super::{
     load_water_pages, persist, persist_prepared,
 };
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentalProvenance, FieldPyramid, MapPackage,
-    MapRequest, PotentialBiomePage, PreparedEnvironment, ProjectionMetadata, PyramidLevel,
-    WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentalProvenance, FieldPyramid,
+    HistoricalLandUsePage, MapPackage, MapRequest, PotentialBiomePage, PreparedEnvironment,
+    ProjectionMetadata, PyramidLevel, WaterPage, ordered_biome_page_root,
+    ordered_land_use_page_root, ordered_page_root, ordered_water_page_root,
 };
 use std::fs;
 
@@ -14,6 +15,7 @@ fn prepared() -> (
     Vec<ElevationPage>,
     Vec<WaterPage>,
     Vec<PotentialBiomePage>,
+    Vec<HistoricalLandUsePage>,
 ) {
     let elevation = [
         ElevationPage {
@@ -69,6 +71,28 @@ fn prepared() -> (
             potential_biome_class: vec![13],
         },
     ];
+    let land_use = [
+        HistoricalLandUsePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            crop_percent: vec![20, 0, 10, 0],
+            grazing_percent: vec![30, 15, 0, 0],
+            population_pressure_per_square_kilometer: vec![5, 2, 1, 0],
+        },
+        HistoricalLandUsePage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            crop_percent: vec![8],
+            grazing_percent: vec![11],
+            population_pressure_per_square_kilometer: vec![2],
+        },
+    ];
     let field = |roots: [[u8; 32]; 2]| FieldPyramid {
         levels: vec![
             PyramidLevel {
@@ -97,6 +121,10 @@ fn prepared() -> (
             ordered_biome_page_root(&[vegetation[0].clone()]).expect("vegetation root"),
             ordered_biome_page_root(&[vegetation[1].clone()]).expect("vegetation root"),
         ])),
+        historical_land_use: Some(field([
+            ordered_land_use_page_root(&[land_use[0].clone()]).expect("land-use root"),
+            ordered_land_use_page_root(&[land_use[1].clone()]).expect("land-use root"),
+        ])),
     };
     let package = MapPackage::with_prepared_environment(
         1,
@@ -107,7 +135,13 @@ fn prepared() -> (
         environment,
     )
     .expect("package");
-    (package, elevation.into(), water.into(), vegetation.into())
+    (
+        package,
+        elevation.into(),
+        water.into(),
+        vegetation.into(),
+        land_use.into(),
+    )
 }
 
 #[test]
@@ -141,13 +175,14 @@ fn noncanonical_file_names_are_rejected_on_load() {
 #[test]
 fn prepared_elevation_and_water_pages_must_persist_with_their_package() {
     let directory = tempfile::tempdir().expect("package directory");
-    let (package, elevation, water, vegetation) = prepared();
+    let (package, elevation, water, vegetation, land_use) = prepared();
     persist_prepared(
         Some(directory.path()),
         &package,
         &elevation,
         &water,
         &vegetation,
+        &land_use,
     )
     .expect("persist");
     assert_eq!(load(Some(directory.path())).expect("load").len(), 1);
@@ -162,6 +197,10 @@ fn prepared_elevation_and_water_pages_must_persist_with_their_package() {
     assert_eq!(
         load_vegetation_pages(Some(directory.path()), &package).expect("vegetation pages"),
         vegetation
+    );
+    assert_eq!(
+        super::load_land_use_pages(Some(directory.path()), &package).expect("land-use pages"),
+        land_use
     );
     fs::remove_file(elevation_page_root(directory.path(), &package).join("0-0-0.json"))
         .expect("remove page");

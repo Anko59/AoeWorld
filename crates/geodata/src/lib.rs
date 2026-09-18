@@ -18,6 +18,9 @@ use std::path::{Path, PathBuf};
 mod elevation;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 
+mod hyde;
+pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600};
+
 mod source_cache;
 pub use source_cache::{
     CacheError, DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy,
@@ -120,12 +123,16 @@ pub struct PreparedOverview {
     water_source_lock: aoe_map::SourceLock,
     vegetation_source_lock: aoe_map::SourceLock,
     vegetation_classes_source_lock: aoe_map::SourceLock,
+    hyde_baseline_source_lock: aoe_map::SourceLock,
+    hyde_supplementary_source_lock: aoe_map::SourceLock,
+    hyde_readme_source_lock: aoe_map::SourceLock,
     projection: ProjectionMetadata,
     provenance: EnvironmentalProvenance,
     environment: PreparedEnvironment,
     pages: Vec<ElevationPage>,
     water_pages: Vec<WaterPage>,
     vegetation_pages: Vec<PotentialBiomePage>,
+    historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -195,29 +202,51 @@ fn prepare_overview_elevation(
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let path = cache.acquire(&lock, &cancelled)?;
     let water_path = cache.acquire(&water_lock, &cancelled)?;
-    let potential_sources = potential_biome_sources()?;
-    let vegetation_source = potential_sources
-        .iter()
-        .find(|source| source.id.ends_with(".tif"))
-        .ok_or(GeodataError::Preparation(
-            "potential biome raster is missing",
-        ))?;
-    let vegetation_classes_source = potential_sources
-        .iter()
-        .find(|source| source.id.ends_with(".tif.csv"))
-        .ok_or(GeodataError::Preparation(
-            "potential biome class legend is missing",
-        ))?;
-    let vegetation_lock = cache.acquire_known(vegetation_source, &cancelled)?;
-    let vegetation_classes_lock = cache.acquire_known(vegetation_classes_source, &cancelled)?;
+    let potential_sources = potential_biome_sources().ok();
+    let vegetation_lock = acquire_or_cached(
+        &cache,
+        potential_sources.as_deref(),
+        POTENTIAL_BIOME_RASTER_ID,
+        &cancelled,
+    )?;
+    let vegetation_classes_lock = acquire_or_cached(
+        &cache,
+        potential_sources.as_deref(),
+        POTENTIAL_BIOME_CLASSES_ID,
+        &cancelled,
+    )?;
     let vegetation_path = cache.object_path(&vegetation_lock)?;
     let vegetation_classes_path = cache.object_path(&vegetation_classes_lock)?;
+    let hyde_sources = hyde_sources().ok();
+    let hyde_baseline_lock = acquire_or_cached(
+        &cache,
+        hyde_sources.as_deref(),
+        HYDE_BASELINE_ID,
+        &cancelled,
+    )?;
+    let hyde_supplementary_lock = acquire_or_cached(
+        &cache,
+        hyde_sources.as_deref(),
+        HYDE_SUPPLEMENTARY_ID,
+        &cancelled,
+    )?;
+    let hyde_readme_lock =
+        acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
+    let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
+    let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
     let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
     let water = prepare_ocean_coverage(&water_path, request, samples_per_axis)?;
     let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
+    let historical_land_use = prepare_hyde_600(
+        &hyde_baseline_path,
+        &hyde_supplementary_path,
+        request,
+        samples_per_axis,
+    )?;
     verify_potential_biome_legend(&vegetation_classes_path)?;
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);
+    prepared.environment.historical_land_use = Some(historical_land_use.field);
     prepared.environment.validate()?;
     Ok(WorkerResponse::PreparedOverview(Box::new(
         PreparedOverview {
@@ -235,6 +264,18 @@ fn prepare_overview_elevation(
                 acquisition_marker(),
                 "potential-biome-class-legend-v0.2".to_owned(),
             )?,
+            hyde_baseline_source_lock: hyde_baseline_lock.to_map_source_lock(
+                acquisition_marker(),
+                "hyde-600ad-readonly-zip-v1".to_owned(),
+            )?,
+            hyde_supplementary_source_lock: hyde_supplementary_lock.to_map_source_lock(
+                acquisition_marker(),
+                "hyde-600ad-readonly-zip-v1".to_owned(),
+            )?,
+            hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
+                acquisition_marker(),
+                "hyde-3.2.1-release-notes-v1".to_owned(),
+            )?,
             projection: ProjectionMetadata {
                 horizontal_crs: local_aeqd_definition(
                     request.center_latitude_e7,
@@ -247,14 +288,38 @@ fn prepare_overview_elevation(
                 elevation: LayerProvenance::SourceDerived,
                 water: LayerProvenance::SourceDerived,
                 vegetation: LayerProvenance::SourceDerived,
-                historical_land_use: LayerProvenance::Fallback,
+                historical_land_use: LayerProvenance::SourceDerived,
             },
             environment: prepared.environment,
             pages: prepared.pages,
             water_pages: water.pages,
             vegetation_pages: vegetation.pages,
+            historical_land_use_pages: historical_land_use.pages,
         },
     )))
+}
+
+const POTENTIAL_BIOME_RASTER_ID: &str =
+    "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif";
+const POTENTIAL_BIOME_CLASSES_ID: &str =
+    "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv";
+const HYDE_BASELINE_ID: &str = "hyde-3.2.1:HYDE3_2_1-baseline.zip";
+const HYDE_SUPPLEMENTARY_ID: &str = "hyde-3.2.1:HYDE3_2_1-general_supplementary.zip";
+const HYDE_README_ID: &str = "hyde-3.2.1:readme_release_HYDE3.2.1.txt";
+
+fn acquire_or_cached(
+    cache: &SourceCache,
+    sources: Option<&[KnownSource]>,
+    id: &str,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<SourceLock, GeodataError> {
+    if let Some(source) = sources.and_then(|sources| sources.iter().find(|source| source.id == id))
+    {
+        return Ok(cache.acquire_known(source, cancelled)?);
+    }
+    cache.known_lock(id)?.ok_or(GeodataError::Preparation(
+        "source catalog is unavailable and no verified cached source lock exists",
+    ))
 }
 
 fn acquisition_marker() -> String {
@@ -306,111 +371,5 @@ pub fn project_wgs84(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn local_projection_places_its_center_at_the_origin() {
-        let definition = local_aeqd_definition(488_500_000, 23_500_000);
-        let (east, north) = project_wgs84(&definition, 2.35, 48.85).expect("projection");
-        assert!(east.abs() < 0.01);
-        assert!(north.abs() < 0.01);
-    }
-
-    #[test]
-    fn worker_projects_the_requested_center_to_zero_meters() {
-        let response = execute(WorkerRequest::ProjectPoint {
-            center_latitude_e7: 488_500_000,
-            center_longitude_e7: 23_500_000,
-            longitude: 2.35,
-            latitude: 48.85,
-        })
-        .expect("projected point");
-        assert_eq!(
-            response,
-            WorkerResponse::ProjectedPoint {
-                east_meters: 0,
-                north_meters: 0,
-            }
-        );
-    }
-
-    #[test]
-    fn worker_lists_only_the_allowlisted_global_overview() {
-        let response = execute(WorkerRequest::ListOverviewSources).expect("sources");
-        let WorkerResponse::KnownSources { sources } = response else {
-            panic!("source response");
-        };
-        assert_eq!(sources, vec![etopo_2022_60s_surface()]);
-    }
-
-    #[test]
-    fn overview_response_keeps_its_bounded_protocol_shape_when_boxed() {
-        let response = WorkerResponse::PreparedOverview(Box::new(PreparedOverview {
-            source_lock: aoe_map::SourceLock {
-                id: "overview".to_owned(),
-                provider: "provider".to_owned(),
-                release: "release".to_owned(),
-                url: "https://example.invalid/overview.tif".to_owned(),
-                sha256: [7; 32],
-                acquired_at: "2026-09-18".to_owned(),
-                native_resolution: "1 arc-minute".to_owned(),
-                crs: "EPSG:4326".to_owned(),
-                vertical_datum: "EGM2008".to_owned(),
-                license: "test".to_owned(),
-                preprocessing_version: "test".to_owned(),
-            },
-            water_source_lock: aoe_map::SourceLock {
-                id: "coastline".to_owned(),
-                provider: "provider".to_owned(),
-                release: "release".to_owned(),
-                url: "https://example.invalid/land.zip".to_owned(),
-                sha256: [8; 32],
-                acquired_at: "2026-09-18".to_owned(),
-                native_resolution: "1:10m".to_owned(),
-                crs: "EPSG:4326".to_owned(),
-                vertical_datum: "not applicable".to_owned(),
-                license: "test".to_owned(),
-                preprocessing_version: "test".to_owned(),
-            },
-            vegetation_source_lock: aoe_map::SourceLock {
-                id: "vegetation".to_owned(),
-                provider: "provider".to_owned(),
-                release: "release".to_owned(),
-                url: "https://example.invalid/vegetation.tif".to_owned(),
-                sha256: [9; 32],
-                acquired_at: "2026-09-18".to_owned(),
-                native_resolution: "250m".to_owned(),
-                crs: "EPSG:4326".to_owned(),
-                vertical_datum: "not applicable".to_owned(),
-                license: "test".to_owned(),
-                preprocessing_version: "test".to_owned(),
-            },
-            vegetation_classes_source_lock: aoe_map::SourceLock {
-                id: "vegetation-classes".to_owned(),
-                provider: "provider".to_owned(),
-                release: "release".to_owned(),
-                url: "https://example.invalid/vegetation.csv".to_owned(),
-                sha256: [10; 32],
-                acquired_at: "2026-09-18".to_owned(),
-                native_resolution: "table".to_owned(),
-                crs: "not applicable".to_owned(),
-                vertical_datum: "not applicable".to_owned(),
-                license: "test".to_owned(),
-                preprocessing_version: "test".to_owned(),
-            },
-            projection: ProjectionMetadata::default(),
-            provenance: EnvironmentalProvenance::default(),
-            environment: PreparedEnvironment::default(),
-            pages: Vec::new(),
-            water_pages: Vec::new(),
-            vegetation_pages: Vec::new(),
-        }));
-        let encoded = serde_json::to_value(response).expect("serializes");
-        assert_eq!(encoded["operation"], "prepared_overview");
-        assert_eq!(encoded["source_lock"]["id"], "overview");
-        assert_eq!(encoded["water_source_lock"]["id"], "coastline");
-        assert_eq!(encoded["vegetation_source_lock"]["id"], "vegetation");
-        assert!(encoded.get("value").is_none());
-    }
-}
+#[path = "tests/geodata.rs"]
+mod geodata_tests;

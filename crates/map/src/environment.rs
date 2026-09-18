@@ -20,6 +20,8 @@ pub struct PreparedEnvironment {
     /// source's published class identifiers and are mapped to game biomes only
     /// when terrain is queried.
     pub vegetation: Option<FieldPyramid>,
+    /// Optional HYDE 600 AD land-use fractions and population pressure.
+    pub historical_land_use: Option<FieldPyramid>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -75,7 +77,8 @@ impl PreparedEnvironment {
         if self.samples_per_axis == 0 {
             return (self.elevation.levels.is_empty()
                 && self.water.is_none()
-                && self.vegetation.is_none())
+                && self.vegetation.is_none()
+                && self.historical_land_use.is_none())
             .then_some(())
             .ok_or(EnvironmentError::InvalidPyramid);
         }
@@ -91,7 +94,10 @@ impl PreparedEnvironment {
             .map_or(Ok(()), |water| water.validate(self.samples_per_axis))?;
         self.vegetation.as_ref().map_or(Ok(()), |vegetation| {
             vegetation.validate(self.samples_per_axis)
-        })
+        })?;
+        self.historical_land_use
+            .as_ref()
+            .map_or(Ok(()), |land_use| land_use.validate(self.samples_per_axis))
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {
@@ -103,21 +109,19 @@ impl PreparedEnvironment {
             hash.update(&level.samples_per_axis.to_le_bytes());
             hash.update(&level.ordered_page_root);
         }
-        hash.update(&[u8::from(self.water.is_some())]);
-        if let Some(water) = &self.water {
-            hash.update(&(water.levels.len() as u64).to_le_bytes());
-            for level in &water.levels {
-                hash.update(&level.samples_per_axis.to_le_bytes());
-                hash.update(&level.ordered_page_root);
-            }
-        }
-        hash.update(&[u8::from(self.vegetation.is_some())]);
-        if let Some(vegetation) = &self.vegetation {
-            hash.update(&(vegetation.levels.len() as u64).to_le_bytes());
-            for level in &vegetation.levels {
-                hash.update(&level.samples_per_axis.to_le_bytes());
-                hash.update(&level.ordered_page_root);
-            }
+        hash_optional_field(hash, &self.water);
+        hash_optional_field(hash, &self.vegetation);
+        hash_optional_field(hash, &self.historical_land_use);
+    }
+}
+
+fn hash_optional_field(hash: &mut blake3::Hasher, field: &Option<FieldPyramid>) {
+    hash.update(&[u8::from(field.is_some())]);
+    if let Some(field) = field {
+        hash.update(&(field.levels.len() as u64).to_le_bytes());
+        for level in &field.levels {
+            hash.update(&level.samples_per_axis.to_le_bytes());
+            hash.update(&level.ordered_page_root);
         }
     }
 }
@@ -411,6 +415,7 @@ mod tests {
             },
             water: None,
             vegetation: None,
+            historical_land_use: None,
         };
         assert!(field.validate().is_ok());
         let mut invalid = field;
@@ -456,6 +461,7 @@ mod tests {
             },
             water: None,
             vegetation: None,
+            historical_land_use: None,
         };
         let request = crate::MapRequest {
             requested_side_meters: 250,

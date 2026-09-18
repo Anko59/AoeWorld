@@ -215,7 +215,7 @@ fn launch(state: AppState, id: u64) {
                 let directory = directory.as_deref().ok_or_else(|| {
                     "source-backed map creation requires a configured package directory".to_owned()
                 })?;
-                let (package, elevation_pages, water_pages, vegetation_pages) =
+                let (package, elevation_pages, water_pages, vegetation_pages, land_use_pages) =
                     prepare_overview(&worker, &cache, request)?;
                 map_store::persist_prepared(
                     Some(directory),
@@ -223,6 +223,7 @@ fn launch(state: AppState, id: u64) {
                     &elevation_pages,
                     &water_pages,
                     &vegetation_pages,
+                    &land_use_pages,
                 )
                 .map_err(|error| error.to_string())?;
                 package
@@ -263,12 +264,16 @@ enum WorkerOutput {
         water_source_lock: SourceLock,
         vegetation_source_lock: SourceLock,
         vegetation_classes_source_lock: SourceLock,
+        hyde_baseline_source_lock: SourceLock,
+        hyde_supplementary_source_lock: SourceLock,
+        hyde_readme_source_lock: SourceLock,
         projection: ProjectionMetadata,
         provenance: EnvironmentalProvenance,
         environment: aoe_map::PreparedEnvironment,
         pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
         vegetation_pages: Vec<aoe_map::PotentialBiomePage>,
+        historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
     },
 }
 
@@ -277,6 +282,7 @@ type PreparedOverviewPages = (
     Vec<ElevationPage>,
     Vec<WaterPage>,
     Vec<aoe_map::PotentialBiomePage>,
+    Vec<aoe_map::HistoricalLandUsePage>,
 );
 
 fn prepare_overview(
@@ -336,12 +342,16 @@ fn prepare_overview(
         water_source_lock,
         vegetation_source_lock,
         vegetation_classes_source_lock,
+        hyde_baseline_source_lock,
+        hyde_supplementary_source_lock,
+        hyde_readme_source_lock,
         projection,
         provenance,
         environment,
         pages,
         water_pages,
         vegetation_pages,
+        historical_land_use_pages,
     } = serde_json::from_slice(&output)
         .map_err(|error| format!("invalid map-worker response: {error}"))?;
     let package = MapPackage::with_prepared_environment(
@@ -352,13 +362,22 @@ fn prepare_overview(
             water_source_lock,
             vegetation_source_lock,
             vegetation_classes_source_lock,
+            hyde_baseline_source_lock,
+            hyde_supplementary_source_lock,
+            hyde_readme_source_lock,
         ],
         projection,
         provenance,
         environment,
     )
     .map_err(|error| error.to_string())?;
-    Ok((package, pages, water_pages, vegetation_pages))
+    Ok((
+        package,
+        pages,
+        water_pages,
+        vegetation_pages,
+        historical_land_use_pages,
+    ))
 }
 
 async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<AtomicBool>)> {

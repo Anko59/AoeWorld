@@ -1,5 +1,6 @@
 use crate::{
-    ElevationPage, MapChunkGenerator, MapPackage, MapPackageError, PotentialBiomePage, WaterPage,
+    ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage, MapPackageError,
+    PotentialBiomePage, WaterPage,
 };
 
 impl MapPackage {
@@ -27,10 +28,14 @@ impl MapPackage {
         elevation_pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
         biome_pages: Vec<PotentialBiomePage>,
+        land_use_pages: Vec<HistoricalLandUsePage>,
     ) -> Result<MapChunkGenerator, MapPackageError> {
         self.generator_with_elevation(elevation_pages)?
             .with_prepared_water(&self.environment, water_pages)
             .and_then(|generator| generator.with_prepared_biomes(&self.environment, biome_pages))
+            .and_then(|generator| {
+                generator.with_historical_land_use(&self.environment, land_use_pages)
+            })
             .map_err(|_| MapPackageError::InvalidEnvironment)
     }
 }

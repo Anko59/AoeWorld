@@ -13,11 +13,13 @@ use std::{
 mod digest;
 use digest::{digest_hex, file_hashes};
 
+mod known;
+
 pub const DEFAULT_CACHE_QUOTA_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub const DEFAULT_JOB_ACQUISITION_BUDGET_BYTES: u64 = 20 * 1024 * 1024 * 1024;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 const RETRIES: u8 = 3;
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
     Noaa,
@@ -61,7 +63,7 @@ impl Provider {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct SourceLock {
     pub id: String,
     pub provider: Provider,
@@ -125,6 +127,7 @@ impl SourceCache {
         }
         fs::create_dir_all(root.join("objects"))?;
         fs::create_dir_all(root.join("partial"))?;
+        fs::create_dir_all(root.join("known"))?;
         Ok(Self { root, policy })
     }
 
@@ -220,6 +223,9 @@ impl SourceCache {
         if source.id.is_empty() || source.bytes == 0 || !source.provider.permits(&source.url) {
             return Err(CacheError::InvalidLock("known source metadata is invalid"));
         }
+        if let Some(lock) = self.cached_known(source)? {
+            return Ok(lock);
+        }
         if source.bytes > self.policy.job_acquisition_budget_bytes {
             return Err(CacheError::Budget(
                 "source exceeds the per-job acquisition budget",
@@ -268,11 +274,13 @@ impl SourceCache {
                     match fs::hard_link(&partial, &destination) {
                         Ok(()) => {
                             fs::remove_file(&partial)?;
+                            self.remember_known(source, &lock)?;
                             return Ok(lock);
                         }
                         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                             if self.is_verified(&lock)? {
                                 fs::remove_file(&partial)?;
+                                self.remember_known(source, &lock)?;
                                 return Ok(lock);
                             }
                             return Err(CacheError::Io(error));

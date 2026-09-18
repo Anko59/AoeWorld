@@ -1,6 +1,6 @@
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{Seed, Tick, WorldConfig};
-use aoe_map::{ElevationPage, MapPackage, PotentialBiomePage, WaterPage};
+use aoe_map::{ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage};
 use std::collections::BTreeMap;
 
 impl GameWorld {
@@ -24,6 +24,7 @@ impl GameWorld {
         elevation_pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
         vegetation_pages: Vec<PotentialBiomePage>,
+        land_use_pages: Vec<HistoricalLandUsePage>,
     ) -> Result<Self, GameWorldError> {
         let width = i32::try_from(package.estimate.tiles_per_side)
             .map_err(|_| GameWorldError::InvalidPosition)?;
@@ -34,6 +35,7 @@ impl GameWorld {
                 elevation_pages,
                 water_pages,
                 vegetation_pages,
+                land_use_pages,
             )
             .map_err(|_| GameWorldError::InvalidTerrain)?,
             config,

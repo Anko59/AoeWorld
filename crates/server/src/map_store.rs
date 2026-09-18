@@ -1,6 +1,6 @@
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, MapPackage, PotentialBiomePage, WaterPage,
-    ordered_page_root,
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage,
+    WaterPage, ordered_page_root,
 };
 use std::{
     collections::BTreeMap,
@@ -72,7 +72,7 @@ pub(crate) fn load(
 
 pub(crate) fn persist(directory: Option<&Path>, package: &MapPackage) -> Result<(), MapStoreError> {
     if package.environment.samples_per_axis != 0 {
-        return persist_prepared(directory, package, &[], &[], &[]);
+        return persist_prepared(directory, package, &[], &[], &[], &[]);
     }
     persist_manifest(directory, package)
 }
@@ -135,6 +135,7 @@ pub(crate) fn persist_prepared(
     elevation_pages: &[ElevationPage],
     water_pages: &[WaterPage],
     vegetation_pages: &[PotentialBiomePage],
+    land_use_pages: &[HistoricalLandUsePage],
 ) -> Result<(), MapStoreError> {
     let Some(directory) = directory else {
         return Ok(());
@@ -145,11 +146,16 @@ pub(crate) fn persist_prepared(
             path: directory.to_owned(),
             reason: error.to_string(),
         })?;
-    verify_pages(package, elevation_pages, water_pages, vegetation_pages).map_err(|reason| {
-        MapStoreError::InvalidPackage {
-            path: directory.to_owned(),
-            reason,
-        }
+    verify_pages(
+        package,
+        elevation_pages,
+        water_pages,
+        vegetation_pages,
+        land_use_pages,
+    )
+    .map_err(|reason| MapStoreError::InvalidPackage {
+        path: directory.to_owned(),
+        reason,
     })?;
     let root = elevation_page_root(directory, package);
     fs::create_dir_all(&root)?;
@@ -162,6 +168,9 @@ pub(crate) fn persist_prepared(
     }
     if package.environment.vegetation.is_some() {
         pages::persist_vegetation(directory, package, vegetation_pages)?;
+    }
+    if package.environment.historical_land_use.is_some() {
+        pages::persist_land_use(directory, package, land_use_pages)?;
     }
     persist_manifest(Some(directory), package)
 }
@@ -183,7 +192,8 @@ mod tests;
 fn verify_environment(directory: &Path, package: &MapPackage) -> Result<(), MapStoreError> {
     load_elevation_pages(Some(directory), package)?;
     pages::load_water(Some(directory), package)?;
-    pages::load_vegetation(Some(directory), package).map(|_| ())
+    pages::load_vegetation(Some(directory), package)?;
+    pages::load_land_use(Some(directory), package).map(|_| ())
 }
 
 pub(super) fn load_elevation_pages(
@@ -238,11 +248,19 @@ pub(super) fn load_vegetation_pages(
     pages::load_vegetation(directory, package)
 }
 
+pub(super) fn load_land_use_pages(
+    directory: Option<&Path>,
+    package: &MapPackage,
+) -> Result<Vec<HistoricalLandUsePage>, MapStoreError> {
+    pages::load_land_use(directory, package)
+}
+
 fn verify_pages(
     package: &MapPackage,
     pages: &[ElevationPage],
     water_pages: &[WaterPage],
     vegetation_pages: &[PotentialBiomePage],
+    land_use_pages: &[HistoricalLandUsePage],
 ) -> Result<(), String> {
     let levels = &package.environment.elevation.levels;
     if levels.is_empty() || pages.iter().any(|page| page.validate().is_err()) {
@@ -265,6 +283,7 @@ fn verify_pages(
     }
     pages::verify_water(package, water_pages)?;
     pages::verify_vegetation(package, vegetation_pages)?;
+    pages::verify_land_use(package, land_use_pages)?;
     Ok(())
 }
 

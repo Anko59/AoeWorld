@@ -3,6 +3,7 @@ mod biome;
 mod biome_rules;
 mod environment;
 mod generator;
+mod land_use;
 mod navigation;
 mod overlay;
 mod package;
@@ -16,6 +17,7 @@ pub use environment::{
     MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PotentialBiomePage, PreparedEnvironment, PyramidLevel,
     WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
 };
+pub use land_use::{HistoricalLandUsePage, ordered_land_use_page_root};
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
 pub use package::{
@@ -31,9 +33,8 @@ pub use terrain::{
 };
 
 pub const CHUNK_TILES: i32 = 32;
-/// Version 4 adds immutable potential-biome page roots, per-tile vegetation
-/// provenance, and biome-specific correlated tree-generation rules.
-pub const MAP_SCHEMA_VERSION: u16 = 4;
+/// Version 5 adds immutable HYDE 600 AD land-use page roots.
+pub const MAP_SCHEMA_VERSION: u16 = 5;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;

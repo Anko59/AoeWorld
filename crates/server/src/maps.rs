@@ -166,11 +166,14 @@ async fn activate_completed(
                 .map_err(|error| error.to_string())?;
             let vegetation_pages = map_store::load_vegetation_pages(directory.as_deref(), &package)
                 .map_err(|error| error.to_string())?;
+            let land_use_pages = map_store::load_land_use_pages(directory.as_deref(), &package)
+                .map_err(|error| error.to_string())?;
             GameplayService::from_prepared_map(
                 package,
                 elevation_pages,
                 water_pages,
                 vegetation_pages,
+                land_use_pages,
             )
             .map_err(|error| error.to_string())
         }
@@ -261,8 +264,15 @@ pub(super) async fn chunk(
             .map_err(|_| StatusCode::NOT_FOUND)?;
         let vegetation_pages = map_store::load_vegetation_pages(directory.as_deref(), &package)
             .map_err(|_| StatusCode::NOT_FOUND)?;
+        let land_use_pages = map_store::load_land_use_pages(directory.as_deref(), &package)
+            .map_err(|_| StatusCode::NOT_FOUND)?;
         package
-            .generator_with_environment(elevation_pages, water_pages, vegetation_pages)
+            .generator_with_environment(
+                elevation_pages,
+                water_pages,
+                vegetation_pages,
+                land_use_pages,
+            )
             .map(|generator| Json(generator.chunk(x, y)))
             .map_err(|_| StatusCode::NOT_FOUND)
     })

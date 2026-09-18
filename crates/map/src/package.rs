@@ -333,6 +333,7 @@ mod tests {
             },
             water: None,
             vegetation: None,
+            historical_land_use: None,
         }
     }
 
