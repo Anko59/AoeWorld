@@ -1,0 +1,12 @@
+[package]
+name = "aoe-map"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aoe-core.workspace = true
+blake3 = "1.8"
+serde.workspace = true
+thiserror.workspace = true

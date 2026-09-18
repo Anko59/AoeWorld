@@ -24,3 +24,10 @@ prefers WebGPU and falls back to Canvas 2D; both paths use native-scale local
 AoE II sprite frames, viewport culling, and a constant-size uniform grass
 representation. The server's environment reads are isolated in
 `crates/server/src/config.rs`.
+
+`aoe-map` is the environment-independent boundary for frozen geographic map
+identity. It validates the 600 CE request, physical compression and bounded
+virtual dimensions, canonicalizes equivalent ratios and longitudes, and
+generates deterministic 32×32 terrain/resource chunks from package inputs.
+It deliberately has no filesystem, networking, browser, GDAL, or PROJ
+dependency; the future native preparation worker owns those capabilities.

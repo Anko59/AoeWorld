@@ -149,6 +149,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoe-map"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "blake3",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "aoe-protocol"
 version = "0.1.0"
 dependencies = [
