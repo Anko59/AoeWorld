@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "crates/core",
   "crates/map",
+  "crates/geodata",
   "crates/scenario",
   "crates/simulation",
   "crates/protocol",
@@ -21,6 +22,7 @@ rust-version = "1.93"
 [workspace.dependencies]
 aoe-core = { path = "crates/core" }
 aoe-map = { path = "crates/map" }
+aoe-geodata = { path = "crates/geodata" }
 aoe-scenario = { path = "crates/scenario" }
 aoe-simulation = { path = "crates/simulation" }
 aoe-protocol = { path = "crates/protocol" }
