@@ -423,7 +423,12 @@ pub fn start() {
     spawn_local(async {
         if let Err(error) = initialize().await {
             if let Some(document) = web_sys::window().and_then(|window| window.document()) {
-                set_text(&document, "unit-status", "Unavailable");
+                let status_id = if document.get_element_by_id("playground").is_some() {
+                    "connection"
+                } else {
+                    "unit-status"
+                };
+                set_text(&document, status_id, "Unavailable");
                 set_text(
                     &document,
                     "unsupported",

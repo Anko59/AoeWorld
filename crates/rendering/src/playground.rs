@@ -14,7 +14,6 @@ pub struct GameArt {
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
-    pub trees: Vec<GameFrame>,
 }
 
 impl Renderer {
@@ -119,34 +118,6 @@ pub(crate) fn game_sprites(
                 false,
             );
         }
-    }
-    // Trees sit outside the traversable clearing.
-    for i in 0..12 {
-        let frame = art.trees[i % art.trees.len()];
-        push(
-            &mut sprites,
-            frame,
-            [i as f32 * 95.0 - 30.0, 20.0],
-            1.0,
-            i % 2 == 0,
-        );
-    }
-    for i in 0..8 {
-        let frame = art.trees[i % art.trees.len()];
-        push(
-            &mut sprites,
-            frame,
-            [-15.0, i as f32 * 95.0 + 70.0],
-            1.0,
-            false,
-        );
-        push(
-            &mut sprites,
-            frame,
-            [985.0, i as f32 * 95.0 + 70.0],
-            1.0,
-            true,
-        );
     }
     if moving {
         ring(&mut sprites, target, [0.95, 0.79, 0.3, 1.0], 12.0);

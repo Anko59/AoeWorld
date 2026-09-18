@@ -56,7 +56,6 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         ("graphics.drs", 3008, 50),
         ("graphics.drs", 3004, 50),
         ("terrain.drs", 15008, 10),
-        ("graphics.drs", 435, 4),
     ];
     let mut selected = Vec::new();
     for (archive, id, count) in groups {
@@ -153,7 +152,6 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             walking: records[..50].to_vec(),
             standing: records[50..100].to_vec(),
             grass: records[100..110].to_vec(),
-            trees: records[110..].to_vec(),
         },
         pixels,
     ))

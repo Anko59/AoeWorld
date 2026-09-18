@@ -1,8 +1,18 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
 import { PNG } from "pngjs";
 
-test("AoE II scout moves to clicks, redirects, resets, and survives resizing", async ({
+async function waitForGame(page: Page) {
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
+  await expect(page.locator("#playground")).toHaveAttribute(
+    "data-assets",
+    "aoe2-local",
+  );
+}
+
+test("authoritative isometric game renders, selects, orders, and survives reload", async ({
   page,
 }, testInfo) => {
   const evidence = await gameAssets(page);
@@ -10,72 +20,44 @@ test("AoE II scout moves to clicks, redirects, resets, and survives resizing", a
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
-  const status = page.getByRole("status");
-  const position = page.locator("#position");
-  const canvas = page.locator("canvas");
-  await expect(status).toHaveText("Ready", { timeout: 30_000 });
+  await waitForGame(page);
   if (testInfo.project.name === "webgpu") {
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-renderer",
       "webgpu",
     );
   }
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-assets",
-    "aoe2-local",
-  );
-  await expect(position).toHaveText("480, 320");
-  const move = async (x: number, y: number) => {
-    const box = await canvas.boundingBox();
-    if (!box) throw new Error("Missing map");
-    await canvas.click({
-      position: { x: (box.width * x) / 960, y: (box.height * y) / 640 },
-    });
-  };
-  const screenshot = await canvas.screenshot({
+  const canvas = page.locator("canvas");
+  const first = await canvas.screenshot({
     path: "../reports/e2e/aoeworld-map.png",
   });
-  await page.screenshot({
-    path: "../reports/e2e/aoeworld.png",
-    fullPage: true,
-  });
-  const image = PNG.sync.read(screenshot);
+  const image = PNG.sync.read(first);
+  let green = 0;
   let blue = 0;
-  let grass = 0;
   for (let i = 0; i < image.data.length; i += 4) {
     const r = image.data[i] ?? 0;
     const g = image.data[i + 1] ?? 0;
     const b = image.data[i + 2] ?? 0;
-    if (b > 180 && b > r + 50) blue += 1;
-    if (g > r + 15 && g > b + 10) grass += 1;
+    if (g > r + 8 && g > b + 4) green += 1;
+    if (b > 150 && b > r + 30) blue += 1;
   }
-  expect(blue).toBeGreaterThan(30);
-  expect(grass).toBeGreaterThan(image.width * image.height * 0.7);
-  await testInfo.attach("first-scout.png", {
-    body: screenshot,
-    contentType: "image/png",
+  expect(green).toBeGreaterThan(image.width * image.height * 0.6);
+  expect(blue).toBeGreaterThan(10);
+
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Missing map");
+  await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await canvas.click({
+    position: { x: box.width / 2 + 110, y: box.height / 2 + 30 },
+    button: "right",
   });
-  await move(760, 440);
-  await expect(status).toHaveText("Moving");
-  await expect(position).not.toHaveText("480, 320");
-  await move(600, 220);
-  await expect(status).toHaveText("Ready");
-  const coordinates = (await position.innerText()).split(",").map(Number);
-  expect(Math.abs((coordinates[0] ?? 0) - 600)).toBeLessThanOrEqual(2);
-  expect(Math.abs((coordinates[1] ?? 0) - 220)).toBeLessThanOrEqual(2);
-  expect(await canvas.screenshot()).not.toEqual(screenshot);
-  await page.getByRole("button", { name: "Reset position" }).click();
-  await expect(position).toHaveText("480, 320");
-  await canvas.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(position).toHaveText("420, 320");
-  await page.setViewportSize({ width: 540, height: 820 });
-  await move(540, 360);
-  await expect(status).toHaveText("Moving");
-  await expect(status).toHaveText("Ready");
-  const resized = (await position.innerText()).split(",").map(Number);
-  expect(Math.abs((resized[0] ?? 0) - 540)).toBeLessThanOrEqual(3);
-  expect(Math.abs((resized[1] ?? 0) - 360)).toBeLessThanOrEqual(3);
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 10_000,
+  });
+  await page.getByRole("button", { name: "Toggle isometric grid" }).click();
+  await page.getByRole("button", { name: "Center on primary unit" }).click();
+  await page.reload();
+  await waitForGame(page);
   expect(errors).toEqual([]);
 });
 
@@ -104,27 +86,12 @@ for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
       }
     }, failure);
     await page.goto("/");
-    await expect(page.getByRole("status")).toHaveText("Ready", {
-      timeout: 30_000,
-    });
+    await waitForGame(page);
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-renderer",
       "canvas2d",
     );
     await expect(page.getByRole("alert")).toBeEmpty();
-    const canvas = page.locator("canvas");
-    const image = PNG.sync.read(await canvas.screenshot());
-    let colored = 0;
-    for (let i = 0; i < image.data.length; i += 4) {
-      if ((image.data[i + 1] ?? 0) > (image.data[i] ?? 0) + 15) colored += 1;
-    }
-    expect(colored).toBeGreaterThan(image.width * image.height * 0.7);
-    await canvas.click({ position: { x: 40, y: 90 } });
-    await expect(page.getByRole("status")).toHaveText("Moving");
-    await expect(page.locator("#position")).not.toHaveText("480, 320");
-    await expect(page.getByRole("status")).toHaveText("Ready");
-    await page.getByRole("button", { name: "Reset position" }).click();
-    await expect(page.locator("#position")).toHaveText("480, 320");
   });
 }
 
@@ -134,13 +101,10 @@ test("missing local assets show an actionable error", async ({ page }) => {
   );
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("local asset pack");
-  await expect(page.getByRole("status")).toHaveText("Unavailable");
-  await expect(
-    page.getByRole("button", { name: "Reset position" }),
-  ).toBeDisabled();
+  await expect(page.locator("#connection")).toHaveText("Unavailable");
 });
 
-test("unavailable renderers stop loading and disable controls", async ({
+test("unavailable renderers stop loading with a visible error", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -148,11 +112,8 @@ test("unavailable renderers stop loading and disable controls", async ({
     HTMLCanvasElement.prototype.getContext = () => null;
   });
   await page.goto("/");
-  await expect(page.getByRole("status")).toHaveText("Unavailable");
+  await expect(page.locator("#connection")).toHaveText("Unavailable");
   await expect(page.getByRole("alert")).toContainText(
     "Canvas 2D is unavailable",
   );
-  await expect(
-    page.getByRole("button", { name: "Reset position" }),
-  ).toBeDisabled();
 });

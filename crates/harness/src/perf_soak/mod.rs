@@ -216,9 +216,10 @@ mod tests {
                 &path,
                 MAX_RETAINED_RSS_BYTES,
                 || {
-                    let mut sample = ClientResult::default();
-                    sample.snapshots = 63;
-                    Ok(sample)
+                    Ok(ClientResult {
+                        snapshots: 63,
+                        ..Default::default()
+                    })
                 }
             )
             .is_err()
@@ -241,10 +242,11 @@ mod tests {
         assert_eq!(failed["verdict"], "INCONCLUSIVE");
         assert!(
             run_for(Duration::ZERO, "test", &path, 0, || {
-                let mut sample = ClientResult::default();
-                sample.snapshots = 64;
-                sample.deltas = 128;
-                Ok(sample)
+                Ok(ClientResult {
+                    snapshots: 64,
+                    deltas: 128,
+                    ..Default::default()
+                })
             })
             .is_err()
         );

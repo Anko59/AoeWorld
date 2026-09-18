@@ -5,48 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AoeWorld</title>
   <style>
+    :root { color-scheme: dark; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #101b19; color: #e3e8d7; font: 15px system-ui, sans-serif; }
-    main { max-width: 1120px; margin: auto; padding: 18px 24px; }
-    header, .bar, footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    header { margin-bottom: 14px; }
-    .brand { font-weight: 650; letter-spacing: .12em; font-size: 16px; }
-    .tag, .eyebrow { color: #a9b8a0; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; }
-    .tag { border: 1px solid #405246; border-radius: 30px; padding: 8px 12px; }
-    h1 { font: 38px Georgia, serif; margin: 10px 0; font-weight: normal; }
-    .intro { color: #aab7ac; margin: 0 0 14px; line-height: 1.6; }
-    .map { width: min(100%, calc((100dvh - 220px) * 1.5)); margin: auto; border: 1px solid #56664b; padding: 7px; background: #25362a; box-shadow: 0 18px 65px #0004; }
-    canvas { display: block; width: 100%; aspect-ratio: 3 / 2; cursor: crosshair; touch-action: none; }
-    canvas:focus-visible { outline: 2px solid #e8cb80; outline-offset: 3px; }
-    .bar { width: min(100%, calc((100dvh - 220px) * 1.5)); margin: auto; padding: 16px 18px; background: #1c2a24; border: 1px solid #354739; border-top: 0; }
-    .unit { display: flex; align-items: center; gap: 12px; }
-    .badge { color: #8dcbea; font-size: 26px; }
-    small { color: #9bad9e; display: block; margin-top: 4px; }
-    #unit-status { color: #c8d99e; }
-    button { color: #e2e7d6; border: 1px solid #52634d; background: #2b3b2d; padding: 10px 16px; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #3c5039; }
-    footer { color: #84988b; font-size: 12px; margin-top: 18px; flex-wrap: wrap; }
-    a { color: #b8c7ad; }
-    #unsupported { color: #ffd09b; line-height: 1.6; }
-    @media (max-width: 600px) { main { padding: 20px 12px; } h1 { font-size: 30px; } .coordinates { display: none; } }
+    html, body, #playground { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #172516; color: #e8efd9; font: 14px system-ui, sans-serif; }
+    #scene { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; outline: none; }
+    #controls { position: fixed; top: 14px; right: 14px; z-index: 2; display: flex; gap: 7px; }
+    button { color: #eef6dc; background: #243c25dd; border: 1px solid #78915d; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
+    button:hover { background: #3e5a35; }
+    #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; }
+    #connection { color: #d2e5a7; }
+    #unsupported { position: fixed; left: 14px; top: 14px; z-index: 3; max-width: 420px; color: #ffd29a; }
   </style>
 </head>
 <body>
-<main id="playground">
-  <header><span class="brand">AoeWorld</span><span class="tag">Single player</span></header>
-  <p class="intro">Your cavalry is selected. Click or tap the map to move. Click again to change direction.</p>
-  <div class="map"><canvas id="scene" width="960" height="640" tabindex="0" aria-label="AoeWorld map. Click to move, or focus and use arrow keys or WASD."></canvas></div>
-  <div class="bar">
-    <div class="unit"><span class="badge" aria-hidden="true">◆</span><div><strong>Cavalry</strong><small>Selected · <span id="unit-status" role="status">Loading…</span></small></div></div>
-    <div class="coordinates"><span class="eyebrow">Map position</span><small id="position">480, 320</small></div>
-    <button id="reset" type="button" disabled>Reset position</button>
-  </div>
-  <p id="unsupported" role="alert"></p>
-  <footer><span>Click to move · Arrow keys / WASD when map is focused</span><span>AoeWorld · Age of Empires II local assets</span></footer>
-</main>
-<script type="module">
-  import init from '/pkg/aoe_client.js';
-  init().catch(error => { document.getElementById('unit-status').textContent = 'Unavailable'; document.getElementById('unsupported').textContent = `Unable to load the game: ${error}. Reload to retry.`; });
-</script>
+  <main id="playground">
+    <canvas id="scene" tabindex="0" aria-label="AoeWorld isometric map. Select a unit and right-click to move."></canvas>
+    <nav id="controls" aria-label="Map controls">
+      <button id="fullscreen" type="button" aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
+      <button id="recenter" type="button" aria-label="Center on primary unit" title="Center unit">⌾</button>
+      <button id="grid" type="button" aria-label="Toggle isometric grid" title="Grid">▦</button>
+      <button id="reconnect" type="button" aria-label="Reconnect to server" title="Reconnect">↻</button>
+    </nav>
+    <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
+    <p id="unsupported" role="alert"></p>
+  </main>
+  <script type="module">
+    import init from '/pkg/aoe_client.js';
+    init().catch(error => {
+      document.getElementById('connection').textContent = 'Unavailable';
+      document.getElementById('unsupported').textContent = `Unable to start AoeWorld: ${error}`;
+    });
+  </script>
 </body>
 </html>

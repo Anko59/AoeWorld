@@ -1,7 +1,8 @@
 # Performance evidence
 
-`make perf-smoke` runs the 8-client, 8,000-entity scenario through actual local
-WebSocket connections. `make perf-ci` adds the 64-client, 128,000-entity
+`make perf-smoke` runs the 8-client, 8,000-entity scenario through the
+authoritative gameplay WebSocket at `/game/ws`, using the production
+`GameWorld`. `make perf-ci` adds the 64-client, 128,000-entity
 distributed and hotspot scenarios. `make perf-full` adds a comparable
 8k/32k/64k/128k population series with 2,000 units per client and fixed seed
 and map dimensions. It also adds two sparse-world scenarios: they contain

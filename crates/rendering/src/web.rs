@@ -281,6 +281,14 @@ impl Renderer {
     }
 
     pub(crate) fn render_sprites(&mut self, sprites: &[Sprite]) -> Result<Counters, String> {
+        self.render_sprites_with_clear(sprites, [0.055, 0.08, 0.12, 1.0])
+    }
+
+    pub(crate) fn render_sprites_with_clear(
+        &mut self,
+        sprites: &[Sprite],
+        clear: [f64; 4],
+    ) -> Result<Counters, String> {
         if !sprites.is_empty() {
             self.queue
                 .write_buffer(&self.buffer, 0, bytemuck::cast_slice(sprites));
@@ -334,10 +342,10 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.055,
-                            g: 0.08,
-                            b: 0.12,
-                            a: 1.0,
+                            r: clear[0],
+                            g: clear[1],
+                            b: clear[2],
+                            a: clear[3],
                         }),
                         store: wgpu::StoreOp::Store,
                     },

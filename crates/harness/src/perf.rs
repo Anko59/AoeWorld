@@ -1,23 +1,16 @@
 //! Synthetic performance evidence. Timing is informational on shared hosts.
-use aoe_core::Region;
-use aoe_protocol::{ClientMessage, ServerMessage, VERSION, decode_server, encode_client};
+use aoe_core::{Region, TileRect, WorldConfig};
 use aoe_scenario::{
     POPULATION_8K, POPULATION_32K, POPULATION_64K, POPULATION_128K, SMOKE, SPARSE_LARGE,
     SPARSE_SMALL, Scenario, TARGET_DISTRIBUTED, TARGET_HOTSPOT,
 };
-use aoe_server::{AppState, Config, app};
-use aoe_simulation::World;
-use futures_util::{SinkExt, StreamExt, future::join_all};
+use aoe_simulation::GameWorld;
 use serde::Serialize;
-use std::{
-    error::Error,
-    fs,
-    net::SocketAddr,
-    process::Command,
-    time::{Duration, Instant},
-};
-use tokio::{net::TcpListener, time::timeout};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use std::{error::Error, fs, process::Command, time::Instant};
+
+#[path = "perf/network.rs"]
+mod network;
+pub(crate) use network::{ClientResult, gameplay_network, network, receive, send};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -139,7 +132,7 @@ pub(crate) fn region(scenario: Scenario, client: u16) -> Region {
 }
 
 struct OfflineResult {
-    world: World,
+    world: GameWorld,
     tick_duration_ns: Vec<u64>,
     visited_chunks: u32,
     candidates: u32,
@@ -147,9 +140,33 @@ struct OfflineResult {
 }
 
 fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
-    let mut world = World::new(scenario);
-    if world.entities().len() != scenario.entities as usize {
+    let config = WorldConfig {
+        width_tiles: scenario.world_size,
+        height_tiles: scenario.world_size,
+        seed: scenario.seed,
+        ..WorldConfig::default()
+    };
+    let mut world = GameWorld::with_population_in_extent(
+        config,
+        scenario.entities,
+        scenario.hotspot_entities,
+        scenario.players,
+        scenario.active_extent,
+    )?;
+    if world.unit_count() != scenario.entities as usize {
         return Err("population mismatch".into());
+    }
+    let moving = world
+        .units()
+        .take((scenario.entities as usize / 100).min(512))
+        .map(|unit| (unit.id, unit.position))
+        .collect::<Vec<_>>();
+    for (id, position) in moving {
+        let destination = aoe_core::WorldPosition::new(
+            position.x.saturating_add(4_096),
+            position.y.saturating_add(2_048),
+        );
+        let _ = world.issue_move(id, destination);
     }
     let mut tick_duration_ns = Vec::new();
     for _ in 0..4 {
@@ -157,7 +174,13 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
         world.advance();
         tick_duration_ns.push(start.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64);
     }
-    let (visible, stats) = world.query_with_stats(region(scenario, 0));
+    let requested = region(scenario, 0);
+    let (visible, stats) = world.query(TileRect::from_xywh(
+        requested.x,
+        requested.y,
+        i32::from(requested.width),
+        i32::from(requested.height),
+    ));
     if scenario.hotspot_entities > 0 && visible.len() < scenario.hotspot_entities as usize {
         return Err("hotspot visibility fell below workload definition".into());
     }
@@ -165,135 +188,9 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
         world,
         tick_duration_ns,
         visited_chunks: stats.visited_chunks,
-        candidates: stats.candidate_entities,
+        candidates: stats.candidate_units,
         visible: visible.len(),
     })
-}
-
-pub(crate) async fn receive(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-) -> Result<(ServerMessage, usize), Box<dyn Error + Send + Sync>> {
-    let frame = timeout(Duration::from_secs(20), socket.next())
-        .await?
-        .ok_or("connection closed")??;
-    let Message::Binary(bytes) = frame else {
-        return Err("nonbinary protocol frame".into());
-    };
-    Ok((decode_server(&bytes)?, bytes.len()))
-}
-
-pub(crate) async fn send(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-    message: ClientMessage,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    socket
-        .send(Message::Binary(encode_client(&message)?.into()))
-        .await?;
-    Ok(())
-}
-
-#[derive(Default)]
-pub(crate) struct ClientResult {
-    pub(crate) snapshots: u16,
-    pub(crate) deltas: u64,
-    replicated: u64,
-    pub(crate) bytes: u64,
-    visible: usize,
-}
-
-fn initial_client_result(handshake_bytes: usize) -> ClientResult {
-    ClientResult {
-        bytes: handshake_bytes as u64,
-        ..Default::default()
-    }
-}
-
-async fn client(
-    address: SocketAddr,
-    scenario: Scenario,
-    index: u16,
-) -> Result<ClientResult, Box<dyn Error + Send + Sync>> {
-    let (mut socket, _) = timeout(
-        Duration::from_secs(20),
-        connect_async(format!("ws://{address}/ws")),
-    )
-    .await??;
-    send(&mut socket, ClientMessage::Hello { version: VERSION }).await?;
-    let (hello, size) = receive(&mut socket).await?;
-    if !matches!(
-        hello,
-        ServerMessage::Hello {
-            version: VERSION,
-            ..
-        }
-    ) {
-        return Err("handshake mismatch".into());
-    }
-    let mut result = initial_client_result(size);
-    send(
-        &mut socket,
-        ClientMessage::Subscribe {
-            region: region(scenario, index),
-        },
-    )
-    .await?;
-    let (snapshot, size) = receive(&mut socket).await?;
-    let ServerMessage::Snapshot {
-        total_entities,
-        entities,
-        ..
-    } = snapshot
-    else {
-        return Err("snapshot missing".into());
-    };
-    if total_entities != scenario.entities {
-        return Err("server population mismatch".into());
-    }
-    result.snapshots = 1;
-    result.replicated = entities.len() as u64;
-    result.visible = entities.len();
-    result.bytes += size as u64;
-    for _ in 0..2 {
-        let (message, size) = receive(&mut socket).await?;
-        if !matches!(message, ServerMessage::Delta { .. }) {
-            return Err("delta missing".into());
-        }
-        result.deltas += 1;
-        result.bytes += size as u64;
-    }
-    Ok(result)
-}
-
-pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn Error>> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let config = Config {
-        bind: address,
-        scenario,
-        tick_hz: 20,
-        asset_pack: None,
-    };
-    let state = AppState::new(&config, "perf-local");
-    let ticker = tokio::spawn(state.clone().run_ticks());
-    let server = tokio::spawn(async move { axum::serve(listener, app(state)).await });
-    let clients =
-        join_all((0..scenario.players).map(|index| client(address, scenario, index))).await;
-    ticker.abort();
-    server.abort();
-    let mut combined = ClientResult::default();
-    for item in clients {
-        let item = item.map_err(|error| error.to_string())?;
-        combined.snapshots += item.snapshots;
-        combined.deltas += item.deltas;
-        combined.replicated += item.replicated;
-        combined.bytes += item.bytes;
-        combined.visible = combined.visible.max(item.visible);
-    }
-    Ok(combined)
 }
 
 pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
@@ -322,7 +219,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     for scenario in scenarios {
         let start = Instant::now();
         let offline = offline(*scenario)?;
-        let connection = runtime.block_on(network(*scenario))?;
+        let connection = runtime.block_on(gameplay_network(*scenario))?;
         if connection.snapshots != scenario.players
             || connection.deltas != u64::from(scenario.players) * 2
         {
@@ -338,10 +235,10 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             workload_hash: scenario.workload_hash(),
             total_entities: scenario.entities,
             active_entities: scenario.entities,
-            resident_entities: offline.world.entities().len() as u32,
+            resident_entities: offline.world.unit_count() as u32,
             replicated_entities: connection.replicated,
             max_visible_entities: offline.visible.max(connection.visible),
-            loaded_chunks: offline.world.loaded_chunks(),
+            loaded_chunks: offline.world.occupied_chunk_count(),
             query_visited_chunks: offline.visited_chunks,
             query_candidates: offline.candidates,
             clients_expected: scenario.players,
@@ -466,7 +363,7 @@ mod tests {
 
     #[test]
     fn comparator_rejects_missing_and_regressed_samples() {
-        assert_eq!(initial_client_result(37).bytes, 37);
+        assert_eq!(network::initial_client_result(37).bytes, 37);
         assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);
         assert_eq!(compare("x", Some(100), None).verdict, Verdict::Unbaselined);
         assert_eq!(compare("x", Some(105), Some(100)).verdict, Verdict::Pass);

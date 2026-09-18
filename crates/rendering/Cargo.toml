@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+aoe-core.workspace = true
 aoe-protocol.workspace = true
 bytemuck = { version = "1.23", features = ["derive"] }
 web-sys = { version = "0.3", features = ["HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData", "Document", "Element", "Node"] }

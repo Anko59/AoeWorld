@@ -121,6 +121,7 @@ name = "aoe-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -163,6 +164,7 @@ dependencies = [
 name = "aoe-rendering"
 version = "0.1.0"
 dependencies = [
+ "aoe-core",
  "aoe-protocol",
  "bytemuck",
  "wasm-bindgen",
@@ -207,6 +209,7 @@ dependencies = [
  "blake3",
  "criterion",
  "gungraun",
+ "thiserror",
 ]
 
 [[package]]
