@@ -8,7 +8,8 @@ use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
 };
-use std::path::Path;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterDimensions {
@@ -24,6 +25,60 @@ pub enum GeodataError {
     Projection,
     #[error("PROJ could not project the requested coordinate")]
     Coordinate,
+}
+
+/// A bounded native-worker operation passed on stdin by a direct process spawn.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum WorkerRequest {
+    InspectRaster {
+        path: PathBuf,
+    },
+    ProjectPoint {
+        center_latitude_e7: i32,
+        center_longitude_e7: i32,
+        longitude: f64,
+        latitude: f64,
+    },
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum WorkerResponse {
+    RasterDimensions { width: usize, height: usize },
+    ProjectedPoint { east_meters: i64, north_meters: i64 },
+}
+
+pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
+    match request {
+        WorkerRequest::InspectRaster { path } => {
+            let dimensions = raster_dimensions(&path)?;
+            Ok(WorkerResponse::RasterDimensions {
+                width: dimensions.width,
+                height: dimensions.height,
+            })
+        }
+        WorkerRequest::ProjectPoint {
+            center_latitude_e7,
+            center_longitude_e7,
+            longitude,
+            latitude,
+        } => {
+            let definition = local_aeqd_definition(center_latitude_e7, center_longitude_e7);
+            let (east_meters, north_meters) = project_wgs84(&definition, longitude, latitude)?;
+            Ok(WorkerResponse::ProjectedPoint {
+                east_meters: round_meters(east_meters)?,
+                north_meters: round_meters(north_meters)?,
+            })
+        }
+    }
+}
+
+fn round_meters(value: f64) -> Result<i64, GeodataError> {
+    if !value.is_finite() || value.abs() > i64::MAX as f64 {
+        return Err(GeodataError::Coordinate);
+    }
+    Ok(value.round() as i64)
 }
 
 pub fn raster_dimensions(path: &Path) -> Result<RasterDimensions, GeodataError> {
@@ -69,5 +124,23 @@ mod tests {
         let (east, north) = project_wgs84(&definition, 2.35, 48.85).expect("projection");
         assert!(east.abs() < 0.01);
         assert!(north.abs() < 0.01);
+    }
+
+    #[test]
+    fn worker_projects_the_requested_center_to_zero_meters() {
+        let response = execute(WorkerRequest::ProjectPoint {
+            center_latitude_e7: 488_500_000,
+            center_longitude_e7: 23_500_000,
+            longitude: 2.35,
+            latitude: 48.85,
+        })
+        .expect("projected point");
+        assert_eq!(
+            response,
+            WorkerResponse::ProjectedPoint {
+                east_meters: 0,
+                north_meters: 0,
+            }
+        );
     }
 }
