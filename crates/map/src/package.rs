@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub struct ProjectionMetadata {
     pub horizontal_crs: String,
     pub vertical_datum: VerticalDatum,
+    /// GDAL/PROJ version used to prepare the frozen environmental fields.
+    pub tool_version: String,
 }
 
 impl Default for ProjectionMetadata {
@@ -12,6 +14,7 @@ impl Default for ProjectionMetadata {
         Self {
             horizontal_crs: "fallback-local-grid-v1".to_owned(),
             vertical_datum: VerticalDatum::UnspecifiedFallback,
+            tool_version: "unavailable-fallback".to_owned(),
         }
     }
 }
@@ -58,9 +61,13 @@ pub struct SourceLock {
     pub release: String,
     pub url: String,
     pub sha256: [u8; 32],
+    /// Informational acquisition time, excluded from canonical map identity.
+    pub acquired_at: String,
     pub native_resolution_millimeters: u64,
     pub crs: String,
+    pub vertical_datum: String,
     pub license: String,
+    pub preprocessing_version: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -115,11 +122,22 @@ impl MapPackage {
         let estimate = request.estimate()?;
         source_locks.sort_by(|left, right| left.id.cmp(&right.id));
         if source_locks.windows(2).any(|pair| pair[0].id == pair[1].id)
-            || source_locks.iter().any(|source| source.id.is_empty())
+            || source_locks.iter().any(|source| {
+                source.id.is_empty()
+                    || source.release.is_empty()
+                    || source.url.is_empty()
+                    || source.acquired_at.is_empty()
+                    || source.native_resolution_millimeters == 0
+                    || source.crs.is_empty()
+                    || source.vertical_datum.is_empty()
+                    || source.license.is_empty()
+                    || source.preprocessing_version.is_empty()
+            })
         {
             return Err(MapPackageError::InvalidSourceLocks);
         }
-        if projection.horizontal_crs.trim().is_empty() {
+        if projection.horizontal_crs.trim().is_empty() || projection.tool_version.trim().is_empty()
+        {
             return Err(MapPackageError::InvalidProjection);
         }
         let content_hash = hash_package(
@@ -131,7 +149,7 @@ impl MapPackage {
             true,
         );
         Ok(Self {
-            schema_version: 1,
+            schema_version: crate::MAP_SCHEMA_VERSION,
             generator_version,
             request,
             estimate,
@@ -225,6 +243,7 @@ fn hash_package(
     }
     hash_field(&mut hash, projection.horizontal_crs.as_bytes());
     hash.update(&[projection.vertical_datum as u8]);
+    hash_field(&mut hash, projection.tool_version.as_bytes());
     hash.update(&[
         provenance.elevation as u8,
         provenance.water as u8,
@@ -236,9 +255,13 @@ fn hash_package(
         hash_field(&mut hash, source.release.as_bytes());
         hash_field(&mut hash, source.url.as_bytes());
         hash.update(&source.sha256);
+        // Acquisition time is provenance, not a prepared input. It must not
+        // make identical packages hash differently across cache refreshes.
         hash.update(&source.native_resolution_millimeters.to_le_bytes());
         hash_field(&mut hash, source.crs.as_bytes());
+        hash_field(&mut hash, source.vertical_datum.as_bytes());
         hash_field(&mut hash, source.license.as_bytes());
+        hash_field(&mut hash, source.preprocessing_version.as_bytes());
     }
     *hash.finalize().as_bytes()
 }
@@ -258,9 +281,12 @@ mod tests {
             release: "test".to_owned(),
             url: "https://example.invalid/test".to_owned(),
             sha256: [7; 32],
+            acquired_at: "2026-09-18T00:00:00Z".to_owned(),
             native_resolution_millimeters: 30_000,
             crs: "EPSG:4326".to_owned(),
+            vertical_datum: "EGM2008".to_owned(),
             license: "test-only".to_owned(),
+            preprocessing_version: "test-v1".to_owned(),
         }
     }
 
@@ -322,6 +348,7 @@ mod tests {
                 ProjectionMetadata {
                     horizontal_crs: " ".to_owned(),
                     vertical_datum: VerticalDatum::UnspecifiedFallback,
+                    tool_version: "test".to_owned(),
                 },
             ),
             Err(MapPackageError::InvalidProjection)
@@ -334,6 +361,7 @@ mod tests {
             ProjectionMetadata {
                 horizontal_crs: "EPSG:3857".to_owned(),
                 vertical_datum: VerticalDatum::Egm2008Orthometric,
+                tool_version: "GDAL 3.6.2 / PROJ 9.1.1".to_owned(),
             },
         )
         .expect("package");
@@ -357,5 +385,20 @@ mod tests {
         )
         .expect("package");
         assert_ne!(fallback.content_hash, sourced.content_hash);
+    }
+
+    #[test]
+    fn acquisition_time_is_not_a_content_input_but_preprocessing_is() {
+        let first =
+            MapPackage::new(1, MapRequest::default(), vec![source("elevation")]).expect("package");
+        let mut later_source = source("elevation");
+        later_source.acquired_at = "2026-09-19T00:00:00Z".to_owned();
+        let later = MapPackage::new(1, MapRequest::default(), vec![later_source]).expect("package");
+        assert_eq!(first.content_hash, later.content_hash);
+        let mut altered_source = source("elevation");
+        altered_source.preprocessing_version = "test-v2".to_owned();
+        let altered =
+            MapPackage::new(1, MapRequest::default(), vec![altered_source]).expect("package");
+        assert_ne!(first.content_hash, altered.content_hash);
     }
 }
