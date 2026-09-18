@@ -1,4 +1,4 @@
-//! Checkout-scoped Docker lifecycle for the local synthetic lab.
+//! Checkout-scoped Docker lifecycle for the local AoeWorld server.
 use std::{
     error::Error,
     io::{Read, Write},
@@ -152,7 +152,7 @@ fn start_with<R: Runtime>(
 ) -> Result<()> {
     let name = name(root);
     if running(runtime, &name)? {
-        println!("AoeWorld Harness Lab already running: http://127.0.0.1:8080");
+        println!("AoeWorld already running: http://127.0.0.1:8080");
         return Ok(());
     }
     if exists(runtime, &name)? {
@@ -208,7 +208,7 @@ fn start_with<R: Runtime>(
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
         if runtime.healthy() {
-            println!("AoeWorld Harness Lab: http://127.0.0.1:8080");
+            println!("AoeWorld: http://127.0.0.1:8080");
             return Ok(());
         }
         if !running(runtime, &name)? {
@@ -230,7 +230,7 @@ fn down_with<R: Runtime>(runtime: &R, name: &str) -> Result<()> {
     if exists(runtime, name)? {
         runtime.docker(&["stop", name])?;
     }
-    println!("AoeWorld Harness Lab stopped: {name}");
+    println!("AoeWorld stopped: {name}");
     Ok(())
 }
 

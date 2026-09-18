@@ -1,12 +1,16 @@
 //! HTTP and bounded WebSocket adapter for the synthetic world.
 mod config;
+mod gameplay;
+mod gameplay_transport;
 pub use config::Config;
+pub use gameplay::GameplayService;
 
 use aoe_core::{EntityId, Region, Tick};
 use aoe_protocol::{
     ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
-use aoe_simulation::{Entity, World};
+use aoe_scenario::Scenario;
+use aoe_simulation::{Entity, GameWorldError, World};
 use axum::{
     Json, Router,
     extract::{
@@ -36,23 +40,55 @@ use tower_http::services::ServeDir;
 
 #[derive(Clone)]
 pub struct AppState {
-    world: Arc<RwLock<World>>,
+    world: Arc<RwLock<Option<World>>>,
+    diagnostic_scenario: Scenario,
     generation: Arc<AtomicU64>,
     tick_deadline_misses: Arc<AtomicU64>,
     build: Arc<str>,
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
+    gameplay: GameplayService,
 }
 
 impl AppState {
     pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Self {
         Self {
-            world: Arc::new(RwLock::new(World::new(config.scenario))),
+            world: Arc::new(RwLock::new(None)),
+            diagnostic_scenario: config.scenario,
             generation: Arc::new(AtomicU64::new(0)),
             tick_deadline_misses: Arc::new(AtomicU64::new(0)),
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
+            gameplay: GameplayService::new(config.scenario.seed),
+        }
+    }
+
+    pub fn with_gameplay_population(
+        config: &Config,
+        build: impl Into<Arc<str>>,
+    ) -> Result<Self, GameWorldError> {
+        let mut state = Self::new(config, build);
+        let gameplay_config = aoe_core::WorldConfig {
+            width_tiles: config.scenario.world_size,
+            height_tiles: config.scenario.world_size,
+            seed: config.scenario.seed,
+            ..aoe_core::WorldConfig::default()
+        };
+        state.gameplay = GameplayService::with_population(
+            gameplay_config,
+            config.scenario.entities,
+            config.scenario.hotspot_entities,
+            config.scenario.players,
+            config.scenario.active_extent,
+        )?;
+        Ok(state)
+    }
+
+    async fn ensure_diagnostic_world(&self) {
+        let mut world = self.world.write().await;
+        if world.is_none() {
+            *world = Some(World::new(self.diagnostic_scenario));
         }
     }
 
@@ -62,7 +98,10 @@ impl AppState {
         loop {
             let scheduled = interval.tick().await;
             let started = tokio::time::Instant::now();
-            self.world.write().await.advance();
+            if let Some(world) = self.world.write().await.as_mut() {
+                world.advance();
+            }
+            self.gameplay.tick().await;
             if started.duration_since(scheduled) > self.tick_period
                 || started.elapsed() > self.tick_period
             {
@@ -88,7 +127,19 @@ struct Health {
 }
 
 async fn health(State(state): State<AppState>) -> Json<Health> {
-    let world = state.world.read().await;
+    state.ensure_diagnostic_world().await;
+    let world_guard = state.world.read().await;
+    let Some(world) = world_guard.as_ref() else {
+        return Json(Health {
+            status: "unavailable",
+            build: state.build.to_string(),
+            scenario: state.diagnostic_scenario.name.to_owned(),
+            tick: 0,
+            entities: 0,
+            loaded_chunks: 0,
+            tick_deadline_misses: state.tick_deadline_misses(),
+        });
+    };
     Json(Health {
         status: "ok",
         build: state.build.to_string(),
@@ -142,15 +193,26 @@ async fn select_scenario(
     let next = tokio::task::spawn_blocking(move || World::new(scenario))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    *state.world.write().await = next;
+    *state.world.write().await = Some(next);
     state.generation.fetch_add(1, Ordering::SeqCst);
     Ok(health(State(state)).await)
 }
 
 async fn websocket(State(state): State<AppState>, upgrade: WebSocketUpgrade) -> impl IntoResponse {
+    state.ensure_diagnostic_world().await;
     upgrade
         .max_message_size(aoe_protocol::MAX_MESSAGE)
         .on_upgrade(move |socket| client(socket, state))
+}
+
+async fn gameplay_websocket(
+    State(state): State<AppState>,
+    upgrade: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let gameplay = state.gameplay.clone();
+    upgrade
+        .max_message_size(aoe_protocol::GAMEPLAY_MAX_MESSAGE)
+        .on_upgrade(move |socket| gameplay_transport::handle_socket(gameplay, socket))
 }
 
 pub fn app(state: AppState) -> Router {
@@ -160,6 +222,7 @@ pub fn app(state: AppState) -> Router {
         .route("/replay-hash", get(replay_hash))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
+        .route("/game/ws", get(gameplay_websocket))
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);
     if let Some(pack) = asset_pack {
@@ -213,11 +276,12 @@ async fn snapshot(
     state: &AppState,
     region: Region,
 ) -> Option<(Tick, BTreeMap<EntityId, EntityState>)> {
-    let world = state.world.read().await;
+    let world_guard = state.world.read().await;
+    let world = world_guard.as_ref()?;
     let tick = world.tick();
     let entities = states(world.query(region));
     if entities.len() > MAX_ENTITIES {
-        drop(world);
+        drop(world_guard);
         error(
             socket,
             413,
@@ -233,7 +297,7 @@ async fn snapshot(
         loaded_chunks: world.loaded_chunks() as u32,
         total_entities: world.entities().len() as u32,
     };
-    drop(world);
+    drop(world_guard);
     send(socket, response).await.then_some((tick, entities))
 }
 
@@ -253,7 +317,13 @@ async fn client(mut socket: WebSocket, state: AppState) {
             return;
         }
     }
-    let scenario = state.world.read().await.scenario();
+    let scenario = state
+        .world
+        .read()
+        .await
+        .as_ref()
+        .map(World::scenario)
+        .unwrap_or(state.diagnostic_scenario);
     if !send(
         &mut socket,
         ServerMessage::Hello {
@@ -280,7 +350,7 @@ async fn client(mut socket: WebSocket, state: AppState) {
             incoming = socket.next() => {
                 let Some(Ok(Message::Binary(bytes))) = incoming else { break; };
                 match decode_client(&bytes) {
-                    Ok(ClientMessage::Subscribe { region: requested }) if requested.valid(state.world.read().await.scenario().world_size) => {
+                    Ok(ClientMessage::Subscribe { region: requested }) if requested.valid(state.world.read().await.as_ref().map_or(state.diagnostic_scenario.world_size, |world| world.scenario().world_size)) => {
                         region = Some(requested);
                         if let Some((tick, entities)) = snapshot(&mut socket, &state, requested).await { last_tick = tick; previous = entities; } else { break; }
                     }
@@ -298,16 +368,23 @@ async fn client(mut socket: WebSocket, state: AppState) {
                     observed_generation = generation;
                     region = None;
                     previous.clear();
-                    let scenario = state.world.read().await.scenario();
+                    let scenario = state
+                        .world
+                        .read()
+                        .await
+                        .as_ref()
+                        .map(World::scenario)
+                        .unwrap_or(state.diagnostic_scenario);
                     if !send(&mut socket, ServerMessage::Hello { version: VERSION, build: state.build.to_string(), scenario: scenario.name.to_owned(), world_size: scenario.world_size }).await { break; }
                     continue;
                 }
                 let Some(requested) = region else { continue; };
-                let world = state.world.read().await;
+                let world_guard = state.world.read().await;
+                let Some(world) = world_guard.as_ref() else { continue; };
                 if world.tick() == last_tick { continue; }
                 let tick = world.tick();
                 let next = states(world.query(requested));
-                drop(world);
+                drop(world_guard);
                 if next.len() > MAX_ENTITIES {
                     error(&mut socket, 413, "subscribed region exceeds protocol entity limit").await;
                     break;

@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 test("software WebGPU renders a synthetic scene and camera moves", async ({
   page,
 }, testInfo) => {
-  await page.goto("/");
+  await page.goto("/diagnostics.html");
   const diagnostics = page.getByRole("status");
   await expect(diagnostics).toContainText("connected");
   await expect(diagnostics).toContainText(/adapter: .*WebGpu/);
@@ -51,7 +51,7 @@ test("software WebGPU renders a synthetic scene and camera moves", async ({
 });
 
 test("native and browser replay hashes agree", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/diagnostics.html");
   const response = await page.request.get(
     "/replay-hash?scenario=smoke&ticks=20",
   );
@@ -71,7 +71,7 @@ test("native and browser replay hashes agree", async ({ page }) => {
 test("scenario control changes the authoritative world and rejects invalid names", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/diagnostics.html");
   const diagnostics = page.getByRole("status");
   await expect(diagnostics).toContainText("connected");
   try {
@@ -91,7 +91,7 @@ test("hotspot camera churn retains bounded browser timing and resources", async 
 }, testInfo) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto("/");
+  await page.goto("/diagnostics.html");
   const diagnostics = page.getByRole("status");
   await expect(diagnostics).toContainText("connected");
   try {
@@ -207,7 +207,10 @@ test("two sessions subscribe independently and reconnect", async ({
 }) => {
   const first = await browser.newPage();
   const second = await browser.newPage();
-  await Promise.all([first.goto("/"), second.goto("/")]);
+  await Promise.all([
+    first.goto("/diagnostics.html"),
+    second.goto("/diagnostics.html"),
+  ]);
   await expect(first.getByRole("status")).toContainText("connected");
   await expect(second.getByRole("status")).toContainText("connected");
   for (let i = 0; i < 16; i += 1) await second.keyboard.press("ArrowRight");
@@ -226,7 +229,7 @@ test("unsupported WebGPU shows a capability error", async ({ browser }) => {
     Object.defineProperty(navigator, "gpu", { value: undefined });
   });
   const page = await context.newPage();
-  await page.goto("/");
+  await page.goto("/diagnostics.html");
   await expect(page.getByRole("alert")).toContainText("WebGPU unavailable");
   await context.close();
 });
@@ -234,7 +237,7 @@ test("unsupported WebGPU shows a capability error", async ({ browser }) => {
 test("unknown URL scenario shows visible configuration feedback", async ({
   page,
 }) => {
-  await page.goto("/?scenario=invalid-demo");
+  await page.goto("/diagnostics.html?scenario=invalid-demo");
   await expect(page.getByRole("alert")).toContainText(
     "Unknown scenario configuration",
   );

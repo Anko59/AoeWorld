@@ -359,18 +359,22 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
 async fn initialize() -> Result<(), JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let document = window.document().ok_or("No document")?;
+    if document.get_element_by_id("playground").is_some() {
+        return crate::playground::initialize(document).await;
+    }
     let canvas: HtmlCanvasElement = document
         .get_element_by_id("scene")
         .ok_or("No scene canvas")?
         .dyn_into()?;
     let renderer = Renderer::new(canvas.clone())
         .await
-        .map_err(|error| JsValue::from_str(&error))?;
+        .map_err(|error| JsValue::from_str(&format!("WebGPU unavailable: {error}")))?;
     let adapter = renderer.adapter_label().to_owned();
     let query = web_sys::UrlSearchParams::new_with_str(&window.location().search()?)?;
     if let Some(name) = query.get("scenario") {
         if ["smoke", "target-distributed", "target-hotspot"].contains(&name.as_str()) {
             if let Err(error) = change_scenario(&name).await {
+                set_text(&document, "unit-status", "Unavailable");
                 set_text(
                     &document,
                     "unsupported",
@@ -419,12 +423,16 @@ pub fn start() {
     spawn_local(async {
         if let Err(error) = initialize().await {
             if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+                let status_id = if document.get_element_by_id("playground").is_some() {
+                    "connection"
+                } else {
+                    "unit-status"
+                };
+                set_text(&document, status_id, "Unavailable");
                 set_text(
                     &document,
                     "unsupported",
-                    &format!(
-                        "WebGPU unavailable: {error:?}. Try a WebGPU-capable desktop browser and reload."
-                    ),
+                    &format!("Unable to start AoeWorld: {error:?}. Reload to retry."),
                 );
             }
         }

@@ -23,6 +23,21 @@ baseline. The four instruction and allocation cases in the same proposal
 remained identical. Future compressed WASM growth is still gated at 5% from
 86,725 bytes; this baseline change and rationale are part of the feature PR.
 
+The 2026-09-18 playable world feature adds the authoritative game protocol,
+isometric world and unit simulation, local asset manifest and PNG decoding, and
+WebGPU plus Canvas game rendering to the browser client. The original 86,725-byte
+budget describes the earlier synthetic renderer and is no longer representative
+of the shipped client. The unchanged Rust release build, wasm-bindgen 0.2.128,
+Binaryen 108 `-Oz --strip-debug`, and gzip 1.12 `-n -9` produced 217,240 bytes
+with `make perf-baseline-propose`; the PR CI artifact measured 217,234 bytes.
+A size-focused Rust build measured 193,172 bytes but may cost runtime speed;
+link-time optimization with one codegen unit measured 209,737 bytes. Neither
+restores the old budget. The speed-oriented build remains appropriate until
+gameplay and browser timing can be qualified on dedicated hardware. The
+proposed 217,240-byte value keeps the same 5% regression threshold. The
+instruction and allocation baselines are unchanged; their current comparisons
+pass.
+
 `make perf-baseline-propose` writes fresh measurements to the ignored
 `reports/perf/micro-proposal.json`; it does not change this baseline. Review
 old and new values, scenario/tool versions, and a written rationale before a

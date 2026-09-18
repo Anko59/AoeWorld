@@ -1,6 +1,7 @@
 # Exploratory QA
 
-Start the synthetic lab with `make dev`. In another terminal, run
+Start AoeWorld with `make dev`. This QA adapter targets the development
+diagnostics at `/diagnostics.html`. In another terminal, run
 `make qa-serve` and connect a compatible MCP client to its stdio. The Rust
 server speaks MCP 2025-11-25. It exposes named local browser sessions,
 accessible observations, visible button activation, scenario selection,

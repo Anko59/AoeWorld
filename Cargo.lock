@@ -101,12 +101,15 @@ dependencies = [
 name = "aoe-client"
 version = "0.1.0"
 dependencies = [
+ "aoe-assets",
  "aoe-core",
  "aoe-protocol",
  "aoe-rendering",
  "aoe-scenario",
  "aoe-simulation",
  "js-sys",
+ "png",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -118,6 +121,7 @@ name = "aoe-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -160,8 +164,10 @@ dependencies = [
 name = "aoe-rendering"
 version = "0.1.0"
 dependencies = [
+ "aoe-core",
  "aoe-protocol",
  "bytemuck",
+ "wasm-bindgen",
  "web-sys",
  "wgpu",
 ]
@@ -203,6 +209,7 @@ dependencies = [
  "blake3",
  "criterion",
  "gungraun",
+ "thiserror",
 ]
 
 [[package]]

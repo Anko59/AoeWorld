@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| option_env!("AOE_BUILD_SHA").unwrap_or("local").to_owned());
     let state = AppState::new(&config, build);
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
-    tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld Harness Lab listening");
+    tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld listening");
     tokio::spawn(state.clone().run_ticks());
     axum::serve(listener, app(state)).await?;
     Ok(())

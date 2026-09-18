@@ -6,8 +6,11 @@ native tests through pinned cargo-nextest, followed by separate doctests and a
 WASM build. `make test-wasm` runs Rust `wasm-bindgen-test` cases in pinned
 headless Chromium through a disposable ChromeDriver container. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
-this gate. `make test-e2e` runs Playwright under Xvfb with Vulkan SwiftShader
-and checks actual canvas background and four sprite colors in a full-page
+this gate. `make test-e2e` runs both an explicit WebGPU project under Xvfb with Vulkan
+SwiftShader and a game-only project with default browser launch settings.
+Game checks cover rendered pixels, movement, resize, and compatibility startup
+after a missing WebGPU API, null WebGPU context, or unavailable adapter.
+The WebGPU project also checks actual canvas background and four sprite colors in a full-page
 screenshot, along with reconnect and independent subscriptions.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
 production-line denominator, and rejects less than 85% overall or 90% in

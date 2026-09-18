@@ -15,3 +15,9 @@ pub fn replay_hash(scenario: &str, ticks: u32) -> Result<String, wasm_bindgen::J
     }
     Ok(world.canonical_hash_hex())
 }
+
+#[cfg(target_arch = "wasm32")]
+mod playground;
+
+#[cfg(target_arch = "wasm32")]
+mod game_assets;

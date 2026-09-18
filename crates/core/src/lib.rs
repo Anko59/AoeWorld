@@ -1,4 +1,11 @@
-//! Configuration-independent values shared by the synthetic application.
+//! Configuration-independent values shared by diagnostics and gameplay.
+mod coordinates;
+mod projection;
+
+pub use coordinates::*;
+pub use projection::{
+    Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, inverse_project, project,
+};
 use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: i32 = 64;

@@ -22,7 +22,7 @@ DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --gro
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
 
 help:
-	@echo 'AoeWorld Harness Lab'
+	@echo 'AoeWorld'
 	@echo '  make bootstrap       Build the pinned Rust tools image and install hooks'
 	@echo '  make doctor          Check toolchain availability'
 	@echo '  make fmt-check       Check Rust formatting without changing files'
@@ -242,7 +242,7 @@ build-wasm:
 
 test-e2e: build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
 dev: build-wasm orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
