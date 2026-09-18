@@ -4,12 +4,16 @@
 //! validates local rasters and evaluates the documented azimuthal-equidistant
 //! projection before a future preparation pipeline freezes map inputs.
 
+use aoe_map::{MapRequest, PreparedEnvironment};
 use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
 };
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+mod elevation;
+pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 
 mod source_cache;
 pub use source_cache::{
@@ -34,6 +38,10 @@ pub enum GeodataError {
     Projection,
     #[error("PROJ could not project the requested coordinate")]
     Coordinate,
+    #[error("geographic preparation failed: {0}")]
+    Preparation(&'static str),
+    #[error(transparent)]
+    Environment(#[from] aoe_map::EnvironmentError),
     #[error(transparent)]
     SourceCatalog(#[from] SourceCatalogError),
 }
@@ -52,14 +60,31 @@ pub enum WorkerRequest {
         longitude: f64,
         latitude: f64,
     },
+    PrepareElevation {
+        path: PathBuf,
+        request: MapRequest,
+        samples_per_axis: u16,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerResponse {
-    KnownSources { sources: Vec<KnownSource> },
-    RasterDimensions { width: usize, height: usize },
-    ProjectedPoint { east_meters: i64, north_meters: i64 },
+    KnownSources {
+        sources: Vec<KnownSource>,
+    },
+    RasterDimensions {
+        width: usize,
+        height: usize,
+    },
+    ProjectedPoint {
+        east_meters: i64,
+        north_meters: i64,
+    },
+    PreparedElevation {
+        environment: PreparedEnvironment,
+        page_count: usize,
+    },
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -85,6 +110,17 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             Ok(WorkerResponse::ProjectedPoint {
                 east_meters: round_meters(east_meters)?,
                 north_meters: round_meters(north_meters)?,
+            })
+        }
+        WorkerRequest::PrepareElevation {
+            path,
+            request,
+            samples_per_axis,
+        } => {
+            let prepared = prepare_elevation(&path, request, samples_per_axis)?;
+            Ok(WorkerResponse::PreparedElevation {
+                environment: prepared.environment,
+                page_count: prepared.pages.len(),
             })
         }
     }

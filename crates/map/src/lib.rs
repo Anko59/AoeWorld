@@ -8,7 +8,7 @@ mod terrain;
 
 pub use environment::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, FieldPyramid,
-    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PreparedEnvironment, PyramidLevel,
+    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PreparedEnvironment, PyramidLevel, ordered_page_root,
 };
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};

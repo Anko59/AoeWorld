@@ -115,6 +115,27 @@ impl ElevationPage {
     }
 }
 
+pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], EnvironmentError> {
+    if pages.is_empty() {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut ordered = pages.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|page| (page.y, page.x));
+    if ordered
+        .windows(2)
+        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
+    {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut hash = blake3::Hasher::new();
+    hash.update(b"aoe-environment-page-root-v1\0");
+    hash.update(&(ordered.len() as u64).to_le_bytes());
+    for page in ordered {
+        hash.update(&page.content_hash()?);
+    }
+    Ok(*hash.finalize().as_bytes())
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum EnvironmentError {
     #[error("environmental field index is invalid")]
@@ -148,6 +169,21 @@ mod tests {
         assert_ne!(original, changed.content_hash().expect("changed hash"));
         changed.geographic_height_centimeters.pop();
         assert_eq!(changed.content_hash(), Err(EnvironmentError::InvalidPage));
+    }
+
+    #[test]
+    fn page_roots_are_canonical_and_reject_duplicate_locations() {
+        let first = page();
+        let mut second = page();
+        second.x = 1;
+        assert_eq!(
+            ordered_page_root(&[first.clone(), second.clone()]),
+            ordered_page_root(&[second, first.clone()])
+        );
+        assert_eq!(
+            ordered_page_root(&[first.clone(), first]),
+            Err(EnvironmentError::InvalidPyramid)
+        );
     }
 
     #[test]
