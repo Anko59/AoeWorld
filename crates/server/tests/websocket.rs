@@ -136,12 +136,21 @@ fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
 async fn map_estimates_are_validated_without_creating_a_world() {
     let (address, server, ticker) = setup().await;
     let request = serde_json::to_string(&MapRequest::default()).expect("request JSON");
+    let estimate_request = request.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        http_json(address, "/maps/estimate", &estimate_request)
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("\"tiles_per_side\":500"));
     let response =
-        tokio::task::spawn_blocking(move || http_json(address, "/maps/estimate", &request))
+        tokio::task::spawn_blocking(move || http_json(address, "/maps/activate", &request))
             .await
             .expect("response");
     assert!(response.starts_with("HTTP/1.1 200"));
-    assert!(response.contains("\"tiles_per_side\":500"));
+    assert!(response.contains("\"uses_fallback_data\":true"));
+    assert!(response.contains("\"source_lock_count\":0"));
     let response = tokio::task::spawn_blocking(move || {
         http_json(
             address,

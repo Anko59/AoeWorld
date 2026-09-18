@@ -1,12 +1,13 @@
 //! HTTP and bounded WebSocket adapter for the synthetic world.
 mod config;
 mod gameplay;
+mod gameplay_map;
 mod gameplay_transport;
 pub use config::Config;
 pub use gameplay::GameplayService;
 
 use aoe_core::{EntityId, Region, Tick};
-use aoe_map::{MapEstimate, MapRequest};
+use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use aoe_protocol::{
     ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
@@ -48,7 +49,7 @@ pub struct AppState {
     build: Arc<str>,
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
-    gameplay: GameplayService,
+    gameplay: Arc<RwLock<GameplayService>>,
 }
 
 impl AppState {
@@ -61,7 +62,7 @@ impl AppState {
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
-            gameplay: GameplayService::new(config.scenario.seed),
+            gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         }
     }
 
@@ -76,13 +77,13 @@ impl AppState {
             seed: config.scenario.seed,
             ..aoe_core::WorldConfig::default()
         };
-        state.gameplay = GameplayService::with_population(
+        state.gameplay = Arc::new(RwLock::new(GameplayService::with_population(
             gameplay_config,
             config.scenario.entities,
             config.scenario.hotspot_entities,
             config.scenario.players,
             config.scenario.active_extent,
-        )?;
+        )?));
         Ok(state)
     }
 
@@ -102,7 +103,7 @@ impl AppState {
             if let Some(world) = self.world.write().await.as_mut() {
                 world.advance();
             }
-            self.gameplay.tick().await;
+            self.gameplay.read().await.clone().tick().await;
             if started.duration_since(scheduled) > self.tick_period
                 || started.elapsed() > self.tick_period
             {
@@ -195,6 +196,43 @@ async fn estimate_map(
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
 }
 
+#[derive(Serialize)]
+struct MapActivation {
+    content_hash: String,
+    tiles_per_side: u64,
+    source_lock_count: usize,
+    uses_fallback_data: bool,
+}
+
+async fn activate_map(
+    State(state): State<AppState>,
+    Json(request): Json<MapRequest>,
+) -> Result<Json<MapActivation>, (StatusCode, String)> {
+    let (activation, gameplay) = tokio::task::spawn_blocking(move || {
+        let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
+            .map_err(|error| error.to_string())?;
+        let activation = MapActivation {
+            content_hash: package.content_hash_hex(),
+            tiles_per_side: package.estimate.tiles_per_side,
+            source_lock_count: package.source_locks.len(),
+            uses_fallback_data: package.source_locks.is_empty(),
+        };
+        let gameplay = GameplayService::from_map(package).map_err(|error| error.to_string())?;
+        Ok::<_, String>((activation, gameplay))
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "map creation task failed".to_owned(),
+        )
+    })?
+    .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+    *state.gameplay.write().await = gameplay;
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    Ok(Json(activation))
+}
+
 async fn select_scenario(
     Path(name): Path<String>,
     State(state): State<AppState>,
@@ -219,7 +257,7 @@ async fn gameplay_websocket(
     State(state): State<AppState>,
     upgrade: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    let gameplay = state.gameplay.clone();
+    let gameplay = state.gameplay.read().await.clone();
     upgrade
         .max_message_size(aoe_protocol::GAMEPLAY_MAX_MESSAGE)
         .on_upgrade(move |socket| gameplay_transport::handle_socket(gameplay, socket))
@@ -231,6 +269,7 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
         .route("/maps/estimate", post(estimate_map))
+        .route("/maps/activate", post(activate_map))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))

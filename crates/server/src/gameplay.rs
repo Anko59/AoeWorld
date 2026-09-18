@@ -95,7 +95,7 @@ impl GameplayService {
         Ok(Self::from_world(world, EntityId(0)))
     }
 
-    fn from_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
+    pub(super) fn from_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
