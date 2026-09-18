@@ -9,6 +9,20 @@ pub const MAX_SIDE_METERS: u64 = 10_000_000_000;
 pub const MIN_TILES_PER_SIDE: u64 = 64;
 pub const MAX_TILES_PER_SIDE: u64 = 262_144;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconstructionProfile {
+    #[default]
+    Circa600V1,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DetailProfile {
+    #[default]
+    StandardV1,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Ratio {
     pub numerator: u32,
@@ -43,6 +57,10 @@ pub struct MapRequest {
     pub compression: Ratio,
     pub year_ce: u16,
     pub seed: u64,
+    #[serde(default)]
+    pub reconstruction_profile: ReconstructionProfile,
+    #[serde(default)]
+    pub detail_profile: DetailProfile,
 }
 
 impl Default for MapRequest {
@@ -58,6 +76,8 @@ impl Default for MapRequest {
             }),
             year_ce: 600,
             seed: 1,
+            reconstruction_profile: ReconstructionProfile::Circa600V1,
+            detail_profile: DetailProfile::StandardV1,
         }
     }
 }

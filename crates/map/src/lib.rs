@@ -7,8 +7,10 @@ mod terrain;
 
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
-pub use package::{MapPackage, SourceLock};
-pub use request::{MapEstimate, MapRequest, MapRequestError, Ratio};
+pub use package::{MapPackage, ProjectionMetadata, SourceLock, VerticalDatum};
+pub use request::{
+    DetailProfile, MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile,
+};
 pub use terrain::{
     Biome, Chunk, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind,
     ResourceNode, Tile, WaterKind,
