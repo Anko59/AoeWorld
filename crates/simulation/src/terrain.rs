@@ -1,7 +1,7 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage, MovementOutcome,
-    PotentialBiomePage, ResourceOverlay, WaterPage, find_path_with_overlay,
+    EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage,
+    MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage, find_path_with_overlay,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,6 +78,18 @@ impl Terrain {
                         .object_at(tile)
                         .is_none_or(|node| !overlay.blocks(generator, node.id))
             }),
+        }
+    }
+
+    pub fn crossable(&self, from: TileCoord, to: TileCoord, config: WorldConfig) -> bool {
+        match self {
+            Self::Uniform(_) => self.passable(from, config) && self.passable(to, config),
+            Self::Map { generator, overlay } => {
+                matches!(generator.edge_between(from, to), EdgePassability::Passable)
+                    && generator
+                        .object_at(to)
+                        .is_none_or(|node| !overlay.blocks(generator, node.id))
+            }
         }
     }
 

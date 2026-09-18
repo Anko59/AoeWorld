@@ -1,4 +1,4 @@
-use crate::{GroundMaterial, MapChunkGenerator, ResourceOverlay};
+use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -137,7 +137,9 @@ where
                 continue;
             }
             let next = TileCoord::new(tile.x + delta_x, tile.y + delta_y);
-            if !passable(next) || !crossable(terrain, tile, next) {
+            if !passable(next)
+                || !matches!(terrain.edge_between(tile, next), EdgePassability::Passable)
+            {
                 continue;
             }
             if delta_x != 0
@@ -168,16 +170,6 @@ fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
     terrain.tile_at(tile).is_some_and(|sample| sample.passable) && terrain.object_at(tile).is_none()
 }
 
-fn crossable(terrain: &MapChunkGenerator, from: TileCoord, to: TileCoord) -> bool {
-    let Some(from) = terrain.tile_at(from) else {
-        return false;
-    };
-    let Some(to) = terrain.tile_at(to) else {
-        return false;
-    };
-    (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() <= 1
-}
-
 fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     let dx = u64::from((from.x - to.x).unsigned_abs());
     let dy = u64::from((from.y - to.y).unsigned_abs());
@@ -204,7 +196,10 @@ mod tests {
                 let destination = TileCoord::new(x + 1, y);
                 if walkable(&terrain(), origin)
                     && walkable(&terrain(), destination)
-                    && crossable(&terrain(), origin, destination)
+                    && matches!(
+                        terrain().edge_between(origin, destination),
+                        EdgePassability::Passable
+                    )
                 {
                     return (origin, destination);
                 }

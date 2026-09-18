@@ -10,7 +10,12 @@ use crate::{
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
+
+mod elevation;
+mod surface;
+use elevation::PreparedElevation;
+pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -72,6 +77,7 @@ pub enum ObjectKind {
 pub struct Tile {
     pub geographic_height_centimeters: i32,
     pub game_height_level: i16,
+    pub surface: TileSurface,
     pub material: GroundMaterial,
     pub biome: Biome,
     pub vegetation_provenance: Provenance,
@@ -108,13 +114,6 @@ pub struct MapChunkGenerator {
     water: Option<Arc<PreparedWater>>,
     biome: Option<Arc<PreparedBiome>>,
     historical_land_use: Option<Arc<HistoricalLandUse>>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct PreparedElevation {
-    samples_per_axis: u16,
-    compression: Ratio,
-    pages: BTreeMap<(u16, u16), ElevationPage>,
 }
 
 impl MapChunkGenerator {
@@ -337,6 +336,7 @@ impl MapChunkGenerator {
         let (
             geographic_height_centimeters,
             game_height_level,
+            surface,
             elevation_provenance,
             water,
             water_provenance,
@@ -349,12 +349,16 @@ impl MapChunkGenerator {
                     .map(|height| (height, elevation.compression))
             })
             .map(|(height, compression)| {
-                let game_height = i64::from(height)
-                    .saturating_mul(i64::from(compression.denominator))
-                    / (i64::from(ELEVATION_LEVEL_CENTIMETERS) * i64::from(compression.numerator));
+                let game_height = quantize_game_height(height, compression);
+                let corner_heights = self
+                    .elevation
+                    .as_ref()
+                    .and_then(|elevation| elevation.corner_heights(tile, self.width_tiles))
+                    .unwrap_or([height; 4]);
                 (
                     height,
-                    game_height.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
+                    game_height,
+                    surface::from_heights(corner_heights, compression),
                     Provenance::SourceDerived,
                     // Elevation cannot identify water: inland depressions can be dry,
                     // while coastlines require independent, coherent water geometry.
@@ -364,8 +368,8 @@ impl MapChunkGenerator {
             })
             .unwrap_or((
                 fallback_height,
-                (fallback_height / ELEVATION_LEVEL_CENTIMETERS)
-                    .clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                quantize_game_height(fallback_height, compression_fallback()),
+                surface::from_heights([fallback_height; 4], compression_fallback()),
                 Provenance::Fallback,
                 fallback_water,
                 Provenance::Fallback,
@@ -388,13 +392,16 @@ impl MapChunkGenerator {
         Tile {
             geographic_height_centimeters,
             game_height_level,
+            surface,
             material,
             biome,
             vegetation_provenance,
             water,
             elevation_provenance,
             water_provenance,
-            passable: water == WaterKind::None && material != GroundMaterial::Ice,
+            passable: water == WaterKind::None
+                && material != GroundMaterial::Ice
+                && surface.walkable(),
         }
     }
 
@@ -438,23 +445,16 @@ impl MapChunkGenerator {
     }
 }
 
-impl PreparedElevation {
-    fn height_at(&self, tile: TileCoord, width_tiles: i32) -> Option<i32> {
-        let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
-        let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
-        let x =
-            u16::try_from((u64::try_from(tile.x).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
-        let y =
-            u16::try_from((u64::try_from(tile.y).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
-        let page_size = u16::from(crate::ENVIRONMENT_PAGE_SAMPLES);
-        let page = self.pages.get(&(x / page_size, y / page_size))?;
-        let local_x = usize::from(x % page_size);
-        let local_y = usize::from(y % page_size);
-        (local_x < usize::from(page.width) && local_y < usize::from(page.height)).then(|| {
-            page.geographic_height_centimeters[local_y * usize::from(page.width) + local_x]
-        })
+fn quantize_game_height(height: i32, compression: Ratio) -> i16 {
+    let game_height = i64::from(height).saturating_mul(i64::from(compression.denominator))
+        / (i64::from(ELEVATION_LEVEL_CENTIMETERS) * i64::from(compression.numerator));
+    game_height.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16
+}
+
+const fn compression_fallback() -> Ratio {
+    Ratio {
+        numerator: 1,
+        denominator: 1,
     }
 }
 

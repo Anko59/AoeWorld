@@ -28,7 +28,12 @@ impl GameWorld {
             } else {
                 interpolate(order, order.travelled)
             };
-            if !self.terrain.passable(position.tile_floor(), self.config) {
+            let previous_tile = self.units[index].state.previous_position.tile_floor();
+            let tile = position.tile_floor();
+            if !self.terrain.passable(tile, self.config)
+                || (tile != previous_tile
+                    && !self.terrain.crossable(previous_tile, tile, self.config))
+            {
                 self.units[index].state.moving = false;
                 self.units[index].order = None;
                 changed.push(self.units[index].state);
