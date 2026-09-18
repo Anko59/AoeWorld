@@ -217,6 +217,8 @@ pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn 
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
     };
     let state = AppState::new(&config, "perf-local")?;
     let ticker = tokio::spawn(state.clone().run_ticks());
@@ -237,6 +239,8 @@ pub(crate) async fn gameplay_network(scenario: Scenario) -> Result<ClientResult,
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
     };
     let state = AppState::with_gameplay_population(&config, "perf-gameplay")?;
     let ticker = tokio::spawn(state.clone().run_ticks());

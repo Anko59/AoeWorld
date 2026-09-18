@@ -4,7 +4,10 @@
 //! validates local rasters and evaluates the documented azimuthal-equidistant
 //! projection before a future preparation pipeline freezes map inputs.
 
-use aoe_map::{ElevationPage, MapRequest, PreparedEnvironment};
+use aoe_map::{
+    ElevationPage, EnvironmentalProvenance, LayerProvenance, MapRequest, PreparedEnvironment,
+    ProjectionMetadata, VerticalDatum,
+};
 use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
@@ -49,12 +52,19 @@ pub enum GeodataError {
     Environment(#[from] aoe_map::EnvironmentError),
     #[error(transparent)]
     SourceCatalog(#[from] SourceCatalogError),
+    #[error(transparent)]
+    Cache(#[from] CacheError),
 }
 
 /// A bounded native-worker operation passed on stdin by a direct process spawn.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerRequest {
+    PrepareOverviewElevation {
+        cache_root: PathBuf,
+        request: MapRequest,
+        samples_per_axis: u16,
+    },
     ListOverviewSources,
     ListPotentialBiomeSources,
     InspectRaster {
@@ -91,10 +101,26 @@ pub enum WorkerResponse {
         environment: PreparedEnvironment,
         pages: Vec<ElevationPage>,
     },
+    PreparedOverview(Box<PreparedOverview>),
+}
+
+/// Source-backed overview data returned by the worker in a bounded response.
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct PreparedOverview {
+    source_lock: aoe_map::SourceLock,
+    projection: ProjectionMetadata,
+    provenance: EnvironmentalProvenance,
+    environment: PreparedEnvironment,
+    pages: Vec<ElevationPage>,
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
     match request {
+        WorkerRequest::PrepareOverviewElevation {
+            cache_root,
+            request,
+            samples_per_axis,
+        } => prepare_overview_elevation(cache_root, request, samples_per_axis),
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
             sources: vec![etopo_2022_60s_surface()],
         }),
@@ -133,6 +159,51 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             })
         }
     }
+}
+
+fn prepare_overview_elevation(
+    cache_root: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+) -> Result<WorkerResponse, GeodataError> {
+    let source = etopo_2022_60s_surface();
+    let lock = source
+        .cache_lock()
+        .ok_or(GeodataError::Preparation("overview source lacks SHA-256"))?;
+    let cache = SourceCache::new(cache_root, DownloadPolicy::default())?;
+    let cancelled = std::sync::atomic::AtomicBool::new(false);
+    let path = cache.acquire(&lock, &cancelled)?;
+    let prepared = prepare_elevation(&path, request, samples_per_axis)?;
+    Ok(WorkerResponse::PreparedOverview(Box::new(
+        PreparedOverview {
+            source_lock: lock
+                .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
+            projection: ProjectionMetadata {
+                horizontal_crs: local_aeqd_definition(
+                    request.center_latitude_e7,
+                    request.center_longitude_e7,
+                ),
+                vertical_datum: VerticalDatum::Egm2008Orthometric,
+                tool_version: "GDAL Rust bindings 0.19 / PROJ native".to_owned(),
+            },
+            provenance: EnvironmentalProvenance {
+                elevation: LayerProvenance::SourceDerived,
+                water: LayerProvenance::Fallback,
+                vegetation: LayerProvenance::Procedural,
+                historical_land_use: LayerProvenance::Fallback,
+            },
+            environment: prepared.environment,
+            pages: prepared.pages,
+        },
+    )))
+}
+
+fn acquisition_marker() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format!("unix-seconds-{seconds}")
 }
 
 fn round_meters(value: f64) -> Result<i64, GeodataError> {
@@ -212,5 +283,32 @@ mod tests {
             panic!("source response");
         };
         assert_eq!(sources, vec![etopo_2022_60s_surface()]);
+    }
+
+    #[test]
+    fn overview_response_keeps_its_bounded_protocol_shape_when_boxed() {
+        let response = WorkerResponse::PreparedOverview(Box::new(PreparedOverview {
+            source_lock: aoe_map::SourceLock {
+                id: "overview".to_owned(),
+                provider: "provider".to_owned(),
+                release: "release".to_owned(),
+                url: "https://example.invalid/overview.tif".to_owned(),
+                sha256: [7; 32],
+                acquired_at: "2026-09-18".to_owned(),
+                native_resolution: "1 arc-minute".to_owned(),
+                crs: "EPSG:4326".to_owned(),
+                vertical_datum: "EGM2008".to_owned(),
+                license: "test".to_owned(),
+                preprocessing_version: "test".to_owned(),
+            },
+            projection: ProjectionMetadata::default(),
+            provenance: EnvironmentalProvenance::default(),
+            environment: PreparedEnvironment::default(),
+            pages: Vec::new(),
+        }));
+        let encoded = serde_json::to_value(response).expect("serializes");
+        assert_eq!(encoded["operation"], "prepared_overview");
+        assert_eq!(encoded["source_lock"]["id"], "overview");
+        assert!(encoded.get("value").is_none());
     }
 }

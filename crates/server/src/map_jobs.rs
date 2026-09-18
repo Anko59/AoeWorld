@@ -1,8 +1,14 @@
 use crate::{AppState, map_store};
-use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
-use serde::Serialize;
+use aoe_map::{
+    ElevationPage, EnvironmentalProvenance, MAP_SCHEMA_VERSION, MapEstimate, MapPackage,
+    MapRequest, ProjectionMetadata, SourceLock,
+};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    io::{Read, Write},
+    path::Path,
+    process::{Command, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -10,6 +16,9 @@ use std::{
 };
 
 const MAX_QUEUED_JOBS: usize = 2;
+const MAX_WORKER_REQUEST_BYTES: usize = 64 * 1024;
+const MAX_WORKER_RESPONSE_BYTES: usize = 512 * 1024;
+const MAX_WORKER_ERROR_BYTES: u64 = 8 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +36,7 @@ pub(super) enum JobState {
 pub(super) enum JobStage {
     Queued,
     BuildingFallbackPackage,
+    PreparingOverview,
     Cancelling,
     Completed,
     Cancelled,
@@ -192,23 +202,134 @@ fn launch(state: AppState, id: u64) {
             return;
         };
         let directory = state.map_package_directory.clone();
+        let worker = state.map_worker.clone();
+        let cache = state.geodata_cache_directory.clone();
+        if worker.is_some() {
+            set_stage(&state, id, JobStage::PreparingOverview).await;
+        }
         let result = tokio::task::spawn_blocking(move || {
             if cancelled.load(Ordering::SeqCst) {
                 return Err("map creation cancelled".to_owned());
             }
-            let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
-                .map_err(|error| error.to_string())?;
+            let package = if let Some(worker) = worker {
+                let directory = directory.as_deref().ok_or_else(|| {
+                    "source-backed map creation requires a configured package directory".to_owned()
+                })?;
+                let (package, pages) = prepare_overview(&worker, &cache, request)?;
+                map_store::persist_prepared(Some(directory), &package, &pages)
+                    .map_err(|error| error.to_string())?;
+                package
+            } else {
+                let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
+                    .map_err(|error| error.to_string())?;
+                map_store::persist(directory.as_deref(), &package)
+                    .map_err(|error| error.to_string())?;
+                package
+            };
             if cancelled.load(Ordering::SeqCst) {
                 return Err("map creation cancelled".to_owned());
             }
-            map_store::persist(directory.as_deref(), &package)
-                .map_err(|error| error.to_string())?;
             Ok::<_, String>(package)
         })
         .await
         .unwrap_or_else(|_| Err("map creation task failed".to_owned()));
         finish(&state, id, result).await;
     });
+}
+
+async fn set_stage(state: &AppState, id: u64, stage: JobStage) {
+    let mut manager = state.map_jobs.lock().await;
+    if let Some(entry) = manager.jobs.get_mut(&id)
+        && entry.job.state == JobState::Running
+    {
+        entry.job.stage = stage;
+        entry.job.percent = 10;
+        entry.job.eta_seconds = None;
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+enum WorkerOutput {
+    PreparedOverview {
+        source_lock: SourceLock,
+        projection: ProjectionMetadata,
+        provenance: EnvironmentalProvenance,
+        environment: aoe_map::PreparedEnvironment,
+        pages: Vec<ElevationPage>,
+    },
+}
+
+fn prepare_overview(
+    worker: &Path,
+    cache_root: &Path,
+    request: MapRequest,
+) -> Result<(MapPackage, Vec<ElevationPage>), String> {
+    let input = serde_json::to_vec(&serde_json::json!({
+        "operation": "prepare_overview_elevation",
+        "cache_root": cache_root,
+        "request": request,
+        "samples_per_axis": 128,
+    }))
+    .map_err(|error| format!("could not encode map-worker request: {error}"))?;
+    if input.len() > MAX_WORKER_REQUEST_BYTES {
+        return Err("map-worker request exceeds the configured bound".to_owned());
+    }
+    let mut child = Command::new(worker)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("could not start map worker: {error}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| "map worker did not expose standard input".to_owned())?
+        .write_all(&input)
+        .map_err(|error| format!("could not send map-worker request: {error}"))?;
+    let mut output = Vec::with_capacity(MAX_WORKER_RESPONSE_BYTES + 1);
+    child
+        .stdout
+        .take()
+        .ok_or_else(|| "map worker did not expose standard output".to_owned())?
+        .take((MAX_WORKER_RESPONSE_BYTES + 1) as u64)
+        .read_to_end(&mut output)
+        .map_err(|error| format!("could not read map-worker response: {error}"))?;
+    let mut error = String::new();
+    child
+        .stderr
+        .take()
+        .ok_or_else(|| "map worker did not expose standard error".to_owned())?
+        .take(MAX_WORKER_ERROR_BYTES)
+        .read_to_string(&mut error)
+        .map_err(|error| format!("could not read map-worker error: {error}"))?;
+    let status = child
+        .wait()
+        .map_err(|error| format!("could not wait for map worker: {error}"))?;
+    if output.len() > MAX_WORKER_RESPONSE_BYTES {
+        return Err("map-worker response exceeds the configured bound".to_owned());
+    }
+    if !status.success() {
+        return Err(format!("map worker failed: {}", error.trim()));
+    }
+    let WorkerOutput::PreparedOverview {
+        source_lock,
+        projection,
+        provenance,
+        environment,
+        pages,
+    } = serde_json::from_slice(&output)
+        .map_err(|error| format!("invalid map-worker response: {error}"))?;
+    let package = MapPackage::with_prepared_environment(
+        MAP_SCHEMA_VERSION,
+        request,
+        vec![source_lock],
+        projection,
+        provenance,
+        environment,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok((package, pages))
 }
 
 async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<AtomicBool>)> {

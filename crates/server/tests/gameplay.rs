@@ -27,6 +27,8 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
             tick_hz: 20,
             asset_pack: None,
             map_package_directory: None,
+            map_worker: None,
+            geodata_cache_directory: ".cache/geodata".into(),
         },
         "game-test",
     )

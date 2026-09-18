@@ -25,6 +25,28 @@ impl ExpectedChecksum {
     }
 }
 
+impl KnownSource {
+    /// Produces a directly reusable cache lock when the catalog has a
+    /// SHA-256, so a verified object can be reused without another download.
+    pub fn cache_lock(&self) -> Option<crate::SourceLock> {
+        let ExpectedChecksum::Sha256(sha256) = self.expected_checksum else {
+            return None;
+        };
+        Some(crate::SourceLock {
+            id: self.id.clone(),
+            provider: self.provider,
+            release: self.release.clone(),
+            url: self.url.clone(),
+            sha256: sha256.iter().map(|byte| format!("{byte:02x}")).collect(),
+            bytes: self.bytes,
+            native_resolution: self.native_resolution.clone(),
+            crs: self.crs.clone(),
+            vertical_datum: self.vertical_datum.clone(),
+            license_reference: self.license_reference.clone(),
+        })
+    }
+}
+
 /// Allowlisted metadata resolved from a fixed catalog entry. Its checksum is
 /// checked during acquisition; the resulting source lock records SHA-256.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
@@ -189,5 +211,9 @@ mod tests {
             source.expected_checksum,
             ExpectedChecksum::Sha256([0x9d, 0x27, 0xd4, 0xb8, ..])
         ));
+        assert_eq!(
+            source.cache_lock().expect("cache lock").sha256,
+            "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
+        );
     }
 }

@@ -8,6 +8,8 @@ pub struct Config {
     pub tick_hz: u32,
     pub asset_pack: Option<PathBuf>,
     pub map_package_directory: Option<PathBuf>,
+    pub map_worker: Option<PathBuf>,
+    pub geodata_cache_directory: PathBuf,
 }
 
 impl Config {
@@ -31,6 +33,18 @@ impl Config {
             }
             config.asset_pack = Some(pack);
         }
+        if let Some(path) = env::var_os("AOE_MAP_WORKER").filter(|value| !value.is_empty()) {
+            let worker = PathBuf::from(path)
+                .canonicalize()
+                .map_err(|e| format!("invalid AOE_MAP_WORKER: {e}"))?;
+            let metadata = worker
+                .metadata()
+                .map_err(|e| format!("invalid AOE_MAP_WORKER: {e}"))?;
+            if !metadata.is_file() {
+                return Err("AOE_MAP_WORKER must name a regular native executable".to_owned());
+            }
+            config.map_worker = Some(worker);
+        }
         Ok(config)
     }
 
@@ -49,6 +63,8 @@ impl Config {
             tick_hz,
             asset_pack: None,
             map_package_directory: Some(PathBuf::from("local-assets/maps-v4")),
+            map_worker: None,
+            geodata_cache_directory: PathBuf::from(".cache/geodata"),
         })
     }
 }
@@ -66,6 +82,11 @@ mod tests {
             config.map_package_directory,
             Some(PathBuf::from("local-assets/maps-v4"))
         );
+        assert_eq!(
+            config.geodata_cache_directory,
+            PathBuf::from(".cache/geodata")
+        );
+        assert!(config.map_worker.is_none());
         assert!(Config::parse("bad", "smoke", "20").is_err());
         assert!(Config::parse("127.0.0.1:0", "missing", "20").is_err());
         assert!(Config::parse("127.0.0.1:0", "smoke", "bad").is_err());

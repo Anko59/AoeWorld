@@ -24,6 +24,8 @@ async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, Join
             tick_hz: 20,
             asset_pack: None,
             map_package_directory: None,
+            map_worker: None,
+            geodata_cache_directory: ".cache/geodata".into(),
         },
         "test-build",
     )
@@ -52,6 +54,8 @@ async fn selected_local_pack_is_served_only_when_configured() {
         tick_hz: 20,
         asset_pack: Some(pack.path().to_owned()),
         map_package_directory: None,
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
     };
     let server = tokio::spawn(async move {
         axum::serve(

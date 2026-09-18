@@ -55,6 +55,8 @@ pub struct AppState {
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
     map_package_directory: Option<PathBuf>,
+    map_worker: Option<PathBuf>,
+    geodata_cache_directory: PathBuf,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
@@ -71,6 +73,8 @@ impl AppState {
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
             map_package_directory: config.map_package_directory.clone(),
+            map_worker: config.map_worker.clone(),
+            geodata_cache_directory: config.geodata_cache_directory.clone(),
             map_packages: Arc::new(RwLock::new(map_store::load(
                 config.map_package_directory.as_deref(),
             )?)),

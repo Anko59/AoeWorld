@@ -39,7 +39,7 @@
     </nav>
     <section id="map-creator" hidden aria-labelledby="map-creator-title">
       <h1 id="map-creator-title">Create geographic map</h1>
-      <p>Modern terrain adapted into a plausible circa-600 landscape. Generation currently uses the deterministic fallback terrain until verified source preparation is available.</p>
+      <p>Modern terrain adapted into a plausible circa-600 landscape. When a configured native map worker has verified sources cached, generation prepares source-backed terrain; otherwise it reports deterministic fallback terrain.</p>
       <label>Latitude <input id="map-latitude" type="number" min="-90" max="90" step="0.0000001" value="48.85"></label>
       <label>Longitude <input id="map-longitude" type="number" min="-180" max="180" step="0.0000001" value="2.35"></label>
       <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
@@ -153,7 +153,8 @@
         const value = await readJson(await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() }));
         await refreshPackages();
         estimate.className = '';
-        estimate.textContent = `Fallback package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
+        const source = value.uses_fallback_data ? 'Fallback' : 'Source-backed';
+        estimate.textContent = `${source} package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to activate this map.';
