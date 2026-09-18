@@ -1,12 +1,42 @@
 use crate::{AppState, GameplayService, map_jobs, map_store};
 use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
+use aoe_protocol::ResumeToken;
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use serde::Serialize;
 use std::sync::atomic::Ordering;
+
+const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
+
+fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
+    let value = headers.get(CONTROLLER_TOKEN_HEADER)?.to_str().ok()?;
+    if value.len() != 48 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut bytes = [0_u8; 24];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
+    }
+    Some(ResumeToken(bytes))
+}
+
+async fn require_controller(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, String)> {
+    let token = controller_token(headers).ok_or((
+        StatusCode::FORBIDDEN,
+        "current gameplay controller authorization is required".to_owned(),
+    ))?;
+    let gameplay = state.gameplay.read().await.clone();
+    gameplay.is_controller(token).await.then_some(()).ok_or((
+        StatusCode::FORBIDDEN,
+        "current gameplay controller authorization is required".to_owned(),
+    ))
+}
 
 pub(super) async fn estimate(
     Json(request): Json<MapRequest>,
@@ -27,8 +57,10 @@ pub(super) struct Activation {
 
 pub(super) async fn activate(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<MapRequest>,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
+    require_controller(&state, &headers).await?;
     let map_package_directory = state.map_package_directory.clone();
     let package = tokio::task::spawn_blocking(move || {
         let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
@@ -50,8 +82,10 @@ pub(super) async fn activate(
 
 pub(super) async fn create_job(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<MapRequest>,
 ) -> Result<(StatusCode, Json<map_jobs::Job>), (StatusCode, String)> {
+    require_controller(&state, &headers).await?;
     request
         .estimate()
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
@@ -74,17 +108,21 @@ pub(super) async fn job_status(
 pub(super) async fn cancel_job(
     Path(job_id): Path<u64>,
     State(state): State<AppState>,
-) -> Result<Json<map_jobs::Job>, StatusCode> {
+    headers: HeaderMap,
+) -> Result<Json<map_jobs::Job>, (StatusCode, String)> {
+    require_controller(&state, &headers).await?;
     map_jobs::cancel(&state, job_id)
         .await
         .map(Json)
-        .ok_or(StatusCode::NOT_FOUND)
+        .ok_or((StatusCode::NOT_FOUND, "unknown map creation job".to_owned()))
 }
 
 pub(super) async fn activate_package(
     Path(content_hash): Path<String>,
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
+    require_controller(&state, &headers).await?;
     let package = state
         .map_packages
         .read()

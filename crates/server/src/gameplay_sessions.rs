@@ -1,5 +1,5 @@
 use crate::GameplayService;
-use aoe_protocol::{GameplayRole, GameplayServerMessage};
+use aoe_protocol::{GameplayRole, GameplayServerMessage, ResumeToken};
 use std::time::Instant;
 
 impl GameplayService {
@@ -32,6 +32,15 @@ impl GameplayService {
         {
             lease.disconnected_at = Some(Instant::now());
         }
+    }
+
+    /// Returns whether a current gameplay controller owns this resume token.
+    pub async fn is_controller(&self, token: ResumeToken) -> bool {
+        self.ownership
+            .lock()
+            .await
+            .controller
+            .is_some_and(|lease| lease.token == token && lease.disconnected_at.is_none())
     }
 
     pub(super) async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {

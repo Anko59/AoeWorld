@@ -92,6 +92,33 @@ fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
     result
 }
 
+fn http_json_as_controller(
+    address: SocketAddr,
+    path: &str,
+    body: &str,
+    token: ResumeToken,
+) -> String {
+    let token = token
+        .0
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-AoeWorld-Controller-Token: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
+}
+
 #[tokio::test]
 async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     let (address, server, ticker) = setup().await;
@@ -297,6 +324,7 @@ async fn map_activation_resets_existing_gameplay_sessions() {
     let (mut controller, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
         world_id: previous_world_id,
+        resume_token: Some(token),
         ..
     } = welcome
     else {
@@ -315,10 +343,18 @@ async fn map_activation_resets_existing_gameplay_sessions() {
         GameplayServerMessage::Snapshot { .. }
     ));
     let request = serde_json::to_string(&MapRequest::default()).expect("request JSON");
-    let response =
-        tokio::task::spawn_blocking(move || http_json(address, "/maps/activate", &request))
-            .await
-            .expect("response");
+    let unauthorized_request = request.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        http_json(address, "/maps/activate", &unauthorized_request)
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 403"));
+    let response = tokio::task::spawn_blocking(move || {
+        http_json_as_controller(address, "/maps/activate", &request, token)
+    })
+    .await
+    .expect("response");
     assert!(response.starts_with("HTTP/1.1 200"));
     let mut replacement_world_id = None;
     for _ in 0..4 {
