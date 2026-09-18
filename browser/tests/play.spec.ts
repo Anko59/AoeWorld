@@ -61,6 +61,19 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   expect(errors).toEqual([]);
 });
 
+test("map creator estimates a bounded circa-600 request", async ({ page }) => {
+  await gameAssets(page);
+  await page.goto("/");
+  await waitForGame(page);
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.getByLabel("Square km").fill("30");
+  await page.getByLabel("Compression").fill("30");
+  await page.getByRole("button", { name: "Estimate" }).click();
+  await expect(page.locator("#map-estimate")).toContainText("500 × 500 tiles");
+  await expect(page.locator("#map-estimate")).toContainText("walk 14 min 17 s");
+  await expect(page.getByRole("button", { name: "Generate" })).toBeDisabled();
+});
+
 for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
   test(`game remains playable after WebGPU ${failure}`, async ({ page }) => {
     await gameAssets(page);

@@ -16,22 +16,84 @@
     #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; }
     #connection { color: #d2e5a7; }
     #unsupported { position: fixed; left: 14px; top: 14px; z-index: 3; max-width: 420px; color: #ffd29a; }
+    #map-creator { position: fixed; left: 14px; top: 14px; z-index: 2; width: 310px; padding: 12px; color: #e8efd9; background: #142314ed; border: 1px solid #60764d; border-radius: 5px; }
+    #map-creator[hidden] { display: none; }
+    #map-creator h1 { margin: 0 0 10px; font-size: 16px; }
+    #map-creator p { margin: 0 0 10px; color: #c8d8ae; line-height: 1.35; }
+    #map-creator label { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; margin: 6px 0; }
+    #map-creator input { width: 100%; color: #eef6dc; background: #1c301d; border: 1px solid #78915d; border-radius: 3px; padding: 5px; }
+    #creator-actions { display: flex; gap: 7px; margin-top: 10px; }
+    #map-estimate { min-height: 36px; margin: 10px 0 0; color: #dce9c9; white-space: pre-line; }
+    #map-estimate.error { color: #ffd29a; }
   </style>
 </head>
 <body>
   <main id="playground">
     <canvas id="scene" tabindex="0" aria-label="AoeWorld isometric map. Select a unit and right-click to move."></canvas>
     <nav id="controls" aria-label="Map controls">
+      <button id="creator-toggle" type="button" aria-label="Open map creator" title="Map creator">⌖</button>
       <button id="fullscreen" type="button" aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
       <button id="recenter" type="button" aria-label="Center on primary unit" title="Center unit">⌾</button>
       <button id="grid" type="button" aria-label="Toggle isometric grid" title="Grid">▦</button>
       <button id="reconnect" type="button" aria-label="Reconnect to server" title="Reconnect">↻</button>
     </nav>
+    <section id="map-creator" hidden aria-labelledby="map-creator-title">
+      <h1 id="map-creator-title">Create geographic map</h1>
+      <p>Modern terrain adapted into a plausible circa-600 landscape. Source preparation is required before generation.</p>
+      <label>Latitude <input id="map-latitude" type="number" min="-90" max="90" step="0.0000001" value="48.85"></label>
+      <label>Longitude <input id="map-longitude" type="number" min="-180" max="180" step="0.0000001" value="2.35"></label>
+      <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
+      <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
+      <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
+      <label>Year <input value="600 CE" readonly></label>
+      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button type="button" disabled title="Prepare verified geographic inputs first">Generate</button></div>
+      <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
+    </section>
     <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
     <p id="unsupported" role="alert"></p>
   </main>
   <script type="module">
     import init from '/pkg/aoe_client.js';
+    const creator = document.getElementById('map-creator');
+    const estimate = document.getElementById('map-estimate');
+    const number = id => Number(document.getElementById(id).value);
+    const ratio = value => {
+      const text = String(value).trim();
+      if (!/^\d+(\.\d{1,3})?$/.test(text)) throw new Error('Compression must be 1:1 through 10,000:1 with up to three decimals.');
+      const [whole, fraction = ''] = text.split('.');
+      const scale = 10 ** fraction.length;
+      return { numerator: Number(whole) * scale + Number(fraction.padEnd(fraction.length, '0') || 0), denominator: scale };
+    };
+    const formatTime = seconds => {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return hours ? `${hours} h ${minutes} min` : `${minutes} min ${seconds % 60} s`;
+    };
+    document.getElementById('creator-toggle').addEventListener('click', () => {
+      creator.hidden = !creator.hidden;
+    });
+    document.getElementById('estimate-map').addEventListener('click', async () => {
+      try {
+        const side = number('map-side-km');
+        const request = {
+          schema_version: 1,
+          center_latitude_e7: Math.round(number('map-latitude') * 1e7),
+          center_longitude_e7: Math.round(number('map-longitude') * 1e7),
+          requested_side_meters: Math.round(side * 1000),
+          compression: ratio(document.getElementById('map-compression').value),
+          year_ce: 600,
+          seed: Math.round(number('map-seed'))
+        };
+        const response = await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        if (!response.ok) throw new Error(await response.text());
+        const value = await response.json();
+        estimate.className = '';
+        estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nEffective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}`;
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to estimate this map.';
+      }
+    });
     init().catch(error => {
       document.getElementById('connection').textContent = 'Unavailable';
       document.getElementById('unsupported').textContent = `Unable to start AoeWorld: ${error}`;
