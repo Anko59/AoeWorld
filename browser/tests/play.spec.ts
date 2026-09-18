@@ -100,6 +100,14 @@ test("map creator estimates and activates a bounded circa-600 fallback request",
   );
   await page.getByLabel("Region").selectOption("nile");
   await expect(page.locator("#map-location")).toContainText("Nile Delta");
+  await page.getByLabel("Region").selectOption("fiji");
+  await expect(page.locator("#map-location")).toContainText("Fiji");
+  await expect(page.getByLabel("Latitude")).toHaveValue("-17.8");
+  await expect(page.getByLabel("Longitude")).toHaveValue("179.8");
+  await page.getByLabel("Region").selectOption("antarctic");
+  await expect(page.locator("#map-location")).toContainText(
+    "Antarctic interior",
+  );
   await page.getByLabel("Region").selectOption("custom");
   await expect(page.locator("#map-coordinates")).toBeVisible();
   await page.getByLabel("Latitude").fill("48.8566");

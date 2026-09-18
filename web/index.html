@@ -43,7 +43,7 @@
     <section id="map-creator" hidden aria-labelledby="map-creator-title">
       <h1 id="map-creator-title">Create geographic map</h1>
       <p>Choose a region and map size for a plausible circa-600 landscape. Verified source preparation supplies terrain when available; otherwise generation labels deterministic fallback terrain.</p>
-      <label>Region <select id="map-region" aria-label="Region"><option value="paris">Paris Basin</option><option value="tiber">Tiber Valley</option><option value="constantinople">Bosporus</option><option value="nile">Nile Delta</option><option value="niger">Niger Inland Delta</option><option value="yangtze">Lower Yangtze</option><option value="custom">Custom coordinates</option></select></label>
+      <label>Region <select id="map-region" aria-label="Region"><option value="paris">Paris Basin</option><option value="alps">Alps</option><option value="tiber">Tiber Valley</option><option value="constantinople">Bosporus</option><option value="nile">Nile Delta</option><option value="niger">Niger Inland Delta</option><option value="finland">Southern Finland</option><option value="yangtze">Lower Yangtze</option><option value="borneo">Borneo</option><option value="sahara">Sahara</option><option value="fiji">Fiji</option><option value="antarctic">Antarctic interior</option><option value="continental">Continental Europe/Africa</option><option value="custom">Custom coordinates</option></select></label>
       <div id="map-preview" aria-label="Selected geographic footprint preview">
         <svg viewBox="0 0 360 180" role="img" aria-label="Selected geographic footprint on a world grid">
           <rect width="360" height="180" fill="#244a58"></rect>
@@ -81,11 +81,18 @@
     const location = document.getElementById('map-location');
     const regions = Object.freeze({
       paris: { name: 'Paris Basin', latitude: 48.8566, longitude: 2.3522 },
+      alps: { name: 'Alps', latitude: 46.6, longitude: 10.5 },
       tiber: { name: 'Tiber Valley', latitude: 41.9028, longitude: 12.4964 },
       constantinople: { name: 'Bosporus', latitude: 41.0082, longitude: 28.9784 },
       nile: { name: 'Nile Delta', latitude: 30.0444, longitude: 31.2357 },
       niger: { name: 'Niger Inland Delta', latitude: 14.4974, longitude: -4.1956 },
-      yangtze: { name: 'Lower Yangtze', latitude: 31.2304, longitude: 121.4737 }
+      finland: { name: 'Southern Finland', latitude: 61.5, longitude: 25.5 },
+      yangtze: { name: 'Lower Yangtze', latitude: 31.2304, longitude: 121.4737 },
+      borneo: { name: 'Borneo', latitude: 0.5, longitude: 114.0 },
+      sahara: { name: 'Sahara', latitude: 24.0, longitude: 10.0 },
+      fiji: { name: 'Fiji', latitude: -17.8, longitude: 179.8 },
+      antarctic: { name: 'Antarctic interior', latitude: -80.0, longitude: 0.0 },
+      continental: { name: 'Continental Europe/Africa', latitude: 35.0, longitude: 15.0 }
     });
     let activeJob = null;
     const number = id => Number(document.getElementById(id).value);
