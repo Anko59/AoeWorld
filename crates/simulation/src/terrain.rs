@@ -3,6 +3,7 @@ use aoe_map::{
     EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage,
     MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage, find_path_with_overlay,
 };
+use std::collections::{BTreeSet, VecDeque};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniformGrass {
@@ -99,6 +100,38 @@ impl Terrain {
             | MovementOutcome::BudgetExceeded => Some(Vec::new()),
         }
     }
+
+    /// Counts a connected walkable component without allocating map-scale
+    /// state. Callers choose the stopping threshold (for example 256 tiles
+    /// for a playable starting area).
+    pub fn reachable_tiles(&self, origin: TileCoord, config: WorldConfig, limit: usize) -> usize {
+        if limit == 0 || !self.passable(origin, config) {
+            return 0;
+        }
+        let mut visited = BTreeSet::from([origin]);
+        let mut pending = VecDeque::from([origin]);
+        while let Some(tile) = pending.pop_front() {
+            if visited.len() >= limit {
+                break;
+            }
+            for offset_y in -1..=1 {
+                for offset_x in -1..=1 {
+                    if offset_x == 0 && offset_y == 0 {
+                        continue;
+                    }
+                    let next = TileCoord::new(tile.x + offset_x, tile.y + offset_y);
+                    if visited.len() < limit
+                        && !visited.contains(&next)
+                        && self.crossable(tile, next, config)
+                    {
+                        visited.insert(next);
+                        pending.push_back(next);
+                    }
+                }
+            }
+        }
+        visited.len()
+    }
 }
 
 fn map_crossable(
@@ -120,4 +153,19 @@ fn map_crossable(
     !diagonal
         || (step_clear(from, TileCoord::new(to.x, from.y))
             && step_clear(from, TileCoord::new(from.x, to.y)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_core::Seed;
+
+    #[test]
+    fn reachable_tiles_stops_at_the_requested_bound() {
+        let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
+        assert_eq!(
+            Terrain::uniform(1).reachable_tiles(TileCoord::new(32, 32), config, 256),
+            256
+        );
+    }
 }
