@@ -1,4 +1,5 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
+use aoe_map::MapRequest;
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -6,7 +7,11 @@ use aoe_protocol::{
 use aoe_scenario::SMOKE;
 use aoe_server::{AppState, Config, app};
 use futures_util::{SinkExt, StreamExt};
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
+    time::Duration,
+};
 use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 
@@ -68,6 +73,23 @@ async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, Gamep
     .await;
     let welcome = receive(&mut socket).await;
     (socket, welcome)
+}
+
+fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
 }
 
 #[tokio::test]
@@ -264,6 +286,53 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
     assert!(matches!(
         receive(&mut socket).await,
         GameplayServerMessage::Error { code: 400, .. }
+    ));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test]
+async fn map_activation_resets_existing_gameplay_sessions() {
+    let (address, server, ticker) = setup().await;
+    let (mut controller, welcome) = open(address, None).await;
+    let GameplayServerMessage::Welcome {
+        world_id: previous_world_id,
+        ..
+    } = welcome
+    else {
+        panic!("welcome");
+    };
+    send(
+        &mut controller,
+        GameplayClientMessage::Subscribe {
+            revision: 1,
+            region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(32, 32)),
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut controller).await,
+        GameplayServerMessage::Snapshot { .. }
+    ));
+    let request = serde_json::to_string(&MapRequest::default()).expect("request JSON");
+    let response =
+        tokio::task::spawn_blocking(move || http_json(address, "/maps/activate", &request))
+            .await
+            .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    let mut replacement_world_id = None;
+    for _ in 0..4 {
+        if let GameplayServerMessage::WorldReset { world_id } = receive(&mut controller).await {
+            replacement_world_id = Some(world_id);
+            break;
+        }
+    }
+    let replacement_world_id = replacement_world_id.expect("world reset");
+    assert_ne!(replacement_world_id, previous_world_id);
+    let (_replacement, welcome) = open(address, None).await;
+    assert!(matches!(
+        welcome,
+        GameplayServerMessage::Welcome { world_id, .. } if world_id == replacement_world_id
     ));
     server.abort();
     ticker.abort();

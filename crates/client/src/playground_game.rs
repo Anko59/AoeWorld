@@ -319,6 +319,15 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.token = resume_token;
                 save_token(resume_token);
             }
+            Ok(GameplayServerMessage::WorldReset { .. }) => {
+                client.units.clear();
+                client.history.clear();
+                client.role = None;
+                client.primary = None;
+                client.token = None;
+                save_token(None);
+                client.status = "map changed; reconnecting".to_owned();
+            }
             Ok(GameplayServerMessage::CommandAck { result, .. }) => {
                 client.status = if matches!(result, aoe_protocol::CommandResult::Accepted) {
                     "connected"

@@ -58,7 +58,13 @@ pub(super) async fn activate(
         .write()
         .await
         .insert(activation.content_hash.clone(), package);
-    *state.gameplay.write().await = gameplay;
+    let previous = {
+        let mut active = state.gameplay.write().await;
+        let previous = active.clone();
+        *active = gameplay.clone();
+        previous
+    };
+    previous.retire(gameplay.world_id()).await;
     state.generation.fetch_add(1, Ordering::SeqCst);
     Ok(Json(activation))
 }

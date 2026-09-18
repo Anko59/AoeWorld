@@ -2,6 +2,7 @@
 mod config;
 mod gameplay;
 mod gameplay_map;
+mod gameplay_sessions;
 mod gameplay_transport;
 mod map_store;
 mod maps;

@@ -42,7 +42,8 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
         tokio::select! {
             outgoing = receiver.recv() => {
                 let Some(message) = outgoing else { break };
-                if send_socket(&mut sink, message).await.is_err() { break }
+                let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
+                if send_socket(&mut sink, message).await.is_err() || reset { break }
             }
             incoming = stream.next() => {
                 let Some(Ok(Message::Binary(bytes))) = incoming else { break };

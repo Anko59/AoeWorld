@@ -22,10 +22,10 @@ mod commands;
 #[derive(Clone)]
 pub struct GameplayService {
     world: Arc<RwLock<GameWorld>>,
-    sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
-    ownership: Arc<Mutex<Ownership>>,
+    pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
+    pub(super) ownership: Arc<Mutex<Ownership>>,
     next_session: Arc<AtomicU64>,
-    world_id: u64,
+    pub(super) world_id: u64,
     primary_unit_id: EntityId,
 }
 
@@ -430,32 +430,6 @@ impl GameplayService {
                 },
             )
             .await;
-        }
-    }
-
-    pub async fn disconnect(&self, session_id: u64) {
-        let mut ownership = self.ownership.lock().await;
-        let mut sessions = self.sessions.lock().await;
-        let removed = sessions.remove(&session_id);
-        if removed.is_some_and(|session| session.role == GameplayRole::Controller)
-            && let Some(lease) = ownership
-                .controller
-                .as_mut()
-                .filter(|lease| lease.session_id == session_id)
-        {
-            lease.disconnected_at = Some(Instant::now());
-        }
-    }
-
-    async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {
-        let sender = self
-            .sessions
-            .lock()
-            .await
-            .get(&session_id)
-            .map(|session| session.sender.clone());
-        if let Some(sender) = sender {
-            let _ = sender.try_send(message);
         }
     }
 }

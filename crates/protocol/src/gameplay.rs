@@ -5,7 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -98,6 +98,9 @@ pub enum ServerMessage {
         role: Role,
         primary_unit_id: EntityId,
         resume_token: Option<ResumeToken>,
+    },
+    WorldReset {
+        world_id: u64,
     },
     Error {
         code: u16,
@@ -236,6 +239,11 @@ mod tests {
         assert_eq!(
             decode_server(&encode_server(&welcome).unwrap()).unwrap(),
             welcome
+        );
+        let reset = ServerMessage::WorldReset { world_id: 12 };
+        assert_eq!(
+            decode_server(&encode_server(&reset).unwrap()).unwrap(),
+            reset
         );
     }
 
