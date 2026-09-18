@@ -5,7 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 3;
+pub const VERSION: u16 = 4;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -62,12 +62,23 @@ pub enum CommandResult {
     RejectedInvalidDestination,
 }
 
+/// Immutable physical properties of the active geographic map. The package
+/// itself remains available through bounded HTTP chunk requests.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MapMetadata {
+    pub tile_size_meters: u8,
+    pub compression_numerator: u32,
+    pub compression_denominator: u32,
+    pub terrain_schema_version: u16,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ServerMessage {
     Welcome {
         version: u16,
         world_id: u64,
         map_content_hash: Option<[u8; 32]>,
+        map_metadata: Option<MapMetadata>,
         width_tiles: i32,
         height_tiles: i32,
         coordinate_precision: u16,
@@ -228,6 +239,7 @@ mod tests {
             version: VERSION,
             world_id: 11,
             map_content_hash: None,
+            map_metadata: None,
             width_tiles: WorldConfig::new(16_384, 16_384, Seed(1))
                 .unwrap()
                 .width_tiles,

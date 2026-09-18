@@ -1,5 +1,5 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
-use aoe_map::MapRequest;
+use aoe_map::{MAP_SCHEMA_VERSION, MapRequest};
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -382,14 +382,21 @@ async fn map_activation_resets_existing_gameplay_sessions() {
     let replacement_world_id = replacement_world_id.expect("world reset");
     assert_ne!(replacement_world_id, previous_world_id);
     let (_replacement, welcome) = open(address, None).await;
-    assert!(matches!(
-        welcome,
-        GameplayServerMessage::Welcome {
-            world_id,
-            map_content_hash: Some(hash),
-            ..
-        } if world_id == replacement_world_id && hash == content_hash
-    ));
+    let GameplayServerMessage::Welcome {
+        world_id,
+        map_content_hash: Some(hash),
+        map_metadata: Some(metadata),
+        ..
+    } = welcome
+    else {
+        panic!("replacement welcome must identify its physical map");
+    };
+    assert_eq!(world_id, replacement_world_id);
+    assert_eq!(hash, content_hash);
+    assert_eq!(metadata.tile_size_meters, 2);
+    assert_eq!(metadata.compression_numerator, 30);
+    assert_eq!(metadata.compression_denominator, 1);
+    assert_eq!(metadata.terrain_schema_version, MAP_SCHEMA_VERSION);
     server.abort();
     ticker.abort();
 }

@@ -3,7 +3,7 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Seed, TileRect, WorldConfig, W
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayRole, GameplayServerMessage, GameplayUnitState,
     MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION,
-    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, ResumeToken,
+    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MapMetadata, ResumeToken,
 };
 use aoe_simulation::{GameUnit, GameWorld, GameWorldError};
 use std::{
@@ -27,6 +27,7 @@ pub struct GameplayService {
     next_session: Arc<AtomicU64>,
     pub(super) world_id: u64,
     map_content_hash: Option<[u8; 32]>,
+    map_metadata: Option<MapMetadata>,
     primary_unit_id: EntityId,
 }
 
@@ -73,7 +74,7 @@ pub(super) struct Ownership {
 impl GameplayService {
     pub fn new(seed: Seed) -> Self {
         let (world, primary_unit_id) = GameWorld::default_with_cavalry(seed);
-        Self::from_world(world, primary_unit_id, None)
+        Self::from_world(world, primary_unit_id, None, None)
     }
 
     pub fn with_population(
@@ -93,13 +94,14 @@ impl GameplayService {
         if !world.unit_exists(EntityId(0)) {
             return Err(GameWorldError::EntityIdExhausted);
         }
-        Ok(Self::from_world(world, EntityId(0), None))
+        Ok(Self::from_world(world, EntityId(0), None, None))
     }
 
     pub(super) fn from_world(
         world: GameWorld,
         primary_unit_id: EntityId,
         map_content_hash: Option<[u8; 32]>,
+        map_metadata: Option<MapMetadata>,
     ) -> Self {
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -115,6 +117,7 @@ impl GameplayService {
             next_session: Arc::new(AtomicU64::new(1)),
             world_id,
             map_content_hash,
+            map_metadata,
             primary_unit_id,
         }
     }
@@ -321,6 +324,7 @@ impl GameplayService {
             version: GAMEPLAY_VERSION,
             world_id: self.world_id,
             map_content_hash: self.map_content_hash,
+            map_metadata: self.map_metadata,
             width_tiles: config.width_tiles,
             height_tiles: config.height_tiles,
             coordinate_precision: FIXED_SUBUNITS_PER_TILE as u16,
