@@ -39,14 +39,14 @@
     </nav>
     <section id="map-creator" hidden aria-labelledby="map-creator-title">
       <h1 id="map-creator-title">Create geographic map</h1>
-      <p>Modern terrain adapted into a plausible circa-600 landscape. Source preparation is required before generation.</p>
+      <p>Modern terrain adapted into a plausible circa-600 landscape. Generation currently uses the deterministic fallback terrain until verified source preparation is available.</p>
       <label>Latitude <input id="map-latitude" type="number" min="-90" max="90" step="0.0000001" value="48.85"></label>
       <label>Longitude <input id="map-longitude" type="number" min="-180" max="180" step="0.0000001" value="2.35"></label>
       <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
-      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button type="button" disabled title="Prepare verified geographic inputs first">Generate</button></div>
+      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
     <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
@@ -56,6 +56,7 @@
     import init from '/pkg/aoe_client.js';
     const creator = document.getElementById('map-creator');
     const estimate = document.getElementById('map-estimate');
+    const generate = document.getElementById('generate-map');
     const number = id => Number(document.getElementById(id).value);
     const ratio = value => {
       const text = String(value).trim();
@@ -69,21 +70,24 @@
       const minutes = Math.floor((seconds % 3600) / 60);
       return hours ? `${hours} h ${minutes} min` : `${minutes} min ${seconds % 60} s`;
     };
+    const mapRequest = () => {
+      const side = number('map-side-km');
+      return {
+        schema_version: 1,
+        center_latitude_e7: Math.round(number('map-latitude') * 1e7),
+        center_longitude_e7: Math.round(number('map-longitude') * 1e7),
+        requested_side_meters: Math.round(side * 1000),
+        compression: ratio(document.getElementById('map-compression').value),
+        year_ce: 600,
+        seed: Math.round(number('map-seed'))
+      };
+    };
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
     });
     document.getElementById('estimate-map').addEventListener('click', async () => {
       try {
-        const side = number('map-side-km');
-        const request = {
-          schema_version: 1,
-          center_latitude_e7: Math.round(number('map-latitude') * 1e7),
-          center_longitude_e7: Math.round(number('map-longitude') * 1e7),
-          requested_side_meters: Math.round(side * 1000),
-          compression: ratio(document.getElementById('map-compression').value),
-          year_ce: 600,
-          seed: Math.round(number('map-seed'))
-        };
+        const request = mapRequest();
         const response = await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
         if (!response.ok) throw new Error(await response.text());
         const value = await response.json();
@@ -92,6 +96,21 @@
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to estimate this map.';
+      }
+    });
+    generate.addEventListener('click', async () => {
+      generate.disabled = true;
+      try {
+        const response = await fetch('/maps/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapRequest()) });
+        if (!response.ok) throw new Error(await response.text());
+        const value = await response.json();
+        estimate.className = '';
+        estimate.textContent = `Fallback package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to activate this map.';
+      } finally {
+        generate.disabled = false;
       }
     });
     init().catch(error => {

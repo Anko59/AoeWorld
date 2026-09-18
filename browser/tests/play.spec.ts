@@ -12,6 +12,23 @@ async function waitForGame(page: Page) {
   );
 }
 
+async function bluePixels(canvas: ReturnType<Page["locator"]>) {
+  const image = PNG.sync.read(await canvas.screenshot());
+  let blue = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    const r = image.data[i] ?? 0;
+    const g = image.data[i + 1] ?? 0;
+    const b = image.data[i + 2] ?? 0;
+    if (b > 150 && b > r + 30 && b > g + 30) blue += 1;
+  }
+  return blue;
+}
+
+test.beforeEach(async ({ request }) => {
+  const response = await request.post("/maps/reset");
+  expect(response.status()).toBe(204);
+});
+
 test("authoritative isometric game renders, selects, orders, and survives reload", async ({
   page,
 }, testInfo) => {
@@ -28,6 +45,9 @@ test("authoritative isometric game renders, selects, orders, and survives reload
     );
   }
   const canvas = page.locator("canvas");
+  await expect
+    .poll(() => bluePixels(canvas), { timeout: 10_000 })
+    .toBeGreaterThan(10);
   const first = await canvas.screenshot({
     path: "../reports/e2e/aoeworld-map.png",
   });
@@ -61,7 +81,9 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   expect(errors).toEqual([]);
 });
 
-test("map creator estimates a bounded circa-600 request", async ({ page }) => {
+test("map creator estimates and activates a bounded circa-600 fallback request", async ({
+  page,
+}) => {
   await gameAssets(page);
   await page.goto("/");
   await waitForGame(page);
@@ -71,7 +93,14 @@ test("map creator estimates a bounded circa-600 request", async ({ page }) => {
   await page.getByRole("button", { name: "Estimate" }).click();
   await expect(page.locator("#map-estimate")).toContainText("500 × 500 tiles");
   await expect(page.locator("#map-estimate")).toContainText("walk 14 min 17 s");
-  await expect(page.getByRole("button", { name: "Generate" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Generate" })).toBeEnabled();
+  await page.getByRole("button", { name: "Generate" }).click();
+  await expect(page.locator("#map-estimate")).toContainText(
+    "Fallback package active",
+  );
+  await expect(page.locator("#map-estimate")).toContainText(
+    "0 verified sources",
+  );
 });
 
 for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {

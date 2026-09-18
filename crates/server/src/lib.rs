@@ -233,6 +233,12 @@ async fn activate_map(
     Ok(Json(activation))
 }
 
+async fn reset_map(State(state): State<AppState>) -> StatusCode {
+    *state.gameplay.write().await = GameplayService::new(state.diagnostic_scenario.seed);
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    StatusCode::NO_CONTENT
+}
+
 async fn select_scenario(
     Path(name): Path<String>,
     State(state): State<AppState>,
@@ -270,6 +276,7 @@ pub fn app(state: AppState) -> Router {
         .route("/replay-hash", get(replay_hash))
         .route("/maps/estimate", post(estimate_map))
         .route("/maps/activate", post(activate_map))
+        .route("/maps/reset", post(reset_map))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
