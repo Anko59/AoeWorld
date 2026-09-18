@@ -17,6 +17,9 @@ pub use source_cache::{
     SourceCache, SourceLock,
 };
 
+mod source_catalog;
+pub use source_catalog::{KnownSource, SourceCatalogError, potential_biome_sources};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterDimensions {
     pub width: usize,
@@ -31,12 +34,15 @@ pub enum GeodataError {
     Projection,
     #[error("PROJ could not project the requested coordinate")]
     Coordinate,
+    #[error(transparent)]
+    SourceCatalog(#[from] SourceCatalogError),
 }
 
 /// A bounded native-worker operation passed on stdin by a direct process spawn.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerRequest {
+    ListPotentialBiomeSources,
     InspectRaster {
         path: PathBuf,
     },
@@ -51,12 +57,16 @@ pub enum WorkerRequest {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerResponse {
+    KnownSources { sources: Vec<KnownSource> },
     RasterDimensions { width: usize, height: usize },
     ProjectedPoint { east_meters: i64, north_meters: i64 },
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
     match request {
+        WorkerRequest::ListPotentialBiomeSources => Ok(WorkerResponse::KnownSources {
+            sources: potential_biome_sources()?,
+        }),
         WorkerRequest::InspectRaster { path } => {
             let dimensions = raster_dimensions(&path)?;
             Ok(WorkerResponse::RasterDimensions {

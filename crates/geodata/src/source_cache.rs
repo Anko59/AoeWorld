@@ -3,6 +3,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
@@ -13,7 +14,8 @@ pub const DEFAULT_JOB_ACQUISITION_BUDGET_BYTES: u64 = 20 * 1024 * 1024 * 1024;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 const RETRIES: u8 = 3;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Provider {
     Noaa,
     Zenodo,
@@ -238,10 +240,17 @@ fn download_once(
         fs::remove_file(partial)?;
         return Err(CacheError::Integrity("partial file exceeds expected size"));
     }
+    let connector = ureq::native_tls::TlsConnector::new()
+        .map_err(|error| CacheError::Download(error.to_string()))?;
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(Arc::new(connector))
+        .build();
     let request = if offset == 0 {
-        ureq::get(&lock.url)
+        agent.get(&lock.url)
     } else {
-        ureq::get(&lock.url).set("Range", &format!("bytes={offset}-"))
+        agent
+            .get(&lock.url)
+            .set("Range", &format!("bytes={offset}-"))
     };
     let response = request
         .call()
