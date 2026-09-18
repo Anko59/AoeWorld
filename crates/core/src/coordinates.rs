@@ -341,4 +341,13 @@ mod tests {
         assert!(rect.contains(TileCoord::new(11, 9)));
         assert!(!rect.contains(TileCoord::new(12, 9)));
     }
+
+    #[test]
+    fn world_positions_convert_to_tiles_and_rectangles_remain_half_open() {
+        let position = WorldPosition::new(1_024, 2_048);
+        assert_eq!(position.as_tiles(), [1.0, 2.0]);
+        let rect = WorldRect::from_tiles(TileRect::from_xywh(1, 2, 3, 4)).unwrap();
+        assert!(rect.contains(position));
+        assert!(!rect.contains(WorldPosition::new(4_096, 2_048)));
+    }
 }

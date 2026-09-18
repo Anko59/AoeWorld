@@ -146,6 +146,70 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         }
     }
     assert!(accepted);
+    send(
+        &mut spectator,
+        GameplayClientMessage::MoveOrder {
+            sequence: 2,
+            entity_id: primary_unit_id,
+            destination: WorldPosition::new(-1, 0),
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut spectator).await,
+        GameplayServerMessage::CommandAck {
+            result: CommandResult::RejectedNotController,
+            ..
+        }
+    ));
+    send(
+        &mut controller,
+        GameplayClientMessage::MoveOrder {
+            sequence: 2,
+            entity_id: EntityId(999_999),
+            destination: WorldPosition::new(8_389_632, 8_388_608),
+        },
+    )
+    .await;
+    let mut unknown_entity = false;
+    for _ in 0..4 {
+        if matches!(
+            receive(&mut controller).await,
+            GameplayServerMessage::CommandAck {
+                sequence: 2,
+                result: CommandResult::RejectedUnknownEntity,
+                ..
+            }
+        ) {
+            unknown_entity = true;
+            break;
+        }
+    }
+    assert!(unknown_entity);
+    send(
+        &mut controller,
+        GameplayClientMessage::MoveOrder {
+            sequence: 3,
+            entity_id: primary_unit_id,
+            destination: WorldPosition::new(-1, 0),
+        },
+    )
+    .await;
+    let mut invalid_destination = false;
+    for _ in 0..4 {
+        if matches!(
+            receive(&mut controller).await,
+            GameplayServerMessage::CommandAck {
+                sequence: 3,
+                result: CommandResult::RejectedInvalidDestination,
+                ..
+            }
+        ) {
+            invalid_destination = true;
+            break;
+        }
+    }
+    assert!(invalid_destination);
     drop(controller);
     let (_replacement, welcome) = open(address, Some(token)).await;
     assert!(matches!(

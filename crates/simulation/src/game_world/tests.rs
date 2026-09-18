@@ -77,11 +77,54 @@ fn move_destinations_snap_to_tile_centers() {
 }
 
 #[test]
+fn move_to_current_tile_center_cancels_without_active_work() {
+    let mut world = world();
+    let center = WorldPosition::from_tile_center(TileCoord::new(20, 20)).unwrap();
+    let unit = world.spawn_unit(PlayerId(0), center).unwrap();
+    assert!(!world.issue_move(unit, center).unwrap());
+    assert_eq!(world.active_mover_count(), 0);
+    assert!(!world.unit(unit).unwrap().moving);
+}
+
+#[test]
+fn facing_covers_all_isometric_direction_bands() {
+    assert_eq!(facing_for(0, 0, Facing::North), Facing::North);
+    assert_eq!(facing_for(10, -10, Facing::North), Facing::East);
+    assert_eq!(facing_for(-10, 10, Facing::North), Facing::West);
+    assert_eq!(facing_for(10, 10, Facing::North), Facing::South);
+    assert_eq!(facing_for(-10, -10, Facing::South), Facing::North);
+    assert_eq!(facing_for(1, 0, Facing::North), Facing::SouthEast);
+    assert_eq!(facing_for(0, -1, Facing::North), Facing::NorthEast);
+    assert_eq!(facing_for(0, 1, Facing::North), Facing::SouthWest);
+    assert_eq!(facing_for(-1, 0, Facing::North), Facing::NorthWest);
+}
+
+#[test]
+fn unknown_orders_and_hash_hex_are_deterministic() {
+    let mut world = world();
+    assert_eq!(
+        world.issue_move(EntityId(999), WorldPosition::new(1, 1)),
+        Err(GameWorldError::UnknownEntity)
+    );
+    assert_eq!(world.canonical_hash_hex().len(), 64);
+}
+
+#[test]
 fn default_cavalry_starts_at_a_tile_center() {
     let (world, unit) = GameWorld::default_with_cavalry(Seed(7));
     let position = world.unit(unit).unwrap().position;
     assert_eq!(position.x.rem_euclid(FIXED_SUBUNITS_PER_TILE), 512);
     assert_eq!(position.y.rem_euclid(FIXED_SUBUNITS_PER_TILE), 512);
+}
+
+#[test]
+fn convenience_world_constructors_build_the_requested_worlds() {
+    let config = WorldConfig::new(256, 256, Seed(7)).unwrap();
+    let (world, unit) = GameWorld::with_cavalry(config).unwrap();
+    assert_eq!(world.unit_count(), 1);
+    assert!(world.unit_exists(unit));
+    let populated = GameWorld::with_population(config, 4, 1, 2).unwrap();
+    assert_eq!(populated.unit_count(), 4);
 }
 
 #[test]
