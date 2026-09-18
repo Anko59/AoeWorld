@@ -3,6 +3,7 @@ use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
+use aoe_map::{Depletion, ResourceOverlayError};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::game_path::{next_waypoint, segment_length};
@@ -253,6 +254,17 @@ impl GameWorld {
             route: VecDeque::new(),
         });
         Ok(id)
+    }
+
+    /// Depletes an immutable-map resource through the authoritative mutable
+    /// overlay. Once the remaining amount reaches zero, collision updates in
+    /// the same deterministic world state.
+    pub fn deplete_resource(
+        &mut self,
+        id: u64,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
+        self.terrain.deplete_resource(id, requested)
     }
 
     pub fn issue_move(

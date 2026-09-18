@@ -1,7 +1,8 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage,
-    MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage, find_path_with_overlay,
+    Depletion, EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator,
+    MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay, ResourceOverlayError,
+    WaterPage, find_path_with_overlay,
 };
 use std::collections::{BTreeSet, VecDeque};
 
@@ -99,6 +100,19 @@ impl Terrain {
             | MovementOutcome::Unreachable
             | MovementOutcome::BudgetExceeded => Some(Vec::new()),
         }
+    }
+
+    /// Applies a deterministic resource depletion to map terrain. Exhausted
+    /// resources immediately stop blocking passability through the overlay.
+    pub fn deplete_resource(
+        &mut self,
+        id: u64,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
+        let Self::Map { generator, overlay } = self else {
+            return Err(ResourceOverlayError::UnknownResource);
+        };
+        overlay.deplete(generator, id, requested)
     }
 
     /// Counts a connected walkable component without allocating map-scale

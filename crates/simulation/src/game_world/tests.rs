@@ -229,6 +229,36 @@ fn map_world_rejects_blocked_ground_before_spawning_or_ordering() {
 }
 
 #[test]
+fn exhausting_a_resource_releases_its_blocking_tile() {
+    let config = WorldConfig::new(128, 128, Seed(3)).expect("config");
+    let generator = MapChunkGenerator::new([3; 32], 1, config.width_tiles);
+    let resource = (0..4)
+        .flat_map(|y| {
+            let generator = generator.clone();
+            (0..4).flat_map(move |x| generator.chunk(x, y).resources)
+        })
+        .next()
+        .expect("resource");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    assert!(!world.terrain().passable(resource.tile, config));
+    let first = world
+        .deplete_resource(resource.id, resource.initial_amount - 1)
+        .expect("partial depletion");
+    assert!(first.remaining > 0);
+    assert!(!first.became_nonblocking);
+    let final_depletion = world
+        .deplete_resource(resource.id, resource.initial_amount)
+        .expect("final depletion");
+    assert_eq!(final_depletion.remaining, 0);
+    assert!(final_depletion.became_nonblocking);
+    assert!(world.terrain().passable(resource.tile, config));
+}
+
+#[test]
 fn map_world_follows_a_passable_route_to_its_destination() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
