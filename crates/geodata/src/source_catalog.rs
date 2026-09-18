@@ -8,6 +8,10 @@ const BIOME_CLASSES: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v
 const ETOPO_60S_SURFACE_URL: &str = "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/data/60s/60s_surface_elev_gtif/ETOPO_2022_v1_60s_N90W180_surface.tif";
 const NATURAL_EARTH_10M_LAND_URL: &str =
     "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip";
+const HYDE_DATASET_URL: &str = "https://archaeology.datastations.nl/api/datasets/:persistentId/?persistentId=doi:10.17026/DANS-25G-GEZ3";
+const HYDE_BASELINE: &str = "HYDE3_2_1-baseline.zip";
+const HYDE_SUPPLEMENTARY: &str = "HYDE3_2_1-general_supplementary.zip";
+const HYDE_README: &str = "readme_release_HYDE3.2.1.txt";
 
 /// A checksum resolved from provider metadata or pinned after a verified,
 /// explicitly reviewed acquisition when the provider publishes no digest.
@@ -15,16 +19,76 @@ const NATURAL_EARTH_10M_LAND_URL: &str =
 #[serde(rename_all = "snake_case", tag = "algorithm", content = "digest")]
 pub enum ExpectedChecksum {
     Md5([u8; 16]),
+    Sha1([u8; 20]),
     Sha256([u8; 32]),
 }
 
 impl ExpectedChecksum {
-    pub(crate) fn matches(self, sha256: &[u8; 32], md5: &[u8; 16]) -> bool {
+    pub(crate) fn matches(self, sha256: &[u8; 32], sha1: &[u8; 20], md5: &[u8; 16]) -> bool {
         match self {
             Self::Md5(expected) => expected == *md5,
+            Self::Sha1(expected) => expected == *sha1,
             Self::Sha256(expected) => expected == *sha256,
         }
     }
+}
+
+pub fn hyde_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
+    let connector = ureq::native_tls::TlsConnector::new()
+        .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(Arc::new(connector))
+        .build();
+    let response = agent
+        .get(HYDE_DATASET_URL)
+        .call()
+        .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
+    let mut payload = String::new();
+    response
+        .into_reader()
+        .read_to_string(&mut payload)
+        .map_err(SourceCatalogError::Io)?;
+    parse_hyde_sources(&payload)
+}
+
+fn parse_hyde_sources(payload: &str) -> Result<Vec<KnownSource>, SourceCatalogError> {
+    let dataset = serde_json::from_str::<DataverseDataset>(payload)
+        .map_err(|error| SourceCatalogError::Metadata(error.to_string()))?;
+    [HYDE_BASELINE, HYDE_SUPPLEMENTARY, HYDE_README]
+        .into_iter()
+        .map(|expected| {
+            let file = dataset
+                .data
+                .latest_version
+                .files
+                .iter()
+                .find(|file| file.data_file.filename == expected)
+                .ok_or(SourceCatalogError::MissingRequiredFile(expected))?;
+            let checksum = file
+                .data_file
+                .checksum
+                .as_ref()
+                .ok_or(SourceCatalogError::UnexpectedChecksum(expected))?;
+            if checksum.kind != "SHA-1" {
+                return Err(SourceCatalogError::UnexpectedChecksum(expected));
+            }
+            Ok(KnownSource {
+                id: format!("hyde-3.2.1:{expected}"),
+                provider: Provider::Dans,
+                release: "HYDE 3.2.1, DANS-25G-GEZ3".to_owned(),
+                url: format!(
+                    "https://archaeology.datastations.nl/api/access/datafile/{}?format=original",
+                    file.data_file.id
+                ),
+                bytes: file.data_file.filesize,
+                expected_checksum: ExpectedChecksum::Sha1(parse_sha1(&checksum.value, expected)?),
+                native_resolution: "5 arc-minutes".to_owned(),
+                crs: "EPSG:4326".to_owned(),
+                vertical_datum: "not applicable".to_owned(),
+                license_reference: "dataset metadata CC0; release README CC BY 3.0".to_owned(),
+            })
+        })
+        .collect()
 }
 
 impl KnownSource {
@@ -169,6 +233,18 @@ fn parse_md5(value: &str, name: &'static str) -> Result<[u8; 16], SourceCatalogE
     Ok(output)
 }
 
+fn parse_sha1(value: &str, name: &'static str) -> Result<[u8; 20], SourceCatalogError> {
+    if value.len() != 40 {
+        return Err(SourceCatalogError::UnexpectedChecksum(name));
+    }
+    let mut output = [0_u8; 20];
+    for (index, slot) in output.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| SourceCatalogError::UnexpectedChecksum(name))?;
+    }
+    Ok(output)
+}
+
 #[derive(Deserialize)]
 struct ZenodoRecord {
     files: Vec<ZenodoFile>,
@@ -186,6 +262,38 @@ struct ZenodoFile {
 struct ZenodoLinks {
     #[serde(rename = "self")]
     content: String,
+}
+
+#[derive(Deserialize)]
+struct DataverseDataset {
+    data: DataverseData,
+}
+#[derive(Deserialize)]
+struct DataverseData {
+    #[serde(rename = "latestVersion")]
+    latest_version: DataverseVersion,
+}
+#[derive(Deserialize)]
+struct DataverseVersion {
+    files: Vec<DataverseFile>,
+}
+#[derive(Deserialize)]
+struct DataverseFile {
+    #[serde(rename = "dataFile")]
+    data_file: DataverseDataFile,
+}
+#[derive(Deserialize)]
+struct DataverseDataFile {
+    id: u64,
+    filename: String,
+    filesize: u64,
+    checksum: Option<DataverseChecksum>,
+}
+#[derive(Deserialize)]
+struct DataverseChecksum {
+    #[serde(rename = "type")]
+    kind: String,
+    value: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -248,6 +356,29 @@ mod tests {
         assert_eq!(
             source.cache_lock().expect("cache lock").sha256,
             "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
+        );
+    }
+
+    #[test]
+    fn catalog_requires_hyde_baseline_supplementary_and_readme() {
+        let sources = parse_hyde_sources(
+            r#"{"data":{"latestVersion":{"files":[
+                {"dataFile":{"id":5490328,"filename":"HYDE3_2_1-baseline.zip","filesize":5339653974,"checksum":{"type":"SHA-1","value":"0d0e4ff97deb59664ce6c34dfdeeafa08e487d20"}}},
+                {"dataFile":{"id":5490327,"filename":"HYDE3_2_1-general_supplementary.zip","filesize":23585889,"checksum":{"type":"SHA-1","value":"3cfe98d21e70c9ce478460c7265962f1bb2b6aab"}}},
+                {"dataFile":{"id":5396388,"filename":"readme_release_HYDE3.2.1.txt","filesize":8826,"checksum":{"type":"SHA-1","value":"821309ce6035c68033c6e5b3522982cd515bd111"}}}
+            ]}}}"#,
+        )
+        .expect("HYDE catalog");
+        assert_eq!(sources.len(), 3);
+        assert_eq!(sources[0].bytes, 5_339_653_974);
+        assert!(matches!(
+            sources[0].expected_checksum,
+            ExpectedChecksum::Sha1(_)
+        ));
+        assert!(
+            sources
+                .iter()
+                .all(|source| source.provider == Provider::Dans)
         );
     }
 }

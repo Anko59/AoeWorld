@@ -34,7 +34,7 @@ pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potent
 
 mod source_catalog;
 pub use source_catalog::{
-    ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface,
+    ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface, hyde_sources,
     natural_earth_10m_land, potential_biome_sources,
 };
 
@@ -75,6 +75,7 @@ pub enum WorkerRequest {
     },
     ListOverviewSources,
     ListPotentialBiomeSources,
+    ListHydeSources,
     InspectRaster {
         path: PathBuf,
     },
@@ -139,6 +140,9 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
         }),
         WorkerRequest::ListPotentialBiomeSources => Ok(WorkerResponse::KnownSources {
             sources: potential_biome_sources()?,
+        }),
+        WorkerRequest::ListHydeSources => Ok(WorkerResponse::KnownSources {
+            sources: hyde_sources()?,
         }),
         WorkerRequest::InspectRaster { path } => {
             let dimensions = raster_dimensions(&path)?;

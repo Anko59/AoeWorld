@@ -1,8 +1,7 @@
 use crate::KnownSource;
-use md5::Md5;
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
@@ -10,6 +9,9 @@ use std::{
     thread,
     time::Duration,
 };
+
+mod digest;
+use digest::{digest_hex, file_hashes};
 
 pub const DEFAULT_CACHE_QUOTA_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub const DEFAULT_JOB_ACQUISITION_BUDGET_BYTES: u64 = 20 * 1024 * 1024 * 1024;
@@ -40,7 +42,7 @@ impl Provider {
             ) | (Provider::Zenodo, Some("zenodo.org" | "sandbox.zenodo.org"))
                 | (
                     Provider::Dans,
-                    Some("data.dans.knaw.nl" | "easy.dans.knaw.nl")
+                    Some("data.dans.knaw.nl" | "easy.dans.knaw.nl" | "archaeology.datastations.nl")
                 )
                 | (Provider::HydroSheds, Some("data.hydrosheds.org"))
                 | (
@@ -242,8 +244,8 @@ impl SourceCache {
             }
             match download_once(&source.url, source.bytes, &partial, cancelled) {
                 Ok(()) => {
-                    let (sha256, md5) = file_hashes(&partial)?;
-                    if !source.expected_checksum.matches(&sha256, &md5) {
+                    let (sha256, sha1, md5) = file_hashes(&partial)?;
+                    if !source.expected_checksum.matches(&sha256, &sha1, &md5) {
                         fs::remove_file(&partial)?;
                         return Err(CacheError::Integrity(
                             "catalog checksum differs from source",
@@ -369,25 +371,6 @@ fn download_once(
     }
     Ok(())
 }
-fn file_hashes(path: &Path) -> Result<([u8; 32], [u8; 16]), CacheError> {
-    let mut file = File::open(path)?;
-    let mut sha = Sha256::new();
-    let mut md5 = Md5::new();
-    let mut buffer = [0_u8; COPY_BUFFER_BYTES];
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        sha.update(&buffer[..count]);
-        md5.update(&buffer[..count]);
-    }
-    Ok((sha.finalize().into(), md5.finalize().into()))
-}
-
-fn digest_hex(digest: &[u8]) -> String {
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
 fn verify_file(path: &Path, lock: &SourceLock) -> Result<(), CacheError> {
     let metadata = fs::metadata(path)?;
     if metadata.len() != lock.bytes {
@@ -395,7 +378,7 @@ fn verify_file(path: &Path, lock: &SourceLock) -> Result<(), CacheError> {
             "file length differs from source lock",
         ));
     }
-    let (actual, _) = file_hashes(path)?;
+    let (actual, _, _) = file_hashes(path)?;
     let actual = digest_hex(&actual);
     if !actual.eq_ignore_ascii_case(&lock.sha256) {
         return Err(CacheError::Integrity("SHA-256 differs from source lock"));
@@ -478,12 +461,16 @@ mod tests {
         fs::create_dir_all(&root).expect("temporary root");
         let path = root.join("source");
         fs::write(&path, b"abc").expect("source bytes");
-        let (sha, md5) = file_hashes(&path).expect("digests");
+        let (sha, sha1, md5) = file_hashes(&path).expect("digests");
         assert_eq!(
             digest_hex(&sha),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
         assert_eq!(digest_hex(&md5), "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(
+            digest_hex(&sha1),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
         fs::remove_dir_all(root).expect("remove temporary cache");
     }
 
