@@ -31,9 +31,9 @@ pub use terrain::{
 };
 
 pub const CHUNK_TILES: i32 = 32;
-/// Version 3 adds immutable potential-biome page roots and per-tile vegetation
-/// provenance to the source-backed terrain contract.
-pub const MAP_SCHEMA_VERSION: u16 = 3;
+/// Version 4 adds immutable potential-biome page roots, per-tile vegetation
+/// provenance, and biome-specific correlated tree-generation rules.
+pub const MAP_SCHEMA_VERSION: u16 = 4;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;

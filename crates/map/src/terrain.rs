@@ -1,5 +1,7 @@
 use crate::biome::{PreparedBiome, level_zero_biome_pages};
-use crate::biome_rules::{Biome, biome_from_potential_class, material_for, resource_modulus};
+use crate::biome_rules::{
+    Biome, biome_from_potential_class, material_for, resource_modulus, tree_present,
+};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
     CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PotentialBiomePage,
@@ -369,8 +371,17 @@ impl MapChunkGenerator {
         }
         let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
             ^ self.procedural_seed.rotate_left(17);
+        if tree_present(self.geography_key, tile.x, tile.y, sample.biome) {
+            return Some(ResourceNode {
+                id: resource_id(tile, 0),
+                tile,
+                kind: ResourceKind::Wood,
+                object: ObjectKind::Tree,
+                initial_amount: 100,
+                visual_variant: (value >> 8) as u8,
+            });
+        }
         let (kind, object, amount) = match value % resource_modulus(sample.biome) {
-            0 => (ResourceKind::Wood, ObjectKind::Tree, 100),
             1 if value.is_multiple_of(257) => (ResourceKind::Food, ObjectKind::ForageBush, 125),
             2 if value.is_multiple_of(521) => (ResourceKind::Gold, ObjectKind::GoldDeposit, 800),
             3 if value % 521 == 1 => (ResourceKind::Stone, ObjectKind::StoneDeposit, 350),
