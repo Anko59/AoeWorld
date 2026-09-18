@@ -244,7 +244,7 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
         .route("/maps/estimate", post(maps::estimate))
-        .route("/maps/jobs", post(maps::create_job))
+        .route("/maps/jobs", get(maps::list_jobs).post(maps::create_job))
         .route("/maps/jobs/{job_id}", get(maps::job_status))
         .route("/maps/jobs/{job_id}/cancel", post(maps::cancel_job))
         .route("/maps/activate", post(maps::activate))

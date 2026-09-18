@@ -22,12 +22,26 @@ pub(super) enum JobState {
     Failed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum JobStage {
+    Queued,
+    BuildingFallbackPackage,
+    Cancelling,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub(super) struct Job {
     pub id: u64,
     pub request: MapRequest,
     pub estimate: MapEstimate,
     pub state: JobState,
+    pub stage: JobStage,
+    pub percent: u8,
+    pub eta_seconds: Option<u64>,
     pub content_hash: Option<String>,
     pub error: Option<String>,
 }
@@ -69,7 +83,11 @@ impl Manager {
             .iter()
             .find(|(_, entry)| entry.job.state == JobState::Queued)
             .map(|(id, _)| *id)?;
-        self.jobs.get_mut(&id)?.job.state = JobState::Running;
+        let job = &mut self.jobs.get_mut(&id)?.job;
+        job.state = JobState::Running;
+        job.stage = JobStage::BuildingFallbackPackage;
+        job.percent = 5;
+        job.eta_seconds = Some(1);
         Some(id)
     }
 
@@ -88,6 +106,9 @@ impl Manager {
             request,
             estimate,
             state: JobState::Queued,
+            stage: JobStage::Queued,
+            percent: 0,
+            eta_seconds: None,
             content_hash: None,
             error: None,
         };
@@ -131,14 +152,31 @@ pub(super) async fn status(state: &AppState, id: u64) -> Option<Job> {
         .map(|entry| entry.job.clone())
 }
 
+pub(super) async fn list(state: &AppState) -> Vec<Job> {
+    state
+        .map_jobs
+        .lock()
+        .await
+        .jobs
+        .values()
+        .map(|entry| entry.job.clone())
+        .collect()
+}
+
 pub(super) async fn cancel(state: &AppState, id: u64) -> Option<Job> {
     let mut manager = state.map_jobs.lock().await;
     let entry = manager.jobs.get_mut(&id)?;
     match entry.job.state {
-        JobState::Queued => entry.job.state = JobState::Cancelled,
+        JobState::Queued => {
+            entry.job.state = JobState::Cancelled;
+            entry.job.stage = JobStage::Cancelled;
+            entry.job.eta_seconds = None;
+        }
         JobState::Running => {
             entry.cancelled.store(true, Ordering::SeqCst);
             entry.job.state = JobState::CancelRequested;
+            entry.job.stage = JobStage::Cancelling;
+            entry.job.eta_seconds = None;
         }
         JobState::CancelRequested
         | JobState::Completed
@@ -191,16 +229,23 @@ async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
         };
         let package = if entry.cancelled.load(Ordering::SeqCst) {
             entry.job.state = JobState::Cancelled;
+            entry.job.stage = JobStage::Cancelled;
+            entry.job.eta_seconds = None;
             None
         } else {
             match result {
                 Ok(package) => {
                     entry.job.state = JobState::Completed;
+                    entry.job.stage = JobStage::Completed;
+                    entry.job.percent = 100;
+                    entry.job.eta_seconds = Some(0);
                     entry.job.content_hash = Some(package.content_hash_hex());
                     Some(package)
                 }
                 Err(error) => {
                     entry.job.state = JobState::Failed;
+                    entry.job.stage = JobStage::Failed;
+                    entry.job.eta_seconds = None;
                     entry.job.error = Some(error);
                     None
                 }
@@ -236,7 +281,13 @@ mod tests {
         manager.enqueue(request, estimate).expect("third job");
         assert!(manager.enqueue(request, estimate).is_err());
         assert_eq!(manager.queued(), 2);
+        assert_eq!(first.stage, JobStage::BuildingFallbackPackage);
+        assert_eq!(first.percent, 5);
         manager.jobs.get_mut(&first.id).expect("job").job.state = JobState::Completed;
         assert_eq!(manager.start_next(), Some(1));
+        assert_eq!(
+            manager.jobs.get(&1).expect("second job").job.stage,
+            JobStage::BuildingFallbackPackage
+        );
     }
 }

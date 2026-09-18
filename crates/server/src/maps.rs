@@ -105,6 +105,10 @@ pub(super) async fn job_status(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+pub(super) async fn list_jobs(State(state): State<AppState>) -> Json<Vec<map_jobs::Job>> {
+    Json(map_jobs::list(&state).await)
+}
+
 pub(super) async fn cancel_job(
     Path(job_id): Path<u64>,
     State(state): State<AppState>,

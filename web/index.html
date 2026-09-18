@@ -86,7 +86,9 @@
         requested_side_meters: Math.round(side * 1000),
         compression: ratio(document.getElementById('map-compression').value),
         year_ce: 600,
-        seed: Math.round(number('map-seed'))
+        seed: Math.round(number('map-seed')),
+        reconstruction_profile: 'circa600_v1',
+        detail_profile: 'standard_v1'
       };
     };
     const readJson = async response => {
@@ -99,7 +101,8 @@
         if (job.state === 'completed') return job;
         if (job.state === 'cancelled') throw new Error('Map creation cancelled.');
         if (job.state === 'failed') throw new Error(job.error || 'Map creation failed.');
-        estimate.textContent = job.state === 'queued' ? 'Map creation queued.' : 'Preparing fallback map package…';
+        const eta = job.eta_seconds === null ? '' : ` · ${formatTime(job.eta_seconds)} remaining`;
+        estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}`;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     };
