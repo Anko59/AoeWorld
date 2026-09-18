@@ -33,8 +33,8 @@ pub use terrain::{
 };
 
 pub const CHUNK_TILES: i32 = 32;
-/// Version 6 adds shared elevation-corner surface geometry and cliff rules.
-pub const MAP_SCHEMA_VERSION: u16 = 6;
+/// Version 7 adds deterministic clustered forage and ore patch generation.
+pub const MAP_SCHEMA_VERSION: u16 = 7;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;

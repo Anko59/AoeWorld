@@ -1,7 +1,5 @@
 use crate::biome::{PreparedBiome, level_zero_biome_pages};
-use crate::biome_rules::{
-    Biome, biome_from_potential_class, material_for, resource_modulus, tree_present,
-};
+use crate::biome_rules::{Biome, biome_from_potential_class, material_for, tree_present};
 use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
@@ -13,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 mod elevation;
+mod resources;
 mod surface;
 use elevation::PreparedElevation;
 pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
@@ -428,20 +427,7 @@ impl MapChunkGenerator {
                 visual_variant: (value >> 8) as u8,
             });
         }
-        let (kind, object, amount) = match value % resource_modulus(sample.biome) {
-            1 if value.is_multiple_of(257) => (ResourceKind::Food, ObjectKind::ForageBush, 125),
-            2 if value.is_multiple_of(521) => (ResourceKind::Gold, ObjectKind::GoldDeposit, 800),
-            3 if value % 521 == 1 => (ResourceKind::Stone, ObjectKind::StoneDeposit, 350),
-            _ => return None,
-        };
-        Some(ResourceNode {
-            id: resource_id(tile, 0),
-            tile,
-            kind,
-            object,
-            initial_amount: amount,
-            visual_variant: (value >> 8) as u8,
-        })
+        resources::at(self, tile, sample)
     }
 }
 

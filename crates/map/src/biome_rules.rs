@@ -45,16 +45,6 @@ pub(crate) fn material_for(biome: Biome, height: i32) -> GroundMaterial {
     }
 }
 
-pub(crate) fn resource_modulus(biome: Biome) -> u64 {
-    match biome {
-        Biome::Tropical | Biome::Temperate | Biome::Boreal => 3,
-        Biome::Woodland => 6,
-        Biome::Savanna => 12,
-        Biome::Steppe => 96,
-        Biome::Desert | Biome::Tundra | Biome::Alpine | Biome::Polar => u64::MAX,
-    }
-}
-
 /// Initial occupied-tile tree targets for the game model, before water and
 /// land-use exclusions. Terrain applies a correlated local modifier so these
 /// do not form a uniform checkerboard.
