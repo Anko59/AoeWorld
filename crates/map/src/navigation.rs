@@ -144,8 +144,9 @@ where
             }
             if delta_x != 0
                 && delta_y != 0
-                && (!passable(TileCoord::new(tile.x + delta_x, tile.y))
-                    || !passable(TileCoord::new(tile.x, tile.y + delta_y)))
+                && !diagonal_clear(tile, delta_x, delta_y, passable, |from, to| {
+                    terrain.edge_between(from, to)
+                })
             {
                 continue;
             }
@@ -164,6 +165,25 @@ where
         }
     }
     result
+}
+
+fn diagonal_clear<F, E>(
+    tile: TileCoord,
+    delta_x: i32,
+    delta_y: i32,
+    passable: &F,
+    edge_between: E,
+) -> bool
+where
+    F: Fn(TileCoord) -> bool,
+    E: Fn(TileCoord, TileCoord) -> EdgePassability,
+{
+    let horizontal = TileCoord::new(tile.x + delta_x, tile.y);
+    let vertical = TileCoord::new(tile.x, tile.y + delta_y);
+    passable(horizontal)
+        && passable(vertical)
+        && matches!(edge_between(tile, horizontal), EdgePassability::Passable)
+        && matches!(edge_between(tile, vertical), EdgePassability::Passable)
 }
 
 fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
@@ -260,5 +280,20 @@ mod tests {
             find_path_with_overlay(&terrain, &overlay, node.tile, node.tile, 4_096),
             MovementOutcome::Path(_)
         ));
+    }
+
+    #[test]
+    fn diagonal_moves_require_clear_cardinal_edges() {
+        let origin = TileCoord::new(4, 4);
+        assert!(!diagonal_clear(origin, 1, 1, &|_| true, |from, to| {
+            if from == origin && to == TileCoord::new(5, 4) {
+                EdgePassability::Blocked
+            } else {
+                EdgePassability::Passable
+            }
+        },));
+        assert!(diagonal_clear(origin, 1, 1, &|_| true, |_, _| {
+            EdgePassability::Passable
+        },));
     }
 }
