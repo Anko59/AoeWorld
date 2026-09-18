@@ -377,10 +377,14 @@ impl MapChunkGenerator {
             .water
             .as_ref()
             .and_then(|water| water.coverage_at(tile, self.width_tiles))
-            .map(|coverage| match coverage {
-                0 => (fallback_water, Provenance::Fallback),
+            .map(|coverage| match coverage.ocean_percent {
                 1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
-                _ => (WaterKind::Ocean, Provenance::SourceDerived),
+                51..=100 => (WaterKind::Ocean, Provenance::SourceDerived),
+                _ => match coverage.inland_percent {
+                    0 => (fallback_water, Provenance::Fallback),
+                    1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
+                    _ => (WaterKind::Lake, Provenance::SourceDerived),
+                },
             })
             .unwrap_or((water, water_provenance));
         let material = match water {

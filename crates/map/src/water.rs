@@ -10,6 +10,12 @@ pub(crate) struct PreparedWater {
     pages: BTreeMap<(u16, u16), WaterPage>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WaterCoverage {
+    pub ocean_percent: u8,
+    pub inland_percent: u8,
+}
+
 pub(crate) fn level_zero_water_pages(
     field: &FieldPyramid,
     pages: Vec<WaterPage>,
@@ -61,7 +67,7 @@ impl PreparedWater {
         }
     }
 
-    pub(crate) fn coverage_at(&self, tile: TileCoord, width_tiles: i32) -> Option<u8> {
+    pub(crate) fn coverage_at(&self, tile: TileCoord, width_tiles: i32) -> Option<WaterCoverage> {
         let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
         let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
         let x =
@@ -74,7 +80,12 @@ impl PreparedWater {
         let page = self.pages.get(&(x / page_size, y / page_size))?;
         let local_x = usize::from(x % page_size);
         let local_y = usize::from(y % page_size);
-        (local_x < usize::from(page.width) && local_y < usize::from(page.height))
-            .then(|| page.ocean_coverage_percent[local_y * usize::from(page.width) + local_x])
+        (local_x < usize::from(page.width) && local_y < usize::from(page.height)).then(|| {
+            let index = local_y * usize::from(page.width) + local_x;
+            WaterCoverage {
+                ocean_percent: page.ocean_coverage_percent[index],
+                inland_percent: page.inland_coverage_percent[index],
+            }
+        })
     }
 }

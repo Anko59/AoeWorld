@@ -31,6 +31,7 @@ pub fn prepare_ocean_coverage(
     archive: &Path,
     request: MapRequest,
     samples_per_axis: u16,
+    inland_coverage: Vec<u8>,
 ) -> Result<PreparedWater, GeodataError> {
     if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
@@ -109,9 +110,10 @@ pub fn prepare_ocean_coverage(
     let mut pages = Vec::new();
     let mut levels = Vec::new();
     let mut level_axis = samples_per_axis;
-    let mut values = ocean_coverage(samples_per_axis, axis, &land)?;
+    let mut ocean = ocean_coverage(samples_per_axis, axis, &land)?;
+    let mut inland = inland_on_land(&ocean, inland_coverage)?;
     loop {
-        let level_pages = pages_for(levels.len() as u8, level_axis, &values)?;
+        let level_pages = pages_for(levels.len() as u8, level_axis, &ocean, &inland)?;
         levels.push(PyramidLevel {
             samples_per_axis: level_axis,
             ordered_page_root: ordered_water_page_root(&level_pages)?,
@@ -120,7 +122,8 @@ pub fn prepare_ocean_coverage(
         if level_axis == 1 {
             break;
         }
-        values = reduce_coverage(level_axis, &values)?;
+        ocean = reduce_coverage(level_axis, &ocean)?;
+        inland = reduce_coverage(level_axis, &inland)?;
         level_axis = level_axis.div_ceil(2);
     }
     Ok(PreparedWater {
@@ -169,8 +172,26 @@ fn ocean_coverage(axis: u16, supersampled_axis: u16, land: &[u8]) -> Result<Vec<
     Ok(values)
 }
 
-fn pages_for(level: u8, axis: u16, values: &[u8]) -> Result<Vec<WaterPage>, GeodataError> {
-    if values.len() != usize::from(axis).pow(2) {
+fn inland_on_land(ocean: &[u8], inland: Vec<u8>) -> Result<Vec<u8>, GeodataError> {
+    if inland.len() != ocean.len() {
+        return Err(GeodataError::Preparation(
+            "inland water grid shape is invalid",
+        ));
+    }
+    Ok(ocean
+        .iter()
+        .zip(inland)
+        .map(|(&ocean, inland)| if ocean == 0 { inland } else { 0 })
+        .collect())
+}
+
+fn pages_for(
+    level: u8,
+    axis: u16,
+    ocean: &[u8],
+    inland: &[u8],
+) -> Result<Vec<WaterPage>, GeodataError> {
+    if ocean.len() != usize::from(axis).pow(2) || inland.len() != ocean.len() {
         return Err(GeodataError::Preparation("water grid shape is invalid"));
     }
     let mut pages = Vec::new();
@@ -178,10 +199,14 @@ fn pages_for(level: u8, axis: u16, values: &[u8]) -> Result<Vec<WaterPage>, Geod
         for x in (0..axis).step_by(usize::from(ENVIRONMENT_PAGE_SAMPLES)) {
             let width = (axis - x).min(u16::from(ENVIRONMENT_PAGE_SAMPLES));
             let height = (axis - y).min(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-            let mut coverage = Vec::with_capacity(usize::from(width) * usize::from(height));
+            let mut ocean_coverage_percent =
+                Vec::with_capacity(usize::from(width) * usize::from(height));
+            let mut inland_coverage_percent = Vec::with_capacity(ocean_coverage_percent.capacity());
             for row in y..y + height {
                 let start = usize::from(row) * usize::from(axis) + usize::from(x);
-                coverage.extend_from_slice(&values[start..start + usize::from(width)]);
+                let end = start + usize::from(width);
+                ocean_coverage_percent.extend_from_slice(&ocean[start..end]);
+                inland_coverage_percent.extend_from_slice(&inland[start..end]);
             }
             pages.push(WaterPage {
                 level,
@@ -189,7 +214,8 @@ fn pages_for(level: u8, axis: u16, values: &[u8]) -> Result<Vec<WaterPage>, Geod
                 y: y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
                 width: width as u8,
                 height: height as u8,
-                ocean_coverage_percent: coverage,
+                ocean_coverage_percent,
+                inland_coverage_percent,
             });
         }
     }
@@ -231,5 +257,14 @@ mod tests {
             [100, 0, 100, 0]
         );
         assert!(ocean_coverage(2, 4, &land[..15]).is_err());
+    }
+
+    #[test]
+    fn inland_coverage_never_overwrites_ocean() {
+        assert_eq!(
+            inland_on_land(&[100, 0], vec![100, 100]).expect("inland coverage"),
+            [0, 100]
+        );
+        assert!(inland_on_land(&[0], vec![100, 0]).is_err());
     }
 }

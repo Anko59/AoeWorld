@@ -19,7 +19,7 @@ mod elevation;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 
 mod hyde;
-pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600};
+pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
 
 mod source_cache;
 pub use source_cache::{
@@ -235,7 +235,9 @@ fn prepare_overview_elevation(
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
     let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
-    let water = prepare_ocean_coverage(&water_path, request, samples_per_axis)?;
+    let lake_coverage =
+        prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;
+    let water = prepare_ocean_coverage(&water_path, request, samples_per_axis, lake_coverage)?;
     let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
     let historical_land_use = prepare_hyde_600(
         &hyde_baseline_path,

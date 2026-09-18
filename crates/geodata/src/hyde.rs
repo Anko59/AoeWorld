@@ -30,6 +30,30 @@ pub struct PreparedHistoricalLandUse {
     pub pages: Vec<HistoricalLandUsePage>,
 }
 
+/// Samples HYDE's fixed 5' land/lake mask. The release notes define land as
+/// one, lakes as zero, and ocean as nodata; only lakes become inland coverage.
+pub fn prepare_hyde_lake_coverage(
+    supplementary_archive: &Path,
+    request: MapRequest,
+    samples_per_axis: u16,
+) -> Result<Vec<u8>, GeodataError> {
+    let request = request
+        .normalized()
+        .map_err(|_| GeodataError::Preparation("invalid request"))?;
+    let coordinates = projected_coordinates(request, samples_per_axis)?;
+    sample_member(
+        supplementary_archive,
+        HYDE_600_MEMBERS[3],
+        &coordinates,
+        samples_per_axis,
+    )
+    .map(|values| values.into_iter().map(lake_coverage_percent).collect())
+}
+
+fn lake_coverage_percent(value: f64) -> u8 {
+    u8::from(value == 0.0) * 100
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct LandUseValue {
     crop_percent: u8,
@@ -422,5 +446,12 @@ mod tests {
     fn archive_members_are_an_explicit_safe_allowlist() {
         assert!(HYDE_600_MEMBERS.contains(&"baseline/asc/600AD_lu/cropland600AD.asc"));
         assert!(!HYDE_600_MEMBERS.contains(&"../../outside.asc"));
+    }
+
+    #[test]
+    fn fixed_hyde_landlake_values_only_mark_lakes_as_water() {
+        assert_eq!(lake_coverage_percent(1.0), 0);
+        assert_eq!(lake_coverage_percent(0.0), 100);
+        assert_eq!(lake_coverage_percent(-9_999.0), 0);
     }
 }

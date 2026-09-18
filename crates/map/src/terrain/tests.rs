@@ -124,3 +124,69 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         .collect::<Vec<_>>();
     assert!(cleared.iter().all(|node| node.kind != ResourceKind::Wood));
 }
+
+#[test]
+fn prepared_inland_coverage_creates_a_non_passable_lake() {
+    let level_zero = crate::WaterPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        ocean_coverage_percent: vec![0; 4],
+        inland_coverage_percent: vec![100, 0, 0, 0],
+    };
+    let overview = crate::WaterPage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        ocean_coverage_percent: vec![0],
+        inland_coverage_percent: vec![25],
+    };
+    let environment = PreparedEnvironment {
+        samples_per_axis: 2,
+        geographic_millimeters_per_sample: 1_000,
+        page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+        elevation: crate::FieldPyramid {
+            levels: vec![
+                crate::PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: [1; 32],
+                },
+                crate::PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [2; 32],
+                },
+            ],
+        },
+        water: Some(crate::FieldPyramid {
+            levels: vec![
+                crate::PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: crate::ordered_water_page_root(std::slice::from_ref(
+                        &level_zero,
+                    ))
+                    .expect("level-zero root"),
+                },
+                crate::PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: crate::ordered_water_page_root(std::slice::from_ref(
+                        &overview,
+                    ))
+                    .expect("overview root"),
+                },
+            ],
+        }),
+        vegetation: None,
+        historical_land_use: None,
+    };
+    let terrain = generator(1)
+        .with_prepared_water(&environment, vec![level_zero, overview])
+        .expect("prepared water");
+    let tile = terrain.tile_at(TileCoord::new(0, 0)).expect("lake tile");
+    assert_eq!(tile.water, WaterKind::Lake);
+    assert_eq!(tile.water_provenance, Provenance::SourceDerived);
+    assert!(!tile.passable);
+}

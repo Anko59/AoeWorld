@@ -47,9 +47,7 @@ pub struct ElevationPage {
     pub geographic_height_centimeters: Vec<i32>,
 }
 
-/// One bounded water-coverage page. Values are percent coverage, so a source
-/// can retain coastlines below the game tile lattice without deriving water
-/// from elevation.
+/// One bounded page with percent ocean and inland-lake coverage.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct WaterPage {
     pub level: u8,
@@ -58,8 +56,8 @@ pub struct WaterPage {
     pub width: u8,
     pub height: u8,
     pub ocean_coverage_percent: Vec<u8>,
+    pub inland_coverage_percent: Vec<u8>,
 }
-
 /// One bounded potential-biome page. `potential_biome_class` stores the
 /// source's integer class, with zero reserved for nodata/fallback.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -181,6 +179,8 @@ impl WaterPage {
             || self.height > ENVIRONMENT_PAGE_SAMPLES
             || self.ocean_coverage_percent.len()
                 != usize::from(self.width) * usize::from(self.height)
+            || self.inland_coverage_percent.len()
+                != usize::from(self.width) * usize::from(self.height)
         {
             return Err(EnvironmentError::InvalidPage);
         }
@@ -190,12 +190,13 @@ impl WaterPage {
     pub fn content_hash(&self) -> Result<[u8; 32], EnvironmentError> {
         self.validate()?;
         let mut hash = blake3::Hasher::new();
-        hash.update(b"aoe-water-page-v1\0");
+        hash.update(b"aoe-water-page-v2\0");
         hash.update(&[self.level]);
         hash.update(&self.x.to_le_bytes());
         hash.update(&self.y.to_le_bytes());
         hash.update(&[self.width, self.height]);
         hash.update(&self.ocean_coverage_percent);
+        hash.update(&self.inland_coverage_percent);
         Ok(*hash.finalize().as_bytes())
     }
 }

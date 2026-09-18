@@ -43,6 +43,7 @@ fn prepared() -> (
             width: 2,
             height: 2,
             ocean_coverage_percent: vec![0, 25, 75, 100],
+            inland_coverage_percent: vec![100, 0, 0, 0],
         },
         WaterPage {
             level: 1,
@@ -51,6 +52,7 @@ fn prepared() -> (
             width: 1,
             height: 1,
             ocean_coverage_percent: vec![50],
+            inland_coverage_percent: vec![0],
         },
     ];
     let vegetation = [
