@@ -84,12 +84,7 @@ impl Terrain {
     pub fn crossable(&self, from: TileCoord, to: TileCoord, config: WorldConfig) -> bool {
         match self {
             Self::Uniform(_) => self.passable(from, config) && self.passable(to, config),
-            Self::Map { generator, overlay } => {
-                matches!(generator.edge_between(from, to), EdgePassability::Passable)
-                    && generator
-                        .object_at(to)
-                        .is_none_or(|node| !overlay.blocks(generator, node.id))
-            }
+            Self::Map { generator, overlay } => map_crossable(generator, overlay, from, to),
         }
     }
 
@@ -104,4 +99,25 @@ impl Terrain {
             | MovementOutcome::BudgetExceeded => Some(Vec::new()),
         }
     }
+}
+
+fn map_crossable(
+    generator: &MapChunkGenerator,
+    overlay: &ResourceOverlay,
+    from: TileCoord,
+    to: TileCoord,
+) -> bool {
+    let step_clear = |from, to| {
+        matches!(generator.edge_between(from, to), EdgePassability::Passable)
+            && generator
+                .object_at(to)
+                .is_none_or(|node| !overlay.blocks(generator, node.id))
+    };
+    if !step_clear(from, to) {
+        return false;
+    }
+    let diagonal = from.x != to.x && from.y != to.y;
+    !diagonal
+        || (step_clear(from, TileCoord::new(to.x, from.y))
+            && step_clear(from, TileCoord::new(from.x, to.y)))
 }
