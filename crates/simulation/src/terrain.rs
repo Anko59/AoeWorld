@@ -1,7 +1,7 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    ElevationPage, MapChunkGenerator, MapPackage, MovementOutcome, ResourceOverlay, WaterPage,
-    find_path_with_overlay,
+    ElevationPage, MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage,
+    ResourceOverlay, WaterPage, find_path_with_overlay,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,9 +50,14 @@ impl Terrain {
         package: &MapPackage,
         elevation_pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
+        vegetation_pages: Vec<PotentialBiomePage>,
     ) -> Result<Self, aoe_map::MapPackageError> {
         Ok(Self::Map {
-            generator: package.generator_with_environment(elevation_pages, water_pages)?,
+            generator: package.generator_with_environment(
+                elevation_pages,
+                water_pages,
+                vegetation_pages,
+            )?,
             overlay: ResourceOverlay::default(),
         })
     }

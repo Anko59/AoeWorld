@@ -1,7 +1,9 @@
+use crate::biome::{PreparedBiome, level_zero_biome_pages};
+use crate::biome_rules::{Biome, biome_from_potential_class, material_for, resource_modulus};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
-    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PreparedEnvironment,
-    Ratio, WaterPage,
+    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, PotentialBiomePage,
+    PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -22,21 +24,6 @@ pub enum GroundMaterial {
     Ice,
     Shore,
     Water,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum Biome {
-    Temperate,
-    Boreal,
-    Tropical,
-    Woodland,
-    Savanna,
-    Steppe,
-    Desert,
-    Tundra,
-    Alpine,
-    Polar,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -84,6 +71,7 @@ pub struct Tile {
     pub game_height_level: i16,
     pub material: GroundMaterial,
     pub biome: Biome,
+    pub vegetation_provenance: Provenance,
     pub water: WaterKind,
     pub elevation_provenance: Provenance,
     pub water_provenance: Provenance,
@@ -115,6 +103,7 @@ pub struct MapChunkGenerator {
     width_tiles: i32,
     elevation: Option<Arc<PreparedElevation>>,
     water: Option<Arc<PreparedWater>>,
+    biome: Option<Arc<PreparedBiome>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -132,6 +121,7 @@ impl MapChunkGenerator {
             width_tiles,
             elevation: None,
             water: None,
+            biome: None,
         }
     }
 
@@ -155,6 +145,7 @@ impl MapChunkGenerator {
                 pages: level_zero,
             })),
             water: self.water,
+            biome: self.biome,
         })
     }
 
@@ -178,6 +169,34 @@ impl MapChunkGenerator {
             width_tiles: self.width_tiles,
             elevation: self.elevation,
             water: Some(Arc::new(PreparedWater::new(
+                environment.samples_per_axis,
+                level_zero,
+            ))),
+            biome: self.biome,
+        })
+    }
+
+    /// Binds source potential-biome classes to a terrain query. Zero and
+    /// unrecognized source classes deliberately retain the procedural fallback.
+    pub fn with_prepared_biomes(
+        self,
+        environment: &PreparedEnvironment,
+        pages: Vec<PotentialBiomePage>,
+    ) -> Result<Self, EnvironmentError> {
+        let Some(field) = &environment.vegetation else {
+            return pages
+                .is_empty()
+                .then_some(self)
+                .ok_or(EnvironmentError::InvalidPyramid);
+        };
+        let level_zero = level_zero_biome_pages(field, pages)?;
+        Ok(Self {
+            geography_key: self.geography_key,
+            procedural_seed: self.procedural_seed,
+            width_tiles: self.width_tiles,
+            elevation: self.elevation,
+            water: self.water,
+            biome: Some(Arc::new(PreparedBiome::new(
                 environment.samples_per_axis,
                 level_zero,
             ))),
@@ -255,7 +274,7 @@ impl MapChunkGenerator {
         } else {
             WaterKind::None
         };
-        let biome = match unsigned_noise(
+        let fallback_biome = match unsigned_noise(
             self.geography_key,
             b"biome",
             tile.x.div_euclid(32),
@@ -273,6 +292,13 @@ impl MapChunkGenerator {
             8 => Biome::Polar,
             _ => Biome::Temperate,
         };
+        let (biome, vegetation_provenance) = self
+            .biome
+            .as_ref()
+            .and_then(|biome| biome.class_at(tile, self.width_tiles))
+            .and_then(biome_from_potential_class)
+            .map(|biome| (biome, Provenance::SourceDerived))
+            .unwrap_or((fallback_biome, Provenance::Fallback));
         let (
             geographic_height_centimeters,
             game_height_level,
@@ -329,6 +355,7 @@ impl MapChunkGenerator {
             game_height_level,
             material,
             biome,
+            vegetation_provenance,
             water,
             elevation_provenance,
             water_provenance,
@@ -377,31 +404,6 @@ impl PreparedElevation {
         (local_x < usize::from(page.width) && local_y < usize::from(page.height)).then(|| {
             page.geographic_height_centimeters[local_y * usize::from(page.width) + local_x]
         })
-    }
-}
-
-fn material_for(biome: Biome, height: i32) -> GroundMaterial {
-    if height > 3_500 {
-        return GroundMaterial::Rock;
-    }
-    match biome {
-        Biome::Tropical => GroundMaterial::LushGrass,
-        Biome::Boreal | Biome::Tundra | Biome::Polar => GroundMaterial::Snow,
-        Biome::Woodland => GroundMaterial::ForestFloor,
-        Biome::Savanna | Biome::Steppe => GroundMaterial::DryGrass,
-        Biome::Desert => GroundMaterial::Sand,
-        Biome::Alpine => GroundMaterial::Rock,
-        Biome::Temperate => GroundMaterial::TemperateGrass,
-    }
-}
-
-fn resource_modulus(biome: Biome) -> u64 {
-    match biome {
-        Biome::Tropical | Biome::Temperate | Biome::Boreal => 3,
-        Biome::Woodland => 6,
-        Biome::Savanna => 12,
-        Biome::Steppe => 96,
-        Biome::Desert | Biome::Tundra | Biome::Alpine | Biome::Polar => u64::MAX,
     }
 }
 

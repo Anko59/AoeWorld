@@ -1,4 +1,6 @@
-use crate::{ElevationPage, MapChunkGenerator, MapPackage, MapPackageError, WaterPage};
+use crate::{
+    ElevationPage, MapChunkGenerator, MapPackage, MapPackageError, PotentialBiomePage, WaterPage,
+};
 
 impl MapPackage {
     /// Creates pure terrain queries backed by complete, verified elevation
@@ -24,9 +26,11 @@ impl MapPackage {
         &self,
         elevation_pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
+        biome_pages: Vec<PotentialBiomePage>,
     ) -> Result<MapChunkGenerator, MapPackageError> {
         self.generator_with_elevation(elevation_pages)?
             .with_prepared_water(&self.environment, water_pages)
+            .and_then(|generator| generator.with_prepared_biomes(&self.environment, biome_pages))
             .map_err(|_| MapPackageError::InvalidEnvironment)
     }
 }

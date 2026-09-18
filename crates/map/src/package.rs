@@ -332,6 +332,7 @@ mod tests {
                 ],
             },
             water: None,
+            vegetation: None,
         }
     }
 

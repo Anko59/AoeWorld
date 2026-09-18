@@ -1,4 +1,6 @@
 //! Deterministic, environment-independent geographic map contracts.
+mod biome;
+mod biome_rules;
 mod environment;
 mod generator;
 mod navigation;
@@ -8,10 +10,11 @@ mod request;
 mod terrain;
 mod water;
 
+pub use biome_rules::Biome;
 pub use environment::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, FieldPyramid,
-    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PreparedEnvironment, PyramidLevel, WaterPage,
-    ordered_page_root, ordered_water_page_root,
+    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PotentialBiomePage, PreparedEnvironment, PyramidLevel,
+    WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
 };
 pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
@@ -23,12 +26,14 @@ pub use request::{
     DetailProfile, MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile,
 };
 pub use terrain::{
-    Biome, Chunk, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind,
-    ResourceNode, Tile, WaterKind,
+    Chunk, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind, ResourceNode,
+    Tile, WaterKind,
 };
 
 pub const CHUNK_TILES: i32 = 32;
-pub const MAP_SCHEMA_VERSION: u16 = 2;
+/// Version 3 adds immutable potential-biome page roots and per-tile vegetation
+/// provenance to the source-backed terrain contract.
+pub const MAP_SCHEMA_VERSION: u16 = 3;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;

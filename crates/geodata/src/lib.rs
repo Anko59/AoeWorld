@@ -5,8 +5,8 @@
 //! projection before a future preparation pipeline freezes map inputs.
 
 use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, LayerProvenance, MapRequest, PreparedEnvironment,
-    ProjectionMetadata, VerticalDatum, WaterPage,
+    ElevationPage, EnvironmentalProvenance, LayerProvenance, MapRequest, PotentialBiomePage,
+    PreparedEnvironment, ProjectionMetadata, VerticalDatum, WaterPage,
 };
 use gdal::{
     Dataset,
@@ -28,6 +28,9 @@ mod source_manifest;
 
 mod water;
 pub use water::{PreparedWater, prepare_ocean_coverage};
+
+mod vegetation;
+pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potential_biome_legend};
 
 mod source_catalog;
 pub use source_catalog::{
@@ -114,11 +117,14 @@ pub enum WorkerResponse {
 pub struct PreparedOverview {
     source_lock: aoe_map::SourceLock,
     water_source_lock: aoe_map::SourceLock,
+    vegetation_source_lock: aoe_map::SourceLock,
+    vegetation_classes_source_lock: aoe_map::SourceLock,
     projection: ProjectionMetadata,
     provenance: EnvironmentalProvenance,
     environment: PreparedEnvironment,
     pages: Vec<ElevationPage>,
     water_pages: Vec<WaterPage>,
+    vegetation_pages: Vec<PotentialBiomePage>,
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -185,9 +191,29 @@ fn prepare_overview_elevation(
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let path = cache.acquire(&lock, &cancelled)?;
     let water_path = cache.acquire(&water_lock, &cancelled)?;
+    let potential_sources = potential_biome_sources()?;
+    let vegetation_source = potential_sources
+        .iter()
+        .find(|source| source.id.ends_with(".tif"))
+        .ok_or(GeodataError::Preparation(
+            "potential biome raster is missing",
+        ))?;
+    let vegetation_classes_source = potential_sources
+        .iter()
+        .find(|source| source.id.ends_with(".tif.csv"))
+        .ok_or(GeodataError::Preparation(
+            "potential biome class legend is missing",
+        ))?;
+    let vegetation_lock = cache.acquire_known(vegetation_source, &cancelled)?;
+    let vegetation_classes_lock = cache.acquire_known(vegetation_classes_source, &cancelled)?;
+    let vegetation_path = cache.object_path(&vegetation_lock)?;
+    let vegetation_classes_path = cache.object_path(&vegetation_classes_lock)?;
     let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
     let water = prepare_ocean_coverage(&water_path, request, samples_per_axis)?;
+    let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
+    verify_potential_biome_legend(&vegetation_classes_path)?;
     prepared.environment.water = Some(water.field);
+    prepared.environment.vegetation = Some(vegetation.field);
     prepared.environment.validate()?;
     Ok(WorkerResponse::PreparedOverview(Box::new(
         PreparedOverview {
@@ -196,6 +222,14 @@ fn prepare_overview_elevation(
             water_source_lock: water_lock.to_map_source_lock(
                 acquisition_marker(),
                 "natural-earth-coastline-gdal-0.19".to_owned(),
+            )?,
+            vegetation_source_lock: vegetation_lock.to_map_source_lock(
+                acquisition_marker(),
+                "potential-biome-nearest-gdal-0.19".to_owned(),
+            )?,
+            vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
+                acquisition_marker(),
+                "potential-biome-class-legend-v0.2".to_owned(),
             )?,
             projection: ProjectionMetadata {
                 horizontal_crs: local_aeqd_definition(
@@ -208,12 +242,13 @@ fn prepare_overview_elevation(
             provenance: EnvironmentalProvenance {
                 elevation: LayerProvenance::SourceDerived,
                 water: LayerProvenance::SourceDerived,
-                vegetation: LayerProvenance::Procedural,
+                vegetation: LayerProvenance::SourceDerived,
                 historical_land_use: LayerProvenance::Fallback,
             },
             environment: prepared.environment,
             pages: prepared.pages,
             water_pages: water.pages,
+            vegetation_pages: vegetation.pages,
         },
     )))
 }
@@ -334,16 +369,44 @@ mod tests {
                 license: "test".to_owned(),
                 preprocessing_version: "test".to_owned(),
             },
+            vegetation_source_lock: aoe_map::SourceLock {
+                id: "vegetation".to_owned(),
+                provider: "provider".to_owned(),
+                release: "release".to_owned(),
+                url: "https://example.invalid/vegetation.tif".to_owned(),
+                sha256: [9; 32],
+                acquired_at: "2026-09-18".to_owned(),
+                native_resolution: "250m".to_owned(),
+                crs: "EPSG:4326".to_owned(),
+                vertical_datum: "not applicable".to_owned(),
+                license: "test".to_owned(),
+                preprocessing_version: "test".to_owned(),
+            },
+            vegetation_classes_source_lock: aoe_map::SourceLock {
+                id: "vegetation-classes".to_owned(),
+                provider: "provider".to_owned(),
+                release: "release".to_owned(),
+                url: "https://example.invalid/vegetation.csv".to_owned(),
+                sha256: [10; 32],
+                acquired_at: "2026-09-18".to_owned(),
+                native_resolution: "table".to_owned(),
+                crs: "not applicable".to_owned(),
+                vertical_datum: "not applicable".to_owned(),
+                license: "test".to_owned(),
+                preprocessing_version: "test".to_owned(),
+            },
             projection: ProjectionMetadata::default(),
             provenance: EnvironmentalProvenance::default(),
             environment: PreparedEnvironment::default(),
             pages: Vec::new(),
             water_pages: Vec::new(),
+            vegetation_pages: Vec::new(),
         }));
         let encoded = serde_json::to_value(response).expect("serializes");
         assert_eq!(encoded["operation"], "prepared_overview");
         assert_eq!(encoded["source_lock"]["id"], "overview");
         assert_eq!(encoded["water_source_lock"]["id"], "coastline");
+        assert_eq!(encoded["vegetation_source_lock"]["id"], "vegetation");
         assert!(encoded.get("value").is_none());
     }
 }

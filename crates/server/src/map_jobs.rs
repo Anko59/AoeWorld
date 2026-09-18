@@ -215,13 +215,14 @@ fn launch(state: AppState, id: u64) {
                 let directory = directory.as_deref().ok_or_else(|| {
                     "source-backed map creation requires a configured package directory".to_owned()
                 })?;
-                let (package, elevation_pages, water_pages) =
+                let (package, elevation_pages, water_pages, vegetation_pages) =
                     prepare_overview(&worker, &cache, request)?;
                 map_store::persist_prepared(
                     Some(directory),
                     &package,
                     &elevation_pages,
                     &water_pages,
+                    &vegetation_pages,
                 )
                 .map_err(|error| error.to_string())?;
                 package
@@ -260,19 +261,29 @@ enum WorkerOutput {
     PreparedOverview {
         source_lock: SourceLock,
         water_source_lock: SourceLock,
+        vegetation_source_lock: SourceLock,
+        vegetation_classes_source_lock: SourceLock,
         projection: ProjectionMetadata,
         provenance: EnvironmentalProvenance,
         environment: aoe_map::PreparedEnvironment,
         pages: Vec<ElevationPage>,
         water_pages: Vec<WaterPage>,
+        vegetation_pages: Vec<aoe_map::PotentialBiomePage>,
     },
 }
+
+type PreparedOverviewPages = (
+    MapPackage,
+    Vec<ElevationPage>,
+    Vec<WaterPage>,
+    Vec<aoe_map::PotentialBiomePage>,
+);
 
 fn prepare_overview(
     worker: &Path,
     cache_root: &Path,
     request: MapRequest,
-) -> Result<(MapPackage, Vec<ElevationPage>, Vec<WaterPage>), String> {
+) -> Result<PreparedOverviewPages, String> {
     let input = serde_json::to_vec(&serde_json::json!({
         "operation": "prepare_overview_elevation",
         "cache_root": cache_root,
@@ -323,23 +334,31 @@ fn prepare_overview(
     let WorkerOutput::PreparedOverview {
         source_lock,
         water_source_lock,
+        vegetation_source_lock,
+        vegetation_classes_source_lock,
         projection,
         provenance,
         environment,
         pages,
         water_pages,
+        vegetation_pages,
     } = serde_json::from_slice(&output)
         .map_err(|error| format!("invalid map-worker response: {error}"))?;
     let package = MapPackage::with_prepared_environment(
         MAP_SCHEMA_VERSION,
         request,
-        vec![source_lock, water_source_lock],
+        vec![
+            source_lock,
+            water_source_lock,
+            vegetation_source_lock,
+            vegetation_classes_source_lock,
+        ],
         projection,
         provenance,
         environment,
     )
     .map_err(|error| error.to_string())?;
-    Ok((package, pages, water_pages))
+    Ok((package, pages, water_pages, vegetation_pages))
 }
 
 async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<AtomicBool>)> {

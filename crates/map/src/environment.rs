@@ -16,6 +16,10 @@ pub struct PreparedEnvironment {
     /// Optional independently prepared water coverage. Its page grid is
     /// aligned with elevation but may be absent while a source is unavailable.
     pub water: Option<FieldPyramid>,
+    /// Optional potential-natural-vegetation classification. Values retain the
+    /// source's published class identifiers and are mapped to game biomes only
+    /// when terrain is queried.
+    pub vegetation: Option<FieldPyramid>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -54,15 +58,26 @@ pub struct WaterPage {
     pub ocean_coverage_percent: Vec<u8>,
 }
 
+/// One bounded potential-biome page. `potential_biome_class` stores the
+/// source's integer class, with zero reserved for nodata/fallback.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PotentialBiomePage {
+    pub level: u8,
+    pub x: u16,
+    pub y: u16,
+    pub width: u8,
+    pub height: u8,
+    pub potential_biome_class: Vec<u8>,
+}
+
 impl PreparedEnvironment {
     pub fn validate(&self) -> Result<(), EnvironmentError> {
         if self.samples_per_axis == 0 {
-            return self
-                .elevation
-                .levels
-                .is_empty()
-                .then_some(())
-                .ok_or(EnvironmentError::InvalidPyramid);
+            return (self.elevation.levels.is_empty()
+                && self.water.is_none()
+                && self.vegetation.is_none())
+            .then_some(())
+            .ok_or(EnvironmentError::InvalidPyramid);
         }
         if self.samples_per_axis > MAX_ENVIRONMENT_SAMPLES_PER_AXIS
             || self.geographic_millimeters_per_sample == 0
@@ -73,7 +88,10 @@ impl PreparedEnvironment {
         self.elevation.validate(self.samples_per_axis)?;
         self.water
             .as_ref()
-            .map_or(Ok(()), |water| water.validate(self.samples_per_axis))
+            .map_or(Ok(()), |water| water.validate(self.samples_per_axis))?;
+        self.vegetation.as_ref().map_or(Ok(()), |vegetation| {
+            vegetation.validate(self.samples_per_axis)
+        })
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {
@@ -89,6 +107,14 @@ impl PreparedEnvironment {
         if let Some(water) = &self.water {
             hash.update(&(water.levels.len() as u64).to_le_bytes());
             for level in &water.levels {
+                hash.update(&level.samples_per_axis.to_le_bytes());
+                hash.update(&level.ordered_page_root);
+            }
+        }
+        hash.update(&[u8::from(self.vegetation.is_some())]);
+        if let Some(vegetation) = &self.vegetation {
+            hash.update(&(vegetation.levels.len() as u64).to_le_bytes());
+            for level in &vegetation.levels {
                 hash.update(&level.samples_per_axis.to_le_bytes());
                 hash.update(&level.ordered_page_root);
             }
@@ -170,6 +196,33 @@ impl WaterPage {
     }
 }
 
+impl PotentialBiomePage {
+    pub fn validate(&self) -> Result<(), EnvironmentError> {
+        if self.width == 0
+            || self.height == 0
+            || self.width > ENVIRONMENT_PAGE_SAMPLES
+            || self.height > ENVIRONMENT_PAGE_SAMPLES
+            || self.potential_biome_class.len()
+                != usize::from(self.width) * usize::from(self.height)
+        {
+            return Err(EnvironmentError::InvalidPage);
+        }
+        Ok(())
+    }
+
+    pub fn content_hash(&self) -> Result<[u8; 32], EnvironmentError> {
+        self.validate()?;
+        let mut hash = blake3::Hasher::new();
+        hash.update(b"aoe-potential-biome-page-v1\0");
+        hash.update(&[self.level]);
+        hash.update(&self.x.to_le_bytes());
+        hash.update(&self.y.to_le_bytes());
+        hash.update(&[self.width, self.height]);
+        hash.update(&self.potential_biome_class);
+        Ok(*hash.finalize().as_bytes())
+    }
+}
+
 pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], EnvironmentError> {
     if pages.is_empty() {
         return Err(EnvironmentError::InvalidPyramid);
@@ -207,6 +260,29 @@ pub fn ordered_water_page_root(pages: &[WaterPage]) -> Result<[u8; 32], Environm
     }
     let mut hash = blake3::Hasher::new();
     hash.update(b"aoe-water-page-root-v1\0");
+    hash.update(&(ordered.len() as u64).to_le_bytes());
+    for page in ordered {
+        hash.update(&page.content_hash()?);
+    }
+    Ok(*hash.finalize().as_bytes())
+}
+
+/// Computes the canonical identity of potential-biome pages independently
+/// from elevation and water, while retaining the same ordering guarantees.
+pub fn ordered_biome_page_root(pages: &[PotentialBiomePage]) -> Result<[u8; 32], EnvironmentError> {
+    if pages.is_empty() {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut ordered = pages.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|page| (page.y, page.x));
+    if ordered
+        .windows(2)
+        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
+    {
+        return Err(EnvironmentError::InvalidPyramid);
+    }
+    let mut hash = blake3::Hasher::new();
+    hash.update(b"aoe-potential-biome-page-root-v1\0");
     hash.update(&(ordered.len() as u64).to_le_bytes());
     for page in ordered {
         hash.update(&page.content_hash()?);
@@ -334,6 +410,7 @@ mod tests {
                 ],
             },
             water: None,
+            vegetation: None,
         };
         assert!(field.validate().is_ok());
         let mut invalid = field;
@@ -378,6 +455,7 @@ mod tests {
                 ],
             },
             water: None,
+            vegetation: None,
         };
         let request = crate::MapRequest {
             requested_side_meters: 250,

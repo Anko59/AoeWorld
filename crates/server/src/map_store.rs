@@ -1,6 +1,6 @@
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, MapPackage, WaterPage, ordered_page_root,
-    ordered_water_page_root,
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, MapPackage, PotentialBiomePage, WaterPage,
+    ordered_page_root,
 };
 use std::{
     collections::BTreeMap,
@@ -11,6 +11,8 @@ use thiserror::Error;
 const MAX_PACKAGES: usize = 256;
 const MAX_PACKAGE_BYTES: u64 = 64 * 1024;
 const MAX_PAGE_BYTES: u64 = 128 * 1024;
+
+mod pages;
 
 #[derive(Debug, Error)]
 pub enum MapStoreError {
@@ -70,7 +72,7 @@ pub(crate) fn load(
 
 pub(crate) fn persist(directory: Option<&Path>, package: &MapPackage) -> Result<(), MapStoreError> {
     if package.environment.samples_per_axis != 0 {
-        return persist_prepared(directory, package, &[], &[]);
+        return persist_prepared(directory, package, &[], &[], &[]);
     }
     persist_manifest(directory, package)
 }
@@ -132,6 +134,7 @@ pub(crate) fn persist_prepared(
     package: &MapPackage,
     elevation_pages: &[ElevationPage],
     water_pages: &[WaterPage],
+    vegetation_pages: &[PotentialBiomePage],
 ) -> Result<(), MapStoreError> {
     let Some(directory) = directory else {
         return Ok(());
@@ -142,7 +145,7 @@ pub(crate) fn persist_prepared(
             path: directory.to_owned(),
             reason: error.to_string(),
         })?;
-    verify_pages(package, elevation_pages, water_pages).map_err(|reason| {
+    verify_pages(package, elevation_pages, water_pages, vegetation_pages).map_err(|reason| {
         MapStoreError::InvalidPackage {
             path: directory.to_owned(),
             reason,
@@ -155,12 +158,10 @@ pub(crate) fn persist_prepared(
         write_json(&path, page, MAX_PAGE_BYTES)?;
     }
     if package.environment.water.is_some() {
-        let root = water_page_root(directory, package);
-        fs::create_dir_all(&root)?;
-        for page in water_pages {
-            let path = root.join(format!("{}-{}-{}.json", page.level, page.x, page.y));
-            write_json(&path, page, MAX_PAGE_BYTES)?;
-        }
+        pages::persist_water(directory, package, water_pages)?;
+    }
+    if package.environment.vegetation.is_some() {
+        pages::persist_vegetation(directory, package, vegetation_pages)?;
     }
     persist_manifest(Some(directory), package)
 }
@@ -179,16 +180,10 @@ pub(super) fn elevation_page_root(directory: &Path, package: &MapPackage) -> Pat
 #[cfg(test)]
 mod tests;
 
-fn water_page_root(directory: &Path, package: &MapPackage) -> PathBuf {
-    directory
-        .join("pages")
-        .join(package.content_hash_hex())
-        .join("water")
-}
-
 fn verify_environment(directory: &Path, package: &MapPackage) -> Result<(), MapStoreError> {
     load_elevation_pages(Some(directory), package)?;
-    load_water_pages(Some(directory), package).map(|_| ())
+    pages::load_water(Some(directory), package)?;
+    pages::load_vegetation(Some(directory), package).map(|_| ())
 }
 
 pub(super) fn load_elevation_pages(
@@ -233,49 +228,21 @@ pub(super) fn load_water_pages(
     directory: Option<&Path>,
     package: &MapPackage,
 ) -> Result<Vec<WaterPage>, MapStoreError> {
-    let Some(levels) = package
-        .environment
-        .water
-        .as_ref()
-        .map(|field| &field.levels)
-    else {
-        return Ok(Vec::new());
-    };
-    let directory = directory.ok_or_else(|| MapStoreError::InvalidPackage {
-        path: PathBuf::from("prepared-environment"),
-        reason: "prepared water requires a page directory".to_owned(),
-    })?;
-    let mut pages = Vec::new();
-    for (level, metadata) in levels.iter().enumerate() {
-        let count = metadata
-            .samples_per_axis
-            .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-        for y in 0..count {
-            for x in 0..count {
-                let path =
-                    water_page_root(directory, package).join(format!("{level}-{x}-{y}.json"));
-                pages.push(read_water_page(&path)?);
-            }
-        }
-        let level_pages = pages
-            .iter()
-            .filter(|page| usize::from(page.level) == level)
-            .cloned()
-            .collect::<Vec<_>>();
-        if ordered_water_page_root(&level_pages).ok() != Some(metadata.ordered_page_root) {
-            return Err(MapStoreError::InvalidPackage {
-                path: directory.to_owned(),
-                reason: "water pages do not reproduce the indexed root".to_owned(),
-            });
-        }
-    }
-    Ok(pages)
+    pages::load_water(directory, package)
+}
+
+pub(super) fn load_vegetation_pages(
+    directory: Option<&Path>,
+    package: &MapPackage,
+) -> Result<Vec<PotentialBiomePage>, MapStoreError> {
+    pages::load_vegetation(directory, package)
 }
 
 fn verify_pages(
     package: &MapPackage,
     pages: &[ElevationPage],
     water_pages: &[WaterPage],
+    vegetation_pages: &[PotentialBiomePage],
 ) -> Result<(), String> {
     let levels = &package.environment.elevation.levels;
     if levels.is_empty() || pages.iter().any(|page| page.validate().is_err()) {
@@ -296,30 +263,8 @@ fn verify_pages(
             return Err("prepared package page index is incomplete".to_owned());
         }
     }
-    let Some(water) = &package.environment.water else {
-        return water_pages
-            .is_empty()
-            .then_some(())
-            .ok_or_else(|| "water pages require a water index".to_owned());
-    };
-    if water_pages.iter().any(|page| page.validate().is_err()) {
-        return Err("prepared package has invalid water pages".to_owned());
-    }
-    for (level, metadata) in water.levels.iter().enumerate() {
-        let level_pages = water_pages
-            .iter()
-            .filter(|page| usize::from(page.level) == level)
-            .cloned()
-            .collect::<Vec<_>>();
-        let count = metadata
-            .samples_per_axis
-            .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-        if level_pages.len() != usize::from(count).pow(2)
-            || ordered_water_page_root(&level_pages).ok() != Some(metadata.ordered_page_root)
-        {
-            return Err("prepared package water page index is incomplete".to_owned());
-        }
-    }
+    pages::verify_water(package, water_pages)?;
+    pages::verify_vegetation(package, vegetation_pages)?;
     Ok(())
 }
 
@@ -345,29 +290,11 @@ fn read_page(path: &Path) -> Result<ElevationPage, MapStoreError> {
     Ok(page)
 }
 
-fn read_water_page(path: &Path) -> Result<WaterPage, MapStoreError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_PAGE_BYTES {
-        return Err(MapStoreError::InvalidPackage {
-            path: path.to_owned(),
-            reason: "water page is not a bounded regular file".to_owned(),
-        });
-    }
-    let page: WaterPage = serde_json::from_slice(&fs::read(path)?).map_err(|error| {
-        MapStoreError::InvalidPackage {
-            path: path.to_owned(),
-            reason: error.to_string(),
-        }
-    })?;
-    page.validate()
-        .map_err(|error| MapStoreError::InvalidPackage {
-            path: path.to_owned(),
-            reason: error.to_string(),
-        })?;
-    Ok(page)
-}
-
-fn write_json(path: &Path, value: &impl serde::Serialize, limit: u64) -> Result<(), MapStoreError> {
+pub(super) fn write_json(
+    path: &Path,
+    value: &impl serde::Serialize,
+    limit: u64,
+) -> Result<(), MapStoreError> {
     let bytes = serde_json::to_vec(value)?;
     if bytes.len() as u64 > limit {
         return Err(MapStoreError::InvalidPackage {

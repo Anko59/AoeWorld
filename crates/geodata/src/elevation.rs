@@ -131,6 +131,7 @@ fn prepare_elevation_dataset(
         page_samples: ENVIRONMENT_PAGE_SAMPLES,
         elevation: FieldPyramid { levels },
         water: None,
+        vegetation: None,
     };
     environment.validate()?;
     Ok(PreparedElevation { environment, pages })

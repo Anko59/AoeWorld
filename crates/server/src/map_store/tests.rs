@@ -1,15 +1,20 @@
 use super::{
-    MapStoreError, elevation_page_root, load, load_elevation_pages, load_water_pages, persist,
-    persist_prepared,
+    MapStoreError, elevation_page_root, load, load_elevation_pages, load_vegetation_pages,
+    load_water_pages, persist, persist_prepared,
 };
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentalProvenance, FieldPyramid, MapPackage,
-    MapRequest, PreparedEnvironment, ProjectionMetadata, PyramidLevel, WaterPage,
-    ordered_page_root, ordered_water_page_root,
+    MapRequest, PotentialBiomePage, PreparedEnvironment, ProjectionMetadata, PyramidLevel,
+    WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
 };
 use std::fs;
 
-fn prepared() -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
+fn prepared() -> (
+    MapPackage,
+    Vec<ElevationPage>,
+    Vec<WaterPage>,
+    Vec<PotentialBiomePage>,
+) {
     let elevation = [
         ElevationPage {
             level: 0,
@@ -46,6 +51,24 @@ fn prepared() -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
             ocean_coverage_percent: vec![50],
         },
     ];
+    let vegetation = [
+        PotentialBiomePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            potential_biome_class: vec![13, 15, 18, 27],
+        },
+        PotentialBiomePage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            potential_biome_class: vec![13],
+        },
+    ];
     let field = |roots: [[u8; 32]; 2]| FieldPyramid {
         levels: vec![
             PyramidLevel {
@@ -70,6 +93,10 @@ fn prepared() -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
             ordered_water_page_root(&[water[0].clone()]).expect("water root"),
             ordered_water_page_root(&[water[1].clone()]).expect("water root"),
         ])),
+        vegetation: Some(field([
+            ordered_biome_page_root(&[vegetation[0].clone()]).expect("vegetation root"),
+            ordered_biome_page_root(&[vegetation[1].clone()]).expect("vegetation root"),
+        ])),
     };
     let package = MapPackage::with_prepared_environment(
         1,
@@ -80,7 +107,7 @@ fn prepared() -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
         environment,
     )
     .expect("package");
-    (package, elevation.into(), water.into())
+    (package, elevation.into(), water.into(), vegetation.into())
 }
 
 #[test]
@@ -114,8 +141,15 @@ fn noncanonical_file_names_are_rejected_on_load() {
 #[test]
 fn prepared_elevation_and_water_pages_must_persist_with_their_package() {
     let directory = tempfile::tempdir().expect("package directory");
-    let (package, elevation, water) = prepared();
-    persist_prepared(Some(directory.path()), &package, &elevation, &water).expect("persist");
+    let (package, elevation, water, vegetation) = prepared();
+    persist_prepared(
+        Some(directory.path()),
+        &package,
+        &elevation,
+        &water,
+        &vegetation,
+    )
+    .expect("persist");
     assert_eq!(load(Some(directory.path())).expect("load").len(), 1);
     assert_eq!(
         load_elevation_pages(Some(directory.path()), &package).expect("elevation pages"),
@@ -124,6 +158,10 @@ fn prepared_elevation_and_water_pages_must_persist_with_their_package() {
     assert_eq!(
         load_water_pages(Some(directory.path()), &package).expect("water pages"),
         water
+    );
+    assert_eq!(
+        load_vegetation_pages(Some(directory.path()), &package).expect("vegetation pages"),
+        vegetation
     );
     fs::remove_file(elevation_page_root(directory.path(), &package).join("0-0-0.json"))
         .expect("remove page");
