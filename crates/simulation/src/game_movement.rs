@@ -5,6 +5,8 @@ use crate::{
     game_world::{facing_for, interpolate},
 };
 use aoe_core::{ChunkCoord, WorldPosition};
+use aoe_map::MovementOutcome;
+use std::collections::VecDeque;
 
 impl GameWorld {
     pub fn advance(&mut self) -> Vec<GameUnit> {
@@ -69,10 +71,7 @@ impl GameWorld {
             .route
             .pop_front()
             .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
-            .or_else(|| {
-                (order.waypoint != order.destination)
-                    .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
-            });
+            .or_else(|| self.next_map_segment(index, order));
         let Some(next) = next else {
             self.units[index].state.moving = false;
             self.units[index].order = None;
@@ -91,5 +90,29 @@ impl GameWorld {
         self.units[index].state.moving = true;
         self.units[index].order = Some(next_order);
         still_moving.push(id);
+    }
+
+    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> Option<WorldPosition> {
+        match self
+            .terrain
+            .route_segment(order.waypoint.tile_floor(), order.target_tile)
+        {
+            Some(MovementOutcome::Path(path)) => {
+                let mut route = VecDeque::from(path.tiles);
+                if route.pop_front() != Some(order.waypoint.tile_floor()) {
+                    return None;
+                }
+                let next = route
+                    .pop_front()
+                    .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
+                self.units[index].route = route;
+                next
+            }
+            Some(MovementOutcome::InvalidDestination)
+            | Some(MovementOutcome::Unreachable)
+            | Some(MovementOutcome::BudgetExceeded) => None,
+            None => (order.waypoint != order.destination)
+                .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination)),
+        }
     }
 }

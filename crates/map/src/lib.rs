@@ -19,7 +19,10 @@ pub use environment::{
     WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
 };
 pub use land_use::{HistoricalLandUsePage, ordered_land_use_page_root};
-pub use navigation::{MovementOutcome, Path, find_path, find_path_with_overlay};
+pub use navigation::{
+    MAX_ROUTE_SEGMENT_TILES, MovementOutcome, Path, find_path, find_path_segment_with_overlay,
+    find_path_with_overlay,
+};
 pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
 pub use package::{
     EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, ProjectionMetadata,

@@ -4,6 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
 pub const DIAGONAL_COST: u32 = 1_448;
+/// A long order is detailed in these bounded tile-scale segments. The caller
+/// requests the next segment again after reaching its endpoint.
+pub const MAX_ROUTE_SEGMENT_TILES: u32 = 32;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Path {
@@ -25,7 +28,7 @@ pub fn find_path(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    find_path_with(terrain, origin, destination, max_expansions, |tile| {
+    find_path_with(terrain, origin, destination, max_expansions, None, |tile| {
         walkable(terrain, tile)
     })
 }
@@ -37,7 +40,7 @@ pub fn find_path_with_overlay(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    find_path_with(terrain, origin, destination, max_expansions, |tile| {
+    find_path_with(terrain, origin, destination, max_expansions, None, |tile| {
         terrain.tile_at(tile).is_some_and(|sample| {
             sample.passable
                 && terrain
@@ -47,11 +50,39 @@ pub fn find_path_with_overlay(
     })
 }
 
+/// Finds either a complete route or the next deterministic fine-scale segment
+/// of a longer order. It preserves the same passability, diagonal, resource,
+/// and expansion rules as [`find_path_with_overlay`].
+pub fn find_path_segment_with_overlay(
+    terrain: &MapChunkGenerator,
+    overlay: &ResourceOverlay,
+    origin: TileCoord,
+    destination: TileCoord,
+    max_expansions: u32,
+) -> MovementOutcome {
+    find_path_with(
+        terrain,
+        origin,
+        destination,
+        max_expansions,
+        Some(MAX_ROUTE_SEGMENT_TILES),
+        |tile| {
+            terrain.tile_at(tile).is_some_and(|sample| {
+                sample.passable
+                    && terrain
+                        .object_at(tile)
+                        .is_none_or(|node| !overlay.blocks(terrain, node.id))
+            })
+        },
+    )
+}
+
 fn find_path_with<F>(
     terrain: &MapChunkGenerator,
     origin: TileCoord,
     destination: TileCoord,
     max_expansions: u32,
+    segment_tiles: Option<u32>,
     passable: F,
 ) -> MovementOutcome
 where
@@ -81,7 +112,11 @@ where
             continue;
         }
         if tile == destination {
-            return path(origin, destination, cost, parents);
+            return segment_path(
+                terrain,
+                path(origin, destination, cost, parents),
+                segment_tiles,
+            );
         }
         if expansions >= max_expansions {
             return MovementOutcome::BudgetExceeded;
@@ -126,6 +161,31 @@ fn path(
     MovementOutcome::Path(Path { tiles, cost })
 }
 
+fn segment_path(
+    terrain: &MapChunkGenerator,
+    outcome: MovementOutcome,
+    segment_tiles: Option<u32>,
+) -> MovementOutcome {
+    let (mut path, limit) = match (outcome, segment_tiles) {
+        (MovementOutcome::Path(path), Some(limit)) => (path, limit),
+        (outcome, _) => return outcome,
+    };
+    let keep = usize::try_from(limit)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1);
+    if path.tiles.len() <= keep {
+        return MovementOutcome::Path(path);
+    }
+    path.tiles.truncate(keep);
+    path.cost = path
+        .tiles
+        .windows(2)
+        .map(|pair| movement_cost(terrain, pair[0], pair[1]))
+        .map(u64::from)
+        .sum();
+    MovementOutcome::Path(path)
+}
+
 fn neighbors<F>(terrain: &MapChunkGenerator, tile: TileCoord, passable: &F) -> Vec<(TileCoord, u32)>
 where
     F: Fn(TileCoord) -> bool,
@@ -150,21 +210,25 @@ where
             {
                 continue;
             }
-            let base = if delta_x == 0 || delta_y == 0 {
-                ORTHOGONAL_COST
-            } else {
-                DIAGONAL_COST
-            };
-            let multiplier = matches!(
-                terrain.tile_at(next).map(|sample| sample.material),
-                Some(GroundMaterial::Mud)
-            )
-            .then_some(3_u32)
-            .unwrap_or(2);
-            result.push((next, base * multiplier / 2));
+            result.push((next, movement_cost(terrain, tile, next)));
         }
     }
     result
+}
+
+fn movement_cost(terrain: &MapChunkGenerator, from: TileCoord, to: TileCoord) -> u32 {
+    let base = if from.x == to.x || from.y == to.y {
+        ORTHOGONAL_COST
+    } else {
+        DIAGONAL_COST
+    };
+    let multiplier = matches!(
+        terrain.tile_at(to).map(|sample| sample.material),
+        Some(GroundMaterial::Mud)
+    )
+    .then_some(3_u32)
+    .unwrap_or(2);
+    base * multiplier / 2
 }
 
 fn diagonal_clear<F, E>(
@@ -195,6 +259,13 @@ fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     let dy = u64::from((from.y - to.y).unsigned_abs());
     let diagonal = dx.min(dy);
     diagonal * u64::from(DIAGONAL_COST) + (dx - diagonal) * u64::from(ORTHOGONAL_COST)
+}
+
+#[cfg(test)]
+fn chebyshev_distance(from: TileCoord, to: TileCoord) -> u32 {
+    (from.x - to.x)
+        .unsigned_abs()
+        .max((from.y - to.y).unsigned_abs())
 }
 
 fn key(total: u64, cost: u64, tile: TileCoord) -> (u64, u64, i32, i32) {
@@ -238,6 +309,72 @@ mod tests {
             .next()
             .expect("test terrain resource");
         (terrain, node)
+    }
+
+    fn flat_terrain() -> MapChunkGenerator {
+        let level_zero = crate::ElevationPage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            geographic_height_centimeters: vec![0; 4],
+        };
+        let overview = crate::ElevationPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            geographic_height_centimeters: vec![0],
+        };
+        let environment = crate::PreparedEnvironment {
+            samples_per_axis: 2,
+            geographic_millimeters_per_sample: 1_000,
+            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+            elevation: crate::FieldPyramid {
+                levels: vec![
+                    crate::PyramidLevel {
+                        samples_per_axis: 2,
+                        ordered_page_root: crate::ordered_page_root(std::slice::from_ref(
+                            &level_zero,
+                        ))
+                        .expect("level-zero root"),
+                    },
+                    crate::PyramidLevel {
+                        samples_per_axis: 1,
+                        ordered_page_root: crate::ordered_page_root(std::slice::from_ref(
+                            &overview,
+                        ))
+                        .expect("overview root"),
+                    },
+                ],
+            },
+            water: None,
+            vegetation: None,
+            historical_land_use: None,
+        };
+        MapChunkGenerator::new([0; 32], 0, 128)
+            .with_prepared_elevation(
+                crate::Ratio::new(1, 1).expect("compression"),
+                &environment,
+                vec![level_zero, overview],
+            )
+            .expect("flat terrain")
+    }
+
+    fn cleared_overlay(terrain: &MapChunkGenerator) -> ResourceOverlay {
+        let mut overlay = ResourceOverlay::default();
+        for y in 0..128 {
+            for x in 0..128 {
+                if let Some(node) = terrain.object_at(TileCoord::new(x, y)) {
+                    overlay
+                        .deplete(terrain, node.id, node.initial_amount)
+                        .expect("resource");
+                }
+            }
+        }
+        overlay
     }
 
     #[test]
@@ -295,5 +432,44 @@ mod tests {
         assert!(diagonal_clear(origin, 1, 1, &|_| true, |_, _| {
             EdgePassability::Passable
         },));
+    }
+
+    #[test]
+    fn long_routes_return_a_bounded_deterministic_segment() {
+        let terrain = flat_terrain();
+        let overlay = cleared_overlay(&terrain);
+        let mut fixture = None;
+        'origins: for y in 1..127 {
+            for x in 1..95 {
+                let origin = TileCoord::new(x, y);
+                let destination = TileCoord::new(x + 33, y);
+                if !matches!(
+                    find_path_with_overlay(&terrain, &overlay, origin, destination, 4_096),
+                    MovementOutcome::Path(_)
+                ) {
+                    continue;
+                }
+                let first =
+                    find_path_segment_with_overlay(&terrain, &overlay, origin, destination, 4_096);
+                if let MovementOutcome::Path(path) = first
+                    && path.tiles.len() > 1
+                    && path.tiles.last().is_some_and(|tile| *tile != destination)
+                {
+                    fixture = Some((origin, destination, path));
+                    break 'origins;
+                }
+            }
+        }
+        let (origin, destination, first) = fixture.expect("long generated route");
+        let second = find_path_segment_with_overlay(&terrain, &overlay, origin, destination, 4_096);
+        assert_eq!(MovementOutcome::Path(first.clone()), second);
+        assert_eq!(first.tiles.first(), Some(&origin));
+        assert_eq!(
+            first
+                .tiles
+                .last()
+                .map(|tile| chebyshev_distance(origin, *tile)),
+            Some(MAX_ROUTE_SEGMENT_TILES)
+        );
     }
 }

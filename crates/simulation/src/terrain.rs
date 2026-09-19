@@ -2,7 +2,7 @@ use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
     CHUNK_TILES, Depletion, EdgePassability, ElevationPage, HistoricalLandUsePage,
     MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay,
-    ResourceOverlayError, WaterPage, find_path_with_overlay,
+    ResourceOverlayError, WaterPage, find_path_segment_with_overlay, find_path_with_overlay,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -104,6 +104,25 @@ impl Terrain {
             | MovementOutcome::Unreachable
             | MovementOutcome::BudgetExceeded => Some(Vec::new()),
         }
+    }
+
+    /// Plans the next fine-scale segment of a map order. Uniform worlds keep
+    /// their allocation-free direct stepping and therefore return `None`.
+    pub fn route_segment(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+    ) -> Option<MovementOutcome> {
+        let Self::Map { generator, overlay } = self else {
+            return None;
+        };
+        Some(find_path_segment_with_overlay(
+            generator,
+            overlay,
+            origin,
+            destination,
+            4_096,
+        ))
     }
 
     /// Applies a deterministic resource depletion to map terrain. Exhausted

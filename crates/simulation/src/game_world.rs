@@ -286,16 +286,7 @@ impl GameWorld {
         let target_tile = destination.tile_floor();
         let (waypoint, route) =
             if let Some(path) = self.terrain.route(origin.tile_floor(), target_tile) {
-                let mut route = VecDeque::from(path);
-                if route.is_empty() {
-                    return Err(GameWorldError::InvalidPosition);
-                }
-                let _ = route.pop_front();
-                let waypoint = route
-                    .pop_front()
-                    .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
-                    .unwrap_or(destination);
-                (waypoint, route)
+                route_waypoint(path, origin, destination)?
             } else {
                 (
                     next_waypoint(origin, target_tile, destination),
@@ -426,6 +417,22 @@ impl GameWorld {
         self.units[index].bucket = bucket;
         self.units[index].bucket_slot = new_slot;
     }
+}
+
+fn route_waypoint(
+    tiles: Vec<TileCoord>,
+    origin: WorldPosition,
+    destination: WorldPosition,
+) -> Result<(WorldPosition, VecDeque<TileCoord>), GameWorldError> {
+    let mut route = VecDeque::from(tiles);
+    if route.pop_front() != Some(origin.tile_floor()) {
+        return Err(GameWorldError::InvalidPosition);
+    }
+    let waypoint = route
+        .pop_front()
+        .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
+        .unwrap_or(destination);
+    Ok((waypoint, route))
 }
 
 pub(crate) fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
