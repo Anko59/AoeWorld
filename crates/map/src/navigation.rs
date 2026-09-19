@@ -1,4 +1,4 @@
-use crate::route_hierarchy::portal_candidates;
+use crate::route_hierarchy::{portal_candidates, same_intermediate_region};
 use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::collections::{BTreeMap, BTreeSet};
@@ -58,6 +58,16 @@ pub fn find_path_segment_with_overlay(
 ) -> MovementOutcome {
     if !walkable_with_overlay(terrain, overlay, destination) {
         return MovementOutcome::InvalidDestination;
+    }
+    if same_intermediate_region(origin, destination) {
+        return find_path_with(
+            terrain,
+            origin,
+            destination,
+            max_expansions,
+            Some(32),
+            |tile| walkable_with_overlay(terrain, overlay, tile),
+        );
     }
     let portals = portal_candidates(terrain, overlay, origin, destination);
     if portals.is_empty() {

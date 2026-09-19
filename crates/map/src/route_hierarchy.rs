@@ -42,6 +42,10 @@ pub(crate) fn hierarchy_boundary(origin: TileCoord, destination: TileCoord) -> T
     destination
 }
 
+pub(crate) fn same_intermediate_region(origin: TileCoord, destination: TileCoord) -> bool {
+    same_cell(origin, destination, INTERMEDIATE_TILES)
+}
+
 fn boundary_toward(origin: TileCoord, destination: TileCoord, span: i32) -> TileCoord {
     let cell_x = origin.x.div_euclid(span);
     let cell_y = origin.y.div_euclid(span);
