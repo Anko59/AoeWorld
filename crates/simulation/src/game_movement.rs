@@ -1,5 +1,6 @@
 use crate::{
-    GameUnit, GameWorld, MovementOrder,
+    GameUnit, GameWorld, MAX_ROUTE_EXPANSIONS_PER_ORDER, MAX_ROUTE_EXPANSIONS_PER_TICK,
+    MovementOrder,
     game_path::next_waypoint,
     game_path::segment_length,
     game_world::{facing_for, interpolate},
@@ -37,6 +38,7 @@ impl GameWorld {
                     && !self.terrain.crossable(previous_tile, tile, self.config))
             {
                 self.units[index].state.moving = false;
+                self.units[index].state.planning = false;
                 self.units[index].order = None;
                 changed.push(self.units[index].state);
                 continue;
@@ -49,6 +51,7 @@ impl GameWorld {
                 self.advance_arrived(index, id, order, &mut still_moving);
             } else {
                 self.units[index].state.moving = true;
+                self.units[index].state.planning = false;
                 self.units[index].order = Some(order);
                 still_moving.push(id);
             }
@@ -56,6 +59,7 @@ impl GameWorld {
         }
         self.active_movers = still_moving;
         self.tick.0 = self.tick.0.saturating_add(1);
+        self.planning_budget = MAX_ROUTE_EXPANSIONS_PER_TICK;
         changed.sort_by_key(|unit| unit.id);
         changed
     }
@@ -67,13 +71,28 @@ impl GameWorld {
         order: MovementOrder,
         still_moving: &mut Vec<aoe_core::EntityId>,
     ) {
+        if order.waypoint == order.destination {
+            self.units[index].state.moving = false;
+            self.units[index].state.planning = false;
+            self.units[index].order = None;
+            return;
+        }
         let next = self.units[index]
             .route
             .pop_front()
             .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
-            .or_else(|| self.next_map_segment(index, order));
-        let Some(next) = next else {
+            .map(SegmentAdvance::Next)
+            .unwrap_or_else(|| self.next_map_segment(index, order));
+        if matches!(next, SegmentAdvance::Planning) {
             self.units[index].state.moving = false;
+            self.units[index].state.planning = true;
+            self.units[index].order = Some(order);
+            still_moving.push(id);
+            return;
+        }
+        let SegmentAdvance::Next(next) = next else {
+            self.units[index].state.moving = false;
+            self.units[index].state.planning = false;
             self.units[index].order = None;
             return;
         };
@@ -88,31 +107,70 @@ impl GameWorld {
         };
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
         self.units[index].state.moving = true;
+        self.units[index].state.planning = false;
         self.units[index].order = Some(next_order);
         still_moving.push(id);
     }
 
-    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> Option<WorldPosition> {
-        match self
-            .terrain
-            .route_segment(order.waypoint.tile_floor(), order.target_tile)
-        {
+    pub(crate) fn next_map_route(
+        &mut self,
+        origin: aoe_core::TileCoord,
+        destination: aoe_core::TileCoord,
+    ) -> Option<MovementOutcome> {
+        if !self.terrain.has_map_navigation() {
+            return None;
+        }
+        let budget = self.take_planning_budget();
+        if budget == 0 {
+            return Some(MovementOutcome::BudgetExceeded);
+        }
+        self.terrain
+            .route_outcome_with_limit(origin, destination, budget)
+    }
+
+    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
+        if !self.terrain.has_map_navigation() {
+            return (order.waypoint != order.destination)
+                .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
+                .map_or(SegmentAdvance::Stopped, SegmentAdvance::Next);
+        }
+        let budget = self.take_planning_budget();
+        if budget == 0 {
+            return SegmentAdvance::Planning;
+        }
+        match self.terrain.route_segment_with_limit(
+            order.waypoint.tile_floor(),
+            order.target_tile,
+            budget,
+        ) {
             Some(MovementOutcome::Path(path)) => {
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() != Some(order.waypoint.tile_floor()) {
-                    return None;
+                    return SegmentAdvance::Stopped;
                 }
                 let next = route
                     .pop_front()
                     .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
                 self.units[index].route = route;
-                next
+                next.map_or(SegmentAdvance::Stopped, SegmentAdvance::Next)
             }
-            Some(MovementOutcome::InvalidDestination)
-            | Some(MovementOutcome::Unreachable)
-            | Some(MovementOutcome::BudgetExceeded) => None,
-            None => (order.waypoint != order.destination)
-                .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination)),
+            Some(MovementOutcome::InvalidDestination) | Some(MovementOutcome::Unreachable) => {
+                SegmentAdvance::Stopped
+            }
+            Some(MovementOutcome::BudgetExceeded) => SegmentAdvance::Planning,
+            None => SegmentAdvance::Stopped,
         }
     }
+
+    fn take_planning_budget(&mut self) -> u32 {
+        let allocated = self.planning_budget.min(MAX_ROUTE_EXPANSIONS_PER_ORDER);
+        self.planning_budget -= allocated;
+        allocated
+    }
+}
+
+enum SegmentAdvance {
+    Next(WorldPosition),
+    Planning,
+    Stopped,
 }

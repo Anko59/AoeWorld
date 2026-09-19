@@ -454,6 +454,7 @@ fn unit_state(unit: &GameUnit) -> GameplayUnitState {
         player: unit.player,
         position: unit.position,
         moving: unit.moving,
+        planning: unit.planning,
         facing: unit.facing as u8,
     }
 }

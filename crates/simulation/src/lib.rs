@@ -6,6 +6,9 @@ mod game_query;
 mod game_world;
 mod terrain;
 
+pub(crate) const MAX_ROUTE_EXPANSIONS_PER_ORDER: u32 = 4_096;
+pub(crate) const MAX_ROUTE_EXPANSIONS_PER_TICK: u32 = 16_384;
+
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;

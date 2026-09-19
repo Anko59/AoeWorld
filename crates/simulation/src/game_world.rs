@@ -28,6 +28,7 @@ pub struct GameUnit {
     pub position: WorldPosition,
     pub previous_position: WorldPosition,
     pub moving: bool,
+    pub planning: bool,
     pub facing: Facing,
 }
 
@@ -77,6 +78,7 @@ pub struct GameWorld {
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) terrain: Terrain,
+    pub(crate) planning_budget: u32,
 }
 
 impl GameWorld {
@@ -90,6 +92,7 @@ impl GameWorld {
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
         })
     }
 
@@ -173,6 +176,7 @@ impl GameWorld {
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
         };
         let center = WorldPosition::new(
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
@@ -250,6 +254,7 @@ impl GameWorld {
                 position,
                 previous_position: position,
                 moving: false,
+                planning: false,
                 facing: Facing::South,
             },
             order: None,
@@ -285,10 +290,11 @@ impl GameWorld {
         if origin == destination {
             self.units[index].order = None;
             self.units[index].state.moving = false;
+            self.units[index].state.planning = false;
             return Ok(false);
         }
         let target_tile = destination.tile_floor();
-        let (waypoint, route) = match self.terrain.route_outcome(origin.tile_floor(), target_tile) {
+        let (waypoint, route) = match self.next_map_route(origin.tile_floor(), target_tile) {
             Some(MovementOutcome::Path(path)) => route_waypoint(path.tiles, origin, destination)?,
             Some(MovementOutcome::InvalidDestination) => {
                 return Err(GameWorldError::InvalidPosition);
@@ -308,6 +314,7 @@ impl GameWorld {
         self.units[index].state.previous_position = origin;
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
         self.units[index].state.moving = true;
+        self.units[index].state.planning = false;
         self.units[index].route = route;
         self.units[index].order = Some(MovementOrder {
             origin,
@@ -373,7 +380,11 @@ impl GameWorld {
             hash.update(&unit.state.position.y.to_le_bytes());
             hash.update(&unit.state.previous_position.x.to_le_bytes());
             hash.update(&unit.state.previous_position.y.to_le_bytes());
-            hash.update(&[unit.state.moving as u8, unit.state.facing as u8]);
+            hash.update(&[
+                unit.state.moving as u8,
+                unit.state.planning as u8,
+                unit.state.facing as u8,
+            ]);
             if let Some(order) = unit.order {
                 hash.update(&order.origin.x.to_le_bytes());
                 hash.update(&order.origin.y.to_le_bytes());

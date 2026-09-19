@@ -45,6 +45,10 @@ impl Terrain {
         Self::Uniform(UniformGrass::new(seed))
     }
 
+    pub const fn has_map_navigation(&self) -> bool {
+        matches!(self, Self::Map { .. })
+    }
+
     pub fn from_package(package: &MapPackage) -> Self {
         Self::Map {
             generator: package.generator(),
@@ -112,6 +116,15 @@ impl Terrain {
         origin: TileCoord,
         destination: TileCoord,
     ) -> Option<MovementOutcome> {
+        self.route_outcome_with_limit(origin, destination, 4_096)
+    }
+
+    pub fn route_outcome_with_limit(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<MovementOutcome> {
         let Self::Map { generator, overlay } = self else {
             return None;
         };
@@ -120,7 +133,7 @@ impl Terrain {
             overlay,
             origin,
             destination,
-            4_096,
+            max_expansions,
         ))
     }
 
@@ -131,6 +144,15 @@ impl Terrain {
         origin: TileCoord,
         destination: TileCoord,
     ) -> Option<MovementOutcome> {
+        self.route_segment_with_limit(origin, destination, 4_096)
+    }
+
+    pub fn route_segment_with_limit(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<MovementOutcome> {
         let Self::Map { generator, overlay } = self else {
             return None;
         };
@@ -139,7 +161,7 @@ impl Terrain {
             overlay,
             origin,
             destination,
-            4_096,
+            max_expansions,
         ))
     }
 

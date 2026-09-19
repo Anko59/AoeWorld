@@ -311,3 +311,63 @@ fn map_world_follows_a_passable_route_to_its_destination() {
     assert_eq!(arrived.position, target);
     assert!(!arrived.moving);
 }
+
+#[test]
+fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let terrain = Terrain::Map {
+        generator: generator.clone(),
+        overlay: ResourceOverlay::default(),
+    };
+    let mut fixture = None;
+    'origins: for y in 1..config.height_tiles - 1 {
+        for x in 1..config.width_tiles - 3 {
+            let origin = TileCoord::new(x, y);
+            let destination = TileCoord::new(x + 2, y);
+            if let Some(MovementOutcome::Path(path)) = terrain.route_outcome(origin, destination)
+                && path.tiles.len() >= 3
+            {
+                fixture = Some((origin, destination, path.tiles[1]));
+                break 'origins;
+            }
+        }
+    }
+    let (origin, destination, waypoint) = fixture.expect("generated map route");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let id = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let index = world.lookup[&id];
+    let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
+    let waypoint_position = WorldPosition::from_tile_center(waypoint).expect("waypoint position");
+    let destination_position =
+        WorldPosition::from_tile_center(destination).expect("destination position");
+    world.units[index].state.moving = true;
+    world.units[index].order = Some(MovementOrder {
+        origin: origin_position,
+        destination: destination_position,
+        waypoint: waypoint_position,
+        target_tile: destination,
+        segment_length: 1,
+        travelled: 1,
+    });
+    world.active_movers.push(id);
+    world.planning_budget = 0;
+
+    world.advance();
+
+    let unit = world.unit(id).expect("unit");
+    assert_eq!(unit.position, waypoint_position);
+    assert!(!unit.moving);
+    assert!(unit.planning);
+    assert!(world.movement_order(id).is_some());
+    assert_eq!(world.active_mover_count(), 1);
+}

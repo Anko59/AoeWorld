@@ -5,7 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 5;
+pub const VERSION: u16 = 6;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -28,6 +28,7 @@ pub struct UnitState {
     pub player: PlayerId,
     pub position: WorldPosition,
     pub moving: bool,
+    pub planning: bool,
     pub facing: u8,
 }
 
@@ -280,6 +281,7 @@ mod tests {
                 player: PlayerId(0),
                 position: WorldPosition::new(0, 0),
                 moving: false,
+                planning: false,
                 facing: 0
             };
             MAX_SUBSCRIBED_UNITS + 1
