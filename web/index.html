@@ -212,6 +212,10 @@
       const minutes = Math.floor((seconds % 3600) / 60);
       return hours ? `${hours} h ${minutes} min` : `${minutes} min ${seconds % 60} s`;
     };
+    const formatCompression = estimate => {
+      const value = estimate.compression_numerator / estimate.compression_denominator;
+      return `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })}:1`;
+    };
     const mapRequest = () => {
       const side = number('map-side-km');
       return {
@@ -315,7 +319,7 @@
         const request = mapRequest();
         const value = await readJson(await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }));
         estimate.className = '';
-        estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nEffective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}`;
+        estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nCompression: ${formatCompression(value)} · Effective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}`;
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to estimate this map.';
