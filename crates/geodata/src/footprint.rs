@@ -115,7 +115,7 @@ fn inverse_project_e7(
     let (longitude, latitude) = inverse_project(definition, east, north)?;
     Ok(GeographicPoint {
         latitude_e7: rounded_e7(latitude)?,
-        longitude_e7: rounded_e7(longitude)?,
+        longitude_e7: normalized_longitude_e7(longitude)?,
     })
 }
 
@@ -249,6 +249,13 @@ fn rounded_e7(value: f64) -> Result<i32, GeodataError> {
     Ok(value.round() as i32)
 }
 
+fn normalized_longitude_e7(value: f64) -> Result<i32, GeodataError> {
+    let value = i64::from(rounded_e7(value)?);
+    let full_turn = 3_600_000_000_i64;
+    i32::try_from((value + 1_800_000_000).rem_euclid(full_turn) - 1_800_000_000)
+        .map_err(|_| GeodataError::Coordinate)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +290,34 @@ mod tests {
         assert!(local.min_scale_error_ppm <= local.max_scale_error_ppm);
         assert!(continental.min_scale_error_ppm <= continental.max_scale_error_ppm);
         assert!(continental.max_scale_error_ppm > local.max_scale_error_ppm);
+    }
+
+    #[test]
+    fn antimeridian_footprint_uses_normalized_longitudes_for_overview_splitting() {
+        let points = projected_footprint(
+            MapRequest {
+                center_latitude_e7: -178_000_000,
+                center_longitude_e7: 1_798_000_000,
+                requested_side_meters: 500_000,
+                ..MapRequest::default()
+            },
+            8,
+        )
+        .expect("antimeridian footprint");
+        assert!(
+            points
+                .iter()
+                .any(|point| point.longitude_e7 > 1_700_000_000)
+        );
+        assert!(
+            points
+                .iter()
+                .any(|point| point.longitude_e7 < -1_700_000_000)
+        );
+        assert!(
+            points
+                .iter()
+                .all(|point| (-1_800_000_000..1_800_000_000).contains(&point.longitude_e7))
+        );
     }
 }
