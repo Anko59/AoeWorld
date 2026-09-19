@@ -4,8 +4,12 @@ use web_sys::CanvasRenderingContext2d;
 
 const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
 
-pub(crate) fn selection_ring(camera: SceneCamera, position: [f64; 2]) -> Vec<Sprite> {
-    let screen = camera_projection(camera).world_to_screen(position);
+pub(crate) fn selection_ring(
+    camera: SceneCamera,
+    position: [f64; 2],
+    elevation_meters: f64,
+) -> Vec<Sprite> {
+    let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
     let radius_x = 24.0 * camera.zoom;
     let radius_y = 8.0 * camera.zoom;
     let mut sprites = Vec::with_capacity(32);

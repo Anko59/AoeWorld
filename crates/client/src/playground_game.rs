@@ -391,7 +391,7 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) || client.selected != client.primary {
         return;
     }
-    let world = client.camera.screen_to_world(point);
+    let world = map::world_at_screen(client, point);
     if world[0] < 0.0
         || world[1] < 0.0
         || world[0] >= f64::from(client.config.width_tiles)
@@ -442,6 +442,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 moving: unit.moving,
                 facing: unit.facing,
                 selected: client.selected == Some(unit.id),
+                elevation_meters: map::elevation_at_world(&client, position_at(&client, unit.id)),
             })
             .collect::<Vec<_>>();
         let camera = SceneCamera {

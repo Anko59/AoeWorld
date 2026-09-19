@@ -90,7 +90,7 @@ fn visible_map_terrain_frames(
         let frame = frames[((sample.position[0] as i32 * 7 + sample.position[1] as i32 * 13)
             .unsigned_abs() as usize)
             % frames.len()];
-        let screen = projection.world_to_screen(sample.position);
+        let screen = projection.world_to_screen_at_height(sample.position, sample.elevation_meters);
         let width = f64::from(frame.size[0]) * camera.zoom;
         let height = f64::from(frame.size[1]) * camera.zoom;
         if screen.x + width < 0.0

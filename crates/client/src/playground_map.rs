@@ -23,7 +23,7 @@ pub(super) fn inspection_label(client: &Client) -> String {
     let Some(pointer) = client.pointer else {
         return "hover a loaded tile to inspect terrain".to_owned();
     };
-    let world = client.camera.screen_to_world(pointer);
+    let world = world_at_screen(client, pointer);
     let x = world[0].floor() as i32;
     let y = world[1].floor() as i32;
     let Some(chunk) = client
@@ -115,6 +115,7 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
             terrain.push(SceneTerrain {
                 position: [f64::from(x), f64::from(y)],
                 material: terrain_material(tile.material),
+                elevation_meters: f64::from(tile.game_height_level),
             });
         }
     }
@@ -141,11 +142,43 @@ pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
             position: [f64::from(resource.tile.x), f64::from(resource.tile.y)],
             kind: resource.kind as u8,
             visual_variant: resource.visual_variant,
+            elevation_meters: elevation_at_tile(client, resource.tile.x, resource.tile.y),
         })
         .collect::<Vec<_>>();
     resources.sort_by_key(|resource| resource.id);
     resources.truncate(MAX_VISIBLE_RESOURCE_SPRITES);
     resources
+}
+
+pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
+    elevation_at_tile(client, world[0].floor() as i32, world[1].floor() as i32)
+}
+
+pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> aoe_core::ScreenPoint {
+    client
+        .camera
+        .world_to_screen_at_height(world, elevation_at_world(client, world))
+}
+
+pub(super) fn world_at_screen(client: &Client, screen: aoe_core::ScreenPoint) -> [f64; 2] {
+    let mut world = client.camera.screen_to_world(screen);
+    for _ in 0..2 {
+        world = client
+            .camera
+            .screen_to_world_at_height(screen, elevation_at_world(client, world));
+    }
+    world
+}
+
+fn elevation_at_tile(client: &Client, x: i32, y: i32) -> f64 {
+    let chunk = client
+        .terrain_chunks
+        .get(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)));
+    let index = y.rem_euclid(CHUNK_TILES) as usize * CHUNK_TILES as usize
+        + x.rem_euclid(CHUNK_TILES) as usize;
+    chunk
+        .and_then(|chunk| chunk.tiles.get(index))
+        .map_or(0.0, |tile| f64::from(tile.game_height_level))
 }
 
 fn terrain_material(material: GroundMaterial) -> u8 {

@@ -15,7 +15,6 @@ pub enum GameRenderer {
         atlas: HtmlCanvasElement,
     },
 }
-
 #[derive(Clone, Copy)]
 pub struct SceneCamera {
     pub center: [f64; 2],
@@ -30,6 +29,7 @@ pub struct SceneUnit {
     pub moving: bool,
     pub facing: u8,
     pub selected: bool,
+    pub elevation_meters: f64,
 }
 
 #[derive(Clone, Copy)]
@@ -37,6 +37,7 @@ pub struct SceneTerrain {
     pub position: [f64; 2],
     /// One of the six `GameArt::terrain` groups.
     pub material: u8,
+    pub elevation_meters: f64,
 }
 
 #[derive(Clone, Copy)]
@@ -46,8 +47,8 @@ pub struct SceneResource {
     /// Resource kind in the versioned map wire order.
     pub kind: u8,
     pub visual_variant: u8,
+    pub elevation_meters: f64,
 }
-
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }
@@ -241,7 +242,11 @@ fn world_sprites(
     let frames = world_sprite_frames(art, terrain, resources, units, camera, animation);
     sprites.extend(frames.iter().map(|(sprite, _, _)| *sprite));
     for unit in units.iter().filter(|unit| unit.selected) {
-        sprites.extend(game_grid::selection_ring(camera, unit.position));
+        sprites.extend(game_grid::selection_ring(
+            camera,
+            unit.position,
+            unit.elevation_meters,
+        ));
     }
     sprites
 }
@@ -291,12 +296,14 @@ fn world_sprite_frames(
             let WorldObject::Resource(resource, frame) = object else {
                 continue;
             };
-            if let Some(sprite) = scene_sprite(frame, resource.position, camera) {
+            if let Some(sprite) =
+                scene_sprite(frame, resource.position, resource.elevation_meters, camera)
+            {
                 result.push((sprite, scaled(frame, camera.zoom as f32), false));
             }
             continue;
         };
-        let screen = projection.world_to_screen(unit.position);
+        let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
         let frames = if unit.moving {
             &art.walking
         } else {
@@ -371,13 +378,18 @@ impl WorldObject {
     }
 }
 
-fn scene_sprite(frame: GameFrame, position: [f64; 2], camera: SceneCamera) -> Option<Sprite> {
+fn scene_sprite(
+    frame: GameFrame,
+    position: [f64; 2],
+    elevation_meters: f64,
+    camera: SceneCamera,
+) -> Option<Sprite> {
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
     };
-    let screen = projection.world_to_screen(position);
+    let screen = projection.world_to_screen_at_height(position, elevation_meters);
     let width = f64::from(frame.size[0]) * camera.zoom;
     let height = f64::from(frame.size[1]) * camera.zoom;
     if screen.x + width < 0.0

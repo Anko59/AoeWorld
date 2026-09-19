@@ -2,6 +2,7 @@ use crate::{TileCoord, TileRect, WorldConfig};
 
 pub const ISO_TILE_WIDTH: f64 = 128.0;
 pub const ISO_TILE_HEIGHT: f64 = 64.0;
+pub const ISO_ELEVATION_METER_HEIGHT: f64 = ISO_TILE_HEIGHT / 2.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ScreenPoint {
@@ -34,6 +35,12 @@ impl Camera {
         }
     }
 
+    pub fn world_to_screen_at_height(self, world: [f64; 2], elevation_meters: f64) -> ScreenPoint {
+        let mut screen = self.world_to_screen(world);
+        screen.y -= elevation_meters * ISO_ELEVATION_METER_HEIGHT * self.zoom;
+        screen
+    }
+
     pub fn screen_to_world(self, screen: ScreenPoint) -> [f64; 2] {
         let camera = project(self.center);
         let projected = ScreenPoint {
@@ -41,6 +48,15 @@ impl Camera {
             y: camera.y + (screen.y - self.viewport[1] * 0.5) / self.zoom,
         };
         inverse_project(projected)
+    }
+
+    pub fn screen_to_world_at_height(
+        self,
+        mut screen: ScreenPoint,
+        elevation_meters: f64,
+    ) -> [f64; 2] {
+        screen.y += elevation_meters * ISO_ELEVATION_METER_HEIGHT * self.zoom;
+        self.screen_to_world(screen)
     }
 
     pub fn zoom_around(mut self, pointer: ScreenPoint, zoom: f64) -> Self {
