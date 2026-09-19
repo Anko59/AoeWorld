@@ -63,6 +63,11 @@ bounded game pages. Terrain then derives water, cliffs and ramps, biome and
 resource placement from those package inputs; the deterministic seed changes
 detail placement without moving source-backed relief.
 
+The map creator asks the native worker for a bounded, densified inverse-
+projection of the effective square. It draws that boundary on its
+equirectangular overview, including a split at the antimeridian. This preview
+does not acquire sources or create a package.
+
 ## Tests and performance evidence
 
 ```sh

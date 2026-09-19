@@ -19,6 +19,9 @@ use std::path::{Path, PathBuf};
 mod elevation;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 
+mod footprint;
+pub use footprint::{GeographicPoint, MAX_FOOTPRINT_SAMPLES_PER_EDGE, projected_footprint};
+
 mod hyde;
 pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
 
@@ -114,6 +117,10 @@ pub enum WorkerRequest {
         longitude: f64,
         latitude: f64,
     },
+    ProjectFootprint {
+        request: MapRequest,
+        samples_per_edge: u8,
+    },
     PrepareElevation {
         path: PathBuf,
         request: MapRequest,
@@ -134,6 +141,9 @@ pub enum WorkerResponse {
     ProjectedPoint {
         east_meters: i64,
         north_meters: i64,
+    },
+    GeographicFootprint {
+        points: Vec<GeographicPoint>,
     },
     PreparedElevation {
         environment: PreparedEnvironment,
@@ -254,6 +264,12 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
                 north_meters: round_meters(north_meters)?,
             })
         }
+        WorkerRequest::ProjectFootprint {
+            request,
+            samples_per_edge,
+        } => Ok(WorkerResponse::GeographicFootprint {
+            points: projected_footprint(request, samples_per_edge)?,
+        }),
         WorkerRequest::PrepareElevation {
             path,
             request,

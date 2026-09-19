@@ -49,7 +49,7 @@
         <svg id="map-overview" viewBox="0 0 360 180" role="img" aria-label="Pannable and zoomable world overview with selected geographic footprint">
           <rect width="360" height="180" fill="#244a58"></rect>
           <path d="M0 45h360M0 90h360M0 135h360M90 0v180M180 0v180M270 0v180" stroke="#7ba5a5" stroke-opacity=".45" stroke-width="1"></path>
-          <rect id="map-footprint" x="180" y="90" width="4" height="4" fill="#f4d577" fill-opacity=".7" stroke="#fff0a4" stroke-width="1"></rect>
+          <path id="map-footprint" d="M180 90h4v4h-4z" fill="#f4d577" fill-opacity=".7" stroke="#fff0a4" stroke-width="1"></path>
         </svg>
       </div>
       <p id="map-location" aria-live="polite"></p>
@@ -100,6 +100,7 @@
     let activeJob = null;
     const overviewView = { x: 0, y: 0, width: 360, height: 180 };
     let overviewDrag = null;
+    let footprintRevision = 0;
     const number = id => Number(document.getElementById(id).value);
     const clampOverview = () => {
       overviewView.width = Math.min(360, Math.max(18, overviewView.width));
@@ -122,6 +123,31 @@
       document.getElementById('map-longitude').value = String(Math.max(-180, Math.min(180, point.x - 180)));
       updatePreview();
     };
+    const overviewCoordinate = point => ({ x: point.longitude_e7 / 1e7 + 180, y: 90 - point.latitude_e7 / 1e7 });
+    const drawGeographicFootprint = points => {
+      let path = '';
+      let previous = null;
+      let split = false;
+      for (const point of points) {
+        const coordinate = overviewCoordinate(point);
+        if (previous === null || Math.abs(coordinate.x - previous.x) > 180) {
+          path += `M${coordinate.x} ${coordinate.y}`;
+          split ||= previous !== null;
+        } else {
+          path += `L${coordinate.x} ${coordinate.y}`;
+        }
+        previous = coordinate;
+      }
+      footprint.setAttribute('d', split ? path : `${path}Z`);
+    };
+    const drawFallbackFootprint = (latitude, longitude, sideKm) => {
+      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
+      const latitudeSpan = Math.min(180, Math.max(0.05, sideKm / 111.32));
+      const longitudeSpan = Math.min(360, Math.max(0.05, sideKm / (111.32 * Math.max(0.1, Math.cos(latitude * Math.PI / 180)))));
+      const x = Math.min(360, Math.max(0, normalizedLongitude + 180 - longitudeSpan / 2));
+      const y = Math.min(180, Math.max(0, 90 - latitude - latitudeSpan / 2));
+      footprint.setAttribute('d', `M${x} ${y}h${longitudeSpan}v${latitudeSpan}h-${longitudeSpan}Z`);
+    };
     const updatePreview = () => {
       const latitude = number('map-latitude');
       const longitude = number('map-longitude');
@@ -132,14 +158,19 @@
         location.textContent = 'Enter a valid location and square size to preview the geographic footprint.';
         return;
       }
-      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
-      const latitudeSpan = Math.min(180, Math.max(0.05, sideKm / 111.32));
-      const longitudeSpan = Math.min(360, Math.max(0.05, sideKm / (111.32 * Math.max(0.1, Math.cos(latitude * Math.PI / 180)))));
       footprint.setAttribute('visibility', 'visible');
-      footprint.setAttribute('x', String(Math.min(360, Math.max(0, normalizedLongitude + 180 - longitudeSpan / 2))));
-      footprint.setAttribute('y', String(Math.min(180, Math.max(0, 90 - latitude - latitudeSpan / 2))));
-      footprint.setAttribute('width', String(longitudeSpan));
-      footprint.setAttribute('height', String(latitudeSpan));
+      drawFallbackFootprint(latitude, longitude, sideKm);
+      const revision = ++footprintRevision;
+      try {
+        const request = mapRequest();
+        fetch('/maps/footprint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+          .then(response => response.ok ? response.json() : Promise.reject())
+          .then(value => {
+            if (revision === footprintRevision && Array.isArray(value.points) && value.points.length > 3) drawGeographicFootprint(value.points);
+          })
+          .catch(() => {});
+      } catch (_) {}
+      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
       const selected = regions[region.value];
       const label = selected ? selected.name : 'Custom coordinates';
       location.textContent = `${label}: ${latitude.toFixed(4)}°, ${normalizedLongitude.toFixed(4)}° · ${sideKm.toLocaleString()} km square footprint`;

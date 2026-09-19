@@ -27,6 +27,20 @@ fn worker_projects_the_requested_center_to_zero_meters() {
 }
 
 #[test]
+fn worker_returns_a_bounded_densified_geographic_footprint() {
+    let response = execute(WorkerRequest::ProjectFootprint {
+        request: MapRequest::default(),
+        samples_per_edge: 8,
+    })
+    .expect("footprint");
+    let WorkerResponse::GeographicFootprint { points } = response else {
+        panic!("footprint response");
+    };
+    assert_eq!(points.len(), 33);
+    assert_eq!(points.first(), points.last());
+}
+
+#[test]
 fn worker_lists_only_the_allowlisted_global_overview() {
     let response = execute(WorkerRequest::ListOverviewSources).expect("sources");
     let WorkerResponse::KnownSources { sources } = response else {

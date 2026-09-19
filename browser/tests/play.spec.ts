@@ -98,6 +98,7 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
     "visibility",
     "visible",
   );
+  await expect(page.locator("#map-footprint")).toHaveAttribute("d", /M/);
   const overview = page.locator("#map-overview");
   const overviewBox = await overview.boundingBox();
   if (!overviewBox) throw new Error("world overview is missing");

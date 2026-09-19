@@ -2,7 +2,7 @@ use aoe_map::{
     ElevationPage, EnvironmentalProvenance, MAP_SCHEMA_VERSION, MapPackage, MapRequest,
     ProjectionMetadata, SourceLock, WaterPage,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
     path::Path,
@@ -19,22 +19,32 @@ const MAX_ERROR_BYTES: usize = 8 * 1024;
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 enum WorkerOutput {
-    PreparedOverview {
-        source_lock: SourceLock,
-        water_source_lock: SourceLock,
-        vegetation_source_lock: SourceLock,
-        vegetation_classes_source_lock: SourceLock,
-        hyde_baseline_source_lock: SourceLock,
-        hyde_supplementary_source_lock: SourceLock,
-        hyde_readme_source_lock: SourceLock,
-        projection: ProjectionMetadata,
-        provenance: EnvironmentalProvenance,
-        environment: aoe_map::PreparedEnvironment,
-        pages: Vec<ElevationPage>,
-        water_pages: Vec<WaterPage>,
-        vegetation_pages: Vec<aoe_map::PotentialBiomePage>,
-        historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
-    },
+    PreparedOverview(Box<PreparedOverview>),
+    GeographicFootprint { points: Vec<GeographicPoint> },
+}
+
+#[derive(Deserialize)]
+struct PreparedOverview {
+    source_lock: SourceLock,
+    water_source_lock: SourceLock,
+    vegetation_source_lock: SourceLock,
+    vegetation_classes_source_lock: SourceLock,
+    hyde_baseline_source_lock: SourceLock,
+    hyde_supplementary_source_lock: SourceLock,
+    hyde_readme_source_lock: SourceLock,
+    projection: ProjectionMetadata,
+    provenance: EnvironmentalProvenance,
+    environment: aoe_map::PreparedEnvironment,
+    pages: Vec<ElevationPage>,
+    water_pages: Vec<WaterPage>,
+    vegetation_pages: Vec<aoe_map::PotentialBiomePage>,
+    historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(super) struct GeographicPoint {
+    pub latitude_e7: i32,
+    pub longitude_e7: i32,
 }
 
 pub(super) type PreparedOverviewPages = (
@@ -58,6 +68,75 @@ pub(super) fn prepare_overview(
         "samples_per_axis": 128,
     }))
     .map_err(|error| format!("could not encode map-worker request: {error}"))?;
+    let output = execute(worker, input, cancelled)?;
+    let WorkerOutput::PreparedOverview(prepared) = serde_json::from_slice(&output)
+        .map_err(|error| format!("invalid map-worker response: {error}"))?
+    else {
+        return Err("map worker returned an unexpected overview response".to_owned());
+    };
+    let PreparedOverview {
+        source_lock,
+        water_source_lock,
+        vegetation_source_lock,
+        vegetation_classes_source_lock,
+        hyde_baseline_source_lock,
+        hyde_supplementary_source_lock,
+        hyde_readme_source_lock,
+        projection,
+        provenance,
+        environment,
+        pages,
+        water_pages,
+        vegetation_pages,
+        historical_land_use_pages,
+    } = *prepared;
+    let package = MapPackage::with_prepared_environment(
+        MAP_SCHEMA_VERSION,
+        request,
+        vec![
+            source_lock,
+            water_source_lock,
+            vegetation_source_lock,
+            vegetation_classes_source_lock,
+            hyde_baseline_source_lock,
+            hyde_supplementary_source_lock,
+            hyde_readme_source_lock,
+        ],
+        projection,
+        provenance,
+        environment,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok((
+        package,
+        pages,
+        water_pages,
+        vegetation_pages,
+        historical_land_use_pages,
+    ))
+}
+
+pub(super) fn geographic_footprint(
+    worker: &Path,
+    request: MapRequest,
+) -> Result<Vec<GeographicPoint>, String> {
+    let input = serde_json::to_vec(&serde_json::json!({
+        "operation": "project_footprint",
+        "request": request,
+        "samples_per_edge": 16,
+    }))
+    .map_err(|error| format!("could not encode footprint request: {error}"))?;
+    let cancelled = AtomicBool::new(false);
+    let output = execute(worker, input, &cancelled)?;
+    let WorkerOutput::GeographicFootprint { points } = serde_json::from_slice(&output)
+        .map_err(|error| format!("invalid footprint response: {error}"))?
+    else {
+        return Err("map worker returned an unexpected footprint response".to_owned());
+    };
+    Ok(points)
+}
+
+fn execute(worker: &Path, input: Vec<u8>, cancelled: &AtomicBool) -> Result<Vec<u8>, String> {
     if input.len() > MAX_REQUEST_BYTES {
         return Err("map-worker request exceeds the configured bound".to_owned());
     }
@@ -97,47 +176,7 @@ pub(super) fn prepare_overview(
     if !status.success() {
         return Err(format!("map worker failed: {}", error.trim()));
     }
-    let WorkerOutput::PreparedOverview {
-        source_lock,
-        water_source_lock,
-        vegetation_source_lock,
-        vegetation_classes_source_lock,
-        hyde_baseline_source_lock,
-        hyde_supplementary_source_lock,
-        hyde_readme_source_lock,
-        projection,
-        provenance,
-        environment,
-        pages,
-        water_pages,
-        vegetation_pages,
-        historical_land_use_pages,
-    } = serde_json::from_slice(&output)
-        .map_err(|error| format!("invalid map-worker response: {error}"))?;
-    let package = MapPackage::with_prepared_environment(
-        MAP_SCHEMA_VERSION,
-        request,
-        vec![
-            source_lock,
-            water_source_lock,
-            vegetation_source_lock,
-            vegetation_classes_source_lock,
-            hyde_baseline_source_lock,
-            hyde_supplementary_source_lock,
-            hyde_readme_source_lock,
-        ],
-        projection,
-        provenance,
-        environment,
-    )
-    .map_err(|error| error.to_string())?;
-    Ok((
-        package,
-        pages,
-        water_pages,
-        vegetation_pages,
-        historical_land_use_pages,
-    ))
+    Ok(output)
 }
 
 fn wait_for_worker(

@@ -1,4 +1,4 @@
-use crate::{AppState, GameplayService, map_jobs, map_store};
+use crate::{AppState, GameplayService, map_jobs, map_store, map_worker};
 use aoe_map::{CompactChunk, MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
 use axum::{
@@ -45,6 +45,37 @@ pub(super) async fn estimate(
         .estimate()
         .map(Json)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+#[derive(Serialize)]
+pub(super) struct GeographicFootprint {
+    points: Vec<map_worker::GeographicPoint>,
+}
+
+/// Computes the picker boundary through the native WGS84 projection worker;
+/// it does not acquire source data or create a map package.
+pub(super) async fn footprint(
+    State(state): State<AppState>,
+    Json(request): Json<MapRequest>,
+) -> Result<Json<GeographicFootprint>, (StatusCode, String)> {
+    let request = request
+        .normalized()
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let worker = state.map_worker.clone().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "the native geographic projection worker is not configured".to_owned(),
+    ))?;
+    let points =
+        tokio::task::spawn_blocking(move || map_worker::geographic_footprint(&worker, request))
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "geographic projection task failed".to_owned(),
+                )
+            })?
+            .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+    Ok(Json(GeographicFootprint { points }))
 }
 
 #[derive(Serialize)]
