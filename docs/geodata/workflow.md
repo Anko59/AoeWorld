@@ -63,6 +63,35 @@ bounded game pages. Terrain then derives water, cliffs and ramps, biome and
 resource placement from those package inputs; the deterministic seed changes
 detail placement without moving source-backed relief.
 
+## Terrain, history, and compatibility limits
+
+The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
+potential-biome data, and HYDE historical land-use inputs. It has versioned
+locks and reproducible reductions, but it is an overview-quality stack: it is
+not a claim that Copernicus DEM, ESA WorldCover, HydroLAKES, HydroRIVERS, or
+other detailed modern layers were acquired or used. Source availability, the
+requested date, and the normalized package provenance are kept distinct so a
+modern source cannot be mistaken for a historical reconstruction.
+
+HYDE contributes a coarse historical land-use signal. It does not establish
+the exact location of medieval forests, farms, settlements, roads, bridges,
+or individual resources. Water and terrain rules use prepared pages and fixed
+thresholds; resource placement is deterministic and suitability-based rather
+than evidence for a particular real-world mine, herd, or stand of trees.
+
+`MapPackage` is the game-facing protocol boundary. Its schema version,
+normalized request, projection metadata, source locks, prepared-page roots,
+and content hash are validated before activation. The server persists prepared
+pages alongside the manifest, serves immutable chunk responses keyed by that
+hash, and rejects missing or inconsistent roots. Keep package artifacts
+outside Git and regenerate or migrate them when a schema change intentionally
+breaks compatibility.
+
+The local asset mapping is equally deliberate: the client presently maps
+semantic terrain to six imported AoE II terrain groups (temperate grass, dry
+grass, dirt, sand, rock, water). Decorative natural features and resource
+sprites are not loaded yet, so they are not represented as substitute art.
+
 The map creator asks the native worker for a bounded, densified inverse-
 projection of the effective square. It draws that boundary on its
 equirectangular overview, including a split at the antimeridian. This preview
@@ -79,4 +108,8 @@ AOE_MAP_REQUEST=/data/request.json make map-perf
 procedural fallback at corners and center and labels its output
 `synthetic_fallback_sampling`. It is useful for a quick regression signal but
 does not demonstrate a source-backed RTS workload or dedicated-hardware
-qualification. Use the repository performance gates for those claims.
+qualification. The supported evidence is therefore bounded deterministic
+generation and synthetic sampling only; use the repository performance gates
+plus recorded hardware, source-backed workloads, and a review of frame,
+memory, worker, and network budgets before making a production performance
+claim.
