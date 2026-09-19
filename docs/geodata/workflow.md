@@ -104,6 +104,13 @@ the minimum and maximum projection scale error in parts per million. This
 reports the selected extent's distortion; it does not describe continental
 selections as distortion-free.
 
+After a package has been generated, **Preview saved** requests a fixed 16 by 16
+read-only terrain sample without activating gameplay. Its elevation, water,
+reconstructed-biome, and passable-ground layers are useful technical
+diagnostics, including for preview-only all-water or all-ice packages. The
+passable-ground layer is not a spawn claim: the authoritative activation search
+still decides whether a valid starting position exists.
+
 ## Tests and performance evidence
 
 ```sh

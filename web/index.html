@@ -26,6 +26,9 @@
     #map-preview svg { display: block; width: 100%; height: 86px; cursor: crosshair; touch-action: none; }
     #map-location { margin: 5px 0 0; color: #c8d8ae; font-size: 12px; }
     #map-overview-hint { margin: 5px 0 0; color: #a9bd8b; font-size: 11px; }
+    #terrain-preview { margin: 10px 0; padding: 8px; border: 1px solid #60764d; border-radius: 3px; background: #182b1b; }
+    #terrain-preview canvas { display: block; width: 100%; height: 130px; image-rendering: pixelated; background: #101810; }
+    #terrain-preview p { margin: 6px 0 0; font-size: 11px; }
     #creator-actions { display: flex; gap: 7px; margin-top: 10px; }
     #map-estimate { min-height: 36px; margin: 10px 0 0; color: #dce9c9; white-space: pre-line; }
     #map-estimate.error { color: #ffd29a; }
@@ -63,8 +66,10 @@
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
       <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
+      <label>Preview layer <select id="preview-layer" aria-label="Terrain preview layer"><option value="elevation">Elevation</option><option value="water">Water</option><option value="vegetation">Vegetation</option><option value="suitability">Passable ground</option></select></label>
+      <section id="terrain-preview" hidden aria-label="Saved map technical preview"><canvas id="terrain-preview-canvas" width="128" height="128"></canvas><p id="terrain-preview-summary"></p></section>
       <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="retry-map" type="button" disabled>Retry</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
-      <div id="creator-actions"><button id="refresh-maps" type="button">Refresh maps</button><button id="open-map" type="button">Open saved</button></div>
+      <div id="creator-actions"><button id="refresh-maps" type="button">Refresh maps</button><button id="preview-map" type="button">Preview saved</button><button id="open-map" type="button">Open saved</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
     <div id="status" role="status"><span id="connection">Loading…</span> · <span id="world-position">8192.0, 8192.0</span></div>
@@ -78,6 +83,10 @@
     const retry = document.getElementById('retry-map');
     const cancel = document.getElementById('cancel-map');
     const packageSelect = document.getElementById('map-package');
+    const previewLayer = document.getElementById('preview-layer');
+    const terrainPreview = document.getElementById('terrain-preview');
+    const terrainPreviewCanvas = document.getElementById('terrain-preview-canvas');
+    const terrainPreviewSummary = document.getElementById('terrain-preview-summary');
     const region = document.getElementById('map-region');
     const coordinates = document.getElementById('map-coordinates');
     const footprint = document.getElementById('map-footprint');
@@ -100,6 +109,7 @@
     });
     let activeJob = null;
     let retryRequest = null;
+    let currentTerrainPreview = null;
     const overviewView = { x: 0, y: 0, width: 360, height: 180 };
     let overviewDrag = null;
     let footprintRevision = 0;
@@ -218,6 +228,34 @@
       const value = compression.numerator / compression.denominator;
       return `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })}:1`;
     };
+    const previewColor = (cell, preview) => {
+      if (previewLayer.value === 'water') return cell.water ? [43, 117, 166] : [73, 105, 55];
+      if (previewLayer.value === 'vegetation') {
+        const palette = [[105, 129, 69], [57, 104, 58], [166, 151, 79], [85, 122, 104], [151, 139, 103], [121, 144, 166]];
+        return palette[cell.biome % palette.length];
+      }
+      if (previewLayer.value === 'suitability') return cell.passable ? [112, 156, 81] : [62, 72, 77];
+      const span = Math.max(1, preview.maximum_height_centimeters - preview.minimum_height_centimeters);
+      const shade = Math.round(38 + 190 * (cell.geographic_height_centimeters - preview.minimum_height_centimeters) / span);
+      return [shade, Math.round(shade * 0.91), Math.round(shade * 0.67)];
+    };
+    const drawTerrainPreview = preview => {
+      if (!preview || !Array.isArray(preview.cells) || !Number.isInteger(preview.samples_per_axis)) return;
+      const context = terrainPreviewCanvas.getContext('2d');
+      const image = context.createImageData(terrainPreviewCanvas.width, terrainPreviewCanvas.height);
+      const cellSize = terrainPreviewCanvas.width / preview.samples_per_axis;
+      for (let y = 0; y < preview.samples_per_axis; y++) for (let x = 0; x < preview.samples_per_axis; x++) {
+        const color = previewColor(preview.cells[y * preview.samples_per_axis + x], preview);
+        for (let pixelY = Math.floor(y * cellSize); pixelY < Math.floor((y + 1) * cellSize); pixelY++) for (let pixelX = Math.floor(x * cellSize); pixelX < Math.floor((x + 1) * cellSize); pixelX++) {
+          const offset = (pixelY * terrainPreviewCanvas.width + pixelX) * 4;
+          image.data.set([...color, 255], offset);
+        }
+      }
+      context.putImageData(image, 0, 0);
+      const source = preview.source_backed ? 'Source-backed' : 'Fallback';
+      terrainPreviewSummary.textContent = `${source} ${preview.samples_per_axis} × ${preview.samples_per_axis} terrain sample · elevation ${(preview.minimum_height_centimeters / 100).toLocaleString()}–${(preview.maximum_height_centimeters / 100).toLocaleString()} m. Passable ground is a terrain diagnostic, not a selected start.`;
+      terrainPreview.hidden = false;
+    };
     const mapRequest = () => {
       const side = number('map-side-km');
       return {
@@ -316,6 +354,17 @@
         estimate.textContent = error.message || 'Unable to list saved maps.';
       });
     });
+    document.getElementById('preview-map').addEventListener('click', async () => {
+      if (!packageSelect.value) return;
+      try {
+        currentTerrainPreview = await readJson(await fetch(`/maps/${encodeURIComponent(packageSelect.value)}/preview`));
+        drawTerrainPreview(currentTerrainPreview);
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to preview this saved map.';
+      }
+    });
+    previewLayer.addEventListener('change', () => drawTerrainPreview(currentTerrainPreview));
     document.getElementById('estimate-map').addEventListener('click', async () => {
       try {
         const request = mapRequest();

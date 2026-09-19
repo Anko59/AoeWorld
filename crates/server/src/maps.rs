@@ -1,4 +1,5 @@
 use crate::{AppState, GameplayService, map_jobs, map_store, map_worker};
+use aoe_core::TileCoord;
 use aoe_map::{CompactChunk, MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
 use axum::{
@@ -10,6 +11,7 @@ use serde::Serialize;
 use std::sync::atomic::Ordering;
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
+const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;
 
 fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
     let value = headers.get(CONTROLLER_TOKEN_HEADER)?.to_str().ok()?;
@@ -99,6 +101,26 @@ pub(super) struct PackageSummary {
     estimate: MapEstimate,
     source_lock_count: usize,
     uses_fallback_data: bool,
+}
+
+/// A compact, read-only terrain sample. It deliberately reports tile facts,
+/// not a gameplay start decision: activation owns the latter search.
+#[derive(Serialize)]
+pub(super) struct MapPreview {
+    samples_per_axis: u16,
+    minimum_height_centimeters: i32,
+    maximum_height_centimeters: i32,
+    source_backed: bool,
+    cells: Vec<PreviewCell>,
+}
+
+#[derive(Serialize)]
+struct PreviewCell {
+    geographic_height_centimeters: i32,
+    material: u8,
+    biome: u8,
+    water: u8,
+    passable: bool,
 }
 
 pub(super) async fn activate(
@@ -266,6 +288,93 @@ pub(super) async fn list(State(state): State<AppState>) -> Json<Vec<PackageSumma
     )
 }
 
+/// Samples immutable map terrain without activation. This lets an all-water
+/// or all-ice package remain inspectable even when it has no valid start.
+pub(super) async fn preview(
+    Path(content_hash): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<MapPreview>, StatusCode> {
+    let package = state
+        .map_packages
+        .read()
+        .await
+        .get(&content_hash)
+        .cloned()
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let directory = state.map_package_directory.clone();
+    tokio::task::spawn_blocking(move || preview_package(directory.as_deref(), package))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Json)
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+fn preview_package(
+    directory: Option<&std::path::Path>,
+    package: MapPackage,
+) -> Result<MapPreview, String> {
+    let elevation_pages =
+        map_store::load_elevation_pages(directory, &package).map_err(|error| error.to_string())?;
+    let water_pages =
+        map_store::load_water_pages(directory, &package).map_err(|error| error.to_string())?;
+    let vegetation_pages =
+        map_store::load_vegetation_pages(directory, &package).map_err(|error| error.to_string())?;
+    let land_use_pages =
+        map_store::load_land_use_pages(directory, &package).map_err(|error| error.to_string())?;
+    let generator = package
+        .generator_with_environment(
+            elevation_pages,
+            water_pages,
+            vegetation_pages,
+            land_use_pages,
+        )
+        .map_err(|error| error.to_string())?;
+    let mut cells = Vec::with_capacity(usize::from(PREVIEW_SAMPLES_PER_AXIS).pow(2));
+    let mut minimum_height_centimeters = i32::MAX;
+    let mut maximum_height_centimeters = i32::MIN;
+    for y in 0..PREVIEW_SAMPLES_PER_AXIS {
+        for x in 0..PREVIEW_SAMPLES_PER_AXIS {
+            let tile = TileCoord::new(
+                preview_coordinate(package.estimate.tiles_per_side, x)?,
+                preview_coordinate(package.estimate.tiles_per_side, y)?,
+            );
+            let tile = generator
+                .tile_at(tile)
+                .ok_or_else(|| "preview sample was outside the package".to_owned())?;
+            minimum_height_centimeters =
+                minimum_height_centimeters.min(tile.geographic_height_centimeters);
+            maximum_height_centimeters =
+                maximum_height_centimeters.max(tile.geographic_height_centimeters);
+            cells.push(PreviewCell {
+                geographic_height_centimeters: tile.geographic_height_centimeters,
+                material: tile.material as u8,
+                biome: tile.biome as u8,
+                water: tile.water as u8,
+                passable: tile.passable,
+            });
+        }
+    }
+    Ok(MapPreview {
+        samples_per_axis: PREVIEW_SAMPLES_PER_AXIS,
+        minimum_height_centimeters,
+        maximum_height_centimeters,
+        source_backed: !package.source_locks.is_empty(),
+        cells,
+    })
+}
+
+fn preview_coordinate(tiles_per_side: u64, sample: u16) -> Result<i32, String> {
+    let numerator = u64::from(sample)
+        .checked_mul(tiles_per_side)
+        .and_then(|value| value.checked_add(tiles_per_side / 2))
+        .ok_or_else(|| "preview coordinate overflowed".to_owned())?;
+    let coordinate = numerator
+        .checked_div(u64::from(PREVIEW_SAMPLES_PER_AXIS))
+        .ok_or_else(|| "preview sample count was zero".to_owned())?
+        .min(tiles_per_side.saturating_sub(1));
+    i32::try_from(coordinate).map_err(|_| "preview coordinate exceeded map bounds".to_owned())
+}
+
 pub(super) async fn reset(State(state): State<AppState>) -> StatusCode {
     *state.gameplay.write().await = GameplayService::new(state.diagnostic_scenario.seed);
     state.generation.fetch_add(1, Ordering::SeqCst);
@@ -326,4 +435,32 @@ pub(super) async fn chunk(
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_preview_is_bounded_and_does_not_require_activation() {
+        let package = MapPackage::new(MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())
+            .expect("fallback package");
+        let preview = preview_package(None, package).expect("fallback preview");
+        assert_eq!(preview.samples_per_axis, PREVIEW_SAMPLES_PER_AXIS);
+        assert_eq!(
+            preview.cells.len(),
+            usize::from(PREVIEW_SAMPLES_PER_AXIS).pow(2)
+        );
+        assert!(!preview.source_backed);
+        assert!(preview.minimum_height_centimeters <= preview.maximum_height_centimeters);
+    }
+
+    #[test]
+    fn preview_coordinates_stay_inside_tiny_and_large_maps() {
+        assert_eq!(preview_coordinate(1, 0).expect("coordinate"), 0);
+        assert_eq!(
+            preview_coordinate(500, PREVIEW_SAMPLES_PER_AXIS - 1).expect("coordinate"),
+            484
+        );
+    }
 }

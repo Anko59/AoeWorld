@@ -256,6 +256,7 @@ pub fn app(state: AppState) -> Router {
         .route("/maps/activate", post(maps::activate))
         .route("/maps/reset", post(maps::reset))
         .route("/maps", get(maps::list))
+        .route("/maps/{content_hash}/preview", get(maps::preview))
         .route(
             "/maps/{content_hash}",
             get(maps::package).post(maps::activate_package),
