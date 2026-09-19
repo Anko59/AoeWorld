@@ -84,7 +84,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   expect(errors).toEqual([]);
 });
 
-test("map creator estimates and activates a bounded circa-600 fallback request", async ({
+test("map creator pans, zooms, and preserves preview-only fallback maps", async ({
   page,
 }) => {
   await gameAssets(page);
@@ -98,6 +98,44 @@ test("map creator estimates and activates a bounded circa-600 fallback request",
     "visibility",
     "visible",
   );
+  const overview = page.locator("#map-overview");
+  const overviewBox = await overview.boundingBox();
+  if (!overviewBox) throw new Error("world overview is missing");
+  await overview.hover({
+    position: { x: overviewBox.width / 2, y: overviewBox.height / 2 },
+  });
+  await page.mouse.wheel(0, -120);
+  await expect(overview).not.toHaveAttribute("viewBox", "0 0 360 180");
+  const zoomedView = await overview.getAttribute("viewBox");
+  if (!zoomedView) throw new Error("zoom did not set an overview viewBox");
+  await page.keyboard.down("Shift");
+  await page.mouse.move(
+    overviewBox.x + overviewBox.width / 2,
+    overviewBox.y + overviewBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    overviewBox.x + overviewBox.width / 2 + 24,
+    overviewBox.y + overviewBox.height / 2,
+  );
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await expect(overview).not.toHaveAttribute("viewBox", zoomedView);
+  await overview.dblclick({
+    position: { x: overviewBox.width / 2, y: overviewBox.height / 2 },
+  });
+  await page.mouse.move(
+    overviewBox.x + overviewBox.width * 0.72,
+    overviewBox.y + overviewBox.height * 0.32,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    overviewBox.x + overviewBox.width * 0.74,
+    overviewBox.y + overviewBox.height * 0.34,
+  );
+  await page.mouse.up();
+  await expect(page.getByLabel("Region")).toHaveValue("custom");
+  await expect(page.locator("#map-coordinates")).toBeVisible();
   await page.getByLabel("Region").selectOption("nile");
   await expect(page.locator("#map-location")).toContainText("Nile Delta");
   await page.getByLabel("Region").selectOption("fiji");
@@ -112,18 +150,17 @@ test("map creator estimates and activates a bounded circa-600 fallback request",
   await expect(page.locator("#map-coordinates")).toBeVisible();
   await page.getByLabel("Latitude").fill("48.8566");
   await page.getByLabel("Longitude").fill("2.3522");
-  await page.getByLabel("Square km").fill("30");
-  await page.getByLabel("Compression").fill("30");
+  await page.getByLabel("Square km").fill("0.256");
+  await page.getByLabel("Compression").fill("2");
   await page.getByRole("button", { name: "Estimate" }).click();
-  await expect(page.locator("#map-estimate")).toContainText("500 × 500 tiles");
-  await expect(page.locator("#map-estimate")).toContainText("walk 14 min 17 s");
+  await expect(page.locator("#map-estimate")).toContainText("64 × 64 tiles");
   await expect(page.getByRole("button", { name: "Generate" })).toBeEnabled();
   await page.getByRole("button", { name: "Generate" }).click();
   await expect(page.locator("#map-estimate")).toContainText(
-    "Fallback package active",
+    "Fallback package available for preview",
   );
   await expect(page.locator("#map-estimate")).toContainText(
-    "0 verified sources",
+    "no suitable land start.",
   );
 });
 
