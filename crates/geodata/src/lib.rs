@@ -5,8 +5,9 @@
 //! projection before a future preparation pipeline freezes map inputs.
 
 use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, LayerProvenance, MapRequest, PotentialBiomePage,
-    PreparedEnvironment, ProjectionMetadata, VerticalDatum, WaterPage,
+    ElevationPage, EnvironmentalProvenance, HistoricalLandUsePage, LayerProvenance,
+    MAP_SCHEMA_VERSION, MapPackage, MapRequest, PotentialBiomePage, PreparedEnvironment,
+    ProjectionMetadata, VerticalDatum, WaterPage,
 };
 use gdal::{
     Dataset,
@@ -41,6 +42,29 @@ pub use source_catalog::{
     natural_earth_10m_land, potential_biome_sources,
 };
 
+/// Catalog identifiers required by the first source-backed overview recipe.
+/// They let offline verification report exactly which verified cache objects
+/// are absent without querying a provider.
+pub const REQUIRED_OVERVIEW_SOURCE_IDS: &[&str] = &[
+    "etopo-2022-v1-60s-surface",
+    "natural-earth-10m-land-v5.1.1",
+    "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif",
+    "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv",
+    "hyde-3.2.1:HYDE3_2_1-baseline.zip",
+    "hyde-3.2.1:HYDE3_2_1-general_supplementary.zip",
+    "hyde-3.2.1:readme_release_HYDE3.2.1.txt",
+];
+
+/// Resolves the allowlisted sources needed by the overview recipe. Calling
+/// this may contact the metadata endpoints for the mutable provider catalogs;
+/// callers that need an offline check should use `REQUIRED_OVERVIEW_SOURCE_IDS`.
+pub fn overview_sources() -> Result<Vec<KnownSource>, GeodataError> {
+    let mut sources = vec![etopo_2022_60s_surface(), natural_earth_10m_land()];
+    sources.extend(potential_biome_sources()?);
+    sources.extend(hyde_sources()?);
+    Ok(sources)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RasterDimensions {
     pub width: usize,
@@ -61,6 +85,8 @@ pub enum GeodataError {
     Preparation(&'static str),
     #[error(transparent)]
     Environment(#[from] aoe_map::EnvironmentError),
+    #[error(transparent)]
+    Package(#[from] aoe_map::MapPackageError),
     #[error(transparent)]
     SourceCatalog(#[from] SourceCatalogError),
     #[error(transparent)]
@@ -119,20 +145,75 @@ pub enum WorkerResponse {
 /// Source-backed overview data returned by the worker in a bounded response.
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct PreparedOverview {
-    source_lock: aoe_map::SourceLock,
-    water_source_lock: aoe_map::SourceLock,
-    vegetation_source_lock: aoe_map::SourceLock,
-    vegetation_classes_source_lock: aoe_map::SourceLock,
-    hyde_baseline_source_lock: aoe_map::SourceLock,
-    hyde_supplementary_source_lock: aoe_map::SourceLock,
-    hyde_readme_source_lock: aoe_map::SourceLock,
-    projection: ProjectionMetadata,
-    provenance: EnvironmentalProvenance,
-    environment: PreparedEnvironment,
-    pages: Vec<ElevationPage>,
-    water_pages: Vec<WaterPage>,
-    vegetation_pages: Vec<PotentialBiomePage>,
-    historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
+    pub source_lock: aoe_map::SourceLock,
+    pub water_source_lock: aoe_map::SourceLock,
+    pub vegetation_source_lock: aoe_map::SourceLock,
+    pub vegetation_classes_source_lock: aoe_map::SourceLock,
+    pub hyde_baseline_source_lock: aoe_map::SourceLock,
+    pub hyde_supplementary_source_lock: aoe_map::SourceLock,
+    pub hyde_readme_source_lock: aoe_map::SourceLock,
+    pub projection: ProjectionMetadata,
+    pub provenance: EnvironmentalProvenance,
+    pub environment: PreparedEnvironment,
+    pub pages: Vec<ElevationPage>,
+    pub water_pages: Vec<WaterPage>,
+    pub vegetation_pages: Vec<PotentialBiomePage>,
+    pub historical_land_use_pages: Vec<HistoricalLandUsePage>,
+}
+
+/// A self-contained, source-backed map result suitable for offline package
+/// verification or later persistence by a server adapter.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GeneratedMap {
+    pub package: MapPackage,
+    pub elevation_pages: Vec<ElevationPage>,
+    pub water_pages: Vec<WaterPage>,
+    pub vegetation_pages: Vec<PotentialBiomePage>,
+    pub historical_land_use_pages: Vec<HistoricalLandUsePage>,
+}
+
+impl GeneratedMap {
+    pub fn from_prepared(
+        request: MapRequest,
+        prepared: PreparedOverview,
+    ) -> Result<Self, GeodataError> {
+        let package = MapPackage::with_prepared_environment(
+            MAP_SCHEMA_VERSION,
+            request,
+            vec![
+                prepared.source_lock,
+                prepared.water_source_lock,
+                prepared.vegetation_source_lock,
+                prepared.vegetation_classes_source_lock,
+                prepared.hyde_baseline_source_lock,
+                prepared.hyde_supplementary_source_lock,
+                prepared.hyde_readme_source_lock,
+            ],
+            prepared.projection,
+            prepared.provenance,
+            prepared.environment,
+        )?;
+        Ok(Self {
+            package,
+            elevation_pages: prepared.pages,
+            water_pages: prepared.water_pages,
+            vegetation_pages: prepared.vegetation_pages,
+            historical_land_use_pages: prepared.historical_land_use_pages,
+        })
+    }
+
+    /// Confirms both the canonical manifest and every frozen page needed for
+    /// terrain generation without asking a provider for additional data.
+    pub fn validate(&self) -> Result<(), GeodataError> {
+        self.package.validate()?;
+        self.package.generator_with_environment(
+            self.elevation_pages.clone(),
+            self.water_pages.clone(),
+            self.vegetation_pages.clone(),
+            self.historical_land_use_pages.clone(),
+        )?;
+        Ok(())
+    }
 }
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -141,7 +222,9 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             cache_root,
             request,
             samples_per_axis,
-        } => prepare_overview_elevation(cache_root, request, samples_per_axis),
+        } => Ok(WorkerResponse::PreparedOverview(Box::new(
+            prepare_overview(cache_root, request, samples_per_axis)?,
+        ))),
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
             sources: vec![etopo_2022_60s_surface()],
         }),
@@ -185,11 +268,11 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
     }
 }
 
-fn prepare_overview_elevation(
+pub fn prepare_overview(
     cache_root: PathBuf,
     request: MapRequest,
     samples_per_axis: u16,
-) -> Result<WorkerResponse, GeodataError> {
+) -> Result<PreparedOverview, GeodataError> {
     let source = etopo_2022_60s_surface();
     let lock = source
         .cache_lock()
@@ -250,55 +333,53 @@ fn prepare_overview_elevation(
     prepared.environment.vegetation = Some(vegetation.field);
     prepared.environment.historical_land_use = Some(historical_land_use.field);
     prepared.environment.validate()?;
-    Ok(WorkerResponse::PreparedOverview(Box::new(
-        PreparedOverview {
-            source_lock: lock
-                .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
-            water_source_lock: water_lock.to_map_source_lock(
-                acquisition_marker(),
-                "natural-earth-coastline-gdal-0.19".to_owned(),
-            )?,
-            vegetation_source_lock: vegetation_lock.to_map_source_lock(
-                acquisition_marker(),
-                "potential-biome-nearest-gdal-0.19".to_owned(),
-            )?,
-            vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
-                acquisition_marker(),
-                "potential-biome-class-legend-v0.2".to_owned(),
-            )?,
-            hyde_baseline_source_lock: hyde_baseline_lock.to_map_source_lock(
-                acquisition_marker(),
-                "hyde-600ad-readonly-zip-v1".to_owned(),
-            )?,
-            hyde_supplementary_source_lock: hyde_supplementary_lock.to_map_source_lock(
-                acquisition_marker(),
-                "hyde-600ad-readonly-zip-v1".to_owned(),
-            )?,
-            hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
-                acquisition_marker(),
-                "hyde-3.2.1-release-notes-v1".to_owned(),
-            )?,
-            projection: ProjectionMetadata {
-                horizontal_crs: local_aeqd_definition(
-                    request.center_latitude_e7,
-                    request.center_longitude_e7,
-                ),
-                vertical_datum: VerticalDatum::Egm2008Orthometric,
-                tool_version: "GDAL Rust bindings 0.19 / PROJ native".to_owned(),
-            },
-            provenance: EnvironmentalProvenance {
-                elevation: LayerProvenance::SourceDerived,
-                water: LayerProvenance::SourceDerived,
-                vegetation: LayerProvenance::SourceDerived,
-                historical_land_use: LayerProvenance::SourceDerived,
-            },
-            environment: prepared.environment,
-            pages: prepared.pages,
-            water_pages: water.pages,
-            vegetation_pages: vegetation.pages,
-            historical_land_use_pages: historical_land_use.pages,
+    Ok(PreparedOverview {
+        source_lock: lock
+            .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
+        water_source_lock: water_lock.to_map_source_lock(
+            acquisition_marker(),
+            "natural-earth-coastline-gdal-0.19".to_owned(),
+        )?,
+        vegetation_source_lock: vegetation_lock.to_map_source_lock(
+            acquisition_marker(),
+            "potential-biome-nearest-gdal-0.19".to_owned(),
+        )?,
+        vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
+            acquisition_marker(),
+            "potential-biome-class-legend-v0.2".to_owned(),
+        )?,
+        hyde_baseline_source_lock: hyde_baseline_lock.to_map_source_lock(
+            acquisition_marker(),
+            "hyde-600ad-readonly-zip-v1".to_owned(),
+        )?,
+        hyde_supplementary_source_lock: hyde_supplementary_lock.to_map_source_lock(
+            acquisition_marker(),
+            "hyde-600ad-readonly-zip-v1".to_owned(),
+        )?,
+        hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
+            acquisition_marker(),
+            "hyde-3.2.1-release-notes-v1".to_owned(),
+        )?,
+        projection: ProjectionMetadata {
+            horizontal_crs: local_aeqd_definition(
+                request.center_latitude_e7,
+                request.center_longitude_e7,
+            ),
+            vertical_datum: VerticalDatum::Egm2008Orthometric,
+            tool_version: "GDAL Rust bindings 0.19 / PROJ native".to_owned(),
         },
-    )))
+        provenance: EnvironmentalProvenance {
+            elevation: LayerProvenance::SourceDerived,
+            water: LayerProvenance::SourceDerived,
+            vegetation: LayerProvenance::SourceDerived,
+            historical_land_use: LayerProvenance::SourceDerived,
+        },
+        environment: prepared.environment,
+        pages: prepared.pages,
+        water_pages: water.pages,
+        vegetation_pages: vegetation.pages,
+        historical_land_use_pages: historical_land_use.pages,
+    })
 }
 
 const POTENTIAL_BIOME_RASTER_ID: &str =

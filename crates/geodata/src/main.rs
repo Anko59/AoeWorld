@@ -1,11 +1,19 @@
 use aoe_geodata::{WorkerRequest, execute};
-use std::{io::Read, process::ExitCode};
+use std::{ffi::OsString, io::Read, process::ExitCode};
+
+mod cli;
 
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const MAX_RESPONSE_BYTES: usize = 512 * 1024;
 
 fn main() -> ExitCode {
-    match run() {
+    let arguments = std::env::args_os().skip(1).collect::<Vec<OsString>>();
+    let result = if arguments.is_empty() {
+        run_worker()
+    } else {
+        cli::run(&arguments)
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("aoe-map-worker: {error}");
@@ -14,7 +22,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), String> {
+fn run_worker() -> Result<(), String> {
     let mut bytes = Vec::with_capacity(MAX_REQUEST_BYTES as usize + 1);
     std::io::stdin()
         .take(MAX_REQUEST_BYTES + 1)
