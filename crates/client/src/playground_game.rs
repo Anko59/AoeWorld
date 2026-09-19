@@ -459,7 +459,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         {
             client.status = error;
         }
-        set_text(&client.document, "connection", &status::label(&client));
+        set_text(&client.document, "connection", &client.status);
+        set_text(&client.document, "unit-state", &status::label(&client));
         set_text(
             &client.document,
             "world-position",

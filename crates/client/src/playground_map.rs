@@ -7,7 +7,7 @@ use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::Response;
 
 const MAX_REQUESTED_CHUNKS: usize = 64;
-const MAX_CACHED_CHUNKS: usize = 96;
+const MAX_CACHED_CHUNKS: usize = 512;
 const MAX_VISIBLE_RESOURCE_SPRITES: usize = 1_024;
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
