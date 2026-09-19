@@ -64,7 +64,6 @@ pub(crate) struct StoredUnit {
     pub(crate) bucket_slot: usize,
     pub(crate) route: VecDeque<TileCoord>,
 }
-
 #[derive(Debug)]
 pub struct GameWorld {
     pub(crate) config: WorldConfig,
@@ -374,6 +373,7 @@ impl GameWorld {
         hash.update(&self.config.tick_hz.to_le_bytes());
         hash.update(&self.config.move_speed_subunits_per_tick.to_le_bytes());
         hash.update(&self.tick.0.to_le_bytes());
+        self.terrain.update_mutable_state_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());

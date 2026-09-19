@@ -251,18 +251,22 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
             .is_some()
     );
     assert_eq!(world.navigation_cache.entry_count(), 1);
+    let initial_hash = world.canonical_hash();
     let first = world
         .deplete_resource(resource.id, resource.initial_amount - 1)
         .expect("partial depletion");
     assert!(first.remaining > 0);
     assert!(!first.became_nonblocking);
     assert_eq!(world.navigation_cache.entry_count(), 1);
+    let partial_hash = world.canonical_hash();
+    assert_ne!(partial_hash, initial_hash);
     let final_depletion = world
         .deplete_resource(resource.id, resource.initial_amount)
         .expect("final depletion");
     assert_eq!(final_depletion.remaining, 0);
     assert!(final_depletion.became_nonblocking);
     assert_eq!(world.navigation_cache.entry_count(), 0);
+    assert_ne!(world.canonical_hash(), partial_hash);
     assert!(world.terrain().passable(resource.tile, config));
 }
 

@@ -73,6 +73,10 @@ impl ResourceOverlay {
     pub fn changed(&self) -> impl Iterator<Item = (u64, u16)> + '_ {
         self.remaining.iter().map(|(id, amount)| (*id, *amount))
     }
+
+    pub fn changed_count(&self) -> usize {
+        self.remaining.len()
+    }
 }
 
 #[cfg(test)]

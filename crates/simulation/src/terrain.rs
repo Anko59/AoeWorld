@@ -1,10 +1,13 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    CHUNK_TILES, Depletion, EdgePassability, ElevationPage, HistoricalLandUsePage,
-    MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay,
-    ResourceOverlayError, WaterPage, find_path_segment_with_overlay, find_path_with_overlay,
+    CHUNK_TILES, EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator,
+    MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage,
+    find_path_segment_with_overlay, find_path_with_overlay,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+#[path = "terrain_overlay_state.rs"]
+mod terrain_overlay_state;
 
 const START_CLEAR_RADIUS: i32 = 2;
 const START_REACHABLE_TILES: usize = 256;
@@ -163,19 +166,6 @@ impl Terrain {
             destination,
             max_expansions,
         ))
-    }
-
-    /// Applies a deterministic resource depletion to map terrain. Exhausted
-    /// resources immediately stop blocking passability through the overlay.
-    pub fn deplete_resource(
-        &mut self,
-        id: u64,
-        requested: u16,
-    ) -> Result<Depletion, ResourceOverlayError> {
-        let Self::Map { generator, overlay } = self else {
-            return Err(ResourceOverlayError::UnknownResource);
-        };
-        overlay.deplete(generator, id, requested)
     }
 
     /// Finds the closest playable 5×5 clearing without allocating terrain
