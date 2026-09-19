@@ -137,8 +137,6 @@ impl MapRequest {
             .ok_or(MapRequestError::Overflow)?
             / u128::from(REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR);
         Ok(MapEstimate {
-            compression_numerator: request.compression.numerator,
-            compression_denominator: request.compression.denominator,
             effective_side_meters: u64::try_from(effective_side_meters)
                 .map_err(|_| MapRequestError::Overflow)?,
             tiles_per_side: tiles,
@@ -211,8 +209,6 @@ impl MapRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MapEstimate {
-    pub compression_numerator: u32,
-    pub compression_denominator: u32,
     pub effective_side_meters: u64,
     pub tiles_per_side: u64,
     pub game_side_meters: u64,
@@ -291,8 +287,6 @@ mod tests {
     fn estimate_rounds_the_geographic_extent_outward_to_tiles() {
         let estimate = MapRequest::default().estimate().expect("estimate");
         assert_eq!(estimate.tiles_per_side, 500);
-        assert_eq!(estimate.compression_numerator, 30);
-        assert_eq!(estimate.compression_denominator, 1);
         assert_eq!(estimate.effective_side_meters, 30_000);
         assert_eq!(estimate.walking_crossing_seconds, 857);
         assert_eq!(estimate.cavalry_crossing_seconds, 333);

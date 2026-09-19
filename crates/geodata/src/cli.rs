@@ -56,7 +56,9 @@ fn cache() -> Result<SourceCache, String> {
 fn bootstrap() -> Result<(), String> {
     let cache = cache()?;
     let cancelled = AtomicBool::new(false);
-    for source in overview_sources().map_err(|error| error.to_string())? {
+    let sources = overview_sources().map_err(|error| error.to_string())?;
+    print_acquisition_estimate(&cache, &sources)?;
+    for source in sources {
         let lock = cache
             .acquire_known(&source, &cancelled)
             .map_err(|error| error.to_string())?;
@@ -103,6 +105,9 @@ fn map_estimate() -> Result<(), String> {
 fn map_generate() -> Result<(), String> {
     let request = read_request()?;
     let output = package_path()?;
+    let cache = cache()?;
+    let sources = overview_sources().map_err(|error| error.to_string())?;
+    print_acquisition_estimate(&cache, &sources)?;
     let prepared = prepare_overview(cache_root(), request, OVERVIEW_SAMPLES_PER_AXIS)
         .map_err(|error| error.to_string())?;
     let generated =
@@ -110,6 +115,20 @@ fn map_generate() -> Result<(), String> {
     generated.validate().map_err(|error| error.to_string())?;
     atomic_write_json(&output, &generated)?;
     println!("generated {}", generated.package.content_hash_hex());
+    Ok(())
+}
+
+fn print_acquisition_estimate(
+    cache: &SourceCache,
+    sources: &[aoe_geodata::KnownSource],
+) -> Result<(), String> {
+    let estimate = cache
+        .estimate_known_acquisition(sources)
+        .map_err(|error| error.to_string())?;
+    println!(
+        "acquisition estimate: {} source(s), {} cached bytes, {} bytes to download",
+        estimate.source_count, estimate.cached_bytes, estimate.download_bytes
+    );
     Ok(())
 }
 

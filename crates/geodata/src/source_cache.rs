@@ -15,6 +15,9 @@ use digest::{digest_hex, file_hashes};
 
 mod known;
 
+mod estimate;
+pub use estimate::AcquisitionEstimate;
+
 pub const DEFAULT_CACHE_QUOTA_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub const DEFAULT_JOB_ACQUISITION_BUDGET_BYTES: u64 = 20 * 1024 * 1024 * 1024;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
@@ -106,6 +109,7 @@ pub struct DownloadPolicy {
     pub cache_quota_bytes: u64,
     pub job_acquisition_budget_bytes: u64,
 }
+
 impl Default for DownloadPolicy {
     fn default() -> Self {
         Self {

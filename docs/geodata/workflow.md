@@ -22,6 +22,9 @@ It acquires the pinned global overview stack, verifies provider and SHA-256
 integrity, and records the locks needed by map provenance. The stack currently
 covers elevation, coastline, potential vegetation, and HYDE historical land
 use. It does not silently substitute a downloaded file when a lock fails.
+Before any transfer, bootstrap and source-backed generation report the complete
+allowlisted source count plus cached and required download bytes; a batch over
+the job or remaining cache budget fails before it begins.
 
 An offline machine can prove that its cache is ready without making network
 requests:

@@ -30,8 +30,8 @@ pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_co
 
 mod source_cache;
 pub use source_cache::{
-    CacheError, DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy,
-    Provider, SourceCache, SourceLock,
+    AcquisitionEstimate, CacheError, DEFAULT_CACHE_QUOTA_BYTES,
+    DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider, SourceCache, SourceLock,
 };
 
 mod source_manifest;
