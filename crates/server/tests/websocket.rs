@@ -41,6 +41,45 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     setup_scenario(SMOKE).await
 }
 
+async fn setup_with_fallback_map() -> (
+    SocketAddr,
+    JoinHandle<()>,
+    JoinHandle<()>,
+    tempfile::TempDir,
+    String,
+) {
+    let directory = tempfile::tempdir().expect("map directory");
+    let package = aoe_map::MapPackage::new(
+        aoe_map::MAP_SCHEMA_VERSION,
+        MapRequest::default(),
+        Vec::new(),
+    )
+    .expect("fallback package");
+    let hash = package.content_hash_hex();
+    std::fs::write(
+        directory.path().join(format!("{hash}.json")),
+        serde_json::to_vec(&package).expect("package JSON"),
+    )
+    .expect("package file");
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let config = Config {
+        bind: address,
+        scenario: SMOKE,
+        tick_hz: 20,
+        asset_pack: None,
+        map_package_directory: Some(directory.path().to_owned()),
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
+    };
+    let state = AppState::new(&config, "test-build").expect("state");
+    let ticker = tokio::spawn(state.clone().run_ticks());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app(state)).await.expect("server");
+    });
+    (address, server, ticker, directory, hash)
+}
+
 #[tokio::test]
 async fn selected_local_pack_is_served_only_when_configured() {
     let pack = tempfile::tempdir().expect("pack directory");
@@ -169,6 +208,21 @@ async fn map_estimates_are_validated_without_creating_a_world() {
     .await
     .expect("response");
     assert!(response.starts_with("HTTP/1.1 400"));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test]
+async fn saved_map_preview_is_read_only_and_bounded() {
+    let (address, server, ticker, _directory, hash) = setup_with_fallback_map().await;
+    let response =
+        tokio::task::spawn_blocking(move || http(address, "GET", &format!("/maps/{hash}/preview")))
+            .await
+            .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("\"samples_per_axis\":16"));
+    assert!(response.contains("\"source_backed\":false"));
+    assert!(response.contains("\"cells\":"));
     server.abort();
     ticker.abort();
 }
