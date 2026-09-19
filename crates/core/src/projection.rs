@@ -205,6 +205,20 @@ mod tests {
     }
 
     #[test]
+    fn elevated_projection_and_picking_round_trip() {
+        let camera = Camera {
+            center: [500.0, 700.0],
+            zoom: 1.75,
+            viewport: [1280.0, 720.0],
+        };
+        let world = [537.25, 681.5];
+        let screen = camera.world_to_screen_at_height(world, 12.0);
+        let actual = camera.screen_to_world_at_height(screen, 12.0);
+        assert!((actual[0] - world[0]).abs() < 1e-9);
+        assert!((actual[1] - world[1]).abs() < 1e-9);
+    }
+
+    #[test]
     fn visible_tiles_are_outward_rounded_and_clamped() {
         let config = WorldConfig::new(100, 80, Seed(1)).unwrap();
         let camera = Camera {
