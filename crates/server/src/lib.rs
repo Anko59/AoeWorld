@@ -6,6 +6,7 @@ mod gameplay_sessions;
 mod gameplay_transport;
 mod map_jobs;
 mod map_store;
+mod map_worker;
 mod maps;
 pub use config::Config;
 pub use gameplay::GameplayService;

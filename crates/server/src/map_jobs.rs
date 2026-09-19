@@ -1,14 +1,8 @@
-use crate::{AppState, map_store};
-use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, MAP_SCHEMA_VERSION, MapEstimate, MapPackage,
-    MapRequest, ProjectionMetadata, SourceLock, WaterPage,
-};
-use serde::{Deserialize, Serialize};
+use crate::{AppState, map_store, map_worker};
+use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
+use serde::Serialize;
 use std::{
     collections::BTreeMap,
-    io::{Read, Write},
-    path::Path,
-    process::{Command, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -16,9 +10,6 @@ use std::{
 };
 
 const MAX_QUEUED_JOBS: usize = 2;
-const MAX_WORKER_REQUEST_BYTES: usize = 64 * 1024;
-const MAX_WORKER_RESPONSE_BYTES: usize = 512 * 1024;
-const MAX_WORKER_ERROR_BYTES: u64 = 8 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -216,7 +207,7 @@ fn launch(state: AppState, id: u64) {
                     "source-backed map creation requires a configured package directory".to_owned()
                 })?;
                 let (package, elevation_pages, water_pages, vegetation_pages, land_use_pages) =
-                    prepare_overview(&worker, &cache, request)?;
+                    map_worker::prepare_overview(&worker, &cache, request, &cancelled)?;
                 map_store::persist_prepared(
                     Some(directory),
                     &package,
@@ -254,130 +245,6 @@ async fn set_stage(state: &AppState, id: u64, stage: JobStage) {
         entry.job.percent = 10;
         entry.job.eta_seconds = None;
     }
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-enum WorkerOutput {
-    PreparedOverview {
-        source_lock: SourceLock,
-        water_source_lock: SourceLock,
-        vegetation_source_lock: SourceLock,
-        vegetation_classes_source_lock: SourceLock,
-        hyde_baseline_source_lock: SourceLock,
-        hyde_supplementary_source_lock: SourceLock,
-        hyde_readme_source_lock: SourceLock,
-        projection: ProjectionMetadata,
-        provenance: EnvironmentalProvenance,
-        environment: aoe_map::PreparedEnvironment,
-        pages: Vec<ElevationPage>,
-        water_pages: Vec<WaterPage>,
-        vegetation_pages: Vec<aoe_map::PotentialBiomePage>,
-        historical_land_use_pages: Vec<aoe_map::HistoricalLandUsePage>,
-    },
-}
-
-type PreparedOverviewPages = (
-    MapPackage,
-    Vec<ElevationPage>,
-    Vec<WaterPage>,
-    Vec<aoe_map::PotentialBiomePage>,
-    Vec<aoe_map::HistoricalLandUsePage>,
-);
-
-fn prepare_overview(
-    worker: &Path,
-    cache_root: &Path,
-    request: MapRequest,
-) -> Result<PreparedOverviewPages, String> {
-    let input = serde_json::to_vec(&serde_json::json!({
-        "operation": "prepare_overview_elevation",
-        "cache_root": cache_root,
-        "request": request,
-        "samples_per_axis": 128,
-    }))
-    .map_err(|error| format!("could not encode map-worker request: {error}"))?;
-    if input.len() > MAX_WORKER_REQUEST_BYTES {
-        return Err("map-worker request exceeds the configured bound".to_owned());
-    }
-    let mut child = Command::new(worker)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("could not start map worker: {error}"))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| "map worker did not expose standard input".to_owned())?
-        .write_all(&input)
-        .map_err(|error| format!("could not send map-worker request: {error}"))?;
-    let mut output = Vec::with_capacity(MAX_WORKER_RESPONSE_BYTES + 1);
-    child
-        .stdout
-        .take()
-        .ok_or_else(|| "map worker did not expose standard output".to_owned())?
-        .take((MAX_WORKER_RESPONSE_BYTES + 1) as u64)
-        .read_to_end(&mut output)
-        .map_err(|error| format!("could not read map-worker response: {error}"))?;
-    let mut error = String::new();
-    child
-        .stderr
-        .take()
-        .ok_or_else(|| "map worker did not expose standard error".to_owned())?
-        .take(MAX_WORKER_ERROR_BYTES)
-        .read_to_string(&mut error)
-        .map_err(|error| format!("could not read map-worker error: {error}"))?;
-    let status = child
-        .wait()
-        .map_err(|error| format!("could not wait for map worker: {error}"))?;
-    if output.len() > MAX_WORKER_RESPONSE_BYTES {
-        return Err("map-worker response exceeds the configured bound".to_owned());
-    }
-    if !status.success() {
-        return Err(format!("map worker failed: {}", error.trim()));
-    }
-    let WorkerOutput::PreparedOverview {
-        source_lock,
-        water_source_lock,
-        vegetation_source_lock,
-        vegetation_classes_source_lock,
-        hyde_baseline_source_lock,
-        hyde_supplementary_source_lock,
-        hyde_readme_source_lock,
-        projection,
-        provenance,
-        environment,
-        pages,
-        water_pages,
-        vegetation_pages,
-        historical_land_use_pages,
-    } = serde_json::from_slice(&output)
-        .map_err(|error| format!("invalid map-worker response: {error}"))?;
-    let package = MapPackage::with_prepared_environment(
-        MAP_SCHEMA_VERSION,
-        request,
-        vec![
-            source_lock,
-            water_source_lock,
-            vegetation_source_lock,
-            vegetation_classes_source_lock,
-            hyde_baseline_source_lock,
-            hyde_supplementary_source_lock,
-            hyde_readme_source_lock,
-        ],
-        projection,
-        provenance,
-        environment,
-    )
-    .map_err(|error| error.to_string())?;
-    Ok((
-        package,
-        pages,
-        water_pages,
-        vegetation_pages,
-        historical_land_use_pages,
-    ))
 }
 
 async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<AtomicBool>)> {
