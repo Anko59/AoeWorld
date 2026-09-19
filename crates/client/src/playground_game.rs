@@ -22,6 +22,8 @@ mod controls;
 mod init;
 #[path = "playground_map.rs"]
 mod map;
+#[path = "playground_status.rs"]
+mod status;
 
 #[derive(Clone, Copy)]
 pub(super) struct Sample {
@@ -457,7 +459,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         {
             client.status = error;
         }
-        set_text(&client.document, "connection", &client.status);
+        set_text(&client.document, "connection", &status::label(&client));
         set_text(
             &client.document,
             "world-position",
