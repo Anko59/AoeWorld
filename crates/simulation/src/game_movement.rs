@@ -124,8 +124,7 @@ impl GameWorld {
         if budget == 0 {
             return Some(MovementOutcome::BudgetExceeded);
         }
-        self.terrain
-            .route_segment_with_limit(origin, destination, budget)
+        self.cached_map_segment(origin, destination, budget)
     }
 
     fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
@@ -138,11 +137,7 @@ impl GameWorld {
         if budget == 0 {
             return SegmentAdvance::Planning;
         }
-        match self.terrain.route_segment_with_limit(
-            order.waypoint.tile_floor(),
-            order.target_tile,
-            budget,
-        ) {
+        match self.cached_map_segment(order.waypoint.tile_floor(), order.target_tile, budget) {
             Some(MovementOutcome::Path(path)) => {
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() != Some(order.waypoint.tile_floor()) {
@@ -160,6 +155,23 @@ impl GameWorld {
             Some(MovementOutcome::BudgetExceeded) => SegmentAdvance::Planning,
             None => SegmentAdvance::Stopped,
         }
+    }
+
+    fn cached_map_segment(
+        &mut self,
+        origin: aoe_core::TileCoord,
+        destination: aoe_core::TileCoord,
+        budget: u32,
+    ) -> Option<MovementOutcome> {
+        if let Some(outcome) = self.navigation_cache.get(origin, destination, budget) {
+            return Some(outcome);
+        }
+        let outcome = self
+            .terrain
+            .route_segment_with_limit(origin, destination, budget)?;
+        self.navigation_cache
+            .insert(origin, destination, budget, outcome.clone());
+        Some(outcome)
     }
 
     fn take_planning_budget(&mut self) -> u32 {

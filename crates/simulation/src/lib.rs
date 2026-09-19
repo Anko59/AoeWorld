@@ -4,6 +4,7 @@ mod game_movement;
 mod game_path;
 mod game_query;
 mod game_world;
+mod navigation_cache;
 mod terrain;
 
 pub(crate) const MAX_ROUTE_EXPANSIONS_PER_ORDER: u32 = 4_096;

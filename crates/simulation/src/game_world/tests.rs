@@ -245,16 +245,24 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
         overlay: ResourceOverlay::default(),
     };
     assert!(!world.terrain().passable(resource.tile, config));
+    assert!(
+        world
+            .next_map_route(TileCoord::new(0, 0), TileCoord::new(0, 0))
+            .is_some()
+    );
+    assert_eq!(world.navigation_cache.entry_count(), 1);
     let first = world
         .deplete_resource(resource.id, resource.initial_amount - 1)
         .expect("partial depletion");
     assert!(first.remaining > 0);
     assert!(!first.became_nonblocking);
+    assert_eq!(world.navigation_cache.entry_count(), 1);
     let final_depletion = world
         .deplete_resource(resource.id, resource.initial_amount)
         .expect("final depletion");
     assert_eq!(final_depletion.remaining, 0);
     assert!(final_depletion.became_nonblocking);
+    assert_eq!(world.navigation_cache.entry_count(), 0);
     assert!(world.terrain().passable(resource.tile, config));
 }
 

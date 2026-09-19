@@ -1,4 +1,7 @@
-use crate::{GameWorld, GameWorldError, MAX_ROUTE_EXPANSIONS_PER_TICK, Terrain};
+use crate::{
+    GameWorld, GameWorldError, MAX_ROUTE_EXPANSIONS_PER_TICK, Terrain,
+    navigation_cache::NavigationCache,
+};
 use aoe_core::{Seed, Tick, WorldConfig};
 use aoe_map::{ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage};
 use std::collections::BTreeMap;
@@ -17,6 +20,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         })
     }
 
@@ -46,6 +50,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         })
     }
 }

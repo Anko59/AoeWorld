@@ -1,12 +1,11 @@
-use crate::{GameQueryStats, terrain::Terrain};
+use crate::game_path::{next_waypoint, segment_length};
+use crate::{GameQueryStats, navigation_cache::NavigationCache, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
 use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-
-use crate::game_path::{next_waypoint, segment_length};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -20,7 +19,6 @@ pub enum Facing {
     West = 6,
     SouthWest = 7,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameUnit {
     pub id: EntityId,
@@ -41,7 +39,6 @@ pub struct MovementOrder {
     pub segment_length: u32,
     pub travelled: u32,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GameWorldError {
     #[error("world configuration is invalid: {0}")]
@@ -59,7 +56,6 @@ pub enum GameWorldError {
     #[error("prepared map terrain is invalid")]
     InvalidTerrain,
 }
-
 #[derive(Debug)]
 pub(crate) struct StoredUnit {
     pub(crate) state: GameUnit,
@@ -79,6 +75,7 @@ pub struct GameWorld {
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) terrain: Terrain,
     pub(crate) planning_budget: u32,
+    pub(crate) navigation_cache: NavigationCache,
 }
 
 impl GameWorld {
@@ -93,6 +90,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         })
     }
 
@@ -177,6 +175,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         };
         let center = WorldPosition::new(
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
@@ -265,15 +264,17 @@ impl GameWorld {
         Ok(id)
     }
 
-    /// Depletes an immutable-map resource through the authoritative mutable
-    /// overlay. Once the remaining amount reaches zero, collision updates in
-    /// the same deterministic world state.
+    /// Depletes an immutable-map resource; collision updates at exhaustion.
     pub fn deplete_resource(
         &mut self,
         id: u64,
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
-        self.terrain.deplete_resource(id, requested)
+        let depletion = self.terrain.deplete_resource(id, requested)?;
+        if depletion.became_nonblocking {
+            self.navigation_cache.clear();
+        }
+        Ok(depletion)
     }
 
     pub fn issue_move(
