@@ -20,7 +20,10 @@ mod elevation;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 
 mod footprint;
-pub use footprint::{GeographicPoint, MAX_FOOTPRINT_SAMPLES_PER_EDGE, projected_footprint};
+pub use footprint::{
+    GeographicPoint, MAX_FOOTPRINT_SAMPLES_PER_EDGE, ProjectionDistortion, projected_footprint,
+    projection_distortion,
+};
 
 mod hyde;
 pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
@@ -144,6 +147,7 @@ pub enum WorkerResponse {
     },
     GeographicFootprint {
         points: Vec<GeographicPoint>,
+        distortion: ProjectionDistortion,
     },
     PreparedElevation {
         environment: PreparedEnvironment,
@@ -269,6 +273,7 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             samples_per_edge,
         } => Ok(WorkerResponse::GeographicFootprint {
             points: projected_footprint(request, samples_per_edge)?,
+            distortion: projection_distortion(request)?,
         }),
         WorkerRequest::PrepareElevation {
             path,

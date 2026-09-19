@@ -50,6 +50,7 @@ pub(super) async fn estimate(
 #[derive(Serialize)]
 pub(super) struct GeographicFootprint {
     points: Vec<map_worker::GeographicPoint>,
+    distortion: map_worker::ProjectionDistortion,
 }
 
 /// Computes the picker boundary through the native WGS84 projection worker;
@@ -65,7 +66,7 @@ pub(super) async fn footprint(
         StatusCode::SERVICE_UNAVAILABLE,
         "the native geographic projection worker is not configured".to_owned(),
     ))?;
-    let points =
+    let footprint =
         tokio::task::spawn_blocking(move || map_worker::geographic_footprint(&worker, request))
             .await
             .map_err(|_| {
@@ -75,7 +76,10 @@ pub(super) async fn footprint(
                 )
             })?
             .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
-    Ok(Json(GeographicFootprint { points }))
+    Ok(Json(GeographicFootprint {
+        points: footprint.points,
+        distortion: footprint.distortion,
+    }))
 }
 
 #[derive(Serialize)]

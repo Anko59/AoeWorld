@@ -33,11 +33,12 @@ fn worker_returns_a_bounded_densified_geographic_footprint() {
         samples_per_edge: 8,
     })
     .expect("footprint");
-    let WorkerResponse::GeographicFootprint { points } = response else {
+    let WorkerResponse::GeographicFootprint { points, distortion } = response else {
         panic!("footprint response");
     };
     assert_eq!(points.len(), 33);
     assert_eq!(points.first(), points.last());
+    assert!(distortion.min_scale_error_ppm <= distortion.max_scale_error_ppm);
 }
 
 #[test]

@@ -95,7 +95,11 @@ sprites are not loaded yet, so they are not represented as substitute art.
 The map creator asks the native worker for a bounded, densified inverse-
 projection of the effective square. It draws that boundary on its
 equirectangular overview, including a split at the antimeridian. This preview
-does not acquire sources or create a package.
+does not acquire sources or create a package. The same bounded worker request
+compares fixed local-grid segments with WGS84 ellipsoidal distances and displays
+the minimum and maximum projection scale error in parts per million. This
+reports the selected extent's distortion; it does not describe continental
+selections as distortion-free.
 
 ## Tests and performance evidence
 

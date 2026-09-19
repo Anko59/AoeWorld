@@ -20,7 +20,10 @@ const MAX_ERROR_BYTES: usize = 8 * 1024;
 #[serde(tag = "operation", rename_all = "snake_case")]
 enum WorkerOutput {
     PreparedOverview(Box<PreparedOverview>),
-    GeographicFootprint { points: Vec<GeographicPoint> },
+    GeographicFootprint {
+        points: Vec<GeographicPoint>,
+        distortion: ProjectionDistortion,
+    },
 }
 
 #[derive(Deserialize)]
@@ -45,6 +48,18 @@ struct PreparedOverview {
 pub(super) struct GeographicPoint {
     pub latitude_e7: i32,
     pub longitude_e7: i32,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(super) struct ProjectionDistortion {
+    pub min_scale_error_ppm: i64,
+    pub max_scale_error_ppm: i64,
+}
+
+#[derive(Serialize)]
+pub(super) struct ProjectedFootprint {
+    pub points: Vec<GeographicPoint>,
+    pub distortion: ProjectionDistortion,
 }
 
 pub(super) type PreparedOverviewPages = (
@@ -119,7 +134,7 @@ pub(super) fn prepare_overview(
 pub(super) fn geographic_footprint(
     worker: &Path,
     request: MapRequest,
-) -> Result<Vec<GeographicPoint>, String> {
+) -> Result<ProjectedFootprint, String> {
     let input = serde_json::to_vec(&serde_json::json!({
         "operation": "project_footprint",
         "request": request,
@@ -128,12 +143,12 @@ pub(super) fn geographic_footprint(
     .map_err(|error| format!("could not encode footprint request: {error}"))?;
     let cancelled = AtomicBool::new(false);
     let output = execute(worker, input, &cancelled)?;
-    let WorkerOutput::GeographicFootprint { points } = serde_json::from_slice(&output)
+    let WorkerOutput::GeographicFootprint { points, distortion } = serde_json::from_slice(&output)
         .map_err(|error| format!("invalid footprint response: {error}"))?
     else {
         return Err("map worker returned an unexpected footprint response".to_owned());
     };
-    Ok(points)
+    Ok(ProjectedFootprint { points, distortion })
 }
 
 fn execute(worker: &Path, input: Vec<u8>, cancelled: &AtomicBool) -> Result<Vec<u8>, String> {

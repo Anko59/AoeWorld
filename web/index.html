@@ -148,6 +148,17 @@
       const y = Math.min(180, Math.max(0, 90 - latitude - latitudeSpan / 2));
       footprint.setAttribute('d', `M${x} ${y}h${longitudeSpan}v${latitudeSpan}h-${longitudeSpan}Z`);
     };
+    const footprintSummary = (latitude, longitude, sideKm) => {
+      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
+      const selected = regions[region.value];
+      const label = selected ? selected.name : 'Custom coordinates';
+      return `${label}: ${latitude.toFixed(4)}°, ${normalizedLongitude.toFixed(4)}° · ${sideKm.toLocaleString()} km square footprint`;
+    };
+    const distortionSummary = distortion => {
+      if (!Number.isInteger(distortion?.min_scale_error_ppm) || !Number.isInteger(distortion?.max_scale_error_ppm)) return '';
+      const ppm = value => `${value >= 0 ? '+' : ''}${value.toLocaleString()} ppm`;
+      return ` · Projection scale error ${ppm(distortion.min_scale_error_ppm)} to ${ppm(distortion.max_scale_error_ppm)}`;
+    };
     const updatePreview = () => {
       const latitude = number('map-latitude');
       const longitude = number('map-longitude');
@@ -166,14 +177,14 @@
         fetch('/maps/footprint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
           .then(response => response.ok ? response.json() : Promise.reject())
           .then(value => {
-            if (revision === footprintRevision && Array.isArray(value.points) && value.points.length > 3) drawGeographicFootprint(value.points);
+            if (revision === footprintRevision && Array.isArray(value.points) && value.points.length > 3) {
+              drawGeographicFootprint(value.points);
+              location.textContent = `${footprintSummary(latitude, longitude, sideKm)}${distortionSummary(value.distortion)}`;
+            }
           })
           .catch(() => {});
       } catch (_) {}
-      const normalizedLongitude = ((longitude + 180) % 360 + 360) % 360 - 180;
-      const selected = regions[region.value];
-      const label = selected ? selected.name : 'Custom coordinates';
-      location.textContent = `${label}: ${latitude.toFixed(4)}°, ${normalizedLongitude.toFixed(4)}° · ${sideKm.toLocaleString()} km square footprint`;
+      location.textContent = footprintSummary(latitude, longitude, sideKm);
     };
     const selectRegion = () => {
       const selected = regions[region.value];
