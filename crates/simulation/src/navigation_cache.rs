@@ -4,6 +4,13 @@ use std::{collections::BTreeMap, mem::size_of};
 
 pub(crate) const MAX_NAVIGATION_CACHE_BYTES: usize = 128 * 1024 * 1024;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NavigationCacheUsage {
+    pub entries: usize,
+    pub retained_bytes: usize,
+    pub limit_bytes: usize,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Key {
     origin: TileCoord,
@@ -112,6 +119,14 @@ impl NavigationCache {
         self.retained_bytes = 0;
     }
 
+    pub(crate) fn usage(&self) -> NavigationCacheUsage {
+        NavigationCacheUsage {
+            entries: self.entries.len(),
+            retained_bytes: self.retained_bytes,
+            limit_bytes: self.limit_bytes,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn entry_count(&self) -> usize {
         self.entries.len()
@@ -147,6 +162,14 @@ mod tests {
         let mut cache = NavigationCache::with_limit(entry_bytes * 2);
         cache.insert(TileCoord::new(0, 0), TileCoord::new(1, 0), 32, first);
         cache.insert(TileCoord::new(0, 0), TileCoord::new(2, 0), 32, path(2));
+        assert_eq!(
+            cache.usage(),
+            NavigationCacheUsage {
+                entries: 2,
+                retained_bytes: entry_bytes * 2,
+                limit_bytes: entry_bytes * 2,
+            }
+        );
         assert!(
             cache
                 .get(TileCoord::new(0, 0), TileCoord::new(1, 0), 32)

@@ -156,10 +156,30 @@ struct Health {
     loaded_chunks: usize,
     tick_deadline_misses: u64,
     terrain_cache: terrain_cache::Usage,
+    navigation_cache: NavigationCacheHealth,
+}
+
+#[derive(Serialize)]
+struct NavigationCacheHealth {
+    entries: usize,
+    retained_bytes: usize,
+    limit_bytes: usize,
+}
+
+impl From<aoe_simulation::NavigationCacheUsage> for NavigationCacheHealth {
+    fn from(value: aoe_simulation::NavigationCacheUsage) -> Self {
+        Self {
+            entries: value.entries,
+            retained_bytes: value.retained_bytes,
+            limit_bytes: value.limit_bytes,
+        }
+    }
 }
 
 async fn health(State(state): State<AppState>) -> Json<Health> {
     let terrain_cache = state.terrain_cache.lock().await.usage();
+    let gameplay = state.gameplay.read().await.clone();
+    let navigation_cache = gameplay.navigation_cache_usage().await.into();
     state.ensure_diagnostic_world().await;
     let world_guard = state.world.read().await;
     let Some(world) = world_guard.as_ref() else {
@@ -172,6 +192,7 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
             loaded_chunks: 0,
             tick_deadline_misses: state.tick_deadline_misses(),
             terrain_cache,
+            navigation_cache,
         });
     };
     Json(Health {
@@ -183,6 +204,7 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
         loaded_chunks: world.loaded_chunks(),
         tick_deadline_misses: state.tick_deadline_misses(),
         terrain_cache,
+        navigation_cache,
     })
 }
 

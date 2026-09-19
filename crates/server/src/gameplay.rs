@@ -5,7 +5,7 @@ use aoe_protocol::{
     MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION,
     MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MapMetadata, ResumeToken,
 };
-use aoe_simulation::{GameUnit, GameWorld, GameWorldError};
+use aoe_simulation::{GameUnit, GameWorld, GameWorldError, NavigationCacheUsage};
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{
@@ -265,6 +265,10 @@ impl GameplayService {
             }
             let _ = session.sender.try_send(message);
         }
+    }
+
+    pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
+        self.world.read().await.navigation_cache_usage()
     }
 
     pub async fn register(
