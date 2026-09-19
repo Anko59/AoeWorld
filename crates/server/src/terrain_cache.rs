@@ -1,7 +1,15 @@
 use aoe_map::CompactChunk;
+use serde::Serialize;
 use std::collections::BTreeMap;
 
 pub const MAX_GENERATED_TERRAIN_CACHE_BYTES: usize = 512 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Usage {
+    pub entries: usize,
+    pub decoded_bytes: usize,
+    pub limit_bytes: usize,
+}
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Key {
@@ -81,6 +89,14 @@ impl TerrainCache {
         }
     }
 
+    pub fn usage(&self) -> Usage {
+        Usage {
+            entries: self.entries.len(),
+            decoded_bytes: self.decoded_bytes,
+            limit_bytes: self.limit,
+        }
+    }
+
     fn next_clock(&mut self) -> u64 {
         self.clock = self.clock.saturating_add(1);
         self.clock
@@ -112,6 +128,14 @@ mod tests {
         let mut cache = TerrainCache::with_limit(4);
         cache.insert(key("first"), chunk(2));
         cache.insert(key("second"), chunk(2));
+        assert_eq!(
+            cache.usage(),
+            Usage {
+                entries: 2,
+                decoded_bytes: 4,
+                limit_bytes: 4,
+            }
+        );
         assert!(cache.get(&key("first")).is_some());
         cache.insert(key("third"), chunk(2));
         assert!(cache.get(&key("first")).is_some());

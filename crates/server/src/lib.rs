@@ -155,9 +155,11 @@ struct Health {
     entities: usize,
     loaded_chunks: usize,
     tick_deadline_misses: u64,
+    terrain_cache: terrain_cache::Usage,
 }
 
 async fn health(State(state): State<AppState>) -> Json<Health> {
+    let terrain_cache = state.terrain_cache.lock().await.usage();
     state.ensure_diagnostic_world().await;
     let world_guard = state.world.read().await;
     let Some(world) = world_guard.as_ref() else {
@@ -169,6 +171,7 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
             entities: 0,
             loaded_chunks: 0,
             tick_deadline_misses: state.tick_deadline_misses(),
+            terrain_cache,
         });
     };
     Json(Health {
@@ -179,6 +182,7 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
         entities: world.entities().len(),
         loaded_chunks: world.loaded_chunks(),
         tick_deadline_misses: state.tick_deadline_misses(),
+        terrain_cache,
     })
 }
 
