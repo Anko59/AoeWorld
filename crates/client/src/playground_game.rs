@@ -463,6 +463,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         set_text(&client.document, "unit-state", &status::label(&client));
         set_text(
             &client.document,
+            "terrain-cache",
+            &map::cache_status(&client),
+        );
+        set_text(
+            &client.document,
             "world-position",
             &format!(
                 "{:.1}, {:.1}",

@@ -1,14 +1,23 @@
 use super::Client;
-use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial};
+use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, Tile};
 use aoe_rendering::{SceneResource, SceneTerrain};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, mem::size_of, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::Response;
 
 const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 512;
+const MAX_CACHED_CHUNK_BYTES: usize = 128 * 1024 * 1024;
 const MAX_VISIBLE_RESOURCE_SPRITES: usize = 1_024;
+
+pub(super) fn cache_status(client: &Client) -> String {
+    format!(
+        "terrain cache: {} / 128 MiB ({} / {MAX_CACHED_CHUNKS} chunks)",
+        display_mebibytes(cached_chunk_bytes(client)),
+        client.terrain_chunks.len(),
+    )
+}
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
     let (connection_id, map_hash, requests) = {
@@ -154,7 +163,8 @@ fn chunk_distance((x, y): (i32, i32), client: &Client) -> f64 {
 }
 
 fn evict_distant_chunks(client: &mut Client) {
-    if client.terrain_chunks.len() <= MAX_CACHED_CHUNKS {
+    let mut cached_bytes = cached_chunk_bytes(client);
+    if client.terrain_chunks.len() <= MAX_CACHED_CHUNKS && cached_bytes <= MAX_CACHED_CHUNK_BYTES {
         return;
     }
     let mut coordinates = client.terrain_chunks.keys().copied().collect::<Vec<_>>();
@@ -163,12 +173,39 @@ fn evict_distant_chunks(client: &mut Client) {
             .total_cmp(&chunk_distance(*left, client))
             .then(right.cmp(left))
     });
-    for coordinate in coordinates
-        .into_iter()
-        .take(client.terrain_chunks.len() - MAX_CACHED_CHUNKS)
-    {
-        client.terrain_chunks.remove(&coordinate);
+    for coordinate in coordinates {
+        if client.terrain_chunks.len() <= MAX_CACHED_CHUNKS
+            && cached_bytes <= MAX_CACHED_CHUNK_BYTES
+        {
+            break;
+        }
+        if let Some(chunk) = client.terrain_chunks.remove(&coordinate) {
+            cached_bytes = cached_bytes.saturating_sub(chunk_resident_bytes(&chunk));
+        }
     }
+}
+
+fn cached_chunk_bytes(client: &Client) -> usize {
+    client
+        .terrain_chunks
+        .values()
+        .map(chunk_resident_bytes)
+        .sum()
+}
+
+fn chunk_resident_bytes(chunk: &Chunk) -> usize {
+    size_of::<Chunk>()
+        .saturating_add(chunk.tiles.capacity().saturating_mul(size_of::<Tile>()))
+        .saturating_add(
+            chunk
+                .resources
+                .capacity()
+                .saturating_mul(size_of::<ResourceNode>()),
+        )
+}
+
+fn display_mebibytes(bytes: usize) -> String {
+    format!("{:.1}", bytes as f64 / (1024.0 * 1024.0))
 }
 
 async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<Chunk, JsValue> {
@@ -187,4 +224,27 @@ async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<Chunk, JsValu
     compact
         .decode()
         .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_map::MapChunkGenerator;
+
+    #[test]
+    fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
+        let chunk = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0);
+        assert_eq!(
+            chunk_resident_bytes(&chunk),
+            size_of::<Chunk>()
+                + chunk.tiles.capacity() * size_of::<Tile>()
+                + chunk.resources.capacity() * size_of::<ResourceNode>()
+        );
+    }
+
+    #[test]
+    fn decoded_cache_limit_matches_the_product_budget() {
+        assert_eq!(MAX_CACHED_CHUNKS, 512);
+        assert_eq!(MAX_CACHED_CHUNK_BYTES, 128 * 1024 * 1024);
+    }
 }
