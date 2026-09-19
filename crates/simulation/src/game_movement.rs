@@ -125,7 +125,7 @@ impl GameWorld {
             return Some(MovementOutcome::BudgetExceeded);
         }
         self.terrain
-            .route_outcome_with_limit(origin, destination, budget)
+            .route_segment_with_limit(origin, destination, budget)
     }
 
     fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {

@@ -8,6 +8,7 @@ mod navigation;
 mod overlay;
 mod package;
 mod request;
+mod route_hierarchy;
 mod terrain;
 mod water;
 mod wire;

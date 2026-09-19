@@ -1,3 +1,4 @@
+use crate::route_hierarchy::portal_candidates;
 use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,12 +42,7 @@ pub fn find_path_with_overlay(
     max_expansions: u32,
 ) -> MovementOutcome {
     find_path_with(terrain, origin, destination, max_expansions, None, |tile| {
-        terrain.tile_at(tile).is_some_and(|sample| {
-            sample.passable
-                && terrain
-                    .object_at(tile)
-                    .is_none_or(|node| !overlay.blocks(terrain, node.id))
-        })
+        walkable_with_overlay(terrain, overlay, tile)
     })
 }
 
@@ -60,21 +56,42 @@ pub fn find_path_segment_with_overlay(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    find_path_with(
-        terrain,
-        origin,
-        destination,
-        max_expansions,
-        Some(MAX_ROUTE_SEGMENT_TILES),
-        |tile| {
-            terrain.tile_at(tile).is_some_and(|sample| {
-                sample.passable
-                    && terrain
-                        .object_at(tile)
-                        .is_none_or(|node| !overlay.blocks(terrain, node.id))
-            })
-        },
-    )
+    if !walkable_with_overlay(terrain, overlay, destination) {
+        return MovementOutcome::InvalidDestination;
+    }
+    let portals = portal_candidates(terrain, overlay, origin, destination);
+    if portals.is_empty() {
+        return if same_fine_chunk(origin, destination) {
+            find_path_with(
+                terrain,
+                origin,
+                destination,
+                max_expansions,
+                Some(32),
+                |tile| walkable_with_overlay(terrain, overlay, tile),
+            )
+        } else {
+            MovementOutcome::Unreachable
+        };
+    }
+    let attempts = portals.len().min(4) as u32;
+    let budget = max_expansions / attempts;
+    let mut exhausted = false;
+    for portal in portals.into_iter().take(attempts as usize) {
+        match find_path_with(terrain, origin, portal, budget, Some(32), |tile| {
+            walkable_with_overlay(terrain, overlay, tile)
+                && (tile == portal || same_fine_chunk(origin, tile))
+        }) {
+            MovementOutcome::Path(path) => return MovementOutcome::Path(path),
+            MovementOutcome::BudgetExceeded => exhausted = true,
+            MovementOutcome::InvalidDestination | MovementOutcome::Unreachable => {}
+        }
+    }
+    if exhausted {
+        MovementOutcome::BudgetExceeded
+    } else {
+        MovementOutcome::Unreachable
+    }
 }
 
 fn find_path_with<F>(
@@ -254,18 +271,31 @@ fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
     terrain.tile_at(tile).is_some_and(|sample| sample.passable) && terrain.object_at(tile).is_none()
 }
 
+fn walkable_with_overlay(
+    terrain: &MapChunkGenerator,
+    overlay: &ResourceOverlay,
+    tile: TileCoord,
+) -> bool {
+    terrain.tile_at(tile).is_some_and(|sample| {
+        sample.passable
+            && terrain
+                .object_at(tile)
+                .is_none_or(|node| !overlay.blocks(terrain, node.id))
+    })
+}
+
+fn same_fine_chunk(left: TileCoord, right: TileCoord) -> bool {
+    left.x.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
+        == right.x.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
+        && left.y.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
+            == right.y.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
+}
+
 fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     let dx = u64::from((from.x - to.x).unsigned_abs());
     let dy = u64::from((from.y - to.y).unsigned_abs());
     let diagonal = dx.min(dy);
     diagonal * u64::from(DIAGONAL_COST) + (dx - diagonal) * u64::from(ORTHOGONAL_COST)
-}
-
-#[cfg(test)]
-fn chebyshev_distance(from: TileCoord, to: TileCoord) -> u32 {
-    (from.x - to.x)
-        .unsigned_abs()
-        .max((from.y - to.y).unsigned_abs())
 }
 
 fn key(total: u64, cost: u64, tile: TileCoord) -> (u64, u64, i32, i32) {
@@ -309,72 +339,6 @@ mod tests {
             .next()
             .expect("test terrain resource");
         (terrain, node)
-    }
-
-    fn flat_terrain() -> MapChunkGenerator {
-        let level_zero = crate::ElevationPage {
-            level: 0,
-            x: 0,
-            y: 0,
-            width: 2,
-            height: 2,
-            geographic_height_centimeters: vec![0; 4],
-        };
-        let overview = crate::ElevationPage {
-            level: 1,
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-            geographic_height_centimeters: vec![0],
-        };
-        let environment = crate::PreparedEnvironment {
-            samples_per_axis: 2,
-            geographic_millimeters_per_sample: 1_000,
-            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
-            elevation: crate::FieldPyramid {
-                levels: vec![
-                    crate::PyramidLevel {
-                        samples_per_axis: 2,
-                        ordered_page_root: crate::ordered_page_root(std::slice::from_ref(
-                            &level_zero,
-                        ))
-                        .expect("level-zero root"),
-                    },
-                    crate::PyramidLevel {
-                        samples_per_axis: 1,
-                        ordered_page_root: crate::ordered_page_root(std::slice::from_ref(
-                            &overview,
-                        ))
-                        .expect("overview root"),
-                    },
-                ],
-            },
-            water: None,
-            vegetation: None,
-            historical_land_use: None,
-        };
-        MapChunkGenerator::new([0; 32], 0, 128)
-            .with_prepared_elevation(
-                crate::Ratio::new(1, 1).expect("compression"),
-                &environment,
-                vec![level_zero, overview],
-            )
-            .expect("flat terrain")
-    }
-
-    fn cleared_overlay(terrain: &MapChunkGenerator) -> ResourceOverlay {
-        let mut overlay = ResourceOverlay::default();
-        for y in 0..128 {
-            for x in 0..128 {
-                if let Some(node) = terrain.object_at(TileCoord::new(x, y)) {
-                    overlay
-                        .deplete(terrain, node.id, node.initial_amount)
-                        .expect("resource");
-                }
-            }
-        }
-        overlay
     }
 
     #[test]
@@ -435,41 +399,19 @@ mod tests {
     }
 
     #[test]
-    fn long_routes_return_a_bounded_deterministic_segment() {
-        let terrain = flat_terrain();
-        let overlay = cleared_overlay(&terrain);
-        let mut fixture = None;
-        'origins: for y in 1..127 {
-            for x in 1..95 {
-                let origin = TileCoord::new(x, y);
-                let destination = TileCoord::new(x + 33, y);
-                if !matches!(
-                    find_path_with_overlay(&terrain, &overlay, origin, destination, 4_096),
-                    MovementOutcome::Path(_)
-                ) {
-                    continue;
-                }
-                let first =
-                    find_path_segment_with_overlay(&terrain, &overlay, origin, destination, 4_096);
-                if let MovementOutcome::Path(path) = first
-                    && path.tiles.len() > 1
-                    && path.tiles.last().is_some_and(|tile| *tile != destination)
-                {
-                    fixture = Some((origin, destination, path));
-                    break 'origins;
-                }
-            }
-        }
-        let (origin, destination, first) = fixture.expect("long generated route");
-        let second = find_path_segment_with_overlay(&terrain, &overlay, origin, destination, 4_096);
-        assert_eq!(MovementOutcome::Path(first.clone()), second);
-        assert_eq!(first.tiles.first(), Some(&origin));
+    fn long_routes_choose_coarse_guidance_before_fine_portals() {
+        let origin = TileCoord::new(1, 1);
         assert_eq!(
-            first
-                .tiles
-                .last()
-                .map(|tile| chebyshev_distance(origin, *tile)),
-            Some(MAX_ROUTE_SEGMENT_TILES)
+            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(8_000, 8_000)),
+            TileCoord::new(2_047, 2_047)
+        );
+        assert_eq!(
+            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(300, 300)),
+            TileCoord::new(255, 255)
+        );
+        assert_eq!(
+            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(33, 33)),
+            TileCoord::new(31, 31)
         );
     }
 }
