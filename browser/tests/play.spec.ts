@@ -44,7 +44,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
       "webgpu",
     );
   }
-  const canvas = page.locator("canvas");
+  const canvas = page.locator("#scene");
   await expect
     .poll(() => bluePixels(canvas), { timeout: 10_000 })
     .toBeGreaterThan(10);

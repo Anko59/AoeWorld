@@ -1,6 +1,6 @@
 use super::Client;
 use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial};
-use aoe_rendering::SceneTerrain;
+use aoe_rendering::{SceneResource, SceneTerrain};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
@@ -8,6 +8,7 @@ use web_sys::Response;
 
 const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 96;
+const MAX_VISIBLE_RESOURCE_SPRITES: usize = 1_024;
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
     let (connection_id, map_hash, requests) = {
@@ -80,6 +81,33 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
         }
     }
     terrain
+}
+
+pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
+    let visible = client
+        .camera
+        .visible_tiles(client.config, 8.0)
+        .clamp(client.config.width_tiles, client.config.height_tiles);
+    let mut resources = client
+        .terrain_chunks
+        .values()
+        .flat_map(|chunk| chunk.resources.iter())
+        .filter(|resource| {
+            resource.tile.x >= visible.min.x
+                && resource.tile.x < visible.max.x
+                && resource.tile.y >= visible.min.y
+                && resource.tile.y < visible.max.y
+        })
+        .map(|resource| SceneResource {
+            id: resource.id,
+            position: [f64::from(resource.tile.x), f64::from(resource.tile.y)],
+            kind: resource.kind as u8,
+            visual_variant: resource.visual_variant,
+        })
+        .collect::<Vec<_>>();
+    resources.sort_by_key(|resource| resource.id);
+    resources.truncate(MAX_VISIBLE_RESOURCE_SPRITES);
+    resources
 }
 
 fn terrain_material(material: GroundMaterial) -> u8 {

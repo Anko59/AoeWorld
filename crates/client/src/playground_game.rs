@@ -445,10 +445,13 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             viewport: client.camera.viewport,
         };
         let terrain = map::scene_terrain(&client);
+        let resources = map::scene_resources(&client);
         let grid = client.grid;
         let animation = (time / 100.0) as usize;
         let Client { renderer, art, .. } = &mut *client;
-        if let Err(error) = renderer.render_world(art, &terrain, &units, camera, animation, grid) {
+        if let Err(error) =
+            renderer.render_world(art, &terrain, &resources, &units, camera, animation, grid)
+        {
             client.status = error;
         }
         set_text(&client.document, "connection", &client.status);

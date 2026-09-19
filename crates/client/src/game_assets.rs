@@ -1,4 +1,5 @@
 //! Loads only the local pack pages needed by the first map and compacts them.
+use aoe_assets::catalog::{AssetRole, OPTIONAL_RESOURCE_SOURCES, REQUIRED_RENDER_SOURCES};
 use aoe_assets::pack::{FrameRecord, Manifest};
 use aoe_rendering::{GAME_ATLAS_SIDE, GameArt, GameFrame};
 use js_sys::Uint8Array;
@@ -52,34 +53,39 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     if manifest.version != 1 {
         return Err(JsValue::from_str("Unsupported asset pack version"));
     }
-    let groups = [
-        ("graphics.drs", 3008, 50),
-        ("graphics.drs", 3004, 50),
-        ("terrain.drs", 15008, 10),
-        ("terrain.drs", 15007, 10),
-        ("terrain.drs", 15000, 10),
-        ("terrain.drs", 15010, 10),
-        ("terrain.drs", 15018, 10),
-        ("terrain.drs", 15002, 10),
-    ];
     let mut selected = Vec::new();
-    for (archive, id, count) in groups {
-        let source = format!("{archive}:[32, 112, 108, 115]:{id}");
+    let mut ranges = BTreeMap::new();
+    for (selection, required) in REQUIRED_RENDER_SOURCES
+        .into_iter()
+        .map(|selection| (selection, true))
+        .chain(
+            OPTIONAL_RESOURCE_SOURCES
+                .into_iter()
+                .map(|selection| (selection, false)),
+        )
+    {
+        let source = selection.manifest_source();
         let mut frames: Vec<_> = manifest
             .frames
             .iter()
-            .filter(|f| f.source == source && f.frame < count)
+            .filter(|f| f.source == source && f.frame < selection.frames)
             .cloned()
             .collect();
         frames.sort_by_key(|f| f.frame);
-        if frames.len() != count as usize
-            || frames.iter().enumerate().any(|(i, f)| f.frame != i as u32)
-        {
+        let complete = frames.len() == selection.frames as usize
+            && frames.iter().enumerate().all(|(i, f)| f.frame == i as u32);
+        if !complete && required {
             return Err(JsValue::from_str(&format!(
-                "Local pack is missing required AoE II resource {id}"
+                "Local pack is missing reviewed {:?} art ({})",
+                selection.role, selection.id
             )));
         }
+        if !complete {
+            continue;
+        }
+        let start = selected.len();
         selected.extend(frames);
+        ranges.insert(selection.role, start..selected.len());
     }
     let side = GAME_ATLAS_SIDE as usize;
     let mut pixels = vec![0; side * side * 4];
@@ -152,16 +158,32 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             }
         }
     }
-    let terrain = std::array::from_fn(|index| {
-        let start = 100 + index * 10;
-        records[start..start + 10].to_vec()
-    });
+    let group = |role| {
+        ranges
+            .get(&role)
+            .map(|range| records[range.clone()].to_vec())
+            .unwrap_or_default()
+    };
+    let terrain = [
+        group(AssetRole::TemperateGrass),
+        group(AssetRole::DryGrass),
+        group(AssetRole::Dirt),
+        group(AssetRole::Sand),
+        group(AssetRole::Rock),
+        group(AssetRole::Water),
+    ];
     Ok((
         GameArt {
-            walking: records[..50].to_vec(),
-            standing: records[50..100].to_vec(),
+            walking: group(AssetRole::CavalryWalking),
+            standing: group(AssetRole::CavalryStanding),
             grass: terrain[0].clone(),
             terrain,
+            resources: [
+                Vec::new(),
+                group(AssetRole::WoodTree),
+                Vec::new(),
+                Vec::new(),
+            ],
         },
         pixels,
     ))

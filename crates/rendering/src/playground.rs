@@ -18,6 +18,9 @@ pub struct GameArt {
     /// sand, rock, and water. Map material binding stays in the client so the
     /// renderer remains independent from geographic map contracts.
     pub terrain: [Vec<GameFrame>; 6],
+    /// Resource groups in map wire order: food, wood, gold, then stone.
+    /// Empty groups deliberately mean that no reviewed real-pack art exists.
+    pub resources: [Vec<GameFrame>; 4],
 }
 
 impl Renderer {

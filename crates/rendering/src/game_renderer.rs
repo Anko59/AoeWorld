@@ -39,6 +39,15 @@ pub struct SceneTerrain {
     pub material: u8,
 }
 
+#[derive(Clone, Copy)]
+pub struct SceneResource {
+    pub id: u64,
+    pub position: [f64; 2],
+    /// Resource kind in the versioned map wire order.
+    pub kind: u8,
+    pub visual_variant: u8,
+}
+
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }
@@ -180,12 +189,13 @@ impl GameRenderer {
         &mut self,
         art: &GameArt,
         terrain: &[SceneTerrain],
+        resources: &[SceneResource],
         units: &[SceneUnit],
         camera: SceneCamera,
         animation: usize,
         grid: bool,
     ) -> Result<(), String> {
-        let sprites = world_sprites(art, terrain, units, camera, animation, grid);
+        let sprites = world_sprites(art, terrain, resources, units, camera, animation, grid);
         match self {
             Self::WebGpu(renderer) => renderer
                 .render_sprites_with_clear(&sprites, [0.16, 0.29, 0.14, 1.0])
@@ -204,7 +214,7 @@ impl GameRenderer {
                     game_grid::draw_grid(context, camera);
                 }
                 for (sprite, frame, selected) in
-                    world_sprite_frames(art, terrain, units, camera, animation)
+                    world_sprite_frames(art, terrain, resources, units, camera, animation)
                 {
                     draw_scene_sprite(context, atlas, canvas, (sprite, frame), selected)?;
                 }
@@ -217,6 +227,7 @@ impl GameRenderer {
 fn world_sprites(
     art: &GameArt,
     terrain: &[SceneTerrain],
+    resources: &[SceneResource],
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
@@ -227,7 +238,7 @@ fn world_sprites(
     } else {
         Vec::new()
     };
-    let frames = world_sprite_frames(art, terrain, units, camera, animation);
+    let frames = world_sprite_frames(art, terrain, resources, units, camera, animation);
     sprites.extend(frames.iter().map(|(sprite, _, _)| *sprite));
     for unit in units.iter().filter(|unit| unit.selected) {
         sprites.extend(game_grid::selection_ring(camera, unit.position));
@@ -238,6 +249,7 @@ fn world_sprites(
 fn world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
+    resources: &[SceneResource],
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
@@ -251,17 +263,39 @@ fn world_sprite_frames(
         zoom: camera.zoom,
         viewport: camera.viewport,
     };
-    let mut ordered = units.to_vec();
-    ordered.sort_by(|a, b| {
-        let a_screen = projection.world_to_screen(a.position);
-        let b_screen = projection.world_to_screen(b.position);
+    let mut objects = Vec::new();
+    for resource in resources {
+        let Some(frames) = art.resources.get(usize::from(resource.kind)) else {
+            continue;
+        };
+        if frames.is_empty() {
+            continue;
+        }
+        let Some(frame) = frames.get(usize::from(resource.visual_variant) % frames.len()) else {
+            continue;
+        };
+        objects.push(WorldObject::Resource(*resource, *frame));
+    }
+    objects.extend(units.iter().copied().map(WorldObject::Unit));
+    objects.sort_by(|a, b| {
+        let a_screen = projection.world_to_screen(a.position());
+        let b_screen = projection.world_to_screen(b.position());
         a_screen
             .y
             .total_cmp(&b_screen.y)
             .then_with(|| a_screen.x.total_cmp(&b_screen.x))
-            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| a.stable_id().cmp(&b.stable_id()))
     });
-    for unit in &ordered {
+    for object in objects {
+        let WorldObject::Unit(unit) = object else {
+            let WorldObject::Resource(resource, frame) = object else {
+                continue;
+            };
+            if let Some(sprite) = scene_sprite(frame, resource.position, camera) {
+                result.push((sprite, scaled(frame, camera.zoom as f32), false));
+            }
+            continue;
+        };
         let screen = projection.world_to_screen(unit.position);
         let frames = if unit.moving {
             &art.walking
@@ -313,6 +347,66 @@ fn world_sprite_frames(
         result.push((sprite, scaled_frame, unit.selected));
     }
     result
+}
+
+#[derive(Clone, Copy)]
+enum WorldObject {
+    Resource(SceneResource, GameFrame),
+    Unit(SceneUnit),
+}
+
+impl WorldObject {
+    fn position(self) -> [f64; 2] {
+        match self {
+            Self::Resource(resource, _) => resource.position,
+            Self::Unit(unit) => unit.position,
+        }
+    }
+
+    fn stable_id(self) -> u64 {
+        match self {
+            Self::Resource(resource, _) => resource.id,
+            Self::Unit(unit) => u64::from(unit.id.0),
+        }
+    }
+}
+
+fn scene_sprite(frame: GameFrame, position: [f64; 2], camera: SceneCamera) -> Option<Sprite> {
+    let projection = Camera {
+        center: camera.center,
+        zoom: camera.zoom,
+        viewport: camera.viewport,
+    };
+    let screen = projection.world_to_screen(position);
+    let width = f64::from(frame.size[0]) * camera.zoom;
+    let height = f64::from(frame.size[1]) * camera.zoom;
+    if screen.x + width < 0.0
+        || screen.y + height < 0.0
+        || screen.x - width > camera.viewport[0]
+        || screen.y - height > camera.viewport[1]
+    {
+        return None;
+    }
+    let x = screen.x - f64::from(frame.anchor[0]) * camera.zoom;
+    let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+    Some(Sprite {
+        position: [
+            ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+            (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+        ],
+        radius: [
+            (width / camera.viewport[0]) as f32,
+            (height / camera.viewport[1]) as f32,
+        ],
+        color: [1.0; 4],
+        uv: frame.uv,
+    })
+}
+
+fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
+    frame.size = frame.size.map(|value| value * scale);
+    frame.anchor = frame.anchor.map(|value| value * scale);
+    frame
 }
 
 fn sprite_direction(facing: u8) -> (usize, bool) {

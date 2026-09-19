@@ -16,4 +16,4 @@ mod game_renderer;
 #[cfg(target_arch = "wasm32")]
 mod terrain;
 #[cfg(target_arch = "wasm32")]
-pub use game_renderer::{GameRenderer, SceneCamera, SceneTerrain, SceneUnit};
+pub use game_renderer::{GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneUnit};
