@@ -63,7 +63,7 @@
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
       <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
-      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
+      <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="retry-map" type="button" disabled>Retry</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
       <div id="creator-actions"><button id="refresh-maps" type="button">Refresh maps</button><button id="open-map" type="button">Open saved</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
@@ -75,6 +75,7 @@
     const creator = document.getElementById('map-creator');
     const estimate = document.getElementById('map-estimate');
     const generate = document.getElementById('generate-map');
+    const retry = document.getElementById('retry-map');
     const cancel = document.getElementById('cancel-map');
     const packageSelect = document.getElementById('map-package');
     const region = document.getElementById('map-region');
@@ -98,6 +99,7 @@
       continental: { name: 'Continental Europe/Africa', latitude: 35.0, longitude: 15.0 }
     });
     let activeJob = null;
+    let retryRequest = null;
     const overviewView = { x: 0, y: 0, width: 360, height: 180 };
     let overviewDrag = null;
     let footprintRevision = 0;
@@ -325,11 +327,12 @@
         estimate.textContent = error.message || 'Unable to estimate this map.';
       }
     });
-    generate.addEventListener('click', async () => {
+    const startGeneration = async request => {
       generate.disabled = true;
+      retry.disabled = true;
       cancel.disabled = false;
       try {
-        const job = await readJson(await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', ...controllerHeaders() }, body: JSON.stringify(mapRequest()) }));
+        const job = await readJson(await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', ...controllerHeaders() }, body: JSON.stringify(request) }));
         activeJob = job.id;
         const completed = await waitForJob(job.id);
         const value = await readJson(await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() }));
@@ -344,11 +347,24 @@
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to activate this map.';
+        retry.disabled = false;
       } finally {
         activeJob = null;
         generate.disabled = false;
         cancel.disabled = true;
       }
+    };
+    generate.addEventListener('click', () => {
+      try {
+        retryRequest = mapRequest();
+        startGeneration(retryRequest);
+      } catch (error) {
+        estimate.className = 'error';
+        estimate.textContent = error.message || 'Unable to create this map request.';
+      }
+    });
+    retry.addEventListener('click', () => {
+      if (retryRequest) startGeneration(retryRequest);
     });
     cancel.addEventListener('click', async () => {
       if (activeJob === null) return;
