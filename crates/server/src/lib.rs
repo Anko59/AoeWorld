@@ -8,6 +8,7 @@ mod map_jobs;
 mod map_store;
 mod map_worker;
 mod maps;
+mod terrain_cache;
 pub use config::Config;
 pub use gameplay::GameplayService;
 pub use map_store::MapStoreError;
@@ -59,6 +60,7 @@ pub struct AppState {
     map_worker: Option<PathBuf>,
     geodata_cache_directory: PathBuf,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
+    terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
 }
@@ -79,6 +81,7 @@ impl AppState {
             map_packages: Arc::new(RwLock::new(map_store::load(
                 config.map_package_directory.as_deref(),
             )?)),
+            terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
             map_jobs: Arc::new(Mutex::new(map_jobs::Manager::default())),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         })

@@ -1,4 +1,4 @@
-use crate::{AppState, GameplayService, map_jobs, map_store, map_worker};
+use crate::{AppState, GameplayService, map_jobs, map_store, map_worker, terrain_cache};
 use aoe_core::TileCoord;
 use aoe_map::{CompactChunk, MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
@@ -399,6 +399,14 @@ pub(super) async fn chunk(
     Path((content_hash, x, y)): Path<(String, i32, i32)>,
     State(state): State<AppState>,
 ) -> Result<Json<CompactChunk>, StatusCode> {
+    let cache_key = terrain_cache::Key {
+        content_hash: content_hash.clone(),
+        x,
+        y,
+    };
+    if let Some(chunk) = state.terrain_cache.lock().await.get(&cache_key) {
+        return Ok(Json(chunk));
+    }
     let package = state
         .map_packages
         .read()
@@ -412,7 +420,7 @@ pub(super) async fn chunk(
         return Err(StatusCode::NOT_FOUND);
     }
     let directory = state.map_package_directory.clone();
-    tokio::task::spawn_blocking(move || {
+    let chunk = tokio::task::spawn_blocking(move || {
         let elevation_pages = map_store::load_elevation_pages(directory.as_deref(), &package)
             .map_err(|_| StatusCode::NOT_FOUND)?;
         let water_pages = map_store::load_water_pages(directory.as_deref(), &package)
@@ -429,12 +437,16 @@ pub(super) async fn chunk(
                 land_use_pages,
             )
             .map_err(|_| StatusCode::NOT_FOUND)?;
-        CompactChunk::encode(&generator.chunk(x, y))
-            .map(Json)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        CompactChunk::encode(&generator.chunk(x, y)).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+    state
+        .terrain_cache
+        .lock()
+        .await
+        .insert(cache_key, chunk.clone());
+    Ok(Json(chunk))
 }
 
 #[cfg(test)]
