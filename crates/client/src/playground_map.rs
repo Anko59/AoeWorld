@@ -19,6 +19,35 @@ pub(super) fn cache_status(client: &Client) -> String {
     )
 }
 
+pub(super) fn inspection_label(client: &Client) -> String {
+    let Some(pointer) = client.pointer else {
+        return "hover a loaded tile to inspect terrain".to_owned();
+    };
+    let world = client.camera.screen_to_world(pointer);
+    let x = world[0].floor() as i32;
+    let y = world[1].floor() as i32;
+    let Some(chunk) = client
+        .terrain_chunks
+        .get(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)))
+    else {
+        return format!("tile {x}, {y}: terrain loading");
+    };
+    let local_x = x.rem_euclid(CHUNK_TILES) as usize;
+    let local_y = y.rem_euclid(CHUNK_TILES) as usize;
+    let Some(tile) = chunk.tiles.get(local_y * CHUNK_TILES as usize + local_x) else {
+        return format!("tile {x}, {y}: terrain unavailable");
+    };
+    format!(
+        "tile {x}, {y}: movement level {} m · geographic height {:.2} m · {:?} · {:?} water · {:?} elevation · {}",
+        tile.game_height_level,
+        f64::from(tile.geographic_height_centimeters) / 100.0,
+        tile.material,
+        tile.water,
+        tile.elevation_provenance,
+        if tile.passable { "passable" } else { "blocked" },
+    )
+}
+
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
     let (connection_id, map_hash, requests) = {
         let mut client = shared.borrow_mut();

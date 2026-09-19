@@ -1,4 +1,19 @@
-use super::Client;
+use super::{Client, map, set_text};
+
+pub(super) fn update(client: &Client) {
+    set_text(&client.document, "connection", &client.status);
+    set_text(&client.document, "unit-state", &label(client));
+    set_text(
+        &client.document,
+        "terrain-cache",
+        &map::cache_status(client),
+    );
+    set_text(
+        &client.document,
+        "tile-inspection",
+        &map::inspection_label(client),
+    );
+}
 
 pub(super) fn label(client: &Client) -> String {
     client

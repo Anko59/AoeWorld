@@ -69,6 +69,12 @@ test("authoritative isometric game renders, selects, orders, and survives reload
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");
+  await canvas.hover({
+    position: { x: box.width / 2, y: box.height / 2 },
+  });
+  await expect(page.locator("#tile-inspection")).toContainText(
+    "tile 8192, 8192",
+  );
   await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
   await canvas.click({
     position: { x: box.width / 2 + 110, y: box.height / 2 + 30 },

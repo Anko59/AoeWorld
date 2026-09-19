@@ -13,7 +13,7 @@
     #controls { position: fixed; top: 14px; right: 14px; z-index: 2; display: flex; gap: 7px; }
     button { color: #eef6dc; background: #243c25dd; border: 1px solid #78915d; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #3e5a35; }
-    #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; }
+    #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; pointer-events: none; }
     #connection { color: #d2e5a7; }
     #unsupported { position: fixed; left: 14px; top: 14px; z-index: 3; max-width: 420px; color: #ffd29a; }
     #map-creator { position: fixed; left: 14px; top: 14px; z-index: 2; width: 310px; padding: 12px; color: #e8efd9; background: #142314ed; border: 1px solid #60764d; border-radius: 5px; }
@@ -72,7 +72,7 @@
       <div id="creator-actions"><button id="refresh-maps" type="button">Refresh maps</button><button id="preview-map" type="button">Preview saved</button><button id="open-map" type="button">Open saved</button></div>
       <output id="map-estimate" aria-live="polite">Enter a location and estimate its physical map size.</output>
     </section>
-    <div id="status" role="status"><span id="connection">Loading…</span> · <span id="unit-state">no unit selected</span> · <span id="world-position">8192.0, 8192.0</span> · <span id="terrain-cache">terrain cache: 0.0 / 128 MiB (0 / 512 chunks)</span></div>
+    <div id="status" role="status"><span id="connection">Loading…</span> · <span id="unit-state">no unit selected</span> · <span id="world-position">8192.0, 8192.0</span> · <span id="terrain-cache">terrain cache: 0.0 / 128 MiB (0 / 512 chunks)</span><br><span id="tile-inspection">hover a loaded tile to inspect terrain</span></div>
     <p id="unsupported" role="alert"></p>
   </main>
   <script type="module">
