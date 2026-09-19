@@ -168,10 +168,13 @@ impl GameplayService {
                 CommandResult::RejectedInvalidDestination
             } else {
                 let destination = world.config().snap_ground_position(command.destination);
-                if world.issue_move(command.entity_id, destination).is_ok() {
-                    CommandResult::Accepted
-                } else {
-                    CommandResult::RejectedInvalidDestination
+                match world.issue_move(command.entity_id, destination) {
+                    Ok(_) => CommandResult::Accepted,
+                    Err(GameWorldError::Unreachable) => CommandResult::RejectedUnreachable,
+                    Err(GameWorldError::PathBudgetExceeded) => {
+                        CommandResult::RejectedPathBudgetExceeded
+                    }
+                    Err(_) => CommandResult::RejectedInvalidDestination,
                 }
             };
             let tick = world.tick();

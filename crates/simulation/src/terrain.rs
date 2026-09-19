@@ -95,15 +95,33 @@ impl Terrain {
     }
 
     pub fn route(&self, origin: TileCoord, destination: TileCoord) -> Option<Vec<TileCoord>> {
+        self.route_outcome(origin, destination)
+            .map(|outcome| match outcome {
+                MovementOutcome::Path(path) => path.tiles,
+                MovementOutcome::InvalidDestination
+                | MovementOutcome::Unreachable
+                | MovementOutcome::BudgetExceeded => Vec::new(),
+            })
+    }
+
+    /// Returns the authoritative map route result without conflating an
+    /// unreachable destination with bounded planner work. Uniform worlds keep
+    /// their direct-stepping behavior and return `None`.
+    pub fn route_outcome(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+    ) -> Option<MovementOutcome> {
         let Self::Map { generator, overlay } = self else {
             return None;
         };
-        match find_path_with_overlay(generator, overlay, origin, destination, 4_096) {
-            MovementOutcome::Path(path) => Some(path.tiles),
-            MovementOutcome::InvalidDestination
-            | MovementOutcome::Unreachable
-            | MovementOutcome::BudgetExceeded => Some(Vec::new()),
-        }
+        Some(find_path_with_overlay(
+            generator,
+            overlay,
+            origin,
+            destination,
+            4_096,
+        ))
     }
 
     /// Plans the next fine-scale segment of a map order. Uniform worlds keep

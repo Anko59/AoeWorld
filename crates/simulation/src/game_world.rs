@@ -3,7 +3,7 @@ use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use aoe_map::{Depletion, ResourceOverlayError};
+use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::game_path::{next_waypoint, segment_length};
@@ -47,6 +47,10 @@ pub enum GameWorldError {
     InvalidConfig(#[from] aoe_core::CoordinateError),
     #[error("position is outside the valid map ground")]
     InvalidPosition,
+    #[error("destination is unreachable from the unit position")]
+    Unreachable,
+    #[error("path planning exceeded its deterministic work budget")]
+    PathBudgetExceeded,
     #[error("entity does not exist")]
     UnknownEntity,
     #[error("entity id space is exhausted")]
@@ -284,15 +288,20 @@ impl GameWorld {
             return Ok(false);
         }
         let target_tile = destination.tile_floor();
-        let (waypoint, route) =
-            if let Some(path) = self.terrain.route(origin.tile_floor(), target_tile) {
-                route_waypoint(path, origin, destination)?
-            } else {
-                (
-                    next_waypoint(origin, target_tile, destination),
-                    VecDeque::new(),
-                )
-            };
+        let (waypoint, route) = match self.terrain.route_outcome(origin.tile_floor(), target_tile) {
+            Some(MovementOutcome::Path(path)) => route_waypoint(path.tiles, origin, destination)?,
+            Some(MovementOutcome::InvalidDestination) => {
+                return Err(GameWorldError::InvalidPosition);
+            }
+            Some(MovementOutcome::Unreachable) => return Err(GameWorldError::Unreachable),
+            Some(MovementOutcome::BudgetExceeded) => {
+                return Err(GameWorldError::PathBudgetExceeded);
+            }
+            None => (
+                next_waypoint(origin, target_tile, destination),
+                VecDeque::new(),
+            ),
+        };
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let length = segment_length(dx, dy);

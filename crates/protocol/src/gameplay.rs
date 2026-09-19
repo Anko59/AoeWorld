@@ -5,7 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 4;
+pub const VERSION: u16 = 5;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -60,6 +60,8 @@ pub enum CommandResult {
     RejectedRateLimited,
     RejectedQueueFull,
     RejectedInvalidDestination,
+    RejectedUnreachable,
+    RejectedPathBudgetExceeded,
 }
 
 /// Immutable physical properties of the active geographic map. The package
@@ -258,6 +260,15 @@ mod tests {
         assert_eq!(
             decode_server(&encode_server(&reset).unwrap()).unwrap(),
             reset
+        );
+        let acknowledgment = ServerMessage::CommandAck {
+            sequence: 7,
+            result: CommandResult::RejectedPathBudgetExceeded,
+            applied_tick: Tick(3),
+        };
+        assert_eq!(
+            decode_server(&encode_server(&acknowledgment).unwrap()).unwrap(),
+            acknowledgment
         );
     }
 

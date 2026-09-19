@@ -342,10 +342,13 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck { result, .. }) => {
-                client.status = if matches!(result, aoe_protocol::CommandResult::Accepted) {
-                    "connected"
-                } else {
-                    "order rejected"
+                client.status = match result {
+                    aoe_protocol::CommandResult::Accepted => "connected",
+                    aoe_protocol::CommandResult::RejectedUnreachable => "order unreachable",
+                    aoe_protocol::CommandResult::RejectedPathBudgetExceeded => {
+                        "path planning limit reached"
+                    }
+                    _ => "order rejected",
                 }
                 .to_owned();
             }
