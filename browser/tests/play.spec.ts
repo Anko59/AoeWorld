@@ -90,6 +90,101 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   expect(errors).toEqual([]);
 });
 
+test("rapid viewport changes ignore stale subscription frames", async ({
+  page,
+}) => {
+  await gameAssets(page);
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    class ProbedWebSocket extends NativeWebSocket {
+      constructor(...args: ConstructorParameters<typeof WebSocket>) {
+        super(...args);
+        let handler: ((event: MessageEvent) => void) | null = null;
+        let queued: MessageEvent | null = null;
+        let sends = 0;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          NativeWebSocket.prototype,
+          "onmessage",
+        );
+        if (!descriptor) return;
+        Object.defineProperty(this, "onmessage", {
+          configurable: true,
+          get: () => handler,
+          set: (value: ((event: MessageEvent) => void) | null) => {
+            handler = value;
+            descriptor.set?.call(
+              this,
+              value &&
+                ((event: MessageEvent) => {
+                  if (sends >= 2 && queued === null) {
+                    queued = event;
+                    return;
+                  }
+                  value(event);
+                }),
+            );
+          },
+        });
+        const nativeSend = this.send.bind(this);
+        this.send = (
+          data: string | ArrayBufferLike | Blob | ArrayBufferView,
+        ) => {
+          sends += 1;
+          const result = nativeSend(data);
+          if (sends >= 3 && queued !== null) {
+            const stale = queued;
+            queued = null;
+            setTimeout(() => {
+              (
+                window as Window & { __staleInjected?: boolean }
+              ).__staleInjected = true;
+              handler?.(new MessageEvent("message", { data: stale.data }));
+            }, 0);
+          }
+          return result;
+        };
+      }
+    }
+    window.WebSocket = ProbedWebSocket;
+  });
+  await page.goto("/");
+  await waitForGame(page);
+  const canvas = page.locator("#scene");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Missing map");
+  const center = {
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  };
+  const pans: Array<[number, number]> = [
+    [120, 40],
+    [-180, 70],
+    [90, -100],
+    [-140, -50],
+    [160, 80],
+    [-110, 30],
+  ];
+  for (const [dx, dy] of pans) {
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(center.x + dx, center.y + dy);
+    await page.mouse.up({ button: "middle" });
+  }
+  await expect
+    .poll(() => page.locator("#connection").textContent(), { timeout: 10_000 })
+    .not.toContain("protocol error");
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as Window & { __staleInjected?: boolean }).__staleInjected,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+});
+
 test("map creator pans, zooms, and preserves preview-only fallback maps", async ({
   page,
 }) => {
