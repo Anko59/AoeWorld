@@ -309,6 +309,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     remember(&mut client, unit, tick.0);
                 }
             }
+            Ok(GameplayServerMessage::Snapshot { .. }) => {}
             Ok(GameplayServerMessage::Tick {
                 revision,
                 tick,
@@ -324,6 +325,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     remember(&mut client, unit, tick.0);
                 }
             }
+            Ok(GameplayServerMessage::Tick { .. }) => {}
             Ok(GameplayServerMessage::RoleChange {
                 role, resume_token, ..
             }) => {
