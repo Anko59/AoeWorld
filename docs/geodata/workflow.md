@@ -84,11 +84,12 @@ than evidence for a particular real-world mine, herd, or stand of trees.
 
 `MapPackage` is the game-facing protocol boundary. Its schema version,
 normalized request, projection metadata, source locks, prepared-page roots,
-and content hash are validated before activation. The server persists prepared
-pages alongside the manifest, serves immutable chunk responses keyed by that
-hash, and rejects missing or inconsistent roots. Keep package artifacts
-outside Git and regenerate or migrate them when a schema change intentionally
-breaks compatibility.
+generation recipe version, and content hash are validated before activation. The
+server persists prepared pages alongside the manifest, serves immutable chunk
+responses keyed by that hash, and rejects missing or inconsistent roots. Keep
+package artifacts outside Git. When the generation recipe changes, retain the
+old package directory for inspection and regenerate compatible packages from
+the cached source inputs into the new versioned directory.
 
 The local asset mapping is equally deliberate: the client presently maps
 semantic terrain to six imported AoE II terrain groups (temperate grass, dry

@@ -381,7 +381,7 @@ impl MapChunkGenerator {
                 1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
                 51..=100 => (WaterKind::Ocean, Provenance::SourceDerived),
                 _ => match coverage.inland_percent {
-                    0 => (fallback_water, Provenance::Fallback),
+                    0 => (WaterKind::None, Provenance::SourceDerived),
                     1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
                     _ => (WaterKind::Lake, Provenance::SourceDerived),
                 },
@@ -412,6 +412,17 @@ impl MapChunkGenerator {
         if !sample.passable {
             return None;
         }
+        self.tree_at(tile, sample)
+            .or_else(|| resources::at(self, tile, sample))
+    }
+
+    pub(super) fn occupied_without_access(&self, tile: TileCoord, sample: Tile) -> bool {
+        !sample.passable
+            || self.tree_at(tile, sample).is_some()
+            || resources::candidate(self, tile, sample).is_some()
+    }
+
+    fn tree_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
         let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
             ^ self.procedural_seed.rotate_left(17);
         let historically_cleared = self
@@ -421,17 +432,15 @@ impl MapChunkGenerator {
             .is_some_and(|land_use| {
                 value % 100 < u64::from(land_use.crop_percent + land_use.grazing_percent)
             });
-        if !historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome) {
-            return Some(ResourceNode {
+        (!historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
+            .then_some(ResourceNode {
                 id: resource_id(tile, 0),
                 tile,
                 kind: ResourceKind::Wood,
                 object: ObjectKind::Tree,
                 initial_amount: 100,
                 visual_variant: (value >> 8) as u8,
-            });
-        }
-        resources::at(self, tile, sample)
+            })
     }
 }
 
