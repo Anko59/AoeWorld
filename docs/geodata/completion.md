@@ -205,3 +205,11 @@ unchanged 85% floor, and lacks the new inventory module. The earlier provisional
 73.92% result omitted production modules and is invalid. A fresh instrumented
 run and additional production-path tests remain required; this repair does
 not establish a coverage or overall CI pass.
+
+The current source generation recipe is version 3. It corrects source-grade
+surface classification before quantization and therefore changes immutable
+content identity while leaving the geography hash domain stable. Existing
+maps-v5 and maps-v6 directories remain untouched; the default output directory
+is maps-v7 and old packages must be regenerated from cached source inputs.
+Resource placement retains its explicit recipe-2 detail domain so this terrain
+recipe migration does not reseed published resource placement.

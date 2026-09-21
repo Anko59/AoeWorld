@@ -94,7 +94,7 @@ pub(super) fn candidate(
 pub(super) fn detail_key(generator: &MapChunkGenerator) -> [u8; 32] {
     let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
     hash.update(b"resource-detail-v2");
-    hash.update(&crate::GENERATION_RECIPE_VERSION.to_le_bytes());
+    hash.update(&crate::RESOURCE_PLACEMENT_RECIPE_VERSION.to_le_bytes());
     hash.update(&generator.procedural_seed.to_le_bytes());
     *hash.finalize().as_bytes()
 }
@@ -240,5 +240,17 @@ mod tests {
         let (gold_root, _, _) = patch_origin(key, gold_domain, 3, 5, GOLD_COLUMNS, GOLD_ROWS);
         let (stone_root, _, _) = patch_origin(key, stone_domain, 3, 5, STONE_COLUMNS, STONE_ROWS);
         assert_ne!(gold_root, stone_root);
+    }
+
+    #[test]
+    fn resource_detail_recipe_two_keeps_its_published_hash_domain() {
+        let generator = MapChunkGenerator::new([7; 32], 3, 64);
+        assert_eq!(
+            detail_key(&generator),
+            [
+                145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195,
+                208, 205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
+            ]
+        );
     }
 }
