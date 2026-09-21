@@ -25,7 +25,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Placement repaired; persistence/deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
-| M6 | Terrain and resource rendering | Pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
+| M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
 | M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
@@ -111,3 +111,14 @@ map-test (49), lint, preflight (239 native tests), test-e2e (21), and test-wasm
 Combined directory/generation regeneration verified the Paris overview under
 maps-v6 as `7d8116e53ee7aba67f25cd63daa0259f4a9c55ecf734134641b929c1b75cc9ec`,
 using the same seven cached inputs and zero downloads.
+
+M6 resource art and viewport stability are reviewed in
+[PR #14](https://github.com/Anko59/AoeWorld/pull/14), revision
+`c26db8a644e7c0495303dcfb24bbec525f7f77b6`. Reviewed source contact sheets
+identify forage, wood, gold, and stone roles; private assets remain outside Git.
+Superseded subscription replies no longer trigger false protocol errors. Hooks,
+preflight (233 native tests), asset verification (20,396 frames, 27 pages),
+test-e2e (23), and test-wasm (7) passed. Pre-push preflight and browser gates
+passed on the clean revision. Source contact-sheet review does not establish
+in-game alignment: terrain coverage, ramp/cliff/water geometry, picking, and
+actual geographic scene qualification remain open.

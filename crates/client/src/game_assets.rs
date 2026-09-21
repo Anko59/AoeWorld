@@ -179,10 +179,10 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             grass: terrain[0].clone(),
             terrain,
             resources: [
-                Vec::new(),
+                group(AssetRole::ForageBush),
                 group(AssetRole::WoodTree),
-                Vec::new(),
-                Vec::new(),
+                group(AssetRole::GoldDeposit),
+                group(AssetRole::StoneDeposit),
             ],
         },
         pixels,
