@@ -272,128 +272,46 @@ async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<Atom
 }
 
 async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
-    let (package, next) = {
+    // Acquire the registry first so status and cancellation remain responsive
+    // while publication waits. No completion is observable before insertion.
+    let publication = match result {
+        Ok(package) => Ok((state.map_packages.write().await, package)),
+        Err(error) => Err(error),
+    };
+    let next = {
         let mut manager = state.map_jobs.lock().await;
         let Some(entry) = manager.jobs.get_mut(&id) else {
             return;
         };
-        let package = if entry.cancelled.load(Ordering::SeqCst) {
+        if entry.cancelled.load(Ordering::SeqCst) {
             entry.job.state = JobState::Cancelled;
             entry.job.stage = JobStage::Cancelled;
             entry.job.eta_seconds = None;
-            None
         } else {
-            match result {
-                Ok(package) => {
+            match publication {
+                Ok((mut packages, package)) => {
+                    let hash = package.content_hash_hex();
+                    packages.insert(hash.clone(), package);
                     entry.job.state = JobState::Completed;
                     entry.job.stage = JobStage::Completed;
                     entry.job.percent = 100;
                     entry.job.eta_seconds = Some(0);
-                    entry.job.content_hash = Some(package.content_hash_hex());
-                    Some(package)
+                    entry.job.content_hash = Some(hash);
                 }
                 Err(error) => {
                     entry.job.state = JobState::Failed;
                     entry.job.stage = JobStage::Failed;
                     entry.job.eta_seconds = None;
                     entry.job.error = Some(error);
-                    None
                 }
             }
         };
-        (package, manager.start_next())
+        manager.start_next()
     };
-    if let Some(package) = package {
-        state
-            .map_packages
-            .write()
-            .await
-            .insert(package.content_hash_hex(), package);
-    }
     if let Some(next) = next {
         launch(state.clone(), next);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn manager_limits_waiting_work_and_starts_in_request_order() {
-        let request = MapRequest::default();
-        let estimate = request.estimate().expect("estimate");
-        let mut manager = Manager::default();
-        let (first, start) = manager.enqueue(request, estimate).expect("first job");
-        assert_eq!(start, Some(first.id));
-        assert!(manager.active());
-        manager.enqueue(request, estimate).expect("second job");
-        manager.enqueue(request, estimate).expect("third job");
-        assert!(manager.enqueue(request, estimate).is_err());
-        assert_eq!(manager.queued(), 2);
-        assert_eq!(first.stage, JobStage::BuildingFallbackPackage);
-        assert_eq!(first.percent, 5);
-        assert_eq!(first.eta_seconds, None);
-        manager.jobs.get_mut(&first.id).expect("job").job.state = JobState::Completed;
-        assert_eq!(manager.start_next(), Some(1));
-        assert_eq!(
-            manager.jobs.get(&1).expect("second job").job.stage,
-            JobStage::BuildingFallbackPackage
-        );
-    }
-
-    #[test]
-    fn completed_history_is_bounded_and_oldest_terminal_jobs_are_evicted() {
-        let request = MapRequest::default();
-        let estimate = request.estimate().expect("estimate");
-        let mut manager = Manager::default();
-        for id in 0..1_000_u64 {
-            let (job, start) = manager.enqueue(request, estimate).expect("job");
-            assert_eq!(job.id, id);
-            assert_eq!(start, Some(id));
-            manager.jobs.get_mut(&id).expect("entry").job.state = match id % 3 {
-                0 => JobState::Completed,
-                1 => JobState::Cancelled,
-                _ => JobState::Failed,
-            };
-            assert!(manager.jobs.len() <= MAX_RETAINED_JOBS);
-        }
-        assert_eq!(manager.jobs.len(), MAX_RETAINED_JOBS);
-        assert_eq!(manager.jobs.first_key_value().map(|(id, _)| *id), Some(872));
-    }
-
-    #[test]
-    fn retirement_preserves_running_cancellation_and_queued_work() {
-        let request = MapRequest::default();
-        let estimate = request.estimate().expect("estimate");
-        let mut manager = Manager::default();
-        for _ in 0..MAX_RETAINED_JOBS - 1 {
-            let (job, _) = manager.enqueue(request, estimate).expect("job");
-            manager.jobs.get_mut(&job.id).expect("entry").job.state = JobState::Completed;
-        }
-        manager.enqueue(request, estimate).expect("running");
-        manager.jobs.get_mut(&127).expect("running").job.state = JobState::CancelRequested;
-        manager.enqueue(request, estimate).expect("queued first");
-        manager.enqueue(request, estimate).expect("queued second");
-        assert_eq!(manager.jobs.len(), MAX_RETAINED_JOBS);
-        assert_eq!(manager.jobs[&127].job.state, JobState::CancelRequested);
-        assert_eq!(manager.jobs[&128].job.state, JobState::Queued);
-        assert_eq!(manager.jobs[&129].job.state, JobState::Queued);
-        assert!(!manager.jobs.contains_key(&0));
-        assert!(!manager.jobs.contains_key(&1));
-        assert!(manager.enqueue(request, estimate).is_err());
-    }
-
-    #[test]
-    fn identifier_exhaustion_does_not_overwrite_or_retire_jobs() {
-        let request = MapRequest::default();
-        let estimate = request.estimate().expect("estimate");
-        let mut manager = Manager::default();
-        manager.enqueue(request, estimate).expect("first");
-        manager.next_id = u64::MAX;
-        assert!(manager.enqueue(request, estimate).is_err());
-        assert_eq!(manager.next_id, u64::MAX);
-        assert_eq!(manager.jobs.len(), 1);
-        assert_eq!(manager.jobs[&0].job.state, JobState::Running);
-    }
-}
+mod tests;
