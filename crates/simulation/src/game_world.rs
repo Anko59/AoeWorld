@@ -1,11 +1,11 @@
-use crate::terrain::UniformGrass;
+use crate::game_path::{next_waypoint, segment_length};
+use crate::{GameQueryStats, navigation_cache::NavigationCache, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use std::collections::{BTreeMap, BTreeSet};
-
-use crate::game_path::{next_waypoint, segment_length};
+use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -19,7 +19,6 @@ pub enum Facing {
     West = 6,
     SouthWest = 7,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameUnit {
     pub id: EntityId,
@@ -27,6 +26,7 @@ pub struct GameUnit {
     pub position: WorldPosition,
     pub previous_position: WorldPosition,
     pub moving: bool,
+    pub planning: bool,
     pub facing: Facing,
 }
 
@@ -39,56 +39,57 @@ pub struct MovementOrder {
     pub segment_length: u32,
     pub travelled: u32,
 }
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct GameQueryStats {
-    pub visited_chunks: u32,
-    pub candidate_units: u32,
-    pub returned_units: u32,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GameWorldError {
     #[error("world configuration is invalid: {0}")]
     InvalidConfig(#[from] aoe_core::CoordinateError),
     #[error("position is outside the valid map ground")]
     InvalidPosition,
+    #[error("destination is unreachable from the unit position")]
+    Unreachable,
+    #[error("path planning exceeded its deterministic work budget")]
+    PathBudgetExceeded,
     #[error("entity does not exist")]
     UnknownEntity,
     #[error("entity id space is exhausted")]
     EntityIdExhausted,
+    #[error("prepared map terrain is invalid")]
+    InvalidTerrain,
 }
-
-#[derive(Clone, Copy, Debug)]
-struct StoredUnit {
-    state: GameUnit,
-    order: Option<MovementOrder>,
-    bucket: ChunkCoord,
-    bucket_slot: usize,
+#[derive(Debug)]
+pub(crate) struct StoredUnit {
+    pub(crate) state: GameUnit,
+    pub(crate) order: Option<MovementOrder>,
+    pub(crate) bucket: ChunkCoord,
+    pub(crate) bucket_slot: usize,
+    pub(crate) route: VecDeque<TileCoord>,
 }
-
 #[derive(Debug)]
 pub struct GameWorld {
-    config: WorldConfig,
-    tick: Tick,
-    units: Vec<StoredUnit>,
-    lookup: BTreeMap<EntityId, usize>,
-    chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
-    active_movers: Vec<EntityId>,
-    terrain: UniformGrass,
+    pub(crate) config: WorldConfig,
+    pub(crate) tick: Tick,
+    pub(crate) units: Vec<StoredUnit>,
+    pub(crate) lookup: BTreeMap<EntityId, usize>,
+    pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
+    pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) terrain: Terrain,
+    pub(crate) planning_budget: u32,
+    pub(crate) navigation_cache: NavigationCache,
 }
 
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
         config.validate()?;
         Ok(Self {
-            terrain: UniformGrass::new(config.seed.0),
+            terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         })
     }
 
@@ -165,13 +166,15 @@ impl GameWorld {
             ..WorldConfig::default()
         };
         let mut world = Self {
-            terrain: UniformGrass::new(config.seed.0),
+            terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
+            navigation_cache: NavigationCache::default(),
         };
         let center = WorldPosition::new(
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
@@ -191,8 +194,8 @@ impl GameWorld {
         self.tick
     }
 
-    pub fn terrain(&self) -> UniformGrass {
-        self.terrain
+    pub fn terrain(&self) -> &Terrain {
+        &self.terrain
     }
 
     pub fn unit_count(&self) -> usize {
@@ -230,7 +233,9 @@ impl GameWorld {
         player: PlayerId,
         position: WorldPosition,
     ) -> Result<EntityId, GameWorldError> {
-        if !self.config.valid_ground_position(position) {
+        if !self.config.valid_ground_position(position)
+            || !self.terrain.passable(position.tile_floor(), self.config)
+        {
             return Err(GameWorldError::InvalidPosition);
         }
         let id = EntityId(
@@ -247,13 +252,28 @@ impl GameWorld {
                 position,
                 previous_position: position,
                 moving: false,
+                planning: false,
                 facing: Facing::South,
             },
             order: None,
             bucket,
             bucket_slot,
+            route: VecDeque::new(),
         });
         Ok(id)
+    }
+
+    /// Depletes an immutable-map resource; collision updates at exhaustion.
+    pub fn deplete_resource(
+        &mut self,
+        id: u64,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
+        let depletion = self.terrain.deplete_resource(id, requested)?;
+        if depletion.became_nonblocking {
+            self.navigation_cache.clear();
+        }
+        Ok(depletion)
     }
 
     pub fn issue_move(
@@ -263,20 +283,39 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         let destination = self.config.snap_ground_position(destination);
+        if !self.terrain.passable(destination.tile_floor(), self.config) {
+            return Err(GameWorldError::InvalidPosition);
+        }
         let origin = self.units[index].state.position;
         if origin == destination {
             self.units[index].order = None;
             self.units[index].state.moving = false;
+            self.units[index].state.planning = false;
             return Ok(false);
         }
         let target_tile = destination.tile_floor();
-        let waypoint = next_waypoint(origin, target_tile, destination);
+        let (waypoint, route) = match self.next_map_route(origin.tile_floor(), target_tile) {
+            Some(MovementOutcome::Path(path)) => route_waypoint(path.tiles, origin, destination)?,
+            Some(MovementOutcome::InvalidDestination) => {
+                return Err(GameWorldError::InvalidPosition);
+            }
+            Some(MovementOutcome::Unreachable) => return Err(GameWorldError::Unreachable),
+            Some(MovementOutcome::BudgetExceeded) => {
+                return Err(GameWorldError::PathBudgetExceeded);
+            }
+            None => (
+                next_waypoint(origin, target_tile, destination),
+                VecDeque::new(),
+            ),
+        };
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let length = segment_length(dx, dy);
         self.units[index].state.previous_position = origin;
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
         self.units[index].state.moving = true;
+        self.units[index].state.planning = false;
+        self.units[index].route = route;
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,
@@ -293,62 +332,6 @@ impl GameWorld {
             self.active_movers.insert(insert_at, id);
         }
         Ok(true)
-    }
-
-    pub fn advance(&mut self) -> Vec<GameUnit> {
-        let movers = std::mem::take(&mut self.active_movers);
-        let mut still_moving = Vec::with_capacity(movers.len());
-        let mut changed = Vec::with_capacity(movers.len());
-        for id in movers {
-            let Some(&index) = self.lookup.get(&id) else {
-                continue;
-            };
-            let Some(mut order) = self.units[index].order else {
-                continue;
-            };
-            self.units[index].state.previous_position = self.units[index].state.position;
-            let remaining = order.segment_length.saturating_sub(order.travelled);
-            let step = remaining.min(self.config.move_speed_subunits_per_tick as u32);
-            order.travelled += step;
-            let arrived = order.travelled >= order.segment_length;
-            let position = if arrived {
-                order.waypoint
-            } else {
-                interpolate(order, order.travelled)
-            };
-            self.units[index].state.position = position;
-            if self.units[index].bucket != ChunkCoord::from_position(position) {
-                self.move_bucket(index, ChunkCoord::from_position(position));
-            }
-            if arrived {
-                if order.waypoint == order.destination {
-                    self.units[index].state.moving = false;
-                    self.units[index].order = None;
-                } else {
-                    let next = next_waypoint(order.waypoint, order.target_tile, order.destination);
-                    let dx = i64::from(next.x) - i64::from(order.waypoint.x);
-                    let dy = i64::from(next.y) - i64::from(order.waypoint.y);
-                    order.origin = order.waypoint;
-                    order.waypoint = next;
-                    order.segment_length = segment_length(dx, dy);
-                    order.travelled = 0;
-                    self.units[index].state.facing =
-                        facing_for(dx, dy, self.units[index].state.facing);
-                    self.units[index].state.moving = true;
-                    self.units[index].order = Some(order);
-                    still_moving.push(id);
-                }
-            } else {
-                self.units[index].state.moving = true;
-                self.units[index].order = Some(order);
-                still_moving.push(id);
-            }
-            changed.push(self.units[index].state);
-        }
-        self.active_movers = still_moving;
-        self.tick.0 = self.tick.0.saturating_add(1);
-        changed.sort_by_key(|unit| unit.id);
-        changed
     }
 
     pub fn query(&self, rect: TileRect) -> (Vec<GameUnit>, GameQueryStats) {
@@ -390,6 +373,7 @@ impl GameWorld {
         hash.update(&self.config.tick_hz.to_le_bytes());
         hash.update(&self.config.move_speed_subunits_per_tick.to_le_bytes());
         hash.update(&self.tick.0.to_le_bytes());
+        self.terrain.update_mutable_state_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());
@@ -397,7 +381,11 @@ impl GameWorld {
             hash.update(&unit.state.position.y.to_le_bytes());
             hash.update(&unit.state.previous_position.x.to_le_bytes());
             hash.update(&unit.state.previous_position.y.to_le_bytes());
-            hash.update(&[unit.state.moving as u8, unit.state.facing as u8]);
+            hash.update(&[
+                unit.state.moving as u8,
+                unit.state.planning as u8,
+                unit.state.facing as u8,
+            ]);
             if let Some(order) = unit.order {
                 hash.update(&order.origin.x.to_le_bytes());
                 hash.update(&order.origin.y.to_le_bytes());
@@ -412,6 +400,11 @@ impl GameWorld {
             } else {
                 hash.update(&[0; 40]);
             }
+            hash.update(&(unit.route.len() as u64).to_le_bytes());
+            for tile in &unit.route {
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+            }
         }
         *hash.finalize().as_bytes()
     }
@@ -423,7 +416,7 @@ impl GameWorld {
             .collect()
     }
 
-    fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
+    pub(crate) fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
         let old = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
         let Some(ids) = self.chunks.get_mut(&old) else {
@@ -447,7 +440,23 @@ impl GameWorld {
     }
 }
 
-fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
+fn route_waypoint(
+    tiles: Vec<TileCoord>,
+    origin: WorldPosition,
+    destination: WorldPosition,
+) -> Result<(WorldPosition, VecDeque<TileCoord>), GameWorldError> {
+    let mut route = VecDeque::from(tiles);
+    if route.pop_front() != Some(origin.tile_floor()) {
+        return Err(GameWorldError::InvalidPosition);
+    }
+    let waypoint = route
+        .pop_front()
+        .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
+        .unwrap_or(destination);
+    Ok((waypoint, route))
+}
+
+pub(crate) fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {
     let t = i128::from(travelled);
     let length = i128::from(order.segment_length);
     let x = i128::from(order.origin.x)
@@ -464,7 +473,7 @@ fn next_random(state: &mut u64) -> u64 {
     *state
 }
 
-fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {
+pub(crate) fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {
     let sx = dx - dy;
     let sy = dx + dy;
     if sx == 0 && sy == 0 {

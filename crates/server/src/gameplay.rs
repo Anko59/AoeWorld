@@ -3,9 +3,9 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Seed, TileRect, WorldConfig, W
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayRole, GameplayServerMessage, GameplayUnitState,
     MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION,
-    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, ResumeToken,
+    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MapMetadata, ResumeToken,
 };
-use aoe_simulation::{GameUnit, GameWorld, GameWorldError};
+use aoe_simulation::{GameUnit, GameWorld, GameWorldError, NavigationCacheUsage};
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{
@@ -22,10 +22,12 @@ mod commands;
 #[derive(Clone)]
 pub struct GameplayService {
     world: Arc<RwLock<GameWorld>>,
-    sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
-    ownership: Arc<Mutex<Ownership>>,
+    pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
+    pub(super) ownership: Arc<Mutex<Ownership>>,
     next_session: Arc<AtomicU64>,
-    world_id: u64,
+    pub(super) world_id: u64,
+    map_content_hash: Option<[u8; 32]>,
+    map_metadata: Option<MapMetadata>,
     primary_unit_id: EntityId,
 }
 
@@ -72,7 +74,7 @@ pub(super) struct Ownership {
 impl GameplayService {
     pub fn new(seed: Seed) -> Self {
         let (world, primary_unit_id) = GameWorld::default_with_cavalry(seed);
-        Self::from_world(world, primary_unit_id)
+        Self::from_world(world, primary_unit_id, None, None)
     }
 
     pub fn with_population(
@@ -92,10 +94,15 @@ impl GameplayService {
         if !world.unit_exists(EntityId(0)) {
             return Err(GameWorldError::EntityIdExhausted);
         }
-        Ok(Self::from_world(world, EntityId(0)))
+        Ok(Self::from_world(world, EntityId(0), None, None))
     }
 
-    fn from_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
+    pub(super) fn from_world(
+        world: GameWorld,
+        primary_unit_id: EntityId,
+        map_content_hash: Option<[u8; 32]>,
+        map_metadata: Option<MapMetadata>,
+    ) -> Self {
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -109,6 +116,8 @@ impl GameplayService {
             })),
             next_session: Arc::new(AtomicU64::new(1)),
             world_id,
+            map_content_hash,
+            map_metadata,
             primary_unit_id,
         }
     }
@@ -159,10 +168,13 @@ impl GameplayService {
                 CommandResult::RejectedInvalidDestination
             } else {
                 let destination = world.config().snap_ground_position(command.destination);
-                if world.issue_move(command.entity_id, destination).is_ok() {
-                    CommandResult::Accepted
-                } else {
-                    CommandResult::RejectedInvalidDestination
+                match world.issue_move(command.entity_id, destination) {
+                    Ok(_) => CommandResult::Accepted,
+                    Err(GameWorldError::Unreachable) => CommandResult::RejectedUnreachable,
+                    Err(GameWorldError::PathBudgetExceeded) => {
+                        CommandResult::RejectedPathBudgetExceeded
+                    }
+                    Err(_) => CommandResult::RejectedInvalidDestination,
                 }
             };
             let tick = world.tick();
@@ -255,6 +267,10 @@ impl GameplayService {
         }
     }
 
+    pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
+        self.world.read().await.navigation_cache_usage()
+    }
+
     pub async fn register(
         &self,
         requested_token: Option<ResumeToken>,
@@ -314,6 +330,8 @@ impl GameplayService {
         let welcome = GameplayServerMessage::Welcome {
             version: GAMEPLAY_VERSION,
             world_id: self.world_id,
+            map_content_hash: self.map_content_hash,
+            map_metadata: self.map_metadata,
             width_tiles: config.width_tiles,
             height_tiles: config.height_tiles,
             coordinate_precision: FIXED_SUBUNITS_PER_TILE as u16,
@@ -432,32 +450,6 @@ impl GameplayService {
             .await;
         }
     }
-
-    pub async fn disconnect(&self, session_id: u64) {
-        let mut ownership = self.ownership.lock().await;
-        let mut sessions = self.sessions.lock().await;
-        let removed = sessions.remove(&session_id);
-        if removed.is_some_and(|session| session.role == GameplayRole::Controller)
-            && let Some(lease) = ownership
-                .controller
-                .as_mut()
-                .filter(|lease| lease.session_id == session_id)
-        {
-            lease.disconnected_at = Some(Instant::now());
-        }
-    }
-
-    async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {
-        let sender = self
-            .sessions
-            .lock()
-            .await
-            .get(&session_id)
-            .map(|session| session.sender.clone());
-        if let Some(sender) = sender {
-            let _ = sender.try_send(message);
-        }
-    }
 }
 
 fn unit_state(unit: &GameUnit) -> GameplayUnitState {
@@ -466,6 +458,7 @@ fn unit_state(unit: &GameUnit) -> GameplayUnitState {
         player: unit.player,
         position: unit.position,
         moving: unit.moving,
+        planning: unit.planning,
         facing: unit.facing as u8,
     }
 }

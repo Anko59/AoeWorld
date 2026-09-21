@@ -21,6 +21,16 @@ fixed-point positions, keeps a bounded two-tick interpolation history, and
 contains only camera, selection, connection, and rendering state. Shared Rust
 projection math provides the 2:1 isometric camera and inverse picking. Rendering
 prefers WebGPU and falls back to Canvas 2D; both paths use native-scale local
-AoE II sprite frames, viewport culling, and a constant-size uniform grass
-representation. The server's environment reads are isolated in
+AoE II sprite frames, viewport culling, and semantic temperate, dry, dirt,
+sand, rock, and water terrain groups from immutable map chunks. The server's
+environment reads are isolated in
 `crates/server/src/config.rs`.
+
+`aoe-map` is the environment-independent boundary for frozen geographic map
+identity. It validates the 600 CE request, physical compression and bounded
+virtual dimensions, canonicalizes equivalent ratios and longitudes, and
+generates deterministic 32×32 terrain/resource chunks from package inputs.
+It deliberately has no filesystem, networking, browser, GDAL, or PROJ
+dependency. The configured native preparation worker owns those capabilities,
+executes source-backed preparation out of process, and has a separate bounded
+request for projected creator-map footprints.

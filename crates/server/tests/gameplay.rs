@@ -1,4 +1,5 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
+use aoe_map::{MapRequest, Ratio};
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -6,7 +7,11 @@ use aoe_protocol::{
 use aoe_scenario::SMOKE;
 use aoe_server::{AppState, Config, app};
 use futures_util::{SinkExt, StreamExt};
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
+    time::Duration,
+};
 use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 
@@ -21,9 +26,13 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
             scenario: SMOKE,
             tick_hz: 20,
             asset_pack: None,
+            map_package_directory: None,
+            map_worker: None,
+            geodata_cache_directory: ".cache/geodata".into(),
         },
         "game-test",
-    );
+    )
+    .expect("state");
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server = tokio::spawn(async move {
         axum::serve(listener, app(state)).await.unwrap();
@@ -66,6 +75,50 @@ async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, Gamep
     .await;
     let welcome = receive(&mut socket).await;
     (socket, welcome)
+}
+
+fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
+}
+
+fn http_json_as_controller(
+    address: SocketAddr,
+    path: &str,
+    body: &str,
+    token: ResumeToken,
+) -> String {
+    let token = token
+        .0
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut stream = TcpStream::connect(address).expect("connect HTTP");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("read timeout");
+    write!(
+        stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-AoeWorld-Controller-Token: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .expect("request");
+    stream.flush().expect("flush");
+    let mut result = String::new();
+    stream.read_to_string(&mut result).expect("response");
+    result
 }
 
 #[tokio::test]
@@ -263,6 +316,70 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         receive(&mut socket).await,
         GameplayServerMessage::Error { code: 400, .. }
     ));
+    server.abort();
+    ticker.abort();
+}
+
+#[tokio::test]
+async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
+    let (address, server, ticker) = setup().await;
+    let (mut controller, welcome) = open(address, None).await;
+    let GameplayServerMessage::Welcome {
+        world_id: previous_world_id,
+        resume_token: Some(token),
+        ..
+    } = welcome
+    else {
+        panic!("welcome");
+    };
+    send(
+        &mut controller,
+        GameplayClientMessage::Subscribe {
+            revision: 1,
+            region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(32, 32)),
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut controller).await,
+        GameplayServerMessage::Snapshot { .. }
+    ));
+    let request = serde_json::to_string(&MapRequest {
+        center_latitude_e7: 600_000_000,
+        center_longitude_e7: 250_000_000,
+        requested_side_meters: 256,
+        compression: Ratio::new(2, 1).expect("ratio"),
+        ..MapRequest::default()
+    })
+    .expect("request JSON");
+    let unauthorized_request = request.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        http_json(address, "/maps/activate", &unauthorized_request)
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 403"));
+    let response = tokio::task::spawn_blocking(move || {
+        http_json_as_controller(address, "/maps/activate", &request, token)
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
+    let body = response.split_once("\r\n\r\n").expect("HTTP body").1;
+    let activation = serde_json::from_str::<serde_json::Value>(body).expect("activation JSON");
+    assert_eq!(activation["start_available"], false);
+    assert_eq!(activation["message"], "no suitable land start.");
+    let (_observer, welcome) = open(address, None).await;
+    let GameplayServerMessage::Welcome {
+        world_id,
+        map_content_hash: None,
+        map_metadata: None,
+        ..
+    } = welcome
+    else {
+        panic!("existing gameplay must remain active");
+    };
+    assert_eq!(world_id, previous_world_id);
     server.abort();
     ticker.abort();
 }

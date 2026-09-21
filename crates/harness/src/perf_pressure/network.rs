@@ -228,8 +228,11 @@ pub(super) async fn network() -> Result<Sample> {
         scenario: NETWORK_PRESSURE,
         tick_hz: 20,
         asset_pack: None,
+        map_package_directory: None,
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
     };
-    let state = AppState::new(&config, "perf-pressure-local");
+    let state = AppState::new(&config, "perf-pressure-local")?;
     let ticker = tokio::spawn(state.clone().run_ticks());
     let server_state = state.clone();
     let server = tokio::spawn(async move { axum::serve(listener, app(server_state)).await });

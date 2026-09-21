@@ -1,4 +1,6 @@
-use super::{Client, Drag, center_on_primary, dpr, position_at, reconnect, send_order, subscribe};
+use super::{
+    Client, Drag, center_on_primary, dpr, map, position_at, reconnect, send_order, subscribe,
+};
 use aoe_core::ScreenPoint;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -18,7 +20,7 @@ fn pick(client: &Client, target: ScreenPoint) -> Option<aoe_core::EntityId> {
         .keys()
         .rev()
         .find(|id| {
-            let screen = client.camera.world_to_screen(position_at(client, **id));
+            let screen = map::screen_position(client, position_at(client, **id));
             (screen.x - target.x).abs() < 32.0 * client.camera.zoom
                 && (screen.y - target.y).abs() < 48.0 * client.camera.zoom
         })
@@ -32,7 +34,7 @@ fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe
         .units
         .keys()
         .find(|id| {
-            let screen = client.camera.world_to_screen(position_at(client, **id));
+            let screen = map::screen_position(client, position_at(client, **id));
             screen.x >= min_x && screen.x <= max_x && screen.y >= min_y && screen.y <= max_y
         })
         .copied()
