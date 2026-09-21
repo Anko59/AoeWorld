@@ -124,6 +124,16 @@ fn validation_rejects_tampering_and_old_generation_recipe_identity() {
         package.generator().chunk(0, 0),
         current.generator().chunk(0, 0)
     );
+    package.content_hash = hash_package(
+        package.generator_version,
+        package.request,
+        &package.source_locks,
+        &package.projection,
+        &package.provenance,
+        &package.environment,
+        HashMode::Content(Some(2)),
+    );
+    assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
     assert_eq!(
         terrain_fingerprint(&current.generator().chunk(0, 0).expect("fixture chunk")),
         [

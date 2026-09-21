@@ -112,7 +112,7 @@ pub(super) fn from_heights(
     let maximum = *corner_game_height_levels.iter().max().unwrap_or(&0);
     let source_grade_exceeded =
         has_excessive_source_grade(geographic_height_centimeters, compression);
-    let kind = if minimum == maximum {
+    let kind = if minimum == maximum && !source_grade_exceeded {
         SurfaceKind::Plateau
     } else if !source_grade_exceeded && i32::from(maximum) - i32::from(minimum) == 1 {
         SurfaceKind::Ramp
@@ -175,6 +175,19 @@ mod tests {
         );
         assert_eq!(
             from_heights([0, 6_000, 6_000, 0], Ratio::new(30, 1).expect("ratio")).kind,
+            SurfaceKind::Cliff
+        );
+    }
+
+    #[test]
+    fn source_grade_rejects_a_quantized_plateau_at_the_boundary() {
+        let ratio = Ratio::new(30, 1).expect("ratio");
+        assert_eq!(
+            from_heights([0, 2_100, 2_100, 0], ratio).kind,
+            SurfaceKind::Plateau
+        );
+        assert_eq!(
+            from_heights([0, 2_101, 2_101, 0], ratio).kind,
             SurfaceKind::Cliff
         );
     }

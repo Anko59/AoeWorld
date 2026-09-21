@@ -62,9 +62,9 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Generation recipe 2 changes immutable package identity. Keep maps-v5
+            // Generation recipe 3 changes immutable package identity. Keep maps-v6
             // intact and regenerate compatible packages in the new directory.
-            map_package_directory: Some(PathBuf::from("local-assets/maps-v6")),
+            map_package_directory: Some(PathBuf::from("local-assets/maps-v7")),
             map_worker: None,
             geodata_cache_directory: PathBuf::from(".cache/geodata"),
         })
@@ -82,7 +82,7 @@ mod tests {
         assert_eq!(config.scenario.name, "target-hotspot");
         assert_eq!(
             config.map_package_directory,
-            Some(PathBuf::from("local-assets/maps-v6"))
+            Some(PathBuf::from("local-assets/maps-v7"))
         );
         assert_eq!(
             config.geodata_cache_directory,
