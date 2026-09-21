@@ -281,6 +281,7 @@ test-e2e: build-wasm browser-deps orchestrator-tools
 
 dev: build-wasm orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
 
 down: orchestrator-tools
