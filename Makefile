@@ -19,11 +19,11 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
-GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-verify map-test map-perf coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
 
 help:
 	@echo 'AoeWorld'
@@ -41,6 +41,7 @@ help:
 	@echo '  make geodata-verify  Verify cached overview inputs without network access'
 	@echo '  AOE_MAP_REQUEST=... make map-estimate  Estimate a map request'
 	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate  Create a self-contained package'
+	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate-detailed  Create a bounded public DEM package'
 	@echo '  AOE_MAP_PACKAGE=... make map-verify  Verify a generated package'
 	@echo '  make map-test        Run deterministic map-model tests'
 	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
@@ -166,6 +167,9 @@ map-estimate:
 
 map-generate:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
+
+map-generate-detailed:
+	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
 
 map-verify:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
