@@ -9,6 +9,8 @@ use aoe_core::{ChunkCoord, WorldPosition};
 use aoe_map::MovementOutcome;
 use std::collections::VecDeque;
 
+const MAX_WAYPOINTS_PER_TICK: usize = 4_096;
+
 impl GameWorld {
     pub fn advance(&mut self) -> Vec<GameUnit> {
         let movers = std::mem::take(&mut self.active_movers);
@@ -22,34 +24,119 @@ impl GameWorld {
                 continue;
             };
             self.units[index].state.previous_position = self.units[index].state.position;
-            let remaining = order.segment_length.saturating_sub(order.travelled);
-            let step = remaining.min(self.config.move_speed_subunits_per_tick as u32);
-            order.travelled += step;
-            let arrived = order.travelled >= order.segment_length;
-            let position = if arrived {
-                order.waypoint
-            } else {
-                interpolate(order, order.travelled)
-            };
-            let previous_tile = self.units[index].state.previous_position.tile_floor();
-            let tile = position.tile_floor();
-            if !self.terrain.passable(tile, self.config)
-                || (tile != previous_tile
-                    && !self.terrain.crossable(previous_tile, tile, self.config))
-            {
-                self.units[index].state.moving = false;
-                self.units[index].state.planning = false;
-                self.units[index].order = None;
-                changed.push(self.units[index].state);
-                continue;
+            let denominator = self.config.move_speed_subunits_per_tick_denominator;
+            let speed = self.config.move_speed_subunits_per_tick as u64;
+            let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
+            order.speed_carry = 0;
+            let mut current_position = self.units[index].state.position;
+            let mut finished = false;
+
+            for _ in 0..MAX_WAYPOINTS_PER_TICK {
+                let remaining = order.segment_length.saturating_sub(order.travelled);
+                let step = u128::from(remaining).min(speed_budget / u128::from(denominator)) as u32;
+                order.travelled += step;
+                speed_budget -= u128::from(step) * u128::from(denominator);
+                let arrived = order.travelled >= order.segment_length;
+                let position = if arrived {
+                    order.waypoint
+                } else {
+                    interpolate(order, order.travelled)
+                };
+                let previous_tile = current_position.tile_floor();
+                let tile = position.tile_floor();
+                if !self.terrain.passable(tile, self.config)
+                    || (tile != previous_tile
+                        && !self.terrain.crossable(previous_tile, tile, self.config))
+                {
+                    self.units[index].state.moving = false;
+                    self.units[index].state.planning = false;
+                    self.units[index].order = None;
+                    finished = true;
+                    break;
+                }
+                self.units[index].state.position = position;
+                if self.units[index].bucket != ChunkCoord::from_position(position) {
+                    self.move_bucket(index, ChunkCoord::from_position(position));
+                }
+                current_position = position;
+                if !arrived {
+                    order.speed_carry = speed_budget as u64;
+                    self.units[index].state.moving = true;
+                    self.units[index].state.planning = false;
+                    self.units[index].order = Some(order);
+                    still_moving.push(id);
+                    finished = true;
+                    break;
+                }
+                if order.waypoint == order.destination {
+                    self.units[index].state.moving = false;
+                    self.units[index].state.planning = false;
+                    self.units[index].order = None;
+                    finished = true;
+                    break;
+                }
+                let next = self.units[index]
+                    .route
+                    .pop_front()
+                    .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
+                    .map(SegmentAdvance::Next)
+                    .or_else(|| {
+                        (order.waypoint != order.destination
+                            && order.waypoint.tile_floor() == order.destination.tile_floor())
+                        .then_some(SegmentAdvance::Next(order.destination))
+                    })
+                    .unwrap_or_else(|| self.next_map_segment(index, order));
+                match next {
+                    SegmentAdvance::Planning => {
+                        // A deferred planner has no available path distance this
+                        // tick. Keep only the fractional remainder, never a
+                        // whole movement credit that could cause a later dash.
+                        order.speed_carry = (speed_budget % u128::from(denominator)) as u64;
+                        self.units[index].state.moving = false;
+                        self.units[index].state.planning = true;
+                        self.units[index].order = Some(order);
+                        still_moving.push(id);
+                        finished = true;
+                        break;
+                    }
+                    SegmentAdvance::Stopped => {
+                        self.units[index].state.moving = false;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = None;
+                        finished = true;
+                        break;
+                    }
+                    SegmentAdvance::Next(next) => {
+                        let dx = i64::from(next.x) - i64::from(order.waypoint.x);
+                        let dy = i64::from(next.y) - i64::from(order.waypoint.y);
+                        order = MovementOrder {
+                            origin: order.waypoint,
+                            waypoint: next,
+                            segment_length: segment_length(dx, dy),
+                            travelled: 0,
+                            speed_carry: 0,
+                            ..order
+                        };
+                        self.units[index].state.facing =
+                            facing_for(dx, dy, self.units[index].state.facing);
+                        if speed_budget < u128::from(denominator) {
+                            order.speed_carry = speed_budget as u64;
+                            self.units[index].state.moving = true;
+                            self.units[index].state.planning = false;
+                            self.units[index].order = Some(order);
+                            still_moving.push(id);
+                            finished = true;
+                            break;
+                        }
+                    }
+                }
             }
-            self.units[index].state.position = position;
-            if self.units[index].bucket != ChunkCoord::from_position(position) {
-                self.move_bucket(index, ChunkCoord::from_position(position));
-            }
-            if arrived {
-                self.advance_arrived(index, id, order, &mut still_moving);
-            } else {
+            if !finished {
+                // The route is bounded even for deliberately tiny custom
+                // segments and very large custom speeds. Unused whole credits
+                // are discarded at the bound; only the fractional remainder
+                // is carried into the next tick.
+                order.speed_carry = (speed_budget % u128::from(denominator)) as u64;
                 self.units[index].state.moving = true;
                 self.units[index].state.planning = false;
                 self.units[index].order = Some(order);
@@ -62,54 +149,6 @@ impl GameWorld {
         self.planning_budget = MAX_ROUTE_EXPANSIONS_PER_TICK;
         changed.sort_by_key(|unit| unit.id);
         changed
-    }
-
-    fn advance_arrived(
-        &mut self,
-        index: usize,
-        id: aoe_core::EntityId,
-        order: MovementOrder,
-        still_moving: &mut Vec<aoe_core::EntityId>,
-    ) {
-        if order.waypoint == order.destination {
-            self.units[index].state.moving = false;
-            self.units[index].state.planning = false;
-            self.units[index].order = None;
-            return;
-        }
-        let next = self.units[index]
-            .route
-            .pop_front()
-            .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
-            .map(SegmentAdvance::Next)
-            .unwrap_or_else(|| self.next_map_segment(index, order));
-        if matches!(next, SegmentAdvance::Planning) {
-            self.units[index].state.moving = false;
-            self.units[index].state.planning = true;
-            self.units[index].order = Some(order);
-            still_moving.push(id);
-            return;
-        }
-        let SegmentAdvance::Next(next) = next else {
-            self.units[index].state.moving = false;
-            self.units[index].state.planning = false;
-            self.units[index].order = None;
-            return;
-        };
-        let dx = i64::from(next.x) - i64::from(order.waypoint.x);
-        let dy = i64::from(next.y) - i64::from(order.waypoint.y);
-        let next_order = MovementOrder {
-            origin: order.waypoint,
-            waypoint: next,
-            segment_length: segment_length(dx, dy),
-            travelled: 0,
-            ..order
-        };
-        self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
-        self.units[index].state.moving = true;
-        self.units[index].state.planning = false;
-        self.units[index].order = Some(next_order);
-        still_moving.push(id);
     }
 
     pub(crate) fn next_map_route(

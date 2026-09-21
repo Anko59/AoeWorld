@@ -1,5 +1,6 @@
 use crate::game_movement::MapRoutePlan;
 use crate::game_path::{next_waypoint, route_waypoint, segment_length};
+use crate::movement_speed::cavalry_config;
 use crate::{GameQueryStats, navigation_cache::NavigationCache, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
@@ -38,6 +39,8 @@ pub struct MovementOrder {
     pub target_tile: TileCoord,
     pub segment_length: u32,
     pub travelled: u32,
+    /// Fractional subunits already earned for the next movement step.
+    pub speed_carry: u64,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GameWorldError {
@@ -83,7 +86,11 @@ pub struct GameWorld {
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
         config.validate()?;
-        Ok(Self {
+        Ok(Self::from_valid_config(config))
+    }
+
+    fn from_valid_config(config: WorldConfig) -> Self {
+        Self {
             terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
@@ -93,10 +100,11 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
             navigation_cache: NavigationCache::default(),
-        })
+        }
     }
 
     pub fn with_cavalry(config: WorldConfig) -> Result<(Self, EntityId), GameWorldError> {
+        let config = cavalry_config(config);
         let mut world = Self::new(config)?;
         let center = WorldPosition::new(
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
@@ -164,21 +172,11 @@ impl GameWorld {
     }
 
     pub fn default_with_cavalry(seed: aoe_core::Seed) -> (Self, EntityId) {
-        let config = WorldConfig {
+        let config = cavalry_config(WorldConfig {
             seed,
             ..WorldConfig::default()
-        };
-        let mut world = Self {
-            terrain: Terrain::uniform(config.seed.0),
-            config,
-            tick: Tick(0),
-            units: Vec::new(),
-            lookup: BTreeMap::new(),
-            chunks: BTreeMap::new(),
-            active_movers: Vec::new(),
-            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
-            navigation_cache: NavigationCache::default(),
-        };
+        });
+        let mut world = Self::from_valid_config(config);
         let center = WorldPosition::new(
             config.width_tiles * FIXED_SUBUNITS_PER_TILE / 2,
             config.height_tiles * FIXED_SUBUNITS_PER_TILE / 2,
@@ -290,6 +288,7 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         let origin = self.units[index].state.position;
+        let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         if origin == destination {
             self.units[index].order = None;
             self.units[index].state.moving = false;
@@ -331,6 +330,7 @@ impl GameWorld {
             target_tile,
             segment_length: length,
             travelled: 0,
+            speed_carry,
         });
         if self.active_movers.binary_search(&id).is_err() {
             let insert_at = self
@@ -380,6 +380,12 @@ impl GameWorld {
         hash.update(&self.config.seed.0.to_le_bytes());
         hash.update(&self.config.tick_hz.to_le_bytes());
         hash.update(&self.config.move_speed_subunits_per_tick.to_le_bytes());
+        hash.update(
+            &self
+                .config
+                .move_speed_subunits_per_tick_denominator
+                .to_le_bytes(),
+        );
         hash.update(&self.tick.0.to_le_bytes());
         self.terrain.update_mutable_state_hash(&mut hash);
         for unit in &self.units {
@@ -405,8 +411,9 @@ impl GameWorld {
                 hash.update(&order.target_tile.y.to_le_bytes());
                 hash.update(&order.segment_length.to_le_bytes());
                 hash.update(&order.travelled.to_le_bytes());
+                hash.update(&order.speed_carry.to_le_bytes());
             } else {
-                hash.update(&[0; 40]);
+                hash.update(&[0; 48]);
             }
             hash.update(&(unit.route.len() as u64).to_le_bytes());
             for tile in &unit.route {
