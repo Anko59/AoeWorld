@@ -231,4 +231,80 @@ mod tests {
         assert_eq!(prepared.pages.len(), 3);
         assert!(prepared.pages.iter().all(|page| page.validate().is_ok()));
     }
+
+    #[test]
+    fn native_preparation_rejects_nodata_outside_and_overflowing_values() {
+        let request = MapRequest {
+            center_latitude_e7: 0,
+            center_longitude_e7: 0,
+            requested_side_meters: 250,
+            compression: aoe_map::Ratio::new(1, 1).expect("ratio"),
+            ..MapRequest::default()
+        };
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+
+        let mut nodata = driver
+            .create_with_band_type::<f64, _>("nodata", 4, 4, 1)
+            .expect("nodata raster");
+        nodata
+            .set_geo_transform(&[-2.0, 1.0, 0.0, 2.0, 0.0, -1.0])
+            .expect("geotransform");
+        nodata
+            .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+            .expect("spatial reference");
+        let mut band = nodata.rasterband(1).expect("band");
+        band.set_no_data_value(Some(-9999.0)).expect("nodata value");
+        let mut values = Buffer::new((4, 4), vec![-9999.0; 16]);
+        band.write((0, 0), (4, 4), &mut values)
+            .expect("nodata values");
+        assert!(matches!(
+            prepare_elevation_dataset(&nodata, request, 2),
+            Err(GeodataError::Preparation(reason)) if reason.contains("nodata")
+        ));
+
+        let mut outside = driver
+            .create_with_band_type::<f64, _>("outside", 4, 4, 1)
+            .expect("outside raster");
+        outside
+            .set_geo_transform(&[20.0, 1.0, 0.0, 22.0, 0.0, -1.0])
+            .expect("outside transform");
+        outside
+            .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+            .expect("outside spatial reference");
+        let mut values = Buffer::new((4, 4), vec![1.0; 16]);
+        outside
+            .rasterband(1)
+            .expect("outside band")
+            .write((0, 0), (4, 4), &mut values)
+            .expect("outside values");
+        assert!(matches!(
+            prepare_elevation_dataset(&outside, request, 2),
+            Err(GeodataError::Preparation(reason)) if reason.contains("does not cover")
+        ));
+
+        let mut overflow = driver
+            .create_with_band_type::<f64, _>("overflow", 4, 4, 1)
+            .expect("overflow raster");
+        overflow
+            .set_geo_transform(&[-2.0, 1.0, 0.0, 2.0, 0.0, -1.0])
+            .expect("overflow transform");
+        overflow
+            .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+            .expect("overflow spatial reference");
+        let mut values = Buffer::new((4, 4), vec![1.0e20; 16]);
+        overflow
+            .rasterband(1)
+            .expect("overflow band")
+            .write((0, 0), (4, 4), &mut values)
+            .expect("overflow values");
+        assert!(matches!(
+            prepare_elevation_dataset(&overflow, request, 2),
+            Err(GeodataError::Preparation(reason)) if reason.contains("outside centimeter")
+        ));
+
+        assert!(matches!(
+            prepare_elevation_dataset(&overflow, request, 1),
+            Err(GeodataError::Preparation(reason)) if reason.contains("outside direct")
+        ));
+    }
 }

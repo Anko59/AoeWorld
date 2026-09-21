@@ -246,6 +246,12 @@ fn reduce_coverage(axis: u16, values: &[u8]) -> Result<Vec<u8>, GeodataError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gdal::{DriverManager, spatial_ref::SpatialRef, vector::LayerOptions};
+    use std::{
+        io::Write,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+    use zip::{ZipWriter, write::SimpleFileOptions};
 
     #[test]
     fn coastline_supersampling_preserves_partial_ocean_coverage() {
@@ -266,5 +272,68 @@ mod tests {
             [0, 100]
         );
         assert!(inland_on_land(&[0], vec![100, 0]).is_err());
+    }
+
+    #[test]
+    fn native_vector_zip_is_rasterized_and_pyramided() {
+        let root = temporary_directory();
+        fs::create_dir_all(&root).expect("temporary directory");
+        let geojson = root.join("land.geojson");
+        let driver = DriverManager::get_driver_by_name("GeoJSON").expect("GeoJSON driver");
+        let mut dataset = driver
+            .create_vector_only(&geojson)
+            .expect("GeoJSON dataset");
+        let wgs84 = SpatialRef::from_epsg(4326).expect("WGS84");
+        {
+            let mut layer = dataset
+                .create_layer(LayerOptions {
+                    name: "land",
+                    srs: Some(&wgs84),
+                    ty: gdal::vector::OGRwkbGeometryType::wkbPolygon,
+                    ..Default::default()
+                })
+                .expect("land layer");
+            layer
+                .create_feature(
+                    gdal::vector::Geometry::from_wkt(
+                        "POLYGON ((2.0 48.0, 2.35 48.0, 2.35 50.0, 2.0 50.0, 2.0 48.0))",
+                    )
+                    .expect("land polygon"),
+                )
+                .expect("land feature");
+        }
+        dataset.flush_cache().expect("flush GeoJSON");
+        drop(dataset);
+
+        let archive = root.join("land.zip");
+        let mut zip = ZipWriter::new(fs::File::create(&archive).expect("vector archive"));
+        zip.start_file("land.geojson", SimpleFileOptions::default())
+            .expect("vector member");
+        zip.write_all(&fs::read(&geojson).expect("GeoJSON bytes"))
+            .expect("vector bytes");
+        zip.finish().expect("finish vector archive");
+
+        let prepared =
+            prepare_ocean_coverage(&archive, MapRequest::default(), 2, vec![60, 60, 60, 60])
+                .expect("prepared coastline");
+        assert_eq!(prepared.field.levels.len(), 2);
+        assert_eq!(prepared.pages.len(), 2);
+        let page = &prepared.pages[0];
+        assert!(page.ocean_coverage_percent.contains(&0));
+        assert!(page.ocean_coverage_percent.contains(&100));
+        assert!(page.inland_coverage_percent.contains(&60));
+        assert!(
+            page.ocean_coverage_percent
+                .iter()
+                .zip(&page.inland_coverage_percent)
+                .any(|(ocean, inland)| *ocean == 0 && *inland == 60)
+        );
+        fs::remove_dir_all(root).expect("remove vector fixture");
+    }
+
+    fn temporary_directory() -> PathBuf {
+        static SERIAL: AtomicU64 = AtomicU64::new(0);
+        let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("aoe-water-test-{}-{serial}", std::process::id()))
     }
 }

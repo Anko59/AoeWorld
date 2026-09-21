@@ -164,7 +164,10 @@ struct Health {
 #[derive(Serialize)]
 struct NavigationCacheHealth {
     entries: usize,
+    /// Logical cached-outcome bytes; allocator and BTreeMap overhead is not
+    /// included, so this is an accounting budget rather than an RSS cap.
     retained_bytes: usize,
+    /// Logical cached-outcome budget rather than a hard process-memory cap.
     limit_bytes: usize,
 }
 

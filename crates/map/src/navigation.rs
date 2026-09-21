@@ -4,6 +4,11 @@ use aoe_core::TileCoord;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod checked;
+mod planner;
+pub(crate) use checked::segment_path_checked;
+pub use planner::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RoutePlannerPoll};
+
 pub const ORTHOGONAL_COST: u32 = 1_024;
 pub const DIAGONAL_COST: u32 = 1_448;
 /// A long order is detailed in these bounded tile-scale segments. The caller
@@ -470,3 +475,7 @@ mod tests {
 #[cfg(test)]
 #[path = "navigation/tests/asymmetric.rs"]
 mod asymmetric_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/resumable.rs"]
+mod resumable_tests;

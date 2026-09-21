@@ -29,6 +29,26 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
+M4 resumable route planning is reviewed in
+[PR #23](https://github.com/Anko59/AoeWorld/pull/23), revision
+`dc3cb12c4e6095bd904197c6ce283472feff1f14`. Frontier state survives tick budgets;
+round-robin scheduling and a 64-planner limit bound concurrent work. Provider
+errors remain typed, exhausted local searches terminate, and retained search
+entries are capped before insertion. Planner progress and budget participate
+in replay hashes. Hooks, map-test (58), preflight (288 native tests), and clean
+pre-push preflight passed. Cache byte accounting is a logical payload budget,
+not allocator-inclusive RSS. Four-portal segment selection still needs the
+long-detour connectivity work and source-backed 100 km qualification.
+
+M8 native geodata fixtures are reviewed in
+[PR #22](https://github.com/Anko59/AoeWorld/pull/22), revision
+`d849e94ff5fd2d172ced61c52f88f3dbee4039e2`. Local raster/vector/ZIP and bounded
+loopback HTTP fixtures exercise sampling, pyramids, HYDE extraction, and cache
+resume/error paths. An ignored HTTP range now removes the stale partial file
+so acquisition can restart. Hooks, test-unit (305), preflight, and clean
+pre-push preflight passed. These fixtures do not establish the overall 85%
+coverage gate or qualify real-world generation performance.
+
 M6 camera elevation and sprite anchoring are reviewed in
 [PR #21](https://github.com/Anko59/AoeWorld/pull/21), revision
 `6eef8330fd179486d1345cff5e7d9b40140802bb`. The initial map focus uses loaded
