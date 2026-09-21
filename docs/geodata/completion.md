@@ -191,3 +191,17 @@ verification of the detailed Paris recipe-2 package recorded above.
 Maximum-pyramid qualification, automatic detail selection, wider geographic
 support, and source-backed long travel remain open. Legacy convenience route
 APIs fail closed but do not yet preserve typed provider failures.
+
+M8 coverage inventory correctness is reviewed in
+[PR #19](https://github.com/Anko59/AoeWorld/pull/19), revision
+`5913268cede55fa0b4b40695764aefec4af8b627`. The native checker follows Cargo
+production targets and Rust module paths, counts executable production spans,
+and excludes test-only modules and non-executable files. Missing production
+modules or coverage records remain failures. Hooks, native tests (280),
+preflight, and clean-revision pre-push preflight passed; independent review
+corrected module resolution and target-discovery omissions before publication.
+The saved CI data now yields 11,222 / 14,658 covered lines (76.6%), below the
+unchanged 85% floor, and lacks the new inventory module. The earlier provisional
+73.92% result omitted production modules and is invalid. A fresh instrumented
+run and additional production-path tests remain required; this repair does
+not establish a coverage or overall CI pass.

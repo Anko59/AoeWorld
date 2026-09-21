@@ -1,12 +1,9 @@
 //! Native production-line coverage policy over cargo-llvm-cov LCOV output.
+mod inventory;
+
+use inventory::{SourceInventory, expected_sources};
 use serde::Serialize;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    error::Error,
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{collections::BTreeSet, error::Error, fs, path::Path};
 
 #[derive(Clone, Copy, Default, Serialize)]
 struct Count {
@@ -36,46 +33,6 @@ struct Report {
     verdict: &'static str,
 }
 
-fn expected_sources(root: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
-    let output = Command::new("git")
-        .args([
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            "crates",
-        ])
-        .current_dir(root)
-        .output()?;
-    if !output.status.success() {
-        return Err("cannot inventory first-party Rust sources".into());
-    }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|item| !item.is_empty())
-        .map(|item| String::from_utf8_lossy(item).to_string())
-        .filter(|name| {
-            name.starts_with("crates/")
-                && name.contains("/src/")
-                && name.ends_with(".rs")
-                && !name.ends_with("/tests.rs")
-                && !name.starts_with("crates/client/src/")
-                && !name.starts_with("crates/rendering/src/")
-        })
-        .collect())
-}
-
-fn source_cutoff(path: &Path) -> Result<usize, Box<dyn Error>> {
-    let source = fs::read_to_string(path)?;
-    Ok(source
-        .lines()
-        .position(|line| line.trim() == "#[cfg(test)]")
-        .map_or(usize::MAX, |index| index + 1))
-}
-
 fn classify(path: &str) -> (bool, bool, bool) {
     let policy = matches!(
         path,
@@ -98,10 +55,9 @@ fn classify(path: &str) -> (bool, bool, bool) {
     (policy, protocol, asset_parser)
 }
 
-fn parse(root: &Path, data: &str, expected: &BTreeSet<String>) -> Result<Report, Box<dyn Error>> {
+fn parse(root: &Path, data: &str, expected: &SourceInventory) -> Result<Report, Box<dyn Error>> {
     let root = root.canonicalize()?;
-    let mut cutoffs = BTreeMap::<PathBuf, usize>::new();
-    let mut current = None::<(String, usize)>;
+    let mut current = None::<String>;
     let mut seen_sources = BTreeSet::new();
     let mut seen_lines = BTreeSet::new();
     let mut counts = [Count::default(); 4];
@@ -110,20 +66,19 @@ fn parse(root: &Path, data: &str, expected: &BTreeSet<String>) -> Result<Report,
             let path = Path::new(path).canonicalize()?;
             let relative = path.strip_prefix(&root)?;
             let name = relative.to_str().ok_or("non-UTF-8 coverage path")?;
-            current = if expected.contains(name) {
-                let cutoff = *cutoffs.entry(path.clone()).or_insert(source_cutoff(&path)?);
-                seen_sources.insert(name.to_owned());
-                Some((name.to_owned(), cutoff))
+            current = if expected.contains_key(name) {
+                Some(name.to_owned())
             } else {
                 None
             };
         } else if let Some(rest) = line.strip_prefix("DA:") {
-            if let Some((name, cutoff)) = &current {
+            if let Some(name) = &current {
                 let (number, after) = rest.split_once(',').ok_or("invalid LCOV DA record")?;
                 let hits = after.split(',').next().ok_or("invalid LCOV hit count")?;
                 let number: usize = number.parse()?;
                 let hits: u64 = hits.parse()?;
-                if number < *cutoff {
+                if expected[name].contains(&number) {
+                    seen_sources.insert(name.clone());
                     if !seen_lines.insert((name.clone(), number)) {
                         return Err("duplicate LCOV line".into());
                     }
@@ -144,7 +99,11 @@ fn parse(root: &Path, data: &str, expected: &BTreeSet<String>) -> Result<Report,
             current = None;
         }
     }
-    let missing_sources: Vec<_> = expected.difference(&seen_sources).cloned().collect();
+    let missing_sources: Vec<_> = expected
+        .keys()
+        .filter(|name| !seen_sources.contains(*name))
+        .cloned()
+        .collect();
     let passed = counts[0].meets(85)
         && counts[1].meets(90)
         && counts[2].meets(90)
@@ -183,6 +142,7 @@ fn check_at(root: &Path, path: &Path) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{collections::BTreeSet, process::Command};
 
     #[test]
     fn missing_groups_or_test_only_coverage_cannot_pass() {
@@ -198,9 +158,9 @@ mod tests {
         let report = parse(
             temp.path(),
             &lcov,
-            &BTreeSet::from([
-                "crates/protocol/src/lib.rs".to_owned(),
-                "crates/core/src/lib.rs".to_owned(),
+            &SourceInventory::from([
+                ("crates/protocol/src/lib.rs".to_owned(), BTreeSet::from([1])),
+                ("crates/core/src/lib.rs".to_owned(), BTreeSet::from([1])),
             ]),
         )
         .expect("report");
@@ -226,6 +186,10 @@ mod tests {
             "crates/assets/src/drs.rs",
             "crates/core/src/lib.rs",
         ];
+        fs::create_dir_all(root.join("crates/harness/src")).expect("harness directory");
+        fs::write(root.join("crates/harness/src/main.rs"), "mod qa;\n").expect("harness root");
+        fs::create_dir_all(root.join("crates/assets/src")).expect("assets directory");
+        fs::write(root.join("crates/assets/src/lib.rs"), "pub mod drs;\n").expect("assets root");
         let mut lcov = String::new();
         for name in names {
             let source = root.join(name);
@@ -257,5 +221,44 @@ mod tests {
         )
         .expect("missing source");
         assert!(check_at(root, &report_path).is_err());
+    }
+
+    #[test]
+    fn missing_production_functions_and_macros_remain_a_regression() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let root = temp.path();
+        let status = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+        let write_source = |name: &str, source: &str| {
+            let path = root.join(name);
+            fs::create_dir_all(path.parent().expect("source parent")).expect("source directory");
+            fs::write(path, source).expect("source");
+        };
+        write_source(
+            "crates/demo/src/lib.rs",
+            "mod function;\nmod macros;\nmod types;\n",
+        );
+        write_source("crates/demo/src/function.rs", "pub fn uncovered() {}\n");
+        write_source(
+            "crates/demo/src/macros.rs",
+            "macro_rules! uncovered_macro { () => { 1 }; }\n",
+        );
+        write_source("crates/demo/src/types.rs", "pub struct TypeOnly;\n");
+        let expected = expected_sources(root).expect("inventory");
+        assert!(expected.contains_key("crates/demo/src/function.rs"));
+        assert!(expected.contains_key("crates/demo/src/macros.rs"));
+        assert!(!expected.contains_key("crates/demo/src/types.rs"));
+        let function = root.join("crates/demo/src/function.rs");
+        let lcov = format!("SF:{}\nDA:1,1\nend_of_record\n", function.display());
+        let report = parse(root, &lcov, &expected).expect("report");
+        assert_eq!(
+            report.missing_sources,
+            ["crates/demo/src/macros.rs".to_owned()]
+        );
+        assert_eq!(report.verdict, "REGRESSION");
     }
 }
