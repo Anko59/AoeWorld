@@ -153,3 +153,13 @@ comparison (258,301 bytes versus 217,240, with a 5% limit) and overall coverage
 (11,030 / 14,416 lines, 76.5%, versus 85%). Native instruction/allocation and
 critical coverage groups passed. Coverage inventory errors and real untested
 paths are both being addressed; no overall CI pass is claimed.
+
+The bundle-size failure is repaired in
+[PR #16](https://github.com/Anko59/AoeWorld/pull/16), revision
+`1adc0eb0f6462da74b2fbb294733b16e57ccf0d2`. A dedicated WASM profile is used
+by Make and release artifact builds. The optimized gzip bundle is 222,723 bytes
+against the unchanged 217,240-byte baseline and 5% allowance. Hooks, preflight
+(271 native tests), test-e2e (23), test-wasm (7), and perf-ci passed; browser,
+performance, and pre-push checks passed on the clean revision. Native profiles
+and performance baselines were not changed. Full dev release packaging and
+published release validation remain separate; native coverage gaps remain open.

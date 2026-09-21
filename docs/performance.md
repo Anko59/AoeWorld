@@ -74,6 +74,12 @@ samples and environment in versioned JSON plus a Markdown summary. No
 dedicated hardware or reviewed timing baseline is available yet, so hardware
 qualification remains **not established**.
 
+The browser bundle uses the `wasm-release` Cargo profile: size-oriented
+optimization, full link-time optimization, and one code generation unit.
+`make build-wasm` produces this profile before binding the browser module;
+native server and benchmark builds retain their existing profiles. Browser
+E2E checks exercise the resulting shipped bundle.
+
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
 pass. The pinned Gungraun/Callgrind and DHAT analysis image measures four

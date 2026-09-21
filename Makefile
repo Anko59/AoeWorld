@@ -273,8 +273,8 @@ build:
 	@$(DOCKER_RUN) cargo build --workspace --locked
 
 build-wasm:
-	@$(DOCKER_RUN) cargo build --locked --release --target wasm32-unknown-unknown -p aoe-client
-	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/release/aoe_client.wasm
+	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
+	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 
 test-e2e: build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
