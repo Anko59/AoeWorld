@@ -5,7 +5,7 @@ use aoe_map::{
     PotentialBiomePage, PreparedEnvironment, WaterPage,
 };
 use aoe_protocol::MapMetadata;
-use aoe_simulation::{GameWorld, GameWorldError};
+use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
 
 impl GameplayService {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
@@ -13,10 +13,13 @@ impl GameplayService {
         let metadata = map_metadata(&package);
         let mut world = GameWorld::from_map(package)?;
         let config = world.config();
-        let tile = world
-            .terrain()
-            .starting_tile(config)
-            .ok_or(GameWorldError::InvalidPosition)?;
+        let tile = match world.terrain().search_start(config, 64, || false) {
+            StartSearchResult::Found(tile) => tile,
+            StartSearchResult::Unavailable => return Err(GameWorldError::InvalidPosition),
+            StartSearchResult::LimitReached | StartSearchResult::Cancelled => {
+                return Err(GameWorldError::StartSearchLimit);
+            }
+        };
         let position =
             WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
         let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
@@ -48,8 +51,12 @@ impl GameplayService {
             land_use_pages,
         )?;
         let config = world.config();
-        let Some(tile) = world.terrain().starting_tile(config) else {
-            return Ok(None);
+        let tile = match world.terrain().search_start(config, 64, || false) {
+            StartSearchResult::Found(tile) => tile,
+            StartSearchResult::Unavailable => return Ok(None),
+            StartSearchResult::LimitReached | StartSearchResult::Cancelled => {
+                return Err(GameWorldError::StartSearchLimit);
+            }
         };
         let position =
             WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;

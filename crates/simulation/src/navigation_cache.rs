@@ -189,4 +189,18 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[test]
+    fn terminal_expansion_exhaustion_is_cached() {
+        let mut cache = NavigationCache::default();
+        let origin = TileCoord::new(1, 2);
+        let destination = TileCoord::new(5, 4);
+        cache.insert(origin, destination, 4_096, MovementOutcome::BudgetExceeded);
+
+        assert_eq!(cache.entry_count(), 1);
+        assert_eq!(
+            cache.get(origin, destination, 4_096),
+            Some(MovementOutcome::BudgetExceeded)
+        );
+    }
 }

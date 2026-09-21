@@ -50,8 +50,8 @@ pub fn prepare_hyde_lake_coverage(
     .map(|values| values.into_iter().map(lake_coverage_percent).collect())
 }
 
-fn lake_coverage_percent(value: f64) -> u8 {
-    u8::from(value == 0.0) * 100
+fn lake_coverage_percent(value: Option<f64>) -> u8 {
+    u8::from(value == Some(0.0)) * 100
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -155,7 +155,7 @@ fn sample_member(
     member: &str,
     coordinates: &[(f64, f64)],
     samples_per_axis: u16,
-) -> Result<Vec<f64>, GeodataError> {
+) -> Result<Vec<Option<f64>>, GeodataError> {
     let path = extract_member(archive, member)?;
     let dataset = Dataset::open(path)?;
     let (width, height) = dataset.raster_size();
@@ -169,7 +169,7 @@ fn sample_member(
             let pixel = pixel.floor() as isize;
             let line = line.floor() as isize;
             if pixel < 0 || line < 0 || pixel >= width as isize || line >= height as isize {
-                return Ok(0.0);
+                return Ok(None);
             }
             let value = band
                 .read_as::<f64>(
@@ -180,11 +180,8 @@ fn sample_member(
                 )?
                 .data()[0];
             Ok(
-                if value.is_finite() && !nodata.is_some_and(|missing| value == missing) {
-                    value
-                } else {
-                    0.0
-                },
+                (value.is_finite() && !nodata.is_some_and(|missing| value == missing))
+                    .then_some(value),
             )
         })
         .collect::<Result<Vec<_>, gdal::errors::GdalError>>()?;
@@ -280,12 +277,19 @@ fn extract_member(archive: &Path, member: &str) -> Result<PathBuf, GeodataError>
 }
 
 fn land_use_value(
-    crop: f64,
-    grazing: f64,
-    population: f64,
-    land: f64,
-    max_land_area: f64,
+    crop: Option<f64>,
+    grazing: Option<f64>,
+    population: Option<f64>,
+    land: Option<f64>,
+    max_land_area: Option<f64>,
 ) -> LandUseValue {
+    let (Some(land), Some(max_land_area)) = (land, max_land_area) else {
+        return LandUseValue {
+            crop_percent: 0,
+            grazing_percent: 0,
+            population_pressure_per_square_kilometer: 0,
+        };
+    };
     if land <= 0.0 || max_land_area <= 0.0 {
         return LandUseValue {
             crop_percent: 0,
@@ -293,12 +297,13 @@ fn land_use_value(
             population_pressure_per_square_kilometer: 0,
         };
     }
-    let crop_percent = fraction_percent(crop, max_land_area);
-    let grazing_percent = fraction_percent(grazing, max_land_area).min(100 - crop_percent);
+    let crop_percent = fraction_percent(crop.unwrap_or(0.0), max_land_area);
+    let grazing_percent =
+        fraction_percent(grazing.unwrap_or(0.0), max_land_area).min(100 - crop_percent);
     LandUseValue {
         crop_percent,
         grazing_percent,
-        population_pressure_per_square_kilometer: (population / max_land_area)
+        population_pressure_per_square_kilometer: (population.unwrap_or(0.0) / max_land_area)
             .round()
             .clamp(0.0, f64::from(u16::MAX))
             as u16,
@@ -425,7 +430,7 @@ mod tests {
     #[test]
     fn land_use_fractions_use_valid_land_and_never_double_count_grazing() {
         assert_eq!(
-            land_use_value(8.0, 9.0, 50.0, 1.0, 10.0),
+            land_use_value(Some(8.0), Some(9.0), Some(50.0), Some(1.0), Some(10.0)),
             LandUseValue {
                 crop_percent: 80,
                 grazing_percent: 20,
@@ -433,7 +438,7 @@ mod tests {
             }
         );
         assert_eq!(
-            land_use_value(8.0, 9.0, 50.0, 0.0, 10.0),
+            land_use_value(Some(8.0), Some(9.0), Some(50.0), Some(0.0), Some(10.0)),
             LandUseValue {
                 crop_percent: 0,
                 grazing_percent: 0,
@@ -450,8 +455,13 @@ mod tests {
 
     #[test]
     fn fixed_hyde_landlake_values_only_mark_lakes_as_water() {
-        assert_eq!(lake_coverage_percent(1.0), 0);
-        assert_eq!(lake_coverage_percent(0.0), 100);
-        assert_eq!(lake_coverage_percent(-9_999.0), 0);
+        assert_eq!(lake_coverage_percent(Some(1.0)), 0);
+        assert_eq!(lake_coverage_percent(Some(0.0)), 100);
+        assert_eq!(lake_coverage_percent(Some(-9_999.0)), 0);
+        assert_eq!(lake_coverage_percent(None), 0);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/hyde.rs"]
+mod hyde_tests;

@@ -382,4 +382,59 @@ fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
     assert!(unit.planning);
     assert!(world.movement_order(id).is_some());
     assert_eq!(world.active_mover_count(), 1);
+
+    // A zero shared budget defers only this tick. Once the tick resets the
+    // budget, planning resumes and the unit receives its next segment.
+    world.advance();
+    let unit = world.unit(id).expect("unit");
+    assert!(unit.moving);
+    assert!(!unit.planning);
+    assert!(world.movement_order(id).is_some());
+}
+
+#[test]
+fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let origin = TileCoord::new(1, 1);
+    let destination = TileCoord::new(2, 1);
+    let id = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let index = world.lookup[&id];
+    let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
+    let destination_position =
+        WorldPosition::from_tile_center(destination).expect("destination position");
+    world.navigation_cache.insert(
+        origin,
+        destination,
+        crate::MAX_ROUTE_EXPANSIONS_PER_ORDER,
+        MovementOutcome::BudgetExceeded,
+    );
+    world.units[index].state.moving = true;
+    world.units[index].order = Some(MovementOrder {
+        origin: origin_position,
+        destination: destination_position,
+        waypoint: origin_position,
+        target_tile: destination,
+        segment_length: 1,
+        travelled: 1,
+    });
+    world.active_movers.push(id);
+
+    world.advance();
+
+    let unit = world.unit(id).expect("unit");
+    assert!(!unit.moving);
+    assert!(!unit.planning);
+    assert!(world.movement_order(id).is_none());
+    assert_eq!(world.active_mover_count(), 0);
 }

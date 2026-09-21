@@ -26,15 +26,13 @@ pub(super) fn inspection_label(client: &Client) -> String {
     let world = world_at_screen(client, pointer);
     let x = world[0].floor() as i32;
     let y = world[1].floor() as i32;
-    let Some(chunk) = client
+    if !client
         .terrain_chunks
-        .get(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)))
-    else {
+        .contains_key(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)))
+    {
         return format!("tile {x}, {y}: terrain loading");
-    };
-    let local_x = x.rem_euclid(CHUNK_TILES) as usize;
-    let local_y = y.rem_euclid(CHUNK_TILES) as usize;
-    let Some(tile) = chunk.tiles.get(local_y * CHUNK_TILES as usize + local_x) else {
+    }
+    let Some(tile) = terrain_tile(client, x, y) else {
         return format!("tile {x}, {y}: terrain unavailable");
     };
     format!(
@@ -93,22 +91,31 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
         .camera
         .visible_tiles(client.config, 8.0)
         .clamp(client.config.width_tiles, client.config.height_tiles);
-    let loaded_tiles = client
-        .terrain_chunks
-        .values()
-        .map(|chunk| chunk.tiles.len())
-        .sum::<usize>();
-    let stride = (loaded_tiles.div_ceil(4_096) as f64).sqrt().ceil().max(1.0) as usize;
-    let mut terrain = Vec::with_capacity(loaded_tiles.div_ceil(stride * stride));
+    let mut terrain = Vec::new();
     for chunk in client.terrain_chunks.values() {
+        let (chunk_width, chunk_height) = chunk_dimensions(client, chunk.x, chunk.y);
+        if chunk_width == 0 || chunk_height == 0 {
+            continue;
+        }
+        let chunk_min_x = chunk.x * CHUNK_TILES;
+        let chunk_min_y = chunk.y * CHUNK_TILES;
+        let chunk_max_x = chunk_min_x + chunk_width as i32;
+        let chunk_max_y = chunk_min_y + chunk_height as i32;
+        if chunk_max_x <= visible.min.x
+            || chunk_min_x >= visible.max.x
+            || chunk_max_y <= visible.min.y
+            || chunk_min_y >= visible.max.y
+        {
+            continue;
+        }
         for (index, tile) in chunk.tiles.iter().enumerate() {
-            let local_x = index as i32 % CHUNK_TILES;
-            let local_y = index as i32 / CHUNK_TILES;
-            if (local_x as usize % stride) != 0 || (local_y as usize % stride) != 0 {
+            let local_x = index % chunk_width;
+            let local_y = index / chunk_width;
+            if local_y >= chunk_height {
                 continue;
             }
-            let x = chunk.x * CHUNK_TILES + local_x;
-            let y = chunk.y * CHUNK_TILES + local_y;
+            let x = chunk.x * CHUNK_TILES + local_x as i32;
+            let y = chunk.y * CHUNK_TILES + local_y as i32;
             if x < visible.min.x || x >= visible.max.x || y < visible.min.y || y >= visible.max.y {
                 continue;
             }
@@ -171,14 +178,56 @@ pub(super) fn world_at_screen(client: &Client, screen: aoe_core::ScreenPoint) ->
 }
 
 fn elevation_at_tile(client: &Client, x: i32, y: i32) -> f64 {
-    let chunk = client
-        .terrain_chunks
-        .get(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)));
-    let index = y.rem_euclid(CHUNK_TILES) as usize * CHUNK_TILES as usize
-        + x.rem_euclid(CHUNK_TILES) as usize;
-    chunk
-        .and_then(|chunk| chunk.tiles.get(index))
-        .map_or(0.0, |tile| f64::from(tile.game_height_level))
+    terrain_tile(client, x, y).map_or(0.0, |tile| f64::from(tile.game_height_level))
+}
+
+fn terrain_tile(client: &Client, x: i32, y: i32) -> Option<&Tile> {
+    if x < 0 || y < 0 || x >= client.config.width_tiles || y >= client.config.height_tiles {
+        return None;
+    }
+    let chunk_x = x.div_euclid(CHUNK_TILES);
+    let chunk_y = y.div_euclid(CHUNK_TILES);
+    let chunk = client.terrain_chunks.get(&(chunk_x, chunk_y))?;
+    chunk_tile_index(
+        client.config.width_tiles,
+        client.config.height_tiles,
+        chunk,
+        x,
+        y,
+    )
+    .and_then(|index| chunk.tiles.get(index))
+}
+
+fn chunk_dimensions(client: &Client, chunk_x: i32, chunk_y: i32) -> (usize, usize) {
+    (
+        chunk_axis_len(client.config.width_tiles, chunk_x),
+        chunk_axis_len(client.config.height_tiles, chunk_y),
+    )
+}
+
+fn chunk_axis_len(total_tiles: i32, chunk: i32) -> usize {
+    let start = i64::from(chunk) * i64::from(CHUNK_TILES);
+    let remaining = i64::from(total_tiles).saturating_sub(start);
+    usize::try_from(remaining.clamp(0, i64::from(CHUNK_TILES))).unwrap_or(0)
+}
+
+fn chunk_tile_index(
+    width_tiles: i32,
+    height_tiles: i32,
+    chunk: &Chunk,
+    x: i32,
+    y: i32,
+) -> Option<usize> {
+    if x < 0 || y < 0 || x >= width_tiles || y >= height_tiles {
+        return None;
+    }
+    let (chunk_width, chunk_height) = (
+        chunk_axis_len(width_tiles, chunk.x),
+        chunk_axis_len(height_tiles, chunk.y),
+    );
+    let local_x = x.rem_euclid(CHUNK_TILES) as usize;
+    let local_y = y.rem_euclid(CHUNK_TILES) as usize;
+    (local_x < chunk_width && local_y < chunk_height).then_some(local_y * chunk_width + local_x)
 }
 
 fn terrain_material(material: GroundMaterial) -> u8 {
@@ -292,8 +341,11 @@ async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<Chunk, JsValu
 mod tests {
     use super::*;
     use aoe_map::MapChunkGenerator;
+    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
-    #[test]
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
     fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
         let chunk = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0);
         assert_eq!(
@@ -304,9 +356,18 @@ mod tests {
         );
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn decoded_cache_limit_matches_the_product_budget() {
         assert_eq!(MAX_CACHED_CHUNKS, 512);
         assert_eq!(MAX_CACHED_CHUNK_BYTES, 128 * 1024 * 1024);
+    }
+
+    #[wasm_bindgen_test]
+    fn partial_edge_chunk_uses_active_map_dimensions_for_rows() {
+        let chunk = MapChunkGenerator::new([0; 32], 1, 500).chunk(15, 15);
+        assert_eq!(chunk.tiles.len(), 20 * 20);
+        assert_eq!(chunk_tile_index(500, 500, &chunk, 480, 480), Some(0));
+        assert_eq!(chunk_tile_index(500, 500, &chunk, 499, 499), Some(399));
+        assert_eq!(chunk_tile_index(500, 500, &chunk, 500, 499), None);
     }
 }

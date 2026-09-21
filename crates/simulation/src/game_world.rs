@@ -1,4 +1,5 @@
-use crate::game_path::{next_waypoint, segment_length};
+use crate::game_movement::MapRoutePlan;
+use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::{GameQueryStats, navigation_cache::NavigationCache, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
@@ -29,7 +30,6 @@ pub struct GameUnit {
     pub planning: bool,
     pub facing: Facing,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {
     pub origin: WorldPosition,
@@ -51,6 +51,10 @@ pub enum GameWorldError {
     PathBudgetExceeded,
     #[error("entity does not exist")]
     UnknownEntity,
+    #[error(
+        "starting-location search limit reached; absence of a suitable start is not established"
+    )]
+    StartSearchLimit,
     #[error("entity id space is exhausted")]
     EntityIdExhausted,
     #[error("prepared map terrain is invalid")]
@@ -76,7 +80,6 @@ pub struct GameWorld {
     pub(crate) planning_budget: u32,
     pub(crate) navigation_cache: NavigationCache,
 }
-
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
         config.validate()?;
@@ -295,12 +298,17 @@ impl GameWorld {
         }
         let target_tile = destination.tile_floor();
         let (waypoint, route) = match self.next_map_route(origin.tile_floor(), target_tile) {
-            Some(MovementOutcome::Path(path)) => route_waypoint(path.tiles, origin, destination)?,
-            Some(MovementOutcome::InvalidDestination) => {
+            Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
+                route_waypoint(path.tiles, origin, destination)?
+            }
+            Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
                 return Err(GameWorldError::InvalidPosition);
             }
-            Some(MovementOutcome::Unreachable) => return Err(GameWorldError::Unreachable),
-            Some(MovementOutcome::BudgetExceeded) => {
+            Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable)) => {
+                return Err(GameWorldError::Unreachable);
+            }
+            Some(MapRoutePlan::Outcome(MovementOutcome::BudgetExceeded))
+            | Some(MapRoutePlan::Deferred) => {
                 return Err(GameWorldError::PathBudgetExceeded);
             }
             None => (
@@ -438,22 +446,6 @@ impl GameWorld {
         self.units[index].bucket = bucket;
         self.units[index].bucket_slot = new_slot;
     }
-}
-
-fn route_waypoint(
-    tiles: Vec<TileCoord>,
-    origin: WorldPosition,
-    destination: WorldPosition,
-) -> Result<(WorldPosition, VecDeque<TileCoord>), GameWorldError> {
-    let mut route = VecDeque::from(tiles);
-    if route.pop_front() != Some(origin.tile_floor()) {
-        return Err(GameWorldError::InvalidPosition);
-    }
-    let waypoint = route
-        .pop_front()
-        .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
-        .unwrap_or(destination);
-    Ok((waypoint, route))
 }
 
 pub(crate) fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition {

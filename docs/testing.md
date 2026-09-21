@@ -3,8 +3,11 @@
 Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
 for focused checks. `make pre-commit` runs static gates; `make preflight` adds
 native tests through pinned cargo-nextest, followed by separate doctests and a
-WASM build. `make test-wasm` runs Rust `wasm-bindgen-test` cases in pinned
-headless Chromium through a disposable ChromeDriver container. It writes
+WASM build. `make test-wasm` runs the client browser integration tests and the
+client and rendering library `wasm-bindgen-test` cases in pinned headless
+Chromium through a disposable ChromeDriver container. Browser-only regressions
+must use `#[wasm_bindgen_test]`; native `#[test]` cases in WASM-only modules do
+not run in this gate. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
 this gate. `make test-e2e` runs both an explicit WebGPU project under Xvfb with Vulkan
 SwiftShader and a game-only project with default browser launch settings.
