@@ -71,9 +71,10 @@ detail placement without moving source-backed relief.
 
 The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
-locks and reproducible reductions, but it is an overview-quality stack: it is
-not a claim that Copernicus DEM, ESA WorldCover, HydroLAKES, HydroRIVERS, or
-other detailed modern layers were acquired or used. Source availability, the
+locks and reproducible reductions, but it is an overview-quality stack. The
+explicit [detailed preparation command](detailed-preparation.md) adds regional
+Copernicus elevation while retaining coarse water and historical inputs.
+ESA WorldCover, HydroLAKES, and HydroRIVERS remain unwired. Source availability, the
 requested date, and the normalized package provenance are kept distinct so a
 modern source cannot be mistaken for a historical reconstruction.
 

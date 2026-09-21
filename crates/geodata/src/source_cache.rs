@@ -56,7 +56,10 @@ impl Provider {
                 )
                 | (
                     Provider::Copernicus,
-                    Some("copernicus-dem-30m.s3.amazonaws.com")
+                    Some(
+                        "copernicus-dem-30m.s3.amazonaws.com"
+                            | "copernicus-dem-90m.s3.amazonaws.com",
+                    )
                 )
                 | (
                     Provider::EsaWorldCover,

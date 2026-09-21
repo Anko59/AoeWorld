@@ -22,6 +22,11 @@ mod directory;
 pub use directory::{
     DIRECTORY_SCHEMA_VERSION, MAX_DIRECTORY_MANIFEST_BYTES, MAX_DIRECTORY_PAGE_BYTES,
 };
+mod copernicus;
+pub use copernicus::{
+    DemResolution, MAX_DETAILED_INPUT_BYTES, MAX_DETAILED_SAMPLES_PER_AXIS,
+    MAX_DETAILED_STAGING_BYTES, MAX_DETAILED_TILES, prepare_detailed_directory,
+};
 mod footprint;
 pub use footprint::{
     GeographicPoint, MAX_FOOTPRINT_SAMPLES_PER_EDGE, ProjectionDistortion, projected_footprint,
@@ -34,6 +39,7 @@ pub use source_cache::{
     AcquisitionEstimate, CacheError, DEFAULT_CACHE_QUOTA_BYTES,
     DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider, SourceCache, SourceLock,
 };
+pub const MAX_OVERVIEW_INPUT_BYTES: u64 = 6 * 1024 * 1024 * 1024;
 mod source_manifest;
 mod water;
 pub use water::{PreparedWater, prepare_ocean_coverage};
@@ -85,6 +91,8 @@ pub enum GeodataError {
     Coordinate,
     #[error("geographic preparation failed: {0}")]
     Preparation(&'static str),
+    #[error("public Copernicus source failed: {0}")]
+    Source(String),
     #[error("directory map package is invalid: {0}")]
     Directory(String),
     #[error(transparent)]
@@ -111,6 +119,13 @@ pub enum WorkerRequest {
         output_directory: PathBuf,
         request: MapRequest,
         samples_per_axis: u16,
+    },
+    PrepareDetailedDirectory {
+        cache_root: PathBuf,
+        output_directory: PathBuf,
+        request: MapRequest,
+        samples_per_axis: u16,
+        resolution: DemResolution,
     },
     ListOverviewSources,
     ListPotentialBiomeSources,
@@ -238,77 +253,8 @@ impl GeneratedMap {
     }
 }
 
-pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
-    match request {
-        WorkerRequest::PrepareOverviewElevation {
-            cache_root,
-            request,
-            samples_per_axis,
-        } => Ok(WorkerResponse::PreparedOverview(Box::new(
-            prepare_overview(cache_root, request, samples_per_axis)?,
-        ))),
-        WorkerRequest::PrepareOverviewDirectory {
-            cache_root,
-            output_directory,
-            request,
-            samples_per_axis,
-        } => {
-            let prepared = prepare_overview(cache_root, request, samples_per_axis)?;
-            let generated = GeneratedMap::from_prepared(request, prepared)?;
-            generated.write_directory(&output_directory)?;
-            Ok(WorkerResponse::PreparedDirectory {
-                package: generated.package,
-            })
-        }
-        WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
-            sources: vec![etopo_2022_60s_surface()],
-        }),
-        WorkerRequest::ListPotentialBiomeSources => Ok(WorkerResponse::KnownSources {
-            sources: potential_biome_sources()?,
-        }),
-        WorkerRequest::ListHydeSources => Ok(WorkerResponse::KnownSources {
-            sources: hyde_sources()?,
-        }),
-        WorkerRequest::InspectRaster { path } => {
-            let dimensions = raster_dimensions(&path)?;
-            Ok(WorkerResponse::RasterDimensions {
-                width: dimensions.width,
-                height: dimensions.height,
-            })
-        }
-        WorkerRequest::ProjectPoint {
-            center_latitude_e7,
-            center_longitude_e7,
-            longitude,
-            latitude,
-        } => {
-            let definition = local_aeqd_definition(center_latitude_e7, center_longitude_e7);
-            let (east_meters, north_meters) = project_wgs84(&definition, longitude, latitude)?;
-            Ok(WorkerResponse::ProjectedPoint {
-                east_meters: round_meters(east_meters)?,
-                north_meters: round_meters(north_meters)?,
-            })
-        }
-        WorkerRequest::ProjectFootprint {
-            request,
-            samples_per_edge,
-        } => Ok(WorkerResponse::GeographicFootprint {
-            points: projected_footprint(request, samples_per_edge)?,
-            distortion: projection_distortion(request)?,
-        }),
-        WorkerRequest::PrepareElevation {
-            path,
-            request,
-            samples_per_axis,
-        } => {
-            let prepared = prepare_elevation(&path, request, samples_per_axis)?;
-            Ok(WorkerResponse::PreparedElevation {
-                environment: prepared.environment,
-                pages: prepared.pages,
-            })
-        }
-    }
-}
+mod worker;
+pub use worker::execute;
 
 pub fn prepare_overview(
     cache_root: PathBuf,
@@ -323,11 +269,23 @@ pub fn prepare_overview(
     let water_lock = water_source
         .cache_lock()
         .ok_or(GeodataError::Preparation("coastline source lacks SHA-256"))?;
-    let cache = SourceCache::new(cache_root, DownloadPolicy::default())?;
+    let cache = SourceCache::new(
+        cache_root,
+        DownloadPolicy {
+            cache_quota_bytes: DEFAULT_CACHE_QUOTA_BYTES,
+            job_acquisition_budget_bytes: MAX_OVERVIEW_INPUT_BYTES,
+        },
+    )?;
+    let potential_sources = potential_biome_sources().ok();
+    let hyde_sources = hyde_sources().ok();
+    preflight_overview_acquisition(
+        &cache,
+        potential_sources.as_deref(),
+        hyde_sources.as_deref(),
+    )?;
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let path = cache.acquire(&lock, &cancelled)?;
     let water_path = cache.acquire(&water_lock, &cancelled)?;
-    let potential_sources = potential_biome_sources().ok();
     let vegetation_lock = acquire_or_cached(
         &cache,
         potential_sources.as_deref(),
@@ -342,7 +300,6 @@ pub fn prepare_overview(
     )?;
     let vegetation_path = cache.object_path(&vegetation_lock)?;
     let vegetation_classes_path = cache.object_path(&vegetation_classes_lock)?;
-    let hyde_sources = hyde_sources().ok();
     let hyde_baseline_lock = acquire_or_cached(
         &cache,
         hyde_sources.as_deref(),
@@ -431,6 +388,33 @@ const POTENTIAL_BIOME_CLASSES_ID: &str =
 const HYDE_BASELINE_ID: &str = "hyde-3.2.1:HYDE3_2_1-baseline.zip";
 const HYDE_SUPPLEMENTARY_ID: &str = "hyde-3.2.1:HYDE3_2_1-general_supplementary.zip";
 const HYDE_README_ID: &str = "hyde-3.2.1:readme_release_HYDE3.2.1.txt";
+
+fn preflight_overview_acquisition(
+    cache: &SourceCache,
+    potential_sources: Option<&[KnownSource]>,
+    hyde_sources: Option<&[KnownSource]>,
+) -> Result<(), GeodataError> {
+    let mut batch = vec![etopo_2022_60s_surface(), natural_earth_10m_land()];
+    for (sources, id) in [
+        (potential_sources, POTENTIAL_BIOME_RASTER_ID),
+        (potential_sources, POTENTIAL_BIOME_CLASSES_ID),
+        (hyde_sources, HYDE_BASELINE_ID),
+        (hyde_sources, HYDE_SUPPLEMENTARY_ID),
+        (hyde_sources, HYDE_README_ID),
+    ] {
+        if let Some(source) =
+            sources.and_then(|sources| sources.iter().find(|source| source.id == id))
+        {
+            batch.push(source.clone());
+        } else if cache.known_lock(id)?.is_none() {
+            return Err(GeodataError::Preparation(
+                "overview source catalog is unavailable and no verified cached lock exists",
+            ));
+        }
+    }
+    cache.estimate_known_acquisition(&batch)?;
+    Ok(())
+}
 
 fn acquire_or_cached(
     cache: &SourceCache,

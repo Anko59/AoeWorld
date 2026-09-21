@@ -21,7 +21,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | ID | Deliverable | Status | Acceptance |
 | --- | --- | --- | --- |
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Directory slice verified; detail/residency pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
+| M2 | Detailed streaming preparation | Directory/regional prep verified; residency pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Placement repaired; persistence/deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
@@ -122,3 +122,34 @@ test-e2e (23), and test-wasm (7) passed. Pre-push preflight and browser gates
 passed on the clean revision. Source contact-sheet review does not establish
 in-game alignment: terrain coverage, ramp/cliff/water geometry, picking, and
 actual geographic scene qualification remain open.
+
+M2 regional preparation is reviewed in
+[PR #15](https://github.com/Anko59/AoeWorld/pull/15), revision
+`22f40f7b1b9b6ee8e4555ac5070fd341fb543b67`. Public Copernicus GLO30/GLO90
+inputs feed disk-staged elevation pages and pyramids; coarse overview water,
+vegetation, and HYDE retain their source locks and provenance. Hooks, focused
+checks, preflight (259 native tests), and clean-revision pre-push preflight
+passed. The 30 km Paris request at 1024 samples (about 29.3 m spacing) generated
+and verified `701fc72311baa491113a4f3282d8f05c44c58ffe97a072b46cac0dc43219802e`
+on that branch, using nine cached GLO30 tiles (406,204,594 source bytes) and
+zero new downloads. This hash uses the branch's generation recipe; integration
+with recipe 2 produces a separate content identity.
+The combined tree also generated and verified the 1024-sample Paris package
+under recipe 2 as
+`ed81472c347ba4038733aba08901a817cc936e21c561dbf098e0f59a5c5b12f2`.
+
+This explicit CLI/worker slice accepts at most 4096 samples, 64 regional tiles,
+4 GiB of regional input, and 2 GiB of staging, with a separate 6 GiB overview
+transfer preflight. Polar and antimeridian footprints are rejected. A missing
+DEM cell becomes zero only when source-backed overview evidence is entirely
+ocean; missing land or partial-coast data fails. Automatic creator integration,
+larger/wrapped selections, detailed hydrology/history, and recovery remain open.
+
+Combined revision `5a1a5338acd33273323b44ca8befc68e0d292c35` passed local
+preflight (271 native tests), test-e2e (23), and test-wasm (7). Its
+[manual CI run](https://github.com/Anko59/AoeWorld/actions/runs/35659384603)
+passed static, browser, and fuzz checks but failed the performance bundle-size
+comparison (258,301 bytes versus 217,240, with a 5% limit) and overall coverage
+(11,030 / 14,416 lines, 76.5%, versus 85%). Native instruction/allocation and
+critical coverage groups passed. Coverage inventory errors and real untested
+paths are both being addressed; no overall CI pass is claimed.
