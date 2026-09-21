@@ -55,6 +55,7 @@ fn camera_projection(camera: SceneCamera) -> Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     }
 }
 

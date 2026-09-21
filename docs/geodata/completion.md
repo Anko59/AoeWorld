@@ -29,6 +29,17 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
+M6 camera elevation and sprite anchoring are reviewed in
+[PR #21](https://github.com/Anko59/AoeWorld/pull/21), revision
+`6eef8330fd179486d1345cff5e7d9b40140802bb`. The initial map focus uses loaded
+terrain altitude, projection and picking share that focus, and Canvas sprite
+anchors agree with WebGPU. Hooks, preflight (281 native tests), test-e2e (23),
+and test-wasm (13) passed; clean-revision pre-push preflight passed. The rebuilt
+browser bundles were compared on the private detailed Paris package in both
+backends. The fixed eight-level culling margin and initial-only altitude focus
+do not qualify high-relief traversal. Surface meshes, water geometry, and
+occlusion remain open.
+
 ## Integration rules
 
 - Never turn a failing gate into a pass by weakening limits or assertions.

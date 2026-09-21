@@ -1,5 +1,6 @@
 use super::Client;
-use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, Tile};
+use aoe_core::{Camera, ScreenPoint, TileRect};
+use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, SurfaceKind, Tile};
 use aoe_rendering::{SceneResource, SceneTerrain};
 use std::{cell::RefCell, mem::size_of, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
@@ -10,6 +11,12 @@ const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 512;
 const MAX_CACHED_CHUNK_BYTES: usize = 128 * 1024 * 1024;
 const MAX_VISIBLE_RESOURCE_SPRITES: usize = 1_024;
+// This slice supports source heights within eight game levels of the camera
+// focus. The package-backed Paris evidence stays inside this window; maps with
+// a wider relief range remain explicitly incomplete until terrain metadata or
+// projected surfaces can provide a larger bounded request window.
+const TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 8.0;
+const MAX_PICK_ITERATIONS: usize = 4;
 
 pub(super) fn cache_status(client: &Client) -> String {
     format!(
@@ -23,9 +30,14 @@ pub(super) fn inspection_label(client: &Client) -> String {
     let Some(pointer) = client.pointer else {
         return "hover a loaded tile to inspect terrain".to_owned();
     };
-    let world = world_at_screen(client, pointer);
+    let Some(world) = world_at_screen(client, pointer) else {
+        return "terrain unavailable at pointer".to_owned();
+    };
     let x = world[0].floor() as i32;
     let y = world[1].floor() as i32;
+    if client.map_content_hash.is_none() {
+        return format!("tile {x}, {y}: diagnostic ground");
+    }
     if !client
         .terrain_chunks
         .contains_key(&(x.div_euclid(CHUNK_TILES), y.div_euclid(CHUNK_TILES)))
@@ -78,6 +90,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
             match result {
                 Ok(chunk) => {
                     client.terrain_chunks.insert((x, y), chunk);
+                    initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
                 }
                 Err(error) => client.status = format!("map chunk request failed: {error:?}"),
@@ -87,10 +100,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
 }
 
 pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
-    let visible = client
-        .camera
-        .visible_tiles(client.config, 8.0)
-        .clamp(client.config.width_tiles, client.config.height_tiles);
+    let visible = terrain_visible_tiles(client);
     let mut terrain = Vec::new();
     for chunk in client.terrain_chunks.values() {
         let (chunk_width, chunk_height) = chunk_dimensions(client, chunk.x, chunk.y);
@@ -130,10 +140,7 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
 }
 
 pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
-    let visible = client
-        .camera
-        .visible_tiles(client.config, 8.0)
-        .clamp(client.config.width_tiles, client.config.height_tiles);
+    let visible = terrain_visible_tiles(client);
     let mut resources = client
         .terrain_chunks
         .values()
@@ -161,20 +168,40 @@ pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
     elevation_at_tile(client, world[0].floor() as i32, world[1].floor() as i32)
 }
 
-pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> aoe_core::ScreenPoint {
+pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
     client
         .camera
         .world_to_screen_at_height(world, elevation_at_world(client, world))
 }
 
-pub(super) fn world_at_screen(client: &Client, screen: aoe_core::ScreenPoint) -> [f64; 2] {
-    let mut world = client.camera.screen_to_world(screen);
-    for _ in 0..2 {
-        world = client
-            .camera
-            .screen_to_world_at_height(screen, elevation_at_world(client, world));
+pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
+    world_at_screen_with_height(client.camera, screen, |x, y| {
+        if client.map_content_hash.is_none() {
+            return Some(0.0);
+        }
+        let tile = terrain_tile(client, x, y)?;
+        (!matches!(tile.surface.kind, SurfaceKind::Cliff))
+            .then_some(f64::from(tile.game_height_level))
+    })
+}
+
+fn world_at_screen_with_height(
+    camera: Camera,
+    screen: ScreenPoint,
+    mut height_at: impl FnMut(i32, i32) -> Option<f64>,
+) -> Option<[f64; 2]> {
+    let mut world = camera.screen_to_world_at_height(screen, camera.focus_elevation_meters);
+    for _ in 0..MAX_PICK_ITERATIONS {
+        let x = world[0].floor() as i32;
+        let y = world[1].floor() as i32;
+        let elevation = height_at(x, y)?;
+        let next = camera.screen_to_world_at_height(screen, elevation);
+        if (next[0] - world[0]).abs() < 0.001 && (next[1] - world[1]).abs() < 0.001 {
+            return Some(next);
+        }
+        world = next;
     }
-    world
+    None
 }
 
 fn elevation_at_tile(client: &Client, x: i32, y: i32) -> f64 {
@@ -196,6 +223,41 @@ fn terrain_tile(client: &Client, x: i32, y: i32) -> Option<&Tile> {
         y,
     )
     .and_then(|index| chunk.tiles.get(index))
+}
+
+pub(super) fn terrain_visible_tiles(client: &Client) -> TileRect {
+    let focus = client.camera.focus_elevation_meters;
+    let lower = client.camera.visible_tiles_at_height(
+        client.config,
+        8.0,
+        focus - TERRAIN_HEIGHT_MARGIN_LEVELS,
+    );
+    let upper = client.camera.visible_tiles_at_height(
+        client.config,
+        8.0,
+        focus + TERRAIN_HEIGHT_MARGIN_LEVELS,
+    );
+    TileRect::new(
+        aoe_core::TileCoord::new(lower.min.x.min(upper.min.x), lower.min.y.min(upper.min.y)),
+        aoe_core::TileCoord::new(upper.max.x.max(lower.max.x), upper.max.y.max(lower.max.y)),
+    )
+    .clamp(client.config.width_tiles, client.config.height_tiles)
+}
+
+fn initialize_altitude_focus(client: &mut Client) {
+    let Some(map_hash) = client.map_content_hash else {
+        return;
+    };
+    if client.focus_map_hash == Some(map_hash) {
+        return;
+    }
+    let x = client.camera.center[0].floor() as i32;
+    let y = client.camera.center[1].floor() as i32;
+    let Some(tile) = terrain_tile(client, x, y) else {
+        return;
+    };
+    client.camera.focus_elevation_meters = f64::from(tile.game_height_level);
+    client.focus_map_hash = Some(map_hash);
 }
 
 fn chunk_dimensions(client: &Client, chunk_x: i32, chunk_y: i32) -> (usize, usize) {
@@ -247,10 +309,7 @@ fn terrain_material(material: GroundMaterial) -> u8 {
 }
 
 fn visible_chunks(client: &Client) -> Vec<(i32, i32)> {
-    let visible = client
-        .camera
-        .visible_tiles(client.config, 8.0)
-        .clamp(client.config.width_tiles, client.config.height_tiles);
+    let visible = terrain_visible_tiles(client);
     let min_x = visible.min.x.div_euclid(CHUNK_TILES);
     let min_y = visible.min.y.div_euclid(CHUNK_TILES);
     let max_x = visible.max.x.saturating_sub(1).div_euclid(CHUNK_TILES);
@@ -373,5 +432,24 @@ mod tests {
         assert_eq!(chunk_tile_index(500, 500, &chunk, 480, 480), Some(0));
         assert_eq!(chunk_tile_index(500, 500, &chunk, 499, 499), Some(399));
         assert_eq!(chunk_tile_index(500, 500, &chunk, 500, 499), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn nonconverging_height_pick_returns_unavailable() {
+        let camera = Camera {
+            center: [10.0, 10.0],
+            zoom: 1.0,
+            viewport: [256.0, 128.0],
+            focus_elevation_meters: 0.0,
+        };
+        let result =
+            world_at_screen_with_height(camera, ScreenPoint { x: 128.0, y: 64.0 }, |x, y| {
+                match (x, y) {
+                    (10, 10) => Some(2.0),
+                    (11, 9) => Some(0.0),
+                    _ => None,
+                }
+            });
+        assert!(result.is_none());
     }
 }

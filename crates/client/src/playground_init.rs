@@ -1,4 +1,4 @@
-use super::{Client, animate, connect, controls, resize, stored_token};
+use super::{Client, animate, connect, controls, resize};
 use crate::game_assets::load;
 use aoe_core::{Camera, WorldConfig};
 use aoe_rendering::GameRenderer;
@@ -37,14 +37,16 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
             ],
             zoom: 1.0,
             viewport: [1.0, 1.0],
+            focus_elevation_meters: 0.0,
         },
         config,
         primary: None,
         role: None,
         map_content_hash: None,
+        focus_map_hash: None,
         terrain_chunks: BTreeMap::new(),
         terrain_inflight: Default::default(),
-        token: stored_token(),
+        token: super::storage::stored_token(),
         revision: 0,
         sent_region: None,
         last_subscribe: 0.0,
