@@ -31,7 +31,7 @@ pub(crate) fn biome_from_potential_class(class: u8) -> Option<Biome> {
 }
 
 pub(crate) fn material_for(biome: Biome, height: i32) -> GroundMaterial {
-    if height > 3_500 {
+    if height > 350_000 {
         return GroundMaterial::Rock;
     }
     match biome {
@@ -107,6 +107,18 @@ mod tests {
     fn polar_biomes_are_ice_and_cannot_supply_a_land_start() {
         assert_eq!(material_for(Biome::Tundra, 0), GroundMaterial::Snow);
         assert_eq!(material_for(Biome::Polar, 0), GroundMaterial::Ice);
+    }
+
+    #[test]
+    fn material_height_threshold_uses_centimeters() {
+        assert_eq!(
+            material_for(Biome::Temperate, 350_000),
+            GroundMaterial::TemperateGrass
+        );
+        assert_eq!(
+            material_for(Biome::Temperate, 350_001),
+            GroundMaterial::Rock
+        );
     }
 
     #[test]
