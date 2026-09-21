@@ -281,3 +281,21 @@ The fresh combined coverage run at
 `bdd2f66a923138287864b67acee8272c8ae625c5` measured 14,142 / 17,709 lines
 (79.9%). No sources are missing, and critical groups pass; the unchanged 85%
 overall gate still fails. Acquisition and worker orchestration need more tests.
+
+The recipe-3 detailed Paris package generated and verified at integration
+`629e9762b0348d9bb0d5391b1c119b79eea7486f` is
+`3687f33815db6431fa007eb3f61d98e496dcfa92ac95bcaa2a0fb925069fafd9`, with
+1024 samples per axis and 16 source locks under maps-v7. The previous maps-v6
+artifacts remain intact. Combined preflight passed 323 native tests.
+
+M2/M7 creator detail selection is reviewed in
+[PR #26](https://github.com/Anko59/AoeWorld/pull/26), revision
+`c4020f9482b6789e74d25dec20a3bea71f8089ec`. Automatic regional elevation uses
+128–4096 samples targeting 30 m within the documented conservative window;
+overview and detailed choices are explicit. Jobs and estimates disclose the
+selected grid and source limitations. Missing workers and unsupported forced
+detail fail explicitly; response validation rejects a changed sample axis.
+Hooks, preflight (302 native tests), browser-check, test-e2e (23), and clean
+pre-push preflight passed. Normal development worker startup and writable output
+mounts still need their follow-up, then actual creator source-backed evidence.
+Water/history detail, broader footprints, progress, and recovery remain open.

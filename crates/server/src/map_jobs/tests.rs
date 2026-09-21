@@ -17,7 +17,11 @@ fn state_with_job() -> (AppState, u64, MapPackage) {
         .map_jobs
         .try_lock()
         .expect("manager")
-        .enqueue(request, request.estimate().expect("estimate"))
+        .enqueue(
+            request,
+            request.estimate().expect("estimate"),
+            PreparationPlan::fallback(),
+        )
         .expect("enqueue");
     let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new()).expect("package");
     (state, job.id, package)
@@ -77,12 +81,22 @@ fn manager_limits_waiting_work_and_starts_in_request_order() {
     let request = MapRequest::default();
     let estimate = request.estimate().expect("estimate");
     let mut manager = Manager::default();
-    let (first, start) = manager.enqueue(request, estimate).expect("first job");
+    let (first, start) = manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("first job");
     assert_eq!(start, Some(first.id));
     assert!(manager.active());
-    manager.enqueue(request, estimate).expect("second job");
-    manager.enqueue(request, estimate).expect("third job");
-    assert!(manager.enqueue(request, estimate).is_err());
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("second job");
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("third job");
+    assert!(
+        manager
+            .enqueue(request, estimate, PreparationPlan::fallback())
+            .is_err()
+    );
     assert_eq!(manager.queued(), 2);
     assert_eq!(first.stage, JobStage::BuildingFallbackPackage);
     assert_eq!(first.percent, 5);
@@ -101,7 +115,9 @@ fn completed_history_is_bounded_and_oldest_terminal_jobs_are_evicted() {
     let estimate = request.estimate().expect("estimate");
     let mut manager = Manager::default();
     for id in 0..1_000_u64 {
-        let (job, start) = manager.enqueue(request, estimate).expect("job");
+        let (job, start) = manager
+            .enqueue(request, estimate, PreparationPlan::fallback())
+            .expect("job");
         assert_eq!(job.id, id);
         assert_eq!(start, Some(id));
         manager.jobs.get_mut(&id).expect("entry").job.state = match id % 3 {
@@ -121,20 +137,32 @@ fn retirement_preserves_running_cancellation_and_queued_work() {
     let estimate = request.estimate().expect("estimate");
     let mut manager = Manager::default();
     for _ in 0..MAX_RETAINED_JOBS - 1 {
-        let (job, _) = manager.enqueue(request, estimate).expect("job");
+        let (job, _) = manager
+            .enqueue(request, estimate, PreparationPlan::fallback())
+            .expect("job");
         manager.jobs.get_mut(&job.id).expect("entry").job.state = JobState::Completed;
     }
-    manager.enqueue(request, estimate).expect("running");
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("running");
     manager.jobs.get_mut(&127).expect("running").job.state = JobState::CancelRequested;
-    manager.enqueue(request, estimate).expect("queued first");
-    manager.enqueue(request, estimate).expect("queued second");
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("queued first");
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("queued second");
     assert_eq!(manager.jobs.len(), MAX_RETAINED_JOBS);
     assert_eq!(manager.jobs[&127].job.state, JobState::CancelRequested);
     assert_eq!(manager.jobs[&128].job.state, JobState::Queued);
     assert_eq!(manager.jobs[&129].job.state, JobState::Queued);
     assert!(!manager.jobs.contains_key(&0));
     assert!(!manager.jobs.contains_key(&1));
-    assert!(manager.enqueue(request, estimate).is_err());
+    assert!(
+        manager
+            .enqueue(request, estimate, PreparationPlan::fallback())
+            .is_err()
+    );
 }
 
 #[test]
@@ -142,9 +170,15 @@ fn identifier_exhaustion_does_not_overwrite_or_retire_jobs() {
     let request = MapRequest::default();
     let estimate = request.estimate().expect("estimate");
     let mut manager = Manager::default();
-    manager.enqueue(request, estimate).expect("first");
+    manager
+        .enqueue(request, estimate, PreparationPlan::fallback())
+        .expect("first");
     manager.next_id = u64::MAX;
-    assert!(manager.enqueue(request, estimate).is_err());
+    assert!(
+        manager
+            .enqueue(request, estimate, PreparationPlan::fallback())
+            .is_err()
+    );
     assert_eq!(manager.next_id, u64::MAX);
     assert_eq!(manager.jobs.len(), 1);
     assert_eq!(manager.jobs[&0].job.state, JobState::Running);

@@ -63,6 +63,7 @@
       </div>
       <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
+      <label>Terrain detail <select id="map-preparation" aria-label="Terrain detail"><option value="automatic">Automatic</option><option value="detailed">Detailed regional elevation</option><option value="overview">Global overview</option></select></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
       <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
@@ -267,7 +268,8 @@
         year_ce: 600,
         seed: Math.round(number('map-seed')),
         reconstruction_profile: 'circa600_v1',
-        detail_profile: 'standard_v1'
+        detail_profile: 'standard_v1',
+        preparation: document.getElementById('map-preparation').value
       };
     };
     region.addEventListener('change', selectRegion);
@@ -337,9 +339,13 @@
         if (job.state === 'cancelled') throw new Error('Map creation cancelled.');
         if (job.state === 'failed') throw new Error(job.error || 'Map creation failed.');
         const eta = job.eta_seconds === null ? '' : ` · ${formatTime(job.eta_seconds)} remaining`;
-        estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}`;
+        estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}\n${preparationSummary(job.preparation)}`;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
+    };
+    const preparationSummary = plan => {
+      const grid = plan.samples_per_axis ? `${plan.samples_per_axis} × ${plan.samples_per_axis} samples · ${(plan.geographic_millimeters_per_sample / 1000).toLocaleString()} m spacing\n` : '';
+      return grid + plan.explanation;
     };
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
@@ -370,7 +376,7 @@
         const request = mapRequest();
         const value = await readJson(await fetch('/maps/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) }));
         estimate.className = '';
-        estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nCompression: ${formatCompression(request.compression)} · Effective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}`;
+        estimate.textContent = `${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nCompression: ${formatCompression(request.compression)} · Effective square: ${(value.effective_side_meters / 1000).toLocaleString()} km\nTile detail: ${(value.geographic_millimeters_per_tile / 1000).toLocaleString()} m\nStraight crossing: walk ${formatTime(value.walking_crossing_seconds)}, cavalry ${formatTime(value.cavalry_crossing_seconds)}\n${preparationSummary(value.preparation)}`;
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to estimate this map.';

@@ -284,6 +284,15 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
   await page.getByLabel("Compression").fill("2");
   await page.getByRole("button", { name: "Estimate" }).click();
   await expect(page.locator("#map-estimate")).toContainText("64 × 64 tiles");
+  await expect(page.locator("#map-estimate")).toContainText(
+    "procedural fallback",
+  );
+  await page.getByLabel("Terrain detail").selectOption("detailed");
+  await page.getByRole("button", { name: "Estimate" }).click();
+  await expect(page.locator("#map-estimate")).toContainText(
+    "requires a configured geographic worker",
+  );
+  await page.getByLabel("Terrain detail").selectOption("automatic");
   await expect(page.getByRole("button", { name: "Generate" })).toBeEnabled();
   await page.getByRole("button", { name: "Generate" }).click();
   await expect(page.locator("#map-estimate")).toContainText(
