@@ -370,6 +370,7 @@ fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
         target_tile: destination,
         segment_length: 1,
         travelled: 1,
+        speed_carry: 0,
     });
     world.active_movers.push(id);
     world.planning_budget = 0;
@@ -427,6 +428,7 @@ fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
         target_tile: destination,
         segment_length: 1,
         travelled: 1,
+        speed_carry: 0,
     });
     world.active_movers.push(id);
 
@@ -438,3 +440,5 @@ fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
     assert!(world.movement_order(id).is_none());
     assert_eq!(world.active_mover_count(), 0);
 }
+
+mod physical_movement;
