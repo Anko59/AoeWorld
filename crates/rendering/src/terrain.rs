@@ -23,6 +23,7 @@ pub(crate) fn visible_terrain_frames(
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let bounds = visible_bounds(projection);
     let mut cell_size = 1_i32;
@@ -67,6 +68,7 @@ fn visible_map_terrain_frames(
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let cell_size = map_cell_size(art, terrain, camera, &projection);
     let mut cells = BTreeMap::new();
