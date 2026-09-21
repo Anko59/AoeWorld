@@ -6,8 +6,11 @@ use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError};
+use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+#[path = "game_world/hash.rs"]
+mod hash;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -62,6 +65,8 @@ pub enum GameWorldError {
     EntityIdExhausted,
     #[error("prepared map terrain is invalid")]
     InvalidTerrain,
+    #[error("prepared map environment lookup failed: {0}")]
+    Environment(#[from] aoe_map::EnvironmentPageError),
 }
 #[derive(Debug)]
 pub(crate) struct StoredUnit {
@@ -70,6 +75,8 @@ pub(crate) struct StoredUnit {
     pub(crate) bucket: ChunkCoord,
     pub(crate) bucket_slot: usize,
     pub(crate) route: VecDeque<TileCoord>,
+    pub(crate) planner: Option<RoutePlanner>,
+    pub(crate) last_movement_error: Option<GameWorldError>,
 }
 #[derive(Debug)]
 pub struct GameWorld {
@@ -82,6 +89,8 @@ pub struct GameWorld {
     pub(crate) terrain: Terrain,
     pub(crate) planning_budget: u32,
     pub(crate) navigation_cache: NavigationCache,
+    pub(crate) planning_cursor: usize,
+    pub(crate) active_planner_count: usize,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -100,6 +109,8 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            planning_cursor: 0,
+            active_planner_count: 0,
         }
     }
 
@@ -229,14 +240,27 @@ impl GameWorld {
             .and_then(|index| self.units[*index].order)
     }
 
+    /// Returns the typed terminal reason for the most recent stopped movement,
+    /// if the unit stopped because route execution failed.
+    pub fn movement_failure(&self, id: EntityId) -> Option<GameWorldError> {
+        self.lookup
+            .get(&id)
+            .and_then(|index| self.units[*index].last_movement_error)
+    }
+
     pub fn spawn_unit(
         &mut self,
         player: PlayerId,
         position: WorldPosition,
     ) -> Result<EntityId, GameWorldError> {
-        if !self.config.valid_ground_position(position)
-            || !self.terrain.passable(position.tile_floor(), self.config)
-        {
+        if !self.config.valid_ground_position(position) {
+            return Err(GameWorldError::InvalidPosition);
+        }
+        let passable = self
+            .terrain
+            .passable_with_cancel(position.tile_floor(), self.config, &|| false)
+            .map_err(GameWorldError::Environment)?;
+        if !passable {
             return Err(GameWorldError::InvalidPosition);
         }
         let id = EntityId(
@@ -260,6 +284,8 @@ impl GameWorld {
             bucket,
             bucket_slot,
             route: VecDeque::new(),
+            planner: None,
+            last_movement_error: None,
         });
         Ok(id)
     }
@@ -273,6 +299,10 @@ impl GameWorld {
         let depletion = self.terrain.deplete_resource(id, requested)?;
         if depletion.became_nonblocking {
             self.navigation_cache.clear();
+            for index in 0..self.units.len() {
+                self.clear_planner(index);
+                self.units[index].last_movement_error = None;
+            }
         }
         Ok(depletion)
     }
@@ -284,45 +314,61 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         let destination = self.config.snap_ground_position(destination);
-        if !self.terrain.passable(destination.tile_floor(), self.config) {
+        let passable = self
+            .terrain
+            .passable_with_cancel(destination.tile_floor(), self.config, &|| false)
+            .map_err(GameWorldError::Environment)?;
+        if !passable {
             return Err(GameWorldError::InvalidPosition);
         }
         let origin = self.units[index].state.position;
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
+        self.clear_planner(index);
+        self.units[index].last_movement_error = None;
         if origin == destination {
             self.units[index].order = None;
+            self.units[index].route.clear();
             self.units[index].state.moving = false;
             self.units[index].state.planning = false;
             return Ok(false);
         }
         let target_tile = destination.tile_floor();
-        let (waypoint, route) = match self.next_map_route(origin.tile_floor(), target_tile) {
-            Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
-                route_waypoint(path.tiles, origin, destination)?
-            }
-            Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
-                return Err(GameWorldError::InvalidPosition);
-            }
-            Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable)) => {
-                return Err(GameWorldError::Unreachable);
-            }
-            Some(MapRoutePlan::Outcome(MovementOutcome::BudgetExceeded))
-            | Some(MapRoutePlan::Deferred) => {
-                return Err(GameWorldError::PathBudgetExceeded);
-            }
-            None => (
-                next_waypoint(origin, target_tile, destination),
-                VecDeque::new(),
-            ),
-        };
+        let (waypoint, route, planner, planning) =
+            match self.next_map_route(origin.tile_floor(), target_tile) {
+                Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
+                    let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
+                    (waypoint, route, None, false)
+                }
+                Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
+                    return Err(GameWorldError::InvalidPosition);
+                }
+                Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable)) => {
+                    return Err(GameWorldError::Unreachable);
+                }
+                Some(MapRoutePlan::Outcome(MovementOutcome::BudgetExceeded))
+                | Some(MapRoutePlan::SearchLimit) => {
+                    return Err(GameWorldError::PathBudgetExceeded);
+                }
+                Some(MapRoutePlan::Pending(planner)) => (origin, VecDeque::new(), planner, true),
+                Some(MapRoutePlan::Environment(error)) => {
+                    return Err(GameWorldError::Environment(error));
+                }
+                None => (
+                    next_waypoint(origin, target_tile, destination),
+                    VecDeque::new(),
+                    None,
+                    false,
+                ),
+            };
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let length = segment_length(dx, dy);
         self.units[index].state.previous_position = origin;
         self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
-        self.units[index].state.moving = true;
-        self.units[index].state.planning = false;
+        self.units[index].state.moving = !planning;
+        self.units[index].state.planning = planning;
         self.units[index].route = route;
+        self.store_planner(index, planner);
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,
@@ -371,64 +417,6 @@ impl GameWorld {
             .collect::<Vec<_>>();
         stats.returned_units = result.len() as u32;
         (result, stats)
-    }
-
-    pub fn canonical_hash(&self) -> [u8; 32] {
-        let mut hash = blake3::Hasher::new();
-        hash.update(&self.config.width_tiles.to_le_bytes());
-        hash.update(&self.config.height_tiles.to_le_bytes());
-        hash.update(&self.config.seed.0.to_le_bytes());
-        hash.update(&self.config.tick_hz.to_le_bytes());
-        hash.update(&self.config.move_speed_subunits_per_tick.to_le_bytes());
-        hash.update(
-            &self
-                .config
-                .move_speed_subunits_per_tick_denominator
-                .to_le_bytes(),
-        );
-        hash.update(&self.tick.0.to_le_bytes());
-        self.terrain.update_mutable_state_hash(&mut hash);
-        for unit in &self.units {
-            hash.update(&unit.state.id.0.to_le_bytes());
-            hash.update(&unit.state.player.0.to_le_bytes());
-            hash.update(&unit.state.position.x.to_le_bytes());
-            hash.update(&unit.state.position.y.to_le_bytes());
-            hash.update(&unit.state.previous_position.x.to_le_bytes());
-            hash.update(&unit.state.previous_position.y.to_le_bytes());
-            hash.update(&[
-                unit.state.moving as u8,
-                unit.state.planning as u8,
-                unit.state.facing as u8,
-            ]);
-            if let Some(order) = unit.order {
-                hash.update(&order.origin.x.to_le_bytes());
-                hash.update(&order.origin.y.to_le_bytes());
-                hash.update(&order.destination.x.to_le_bytes());
-                hash.update(&order.destination.y.to_le_bytes());
-                hash.update(&order.waypoint.x.to_le_bytes());
-                hash.update(&order.waypoint.y.to_le_bytes());
-                hash.update(&order.target_tile.x.to_le_bytes());
-                hash.update(&order.target_tile.y.to_le_bytes());
-                hash.update(&order.segment_length.to_le_bytes());
-                hash.update(&order.travelled.to_le_bytes());
-                hash.update(&order.speed_carry.to_le_bytes());
-            } else {
-                hash.update(&[0; 48]);
-            }
-            hash.update(&(unit.route.len() as u64).to_le_bytes());
-            for tile in &unit.route {
-                hash.update(&tile.x.to_le_bytes());
-                hash.update(&tile.y.to_le_bytes());
-            }
-        }
-        *hash.finalize().as_bytes()
-    }
-
-    pub fn canonical_hash_hex(&self) -> String {
-        self.canonical_hash()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
     }
 
     pub(crate) fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {

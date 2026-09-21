@@ -23,6 +23,8 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_EXPANSIONS_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            planning_cursor: 0,
+            active_planner_count: 0,
         })
     }
 
@@ -53,6 +55,8 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_EXPANSIONS_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            planning_cursor: 0,
+            active_planner_count: 0,
         })
     }
 
@@ -74,6 +78,8 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_EXPANSIONS_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            planning_cursor: 0,
+            active_planner_count: 0,
         })
     }
 }

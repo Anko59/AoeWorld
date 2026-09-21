@@ -7,7 +7,10 @@ pub(crate) const MAX_NAVIGATION_CACHE_BYTES: usize = 128 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NavigationCacheUsage {
     pub entries: usize,
+    /// Logical bytes charged for cached outcomes. This includes the modeled
+    /// entry and path payload but excludes allocator and BTreeMap overhead.
     pub retained_bytes: usize,
+    /// Logical payload budget; this is not a hard resident-process cap.
     pub limit_bytes: usize,
 }
 
@@ -25,8 +28,10 @@ struct Entry {
     last_used: u64,
 }
 
-/// Bounded, non-canonical cache of already-planned map segments. The caller
-/// still accounts for its planning budget before consulting the cache.
+/// Bounded, non-canonical cache of already-planned map segments. Its byte
+/// limit accounts for logical entry and path payload bytes; allocator and
+/// BTreeMap metadata remain outside the reported budget. The caller still
+/// accounts for its planning budget before consulting the cache.
 #[derive(Debug)]
 pub(crate) struct NavigationCache {
     entries: BTreeMap<Key, Entry>,
@@ -77,6 +82,9 @@ impl NavigationCache {
         max_expansions: u32,
         outcome: MovementOutcome,
     ) {
+        if matches!(outcome, MovementOutcome::BudgetExceeded) {
+            return;
+        }
         let key = Key {
             origin,
             destination,
@@ -191,16 +199,13 @@ mod tests {
     }
 
     #[test]
-    fn terminal_expansion_exhaustion_is_cached() {
+    fn expansion_exhaustion_is_not_cached() {
         let mut cache = NavigationCache::default();
         let origin = TileCoord::new(1, 2);
         let destination = TileCoord::new(5, 4);
         cache.insert(origin, destination, 4_096, MovementOutcome::BudgetExceeded);
 
-        assert_eq!(cache.entry_count(), 1);
-        assert_eq!(
-            cache.get(origin, destination, 4_096),
-            Some(MovementOutcome::BudgetExceeded)
-        );
+        assert_eq!(cache.entry_count(), 0);
+        assert_eq!(cache.get(origin, destination, 4_096), None);
     }
 }

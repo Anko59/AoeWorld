@@ -394,7 +394,7 @@ fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
 }
 
 #[test]
-fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
+fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
     let mut world = GameWorld::new(config).expect("world");
@@ -414,13 +414,8 @@ fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
     let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
     let destination_position =
         WorldPosition::from_tile_center(destination).expect("destination position");
-    world.navigation_cache.insert(
-        origin,
-        destination,
-        crate::MAX_ROUTE_EXPANSIONS_PER_ORDER,
-        MovementOutcome::BudgetExceeded,
-    );
     world.units[index].state.moving = true;
+    world.store_planner(index, Some(RoutePlanner::new(origin, destination, 1)));
     world.units[index].order = Some(MovementOrder {
         origin: origin_position,
         destination: destination_position,
@@ -431,14 +426,29 @@ fn terminal_budget_exhaustion_stops_a_segment_instead_of_planning_forever() {
         speed_carry: 0,
     });
     world.active_movers.push(id);
+    world.planning_budget = 1;
 
     world.advance();
 
     let unit = world.unit(id).expect("unit");
     assert!(!unit.moving);
+    assert!(unit.planning);
+    assert!(world.movement_order(id).is_some());
+
+    world.advance();
+    let unit = world.unit(id).expect("unit");
+    assert!(!unit.moving);
     assert!(!unit.planning);
     assert!(world.movement_order(id).is_none());
+    assert_eq!(
+        world.movement_failure(id),
+        Some(GameWorldError::PathBudgetExceeded)
+    );
+    let failed_hash = world.canonical_hash();
+    world.units[index].last_movement_error = None;
+    assert_ne!(world.canonical_hash(), failed_hash);
     assert_eq!(world.active_mover_count(), 0);
 }
 
 mod physical_movement;
+mod routes;
