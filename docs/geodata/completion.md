@@ -21,12 +21,12 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | ID | Deliverable | Status | Acceptance |
 | --- | --- | --- | --- |
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Directory slice in verification | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
+| M2 | Detailed streaming preparation | Directory slice verified; detail/residency pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
-| M7 | Creation experience | Pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
+| M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
 ## Integration rules
@@ -76,6 +76,10 @@ pages in canonical order without retaining page payloads. Repeated source
 generation and verification reproduced the Paris hash above, with seven cached
 inputs and zero downloads. Preparation and runtime residency remain dense;
 this storage slice does not close M2.
+It is reviewed in [PR #11](https://github.com/Anko59/AoeWorld/pull/11), revision
+`bec945b92d8f2a58d617da99325a11684cd5cef8`. Dockerized hooks, map-test (43),
+preflight (250 native tests), test-e2e (21), and test-wasm (7) passed. Browser
+checks, map-verify, and pre-push preflight passed on the clean revision.
 
 M4 physical movement is reviewed in
 [PR #10](https://github.com/Anko59/AoeWorld/pull/10), revision
@@ -86,3 +90,11 @@ configuration remains readable. Dockerized hooks, preflight (242 native tests),
 test-e2e (21), and test-wasm (7) passed; browser checks and pre-push preflight
 ran on the clean committed revision. Resumable routing and source-backed
 100 km travel qualification remain open.
+
+M7 job history is reviewed in
+[PR #12](https://github.com/Anko59/AoeWorld/pull/12), revision
+`6c53a9e1e24da8141f6931ca426371cc41abde02`. It retains 128 records, evicts
+only terminal work, rejects exhausted identifiers without mutation, and drops
+the invented start-time ETA. Hooks, focused native tests (253), and preflight
+passed; pre-push preflight passed on the clean revision. Saved-package quotas,
+measured progress, resumable jobs, and crash recovery remain open.
