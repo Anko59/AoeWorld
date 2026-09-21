@@ -62,9 +62,9 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Map schema 8 persists separate inland-lake coverage. Older map
-            // directories remain intact but cannot be activated as schema-8 maps.
-            map_package_directory: Some(PathBuf::from("local-assets/maps-v5")),
+            // Generation recipe 2 changes immutable package identity. Keep maps-v5
+            // intact and regenerate compatible packages in the new directory.
+            map_package_directory: Some(PathBuf::from("local-assets/maps-v6")),
             map_worker: None,
             geodata_cache_directory: PathBuf::from(".cache/geodata"),
         })
@@ -82,7 +82,7 @@ mod tests {
         assert_eq!(config.scenario.name, "target-hotspot");
         assert_eq!(
             config.map_package_directory,
-            Some(PathBuf::from("local-assets/maps-v5"))
+            Some(PathBuf::from("local-assets/maps-v6"))
         );
         assert_eq!(
             config.geodata_cache_directory,

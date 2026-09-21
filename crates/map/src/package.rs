@@ -1,5 +1,6 @@
 use crate::{
-    CHUNK_TILES, MapChunkGenerator, MapEstimate, MapRequest, MapRequestError, PreparedEnvironment,
+    CHUNK_TILES, GENERATION_RECIPE_VERSION, MapChunkGenerator, MapEstimate, MapRequest,
+    MapRequestError, PreparedEnvironment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -173,7 +174,7 @@ impl MapPackage {
             &projection,
             &provenance,
             &environment,
-            true,
+            HashMode::Content(Some(GENERATION_RECIPE_VERSION)),
         );
         Ok(Self {
             schema_version: crate::MAP_SCHEMA_VERSION,
@@ -222,7 +223,7 @@ impl MapPackage {
             &self.projection,
             &self.provenance,
             &self.environment,
-            false,
+            HashMode::Geography,
         );
         MapChunkGenerator::new(
             geography_key,
@@ -250,6 +251,12 @@ pub enum MapPackageError {
     NonCanonicalFields,
 }
 
+#[derive(Clone, Copy)]
+enum HashMode {
+    Geography,
+    Content(Option<u16>),
+}
+
 fn hash_package(
     generator_version: u16,
     request: MapRequest,
@@ -257,7 +264,7 @@ fn hash_package(
     projection: &ProjectionMetadata,
     provenance: &EnvironmentalProvenance,
     environment: &PreparedEnvironment,
-    include_seed: bool,
+    mode: HashMode,
 ) -> [u8; 32] {
     let mut hash = blake3::Hasher::new();
     hash.update(b"aoe-map-package-v1\0");
@@ -271,7 +278,7 @@ fn hash_package(
     hash.update(&request.year_ce.to_le_bytes());
     hash.update(&[request.reconstruction_profile as u8]);
     hash.update(&[request.detail_profile as u8]);
-    if include_seed {
+    if !matches!(mode, HashMode::Geography) {
         hash.update(&request.seed.to_le_bytes());
     }
     hash_field(&mut hash, projection.horizontal_crs.as_bytes());
@@ -284,6 +291,12 @@ fn hash_package(
         provenance.historical_land_use as u8,
     ]);
     environment.hash_into(&mut hash);
+    if let HashMode::Content(Some(generation_recipe_version)) = mode {
+        // Generation behavior is part of the immutable content identity, while
+        // the geography key remains stable when only the generation recipe changes.
+        hash.update(b"aoe-map-resource-recipe-v1\0");
+        hash.update(&generation_recipe_version.to_le_bytes());
+    }
     for source in source_locks {
         hash_field(&mut hash, source.id.as_bytes());
         hash_field(&mut hash, source.provider.as_bytes());
@@ -307,187 +320,4 @@ fn hash_field(hash: &mut blake3::Hasher, bytes: &[u8]) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn environment() -> PreparedEnvironment {
-        PreparedEnvironment {
-            samples_per_axis: 4,
-            geographic_millimeters_per_sample: 30_000,
-            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
-            elevation: crate::FieldPyramid {
-                levels: vec![
-                    crate::PyramidLevel {
-                        samples_per_axis: 4,
-                        ordered_page_root: [1; 32],
-                    },
-                    crate::PyramidLevel {
-                        samples_per_axis: 2,
-                        ordered_page_root: [2; 32],
-                    },
-                    crate::PyramidLevel {
-                        samples_per_axis: 1,
-                        ordered_page_root: [3; 32],
-                    },
-                ],
-            },
-            water: None,
-            vegetation: None,
-            historical_land_use: None,
-        }
-    }
-
-    fn source(id: &str) -> SourceLock {
-        SourceLock {
-            id: id.to_owned(),
-            provider: "fixture".to_owned(),
-            release: "test".to_owned(),
-            url: "https://example.invalid/test".to_owned(),
-            sha256: [7; 32],
-            acquired_at: "2026-09-18T00:00:00Z".to_owned(),
-            native_resolution: "30 meters".to_owned(),
-            crs: "EPSG:4326".to_owned(),
-            vertical_datum: "EGM2008".to_owned(),
-            license: "test-only".to_owned(),
-            preprocessing_version: "test-v1".to_owned(),
-        }
-    }
-
-    #[test]
-    fn packages_have_canonical_source_order_and_stable_identity() {
-        let first = MapPackage::new(1, MapRequest::default(), vec![source("b"), source("a")])
-            .expect("package");
-        let second = MapPackage::new(1, MapRequest::default(), vec![source("a"), source("b")])
-            .expect("package");
-        assert_eq!(first, second);
-        assert_eq!(first.chunk_count_per_side(), 16);
-    }
-
-    #[test]
-    fn seed_changes_detail_identity_but_not_geographic_elevation() {
-        let first = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
-        let second = MapPackage::new(
-            1,
-            MapRequest {
-                seed: 2,
-                ..MapRequest::default()
-            },
-            vec![],
-        )
-        .expect("package");
-        assert_ne!(first.content_hash, second.content_hash);
-        assert_eq!(
-            first.generator().chunk(0, 0).tiles[0].geographic_height_centimeters,
-            second.generator().chunk(0, 0).tiles[0].geographic_height_centimeters
-        );
-    }
-
-    #[test]
-    fn duplicate_source_locks_are_rejected() {
-        assert!(matches!(
-            MapPackage::new(
-                1,
-                MapRequest::default(),
-                vec![source("same"), source("same")]
-            ),
-            Err(MapPackageError::InvalidSourceLocks)
-        ));
-    }
-
-    #[test]
-    fn validation_rejects_a_tampered_serialized_field() {
-        let mut package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
-        package.estimate.tiles_per_side += 1;
-        assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
-    }
-
-    #[test]
-    fn packages_require_and_hash_projection_metadata() {
-        assert!(matches!(
-            MapPackage::with_projection(
-                1,
-                MapRequest::default(),
-                Vec::new(),
-                ProjectionMetadata {
-                    horizontal_crs: " ".to_owned(),
-                    vertical_datum: VerticalDatum::UnspecifiedFallback,
-                    tool_version: "test".to_owned(),
-                },
-            ),
-            Err(MapPackageError::InvalidProjection)
-        ));
-        let first = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-        let second = MapPackage::with_projection(
-            1,
-            MapRequest::default(),
-            Vec::new(),
-            ProjectionMetadata {
-                horizontal_crs: "EPSG:3857".to_owned(),
-                vertical_datum: VerticalDatum::Egm2008Orthometric,
-                tool_version: "GDAL 3.6.2 / PROJ 9.1.1".to_owned(),
-            },
-        )
-        .expect("package");
-        assert_ne!(first.content_hash, second.content_hash);
-    }
-
-    #[test]
-    fn packages_hash_environmental_provenance() {
-        let fallback = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-        let sourced = MapPackage::with_environment(
-            1,
-            MapRequest::default(),
-            Vec::new(),
-            ProjectionMetadata::default(),
-            EnvironmentalProvenance {
-                elevation: LayerProvenance::SourceDerived,
-                water: LayerProvenance::HistoricallyCorrected,
-                vegetation: LayerProvenance::ModelDerived,
-                historical_land_use: LayerProvenance::SourceDerived,
-            },
-        )
-        .expect("package");
-        assert_ne!(fallback.content_hash, sourced.content_hash);
-    }
-
-    #[test]
-    fn packages_hash_prepared_environment_roots() {
-        let package = MapPackage::with_prepared_environment(
-            1,
-            MapRequest::default(),
-            vec![source("elevation")],
-            ProjectionMetadata::default(),
-            EnvironmentalProvenance::default(),
-            environment(),
-        )
-        .expect("prepared package");
-        let mut changed_environment = environment();
-        changed_environment.elevation.levels[0].ordered_page_root = [4; 32];
-        let changed = MapPackage::with_prepared_environment(
-            1,
-            MapRequest::default(),
-            vec![source("elevation")],
-            ProjectionMetadata::default(),
-            EnvironmentalProvenance::default(),
-            changed_environment,
-        )
-        .expect("changed package");
-        assert_ne!(package.content_hash, changed.content_hash);
-        assert!(package.validate().is_ok());
-    }
-
-    #[test]
-    fn acquisition_time_is_not_a_content_input_but_preprocessing_is() {
-        let first =
-            MapPackage::new(1, MapRequest::default(), vec![source("elevation")]).expect("package");
-        let mut later_source = source("elevation");
-        later_source.acquired_at = "2026-09-19T00:00:00Z".to_owned();
-        let later = MapPackage::new(1, MapRequest::default(), vec![later_source]).expect("package");
-        assert_eq!(first.content_hash, later.content_hash);
-        let mut altered_source = source("elevation");
-        altered_source.preprocessing_version = "test-v2".to_owned();
-        let altered =
-            MapPackage::new(1, MapRequest::default(), vec![altered_source]).expect("package");
-        assert_ne!(first.content_hash, altered.content_hash);
-    }
-}
+mod tests;

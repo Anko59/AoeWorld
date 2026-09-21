@@ -22,9 +22,9 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | --- | --- | --- | --- |
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
 | M2 | Detailed streaming preparation | Directory slice verified; detail/residency pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
-| M3 | Water and historical reconstruction | Pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
+| M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
-| M5 | Resource lifecycle | Pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
+| M5 | Resource lifecycle | Placement repaired; persistence/deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
 | M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
@@ -98,3 +98,16 @@ only terminal work, rejects exhausted identifiers without mutation, and drops
 the invented start-time ETA. Hooks, focused native tests (253), and preflight
 passed; pre-push preflight passed on the clean revision. Saved-package quotas,
 measured progress, resumable jobs, and crash recovery remain open.
+
+M3/M5 generation correctness is reviewed in
+[PR #13](https://github.com/Anko59/AoeWorld/pull/13), revision
+`417e6ef5c8899a80bb741973a7488ebf3e23dd21`. Mountain material thresholds use
+centimeters correctly, prepared dry cells stay dry, ore streams are separate,
+and patch access accounts for deterministic object blockers. Generation recipe
+2 changes content identity without reseeding geography; old maps-v5 packages
+remain intact and compatible packages are generated under maps-v6. Hooks,
+map-test (49), lint, preflight (239 native tests), test-e2e (21), and test-wasm
+(7) passed. Pre-push preflight and browser gates passed on the clean revision.
+Combined directory/generation regeneration verified the Paris overview under
+maps-v6 as `7d8116e53ee7aba67f25cd63daa0259f4a9c55ecf734134641b929c1b75cc9ec`,
+using the same seven cached inputs and zero downloads.
