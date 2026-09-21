@@ -45,11 +45,16 @@ fn pan(client: &mut Client, delta: [f64; 2]) {
         x: client.camera.viewport[0] / 2.0,
         y: client.camera.viewport[1] / 2.0,
     };
-    let before = client.camera.screen_to_world(center);
-    let after = client.camera.screen_to_world(ScreenPoint {
-        x: center.x + delta[0],
-        y: center.y + delta[1],
-    });
+    let before = client
+        .camera
+        .screen_to_world_at_height(center, client.camera.focus_elevation_meters);
+    let after = client.camera.screen_to_world_at_height(
+        ScreenPoint {
+            x: center.x + delta[0],
+            y: center.y + delta[1],
+        },
+        client.camera.focus_elevation_meters,
+    );
     client.camera.center = [
         client.camera.center[0] + before[0] - after[0],
         client.camera.center[1] + before[1] - after[1],
@@ -130,8 +135,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             (drag.start, drag.center, drag.middle)
         };
         if middle {
-            let before = client.camera.screen_to_world(start);
-            let after = client.camera.screen_to_world(target);
+            let before = client
+                .camera
+                .screen_to_world_at_height(start, client.camera.focus_elevation_meters);
+            let after = client
+                .camera
+                .screen_to_world_at_height(target, client.camera.focus_elevation_meters);
             client.camera.center = [
                 center[0] + before[0] - after[0],
                 center[1] + before[1] - after[1],

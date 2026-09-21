@@ -59,11 +59,13 @@ fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
         center: [8_191.0, 0.0],
         zoom: 1.0,
         viewport: [2_000_000.0, 2_000_000.0],
+        focus_elevation_meters: 0.0,
     };
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let cell_size = map_cell_size(&art, &terrain, camera, &projection);
     let mut cells = BTreeMap::new();
@@ -92,6 +94,33 @@ fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
 }
 
 #[wasm_bindgen_test]
+fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
+    let art = test_art(GameFrame {
+        uv: [0.0; 4],
+        size: [97.0, 49.0],
+        anchor: [0.0, 0.0],
+    });
+    let camera = SceneCamera {
+        center: [0.0, 0.0],
+        zoom: 1.0,
+        viewport: [256.0, 128.0],
+        focus_elevation_meters: 6.0,
+    };
+    let elevated = [SceneTerrain {
+        position: [0.0, 0.0],
+        material: 0,
+        elevation_meters: 6.0,
+    }];
+    let ground = [SceneTerrain {
+        position: [0.0, 0.0],
+        material: 0,
+        elevation_meters: 0.0,
+    }];
+    assert_eq!(visible_terrain_frames(&art, &elevated, camera).len(), 1);
+    assert!(visible_terrain_frames(&art, &ground, camera).is_empty());
+}
+
+#[wasm_bindgen_test]
 fn offscreen_cached_tiles_do_not_change_visible_terrain() {
     let frame = GameFrame {
         uv: [0.0; 4],
@@ -103,6 +132,7 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
         center: [0.0, 0.0],
         zoom: 1.0,
         viewport: [256.0, 128.0],
+        focus_elevation_meters: 0.0,
     };
     let visible = [SceneTerrain {
         position: [0.0, 0.0],
@@ -133,11 +163,13 @@ fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
         center: [300.0, 200.0],
         zoom: 0.25,
         viewport: [1_280.0, 720.0],
+        focus_elevation_meters: 0.0,
     };
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let bounds = visible_bounds(projection);
     assert!(canonical_cell_count(bounds, 1) > MAX_VISIBLE_TERRAIN_SPRITES);
@@ -171,11 +203,13 @@ fn flat_map_terrain_uses_covering_lod_at_translated_camera() {
         center: [128.0, 128.0],
         zoom: 0.25,
         viewport: [1_920.0, 1_080.0],
+        focus_elevation_meters: 0.0,
     };
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let cell_size = map_cell_size(&art, &terrain, camera, &projection);
     assert!(cell_size > 1);

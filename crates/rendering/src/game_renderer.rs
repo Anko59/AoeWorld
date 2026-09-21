@@ -1,7 +1,7 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
-    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites,
-    terrain::visible_terrain_frames, web::Sprite,
+    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, canvas_scene::draw_scene_sprite, game_grid,
+    playground::game_sprites, terrain::visible_terrain_frames, web::Sprite,
 };
 use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
@@ -20,6 +20,7 @@ pub struct SceneCamera {
     pub center: [f64; 2],
     pub zoom: f64,
     pub viewport: [f64; 2],
+    pub focus_elevation_meters: f64,
 }
 
 #[derive(Clone, Copy)]
@@ -267,6 +268,7 @@ fn world_sprite_frames(
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let mut objects = Vec::new();
     for resource in resources {
@@ -283,8 +285,8 @@ fn world_sprite_frames(
     }
     objects.extend(units.iter().copied().map(WorldObject::Unit));
     objects.sort_by(|a, b| {
-        let a_screen = projection.world_to_screen(a.position());
-        let b_screen = projection.world_to_screen(b.position());
+        let a_screen = projection.world_to_screen_at_height(a.position(), a.elevation_meters());
+        let b_screen = projection.world_to_screen_at_height(b.position(), b.elevation_meters());
         a_screen
             .y
             .total_cmp(&b_screen.y)
@@ -376,6 +378,13 @@ impl WorldObject {
             Self::Unit(unit) => u64::from(unit.id.0),
         }
     }
+
+    fn elevation_meters(self) -> f64 {
+        match self {
+            Self::Resource(resource, _) => resource.elevation_meters,
+            Self::Unit(unit) => unit.elevation_meters,
+        }
+    }
 }
 
 fn scene_sprite(
@@ -388,6 +397,7 @@ fn scene_sprite(
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     };
     let screen = projection.world_to_screen_at_height(position, elevation_meters);
     let width = f64::from(frame.size[0]) * camera.zoom;
@@ -425,75 +435,4 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
     let facing = facing % 8;
     let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
     (row, matches!(facing, 1..=3))
-}
-
-fn draw_scene_sprite(
-    context: &CanvasRenderingContext2d,
-    atlas: &HtmlCanvasElement,
-    canvas: &HtmlCanvasElement,
-    sprite: (Sprite, GameFrame),
-    selected: bool,
-) -> Result<(), String> {
-    let (sprite, frame) = sprite;
-    let width = f64::from(canvas.width());
-    let height = f64::from(canvas.height());
-    let x = (f64::from(sprite.position[0]) + 1.0) * width / 2.0 - f64::from(frame.size[0]) / 2.0;
-    let y = (1.0 - f64::from(sprite.position[1])) * height / 2.0 - f64::from(frame.anchor[1]);
-    let [mut sx, sy, sw, sh] = sprite
-        .uv
-        .map(|value| f64::from(value) * f64::from(GAME_ATLAS_SIDE));
-    context.save();
-    let result = if sw < 0.0 {
-        sx += sw;
-        context
-            .translate(x + f64::from(frame.size[0]), y)
-            .map_err(error)?;
-        context.scale(-1.0, 1.0).map_err(error)?;
-        context
-            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                atlas,
-                sx,
-                sy,
-                sw.abs(),
-                sh,
-                0.0,
-                0.0,
-                f64::from(frame.size[0]),
-                f64::from(frame.size[1]),
-            )
-            .map_err(error)
-    } else {
-        context
-            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                atlas,
-                sx,
-                sy,
-                sw,
-                sh,
-                x,
-                y,
-                f64::from(frame.size[0]),
-                f64::from(frame.size[1]),
-            )
-            .map_err(error)
-    };
-    context.restore();
-    result?;
-    if selected {
-        context.begin_path();
-        context.set_stroke_style_str("#f2dc78");
-        context
-            .ellipse(
-                x + f64::from(frame.size[0]) / 2.0,
-                y + f64::from(frame.size[1]),
-                f64::from(frame.size[0]) * 0.55,
-                f64::from(frame.size[1]) * 0.105,
-                0.0,
-                0.0,
-                std::f64::consts::TAU,
-            )
-            .map_err(error)?;
-        context.stroke();
-    }
-    Ok(())
 }

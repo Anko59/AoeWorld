@@ -24,6 +24,8 @@ mod init;
 mod map;
 #[path = "playground_status.rs"]
 mod status;
+#[path = "playground_storage.rs"]
+mod storage;
 
 #[derive(Clone, Copy)]
 pub(super) struct Sample {
@@ -50,6 +52,7 @@ pub(super) struct Client {
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
     pub map_content_hash: Option<[u8; 32]>,
+    pub focus_map_hash: Option<[u8; 32]>,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
@@ -80,40 +83,6 @@ pub(super) fn now() -> f64 {
         .map_or(0.0, |performance| performance.now())
 }
 
-fn token_hex(token: ResumeToken) -> String {
-    token.0.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn parse_token(value: String) -> Option<ResumeToken> {
-    if value.len() != 48 {
-        return None;
-    }
-    let mut result = [0_u8; 24];
-    for (index, byte) in result.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
-    }
-    Some(ResumeToken(result))
-}
-
-fn stored_token() -> Option<ResumeToken> {
-    let storage = web_sys::window()?.session_storage().ok()??;
-    parse_token(storage.get_item("aoeworld.resume-token").ok()??)
-}
-
-pub(super) fn save_token(token: Option<ResumeToken>) {
-    let Some(storage) = web_sys::window().and_then(|window| window.session_storage().ok()?) else {
-        return;
-    };
-    match token {
-        Some(token) => {
-            let _ = storage.set_item("aoeworld.resume-token", &token_hex(token));
-        }
-        None => {
-            let _ = storage.remove_item("aoeworld.resume-token");
-        }
-    }
-}
-
 pub(super) fn dpr() -> f64 {
     web_sys::window().map_or(1.0, |window| window.device_pixel_ratio().clamp(1.0, 2.0))
 }
@@ -138,7 +107,7 @@ pub(super) fn resize(client: &mut Client) {
 }
 
 fn requested_region(client: &Client) -> TileRect {
-    let visible = client.camera.visible_tiles(client.config, 8.0);
+    let visible = map::terrain_visible_tiles(client);
     let width = visible.width().clamp(1, 512);
     let height = visible.height().clamp(1, 512);
     TileRect::from_xywh(
@@ -281,15 +250,22 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 resume_token,
                 ..
             }) => {
+                let map_changed = client.map_content_hash != map_content_hash;
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
                 client.role = Some(role);
                 client.map_content_hash = map_content_hash;
+                if map_changed {
+                    client.camera.center =
+                        [f64::from(width_tiles) / 2.0, f64::from(height_tiles) / 2.0];
+                    client.camera.focus_elevation_meters = 0.0;
+                    client.focus_map_hash = None;
+                }
                 client.terrain_chunks.clear();
                 client.terrain_inflight.clear();
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
-                save_token(resume_token);
+                storage::save_token(resume_token);
                 client.units.clear();
                 client.history.clear();
                 client.status = "connected".to_owned();
@@ -331,7 +307,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }) => {
                 client.role = Some(role);
                 client.token = resume_token;
-                save_token(resume_token);
+                storage::save_token(resume_token);
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.units.clear();
@@ -339,10 +315,12 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.role = None;
                 client.primary = None;
                 client.map_content_hash = None;
+                client.focus_map_hash = None;
+                client.camera.focus_elevation_meters = 0.0;
                 client.terrain_chunks.clear();
                 client.terrain_inflight.clear();
                 client.token = None;
-                save_token(None);
+                storage::save_token(None);
                 client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck { result, .. }) => {
@@ -393,7 +371,10 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) || client.selected != client.primary {
         return;
     }
-    let world = map::world_at_screen(client, point);
+    let Some(world) = map::world_at_screen(client, point) else {
+        client.status = "terrain unavailable at pointer".to_owned();
+        return;
+    };
     if world[0] < 0.0
         || world[1] < 0.0
         || world[0] >= f64::from(client.config.width_tiles)
@@ -451,6 +432,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             center: client.camera.center,
             zoom: client.camera.zoom,
             viewport: client.camera.viewport,
+            focus_elevation_meters: client.camera.focus_elevation_meters,
         };
         let terrain = map::scene_terrain(&client);
         let resources = map::scene_resources(&client);
