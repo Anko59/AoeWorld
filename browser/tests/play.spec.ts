@@ -24,6 +24,25 @@ async function bluePixels(canvas: ReturnType<Page["locator"]>) {
   return blue;
 }
 
+function syntheticTerrainCoverage(image: PNG) {
+  let covered = 0;
+  let samples = 0;
+  for (let y = 8; y < image.height - 8; y += 8) {
+    for (let x = 8; x < image.width - 8; x += 8) {
+      const offset = (y * image.width + x) * 4;
+      samples += 1;
+      if (
+        image.data[offset] === 70 &&
+        image.data[offset + 1] === 120 &&
+        image.data[offset + 2] === 55
+      ) {
+        covered += 1;
+      }
+    }
+  }
+  return covered / samples;
+}
+
 test.beforeEach(async ({ request }) => {
   const response = await request.post("/maps/reset");
   expect(response.status()).toBe(204);
@@ -69,6 +88,15 @@ test("authoritative isometric game renders, selects, orders, and survives reload
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");
+
+  if (evidence === "generated CI fixtures") {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 5_000);
+    await page.waitForTimeout(100);
+    const zoomed = PNG.sync.read(await canvas.screenshot());
+    expect(syntheticTerrainCoverage(zoomed)).toBeGreaterThan(0.85);
+  }
+
   await canvas.hover({
     position: { x: box.width / 2, y: box.height / 2 },
   });
@@ -171,9 +199,6 @@ test("rapid viewport changes ignore stale subscription frames", async ({
     await page.mouse.up({ button: "middle" });
   }
   await expect
-    .poll(() => page.locator("#connection").textContent(), { timeout: 10_000 })
-    .not.toContain("protocol error");
-  await expect
     .poll(
       () =>
         page.evaluate(
@@ -183,6 +208,9 @@ test("rapid viewport changes ignore stale subscription frames", async ({
       { timeout: 10_000 },
     )
     .toBe(true);
+  await expect
+    .poll(() => page.locator("#connection").textContent(), { timeout: 10_000 })
+    .not.toContain("protocol error");
 });
 
 test("map creator pans, zooms, and preserves preview-only fallback maps", async ({
