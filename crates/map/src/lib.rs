@@ -2,6 +2,9 @@
 mod biome;
 mod biome_rules;
 mod environment;
+#[path = "environment/root.rs"]
+mod page_root;
+pub use page_root::{PageLayer, PageRootBuilder};
 mod generator;
 mod land_use;
 mod navigation;

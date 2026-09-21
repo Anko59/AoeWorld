@@ -47,17 +47,18 @@ identity.
 ```sh
 AOE_MAP_REQUEST=/data/request.json make map-estimate
 AOE_MAP_REQUEST=/data/request.json \
-  AOE_MAP_PACKAGE=/data/maps/paris.json make map-generate
-AOE_MAP_PACKAGE=/data/maps/paris.json make map-verify
+  AOE_MAP_PACKAGE=/data/maps make map-generate
+AOE_MAP_PACKAGE=/data/maps/<package-hash>.json make map-verify
 ```
 
 The estimate command performs no acquisition. Generation requires the pinned
-inputs and writes a bounded, atomically replaced JSON package. The package
-binds the normalized request, local projection and preprocessing provenance,
-source locks, and the complete prepared elevation, water, vegetation, and
-historical-land-use page sets. `map-verify` rejects a tampered package, missing
-pages, invalid environment roots, and source/provenance inconsistencies before
-it reports the package content hash.
+inputs and atomically publishes a bounded `<package-hash>.json` manifest in the
+output directory. Page files live below `pages/<package-hash>/` with bounded
+coordinate names for each layer and pyramid level. The manifest binds the
+normalized request, local projection and preprocessing provenance, source
+locks, and prepared page roots. `map-verify` streams those pages one at a time
+and rejects tampering, missing or malformed expected pages, invalid coordinates,
+and source/provenance inconsistencies before it reports the package content hash.
 
 The local tangent-plane projection places the requested map center at `(0, 0)`
 meters. Geographic raster and vector work happens in source-native

@@ -18,36 +18,32 @@ use std::path::{Path, PathBuf};
 
 mod elevation;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
-
+mod directory;
+pub use directory::{
+    DIRECTORY_SCHEMA_VERSION, MAX_DIRECTORY_MANIFEST_BYTES, MAX_DIRECTORY_PAGE_BYTES,
+};
 mod footprint;
 pub use footprint::{
     GeographicPoint, MAX_FOOTPRINT_SAMPLES_PER_EDGE, ProjectionDistortion, projected_footprint,
     projection_distortion,
 };
-
 mod hyde;
 pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
-
 mod source_cache;
 pub use source_cache::{
     AcquisitionEstimate, CacheError, DEFAULT_CACHE_QUOTA_BYTES,
     DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider, SourceCache, SourceLock,
 };
-
 mod source_manifest;
-
 mod water;
 pub use water::{PreparedWater, prepare_ocean_coverage};
-
 mod vegetation;
 pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potential_biome_legend};
-
 mod source_catalog;
 pub use source_catalog::{
     ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface, hyde_sources,
     natural_earth_10m_land, potential_biome_sources,
 };
-
 /// Catalog identifiers required by the first source-backed overview recipe.
 /// They let offline verification report exactly which verified cache objects
 /// are absent without querying a provider.
@@ -89,6 +85,8 @@ pub enum GeodataError {
     Coordinate,
     #[error("geographic preparation failed: {0}")]
     Preparation(&'static str),
+    #[error("directory map package is invalid: {0}")]
+    Directory(String),
     #[error(transparent)]
     Environment(#[from] aoe_map::EnvironmentError),
     #[error(transparent)]
@@ -105,6 +103,12 @@ pub enum GeodataError {
 pub enum WorkerRequest {
     PrepareOverviewElevation {
         cache_root: PathBuf,
+        request: MapRequest,
+        samples_per_axis: u16,
+    },
+    PrepareOverviewDirectory {
+        cache_root: PathBuf,
+        output_directory: PathBuf,
         request: MapRequest,
         samples_per_axis: u16,
     },
@@ -131,6 +135,7 @@ pub enum WorkerRequest {
     },
 }
 
+/// Source-backed overview data returned by the worker in a bounded response.
 #[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum WorkerResponse {
@@ -154,9 +159,12 @@ pub enum WorkerResponse {
         pages: Vec<ElevationPage>,
     },
     PreparedOverview(Box<PreparedOverview>),
+    #[serde(rename = "prepared_directory")]
+    PreparedDirectory {
+        package: MapPackage,
+    },
 }
 
-/// Source-backed overview data returned by the worker in a bounded response.
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct PreparedOverview {
     pub source_lock: aoe_map::SourceLock,
@@ -239,6 +247,19 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
         } => Ok(WorkerResponse::PreparedOverview(Box::new(
             prepare_overview(cache_root, request, samples_per_axis)?,
         ))),
+        WorkerRequest::PrepareOverviewDirectory {
+            cache_root,
+            output_directory,
+            request,
+            samples_per_axis,
+        } => {
+            let prepared = prepare_overview(cache_root, request, samples_per_axis)?;
+            let generated = GeneratedMap::from_prepared(request, prepared)?;
+            generated.write_directory(&output_directory)?;
+            Ok(WorkerResponse::PreparedDirectory {
+                package: generated.package,
+            })
+        }
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
             sources: vec![etopo_2022_60s_surface()],
         }),

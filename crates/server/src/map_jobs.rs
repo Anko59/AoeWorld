@@ -206,18 +206,9 @@ fn launch(state: AppState, id: u64) {
                 let directory = directory.as_deref().ok_or_else(|| {
                     "source-backed map creation requires a configured package directory".to_owned()
                 })?;
-                let (package, elevation_pages, water_pages, vegetation_pages, land_use_pages) =
-                    map_worker::prepare_overview(&worker, &cache, request, &cancelled)?;
-                map_store::persist_prepared(
-                    Some(directory),
-                    &package,
-                    &elevation_pages,
-                    &water_pages,
-                    &vegetation_pages,
-                    &land_use_pages,
-                )
-                .map_err(|error| error.to_string())?;
-                package
+                let package =
+                    map_worker::prepare_overview(&worker, &cache, directory, request, &cancelled)?;
+                map_store::verify_stored(directory, &package).map_err(|error| error.to_string())?
             } else {
                 let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
                     .map_err(|error| error.to_string())?;

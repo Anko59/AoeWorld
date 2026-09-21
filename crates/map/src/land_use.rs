@@ -69,13 +69,11 @@ pub fn ordered_land_use_page_root(
     {
         return Err(EnvironmentError::InvalidPyramid);
     }
-    let mut hash = blake3::Hasher::new();
-    hash.update(b"aoe-historical-land-use-page-root-v1\0");
-    hash.update(&(ordered.len() as u64).to_le_bytes());
+    let mut root = crate::PageRootBuilder::new(crate::PageLayer::HistoricalLandUse, ordered.len())?;
     for page in ordered {
-        hash.update(&page.content_hash()?);
+        root.push(page.content_hash()?)?;
     }
-    Ok(*hash.finalize().as_bytes())
+    root.finish()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
