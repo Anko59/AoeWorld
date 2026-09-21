@@ -1,19 +1,18 @@
-use super::{MAX_PAGE_BYTES, MapStoreError, write_json};
+use super::{MAX_PAGE_BYTES, MapStoreError, ensure_directory_path, write_json};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage,
     ordered_biome_page_root, ordered_land_use_page_root, ordered_water_page_root,
 };
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 pub(super) fn persist_water(
     directory: &Path,
     package: &MapPackage,
     pages: &[WaterPage],
 ) -> Result<(), MapStoreError> {
-    persist(directory, package, "water", pages)
+    persist(directory, package, "water", pages, |page| {
+        (page.level, page.x, page.y)
+    })
 }
 
 pub(super) fn persist_vegetation(
@@ -21,7 +20,9 @@ pub(super) fn persist_vegetation(
     package: &MapPackage,
     pages: &[PotentialBiomePage],
 ) -> Result<(), MapStoreError> {
-    persist(directory, package, "vegetation", pages)
+    persist(directory, package, "vegetation", pages, |page| {
+        (page.level, page.x, page.y)
+    })
 }
 
 pub(super) fn persist_land_use(
@@ -29,7 +30,9 @@ pub(super) fn persist_land_use(
     package: &MapPackage,
     pages: &[HistoricalLandUsePage],
 ) -> Result<(), MapStoreError> {
-    persist(directory, package, "historical-land-use", pages)
+    persist(directory, package, "historical-land-use", pages, |page| {
+        (page.level, page.x, page.y)
+    })
 }
 
 pub(super) fn load_water(
@@ -187,11 +190,17 @@ fn persist<T: serde::Serialize>(
     package: &MapPackage,
     layer: &str,
     pages: &[T],
+    coordinates: impl Fn(&T) -> (u8, u16, u16),
 ) -> Result<(), MapStoreError> {
     let root = root(directory, package, layer);
-    fs::create_dir_all(&root)?;
-    for (index, page) in pages.iter().enumerate() {
-        write_json(&root.join(format!("{index}.json")), page, MAX_PAGE_BYTES)?;
+    ensure_directory_path(&root)?;
+    for page in pages {
+        let (level, x, y) = coordinates(page);
+        write_json(
+            &root.join(format!("{level}-{x}-{y}.json")),
+            page,
+            MAX_PAGE_BYTES,
+        )?;
     }
     Ok(())
 }
@@ -206,13 +215,21 @@ fn load<T>(
     let root = root(directory, package, layer);
     let mut pages = Vec::new();
     let mut index = 0;
-    for metadata in levels {
+    for (level, metadata) in levels.iter().enumerate() {
         let count = metadata
             .samples_per_axis
             .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-        for _ in 0..usize::from(count).pow(2) {
-            pages.push(read(&root.join(format!("{index}.json")))?);
-            index += 1;
+        for y in 0..count {
+            for x in 0..count {
+                let coordinate_path = root.join(format!("{level}-{x}-{y}.json"));
+                let path = if coordinate_path.try_exists()? {
+                    coordinate_path
+                } else {
+                    root.join(format!("{index}.json"))
+                };
+                pages.push(read(&path)?);
+                index += 1;
+            }
         }
     }
     Ok(pages)
@@ -257,12 +274,6 @@ fn read_land_use(path: &Path) -> Result<HistoricalLandUsePage, MapStoreError> {
 }
 
 fn read<T: serde::de::DeserializeOwned>(path: &Path, layer: &str) -> Result<T, MapStoreError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_PAGE_BYTES {
-        return Err(invalid(
-            path,
-            format!("{layer} page is not a bounded regular file"),
-        ));
-    }
-    serde_json::from_slice(&fs::read(path)?).map_err(|error| invalid(path, error.to_string()))
+    let bytes = super::read_bounded_file(path, MAX_PAGE_BYTES, &format!("{layer} page"))?;
+    serde_json::from_slice(&bytes).map_err(|error| invalid(path, error.to_string()))
 }

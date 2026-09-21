@@ -240,13 +240,11 @@ pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], Environmen
     {
         return Err(EnvironmentError::InvalidPyramid);
     }
-    let mut hash = blake3::Hasher::new();
-    hash.update(b"aoe-environment-page-root-v1\0");
-    hash.update(&(ordered.len() as u64).to_le_bytes());
+    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Elevation, ordered.len())?;
     for page in ordered {
-        hash.update(&page.content_hash()?);
+        root.push(page.content_hash()?)?;
     }
-    Ok(*hash.finalize().as_bytes())
+    root.finish()
 }
 
 /// Computes the canonical identity of water coverage pages independently from
@@ -263,13 +261,11 @@ pub fn ordered_water_page_root(pages: &[WaterPage]) -> Result<[u8; 32], Environm
     {
         return Err(EnvironmentError::InvalidPyramid);
     }
-    let mut hash = blake3::Hasher::new();
-    hash.update(b"aoe-water-page-root-v1\0");
-    hash.update(&(ordered.len() as u64).to_le_bytes());
+    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Water, ordered.len())?;
     for page in ordered {
-        hash.update(&page.content_hash()?);
+        root.push(page.content_hash()?)?;
     }
-    Ok(*hash.finalize().as_bytes())
+    root.finish()
 }
 
 /// Computes the canonical identity of potential-biome pages independently
@@ -286,13 +282,11 @@ pub fn ordered_biome_page_root(pages: &[PotentialBiomePage]) -> Result<[u8; 32],
     {
         return Err(EnvironmentError::InvalidPyramid);
     }
-    let mut hash = blake3::Hasher::new();
-    hash.update(b"aoe-potential-biome-page-root-v1\0");
-    hash.update(&(ordered.len() as u64).to_le_bytes());
+    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Vegetation, ordered.len())?;
     for page in ordered {
-        hash.update(&page.content_hash()?);
+        root.push(page.content_hash()?)?;
     }
-    Ok(*hash.finalize().as_bytes())
+    root.finish()
 }
 
 pub(crate) fn level_zero_pages(

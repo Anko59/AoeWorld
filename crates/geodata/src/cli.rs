@@ -1,6 +1,7 @@
 use aoe_geodata::{
     DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, GeneratedMap,
-    REQUIRED_OVERVIEW_SOURCE_IDS, SourceCache, overview_sources, prepare_overview,
+    REQUIRED_OVERVIEW_SOURCE_IDS, SourceCache, WorkerRequest, WorkerResponse, execute,
+    overview_sources,
 };
 use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest};
 use serde::Serialize;
@@ -8,13 +9,13 @@ use std::{
     env,
     ffi::OsString,
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::atomic::AtomicBool,
     time::Instant,
 };
 
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
-const MAX_PACKAGE_BYTES: u64 = 2 * 1024 * 1024;
 const OVERVIEW_SAMPLES_PER_AXIS: u16 = 128;
 
 pub fn run(arguments: &[OsString]) -> Result<(), String> {
@@ -108,13 +109,17 @@ fn map_generate() -> Result<(), String> {
     let cache = cache()?;
     let sources = overview_sources().map_err(|error| error.to_string())?;
     print_acquisition_estimate(&cache, &sources)?;
-    let prepared = prepare_overview(cache_root(), request, OVERVIEW_SAMPLES_PER_AXIS)
-        .map_err(|error| error.to_string())?;
-    let generated =
-        GeneratedMap::from_prepared(request, prepared).map_err(|error| error.to_string())?;
-    generated.validate().map_err(|error| error.to_string())?;
-    atomic_write_json(&output, &generated)?;
-    println!("generated {}", generated.package.content_hash_hex());
+    let response = execute(WorkerRequest::PrepareOverviewDirectory {
+        cache_root: cache_root(),
+        output_directory: output,
+        request,
+        samples_per_axis: OVERVIEW_SAMPLES_PER_AXIS,
+    })
+    .map_err(|error| error.to_string())?;
+    let WorkerResponse::PreparedDirectory { package } = response else {
+        return Err("map worker returned an unexpected directory response".to_owned());
+    };
+    println!("generated {}", package.content_hash_hex());
     Ok(())
 }
 
@@ -133,10 +138,9 @@ fn print_acquisition_estimate(
 }
 
 fn map_verify() -> Result<(), String> {
-    let path = package_path()?;
-    let generated = read_json::<GeneratedMap>(&path, MAX_PACKAGE_BYTES)?;
-    generated.validate().map_err(|error| error.to_string())?;
-    println!("verified {}", generated.package.content_hash_hex());
+    let (root, hash) = package_target()?;
+    GeneratedMap::verify_directory(&root, &hash).map_err(|error| error.to_string())?;
+    println!("verified {hash}");
     Ok(())
 }
 
@@ -184,6 +188,48 @@ fn package_path() -> Result<PathBuf, String> {
     env_path("AOE_MAP_PACKAGE")
 }
 
+fn package_target() -> Result<(PathBuf, String), String> {
+    let path = package_path()?;
+    if path.is_file() {
+        let hash = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| format!("{} is not a canonical package manifest", path.display()))?;
+        return Ok((
+            path.parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."))
+                .to_owned(),
+            hash.to_owned(),
+        ));
+    }
+    let mut manifest = None;
+    for entry in fs::read_dir(&path).map_err(|error| format!("{}: {error}", path.display()))? {
+        let candidate = entry
+            .map_err(|error| format!("{}: {error}", path.display()))?
+            .path();
+        if candidate.extension().is_some_and(|ext| ext == "json")
+            && manifest.replace(candidate).is_some()
+        {
+            return Err(format!(
+                "{} must contain exactly one package manifest for map-verify",
+                path.display()
+            ));
+        }
+    }
+    let Some(manifest) = manifest else {
+        return Err(format!(
+            "{} must contain exactly one package manifest for map-verify",
+            path.display()
+        ));
+    };
+    let hash = manifest
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("{} is not a canonical package manifest", manifest.display()))?;
+    Ok((path, hash.to_owned()))
+}
+
 fn cache_root() -> PathBuf {
     env::var_os("AOE_GEODATA_CACHE")
         .map(PathBuf::from)
@@ -193,7 +239,7 @@ fn cache_root() -> PathBuf {
 fn env_path(name: &str) -> Result<PathBuf, String> {
     env::var_os(name)
         .map(PathBuf::from)
-        .ok_or_else(|| format!("{name} must name a file"))
+        .ok_or_else(|| format!("{name} must name a path"))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path, limit: u64) -> Result<T, String> {
@@ -205,29 +251,20 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path, limit: u64) -> Result<
             limit
         ));
     }
-    let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|error| format!("{}: {error}", path.display()))
-}
-
-fn atomic_write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    let bytes = serde_json::to_vec_pretty(value).map_err(|error| error.to_string())?;
-    if bytes.len() > usize::try_from(MAX_PACKAGE_BYTES).unwrap_or(usize::MAX) {
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .map_err(|error| format!("{}: {error}", path.display()))?
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    if bytes.len() as u64 > limit {
         return Err(format!(
-            "generated package exceeds the {MAX_PACKAGE_BYTES} byte limit"
+            "{} exceeds the {} byte input limit",
+            path.display(),
+            limit
         ));
     }
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("{} has no parent directory", path.display()))?;
-    let temporary = parent.join(format!(
-        ".{}.{}.tmp",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("map"),
-        std::process::id()
-    ));
-    fs::write(&temporary, bytes).map_err(|error| format!("{}: {error}", temporary.display()))?;
-    fs::rename(&temporary, path).map_err(|error| format!("{}: {error}", path.display()))
+    serde_json::from_slice(&bytes).map_err(|error| format!("{}: {error}", path.display()))
 }
 
 fn print_json<T: Serialize>(value: &T) -> Result<(), String> {

@@ -20,10 +20,10 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 
 | ID | Deliverable | Status | Acceptance |
 | --- | --- | --- | --- |
-| M1 | Correctness repairs | Implemented; revision checks pending | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
+| M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
+| M2 | Detailed streaming preparation | Directory slice in verification | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
-| M4 | Physical movement and long routes | Pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
+| M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
 | M7 | Creation experience | Pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
@@ -64,7 +64,25 @@ gates, 232 native tests, doctests, WASM build, and the synthetic smoke; `make te
 using seven cached inputs (6,043,158,637 bytes; zero downloaded bytes). Package
 hash: `8f16ee0f746ceead92a918ae08b442c01cc6105f77eb7d75edac3c58aa35ecf2`.
 This is source-backed overview evidence, not detailed-data or performance
-qualification. Final revision-bound checks and the repair PR are pending.
+qualification. Revision-bound checks passed at
+`76d15c04b1a5b17a47c7464cedacb7e54d261abf`: hooks-install, hooks-check,
+map-test (42), preflight (232 native tests plus other gates), test-e2e (21),
+and test-wasm (7). [PR #9](https://github.com/Anko59/AoeWorld/pull/9) is ready
+for review. These are local Dockerized checks; no GitHub CI result is claimed.
 
-M2 directory package implementation is delegated separately. Preparation and
-runtime residency remain dense until their acceptance tests prove otherwise.
+M2 directory packages now use bounded manifests and individual coordinate
+pages. Native preparation returns only the manifest; server startup verifies
+pages in canonical order without retaining page payloads. Repeated source
+generation and verification reproduced the Paris hash above, with seven cached
+inputs and zero downloads. Preparation and runtime residency remain dense;
+this storage slice does not close M2.
+
+M4 physical movement is reviewed in
+[PR #10](https://github.com/Anko59/AoeWorld/pull/10), revision
+`330f4ffc32ae0549f5cad5b9575057e0db26de7f`. Cavalry uses 3 m/s rational speed,
+fractional carry survives ticks and redirects, waypoint remainders are consumed
+within the tick, and exact off-center destinations are reached. Legacy speed
+configuration remains readable. Dockerized hooks, preflight (242 native tests),
+test-e2e (21), and test-wasm (7) passed; browser checks and pre-push preflight
+ran on the clean committed revision. Resumable routing and source-backed
+100 km travel qualification remain open.

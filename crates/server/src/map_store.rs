@@ -4,7 +4,8 @@ use aoe_map::{
 };
 use std::{
     collections::BTreeMap,
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 use thiserror::Error;
@@ -13,6 +14,7 @@ const MAX_PACKAGE_BYTES: u64 = 64 * 1024;
 const MAX_PAGE_BYTES: u64 = 128 * 1024;
 
 mod pages;
+mod verify;
 
 #[derive(Debug, Error)]
 pub enum MapStoreError {
@@ -32,28 +34,23 @@ pub(crate) fn load(
     let Some(directory) = directory else {
         return Ok(BTreeMap::new());
     };
-    if !directory.exists() {
+    if !storage_directory_exists(directory)? {
         return Ok(BTreeMap::new());
     }
-    if !directory.is_dir() {
-        return Err(MapStoreError::InvalidPackage {
-            path: directory.to_owned(),
-            reason: "storage path is not a directory".to_owned(),
-        });
+    let mut paths = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            paths.push(path);
+            if paths.len() > MAX_PACKAGES {
+                return Err(MapStoreError::TooManyPackages);
+            }
+        }
     }
-    let mut paths = fs::read_dir(directory)?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "json")
-        })
-        .collect::<Vec<_>>();
     paths.sort();
-    if paths.len() > MAX_PACKAGES {
-        return Err(MapStoreError::TooManyPackages);
-    }
     let mut packages = BTreeMap::new();
     for path in paths {
         let package = read_package(&path)?;
@@ -87,15 +84,15 @@ fn persist_manifest(directory: Option<&Path>, package: &MapPackage) -> Result<()
             path: directory.to_owned(),
             reason: error.to_string(),
         })?;
-    fs::create_dir_all(directory)?;
+    ensure_storage_directory(directory)?;
     let path = package_path(directory, &package.content_hash_hex());
     if path.exists() {
-        return (read_package(&path)? == *package).then_some(()).ok_or(
-            MapStoreError::InvalidPackage {
+        return (read_package(&path)?.content_hash == package.content_hash)
+            .then_some(())
+            .ok_or(MapStoreError::InvalidPackage {
                 path,
                 reason: "existing package differs from its canonical identity".to_owned(),
-            },
-        );
+            });
     }
     let bytes = serde_json::to_vec(package)?;
     if bytes.len() as u64 > MAX_PACKAGE_BYTES {
@@ -104,29 +101,15 @@ fn persist_manifest(directory: Option<&Path>, package: &MapPackage) -> Result<()
             reason: "serialized package exceeds storage limit".to_owned(),
         });
     }
-    let temporary = directory.join(format!(
-        ".{}.{}.tmp",
-        package.content_hash_hex(),
-        std::process::id()
-    ));
-    fs::write(&temporary, bytes)?;
-    match fs::hard_link(&temporary, &path) {
-        Ok(()) => fs::remove_file(temporary)?,
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            fs::remove_file(temporary)?;
-            if read_package(&path)? != *package {
-                return Err(MapStoreError::InvalidPackage {
-                    path,
-                    reason: "existing package differs from its canonical identity".to_owned(),
-                });
-            }
+    publish_immutable(&path, &bytes, || {
+        if read_package(&path)?.content_hash != package.content_hash {
+            return Err(MapStoreError::InvalidPackage {
+                path: path.clone(),
+                reason: "existing package differs from its canonical identity".to_owned(),
+            });
         }
-        Err(error) => {
-            let _ = fs::remove_file(&temporary);
-            return Err(error.into());
-        }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 pub(crate) fn persist_prepared(
@@ -140,6 +123,7 @@ pub(crate) fn persist_prepared(
     let Some(directory) = directory else {
         return Ok(());
     };
+    ensure_storage_directory(directory)?;
     package
         .validate()
         .map_err(|error| MapStoreError::InvalidPackage {
@@ -158,7 +142,7 @@ pub(crate) fn persist_prepared(
         reason,
     })?;
     let root = elevation_page_root(directory, package);
-    fs::create_dir_all(&root)?;
+    ensure_directory_path(&root)?;
     for page in elevation_pages {
         let path = root.join(format!("{}-{}-{}.json", page.level, page.x, page.y));
         write_json(&path, page, MAX_PAGE_BYTES)?;
@@ -172,6 +156,7 @@ pub(crate) fn persist_prepared(
     if package.environment.historical_land_use.is_some() {
         pages::persist_land_use(directory, package, land_use_pages)?;
     }
+    verify_environment(directory, package)?;
     persist_manifest(Some(directory), package)
 }
 
@@ -189,11 +174,32 @@ pub(super) fn elevation_page_root(directory: &Path, package: &MapPackage) -> Pat
 #[cfg(test)]
 mod tests;
 
+pub(super) fn verify_stored(
+    directory: &Path,
+    package: &MapPackage,
+) -> Result<MapPackage, MapStoreError> {
+    package
+        .validate()
+        .map_err(|error| MapStoreError::InvalidPackage {
+            path: directory.to_owned(),
+            reason: error.to_string(),
+        })?;
+    let path = package_path(directory, &package.content_hash_hex());
+    let stored = read_package(&path)?;
+    if stored.content_hash != package.content_hash {
+        return Err(MapStoreError::InvalidPackage {
+            path,
+            reason: "stored manifest differs from the worker result".to_owned(),
+        });
+    }
+    verify_environment(directory, &stored)?;
+    // Informational acquisition times are deliberately excluded from identity.
+    // Preserve the first published manifest when the same source map is built again.
+    Ok(stored)
+}
+
 fn verify_environment(directory: &Path, package: &MapPackage) -> Result<(), MapStoreError> {
-    load_elevation_pages(Some(directory), package)?;
-    pages::load_water(Some(directory), package)?;
-    pages::load_vegetation(Some(directory), package)?;
-    pages::load_land_use(Some(directory), package).map(|_| ())
+    verify::environment(directory, package)
 }
 
 pub(super) fn load_elevation_pages(
@@ -288,19 +294,12 @@ fn verify_pages(
 }
 
 fn read_page(path: &Path) -> Result<ElevationPage, MapStoreError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_PAGE_BYTES {
-        return Err(MapStoreError::InvalidPackage {
-            path: path.to_owned(),
-            reason: "elevation page is not a bounded regular file".to_owned(),
-        });
-    }
-    let page: ElevationPage = serde_json::from_slice(&fs::read(path)?).map_err(|error| {
-        MapStoreError::InvalidPackage {
+    let bytes = read_bounded_file(path, MAX_PAGE_BYTES, "elevation page")?;
+    let page: ElevationPage =
+        serde_json::from_slice(&bytes).map_err(|error| MapStoreError::InvalidPackage {
             path: path.to_owned(),
             reason: error.to_string(),
-        }
-    })?;
+        })?;
     page.validate()
         .map_err(|error| MapStoreError::InvalidPackage {
             path: path.to_owned(),
@@ -321,27 +320,76 @@ pub(super) fn write_json(
             reason: "serialized page exceeds storage limit".to_owned(),
         });
     }
-    fs::write(path, bytes)?;
+    if path.try_exists()? {
+        return same_page_bytes(path, &bytes, limit);
+    }
+    publish_immutable(path, &bytes, || same_page_bytes(path, &bytes, limit))
+}
+
+fn publish_immutable(
+    path: &Path,
+    bytes: &[u8],
+    verify_existing: impl FnOnce() -> Result<(), MapStoreError>,
+) -> Result<(), MapStoreError> {
+    use std::io::Write;
+    static NEXT_TEMPORARY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let mut attempts = 0;
+    let (mut file, temporary) = loop {
+        attempts += 1;
+        let serial = NEXT_TEMPORARY.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let temporary = path.with_extension(format!("{}-{serial}.tmp", std::process::id()));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => break (file, temporary),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 16 => continue,
+            Err(error) => return Err(error.into()),
+        }
+    };
+    let result = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        match fs::hard_link(&temporary, path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => verify_existing(),
+            Err(error) => Err(error.into()),
+        }
+    })();
+    let _ = fs::remove_file(temporary);
+    result
+}
+
+fn same_page_bytes(path: &Path, expected: &[u8], limit: u64) -> Result<(), MapStoreError> {
+    use std::io::Read;
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > limit {
+        return Err(MapStoreError::InvalidPackage {
+            path: path.to_owned(),
+            reason: "existing page is not a bounded regular file".to_owned(),
+        });
+    }
+    let mut actual = Vec::new();
+    fs::File::open(path)?
+        .take(limit + 1)
+        .read_to_end(&mut actual)?;
+    if actual != expected {
+        return Err(MapStoreError::InvalidPackage {
+            path: path.to_owned(),
+            reason: "immutable page already exists with different bytes".to_owned(),
+        });
+    }
     Ok(())
 }
 
 fn read_package(path: &Path) -> Result<MapPackage, MapStoreError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink()
-        || !metadata.is_file()
-        || metadata.len() > MAX_PACKAGE_BYTES
-    {
-        return Err(MapStoreError::InvalidPackage {
-            path: path.to_owned(),
-            reason: "package is not a bounded regular file".to_owned(),
-        });
-    }
-    let package: MapPackage = serde_json::from_slice(&fs::read(path)?).map_err(|error| {
-        MapStoreError::InvalidPackage {
+    let bytes = read_bounded_file(path, MAX_PACKAGE_BYTES, "package")?;
+    let package: MapPackage =
+        serde_json::from_slice(&bytes).map_err(|error| MapStoreError::InvalidPackage {
             path: path.to_owned(),
             reason: error.to_string(),
-        }
-    })?;
+        })?;
     package
         .validate()
         .map_err(|error| MapStoreError::InvalidPackage {
@@ -349,4 +397,101 @@ fn read_package(path: &Path) -> Result<MapPackage, MapStoreError> {
             reason: error.to_string(),
         })?;
     Ok(package)
+}
+
+fn validate_existing_ancestors(path: &Path) -> Result<(), MapStoreError> {
+    for ancestor in path
+        .ancestors()
+        .filter(|ancestor| !ancestor.as_os_str().is_empty())
+    {
+        match fs::symlink_metadata(ancestor) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(MapStoreError::InvalidPackage {
+                    path: ancestor.to_owned(),
+                    reason: "storage path contains a symlink or non-directory".to_owned(),
+                });
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn ensure_directory_path(directory: &Path) -> Result<(), MapStoreError> {
+    validate_existing_ancestors(directory)?;
+    let mut missing = Vec::new();
+    let mut current = directory.to_owned();
+    while matches!(fs::symlink_metadata(&current), Err(ref error) if error.kind() == io::ErrorKind::NotFound)
+    {
+        missing.push(current.clone());
+        let Some(parent) = current
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        else {
+            break;
+        };
+        current = parent.to_owned();
+    }
+    for path in missing.into_iter().rev() {
+        match fs::create_dir(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+        validate_existing_ancestors(&path)?;
+    }
+    storage_directory_exists(directory)?
+        .then_some(())
+        .ok_or_else(|| MapStoreError::InvalidPackage {
+            path: directory.to_owned(),
+            reason: "storage path could not be created as a regular directory".to_owned(),
+        })
+}
+
+fn storage_directory_exists(directory: &Path) -> Result<bool, MapStoreError> {
+    validate_existing_ancestors(directory)?;
+    match fs::symlink_metadata(directory) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(MapStoreError::InvalidPackage {
+                    path: directory.to_owned(),
+                    reason: "storage path is not a regular directory".to_owned(),
+                });
+            }
+            Ok(true)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn ensure_storage_directory(directory: &Path) -> Result<(), MapStoreError> {
+    ensure_directory_path(directory)
+}
+
+pub(super) fn read_bounded_file(
+    path: &Path,
+    limit: u64,
+    kind: &str,
+) -> Result<Vec<u8>, MapStoreError> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > limit {
+        return Err(MapStoreError::InvalidPackage {
+            path: path.to_owned(),
+            reason: format!("{kind} is not a bounded regular file"),
+        });
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(MapStoreError::InvalidPackage {
+            path: path.to_owned(),
+            reason: format!("{kind} grew beyond the configured bound"),
+        });
+    }
+    Ok(bytes)
 }
