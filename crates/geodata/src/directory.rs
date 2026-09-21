@@ -1,7 +1,7 @@
 use crate::{GeneratedMap, GeodataError};
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage,
-    WaterPage,
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, HistoricalLandUsePage, MapPackage, PageLayer,
+    PotentialBiomePage, WaterPage,
 };
 use std::{
     fs,
@@ -397,6 +397,64 @@ fn page_file(package_hash: &str, key: PageKey) -> String {
         key.x,
         key.y
     )
+}
+
+pub(crate) fn publish_streaming_page(
+    directory: &Path,
+    package_hash: &str,
+    layer: PageLayer,
+    level: u8,
+    x: u16,
+    y: u16,
+    bytes: &[u8],
+) -> Result<(), GeodataError> {
+    if bytes.is_empty() || bytes.len() as u64 > MAX_DIRECTORY_PAGE_BYTES {
+        return Err(invalid("serialized page exceeds the directory page limit"));
+    }
+    let layer = match layer {
+        PageLayer::Elevation => DirectoryLayer::Elevation,
+        PageLayer::Water => DirectoryLayer::Water,
+        PageLayer::Vegetation => DirectoryLayer::Vegetation,
+        PageLayer::HistoricalLandUse => DirectoryLayer::HistoricalLandUse,
+    };
+    let path = directory.join(page_file(package_hash, PageKey { layer, level, x, y }));
+    let parent = path
+        .parent()
+        .ok_or_else(|| invalid("directory page path has no parent"))?;
+    ensure_directory(parent)?;
+    write_page_immutable(&path, bytes)
+}
+
+pub(crate) fn publish_streaming_manifest(
+    directory: &Path,
+    package: &MapPackage,
+) -> Result<(), GeodataError> {
+    package.validate()?;
+    ensure_directory(directory)?;
+    verify::verify_manifest(directory, &package.content_hash_hex(), package)?;
+    let hash = package.content_hash_hex();
+    let path = directory.join(format!("{hash}.json"));
+    let bytes = serde_json::to_vec(package).map_err(json_error)?;
+    if bytes.len() as u64 > MAX_DIRECTORY_MANIFEST_BYTES {
+        return Err(invalid("directory manifest exceeds its byte limit"));
+    }
+    if fs::symlink_metadata(&path).is_ok() {
+        let existing = verify::read_manifest(directory, &hash)?;
+        return verify::verify_manifest(directory, &hash, &existing);
+    }
+    let temporary = write_temporary(&path, &bytes)?;
+    match fs::hard_link(&temporary, &path) {
+        Ok(()) => fs::remove_file(temporary).map_err(GeodataError::from),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(temporary);
+            let existing = verify::read_manifest(directory, &hash)?;
+            verify::verify_manifest(directory, &hash, &existing)
+        }
+        Err(error) => {
+            let _ = fs::remove_file(temporary);
+            Err(error.into())
+        }
+    }
 }
 
 fn json_error(error: serde_json::Error) -> GeodataError {

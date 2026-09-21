@@ -1,7 +1,7 @@
 use aoe_geodata::{
-    DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, GeneratedMap,
-    REQUIRED_OVERVIEW_SOURCE_IDS, SourceCache, WorkerRequest, WorkerResponse, execute,
-    overview_sources,
+    DEFAULT_CACHE_QUOTA_BYTES, DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DemResolution, DownloadPolicy,
+    GeneratedMap, REQUIRED_OVERVIEW_SOURCE_IDS, SourceCache, WorkerRequest, WorkerResponse,
+    execute, overview_sources,
 };
 use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest};
 use serde::Serialize;
@@ -30,6 +30,7 @@ pub fn run(arguments: &[OsString]) -> Result<(), String> {
         "verify" => verify_sources(),
         "map-estimate" => map_estimate(),
         "map-generate" => map_generate(),
+        "map-generate-detailed" => map_generate_detailed(),
         "map-verify" => map_verify(),
         "map-perf" => map_perf(),
         _ => Err(usage()),
@@ -37,7 +38,7 @@ pub fn run(arguments: &[OsString]) -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: aoe-map-worker [bootstrap|verify|map-estimate|map-generate|map-verify|map-perf]"
+    "usage: aoe-map-worker [bootstrap|verify|map-estimate|map-generate|map-generate-detailed|map-verify|map-perf]"
         .to_owned()
 }
 
@@ -120,6 +121,33 @@ fn map_generate() -> Result<(), String> {
         return Err("map worker returned an unexpected directory response".to_owned());
     };
     println!("generated {}", package.content_hash_hex());
+    Ok(())
+}
+
+fn map_generate_detailed() -> Result<(), String> {
+    let request = read_request()?;
+    let output = package_path()?;
+    let samples_per_axis = env::var("AOE_MAP_SAMPLES")
+        .unwrap_or_else(|_| "128".to_owned())
+        .parse::<u16>()
+        .map_err(|_| "AOE_MAP_SAMPLES must be an integer".to_owned())?;
+    let resolution = match env::var("AOE_MAP_DEM_RESOLUTION").as_deref() {
+        Ok("glo90") | Err(_) => DemResolution::Glo90,
+        Ok("glo30") | Ok("glo30_prefer_glo90") => DemResolution::Glo30PreferGlo90,
+        Ok(_) => return Err("AOE_MAP_DEM_RESOLUTION must be glo90 or glo30".to_owned()),
+    };
+    let response = execute(WorkerRequest::PrepareDetailedDirectory {
+        cache_root: cache_root(),
+        output_directory: output,
+        request,
+        samples_per_axis,
+        resolution,
+    })
+    .map_err(|error| error.to_string())?;
+    let WorkerResponse::PreparedDirectory { package } = response else {
+        return Err("map worker returned an unexpected detailed response".to_owned());
+    };
+    println!("generated detailed {}", package.content_hash_hex());
     Ok(())
 }
 
