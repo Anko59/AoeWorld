@@ -116,15 +116,16 @@ impl GameWorld {
         &mut self,
         origin: aoe_core::TileCoord,
         destination: aoe_core::TileCoord,
-    ) -> Option<MovementOutcome> {
+    ) -> Option<MapRoutePlan> {
         if !self.terrain.has_map_navigation() {
             return None;
         }
         let budget = self.take_planning_budget();
         if budget == 0 {
-            return Some(MovementOutcome::BudgetExceeded);
+            return Some(MapRoutePlan::Deferred);
         }
         self.cached_map_segment(origin, destination, budget)
+            .map(MapRoutePlan::Outcome)
     }
 
     fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
@@ -152,7 +153,10 @@ impl GameWorld {
             Some(MovementOutcome::InvalidDestination) | Some(MovementOutcome::Unreachable) => {
                 SegmentAdvance::Stopped
             }
-            Some(MovementOutcome::BudgetExceeded) => SegmentAdvance::Planning,
+            // The planner ran and exhausted its bounded search. This is a
+            // terminal result for this order; only a zero shared budget is a
+            // transient deferral handled above.
+            Some(MovementOutcome::BudgetExceeded) => SegmentAdvance::Stopped,
             None => SegmentAdvance::Stopped,
         }
     }
@@ -185,4 +189,10 @@ enum SegmentAdvance {
     Next(WorldPosition),
     Planning,
     Stopped,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum MapRoutePlan {
+    Outcome(MovementOutcome),
+    Deferred,
 }

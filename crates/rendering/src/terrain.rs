@@ -1,5 +1,6 @@
 use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, web::Sprite};
 use aoe_core::{Camera, ScreenPoint, TileCoord};
+use std::collections::BTreeMap;
 
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
 
@@ -76,12 +77,8 @@ fn visible_map_terrain_frames(
         zoom: camera.zoom,
         viewport: camera.viewport,
     };
-    let stride = (terrain.len().div_ceil(MAX_VISIBLE_TERRAIN_SPRITES) as f64)
-        .sqrt()
-        .ceil()
-        .max(1.0) as usize;
-    let mut result = Vec::with_capacity(terrain.len().div_ceil(stride * stride));
-    for sample in terrain.iter().step_by(stride * stride) {
+    let mut visible = Vec::with_capacity(terrain.len().min(MAX_VISIBLE_TERRAIN_SPRITES));
+    for sample in terrain {
         let frames = art
             .terrain
             .get(usize::from(sample.material))
@@ -90,35 +87,129 @@ fn visible_map_terrain_frames(
         let frame = frames[((sample.position[0] as i32 * 7 + sample.position[1] as i32 * 13)
             .unsigned_abs() as usize)
             % frames.len()];
-        let screen = projection.world_to_screen_at_height(sample.position, sample.elevation_meters);
-        let width = f64::from(frame.size[0]) * camera.zoom;
-        let height = f64::from(frame.size[1]) * camera.zoom;
-        if screen.x + width < 0.0
-            || screen.y + height < 0.0
-            || screen.x - width > camera.viewport[0]
-            || screen.y - height > camera.viewport[1]
-        {
-            continue;
+        if let Some(candidate) = terrain_candidate(&projection, *sample, frame, camera, 1) {
+            visible.push(candidate);
         }
-        let x = screen.x - f64::from(frame.anchor[0]) * camera.zoom;
-        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
-        result.push((
-            Sprite {
-                position: [
-                    ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-                    (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
-                ],
-                radius: [
-                    (width / camera.viewport[0]) as f32,
-                    (height / camera.viewport[1]) as f32,
-                ],
-                color: [1.0; 4],
-                uv: frame.uv,
-            },
-            scaled(frame, camera.zoom as f32),
-        ));
     }
-    result
+    if visible.len() <= MAX_VISIBLE_TERRAIN_SPRITES {
+        return visible
+            .into_iter()
+            .filter_map(|candidate| terrain_sprite(&projection, candidate, camera))
+            .collect();
+    }
+
+    let (cell_size, cells) = aggregate_candidates(visible);
+    cells
+        .into_iter()
+        .filter_map(|((cell_x, cell_y), candidate)| {
+            let center = [
+                f64::from(cell_x * cell_size) + f64::from(cell_size) * 0.5,
+                f64::from(cell_y * cell_size) + f64::from(cell_size) * 0.5,
+            ];
+            terrain_sprite(
+                &projection,
+                TerrainCandidate {
+                    sample: SceneTerrain {
+                        position: center,
+                        ..candidate.sample
+                    },
+                    frame: candidate.frame,
+                    scale: candidate.scale * cell_size as f32,
+                },
+                camera,
+            )
+        })
+        .collect()
+}
+
+fn aggregate_candidates(
+    visible: Vec<TerrainCandidate>,
+) -> (i32, BTreeMap<(i32, i32), TerrainCandidate>) {
+    let mut cell_size = (visible.len().div_ceil(MAX_VISIBLE_TERRAIN_SPRITES) as f64)
+        .sqrt()
+        .ceil() as i32;
+    loop {
+        let mut cells = BTreeMap::new();
+        for candidate in visible.iter().copied() {
+            let cell = (
+                (candidate.sample.position[0].floor() as i32).div_euclid(cell_size),
+                (candidate.sample.position[1].floor() as i32).div_euclid(cell_size),
+            );
+            cells.entry(cell).or_insert(candidate);
+        }
+        if cells.len() <= MAX_VISIBLE_TERRAIN_SPRITES {
+            return (cell_size, cells);
+        }
+        cell_size = cell_size.saturating_add(1);
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TerrainCandidate {
+    sample: SceneTerrain,
+    frame: GameFrame,
+    scale: f32,
+}
+
+fn terrain_candidate(
+    projection: &Camera,
+    sample: SceneTerrain,
+    frame: GameFrame,
+    camera: SceneCamera,
+    scale: i32,
+) -> Option<TerrainCandidate> {
+    let screen = projection.world_to_screen_at_height(sample.position, sample.elevation_meters);
+    let width = f64::from(frame.size[0]) * camera.zoom * f64::from(scale);
+    let height = f64::from(frame.size[1]) * camera.zoom * f64::from(scale);
+    (screen.x + width >= 0.0
+        && screen.y + height >= 0.0
+        && screen.x - width <= camera.viewport[0]
+        && screen.y - height <= camera.viewport[1])
+        .then_some(TerrainCandidate {
+            sample,
+            frame,
+            scale: scale as f32,
+        })
+}
+
+fn terrain_sprite(
+    projection: &Camera,
+    candidate: TerrainCandidate,
+    camera: SceneCamera,
+) -> Option<(Sprite, GameFrame)> {
+    let TerrainCandidate {
+        sample,
+        frame,
+        scale,
+    } = candidate;
+    let screen = projection.world_to_screen_at_height(sample.position, sample.elevation_meters);
+    let frame = scaled(frame, camera.zoom as f32 * scale);
+    let width = f64::from(frame.size[0]);
+    let height = f64::from(frame.size[1]);
+    if screen.x + width < 0.0
+        || screen.y + height < 0.0
+        || screen.x - width > camera.viewport[0]
+        || screen.y - height > camera.viewport[1]
+    {
+        return None;
+    }
+    let x = screen.x - f64::from(frame.anchor[0]);
+    let y = screen.y - f64::from(frame.anchor[1]);
+    Some((
+        Sprite {
+            position: [
+                ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+                (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+            ],
+            radius: [
+                (width / camera.viewport[0]) as f32,
+                (height / camera.viewport[1]) as f32,
+            ],
+            color: [1.0; 4],
+            uv: frame.uv,
+        },
+        frame,
+    ))
 }
 
 fn visible_bounds(camera: Camera) -> (TileCoord, TileCoord) {
@@ -163,4 +254,78 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
     frame.size = frame.size.map(|value| value * scale);
     frame.anchor = frame.anchor.map(|value| value * scale);
     frame
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    fn test_art(frame: GameFrame) -> GameArt {
+        GameArt {
+            walking: Vec::new(),
+            standing: Vec::new(),
+            grass: vec![frame],
+            terrain: std::array::from_fn(|_| vec![frame]),
+            resources: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
+        let frame = GameFrame {
+            uv: [0.0; 4],
+            size: [1.0, 1.0],
+            anchor: [0.0, 0.0],
+        };
+        let candidates = (0..8_192)
+            .map(|x| TerrainCandidate {
+                sample: SceneTerrain {
+                    position: [f64::from(x * 2), 0.0],
+                    material: 0,
+                    elevation_meters: 0.0,
+                },
+                frame,
+                scale: 1.0,
+            })
+            .collect();
+        let (cell_size, cells) = aggregate_candidates(candidates);
+        assert_eq!(cell_size, 4);
+        assert_eq!(cells.len(), MAX_VISIBLE_TERRAIN_SPRITES);
+        assert!(cells.contains_key(&(0, 0)));
+        assert!(cells.contains_key(&(4_095, 0)));
+    }
+
+    #[wasm_bindgen_test]
+    fn offscreen_cached_tiles_do_not_change_visible_terrain() {
+        let frame = GameFrame {
+            uv: [0.0; 4],
+            size: [1.0, 1.0],
+            anchor: [0.0, 0.0],
+        };
+        let art = test_art(frame);
+        let camera = SceneCamera {
+            center: [0.0, 0.0],
+            zoom: 1.0,
+            viewport: [256.0, 128.0],
+        };
+        let visible = [SceneTerrain {
+            position: [0.0, 0.0],
+            material: 0,
+            elevation_meters: 0.0,
+        }];
+        let mut populated = visible.to_vec();
+        populated.extend((0..10_000).map(|x| SceneTerrain {
+            position: [10_000.0 + f64::from(x), 0.0],
+            material: 0,
+            elevation_meters: 0.0,
+        }));
+        let baseline = visible_terrain_frames(&art, &visible, camera);
+        let cached = visible_terrain_frames(&art, &populated, camera);
+        assert_eq!(baseline.len(), 1);
+        assert_eq!(cached.len(), baseline.len());
+        assert_eq!(cached[0].0.position, baseline[0].0.position);
+    }
 }

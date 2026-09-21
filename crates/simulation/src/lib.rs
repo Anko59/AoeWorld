@@ -17,7 +17,7 @@ pub use game_query::GameQueryStats;
 pub use game_world::{Facing, GameUnit, GameWorld, GameWorldError, MovementOrder};
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};
-pub use terrain::{Terrain, UniformGrass};
+pub use terrain::{StartSearchResult, Terrain, UniformGrass};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entity {

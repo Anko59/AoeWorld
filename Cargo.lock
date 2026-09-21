@@ -195,6 +195,7 @@ dependencies = [
  "aoe-protocol",
  "bytemuck",
  "wasm-bindgen",
+ "wasm-bindgen-test",
  "web-sys",
  "wgpu",
 ]

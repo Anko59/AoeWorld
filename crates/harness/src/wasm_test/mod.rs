@@ -102,9 +102,17 @@ pub fn run() -> Result<()> {
     let capabilities = capabilities
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
-    process::run_with_env(
-        "cargo",
-        &[
+    let environment = [
+        ("WASM_BINDGEN_USE_BROWSER", "1"),
+        ("CHROMEDRIVER_REMOTE", remote.as_str()),
+        (
+            "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER",
+            "wasm-bindgen-test-runner",
+        ),
+        ("WASM_BINDGEN_TEST_WEBDRIVER_JSON", capabilities),
+    ];
+    for arguments in [
+        vec![
             "test",
             "--locked",
             "--release",
@@ -115,17 +123,29 @@ pub fn run() -> Result<()> {
             "--test",
             "browser",
         ],
-        &[
-            ("WASM_BINDGEN_USE_BROWSER", "1"),
-            ("CHROMEDRIVER_REMOTE", &remote),
-            (
-                "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER",
-                "wasm-bindgen-test-runner",
-            ),
-            ("WASM_BINDGEN_TEST_WEBDRIVER_JSON", capabilities),
+        vec![
+            "test",
+            "--locked",
+            "--release",
+            "-p",
+            "aoe-client",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--lib",
         ],
-        Duration::from_secs(600),
-    )?;
+        vec![
+            "test",
+            "--locked",
+            "--release",
+            "-p",
+            "aoe-rendering",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--lib",
+        ],
+    ] {
+        process::run_with_env("cargo", &arguments, &environment, Duration::from_secs(600))?;
+    }
     let report = Report {
         version: 1,
         revision: git("rev-parse", "HEAD")?,

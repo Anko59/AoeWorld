@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 pub const MIN_SIDE_METERS: u64 = 250;
-pub const MAX_SIDE_METERS: u64 = 10_000_000_000;
+pub const MAX_SIDE_METERS: u64 = 10_000_000;
 pub const MIN_TILES_PER_SIDE: u64 = 64;
 pub const MAX_TILES_PER_SIDE: u64 = 262_144;
 
@@ -128,7 +128,7 @@ impl MapRequest {
         let effective_side_meters = u128::from(tiles)
             .checked_mul(denominator)
             .ok_or(MapRequestError::Overflow)?
-            / u128::from(request.compression.denominator);
+            .div_ceil(u128::from(request.compression.denominator));
         let game_side_meters = tiles
             .checked_mul(u64::from(GAME_TILE_METERS))
             .ok_or(MapRequestError::Overflow)?;
@@ -146,7 +146,7 @@ impl MapRequest {
                 .ok_or(MapRequestError::Overflow)?
                 .checked_mul(1_000)
                 .ok_or(MapRequestError::Overflow)?
-                / u64::from(request.compression.denominator),
+                .div_ceil(u64::from(request.compression.denominator)),
             walking_crossing_seconds: u64::try_from(walking_seconds)
                 .map_err(|_| MapRequestError::Overflow)?,
             cavalry_crossing_seconds: game_side_meters / u64::from(CAVALRY_METERS_PER_SECOND),
@@ -311,5 +311,38 @@ mod tests {
             request.compatible_compression(),
             Some(Ratio::new(1, 1).expect("ratio"))
         );
+    }
+
+    #[test]
+    fn accepts_the_10_000_kilometer_boundary_and_rejects_larger_requests_early() {
+        let valid = MapRequest {
+            requested_side_meters: 10_000_000,
+            compression: Ratio::new(40, 1).expect("ratio"),
+            ..MapRequest::default()
+        };
+        assert!(valid.normalized().is_ok());
+
+        let invalid = MapRequest {
+            requested_side_meters: 10_000_001,
+            ..valid
+        };
+        assert_eq!(invalid.normalized(), Err(MapRequestError::InvalidSide));
+        assert_eq!(invalid.estimate(), Err(MapRequestError::InvalidSide));
+    }
+
+    #[test]
+    fn fractional_geographic_ratio_rounds_effective_extent_and_tile_spacing_outward() {
+        let estimate = MapRequest {
+            requested_side_meters: 251,
+            compression: Ratio::new(4, 3).expect("ratio"),
+            ..MapRequest::default()
+        }
+        .estimate()
+        .expect("estimate");
+
+        assert_eq!(estimate.tiles_per_side, 95);
+        assert_eq!(estimate.effective_side_meters, 254);
+        assert_eq!(estimate.geographic_millimeters_per_tile, 2_667);
+        assert!(estimate.effective_side_meters >= 251);
     }
 }

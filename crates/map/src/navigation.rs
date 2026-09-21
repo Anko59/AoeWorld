@@ -1,6 +1,7 @@
 use crate::route_hierarchy::{portal_candidates, same_intermediate_region};
 use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
@@ -115,6 +116,23 @@ fn find_path_with<F>(
 where
     F: Fn(TileCoord) -> bool,
 {
+    let outcome = search_path(origin, destination, max_expansions, &passable, |tile| {
+        neighbors(terrain, tile, &passable)
+    });
+    segment_path(terrain, outcome, segment_tiles)
+}
+
+fn search_path<P, N>(
+    origin: TileCoord,
+    destination: TileCoord,
+    max_expansions: u32,
+    passable: P,
+    mut neighbors: N,
+) -> MovementOutcome
+where
+    P: Fn(TileCoord) -> bool,
+    N: FnMut(TileCoord) -> Vec<(TileCoord, u32)>,
+{
     if !passable(origin) || !passable(destination) {
         return MovementOutcome::InvalidDestination;
     }
@@ -127,29 +145,25 @@ where
     let mut open = BTreeSet::new();
     let mut g_scores = BTreeMap::new();
     let mut parents = BTreeMap::new();
-    open.insert(key(heuristic(origin, destination), 0, origin));
+    open.insert(OpenNode::new(heuristic(origin, destination), 0, origin));
     g_scores.insert(origin, 0_u64);
     let mut expansions = 0;
     while let Some(current) = open.pop_first() {
-        let tile = TileCoord::new(current.2, current.3);
+        let tile = current.tile;
         let Some(cost) = g_scores.get(&tile).copied() else {
             continue;
         };
-        if current.1 != cost {
+        if current.cost != cost {
             continue;
         }
         if tile == destination {
-            return segment_path(
-                terrain,
-                path(origin, destination, cost, parents),
-                segment_tiles,
-            );
+            return path(origin, destination, cost, parents);
         }
         if expansions >= max_expansions {
             return MovementOutcome::BudgetExceeded;
         }
         expansions += 1;
-        for (neighbor, step_cost) in neighbors(terrain, tile, &passable) {
+        for (neighbor, step_cost) in neighbors(tile) {
             let next_cost = cost + u64::from(step_cost);
             if g_scores
                 .get(&neighbor)
@@ -159,7 +173,7 @@ where
             }
             g_scores.insert(neighbor, next_cost);
             parents.insert(neighbor, tile);
-            open.insert(key(
+            open.insert(OpenNode::new(
                 next_cost + heuristic(neighbor, destination),
                 next_cost,
                 neighbor,
@@ -308,8 +322,34 @@ fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     diagonal * u64::from(DIAGONAL_COST) + (dx - diagonal) * u64::from(ORTHOGONAL_COST)
 }
 
-fn key(total: u64, cost: u64, tile: TileCoord) -> (u64, u64, i32, i32) {
-    (total, cost, tile.y, tile.x)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OpenNode {
+    total: u64,
+    cost: u64,
+    tile: TileCoord,
+}
+
+impl OpenNode {
+    const fn new(total: u64, cost: u64, tile: TileCoord) -> Self {
+        Self { total, cost, tile }
+    }
+}
+
+impl Ord for OpenNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.total, self.cost, self.tile.y, self.tile.x).cmp(&(
+            other.total,
+            other.cost,
+            other.tile.y,
+            other.tile.x,
+        ))
+    }
+}
+
+impl PartialOrd for OpenNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[cfg(test)]
@@ -425,3 +465,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "navigation/tests/asymmetric.rs"]
+mod asymmetric_tests;
