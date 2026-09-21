@@ -133,6 +133,10 @@ An evicted job ID is no longer available from job status endpoints. Saved map
 packages remain independent of this history. Job history resets when the
 server restarts. Preparation has no time estimate until measured progress is
 available; a completed job reports zero remaining seconds.
+Completion is published only after the map is registered for package retrieval
+and activation. Cancellation received while registration is waiting wins over
+success; the cancelled result is not registered by that job. This in-memory
+ordering does not provide crash recovery for files already prepared on disk.
 
 ## Tests and performance evidence
 

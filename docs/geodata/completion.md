@@ -29,6 +29,16 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
+M7 completion publication is reviewed in
+[PR #24](https://github.com/Anko59/AoeWorld/pull/24), revision
+`12fac5bd1c117d49ed4ea3b96a00be61bbe35fc1`. Map registration precedes observable
+job completion; cancellation during a registry wait prevents publication.
+Both direct race regressions failed before the fix and pass afterward. Hooks,
+test-unit (297), preflight, and clean pre-push preflight passed. One earlier
+preflight failed the existing five-message WebSocket scenario-reset assertion;
+unchanged retry and pre-push passed. No assertions or gate limits were changed.
+This does not close disk recovery, cancelled staging cleanup, or job progress.
+
 M4 resumable route planning is reviewed in
 [PR #23](https://github.com/Anko59/AoeWorld/pull/23), revision
 `dc3cb12c4e6095bd904197c6ce283472feff1f14`. Frontier state survives tick budgets;
