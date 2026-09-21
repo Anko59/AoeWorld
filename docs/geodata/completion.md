@@ -163,3 +163,15 @@ against the unchanged 217,240-byte baseline and 5% allowance. Hooks, preflight
 performance, and pre-push checks passed on the clean revision. Native profiles
 and performance baselines were not changed. Full dev release packaging and
 published release validation remain separate; native coverage gaps remain open.
+
+M6 flat terrain coverage is reviewed in
+[PR #17](https://github.com/Anko59/AoeWorld/pull/17), revision
+`7116082b65e7aa3c6dd05fae33338a4c596711a3`. Native terrain diamonds are
+normalized to the isometric tile footprint and centered anchor; bounded LOD
+covers translated and zoomed viewports. Unit and resource scale is preserved.
+Hooks, preflight (271 native tests), test-e2e (23), test-wasm (10), and
+clean-revision pre-push preflight passed. Combined with detailed preparation
+and the WASM profile fix, preflight (280 native tests), test-e2e (23),
+test-wasm (10), and perf-ci passed. This is flat fixture coverage evidence;
+altitude-aware cameras, surface meshes, picking, and actual source scene
+alignment remain open.
