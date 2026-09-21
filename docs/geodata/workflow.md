@@ -90,10 +90,12 @@ hash, and rejects missing or inconsistent roots. Keep package artifacts
 outside Git and regenerate or migrate them when a schema change intentionally
 breaks compatibility.
 
-The local asset mapping is equally deliberate: the client presently maps
-semantic terrain to six imported AoE II terrain groups (temperate grass, dry
-grass, dirt, sand, rock, water). Decorative natural features and resource
-sprites are not loaded yet, so they are not represented as substitute art.
+The local asset mapping is equally deliberate: the client maps semantic terrain
+to six imported AoE II terrain groups (temperate grass, dry grass, dirt, sand,
+rock, water) and four optional resource roles (berry bushes, broadleaf trees,
+gold deposits, and stone deposits). Decorative natural features and other
+unreviewed object sprites remain absent rather than being represented as
+substitute art.
 
 The map creator asks the native worker for a bounded, densified inverse-
 projection of the effective square. It draws that boundary on its

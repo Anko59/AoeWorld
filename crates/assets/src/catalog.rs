@@ -17,6 +17,9 @@ pub enum AssetRole {
     Rock,
     Water,
     WoodTree,
+    ForageBush,
+    GoldDeposit,
+    StoneDeposit,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,7 +103,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 1] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 4] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -110,13 +113,32 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 1] = [
         frames: 14,
         interpretation: "individual broadleaf tree variants",
     },
+    SpriteSource {
+        role: AssetRole::ForageBush,
+        archive: "graphics.drs",
+        id: 2560,
+        frames: 4,
+        interpretation: "four leafy berry-bush variants",
+    },
+    SpriteSource {
+        role: AssetRole::GoldDeposit,
+        archive: "graphics.drs",
+        id: 4479,
+        frames: 7,
+        interpretation: "seven gold-ore deposit variants",
+    },
+    SpriteSource {
+        role: AssetRole::StoneDeposit,
+        archive: "graphics.drs",
+        id: 4482,
+        frames: 7,
+        interpretation: "seven stone-ore deposit variants",
+    },
 ];
 
-/// Roles lacking reviewed source art. They stay absent from the render list so
-/// public synthetic imagery and unrelated trial frames are never misreported
-/// as evidence of real resource-art coverage.
-pub const UNAVAILABLE_RESOURCE_ART: [&str; 3] =
-    ["food forage bush", "gold deposit", "stone deposit"];
+/// Object roles without reviewed source art. Keep this empty while every
+/// supported resource role has an approved source mapping.
+pub const UNAVAILABLE_RESOURCE_ART: [&str; 0] = [];
 
 #[cfg(test)]
 mod tests {
@@ -149,6 +171,22 @@ mod tests {
         assert_eq!(
             OPTIONAL_RESOURCE_SOURCES[0].manifest_source(),
             "graphics.drs:[32, 112, 108, 115]:4652"
+        );
+    }
+
+    #[test]
+    fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
+        assert_eq!(
+            OPTIONAL_RESOURCE_SOURCES
+                .iter()
+                .map(|source| (source.role, source.id, source.frames))
+                .collect::<Vec<_>>(),
+            vec![
+                (AssetRole::WoodTree, 4652, 14),
+                (AssetRole::ForageBush, 2560, 4),
+                (AssetRole::GoldDeposit, 4479, 7),
+                (AssetRole::StoneDeposit, 4482, 7),
+            ]
         );
     }
 }
