@@ -10,6 +10,7 @@ use std::{
 };
 
 const MAX_QUEUED_JOBS: usize = 2;
+const MAX_RETAINED_JOBS: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -59,6 +60,24 @@ pub(super) struct Manager {
 }
 
 impl Manager {
+    fn reserve_history_slot(&mut self) -> Result<(), String> {
+        if self.jobs.len() < MAX_RETAINED_JOBS {
+            return Ok(());
+        }
+        let retired = self.jobs.iter().find_map(|(id, entry)| {
+            matches!(
+                entry.job.state,
+                JobState::Completed | JobState::Cancelled | JobState::Failed
+            )
+            .then_some(*id)
+        });
+        let Some(id) = retired else {
+            return Err("map job history is full of active work".to_owned());
+        };
+        self.jobs.remove(&id);
+        Ok(())
+    }
+
     fn active(&self) -> bool {
         self.jobs.values().any(|entry| {
             matches!(
@@ -88,7 +107,7 @@ impl Manager {
         job.state = JobState::Running;
         job.stage = JobStage::BuildingFallbackPackage;
         job.percent = 5;
-        job.eta_seconds = Some(1);
+        job.eta_seconds = None;
         Some(id)
     }
 
@@ -101,7 +120,11 @@ impl Manager {
             return Err("map creation queue is full; wait for a job to finish".to_owned());
         }
         let id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(1);
+        let next_id = id
+            .checked_add(1)
+            .ok_or_else(|| "map job identifiers are exhausted; restart the server".to_owned())?;
+        self.reserve_history_slot()?;
+        self.next_id = next_id;
         let job = Job {
             id,
             request,
@@ -310,11 +333,67 @@ mod tests {
         assert_eq!(manager.queued(), 2);
         assert_eq!(first.stage, JobStage::BuildingFallbackPackage);
         assert_eq!(first.percent, 5);
+        assert_eq!(first.eta_seconds, None);
         manager.jobs.get_mut(&first.id).expect("job").job.state = JobState::Completed;
         assert_eq!(manager.start_next(), Some(1));
         assert_eq!(
             manager.jobs.get(&1).expect("second job").job.stage,
             JobStage::BuildingFallbackPackage
         );
+    }
+
+    #[test]
+    fn completed_history_is_bounded_and_oldest_terminal_jobs_are_evicted() {
+        let request = MapRequest::default();
+        let estimate = request.estimate().expect("estimate");
+        let mut manager = Manager::default();
+        for id in 0..1_000_u64 {
+            let (job, start) = manager.enqueue(request, estimate).expect("job");
+            assert_eq!(job.id, id);
+            assert_eq!(start, Some(id));
+            manager.jobs.get_mut(&id).expect("entry").job.state = match id % 3 {
+                0 => JobState::Completed,
+                1 => JobState::Cancelled,
+                _ => JobState::Failed,
+            };
+            assert!(manager.jobs.len() <= MAX_RETAINED_JOBS);
+        }
+        assert_eq!(manager.jobs.len(), MAX_RETAINED_JOBS);
+        assert_eq!(manager.jobs.first_key_value().map(|(id, _)| *id), Some(872));
+    }
+
+    #[test]
+    fn retirement_preserves_running_cancellation_and_queued_work() {
+        let request = MapRequest::default();
+        let estimate = request.estimate().expect("estimate");
+        let mut manager = Manager::default();
+        for _ in 0..MAX_RETAINED_JOBS - 1 {
+            let (job, _) = manager.enqueue(request, estimate).expect("job");
+            manager.jobs.get_mut(&job.id).expect("entry").job.state = JobState::Completed;
+        }
+        manager.enqueue(request, estimate).expect("running");
+        manager.jobs.get_mut(&127).expect("running").job.state = JobState::CancelRequested;
+        manager.enqueue(request, estimate).expect("queued first");
+        manager.enqueue(request, estimate).expect("queued second");
+        assert_eq!(manager.jobs.len(), MAX_RETAINED_JOBS);
+        assert_eq!(manager.jobs[&127].job.state, JobState::CancelRequested);
+        assert_eq!(manager.jobs[&128].job.state, JobState::Queued);
+        assert_eq!(manager.jobs[&129].job.state, JobState::Queued);
+        assert!(!manager.jobs.contains_key(&0));
+        assert!(!manager.jobs.contains_key(&1));
+        assert!(manager.enqueue(request, estimate).is_err());
+    }
+
+    #[test]
+    fn identifier_exhaustion_does_not_overwrite_or_retire_jobs() {
+        let request = MapRequest::default();
+        let estimate = request.estimate().expect("estimate");
+        let mut manager = Manager::default();
+        manager.enqueue(request, estimate).expect("first");
+        manager.next_id = u64::MAX;
+        assert!(manager.enqueue(request, estimate).is_err());
+        assert_eq!(manager.next_id, u64::MAX);
+        assert_eq!(manager.jobs.len(), 1);
+        assert_eq!(manager.jobs[&0].job.state, JobState::Running);
     }
 }
