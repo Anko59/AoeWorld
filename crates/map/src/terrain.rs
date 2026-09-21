@@ -1,16 +1,19 @@
 use crate::biome::{PreparedBiome, level_zero_biome_pages};
-use crate::biome_rules::{Biome, biome_from_potential_class, material_for, tree_present};
+use crate::biome_rules::Biome;
 use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
     CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError,
-    HistoricalLandUsePage, PotentialBiomePage, PreparedEnvironment, Ratio, WaterPage,
+    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, PotentialBiomePage,
+    PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 mod elevation;
+mod fallback;
+mod provider;
 mod resources;
 mod surface;
 use elevation::PreparedElevation;
@@ -104,7 +107,7 @@ pub struct Chunk {
     pub resources: Vec<ResourceNode>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct MapChunkGenerator {
     geography_key: [u8; 32],
     procedural_seed: u64,
@@ -113,10 +116,13 @@ pub struct MapChunkGenerator {
     water: Option<Arc<PreparedWater>>,
     biome: Option<Arc<PreparedBiome>>,
     historical_land_use: Option<Arc<HistoricalLandUse>>,
+    provider: Option<Arc<dyn EnvironmentPageProvider>>,
+    provider_environment: Option<Arc<PreparedEnvironment>>,
+    provider_compression: Option<Ratio>,
 }
 
 impl MapChunkGenerator {
-    pub const fn new(geography_key: [u8; 32], procedural_seed: u64, width_tiles: i32) -> Self {
+    pub fn new(geography_key: [u8; 32], procedural_seed: u64, width_tiles: i32) -> Self {
         Self {
             geography_key,
             procedural_seed,
@@ -125,7 +131,29 @@ impl MapChunkGenerator {
             water: None,
             biome: None,
             historical_land_use: None,
+            provider: None,
+            provider_environment: None,
+            provider_compression: None,
         }
+    }
+
+    /// Binds an immutable page provider without retaining a complete page
+    /// vector. The provider owns source access and residency; this generator
+    /// retains only package metadata and deterministic terrain inputs.
+    pub fn with_page_provider(
+        mut self,
+        compression: Ratio,
+        environment: PreparedEnvironment,
+        provider: Arc<dyn EnvironmentPageProvider>,
+    ) -> Result<Self, EnvironmentError> {
+        environment.validate()?;
+        if environment.samples_per_axis == 0 {
+            return Err(EnvironmentError::InvalidPyramid);
+        }
+        self.provider = Some(provider);
+        self.provider_environment = Some(Arc::new(environment));
+        self.provider_compression = Some(compression);
+        Ok(self)
     }
 
     /// Binds verified level-zero elevation pages to this otherwise pure terrain
@@ -150,6 +178,9 @@ impl MapChunkGenerator {
             water: self.water,
             biome: self.biome,
             historical_land_use: self.historical_land_use,
+            provider: self.provider,
+            provider_environment: self.provider_environment,
+            provider_compression: self.provider_compression,
         })
     }
 
@@ -178,6 +209,9 @@ impl MapChunkGenerator {
             ))),
             biome: self.biome,
             historical_land_use: self.historical_land_use,
+            provider: self.provider,
+            provider_environment: self.provider_environment,
+            provider_compression: self.provider_compression,
         })
     }
 
@@ -206,6 +240,9 @@ impl MapChunkGenerator {
                 level_zero,
             ))),
             historical_land_use: self.historical_land_use,
+            provider: self.provider,
+            provider_environment: self.provider_environment,
+            provider_compression: self.provider_compression,
         })
     }
 
@@ -233,40 +270,97 @@ impl MapChunkGenerator {
                 environment.samples_per_axis,
                 level_zero,
             ))),
+            provider: self.provider,
+            provider_environment: self.provider_environment,
+            provider_compression: self.provider_compression,
         })
     }
 
     pub fn tile_at(&self, tile: TileCoord) -> Option<Tile> {
+        if self.provider.is_some() {
+            return self.tile_at_with_cancel(tile, &|| false).ok().flatten();
+        }
         (tile.x >= 0 && tile.y >= 0 && tile.x < self.width_tiles && tile.y < self.width_tiles)
             .then(|| self.sample_tile(tile))
     }
 
-    pub fn chunk(&self, x: i32, y: i32) -> Chunk {
+    /// Fallible source-backed tile query. A provider failure is never mapped
+    /// to procedural terrain or an absent successful tile.
+    pub fn tile_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<Tile>, EnvironmentPageError> {
+        if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
+            return Ok(None);
+        }
+        if self.provider.is_some() {
+            provider::sample_tile(self, tile, cancelled).map(Some)
+        } else {
+            Ok(Some(self.sample_tile(tile)))
+        }
+    }
+
+    pub fn chunk(&self, x: i32, y: i32) -> Result<Chunk, EnvironmentPageError> {
+        self.chunk_with_cancel(x, y, &|| false)
+    }
+
+    /// Fallible bounded chunk query. At most one returned chunk and the page
+    /// handles needed for its tiles are retained by the provider cache.
+    pub fn chunk_with_cancel(
+        &self,
+        x: i32,
+        y: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Chunk, EnvironmentPageError> {
         let mut tiles = Vec::with_capacity((CHUNK_TILES * CHUNK_TILES) as usize);
         let mut resources = Vec::new();
         for local_y in 0..CHUNK_TILES {
             for local_x in 0..CHUNK_TILES {
                 let tile = TileCoord::new(x * CHUNK_TILES + local_x, y * CHUNK_TILES + local_y);
-                let Some(sample) = self.tile_at(tile) else {
+                let Some(sample) = self.tile_at_with_cancel(tile, cancelled)? else {
                     continue;
                 };
                 tiles.push(sample);
-                if let Some(node) = self.resource_at(tile, sample) {
+                let node = if self.provider.is_some() {
+                    provider::resource_at(self, tile, sample, cancelled)?
+                } else {
+                    self.resource_at(tile, sample)
+                };
+                if let Some(node) = node {
                     resources.push(node);
                 }
             }
         }
-        Chunk {
+        Ok(Chunk {
             x,
             y,
             tiles,
             resources,
-        }
+        })
     }
 
     pub fn object_at(&self, tile: TileCoord) -> Option<ResourceNode> {
+        if self.provider.is_some() {
+            return self.object_at_with_cancel(tile, &|| false).ok().flatten();
+        }
         self.tile_at(tile)
             .and_then(|sample| self.resource_at(tile, sample))
+    }
+
+    pub fn object_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+        let Some(sample) = self.tile_at_with_cancel(tile, cancelled)? else {
+            return Ok(None);
+        };
+        if self.provider.is_some() {
+            provider::resource_at(self, tile, sample, cancelled)
+        } else {
+            Ok(self.resource_at(tile, sample))
+        }
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {
@@ -275,172 +369,6 @@ impl MapChunkGenerator {
         }
         let tile = TileCoord::new(((id >> 1) & 0x3_ffff) as i32, (id >> 19) as i32);
         self.object_at(tile).filter(|node| node.id == id)
-    }
-
-    fn sample_tile(&self, tile: TileCoord) -> Tile {
-        let broad = signed_noise(
-            self.geography_key,
-            b"relief",
-            tile.x.div_euclid(8),
-            tile.y.div_euclid(8),
-        );
-        let local = signed_noise(self.geography_key, b"relief-detail", tile.x, tile.y) / 8;
-        let fallback_height = broad.saturating_mul(25).saturating_add(local);
-        let fallback_water = if unsigned_noise(
-            self.geography_key,
-            b"water",
-            tile.x.div_euclid(16),
-            tile.y.div_euclid(16),
-        )
-        .is_multiple_of(97)
-        {
-            WaterKind::Lake
-        } else if unsigned_noise(
-            self.geography_key,
-            b"river",
-            tile.x.div_euclid(4),
-            tile.y.div_euclid(4),
-        )
-        .is_multiple_of(521)
-        {
-            WaterKind::River
-        } else {
-            WaterKind::None
-        };
-        let fallback_biome = match unsigned_noise(
-            self.geography_key,
-            b"biome",
-            tile.x.div_euclid(32),
-            tile.y.div_euclid(32),
-        ) % 10
-        {
-            0 => Biome::Tropical,
-            1 => Biome::Boreal,
-            2 => Biome::Woodland,
-            3 => Biome::Savanna,
-            4 => Biome::Steppe,
-            5 => Biome::Desert,
-            6 => Biome::Tundra,
-            7 => Biome::Alpine,
-            8 => Biome::Polar,
-            _ => Biome::Temperate,
-        };
-        let (biome, vegetation_provenance) = self
-            .biome
-            .as_ref()
-            .and_then(|biome| biome.class_at(tile, self.width_tiles))
-            .and_then(biome_from_potential_class)
-            .map(|biome| (biome, Provenance::SourceDerived))
-            .unwrap_or((fallback_biome, Provenance::Fallback));
-        let (
-            geographic_height_centimeters,
-            game_height_level,
-            surface,
-            elevation_provenance,
-            water,
-            water_provenance,
-        ) = self
-            .elevation
-            .as_ref()
-            .and_then(|elevation| {
-                elevation
-                    .height_at(tile, self.width_tiles)
-                    .map(|height| (height, elevation.compression))
-            })
-            .map(|(height, compression)| {
-                let game_height = quantize_game_height(height, compression);
-                let corner_heights = self
-                    .elevation
-                    .as_ref()
-                    .and_then(|elevation| elevation.corner_heights(tile, self.width_tiles))
-                    .unwrap_or([height; 4]);
-                (
-                    height,
-                    game_height,
-                    surface::from_heights(corner_heights, compression),
-                    Provenance::SourceDerived,
-                    // Elevation cannot identify water: inland depressions can be dry,
-                    // while coastlines require independent, coherent water geometry.
-                    fallback_water,
-                    Provenance::Fallback,
-                )
-            })
-            .unwrap_or((
-                fallback_height,
-                quantize_game_height(fallback_height, compression_fallback()),
-                surface::from_heights([fallback_height; 4], compression_fallback()),
-                Provenance::Fallback,
-                fallback_water,
-                Provenance::Fallback,
-            ));
-        let (water, water_provenance) = self
-            .water
-            .as_ref()
-            .and_then(|water| water.coverage_at(tile, self.width_tiles))
-            .map(|coverage| match coverage.ocean_percent {
-                1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
-                51..=100 => (WaterKind::Ocean, Provenance::SourceDerived),
-                _ => match coverage.inland_percent {
-                    0 => (WaterKind::None, Provenance::SourceDerived),
-                    1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
-                    _ => (WaterKind::Lake, Provenance::SourceDerived),
-                },
-            })
-            .unwrap_or((water, water_provenance));
-        let material = match water {
-            WaterKind::None => material_for(biome, geographic_height_centimeters),
-            WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
-            WaterKind::Shallow => GroundMaterial::Shore,
-        };
-        Tile {
-            geographic_height_centimeters,
-            game_height_level,
-            surface,
-            material,
-            biome,
-            vegetation_provenance,
-            water,
-            elevation_provenance,
-            water_provenance,
-            passable: water == WaterKind::None
-                && material != GroundMaterial::Ice
-                && surface.walkable(),
-        }
-    }
-
-    fn resource_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
-        if !sample.passable {
-            return None;
-        }
-        self.tree_at(tile, sample)
-            .or_else(|| resources::at(self, tile, sample))
-    }
-
-    pub(super) fn occupied_without_access(&self, tile: TileCoord, sample: Tile) -> bool {
-        !sample.passable
-            || self.tree_at(tile, sample).is_some()
-            || resources::candidate(self, tile, sample).is_some()
-    }
-
-    fn tree_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
-        let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
-            ^ self.procedural_seed.rotate_left(17);
-        let historically_cleared = self
-            .historical_land_use
-            .as_ref()
-            .and_then(|land_use| land_use.at(tile, self.width_tiles))
-            .is_some_and(|land_use| {
-                value % 100 < u64::from(land_use.crop_percent + land_use.grazing_percent)
-            });
-        (!historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
-            .then_some(ResourceNode {
-                id: resource_id(tile, 0),
-                tile,
-                kind: ResourceKind::Wood,
-                object: ObjectKind::Tree,
-                initial_amount: 100,
-                visual_variant: (value >> 8) as u8,
-            })
     }
 }
 

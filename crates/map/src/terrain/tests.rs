@@ -125,12 +125,17 @@ fn deterministic_tree_is_an_obstruction_for_gathering_access() {
 
 #[test]
 fn chunks_are_order_independent_and_have_stable_shared_tiles() {
-    let first = generator(1).chunk(0, 0);
-    let second = generator(1).chunk(0, 0);
+    let first = generator(1).chunk(0, 0).expect("fixture chunk");
+    let second = generator(1).chunk(0, 0).expect("fixture chunk");
     assert_eq!(first, second);
     assert_eq!(
         generator(1).tile_at(TileCoord::new(31, 5)),
-        generator(1).chunk(0, 0).tiles.get(5 * 32 + 31).copied()
+        generator(1)
+            .chunk(0, 0)
+            .expect("fixture chunk")
+            .tiles
+            .get(5 * 32 + 31)
+            .copied()
     );
 }
 
@@ -148,17 +153,21 @@ fn procedural_seed_changes_objects_without_moving_relief() {
             .geographic_height_centimeters
     );
     let first = (0..4)
-        .flat_map(|y| (0..4).flat_map(move |x| generator(1).chunk(x, y).resources))
+        .flat_map(|y| {
+            (0..4).flat_map(move |x| generator(1).chunk(x, y).expect("fixture chunk").resources)
+        })
         .collect::<Vec<_>>();
     let second = (0..4)
-        .flat_map(|y| (0..4).flat_map(move |x| generator(2).chunk(x, y).resources))
+        .flat_map(|y| {
+            (0..4).flat_map(move |x| generator(2).chunk(x, y).expect("fixture chunk").resources)
+        })
         .collect::<Vec<_>>();
     assert_ne!(first, second);
 }
 
 #[test]
 fn resources_have_one_collision_free_slot_per_tile() {
-    let chunk = generator(1).chunk(0, 0);
+    let chunk = generator(1).chunk(0, 0).expect("fixture chunk");
     let mut ids = chunk
         .resources
         .iter()
@@ -175,12 +184,12 @@ fn resources_are_stable_when_chunks_cross_boundaries_in_different_orders() {
     let coordinates = [(0, 0), (1, 0), (0, 1), (1, 1)];
     let mut forward = coordinates
         .into_iter()
-        .flat_map(|(x, y)| terrain.chunk(x, y).resources)
+        .flat_map(|(x, y)| terrain.chunk(x, y).expect("fixture chunk").resources)
         .collect::<Vec<_>>();
     let mut reverse = coordinates
         .into_iter()
         .rev()
-        .flat_map(|(x, y)| terrain.chunk(x, y).resources)
+        .flat_map(|(x, y)| terrain.chunk(x, y).expect("fixture chunk").resources)
         .collect::<Vec<_>>();
     forward.sort_by_key(|node| node.id);
     reverse.sort_by_key(|node| node.id);
@@ -193,7 +202,7 @@ fn every_resource_has_an_unoccupied_adjacent_gathering_tile() {
     let mut nodes = Vec::new();
     for y in 0..4 {
         for x in 0..4 {
-            nodes.extend(terrain.chunk(x, y).resources);
+            nodes.extend(terrain.chunk(x, y).expect("fixture chunk").resources);
         }
     }
     let mut examined = 0;
@@ -277,7 +286,9 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         }),
     };
     let natural = (0..4)
-        .flat_map(|y| (0..4).flat_map(move |x| generator(1).chunk(x, y).resources))
+        .flat_map(|y| {
+            (0..4).flat_map(move |x| generator(1).chunk(x, y).expect("fixture chunk").resources)
+        })
         .collect::<Vec<_>>();
     assert!(natural.iter().any(|node| node.kind == ResourceKind::Wood));
     let cleared = generator(1)
@@ -286,7 +297,7 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
     let cleared = (0..4)
         .flat_map(|y| {
             let generator = cleared.clone();
-            (0..4).flat_map(move |x| generator.chunk(x, y).resources)
+            (0..4).flat_map(move |x| generator.chunk(x, y).expect("fixture chunk").resources)
         })
         .collect::<Vec<_>>();
     assert!(cleared.iter().all(|node| node.kind != ResourceKind::Wood));

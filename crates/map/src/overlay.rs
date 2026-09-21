@@ -1,4 +1,4 @@
-use crate::MapChunkGenerator;
+use crate::{MapChunkGenerator, ResourceNode};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -38,6 +38,17 @@ impl ResourceOverlay {
 
     pub fn blocks(&self, terrain: &MapChunkGenerator, id: u64) -> bool {
         self.remaining(terrain, id).is_some_and(|amount| amount > 0)
+    }
+
+    /// Applies overlay state to a resource that was already resolved by a
+    /// checked terrain query. This avoids resolving a provider-backed tile a
+    /// second time after its page handle has been validated.
+    pub fn blocks_node(&self, node: ResourceNode) -> bool {
+        self.remaining
+            .get(&node.id)
+            .copied()
+            .unwrap_or(node.initial_amount)
+            > 0
     }
 
     pub fn deplete(
@@ -89,7 +100,7 @@ mod tests {
         let node = (0..4)
             .flat_map(|y| {
                 let terrain = terrain.clone();
-                (0..4).flat_map(move |x| terrain.chunk(x, y).resources)
+                (0..4).flat_map(move |x| terrain.chunk(x, y).expect("fixture chunk").resources)
             })
             .next()
             .expect("test terrain resource");

@@ -386,7 +386,9 @@ mod tests {
 
     #[test]
     fn compact_chunk_round_trips_every_terrain_field() {
-        let original = MapChunkGenerator::new([7; 32], 11, 64).chunk(1, 1);
+        let original = MapChunkGenerator::new([7; 32], 11, 64)
+            .chunk(1, 1)
+            .expect("fixture chunk");
         let compact = CompactChunk::encode(&original).expect("encodes a map chunk");
         assert!(compact.decoded_len().expect("decoded length") <= MAX_DECODED_CHUNK_BYTES);
         assert_eq!(compact.decode().expect("decodes a map chunk"), original);

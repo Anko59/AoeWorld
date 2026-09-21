@@ -8,10 +8,25 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use serde::Serialize;
-use std::sync::atomic::Ordering;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;
+struct RequestCancellation(Arc<AtomicBool>);
+
+impl Drop for RequestCancellation {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
+    let cancelled = Arc::new(AtomicBool::new(false));
+    (RequestCancellation(cancelled.clone()), cancelled)
+}
 
 fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
     let value = headers.get(CONTROLLER_TOKEN_HEADER)?.to_str().ok()?;
@@ -209,6 +224,8 @@ async fn activate_completed(
     state: AppState,
     package: MapPackage,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
+    let (_cancellation_guard, cancelled) = request_cancellation();
+    let provider = page_residency(&state, &package, cancelled.clone()).await?;
     let activation = Activation {
         content_hash: package.content_hash_hex(),
         tiles_per_side: package.estimate.tiles_per_side,
@@ -219,24 +236,22 @@ async fn activate_completed(
     };
     let gameplay = tokio::task::spawn_blocking({
         let package = package.clone();
-        let directory = state.map_package_directory.clone();
         move || {
-            let elevation_pages = map_store::load_elevation_pages(directory.as_deref(), &package)
-                .map_err(|error| error.to_string())?;
-            let water_pages = map_store::load_water_pages(directory.as_deref(), &package)
-                .map_err(|error| error.to_string())?;
-            let vegetation_pages = map_store::load_vegetation_pages(directory.as_deref(), &package)
-                .map_err(|error| error.to_string())?;
-            let land_use_pages = map_store::load_land_use_pages(directory.as_deref(), &package)
-                .map_err(|error| error.to_string())?;
-            GameplayService::from_prepared_map(
-                package,
-                elevation_pages,
-                water_pages,
-                vegetation_pages,
-                land_use_pages,
-            )
-            .map_err(|error| error.to_string())
+            if let Some(provider) = provider {
+                GameplayService::from_prepared_provider_with_cancel(package, provider, &|| {
+                    cancelled.load(Ordering::Acquire)
+                })
+                .map_err(|error| error.to_string())
+            } else {
+                GameplayService::from_prepared_map(
+                    package,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .map_err(|error| error.to_string())
+            }
         }
     })
     .await
@@ -301,34 +316,33 @@ pub(super) async fn preview(
         .get(&content_hash)
         .cloned()
         .ok_or(StatusCode::NOT_FOUND)?;
-    let directory = state.map_package_directory.clone();
-    tokio::task::spawn_blocking(move || preview_package(directory.as_deref(), package))
+    let (_cancellation_guard, cancelled) = request_cancellation();
+    let provider = page_residency(&state, &package, cancelled.clone())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(Json)
-        .map_err(|_| StatusCode::NOT_FOUND)
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    tokio::task::spawn_blocking(move || {
+        preview_package(package, provider, &|| cancelled.load(Ordering::Acquire))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map(Json)
+    .map_err(|_| StatusCode::NOT_FOUND)
 }
 
 fn preview_package(
-    directory: Option<&std::path::Path>,
     package: MapPackage,
+    provider: Option<Arc<map_store::PageResidency>>,
+    cancelled: &dyn Fn() -> bool,
 ) -> Result<MapPreview, String> {
-    let elevation_pages =
-        map_store::load_elevation_pages(directory, &package).map_err(|error| error.to_string())?;
-    let water_pages =
-        map_store::load_water_pages(directory, &package).map_err(|error| error.to_string())?;
-    let vegetation_pages =
-        map_store::load_vegetation_pages(directory, &package).map_err(|error| error.to_string())?;
-    let land_use_pages =
-        map_store::load_land_use_pages(directory, &package).map_err(|error| error.to_string())?;
-    let generator = package
-        .generator_with_environment(
-            elevation_pages,
-            water_pages,
-            vegetation_pages,
-            land_use_pages,
-        )
-        .map_err(|error| error.to_string())?;
+    let generator = if package.environment.samples_per_axis == 0 {
+        package.generator()
+    } else {
+        package
+            .generator_with_page_provider(
+                provider.ok_or_else(|| "prepared package has no page provider".to_owned())?,
+            )
+            .map_err(|error| error.to_string())?
+    };
     let mut cells = Vec::with_capacity(usize::from(PREVIEW_SAMPLES_PER_AXIS).pow(2));
     let mut minimum_height_centimeters = i32::MAX;
     let mut maximum_height_centimeters = i32::MIN;
@@ -339,7 +353,8 @@ fn preview_package(
                 preview_coordinate(package.estimate.tiles_per_side, y)?,
             );
             let tile = generator
-                .tile_at(tile)
+                .tile_at_with_cancel(tile, cancelled)
+                .map_err(|error| error.to_string())?
                 .ok_or_else(|| "preview sample was outside the package".to_owned())?;
             minimum_height_centimeters =
                 minimum_height_centimeters.min(tile.geographic_height_centimeters);
@@ -419,25 +434,22 @@ pub(super) async fn chunk(
     if x < 0 || y < 0 || x >= chunks || y >= chunks {
         return Err(StatusCode::NOT_FOUND);
     }
-    let directory = state.map_package_directory.clone();
+    let (_cancellation_guard, cancelled) = request_cancellation();
+    let provider = page_residency(&state, &package, cancelled.clone())
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
     let chunk = tokio::task::spawn_blocking(move || {
-        let elevation_pages = map_store::load_elevation_pages(directory.as_deref(), &package)
+        let generator = if let Some(provider) = provider {
+            package
+                .generator_with_page_provider(provider)
+                .map_err(|_| StatusCode::NOT_FOUND)?
+        } else {
+            package.generator()
+        };
+        let chunk = generator
+            .chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
             .map_err(|_| StatusCode::NOT_FOUND)?;
-        let water_pages = map_store::load_water_pages(directory.as_deref(), &package)
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        let vegetation_pages = map_store::load_vegetation_pages(directory.as_deref(), &package)
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        let land_use_pages = map_store::load_land_use_pages(directory.as_deref(), &package)
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        let generator = package
-            .generator_with_environment(
-                elevation_pages,
-                water_pages,
-                vegetation_pages,
-                land_use_pages,
-            )
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        CompactChunk::encode(&generator.chunk(x, y)).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        CompactChunk::encode(&chunk).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
@@ -449,30 +461,40 @@ pub(super) async fn chunk(
     Ok(Json(chunk))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fallback_preview_is_bounded_and_does_not_require_activation() {
-        let package = MapPackage::new(MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())
-            .expect("fallback package");
-        let preview = preview_package(None, package).expect("fallback preview");
-        assert_eq!(preview.samples_per_axis, PREVIEW_SAMPLES_PER_AXIS);
-        assert_eq!(
-            preview.cells.len(),
-            usize::from(PREVIEW_SAMPLES_PER_AXIS).pow(2)
-        );
-        assert!(!preview.source_backed);
-        assert!(preview.minimum_height_centimeters <= preview.maximum_height_centimeters);
+async fn page_residency(
+    state: &AppState,
+    package: &MapPackage,
+    cancelled: Arc<AtomicBool>,
+) -> Result<Option<Arc<map_store::PageResidency>>, (StatusCode, String)> {
+    if package.environment.samples_per_axis == 0 {
+        return Ok(None);
     }
-
-    #[test]
-    fn preview_coordinates_stay_inside_tiny_and_large_maps() {
-        assert_eq!(preview_coordinate(1, 0).expect("coordinate"), 0);
-        assert_eq!(
-            preview_coordinate(500, PREVIEW_SAMPLES_PER_AXIS - 1).expect("coordinate"),
-            484
-        );
+    let hash = package.content_hash_hex();
+    let mut providers = state.page_residencies.write().await;
+    if let Some(provider) = providers.get(&hash) {
+        return Ok(Some(provider));
     }
+    let directory = state.map_package_directory.clone().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "prepared map package storage is not configured".to_owned(),
+    ))?;
+    let package_copy = package.clone();
+    let provider = tokio::task::spawn_blocking(move || {
+        map_store::PageResidency::open(&directory, &package_copy, &|| {
+            cancelled.load(Ordering::Acquire)
+        })
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "map page index task failed".to_owned(),
+        )
+    })?
+    .map_err(|error| (StatusCode::NOT_FOUND, error))?;
+    providers.insert(hash, provider.clone());
+    Ok(Some(provider))
 }
+#[cfg(test)]
+mod tests;

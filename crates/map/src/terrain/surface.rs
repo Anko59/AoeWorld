@@ -1,4 +1,5 @@
 use super::MapChunkGenerator;
+use crate::EnvironmentPageError;
 use crate::Ratio;
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -64,6 +65,37 @@ impl MapChunkGenerator {
             return EdgePassability::Blocked;
         }
         EdgePassability::Passable
+    }
+
+    pub fn edge_between_with_cancel(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<EdgePassability, EnvironmentPageError> {
+        let delta_x = to.x.saturating_sub(from.x).unsigned_abs();
+        let delta_y = to.y.saturating_sub(from.y).unsigned_abs();
+        if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
+            return Ok(EdgePassability::Blocked);
+        }
+        let from = self
+            .tile_at_with_cancel(from, cancelled)?
+            .ok_or(EnvironmentPageError::Invalid)?;
+        let to = self
+            .tile_at_with_cancel(to, cancelled)?
+            .ok_or(EnvironmentPageError::Invalid)?;
+        Ok(
+            if !from.passable
+                || !to.passable
+                || !from.surface.walkable()
+                || !to.surface.walkable()
+                || (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() > 1
+            {
+                EdgePassability::Blocked
+            } else {
+                EdgePassability::Passable
+            },
+        )
     }
 }
 

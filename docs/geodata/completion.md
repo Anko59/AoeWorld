@@ -21,7 +21,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | ID | Deliverable | Status | Acceptance |
 | --- | --- | --- | --- |
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Directory/regional prep verified; residency pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
+| M2 | Detailed streaming preparation | Regional prep/residency verified; creator/large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Placement repaired; persistence/deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
@@ -175,3 +175,19 @@ and the WASM profile fix, preflight (280 native tests), test-e2e (23),
 test-wasm (10), and perf-ci passed. This is flat fixture coverage evidence;
 altitude-aware cameras, surface meshes, picking, and actual source scene
 alignment remain open.
+
+M2 bounded runtime residency is reviewed in
+[PR #18](https://github.com/Anko59/AoeWorld/pull/18), revision
+`fcd487b4c24e09f75de05a8792bbe434dc87663d`. Verified pages load through a
+128-page cache, with at most two indexed providers in the server registry and
+a 64 MiB index allowance per package. Active handles can outlive registry
+eviction. Chunk/preview/activation requests propagate page failures and use
+request-local cancellation. Fixtures cover all-field dense/provider parity,
+post-start corruption, legacy layouts, and eviction across a 341-page package.
+Hooks, map-test (50), preflight (276 native tests), test-e2e (23), test-wasm (7),
+and clean-revision pre-push preflight passed. The combined tree passed
+preflight (285 native tests), test-e2e (23), test-wasm (10), perf-ci, and
+verification of the detailed Paris recipe-2 package recorded above.
+Maximum-pyramid qualification, automatic detail selection, wider geographic
+support, and source-backed long travel remain open. Legacy convenience route
+APIs fail closed but do not yet preserve typed provider failures.

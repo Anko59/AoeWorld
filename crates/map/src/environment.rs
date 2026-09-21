@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod provider;
+pub use provider::{
+    EnvironmentPage, EnvironmentPageError, EnvironmentPageKey, EnvironmentPageProvider,
+};
+
 pub const MAX_ENVIRONMENT_SAMPLES_PER_AXIS: u16 = 16_384;
 pub const ENVIRONMENT_PAGE_SAMPLES: u8 = 64;
 const MAX_PYRAMID_LEVELS: usize = 15;

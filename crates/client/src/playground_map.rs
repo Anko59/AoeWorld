@@ -347,7 +347,9 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
-        let chunk = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0);
+        let chunk = MapChunkGenerator::new([0; 32], 1, 32)
+            .chunk(0, 0)
+            .expect("fixture chunk");
         assert_eq!(
             chunk_resident_bytes(&chunk),
             size_of::<Chunk>()
@@ -364,7 +366,9 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn partial_edge_chunk_uses_active_map_dimensions_for_rows() {
-        let chunk = MapChunkGenerator::new([0; 32], 1, 500).chunk(15, 15);
+        let chunk = MapChunkGenerator::new([0; 32], 1, 500)
+            .chunk(15, 15)
+            .expect("fixture chunk");
         assert_eq!(chunk.tiles.len(), 20 * 20);
         assert_eq!(chunk_tile_index(500, 500, &chunk, 480, 480), Some(0));
         assert_eq!(chunk_tile_index(500, 500, &chunk, 499, 499), Some(399));

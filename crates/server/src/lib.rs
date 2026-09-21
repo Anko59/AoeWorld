@@ -8,6 +8,7 @@ mod map_jobs;
 mod map_store;
 mod map_worker;
 mod maps;
+mod page_residency;
 mod terrain_cache;
 pub use config::Config;
 pub use gameplay::GameplayService;
@@ -60,6 +61,7 @@ pub struct AppState {
     map_worker: Option<PathBuf>,
     geodata_cache_directory: PathBuf,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
+    page_residencies: Arc<RwLock<page_residency::Registry>>,
     terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
@@ -67,6 +69,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Result<Self, AppStateError> {
+        let map_packages = map_store::load(config.map_package_directory.as_deref())?;
         Ok(Self {
             world: Arc::new(RwLock::new(None)),
             diagnostic_scenario: config.scenario,
@@ -78,9 +81,8 @@ impl AppState {
             map_package_directory: config.map_package_directory.clone(),
             map_worker: config.map_worker.clone(),
             geodata_cache_directory: config.geodata_cache_directory.clone(),
-            map_packages: Arc::new(RwLock::new(map_store::load(
-                config.map_package_directory.as_deref(),
-            )?)),
+            map_packages: Arc::new(RwLock::new(map_packages)),
+            page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
             terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
             map_jobs: Arc::new(Mutex::new(map_jobs::Manager::default())),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
