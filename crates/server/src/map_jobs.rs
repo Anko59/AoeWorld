@@ -9,6 +9,9 @@ use std::{
     },
 };
 
+mod preparation;
+pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
+
 const MAX_QUEUED_JOBS: usize = 2;
 const MAX_RETAINED_JOBS: usize = 128;
 
@@ -29,6 +32,7 @@ pub(super) enum JobStage {
     Queued,
     BuildingFallbackPackage,
     PreparingOverview,
+    PreparingDetailed,
     Cancelling,
     Completed,
     Cancelled,
@@ -40,6 +44,7 @@ pub(super) struct Job {
     pub id: u64,
     pub request: MapRequest,
     pub estimate: MapEstimate,
+    pub preparation: PreparationPlan,
     pub state: JobState,
     pub stage: JobStage,
     pub percent: u8,
@@ -105,7 +110,11 @@ impl Manager {
             .map(|(id, _)| *id)?;
         let job = &mut self.jobs.get_mut(&id)?.job;
         job.state = JobState::Running;
-        job.stage = JobStage::BuildingFallbackPackage;
+        job.stage = match job.preparation.mode {
+            PreparationMode::ProceduralFallback => JobStage::BuildingFallbackPackage,
+            PreparationMode::Overview => JobStage::PreparingOverview,
+            PreparationMode::Detailed => JobStage::PreparingDetailed,
+        };
         job.percent = 5;
         job.eta_seconds = None;
         Some(id)
@@ -115,6 +124,7 @@ impl Manager {
         &mut self,
         request: MapRequest,
         estimate: MapEstimate,
+        preparation: PreparationPlan,
     ) -> Result<(Job, Option<u64>), String> {
         if self.queued() >= MAX_QUEUED_JOBS && self.active() {
             return Err("map creation queue is full; wait for a job to finish".to_owned());
@@ -129,6 +139,7 @@ impl Manager {
             id,
             request,
             estimate,
+            preparation,
             state: JobState::Queued,
             stage: JobStage::Queued,
             percent: 0,
@@ -153,12 +164,16 @@ impl Manager {
     }
 }
 
-pub(super) async fn start(state: &AppState, request: MapRequest) -> Result<Job, String> {
-    let request = request.normalized().map_err(|error| error.to_string())?;
+pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Job, String> {
+    let preparation = PreparationPlan::resolve(input, state.map_worker.is_some())?;
+    let request = input
+        .request
+        .normalized()
+        .map_err(|error| error.to_string())?;
     let estimate = request.estimate().map_err(|error| error.to_string())?;
     let (job, start) = {
         let mut manager = state.map_jobs.lock().await;
-        manager.enqueue(request, estimate)?
+        manager.enqueue(request, estimate, preparation)?
     };
     if let Some(id) = start {
         launch(state.clone(), id);
@@ -212,14 +227,18 @@ pub(super) async fn cancel(state: &AppState, id: u64) -> Option<Job> {
 
 fn launch(state: AppState, id: u64) {
     tokio::spawn(async move {
-        let Some((request, cancelled)) = active_input(&state, id).await else {
+        let Some((request, preparation, cancelled)) = active_input(&state, id).await else {
             return;
         };
         let directory = state.map_package_directory.clone();
         let worker = state.map_worker.clone();
         let cache = state.geodata_cache_directory.clone();
         if worker.is_some() {
-            set_stage(&state, id, JobStage::PreparingOverview).await;
+            let stage = match preparation.mode {
+                PreparationMode::Detailed => JobStage::PreparingDetailed,
+                _ => JobStage::PreparingOverview,
+            };
+            set_stage(&state, id, stage).await;
         }
         let result = tokio::task::spawn_blocking(move || {
             if cancelled.load(Ordering::SeqCst) {
@@ -229,8 +248,14 @@ fn launch(state: AppState, id: u64) {
                 let directory = directory.as_deref().ok_or_else(|| {
                     "source-backed map creation requires a configured package directory".to_owned()
                 })?;
-                let package =
-                    map_worker::prepare_overview(&worker, &cache, directory, request, &cancelled)?;
+                let package = map_worker::prepare(
+                    &worker,
+                    &cache,
+                    directory,
+                    request,
+                    preparation,
+                    &cancelled,
+                )?;
                 map_store::verify_stored(directory, &package).map_err(|error| error.to_string())?
             } else {
                 let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
@@ -261,14 +286,23 @@ async fn set_stage(state: &AppState, id: u64, stage: JobStage) {
     }
 }
 
-async fn active_input(state: &AppState, id: u64) -> Option<(MapRequest, Arc<AtomicBool>)> {
+async fn active_input(
+    state: &AppState,
+    id: u64,
+) -> Option<(MapRequest, PreparationPlan, Arc<AtomicBool>)> {
     let manager = state.map_jobs.lock().await;
     let entry = manager.jobs.get(&id)?;
     matches!(
         entry.job.state,
         JobState::Running | JobState::CancelRequested
     )
-    .then(|| (entry.job.request, entry.cancelled.clone()))
+    .then(|| {
+        (
+            entry.job.request,
+            entry.job.preparation,
+            entry.cancelled.clone(),
+        )
+    })
 }
 
 async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
