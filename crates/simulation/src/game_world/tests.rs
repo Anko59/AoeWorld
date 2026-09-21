@@ -235,7 +235,7 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
     let resource = (0..4)
         .flat_map(|y| {
             let generator = generator.clone();
-            (0..4).flat_map(move |x| generator.chunk(x, y).resources)
+            (0..4).flat_map(move |x| generator.chunk(x, y).expect("fixture chunk").resources)
         })
         .next()
         .expect("resource");

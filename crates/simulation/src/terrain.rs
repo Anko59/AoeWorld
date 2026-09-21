@@ -1,10 +1,11 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
-    CHUNK_TILES, EdgePassability, ElevationPage, HistoricalLandUsePage, MapChunkGenerator,
-    MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage,
+    CHUNK_TILES, EdgePassability, ElevationPage, EnvironmentPageProvider, HistoricalLandUsePage,
+    MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage,
     find_path_segment_with_overlay, find_path_with_overlay,
 };
 use std::collections::{BTreeSet, VecDeque};
+use std::sync::Arc;
 
 #[path = "terrain_overlay_state.rs"]
 mod terrain_overlay_state;
@@ -77,6 +78,16 @@ impl Terrain {
         })
     }
 
+    pub fn from_page_provider(
+        package: &MapPackage,
+        provider: Arc<dyn EnvironmentPageProvider>,
+    ) -> Result<Self, aoe_map::MapPackageError> {
+        Ok(Self::Map {
+            generator: package.generator_with_page_provider(provider)?,
+            overlay: ResourceOverlay::default(),
+        })
+    }
+
     pub fn passable(&self, tile: TileCoord, config: WorldConfig) -> bool {
         match self {
             Self::Uniform(_) => {
@@ -85,19 +96,70 @@ impl Terrain {
                     && tile.x < config.width_tiles
                     && tile.y < config.height_tiles
             }
-            Self::Map { generator, overlay } => generator.tile_at(tile).is_some_and(|sample| {
-                sample.passable
-                    && generator
-                        .object_at(tile)
-                        .is_none_or(|node| !overlay.blocks(generator, node.id))
-            }),
+            Self::Map { .. } => self
+                .passable_with_cancel(tile, config, &|| false)
+                .unwrap_or(false),
+        }
+    }
+
+    pub fn passable_with_cancel(
+        &self,
+        tile: TileCoord,
+        config: WorldConfig,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, aoe_map::EnvironmentPageError> {
+        match self {
+            Self::Uniform(_) => Ok(tile.x >= 0
+                && tile.y >= 0
+                && tile.x < config.width_tiles
+                && tile.y < config.height_tiles),
+            Self::Map { generator, overlay } => {
+                let Some(sample) = generator.tile_at_with_cancel(tile, cancelled)? else {
+                    return Ok(false);
+                };
+                let object = generator.object_at_with_cancel(tile, cancelled)?;
+                Ok(sample.passable && object.is_none_or(|node| !overlay.blocks_node(node)))
+            }
         }
     }
 
     pub fn crossable(&self, from: TileCoord, to: TileCoord, config: WorldConfig) -> bool {
         match self {
             Self::Uniform(_) => self.passable(from, config) && self.passable(to, config),
-            Self::Map { generator, overlay } => map_crossable(generator, overlay, from, to),
+            Self::Map { .. } => self
+                .crossable_with_cancel(from, to, config, &|| false)
+                .unwrap_or(false),
+        }
+    }
+
+    pub fn crossable_with_cancel(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        config: WorldConfig,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, aoe_map::EnvironmentPageError> {
+        match self {
+            Self::Uniform(_) => Ok(self.passable(from, config) && self.passable(to, config)),
+            Self::Map { generator, overlay } => {
+                let step_clear = |from, to| {
+                    Ok::<_, aoe_map::EnvironmentPageError>(
+                        matches!(
+                            generator.edge_between_with_cancel(from, to, cancelled)?,
+                            EdgePassability::Passable
+                        ) && generator
+                            .object_at_with_cancel(to, cancelled)?
+                            .is_none_or(|node| !overlay.blocks_node(node)),
+                    )
+                };
+                if !step_clear(from, to)? {
+                    return Ok(false);
+                }
+                let diagonal = from.x != to.x && from.y != to.y;
+                Ok(!diagonal
+                    || (step_clear(from, TileCoord::new(to.x, from.y))?
+                        && step_clear(from, TileCoord::new(from.x, to.y))?))
+            }
         }
     }
 
@@ -202,7 +264,13 @@ impl Terrain {
 }
 
 impl Terrain {
-    fn chunk_passability(&self, chunk_x: i32, chunk_y: i32, config: WorldConfig) -> Vec<bool> {
+    pub(crate) fn chunk_passability_with_cancel(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+        config: WorldConfig,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Vec<bool>, aoe_map::EnvironmentPageError> {
         let side = CHUNK_TILES as usize;
         let mut passability = vec![false; side * side];
         let origin = TileCoord::new(chunk_x * CHUNK_TILES, chunk_y * CHUNK_TILES);
@@ -222,10 +290,10 @@ impl Terrain {
                 }
             }
             Self::Map { generator, overlay } => {
-                let chunk = generator.chunk(chunk_x, chunk_y);
+                let chunk = generator.chunk_with_cancel(chunk_x, chunk_y, cancelled)?;
                 let width = (config.width_tiles - origin.x).clamp(0, CHUNK_TILES) as usize;
                 if width == 0 {
-                    return passability;
+                    return Ok(passability);
                 }
                 for (index, sample) in chunk.tiles.iter().enumerate() {
                     let local_y = index / width;
@@ -235,7 +303,7 @@ impl Terrain {
                     }
                 }
                 for resource in chunk.resources {
-                    if overlay.blocks(generator, resource.id) {
+                    if overlay.blocks_node(resource) {
                         let local_x = usize::try_from(resource.tile.x - origin.x).unwrap_or(side);
                         let local_y = usize::try_from(resource.tile.y - origin.y).unwrap_or(side);
                         if local_x < side && local_y < side {
@@ -245,29 +313,8 @@ impl Terrain {
                 }
             }
         }
-        passability
+        Ok(passability)
     }
-}
-
-fn map_crossable(
-    generator: &MapChunkGenerator,
-    overlay: &ResourceOverlay,
-    from: TileCoord,
-    to: TileCoord,
-) -> bool {
-    let step_clear = |from, to| {
-        matches!(generator.edge_between(from, to), EdgePassability::Passable)
-            && generator
-                .object_at(to)
-                .is_none_or(|node| !overlay.blocks(generator, node.id))
-    };
-    if !step_clear(from, to) {
-        return false;
-    }
-    let diagonal = from.x != to.x && from.y != to.y;
-    !diagonal
-        || (step_clear(from, TileCoord::new(to.x, from.y))
-            && step_clear(from, TileCoord::new(from.x, to.y)))
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use super::Terrain;
 use aoe_core::{TileCoord, WorldConfig};
-use aoe_map::CHUNK_TILES;
+use aoe_map::{CHUNK_TILES, EnvironmentPageError};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 const START_CLEAR_RADIUS: i32 = 2;
@@ -32,18 +32,28 @@ impl Terrain {
         &self,
         config: WorldConfig,
         max_chunks: usize,
-        mut cancelled: impl FnMut() -> bool,
+        cancelled: impl Fn() -> bool,
     ) -> StartSearchResult {
+        self.search_start_checked(config, max_chunks, cancelled)
+            .unwrap_or(StartSearchResult::Unavailable)
+    }
+
+    pub fn search_start_checked(
+        &self,
+        config: WorldConfig,
+        max_chunks: usize,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<StartSearchResult, EnvironmentPageError> {
         if cancelled() {
-            return StartSearchResult::Cancelled;
+            return Ok(StartSearchResult::Cancelled);
         }
         if max_chunks == 0 {
-            return StartSearchResult::LimitReached;
+            return Ok(StartSearchResult::LimitReached);
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
-        let mut cache = StartPassabilityCache::new(self, config);
-        if valid_start(&mut cache, center) {
-            return StartSearchResult::Found(center);
+        let mut cache = StartPassabilityCache::new(self, config, &cancelled);
+        if valid_start(&mut cache, center)? {
+            return Ok(StartSearchResult::Found(center));
         }
         let center_chunk = TileCoord::new(
             center.x.div_euclid(CHUNK_TILES),
@@ -64,19 +74,19 @@ impl Terrain {
                     continue;
                 }
                 if cancelled() {
-                    return StartSearchResult::Cancelled;
+                    return Ok(StartSearchResult::Cancelled);
                 }
                 if scanned == max_chunks {
-                    return StartSearchResult::LimitReached;
+                    return Ok(StartSearchResult::LimitReached);
                 }
                 scanned += 1;
-                scan_start_chunk(&mut cache, chunk_x, chunk_y, &mut best);
+                scan_start_chunk(&mut cache, chunk_x, chunk_y, &mut best)?;
             }
             if best.is_some_and(|tile| farther_than_best(tile, config, center_chunk, ring)) {
-                return best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found);
+                return Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found));
             }
         }
-        best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found)
+        Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found))
     }
 }
 
@@ -86,22 +96,24 @@ struct StartPassabilityCache<'a> {
     entries: BTreeMap<(i32, i32), Vec<bool>>,
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
+    cancelled: &'a dyn Fn() -> bool,
 }
 
 impl<'a> StartPassabilityCache<'a> {
-    fn new(terrain: &'a Terrain, config: WorldConfig) -> Self {
+    fn new(terrain: &'a Terrain, config: WorldConfig, cancelled: &'a dyn Fn() -> bool) -> Self {
         Self {
             terrain,
             config,
             entries: BTreeMap::new(),
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
+            cancelled,
         }
     }
 
-    fn reaches_required_tiles(&mut self, origin: TileCoord) -> bool {
+    fn reaches_required_tiles(&mut self, origin: TileCoord) -> Result<bool, EnvironmentPageError> {
         if let Some(result) = self.reachable.get(&origin) {
-            return *result;
+            return Ok(*result);
         }
         let mut visited = BTreeSet::from([origin]);
         let mut pending = VecDeque::from([origin]);
@@ -117,10 +129,15 @@ impl<'a> StartPassabilityCache<'a> {
                         continue;
                     }
                     let next = TileCoord::new(tile.x + dx, tile.y + dy);
-                    if visited.contains(&next) || !self.passable(next) {
+                    if visited.contains(&next) || !self.passable(next)? {
                         continue;
                     }
-                    if !self.terrain.crossable(tile, next, self.config) {
+                    if !self.terrain.crossable_with_cancel(
+                        tile,
+                        next,
+                        self.config,
+                        self.cancelled,
+                    )? {
                         continue;
                     }
                     visited.insert(next);
@@ -140,19 +157,19 @@ impl<'a> StartPassabilityCache<'a> {
                 self.reachable.insert(tile, false);
             }
         }
-        result
+        Ok(result)
     }
 
-    fn passable(&mut self, tile: TileCoord) -> bool {
+    fn passable(&mut self, tile: TileCoord) -> Result<bool, EnvironmentPageError> {
         if tile.x < 0
             || tile.y < 0
             || tile.x >= self.config.width_tiles
             || tile.y >= self.config.height_tiles
         {
-            return false;
+            return Ok(false);
         }
         if matches!(self.terrain, Terrain::Uniform(_)) {
-            return true;
+            return Ok(true);
         }
         let chunk_x = tile.x.div_euclid(CHUNK_TILES);
         let chunk_y = tile.y.div_euclid(CHUNK_TILES);
@@ -163,20 +180,23 @@ impl<'a> StartPassabilityCache<'a> {
             {
                 self.entries.remove(&expired);
             }
-            self.entries.insert(
-                key,
-                self.terrain
-                    .chunk_passability(chunk_x, chunk_y, self.config),
-            );
+            let passability = self.terrain.chunk_passability_with_cancel(
+                chunk_x,
+                chunk_y,
+                self.config,
+                self.cancelled,
+            )?;
+            self.entries.insert(key, passability);
             self.insertion_order.push_back(key);
         }
         let local_x = usize::try_from(tile.x.rem_euclid(CHUNK_TILES)).unwrap_or(0);
         let local_y = usize::try_from(tile.y.rem_euclid(CHUNK_TILES)).unwrap_or(0);
-        self.entries
+        Ok(self
+            .entries
             .get(&key)
             .and_then(|tiles| tiles.get(local_y * CHUNK_TILES as usize + local_x))
             .copied()
-            .unwrap_or(false)
+            .unwrap_or(false))
     }
 }
 
@@ -185,7 +205,7 @@ fn scan_start_chunk(
     chunk_x: i32,
     chunk_y: i32,
     best: &mut Option<TileCoord>,
-) {
+) -> Result<(), EnvironmentPageError> {
     let config = cache.config;
     let origin = TileCoord::new(chunk_x * CHUNK_TILES, chunk_y * CHUNK_TILES);
     let mut candidates = (origin.y..(origin.y + CHUNK_TILES).min(config.height_tiles))
@@ -199,22 +219,32 @@ fn scan_start_chunk(
         if best.is_some_and(|current| start_key(candidate, config) >= start_key(current, config)) {
             continue;
         }
-        if valid_start(cache, candidate) {
+        if valid_start(cache, candidate)? {
             *best = Some(candidate);
         }
     }
+    Ok(())
 }
 
-fn valid_start(cache: &mut StartPassabilityCache<'_>, candidate: TileCoord) -> bool {
-    clear_starting_area(cache, candidate) && cache.reaches_required_tiles(candidate)
+fn valid_start(
+    cache: &mut StartPassabilityCache<'_>,
+    candidate: TileCoord,
+) -> Result<bool, EnvironmentPageError> {
+    Ok(clear_starting_area(cache, candidate)? && cache.reaches_required_tiles(candidate)?)
 }
 
-fn clear_starting_area(cache: &mut StartPassabilityCache<'_>, center: TileCoord) -> bool {
-    (-START_CLEAR_RADIUS..=START_CLEAR_RADIUS).all(|offset_y| {
-        (-START_CLEAR_RADIUS..=START_CLEAR_RADIUS).all(|offset_x| {
-            cache.passable(TileCoord::new(center.x + offset_x, center.y + offset_y))
-        })
-    })
+fn clear_starting_area(
+    cache: &mut StartPassabilityCache<'_>,
+    center: TileCoord,
+) -> Result<bool, EnvironmentPageError> {
+    for offset_y in -START_CLEAR_RADIUS..=START_CLEAR_RADIUS {
+        for offset_x in -START_CLEAR_RADIUS..=START_CLEAR_RADIUS {
+            if !cache.passable(TileCoord::new(center.x + offset_x, center.y + offset_y))? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn farther_than_best(

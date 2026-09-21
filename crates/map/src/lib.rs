@@ -18,7 +18,8 @@ mod wire;
 
 pub use biome_rules::Biome;
 pub use environment::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, FieldPyramid,
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, EnvironmentPage,
+    EnvironmentPageError, EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid,
     MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PotentialBiomePage, PreparedEnvironment, PyramidLevel,
     WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
 };

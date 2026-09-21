@@ -35,6 +35,7 @@ pub(super) fn persist_land_use(
     })
 }
 
+#[cfg(test)]
 pub(super) fn load_water(
     directory: Option<&Path>,
     package: &MapPackage,
@@ -53,6 +54,7 @@ pub(super) fn load_water(
     Ok(pages)
 }
 
+#[cfg(test)]
 pub(super) fn load_vegetation(
     directory: Option<&Path>,
     package: &MapPackage,
@@ -71,6 +73,7 @@ pub(super) fn load_vegetation(
     Ok(pages)
 }
 
+#[cfg(test)]
 pub(super) fn load_land_use(
     directory: Option<&Path>,
     package: &MapPackage,
@@ -205,6 +208,7 @@ fn persist<T: serde::Serialize>(
     Ok(())
 }
 
+#[cfg(test)]
 fn load<T>(
     directory: &Path,
     package: &MapPackage,
@@ -242,6 +246,7 @@ fn root(directory: &Path, package: &MapPackage, layer: &str) -> PathBuf {
         .join(layer)
 }
 
+#[cfg(test)]
 fn prepared_directory<'a>(
     directory: Option<&'a Path>,
     layer: &str,
@@ -254,6 +259,7 @@ fn prepared_directory<'a>(
     })
 }
 
+#[cfg(test)]
 fn invalid(path: &Path, reason: impl Into<String>) -> MapStoreError {
     MapStoreError::InvalidPackage {
         path: path.to_owned(),
@@ -261,18 +267,22 @@ fn invalid(path: &Path, reason: impl Into<String>) -> MapStoreError {
     }
 }
 
+#[cfg(test)]
 fn read_water(path: &Path) -> Result<WaterPage, MapStoreError> {
     read(path, "water")
 }
 
+#[cfg(test)]
 fn read_vegetation(path: &Path) -> Result<PotentialBiomePage, MapStoreError> {
     read(path, "vegetation")
 }
 
+#[cfg(test)]
 fn read_land_use(path: &Path) -> Result<HistoricalLandUsePage, MapStoreError> {
     read(path, "historical land-use")
 }
 
+#[cfg(test)]
 fn read<T: serde::de::DeserializeOwned>(path: &Path, layer: &str) -> Result<T, MapStoreError> {
     let bytes = super::read_bounded_file(path, MAX_PAGE_BYTES, &format!("{layer} page"))?;
     serde_json::from_slice(&bytes).map_err(|error| invalid(path, error.to_string()))

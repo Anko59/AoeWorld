@@ -1,6 +1,6 @@
 use crate::EnvironmentError;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PageLayer {
     Elevation,
     Water,

@@ -1,11 +1,12 @@
 use crate::GameplayService;
 use aoe_core::{PlayerId, WorldPosition};
 use aoe_map::{
-    ElevationPage, GAME_TILE_METERS, HistoricalLandUsePage, MAP_SCHEMA_VERSION, MapPackage,
-    PotentialBiomePage, PreparedEnvironment, WaterPage,
+    ElevationPage, EnvironmentPageProvider, GAME_TILE_METERS, HistoricalLandUsePage,
+    MAP_SCHEMA_VERSION, MapPackage, PotentialBiomePage, PreparedEnvironment, WaterPage,
 };
 use aoe_protocol::MapMetadata;
 use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
+use std::sync::Arc;
 
 impl GameplayService {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
@@ -13,7 +14,11 @@ impl GameplayService {
         let metadata = map_metadata(&package);
         let mut world = GameWorld::from_map(package)?;
         let config = world.config();
-        let tile = match world.terrain().search_start(config, 64, || false) {
+        let tile = match world
+            .terrain()
+            .search_start_checked(config, 64, || false)
+            .map_err(|_| GameWorldError::InvalidTerrain)?
+        {
             StartSearchResult::Found(tile) => tile,
             StartSearchResult::Unavailable => return Err(GameWorldError::InvalidPosition),
             StartSearchResult::LimitReached | StartSearchResult::Cancelled => {
@@ -51,7 +56,49 @@ impl GameplayService {
             land_use_pages,
         )?;
         let config = world.config();
-        let tile = match world.terrain().search_start(config, 64, || false) {
+        let tile = match world
+            .terrain()
+            .search_start_checked(config, 64, || false)
+            .map_err(|_| GameWorldError::InvalidTerrain)?
+        {
+            StartSearchResult::Found(tile) => tile,
+            StartSearchResult::Unavailable => return Ok(None),
+            StartSearchResult::LimitReached | StartSearchResult::Cancelled => {
+                return Err(GameWorldError::StartSearchLimit);
+            }
+        };
+        let position =
+            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
+        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        Ok(Some(Self::from_world(
+            world,
+            primary_unit_id,
+            Some(content_hash),
+            Some(metadata),
+        )))
+    }
+
+    pub fn from_prepared_provider(
+        package: MapPackage,
+        provider: Arc<dyn EnvironmentPageProvider>,
+    ) -> Result<Option<Self>, GameWorldError> {
+        Self::from_prepared_provider_with_cancel(package, provider, &|| false)
+    }
+
+    pub fn from_prepared_provider_with_cancel(
+        package: MapPackage,
+        provider: Arc<dyn EnvironmentPageProvider>,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<Self>, GameWorldError> {
+        let content_hash = package.content_hash;
+        let metadata = map_metadata(&package);
+        let mut world = GameWorld::from_page_provider(package, provider)?;
+        let config = world.config();
+        let tile = match world
+            .terrain()
+            .search_start_checked(config, 64, cancelled)
+            .map_err(|_| GameWorldError::InvalidTerrain)?
+        {
             StartSearchResult::Found(tile) => tile,
             StartSearchResult::Unavailable => return Ok(None),
             StartSearchResult::LimitReached | StartSearchResult::Cancelled => {

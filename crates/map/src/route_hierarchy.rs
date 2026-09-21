@@ -89,12 +89,10 @@ fn boundary_portals(origin: TileCoord) -> Vec<(TileCoord, TileCoord)> {
 }
 
 fn passable(terrain: &MapChunkGenerator, overlay: &ResourceOverlay, tile: TileCoord) -> bool {
-    terrain.tile_at(tile).is_some_and(|sample| {
-        sample.passable
-            && terrain
-                .object_at(tile)
-                .is_none_or(|node| !overlay.blocks(terrain, node.id))
-    })
+    terrain.tile_at(tile).is_some_and(|sample| sample.passable)
+        && terrain
+            .object_at_with_cancel(tile, &|| false)
+            .is_ok_and(|object| object.is_none_or(|node| !overlay.blocks_node(node)))
 }
 
 fn same_cell(left: TileCoord, right: TileCoord, span: i32) -> bool {

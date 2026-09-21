@@ -163,7 +163,7 @@ fn map_perf() -> Result<(), String> {
     for (x, y) in coordinates {
         let x = i32::try_from(x).map_err(|_| "chunk coordinate exceeds i32")?;
         let y = i32::try_from(y).map_err(|_| "chunk coordinate exceeds i32")?;
-        let chunk = generator.chunk(x, y);
+        let chunk = generator.chunk(x, y).map_err(|error| error.to_string())?;
         tiles = tiles.saturating_add(chunk.tiles.len());
         resources = resources.saturating_add(chunk.resources.len());
     }
