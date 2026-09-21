@@ -138,6 +138,25 @@ and activation. Cancellation received while registration is waiting wins over
 success; the cancelled result is not registered by that job. This in-memory
 ordering does not provide crash recovery for files already prepared on disk.
 
+The creator's Automatic detail mode selects regional Copernicus elevation for
+squares up to 120 km with centers within 75 degrees latitude and 170 degrees
+longitude. This conservative window avoids the regional worker's unsupported
+polar and wrapped footprints. The grid is a power of two between 128 and 4096
+samples, targeting 30 m spacing. Larger or edge-of-world selections explicitly
+use the 128-sample overview; a user may also select overview for a small map.
+Detailed mode rejects selections outside that window instead of silently
+downgrading them. Exact projected coverage and source/staging budgets are still
+checked by the worker before preparation. Water, vegetation and historical
+land use retain their current overview resolution, even with detailed elevation.
+
+Estimates and active jobs expose the selected preparation mode, sample grid,
+spacing, and source limitations. Without a configured worker, Automatic remains
+explicitly procedural fallback; an explicit source mode returns an error.
+Selecting detailed mode never turns a source failure into procedural terrain.
+These grid spacings describe sampling, not a guarantee of source accuracy or
+historical precision. Source transfer size and completion time are not yet
+estimated; the existing source quotas apply.
+
 ## Tests and performance evidence
 
 ```sh

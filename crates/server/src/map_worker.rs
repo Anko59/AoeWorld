@@ -43,27 +43,40 @@ pub(super) struct ProjectedFootprint {
     pub distortion: ProjectionDistortion,
 }
 
-pub(super) fn prepare_overview(
+pub(super) fn prepare(
     worker: &Path,
     cache_root: &Path,
     output_directory: &Path,
     request: MapRequest,
+    preparation: crate::map_jobs::PreparationPlan,
     cancelled: &AtomicBool,
 ) -> Result<MapPackage, String> {
     let request = request.normalized().map_err(|error| error.to_string())?;
+    let operation = match preparation.mode {
+        crate::map_jobs::PreparationMode::Detailed => "prepare_detailed_directory",
+        crate::map_jobs::PreparationMode::Overview => "prepare_overview_directory",
+        crate::map_jobs::PreparationMode::ProceduralFallback => {
+            return Err("fallback is not a source-worker operation".to_owned());
+        }
+    };
     let input = serde_json::to_vec(&serde_json::json!({
-        "operation": "prepare_overview_directory",
+        "operation": operation,
         "cache_root": cache_root,
         "output_directory": output_directory,
         "request": request,
-        "samples_per_axis": 128,
+        "samples_per_axis": preparation.samples_per_axis,
+        "resolution": "glo30_prefer_glo90",
     }))
     .map_err(|error| format!("could not encode map-worker request: {error}"))?;
     let output = execute(worker, input, cancelled)?;
-    decode_prepared_output(&output, request)
+    decode_prepared_output(&output, request, preparation.samples_per_axis)
 }
 
-fn decode_prepared_output(output: &[u8], request: MapRequest) -> Result<MapPackage, String> {
+fn decode_prepared_output(
+    output: &[u8],
+    request: MapRequest,
+    samples_per_axis: u16,
+) -> Result<MapPackage, String> {
     let WorkerOutput::PreparedDirectory { package } = serde_json::from_slice(output)
         .map_err(|error| format!("invalid map-worker response: {error}"))?
     else {
@@ -75,6 +88,9 @@ fn decode_prepared_output(output: &[u8], request: MapRequest) -> Result<MapPacka
     }
     if package.environment.samples_per_axis == 0 || package.source_locks.is_empty() {
         return Err("source-backed preparation returned no environmental sources".to_owned());
+    }
+    if package.environment.samples_per_axis != samples_per_axis {
+        return Err("map worker returned a different preparation detail than requested".to_owned());
     }
     Ok(*package)
 }
@@ -192,6 +208,63 @@ mod tests {
     use super::*;
 
     #[test]
+    fn valid_source_response_cannot_silently_downgrade_sample_detail() {
+        let request = MapRequest::default();
+        let source = aoe_map::SourceLock {
+            id: "fixture".into(),
+            provider: "fixture".into(),
+            release: "v1".into(),
+            url: "https://example.invalid/fixture".into(),
+            sha256: [1; 32],
+            acquired_at: "fixture".into(),
+            native_resolution: "30 meters".into(),
+            crs: "EPSG:4326".into(),
+            vertical_datum: "EGM2008".into(),
+            license: "fixture".into(),
+            preprocessing_version: "v1".into(),
+        };
+        let environment = aoe_map::PreparedEnvironment {
+            samples_per_axis: 2,
+            geographic_millimeters_per_sample: 15_000_000,
+            page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+            elevation: aoe_map::FieldPyramid {
+                levels: vec![
+                    aoe_map::PyramidLevel {
+                        samples_per_axis: 2,
+                        ordered_page_root: [1; 32],
+                    },
+                    aoe_map::PyramidLevel {
+                        samples_per_axis: 1,
+                        ordered_page_root: [2; 32],
+                    },
+                ],
+            },
+            water: None,
+            vegetation: None,
+            historical_land_use: None,
+        };
+        let package = MapPackage::with_prepared_environment(
+            aoe_map::MAP_SCHEMA_VERSION,
+            request,
+            vec![source],
+            aoe_map::ProjectionMetadata::default(),
+            aoe_map::EnvironmentalProvenance::default(),
+            environment,
+        )
+        .expect("source fixture");
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "operation": "prepared_directory", "package": package,
+        }))
+        .expect("worker response");
+        assert!(decode_prepared_output(&bytes, request, 2).is_ok());
+        assert!(
+            decode_prepared_output(&bytes, request, 1024)
+                .expect_err("wrong detail")
+                .contains("different preparation detail")
+        );
+    }
+
+    #[test]
     fn directory_response_cannot_substitute_another_request_or_silent_fallback() {
         let request = MapRequest::default();
         let package =
@@ -203,12 +276,12 @@ mod tests {
         let mut other = request;
         other.seed += 1;
         assert!(
-            decode_prepared_output(&output, other)
+            decode_prepared_output(&output, other, 128)
                 .expect_err("different request")
                 .contains("different request")
         );
         assert!(
-            decode_prepared_output(&output, request)
+            decode_prepared_output(&output, request, 128)
                 .expect_err("fallback")
                 .contains("no environmental sources")
         );

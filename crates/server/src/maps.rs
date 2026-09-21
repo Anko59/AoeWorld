@@ -13,6 +13,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+mod creation;
+pub(super) use creation::{cancel_job, create_job, estimate, job_status, list_jobs};
+
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;
 struct RequestCancellation(Arc<AtomicBool>);
@@ -53,15 +56,6 @@ async fn require_controller(
         StatusCode::FORBIDDEN,
         "current gameplay controller authorization is required".to_owned(),
     ))
-}
-
-pub(super) async fn estimate(
-    Json(request): Json<MapRequest>,
-) -> Result<Json<MapEstimate>, (StatusCode, String)> {
-    request
-        .estimate()
-        .map(Json)
-        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))
 }
 
 #[derive(Serialize)]
@@ -161,47 +155,6 @@ pub(super) async fn activate(
     })?
     .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
     activate_completed(state, package).await
-}
-
-pub(super) async fn create_job(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<MapRequest>,
-) -> Result<(StatusCode, Json<map_jobs::Job>), (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
-    request
-        .estimate()
-        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
-    let job = map_jobs::start(&state, request)
-        .await
-        .map_err(|error| (StatusCode::TOO_MANY_REQUESTS, error))?;
-    Ok((StatusCode::ACCEPTED, Json(job)))
-}
-
-pub(super) async fn job_status(
-    Path(job_id): Path<u64>,
-    State(state): State<AppState>,
-) -> Result<Json<map_jobs::Job>, StatusCode> {
-    map_jobs::status(&state, job_id)
-        .await
-        .map(Json)
-        .ok_or(StatusCode::NOT_FOUND)
-}
-
-pub(super) async fn list_jobs(State(state): State<AppState>) -> Json<Vec<map_jobs::Job>> {
-    Json(map_jobs::list(&state).await)
-}
-
-pub(super) async fn cancel_job(
-    Path(job_id): Path<u64>,
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<map_jobs::Job>, (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
-    map_jobs::cancel(&state, job_id)
-        .await
-        .map(Json)
-        .ok_or((StatusCode::NOT_FOUND, "unknown map creation job".to_owned()))
 }
 
 pub(super) async fn activate_package(
