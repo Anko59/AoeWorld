@@ -112,6 +112,14 @@ diagnostics, including for preview-only all-water or all-ice packages. The
 passable-ground layer is not a spawn claim: the authoritative activation search
 still decides whether a valid starting position exists.
 
+The creation service runs one job at a time and queues at most two more. It
+retains at most 128 job records in memory, evicting the oldest terminal record
+when new work is accepted; running, cancelling, and queued jobs are preserved.
+An evicted job ID is no longer available from job status endpoints. Saved map
+packages remain independent of this history. Job history resets when the
+server restarts. Preparation has no time estimate until measured progress is
+available; a completed job reports zero remaining seconds.
+
 ## Tests and performance evidence
 
 ```sh
