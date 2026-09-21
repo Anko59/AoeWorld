@@ -1,8 +1,9 @@
 use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
     CHUNK_TILES, EdgePassability, ElevationPage, EnvironmentPageProvider, HistoricalLandUsePage,
-    MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay, WaterPage,
-    find_path_segment_with_overlay, find_path_with_overlay,
+    MapChunkGenerator, MapPackage, MovementOutcome, PotentialBiomePage, ResourceOverlay,
+    RoutePlanner, RoutePlannerPoll, WaterPage, find_path_segment_with_overlay,
+    find_path_with_overlay,
 };
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::Arc;
@@ -228,6 +229,28 @@ impl Terrain {
             destination,
             max_expansions,
         ))
+    }
+
+    pub fn route_planner(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<RoutePlanner> {
+        self.has_map_navigation()
+            .then(|| RoutePlanner::new(origin, destination, max_expansions))
+    }
+
+    pub fn poll_route_planner(
+        &self,
+        planner: &mut RoutePlanner,
+        budget: u32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Option<RoutePlannerPoll> {
+        let Self::Map { generator, overlay } = self else {
+            return None;
+        };
+        Some(planner.poll(generator, overlay, budget, cancelled))
     }
 
     /// Counts a connected walkable component without allocating map-scale

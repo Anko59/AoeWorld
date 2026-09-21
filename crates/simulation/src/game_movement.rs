@@ -1,22 +1,51 @@
 use crate::{
-    GameUnit, GameWorld, MAX_ROUTE_EXPANSIONS_PER_ORDER, MAX_ROUTE_EXPANSIONS_PER_TICK,
-    MovementOrder,
+    GameUnit, GameWorld, GameWorldError, MAX_ROUTE_EXPANSIONS_PER_ORDER,
+    MAX_ROUTE_EXPANSIONS_PER_TICK, MovementOrder,
     game_path::next_waypoint,
     game_path::segment_length,
     game_world::{facing_for, interpolate},
 };
 use aoe_core::{ChunkCoord, WorldPosition};
-use aoe_map::MovementOutcome;
+use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::VecDeque;
 
 const MAX_WAYPOINTS_PER_TICK: usize = 4_096;
+/// Bounds aggregate retained route-search state at 64 planners × 2,048 nodes.
+pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 64;
 
 impl GameWorld {
     pub fn advance(&mut self) -> Vec<GameUnit> {
         let movers = std::mem::take(&mut self.active_movers);
+        let mover_count = movers.len();
+        let start = if mover_count == 0 {
+            0
+        } else {
+            self.planning_cursor % mover_count
+        };
+        self.planning_cursor = if mover_count == 0 {
+            0
+        } else {
+            (start + 1) % mover_count
+        };
+        let movers = movers
+            .iter()
+            .cycle()
+            .skip(start)
+            .take(mover_count)
+            .copied()
+            .collect::<Vec<_>>();
         let mut still_moving = Vec::with_capacity(movers.len());
         let mut changed = Vec::with_capacity(movers.len());
-        for id in movers {
+        for (turn, id) in movers.into_iter().enumerate() {
+            let remaining_movers = mover_count.saturating_sub(turn).max(1);
+            let mut planner_allowance = self
+                .planning_budget
+                .checked_div(u32::try_from(remaining_movers).unwrap_or(u32::MAX))
+                .unwrap_or(0)
+                .min(MAX_ROUTE_EXPANSIONS_PER_ORDER);
+            if self.planning_budget > 0 && planner_allowance == 0 {
+                planner_allowance = 1;
+            }
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
@@ -44,13 +73,41 @@ impl GameWorld {
                 };
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
-                if !self.terrain.passable(tile, self.config)
-                    || (tile != previous_tile
-                        && !self.terrain.crossable(previous_tile, tile, self.config))
-                {
+                let terrain_ok = match self
+                    .terrain
+                    .passable_with_cancel(tile, self.config, &|| false)
+                    .and_then(|passable| {
+                        if !passable {
+                            Ok(false)
+                        } else if tile != previous_tile {
+                            self.terrain.crossable_with_cancel(
+                                previous_tile,
+                                tile,
+                                self.config,
+                                &|| false,
+                            )
+                        } else {
+                            Ok(true)
+                        }
+                    }) {
+                    Ok(terrain_ok) => terrain_ok,
+                    Err(error) => {
+                        self.clear_planner(index);
+                        self.units[index].state.moving = false;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = None;
+                        self.units[index].last_movement_error =
+                            Some(GameWorldError::Environment(error));
+                        finished = true;
+                        break;
+                    }
+                };
+                if !terrain_ok {
+                    self.clear_planner(index);
                     self.units[index].state.moving = false;
                     self.units[index].state.planning = false;
                     self.units[index].order = None;
+                    self.units[index].last_movement_error = None;
                     finished = true;
                     break;
                 }
@@ -69,6 +126,7 @@ impl GameWorld {
                     break;
                 }
                 if order.waypoint == order.destination {
+                    self.clear_planner(index);
                     self.units[index].state.moving = false;
                     self.units[index].state.planning = false;
                     self.units[index].order = None;
@@ -85,7 +143,7 @@ impl GameWorld {
                             && order.waypoint.tile_floor() == order.destination.tile_floor())
                         .then_some(SegmentAdvance::Next(order.destination))
                     })
-                    .unwrap_or_else(|| self.next_map_segment(index, order));
+                    .unwrap_or_else(|| self.next_map_segment(index, order, &mut planner_allowance));
                 match next {
                     SegmentAdvance::Planning => {
                         // A deferred planner has no available path distance this
@@ -99,10 +157,12 @@ impl GameWorld {
                         finished = true;
                         break;
                     }
-                    SegmentAdvance::Stopped => {
+                    SegmentAdvance::Stopped(error) => {
+                        self.clear_planner(index);
                         self.units[index].state.moving = false;
                         self.units[index].state.planning = false;
                         self.units[index].order = None;
+                        self.units[index].last_movement_error = error;
                         finished = true;
                         break;
                     }
@@ -144,6 +204,7 @@ impl GameWorld {
             }
             changed.push(self.units[index].state);
         }
+        still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.tick.0 = self.tick.0.saturating_add(1);
         self.planning_budget = MAX_ROUTE_EXPANSIONS_PER_TICK;
@@ -159,62 +220,128 @@ impl GameWorld {
         if !self.terrain.has_map_navigation() {
             return None;
         }
-        let budget = self.take_planning_budget();
-        if budget == 0 {
-            return Some(MapRoutePlan::Deferred);
+        if self.active_planner_count >= MAX_ACTIVE_ROUTE_PLANNERS {
+            return Some(MapRoutePlan::Pending(None));
         }
-        self.cached_map_segment(origin, destination, budget)
-            .map(MapRoutePlan::Outcome)
+        let budget = self.take_planning_budget();
+        let mut planner =
+            self.terrain
+                .route_planner(origin, destination, MAX_ROUTE_EXPANSIONS_PER_ORDER)?;
+        if budget == 0 {
+            return Some(MapRoutePlan::Pending(Some(planner)));
+        }
+        if let Some(outcome) = self.navigation_cache.get(origin, destination, budget) {
+            return Some(MapRoutePlan::Outcome(outcome));
+        }
+        match self
+            .terrain
+            .poll_route_planner(&mut planner, budget, &|| false)?
+        {
+            RoutePlannerPoll::Pending => Some(MapRoutePlan::Pending(Some(planner))),
+            RoutePlannerPoll::Path(path) => {
+                let outcome = MovementOutcome::Path(path);
+                self.navigation_cache
+                    .insert(origin, destination, budget, outcome.clone());
+                Some(MapRoutePlan::Outcome(outcome))
+            }
+            RoutePlannerPoll::InvalidDestination => {
+                let outcome = MovementOutcome::InvalidDestination;
+                self.navigation_cache
+                    .insert(origin, destination, budget, outcome.clone());
+                Some(MapRoutePlan::Outcome(outcome))
+            }
+            RoutePlannerPoll::Unreachable => {
+                let outcome = MovementOutcome::Unreachable;
+                self.navigation_cache
+                    .insert(origin, destination, budget, outcome.clone());
+                Some(MapRoutePlan::Outcome(outcome))
+            }
+            RoutePlannerPoll::SearchLimit => Some(MapRoutePlan::SearchLimit),
+            RoutePlannerPoll::Environment(error) => Some(MapRoutePlan::Environment(error)),
+        }
     }
 
-    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
+    fn next_map_segment(
+        &mut self,
+        index: usize,
+        order: MovementOrder,
+        allowance: &mut u32,
+    ) -> SegmentAdvance {
         if !self.terrain.has_map_navigation() {
             return (order.waypoint != order.destination)
                 .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
-                .map_or(SegmentAdvance::Stopped, SegmentAdvance::Next);
+                .map_or(SegmentAdvance::Stopped(None), SegmentAdvance::Next);
         }
-        let budget = self.take_planning_budget();
-        if budget == 0 {
+        if *allowance == 0 || self.planner_capacity_exhausted(index) {
             return SegmentAdvance::Planning;
         }
-        match self.cached_map_segment(order.waypoint.tile_floor(), order.target_tile, budget) {
-            Some(MovementOutcome::Path(path)) => {
+        let budget = self.take_planning_budget_share(allowance);
+        let mut planner = match self.units[index].planner.take() {
+            Some(planner) => {
+                self.active_planner_count = self.active_planner_count.saturating_sub(1);
+                planner
+            }
+            None => RoutePlanner::new(
+                order.waypoint.tile_floor(),
+                order.target_tile,
+                MAX_ROUTE_EXPANSIONS_PER_ORDER,
+            ),
+        };
+        let result = self
+            .terrain
+            .poll_route_planner(&mut planner, budget, &|| false);
+        match result {
+            Some(RoutePlannerPoll::Path(path)) => {
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() != Some(order.waypoint.tile_floor()) {
-                    return SegmentAdvance::Stopped;
+                    return SegmentAdvance::Stopped(Some(GameWorldError::InvalidPosition));
                 }
                 let next = route
                     .pop_front()
                     .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
                 self.units[index].route = route;
-                next.map_or(SegmentAdvance::Stopped, SegmentAdvance::Next)
+                next.map_or(
+                    SegmentAdvance::Stopped(Some(GameWorldError::InvalidPosition)),
+                    SegmentAdvance::Next,
+                )
             }
-            Some(MovementOutcome::InvalidDestination) | Some(MovementOutcome::Unreachable) => {
-                SegmentAdvance::Stopped
+            Some(RoutePlannerPoll::Pending) => {
+                self.store_planner(index, Some(planner));
+                SegmentAdvance::Planning
             }
-            // The planner ran and exhausted its bounded search. This is a
-            // terminal result for this order; only a zero shared budget is a
-            // transient deferral handled above.
-            Some(MovementOutcome::BudgetExceeded) => SegmentAdvance::Stopped,
-            None => SegmentAdvance::Stopped,
+            Some(RoutePlannerPoll::InvalidDestination) => {
+                SegmentAdvance::Stopped(Some(GameWorldError::InvalidPosition))
+            }
+            Some(RoutePlannerPoll::Unreachable) => {
+                SegmentAdvance::Stopped(Some(GameWorldError::Unreachable))
+            }
+            Some(RoutePlannerPoll::SearchLimit) => {
+                SegmentAdvance::Stopped(Some(GameWorldError::PathBudgetExceeded))
+            }
+            Some(RoutePlannerPoll::Environment(error)) => {
+                SegmentAdvance::Stopped(Some(GameWorldError::Environment(error)))
+            }
+            None => SegmentAdvance::Stopped(Some(GameWorldError::InvalidTerrain)),
         }
     }
 
-    fn cached_map_segment(
-        &mut self,
-        origin: aoe_core::TileCoord,
-        destination: aoe_core::TileCoord,
-        budget: u32,
-    ) -> Option<MovementOutcome> {
-        if let Some(outcome) = self.navigation_cache.get(origin, destination, budget) {
-            return Some(outcome);
+    fn planner_capacity_exhausted(&self, index: usize) -> bool {
+        let own_planner = usize::from(self.units[index].planner.is_some());
+        self.active_planner_count.saturating_sub(own_planner) >= MAX_ACTIVE_ROUTE_PLANNERS
+    }
+
+    pub(crate) fn clear_planner(&mut self, index: usize) {
+        if self.units[index].planner.take().is_some() {
+            self.active_planner_count = self.active_planner_count.saturating_sub(1);
         }
-        let outcome = self
-            .terrain
-            .route_segment_with_limit(origin, destination, budget)?;
-        self.navigation_cache
-            .insert(origin, destination, budget, outcome.clone());
-        Some(outcome)
+    }
+
+    pub(crate) fn store_planner(&mut self, index: usize, planner: Option<RoutePlanner>) {
+        self.clear_planner(index);
+        if planner.is_some() {
+            self.active_planner_count = self.active_planner_count.saturating_add(1);
+        }
+        self.units[index].planner = planner;
     }
 
     fn take_planning_budget(&mut self) -> u32 {
@@ -222,16 +349,28 @@ impl GameWorld {
         self.planning_budget -= allocated;
         allocated
     }
+
+    fn take_planning_budget_share(&mut self, allowance: &mut u32) -> u32 {
+        let allocated = self
+            .planning_budget
+            .min(*allowance)
+            .min(MAX_ROUTE_EXPANSIONS_PER_ORDER);
+        self.planning_budget -= allocated;
+        *allowance -= allocated;
+        allocated
+    }
 }
 
 enum SegmentAdvance {
     Next(WorldPosition),
     Planning,
-    Stopped,
+    Stopped(Option<GameWorldError>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum MapRoutePlan {
     Outcome(MovementOutcome),
-    Deferred,
+    Pending(Option<RoutePlanner>),
+    SearchLimit,
+    Environment(aoe_map::EnvironmentPageError),
 }

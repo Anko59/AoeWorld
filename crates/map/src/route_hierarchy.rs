@@ -3,7 +3,7 @@
 //! Coarse and intermediate cells guide a 32-tile fine chunk. The actual
 //! crossing is chosen from passable boundary pairs at the moment it is needed,
 //! so no map-scale portal or connectivity table is allocated.
-use crate::{EdgePassability, MapChunkGenerator, ResourceOverlay};
+use crate::{EdgePassability, EnvironmentPageError, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 
 const FINE_TILES: i32 = 32;
@@ -31,6 +31,45 @@ pub(crate) fn portal_candidates(
         .collect::<Vec<_>>();
     candidates.sort_by_key(|tile| (distance(*tile, guidance), tile.y, tile.x));
     candidates
+}
+
+pub(crate) fn portal_candidates_checked(
+    terrain: &MapChunkGenerator,
+    overlay: &ResourceOverlay,
+    origin: TileCoord,
+    destination: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Vec<TileCoord>, EnvironmentPageError> {
+    if same_cell(origin, destination, FINE_TILES) {
+        return Ok(Vec::new());
+    }
+    let guidance = hierarchy_boundary(origin, destination);
+    let mut candidates = Vec::new();
+    for (from, to) in boundary_portals(origin) {
+        let from_sample = terrain
+            .tile_at_with_cancel(from, cancelled)?
+            .filter(|sample| sample.passable);
+        let to_sample = terrain
+            .tile_at_with_cancel(to, cancelled)?
+            .filter(|sample| sample.passable);
+        if from_sample.is_none() || to_sample.is_none() {
+            continue;
+        }
+        let from_object = terrain.object_at_with_cancel(from, cancelled)?;
+        let to_object = terrain.object_at_with_cancel(to, cancelled)?;
+        if from_object.is_some_and(|node| overlay.blocks_node(node))
+            || to_object.is_some_and(|node| overlay.blocks_node(node))
+            || !matches!(
+                terrain.edge_between_with_cancel(from, to, cancelled)?,
+                EdgePassability::Passable
+            )
+        {
+            continue;
+        }
+        candidates.push(to);
+    }
+    candidates.sort_by_key(|tile| (distance(*tile, guidance), tile.y, tile.x));
+    Ok(candidates)
 }
 
 pub(crate) fn hierarchy_boundary(origin: TileCoord, destination: TileCoord) -> TileCoord {
