@@ -347,16 +347,16 @@ fn download_once(
         .call()
         .map_err(|error| CacheError::Download(error.to_string()))?;
     let status = response.status();
-    if !(status == 206 || (offset == 0 && status == 200)) {
-        return Err(CacheError::Download(format!(
-            "unexpected HTTP status {status}"
-        )));
-    }
     if offset > 0 && status == 200 {
         fs::remove_file(partial)?;
         return Err(CacheError::Download(
             "provider ignored a ranged resume request".to_owned(),
         ));
+    }
+    if !(status == 206 || (offset == 0 && status == 200)) {
+        return Err(CacheError::Download(format!(
+            "unexpected HTTP status {status}"
+        )));
     }
     let mut output = OpenOptions::new().create(true).append(true).open(partial)?;
     let mut input = response.into_reader();
@@ -414,87 +414,4 @@ fn directory_bytes(path: &Path) -> Result<u64, CacheError> {
     Ok(total)
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
-
-    fn lock() -> SourceLock {
-        SourceLock {
-            id: "etopo-2022-60s".to_owned(),
-            provider: Provider::Noaa,
-            release: "ETOPO 2022 v1".to_owned(),
-            url: "https://www.ngdc.noaa.gov/example.tif".to_owned(),
-            sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned(),
-            bytes: 3,
-            native_resolution: "60 arc-seconds".to_owned(),
-            crs: "EPSG:4326".to_owned(),
-            vertical_datum: "ice surface".to_owned(),
-            license_reference: "NOAA public domain".to_owned(),
-        }
-    }
-
-    #[test]
-    fn source_locks_reject_unapproved_or_incomplete_sources() {
-        let mut source = lock();
-        assert!(source.validate().is_ok());
-        source.url = "http://www.ngdc.noaa.gov/example.tif".to_owned();
-        assert!(source.validate().is_err());
-        source.url = "https://www.ngdc.noaa.gov/example.tif".to_owned();
-        source.sha256 = "not-a-hash".to_owned();
-        assert!(source.validate().is_err());
-    }
-
-    #[test]
-    fn offline_reports_only_missing_or_tampered_inputs() {
-        let root = temporary_directory();
-        let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
-        let source = lock();
-        let object = cache.object_path(&source).expect("object path");
-        fs::write(&object, b"abc").expect("cached object");
-        assert!(
-            cache
-                .offline_missing(std::slice::from_ref(&source))
-                .expect("offline")
-                .is_empty()
-        );
-        fs::write(&object, b"bad").expect("tampered object");
-        assert_eq!(
-            cache.offline_missing(&[source]).expect("offline"),
-            vec!["etopo-2022-60s"]
-        );
-        fs::remove_dir_all(root).expect("remove temporary cache");
-    }
-
-    #[test]
-    fn source_acquisition_hashes_sha256_and_provider_md5() {
-        let root = temporary_directory();
-        fs::create_dir_all(&root).expect("temporary root");
-        let path = root.join("source");
-        fs::write(&path, b"abc").expect("source bytes");
-        let (sha, sha1, md5) = file_hashes(&path).expect("digests");
-        assert_eq!(
-            digest_hex(&sha),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-        assert_eq!(digest_hex(&md5), "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(
-            digest_hex(&sha1),
-            "a9993e364706816aba3e25717850c26c9cd0d89d"
-        );
-        fs::remove_dir_all(root).expect("remove temporary cache");
-    }
-
-    fn temporary_directory() -> PathBuf {
-        let serial = NEXT_TEMP.fetch_add(1, Ordering::SeqCst);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        std::env::temp_dir().join(format!("aoe-geodata-{nanos}-{serial}"))
-    }
-}
+mod tests;

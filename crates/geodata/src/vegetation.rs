@@ -207,6 +207,7 @@ fn reduce_classes(axis: u16, values: &[u8]) -> Result<Vec<u8>, GeodataError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gdal::{DriverManager, raster::Buffer, spatial_ref::SpatialRef};
 
     #[test]
     fn categorical_reduction_uses_the_stable_lowest_tie_breaker() {
@@ -222,5 +223,77 @@ mod tests {
              tropical savanna\nsteppe\ndesert\ngraminoid and forb tundra\n";
         assert!(legend_is_compatible(legend));
         assert!(!legend_is_compatible("incompatible"));
+    }
+
+    #[test]
+    fn native_raster_sampling_preserves_valid_and_invalid_classes() {
+        let root = std::env::temp_dir().join(format!(
+            "aoe-vegetation-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("temporary directory");
+        let valid = root.join("valid.tif");
+        write_raster(&valid, 7.0, None);
+        let prepared = prepare_potential_biomes(&valid, MapRequest::default(), 2)
+            .expect("valid vegetation raster");
+        assert_eq!(prepared.pages.len(), 2);
+        assert!(
+            prepared.pages[0]
+                .potential_biome_class
+                .iter()
+                .all(|class| *class == 7)
+        );
+
+        let invalid = root.join("invalid.tif");
+        write_raster(&invalid, 999.0, None);
+        let prepared = prepare_potential_biomes(&invalid, MapRequest::default(), 2)
+            .expect("out-of-range vegetation classes become nodata");
+        assert!(
+            prepared.pages[0]
+                .potential_biome_class
+                .iter()
+                .all(|class| *class == 0)
+        );
+
+        let nodata = root.join("nodata.tif");
+        write_raster(&nodata, -1.0, Some(-1.0));
+        let prepared = prepare_potential_biomes(&nodata, MapRequest::default(), 2)
+            .expect("vegetation nodata becomes class zero");
+        assert!(
+            prepared.pages[0]
+                .potential_biome_class
+                .iter()
+                .all(|class| *class == 0)
+        );
+        assert!(matches!(
+            prepare_potential_biomes(&valid, MapRequest::default(), 1),
+            Err(GeodataError::Preparation(_))
+        ));
+        fs::remove_dir_all(root).expect("remove temporary directory");
+    }
+
+    fn write_raster(path: &Path, value: f64, nodata: Option<f64>) {
+        let driver = DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
+        let mut dataset = driver
+            .create_with_band_type::<f64, _>(path, 32, 32, 1)
+            .expect("vegetation raster");
+        dataset
+            .set_geo_transform(&[1.0, 0.1, 0.0, 50.5, 0.0, -0.1])
+            .expect("geotransform");
+        dataset
+            .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+            .expect("spatial reference");
+        let mut band = dataset.rasterband(1).expect("vegetation band");
+        if let Some(nodata) = nodata {
+            band.set_no_data_value(Some(nodata)).expect("nodata");
+        }
+        let mut values = Buffer::new((32, 32), vec![value; 32 * 32]);
+        band.write((0, 0), (32, 32), &mut values)
+            .expect("vegetation values");
+        dataset.flush_cache().expect("flush raster");
     }
 }
