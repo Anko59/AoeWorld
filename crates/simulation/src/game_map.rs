@@ -1,6 +1,6 @@
 use crate::{
     GameWorld, GameWorldError, MAX_ROUTE_EXPANSIONS_PER_TICK, Terrain,
-    navigation_cache::NavigationCache,
+    movement_speed::cavalry_config, navigation_cache::NavigationCache,
 };
 use aoe_core::{Seed, Tick, WorldConfig};
 use aoe_map::{ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage};
@@ -10,7 +10,7 @@ impl GameWorld {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
         let width = i32::try_from(package.estimate.tiles_per_side)
             .map_err(|_| GameWorldError::InvalidPosition)?;
-        let config = WorldConfig::new(width, width, Seed(package.request.seed))?;
+        let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
             terrain: Terrain::from_package(&package),
             config,
@@ -33,7 +33,7 @@ impl GameWorld {
     ) -> Result<Self, GameWorldError> {
         let width = i32::try_from(package.estimate.tiles_per_side)
             .map_err(|_| GameWorldError::InvalidPosition)?;
-        let config = WorldConfig::new(width, width, Seed(package.request.seed))?;
+        let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
             terrain: Terrain::from_prepared_package(
                 &package,
