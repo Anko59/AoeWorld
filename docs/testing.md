@@ -18,8 +18,11 @@ screenshot, along with reconnect and independent subscriptions.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
 production-line denominator, and rejects less than 85% overall or 90% in
 protocol, asset parsers, and policy/report logic. A missing group fails.
-The coverage run includes both instrumented Playwright E2E and the browser
-WASM runner. Browser, WASM, asset, performance, QA, and artifact gates need
+The coverage run instruments the native Playwright harness and server, and the
+native browser WASM runner. It selects the server built by cargo-llvm-cov and
+requires graceful shutdown so its execution counters are written. These are
+native coverage records, not instrumentation of JavaScript or browser WASM.
+Browser, WASM, asset, performance, QA, and artifact gates need
 separate evidence.
 `make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette, and
 pack-manifest parser. It uses a separately pinned nightly toolchain and keeps

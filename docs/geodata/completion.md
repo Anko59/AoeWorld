@@ -205,3 +205,20 @@ unchanged 85% floor, and lacks the new inventory module. The earlier provisional
 73.92% result omitted production modules and is invalid. A fresh instrumented
 run and additional production-path tests remain required; this repair does
 not establish a coverage or overall CI pass.
+
+The fresh instrumented run at
+`ef0b0a8592fa59f742fac38753f8067f75dfed18` measured 12,456 / 16,960 lines
+(73.4%), with no missing sources and all critical groups passing. It still
+fails the 85% overall floor. The larger denominator includes the subsequent
+detailed-preparation and residency code.
+
+[PR #20](https://github.com/Anko59/AoeWorld/pull/20), revision
+`171ebf638f5db9716221ecb025bd17b896d3481a`, fixes a separate instrumentation
+gap: browser coverage selects the instrumented native server and requires
+graceful shutdown to flush counters. Independent review, hooks, preflight
+(295 native tests), browser-check, normal E2E (23), instrumented E2E (23),
+WASM (10), and clean-revision pre-push preflight passed. Server and harness
+profiles were produced. The full coverage command remains a failure at
+12,660 / 17,000 lines (74.5%); missing sources are empty and critical groups
+pass. No threshold changed. Failed browser runs may force cleanup without
+flushing server counters and cannot produce a passing report.
