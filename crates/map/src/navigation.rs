@@ -292,7 +292,10 @@ where
 }
 
 fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
-    terrain.tile_at(tile).is_some_and(|sample| sample.passable) && terrain.object_at(tile).is_none()
+    terrain.tile_at(tile).is_some_and(|sample| sample.passable)
+        && terrain
+            .object_at_with_cancel(tile, &|| false)
+            .is_ok_and(|object| object.is_none())
 }
 
 fn walkable_with_overlay(
@@ -300,12 +303,10 @@ fn walkable_with_overlay(
     overlay: &ResourceOverlay,
     tile: TileCoord,
 ) -> bool {
-    terrain.tile_at(tile).is_some_and(|sample| {
-        sample.passable
-            && terrain
-                .object_at(tile)
-                .is_none_or(|node| !overlay.blocks(terrain, node.id))
-    })
+    terrain.tile_at(tile).is_some_and(|sample| sample.passable)
+        && terrain
+            .object_at_with_cancel(tile, &|| false)
+            .is_ok_and(|object| object.is_none_or(|node| !overlay.blocks_node(node)))
 }
 
 fn same_fine_chunk(left: TileCoord, right: TileCoord) -> bool {
@@ -384,7 +385,7 @@ mod tests {
         let node = (0..4)
             .flat_map(|y| {
                 let terrain = terrain.clone();
-                (0..4).flat_map(move |x| terrain.chunk(x, y).resources)
+                (0..4).flat_map(move |x| terrain.chunk(x, y).expect("fixture chunk").resources)
             })
             .next()
             .expect("test terrain resource");

@@ -24,8 +24,25 @@ pub(super) fn at(
     tile: TileCoord,
     sample: Tile,
 ) -> Option<ResourceNode> {
-    let candidate = candidate(generator, tile, sample)?;
-    adjacent_access(generator, tile).then_some(candidate)
+    at_with_access(generator, tile, sample, |neighbor| {
+        Ok::<_, std::convert::Infallible>(generator.tile_at(neighbor).is_some_and(|sample| {
+            sample.passable && !generator.occupied_without_access(neighbor, sample)
+        }))
+    })
+    .ok()
+    .flatten()
+}
+
+pub(super) fn at_with_access<E>(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    sample: Tile,
+    access: impl Fn(TileCoord) -> Result<bool, E>,
+) -> Result<Option<ResourceNode>, E> {
+    let Some(candidate) = candidate(generator, tile, sample) else {
+        return Ok(None);
+    };
+    Ok(adjacent_access(tile, access)?.then_some(candidate))
 }
 
 pub(super) fn candidate(
@@ -147,7 +164,10 @@ fn patch_count(value: u64) -> usize {
     4 + (value % 5) as usize
 }
 
-fn adjacent_access(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
+fn adjacent_access<E>(
+    tile: TileCoord,
+    access: impl Fn(TileCoord) -> Result<bool, E>,
+) -> Result<bool, E> {
     [
         TileCoord::new(tile.x - 1, tile.y),
         TileCoord::new(tile.x + 1, tile.y),
@@ -155,11 +175,12 @@ fn adjacent_access(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
         TileCoord::new(tile.x, tile.y + 1),
     ]
     .into_iter()
-    .any(|neighbor| {
-        generator.tile_at(neighbor).is_some_and(|sample| {
-            sample.passable && !generator.occupied_without_access(neighbor, sample)
-        })
-    })
+    .try_fold(
+        false,
+        |found, neighbor| {
+            if found { Ok(true) } else { access(neighbor) }
+        },
+    )
 }
 
 fn suitable_forage(biome: Biome) -> bool {

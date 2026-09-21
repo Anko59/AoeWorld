@@ -1,7 +1,8 @@
 use crate::{
-    ElevationPage, HistoricalLandUsePage, MapChunkGenerator, MapPackage, MapPackageError,
-    PotentialBiomePage, WaterPage,
+    ElevationPage, EnvironmentPageProvider, HistoricalLandUsePage, MapChunkGenerator, MapPackage,
+    MapPackageError, PotentialBiomePage, WaterPage,
 };
+use std::sync::Arc;
 
 impl MapPackage {
     /// Creates pure terrain queries backed by complete, verified elevation
@@ -36,6 +37,21 @@ impl MapPackage {
             .and_then(|generator| {
                 generator.with_historical_land_use(&self.environment, land_use_pages)
             })
+            .map_err(|_| MapPackageError::InvalidEnvironment)
+    }
+
+    /// Creates a lazy terrain generator backed by one-page-at-a-time source
+    /// access. The provider retains no complete page vector; callers receive
+    /// fallible query methods from [`MapChunkGenerator`].
+    pub fn generator_with_page_provider(
+        &self,
+        provider: Arc<dyn EnvironmentPageProvider>,
+    ) -> Result<MapChunkGenerator, MapPackageError> {
+        if self.environment.samples_per_axis == 0 {
+            return Err(MapPackageError::InvalidEnvironment);
+        }
+        self.generator()
+            .with_page_provider(self.request.compression, self.environment.clone(), provider)
             .map_err(|_| MapPackageError::InvalidEnvironment)
     }
 }

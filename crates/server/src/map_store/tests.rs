@@ -1,7 +1,4 @@
-use super::{
-    MapStoreError, elevation_page_root, load, load_elevation_pages, load_vegetation_pages,
-    load_water_pages, persist, persist_prepared,
-};
+use super::{MapStoreError, elevation_page_root, load, persist, persist_prepared};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentalProvenance, FieldPyramid,
     HistoricalLandUsePage, MapPackage, MapRequest, PotentialBiomePage, PreparedEnvironment,
@@ -10,7 +7,14 @@ use aoe_map::{
 };
 use std::fs;
 
-fn prepared() -> (
+#[cfg(test)]
+mod legacy;
+#[cfg(test)]
+mod residency;
+
+use legacy::{load_elevation_pages, load_land_use_pages, load_vegetation_pages, load_water_pages};
+
+pub(super) fn prepared() -> (
     MapPackage,
     Vec<ElevationPage>,
     Vec<WaterPage>,
@@ -201,7 +205,7 @@ fn prepared_elevation_and_water_pages_must_persist_with_their_package() {
         vegetation
     );
     assert_eq!(
-        super::load_land_use_pages(Some(directory.path()), &package).expect("land-use pages"),
+        load_land_use_pages(Some(directory.path()), &package).expect("land-use pages"),
         land_use
     );
     fs::remove_file(elevation_page_root(directory.path(), &package).join("0-0-0.json"))

@@ -86,8 +86,10 @@ fn seed_changes_detail_identity_but_not_geographic_elevation() {
     .expect("package");
     assert_ne!(first.content_hash, second.content_hash);
     assert_eq!(
-        first.generator().chunk(0, 0).tiles[0].geographic_height_centimeters,
-        second.generator().chunk(0, 0).tiles[0].geographic_height_centimeters
+        first.generator().chunk(0, 0).expect("fixture chunk").tiles[0]
+            .geographic_height_centimeters,
+        second.generator().chunk(0, 0).expect("fixture chunk").tiles[0]
+            .geographic_height_centimeters
     );
 }
 #[test]
@@ -123,7 +125,7 @@ fn validation_rejects_tampering_and_old_generation_recipe_identity() {
         current.generator().chunk(0, 0)
     );
     assert_eq!(
-        terrain_fingerprint(&current.generator().chunk(0, 0)),
+        terrain_fingerprint(&current.generator().chunk(0, 0).expect("fixture chunk")),
         [
             0x38, 0xfc, 0x44, 0x7f, 0x20, 0x1c, 0xca, 0xc7, 0x13, 0x84, 0x04, 0x8a, 0xe9, 0xee,
             0x2e, 0x4b, 0x03, 0xa1, 0xb7, 0xca, 0x3a, 0x89, 0x97, 0x93, 0x74, 0xa8, 0xa2, 0x6d,

@@ -60,6 +60,16 @@ locks, and prepared page roots. `map-verify` streams those pages one at a time
 and rejects tampering, missing or malformed expected pages, invalid coordinates,
 and source/provenance inconsistencies before it reports the package content hash.
 
+Runtime activation uses the same verified page roots through a bounded provider.
+It retains at most a 64 MiB compact page index per package and 128 decoded
+environment pages per provider, with deterministic least-recently-used
+eviction. The server keeps at most two indexed providers in its registry;
+active gameplay retains its provider handle until that world is released.
+Indexing and page reads are cancellation-aware and request-local. A missing,
+corrupt, or cancelled page request fails the preview or chunk response instead
+of returning a procedural substitute or a partial chunk. These are residency
+and request bounds, not source-backed RTS performance qualification.
+
 The local tangent-plane projection places the requested map center at `(0, 0)`
 meters. Geographic raster and vector work happens in source-native
 coordinates, followed by deterministic reprojection and reduction into the
