@@ -263,3 +263,21 @@ profiles were produced. The full coverage command remains a failure at
 12,660 / 17,000 lines (74.5%); missing sources are empty and critical groups
 pass. No threshold changed. Failed browser runs may force cleanup without
 flushing server counters and cannot produce a passing report.
+The current source generation recipe is version 3. It corrects source-grade
+surface classification before quantization and therefore changes immutable
+content identity while leaving the geography hash domain stable. Existing
+maps-v5 and maps-v6 directories remain untouched; the default output directory
+is maps-v7 and old packages must be regenerated from cached source inputs.
+Resource placement retains its explicit recipe-2 detail domain so this terrain
+recipe migration does not reseed published resource placement.
+
+Source-slope classification is reviewed in [PR #25](https://github.com/Anko59/AoeWorld/pull/25),
+revision `a41a022827099cc3a1c96d5f62dea6a9ee71f2dd`. Hooks, map-test (52),
+preflight (296 native tests), test-e2e (23), test-wasm (10), and clean pre-push
+preflight passed. Source grades above 35% remain impassable even when corner
+heights quantize to one level. Resource detail keys keep their previous bytes.
+
+The fresh combined coverage run at
+`bdd2f66a923138287864b67acee8272c8ae625c5` measured 14,142 / 17,709 lines
+(79.9%). No sources are missing, and critical groups pass; the unchanged 85%
+overall gate still fails. Acquisition and worker orchestration need more tests.
