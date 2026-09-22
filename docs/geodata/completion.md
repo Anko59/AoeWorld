@@ -412,3 +412,31 @@ review, hooks, preflight (356 native), browser-check, E2E (27), and clean
 pre-push passed. Combined integration `b9e41bd91880c4aecc9c6ec533231a3edb94d8d7`
 passes preflight and E2E (27). Lost POST acknowledgements before the job ID is
 received, measured progress, and cancelled staging cleanup remain open.
+
+M4 bounded detours and route reconstruction are reviewed in
+[PR #34](https://github.com/Anko59/AoeWorld/pull/34), revision
+`53c518477505c77e2dd5164470088f06f5acfe84`. Exact sparse A* replaces the incomplete four-portal search. Parent
+backtrace and conversion share the tick work budget; continuations retain the
+proven route between movement segments. Replay hashing uses fixed-width values.
+Independent review, hooks, map-test (66), preflight (334 native), and clean
+pre-push passed. Combined integration `76154946d012579efbee922d0bb6ddab6c1d0db3`
+passes map-test and preflight (380 native). Source-backed 100 km movement and
+runtime qualification remain open; synthetic corridor results above are not
+that evidence.
+
+M7 leased worker scratch is reviewed in
+[PR #35](https://github.com/Anko59/AoeWorld/pull/35), revision
+`d64de5f8e8dfa4ef08cb9110051960c443fe1cb3`. Server and worker leases protect
+active detailed pyramid staging; startup and the next preparation recover
+abandoned scopes. Normal completion and cancellation clean up after process
+reaping. Registry locking serializes recovery/removal, and Unix permissions
+restrict scopes to their owner. Independent review, hooks, preflight (382
+native), and clean pre-push passed. Combined integration
+`9ce626b58aac1f38a976933e42d85c5e9c0c8ff3` passes preflight (388 native).
+Provider extraction temporaries, incomplete immutable publication files, and
+direct CLI staging are outside this cleanup contract.
+
+Coverage at integration `adda0eec37c3197d2bf0e49e4b100426173f6dbf` is
+15,419/19,566 production lines (78.8%): the unchanged 85% overall floor fails.
+All critical groups pass and no sources are missing. This supersedes the older
+79.9% measurement for the expanded implementation; qualification remains open.
