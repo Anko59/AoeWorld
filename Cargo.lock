@@ -175,6 +175,7 @@ dependencies = [
  "aoe-core",
  "blake3",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 

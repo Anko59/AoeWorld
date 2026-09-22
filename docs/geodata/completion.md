@@ -308,3 +308,20 @@ The checkout remains read-only; missing or non-executable workers fail startup.
 Hooks, preflight (324 native tests), E2E (23), and clean pre-push preflight
 passed on that branch. Integration preserves the recipe-3 maps-v7 directory.
 Actual source-backed creator verification remains pending.
+
+The normal creator flow was verified at integration
+`efc0755481fdf788a618123c40f4a4195d9b7c7d`: `make dev` built and ran the worker;
+the browser estimated and generated default Paris at 1024 samples per axis,
+then activated package
+`c47b00d6915c97deeee26ae777876f916e6db31a0d31b9b92119d2cbe0967a48`.
+It reports 16 source locks and 500 tiles per side. Reconnect loaded terrain
+and the primary unit. Elevation transition gaps remain an M6 rendering issue.
+
+M5 bounded snapshot foundations are reviewed in
+[PR #28](https://github.com/Anko59/AoeWorld/pull/28), revision
+`adf1b4d450916df1411c11e2620e8ba5776ca159`. Schema/map identity, canonical
+resource IDs, amounts and revision history are validated before replacement.
+Decoding and mutation cap changed resources at 65,536 logical entries; provider,
+capacity and revision errors leave state intact. Independent review, hooks,
+map-test, preflight (333 native tests), and clean pre-push preflight passed.
+Disk persistence and reconnect/delta consumers remain required.
