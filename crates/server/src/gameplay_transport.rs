@@ -38,6 +38,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
     if sender.send(welcome).await.is_err() {
         return;
     }
+    drop(sender);
     loop {
         tokio::select! {
             outgoing = receiver.recv() => {
@@ -52,7 +53,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                     Ok(GameplayClientMessage::MoveOrder { sequence, entity_id, destination }) => service.queue_move(session_id, sequence, entity_id, destination).await,
                     Ok(GameplayClientMessage::Resync { revision }) => service.resync(session_id, revision).await,
                     Ok(GameplayClientMessage::Hello { .. }) | Err(_) => {
-                        let _ = sender.send(GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;
+                        let _ = send_socket(&mut sink, GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;
                         break;
                     }
                 }

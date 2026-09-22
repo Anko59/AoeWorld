@@ -3,8 +3,11 @@ use aoe_core::{PlayerId, WorldPosition};
 use aoe_map::{Depletion, EnvironmentPageProvider, MapPackage, ResourceOverlaySnapshot};
 use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
 use std::{path::PathBuf, sync::Arc};
+#[path = "resources/feed.rs"]
+mod feed;
 #[path = "resources/store.rs"]
 mod store;
+pub(super) use feed::Journal;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceLifecycleError {
@@ -96,12 +99,17 @@ impl GameplayService {
             .clone()
             .ok_or(ResourceLifecycleError::Disabled)?;
         let mut world = self.world.clone().write_owned().await;
+        let journal = self.resource_journal.clone();
         tokio::task::spawn_blocking(move || {
             let mutation = world.prepare_resource_depletion(id, amount)?;
             let snapshot = mutation.snapshot(hash);
             let directory_synced =
                 store::save(&directory, &snapshot, mutation.previous_revision())?;
             let depletion = mutation.commit();
+            journal
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .record(depletion);
             Ok(PersistedDepletion {
                 depletion,
                 directory_synced,

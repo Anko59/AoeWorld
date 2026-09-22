@@ -171,8 +171,8 @@ it. Restored collision and subsequent depletion use the same authoritative state
 At most 65,536 changed resources may be retained or decoded in one overlay.
 Adding another changed resource fails explicitly without partial depletion;
 already changed resources can still deplete. This is an entry count, not an RSS
-claim. The map crate provides the bounded snapshot contract only: disk adapters,
-network deltas, reconnect, and lifecycle integration are separate work.
+claim. The map crate owns the snapshot contract; the server owns persistence and
+network publication, and the client keeps mutable amounts outside chunk storage.
 
 ## Tests and performance evidence
 
@@ -201,5 +201,23 @@ sync after replacement commits live state and explicitly reports uncertain
 crash durability. A stale service revision cannot overwrite newer saved state.
 A fixed temporary name limits crash leftovers to one per map and the next
 write recovers it under the process lock. One server process must own a package directory; this is not a shared database.
-No gather command or economy is introduced. Network synchronization of resource
-amounts and client sprite invalidation remain separate consumers.
+No gather command or economy is introduced.
+
+Gameplay protocol 7 synchronizes sparse resource amounts. Every subscription
+receives a complete reset, including an empty reset for an unchanged map. Later
+messages name the exact previous overlay revision and contain sorted final
+amounts for changed IDs. The server retains 1,024 revision entries, coalesces
+repeated IDs, and sends a fresh bounded snapshot when a client has fallen behind
+that journal. Both forms carry the subscription revision; superseded replies
+cannot change the current view. An unsuccessful resource queue write disconnects
+the consumer rather than advancing its acknowledged publication state.
+
+The client retains at most 65,536 changed amounts separately from immutable
+chunks. Exhausted resources are filtered before rendering, so chunk eviction and
+reload cannot restore their sprites. Unknown resource state hides sprites until
+the initial reset arrives. Welcome and world replacement clear this state;
+a malformed or discontinuous update closes the socket and requires reconnect.
+Reset/delta validation, persistence-to-wire reconnect, queue overflow, and cache
+capacity are covered by native tests; both browser render backends are covered
+by the general E2E suite. Those tests do not yet constitute a source-backed
+interactive depletion or long-session performance qualification.

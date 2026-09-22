@@ -53,6 +53,7 @@ pub(super) struct Client {
     pub role: Option<GameplayRole>,
     pub map_content_hash: Option<[u8; 32]>,
     pub focus_map_hash: Option<[u8; 32]>,
+    pub resources: crate::resource_state::ResourceStateCache,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
@@ -261,6 +262,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.camera.focus_elevation_meters = 0.0;
                     client.focus_map_hash = None;
                 }
+                client.resources.clear();
                 client.terrain_chunks.clear();
                 client.terrain_inflight.clear();
                 client.primary = Some(primary_unit_id);
@@ -302,6 +304,16 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
             }
             Ok(GameplayServerMessage::Tick { .. }) => {}
+            Ok(GameplayServerMessage::ResourceState(state)) => {
+                if state.subscription_revision == client.revision && !client.resources.apply(state)
+                {
+                    client.status = "resource state out of sync; reconnect required".to_owned();
+                    client.resources.clear();
+                    if let Some(socket) = &client.socket {
+                        let _ = socket.close();
+                    }
+                }
+            }
             Ok(GameplayServerMessage::RoleChange {
                 role, resume_token, ..
             }) => {
@@ -317,6 +329,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.map_content_hash = None;
                 client.focus_map_hash = None;
                 client.camera.focus_elevation_meters = 0.0;
+                client.resources.clear();
                 client.terrain_chunks.clear();
                 client.terrain_inflight.clear();
                 client.token = None;

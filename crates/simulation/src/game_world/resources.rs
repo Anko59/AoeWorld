@@ -33,6 +33,13 @@ impl PreparedResourceDepletion<'_> {
 }
 
 impl GameWorld {
+    pub fn resource_revision(&self) -> Option<u64> {
+        let Terrain::Map { overlay, .. } = &self.terrain else {
+            return None;
+        };
+        Some(overlay.revision())
+    }
+
     pub fn resource_snapshot(&self, content_hash: [u8; 32]) -> Option<ResourceOverlaySnapshot> {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return None;

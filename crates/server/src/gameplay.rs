@@ -32,6 +32,7 @@ pub struct GameplayService {
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
     primary_unit_id: EntityId,
+    resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
 }
 
@@ -48,6 +49,7 @@ pub(super) struct Session {
     subscription_times: VecDeque<Instant>,
     pending: VecDeque<PendingCommand>,
     resident: BTreeMap<EntityId, GameplayUnitState>,
+    resource_revision: Option<u64>,
 }
 
 #[derive(Clone, Copy)]
@@ -124,6 +126,7 @@ impl GameplayService {
             map_metadata,
             primary_unit_id,
             resource_directory: None,
+            resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
         }
     }
 
@@ -270,6 +273,8 @@ impl GameplayService {
             }
             let _ = session.sender.try_send(message);
         }
+        drop(sessions);
+        self.publish_resources().await;
     }
 
     pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
@@ -330,6 +335,7 @@ impl GameplayService {
                 subscription_times: VecDeque::new(),
                 pending: VecDeque::new(),
                 resident: BTreeMap::new(),
+                resource_revision: None,
             },
         );
         let welcome = GameplayServerMessage::Welcome {
@@ -421,6 +427,7 @@ impl GameplayService {
             }
             session.subscription_times.push_back(now);
             session.subscription = Some(Subscription { revision, region });
+            session.resource_revision = None;
             session.resident = units
                 .iter()
                 .map(unit_state)
