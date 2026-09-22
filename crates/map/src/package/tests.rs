@@ -24,6 +24,7 @@ fn environment() -> PreparedEnvironment {
         water: None,
         vegetation: None,
         historical_land_use: None,
+        hydrology_evidence: None,
     }
 }
 fn source(id: &str) -> SourceLock {
@@ -62,6 +63,13 @@ fn terrain_fingerprint(chunk: &crate::Chunk) -> [u8; 32] {
         ]);
     }
     *hash.finalize().as_bytes()
+}
+
+fn fingerprint_hex(chunk: &crate::Chunk) -> String {
+    terrain_fingerprint(chunk)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 #[test]
 fn packages_have_canonical_source_order_and_stable_identity() {
@@ -230,4 +238,82 @@ fn acquisition_time_is_not_a_content_input_but_preprocessing_is() {
     altered_source.preprocessing_version = "test-v2".to_owned();
     let altered = MapPackage::new(1, MapRequest::default(), vec![altered_source]).expect("package");
     assert_ne!(first.content_hash, altered.content_hash);
+}
+
+#[test]
+fn schema_eight_manifest_and_hash_remain_readable_after_schema_nine() {
+    const LEGACY_HASH: &str = "1c82962e62bdfad02d3e0cb5f50aa85f1d72a0e778437c899284f5dfa6e95b18";
+    const LEGACY_TERRAIN_FINGERPRINT: &str =
+        "ef9ad686d6c588cacb21be148a4ec6291ea49997a77f47a825e77f30cd4c99aa";
+    let fixture = include_str!("../../tests/fixtures/schema8-default-package.json");
+    let legacy: MapPackage = serde_json::from_str(fixture).expect("legacy manifest parses");
+    assert_eq!(legacy.schema_version, crate::LEGACY_MAP_SCHEMA_VERSION);
+    assert_eq!(legacy.generator_version, 8);
+    assert_eq!(legacy.content_hash_hex(), LEGACY_HASH);
+    assert!(legacy.validate().is_ok());
+    assert_eq!(
+        serde_json::to_vec_pretty(&legacy).unwrap(),
+        fixture.as_bytes()
+    );
+
+    let legacy_chunk = legacy
+        .generator()
+        .chunk(0, 0)
+        .expect("legacy terrain chunk");
+    assert_eq!(fingerprint_hex(&legacy_chunk), LEGACY_TERRAIN_FINGERPRINT);
+
+    let current = MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), vec![])
+        .expect("current schema package");
+    assert_eq!(current.schema_version, 9);
+    assert_eq!(current.generator_version, 9);
+    assert_eq!(
+        current.content_hash_hex(),
+        "d8aa78b19092802ca080ce67b34389196eb20dcb33bc8dc117f2de9815c9228d"
+    );
+    let current_chunk = current
+        .generator()
+        .chunk(0, 0)
+        .expect("current terrain chunk");
+    assert_ne!(fingerprint_hex(&current_chunk), LEGACY_TERRAIN_FINGERPRINT);
+}
+
+#[test]
+fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
+    let mut environment = environment();
+    environment.hydrology_evidence = Some(crate::HydrologyEvidenceIndex {
+        samples_per_axis: 2,
+        page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: crate::WORLD_COVER_OBSERVATION_YEAR,
+        policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: [4; 32],
+        modern_land_cover_page_root: [5; 32],
+    });
+    let package = MapPackage::with_prepared_environment(
+        crate::MAP_SCHEMA_VERSION,
+        MapRequest::default(),
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        environment,
+    )
+    .expect("schema-nine package");
+    assert!(matches!(
+        package.generator_with_environment(Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+        Err(MapPackageError::InvalidEnvironment)
+    ));
+
+    let mut schema_eight_with_evidence = package.clone();
+    schema_eight_with_evidence.schema_version = crate::LEGACY_MAP_SCHEMA_VERSION;
+    assert_eq!(
+        schema_eight_with_evidence.validate(),
+        Err(MapPackageError::NonCanonicalFields)
+    );
+    let mut unsupported_schema =
+        MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), vec![])
+            .expect("schema-nine package");
+    unsupported_schema.schema_version += 1;
+    assert_eq!(
+        unsupported_schema.validate(),
+        Err(MapPackageError::NonCanonicalFields)
+    );
 }

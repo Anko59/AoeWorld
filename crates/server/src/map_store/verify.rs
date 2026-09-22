@@ -1,7 +1,8 @@
 use super::{MAX_PAGE_BYTES, MapStoreError};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, FieldPyramid, HistoricalLandUsePage,
-    MapPackage, PageLayer, PageRootBuilder, PotentialBiomePage, WaterPage,
+    HydrologyEvidencePage, MapPackage, ModernLandCoverPage, PageLayer, PageRootBuilder,
+    PotentialBiomePage, WaterPage,
 };
 use serde::de::DeserializeOwned;
 use std::{fs, io::Read, path::Path};
@@ -32,6 +33,59 @@ pub(super) fn environment(directory: &Path, package: &MapPackage) -> Result<(), 
     }
     if let Some(index) = &package.environment.historical_land_use {
         field::<HistoricalLandUsePage>(&root, PageLayer::HistoricalLandUse, index)?;
+    }
+    if let Some(index) = &package.environment.hydrology_evidence {
+        evidence::<HydrologyEvidencePage>(
+            &root,
+            PageLayer::HydrologyEvidence,
+            index.samples_per_axis,
+            index.hydrology_page_root,
+        )?;
+        evidence::<ModernLandCoverPage>(
+            &root,
+            PageLayer::ModernLandCover,
+            index.samples_per_axis,
+            index.modern_land_cover_page_root,
+        )?;
+    }
+    Ok(())
+}
+
+fn evidence<T: StoredPage>(
+    root: &Path,
+    layer: PageLayer,
+    axis: u16,
+    expected_root: [u8; 32],
+) -> Result<(), MapStoreError> {
+    let directory = root.join(layer.directory_name());
+    require_directory(&directory)?;
+    let side = usize::from(ENVIRONMENT_PAGE_SAMPLES);
+    let count = usize::from(axis).div_ceil(side);
+    let mut digest = PageRootBuilder::new(layer, count.saturating_mul(count))
+        .map_err(|error| invalid(&directory, error))?;
+    for y in 0..count {
+        for x in 0..count {
+            let path = directory.join(format!("0-{x}-{y}.json"));
+            let page: T = read(&path)?;
+            let width = (usize::from(axis) - x * side).min(side) as u8;
+            let height = (usize::from(axis) - y * side).min(side) as u8;
+            if page.coordinates() != (0, x as u16, y as u16, width, height) {
+                return Err(invalid(&path, "typed page coordinate or shape is invalid"));
+            }
+            digest
+                .push(page.content_hash().map_err(|error| invalid(&path, error))?)
+                .map_err(|error| invalid(&path, error))?;
+        }
+    }
+    if digest
+        .finish()
+        .map_err(|error| invalid(&directory, error))?
+        != expected_root
+    {
+        return Err(invalid(
+            &directory,
+            "typed pages do not reproduce their root",
+        ));
     }
     Ok(())
 }
@@ -110,6 +164,8 @@ fn validate_known_layers(root: &Path) -> Result<(), MapStoreError> {
         PageLayer::Water,
         PageLayer::Vegetation,
         PageLayer::HistoricalLandUse,
+        PageLayer::HydrologyEvidence,
+        PageLayer::ModernLandCover,
     ] {
         validate_optional_directory(&root.join(layer.directory_name()))?;
     }
@@ -160,3 +216,5 @@ stored_page!(ElevationPage);
 stored_page!(WaterPage);
 stored_page!(PotentialBiomePage);
 stored_page!(HistoricalLandUsePage);
+stored_page!(HydrologyEvidencePage);
+stored_page!(ModernLandCoverPage);

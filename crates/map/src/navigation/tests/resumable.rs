@@ -47,6 +47,8 @@ fn flat_terrain_with_width(width: i32) -> MapChunkGenerator {
         water: None,
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     MapChunkGenerator::new([0; 32], 0, width)
         .with_prepared_elevation(
@@ -127,6 +129,8 @@ fn enclosed_local_terrain() -> MapChunkGenerator {
             }],
         }),
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     MapChunkGenerator::new([0; 32], 0, 2)
         .with_prepared_elevation(

@@ -5,9 +5,9 @@
 //! projection before a future preparation pipeline freezes map inputs.
 
 use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, HistoricalLandUsePage, LayerProvenance,
-    MAP_SCHEMA_VERSION, MapPackage, MapRequest, PotentialBiomePage, PreparedEnvironment,
-    ProjectionMetadata, VerticalDatum, WaterPage,
+    ElevationPage, EnvironmentalProvenance, HistoricalLandUsePage, HydrologyEvidencePage,
+    LayerProvenance, MAP_SCHEMA_VERSION, MapPackage, MapRequest, ModernLandCoverPage,
+    PotentialBiomePage, PreparedEnvironment, ProjectionMetadata, VerticalDatum, WaterPage,
 };
 use gdal::{
     Dataset,
@@ -36,8 +36,8 @@ mod hyde;
 pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
 mod hydrology;
 pub use hydrology::{
-    HydrologyKind, HydrologyPage, MAX_HYDROLOGY_SAMPLES_PER_AXIS, ModernLandCoverPage,
-    PreparedHydrology, prepare_hydrology,
+    HydrologyKind, HydrologyPage, MAX_HYDROLOGY_SAMPLES_PER_AXIS, PreparedHydrology,
+    prepare_hydrology,
 };
 mod source_cache;
 pub use source_cache::{
@@ -113,153 +113,8 @@ pub enum GeodataError {
     Cache(#[from] CacheError),
 }
 
-/// A bounded native-worker operation passed on stdin by a direct process spawn.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-pub enum WorkerRequest {
-    PrepareOverviewElevation {
-        cache_root: PathBuf,
-        request: MapRequest,
-        samples_per_axis: u16,
-    },
-    PrepareOverviewDirectory {
-        cache_root: PathBuf,
-        output_directory: PathBuf,
-        request: MapRequest,
-        samples_per_axis: u16,
-    },
-    PrepareDetailedDirectory {
-        cache_root: PathBuf,
-        output_directory: PathBuf,
-        request: MapRequest,
-        samples_per_axis: u16,
-        resolution: DemResolution,
-    },
-    ListOverviewSources,
-    ListPotentialBiomeSources,
-    ListHydeSources,
-    InspectRaster {
-        path: PathBuf,
-    },
-    ProjectPoint {
-        center_latitude_e7: i32,
-        center_longitude_e7: i32,
-        longitude: f64,
-        latitude: f64,
-    },
-    ProjectFootprint {
-        request: MapRequest,
-        samples_per_edge: u8,
-    },
-    PrepareElevation {
-        path: PathBuf,
-        request: MapRequest,
-        samples_per_axis: u16,
-    },
-}
-
-/// Source-backed overview data returned by the worker in a bounded response.
-#[derive(Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-pub enum WorkerResponse {
-    KnownSources {
-        sources: Vec<KnownSource>,
-    },
-    RasterDimensions {
-        width: usize,
-        height: usize,
-    },
-    ProjectedPoint {
-        east_meters: i64,
-        north_meters: i64,
-    },
-    GeographicFootprint {
-        points: Vec<GeographicPoint>,
-        distortion: ProjectionDistortion,
-    },
-    PreparedElevation {
-        environment: PreparedEnvironment,
-        pages: Vec<ElevationPage>,
-    },
-    PreparedOverview(Box<PreparedOverview>),
-    #[serde(rename = "prepared_directory")]
-    PreparedDirectory {
-        package: MapPackage,
-    },
-}
-
-#[derive(Debug, Eq, PartialEq, Serialize)]
-pub struct PreparedOverview {
-    pub source_lock: aoe_map::SourceLock,
-    pub water_source_lock: aoe_map::SourceLock,
-    pub vegetation_source_lock: aoe_map::SourceLock,
-    pub vegetation_classes_source_lock: aoe_map::SourceLock,
-    pub hyde_baseline_source_lock: aoe_map::SourceLock,
-    pub hyde_supplementary_source_lock: aoe_map::SourceLock,
-    pub hyde_readme_source_lock: aoe_map::SourceLock,
-    pub projection: ProjectionMetadata,
-    pub provenance: EnvironmentalProvenance,
-    pub environment: PreparedEnvironment,
-    pub pages: Vec<ElevationPage>,
-    pub water_pages: Vec<WaterPage>,
-    pub vegetation_pages: Vec<PotentialBiomePage>,
-    pub historical_land_use_pages: Vec<HistoricalLandUsePage>,
-}
-
-/// A self-contained, source-backed map result suitable for offline package
-/// verification or later persistence by a server adapter.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct GeneratedMap {
-    pub package: MapPackage,
-    pub elevation_pages: Vec<ElevationPage>,
-    pub water_pages: Vec<WaterPage>,
-    pub vegetation_pages: Vec<PotentialBiomePage>,
-    pub historical_land_use_pages: Vec<HistoricalLandUsePage>,
-}
-
-impl GeneratedMap {
-    pub fn from_prepared(
-        request: MapRequest,
-        prepared: PreparedOverview,
-    ) -> Result<Self, GeodataError> {
-        let package = MapPackage::with_prepared_environment(
-            MAP_SCHEMA_VERSION,
-            request,
-            vec![
-                prepared.source_lock,
-                prepared.water_source_lock,
-                prepared.vegetation_source_lock,
-                prepared.vegetation_classes_source_lock,
-                prepared.hyde_baseline_source_lock,
-                prepared.hyde_supplementary_source_lock,
-                prepared.hyde_readme_source_lock,
-            ],
-            prepared.projection,
-            prepared.provenance,
-            prepared.environment,
-        )?;
-        Ok(Self {
-            package,
-            elevation_pages: prepared.pages,
-            water_pages: prepared.water_pages,
-            vegetation_pages: prepared.vegetation_pages,
-            historical_land_use_pages: prepared.historical_land_use_pages,
-        })
-    }
-
-    /// Confirms both the canonical manifest and every frozen page needed for
-    /// terrain generation without asking a provider for additional data.
-    pub fn validate(&self) -> Result<(), GeodataError> {
-        self.package.validate()?;
-        self.package.generator_with_environment(
-            self.elevation_pages.clone(),
-            self.water_pages.clone(),
-            self.vegetation_pages.clone(),
-            self.historical_land_use_pages.clone(),
-        )?;
-        Ok(())
-    }
-}
+mod map_result;
+pub use map_result::{GeneratedMap, PreparedOverview, WorkerRequest, WorkerResponse};
 
 mod worker;
 pub use worker::execute;

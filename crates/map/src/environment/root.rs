@@ -6,6 +6,8 @@ pub enum PageLayer {
     Water,
     Vegetation,
     HistoricalLandUse,
+    HydrologyEvidence,
+    ModernLandCover,
 }
 
 impl PageLayer {
@@ -15,6 +17,8 @@ impl PageLayer {
             Self::Water => "water",
             Self::Vegetation => "vegetation",
             Self::HistoricalLandUse => "historical-land-use",
+            Self::HydrologyEvidence => "hydrology-evidence",
+            Self::ModernLandCover => "modern-land-cover",
         }
     }
 
@@ -24,6 +28,8 @@ impl PageLayer {
             Self::Water => b"aoe-water-page-root-v1\0",
             Self::Vegetation => b"aoe-potential-biome-page-root-v1\0",
             Self::HistoricalLandUse => b"aoe-historical-land-use-page-root-v1\0",
+            Self::HydrologyEvidence => b"aoe-hydrology-evidence-page-root-v1\0",
+            Self::ModernLandCover => b"aoe-modern-land-cover-page-root-v1\0",
         }
     }
 }

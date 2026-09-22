@@ -31,6 +31,9 @@ impl MapPackage {
         biome_pages: Vec<PotentialBiomePage>,
         land_use_pages: Vec<HistoricalLandUsePage>,
     ) -> Result<MapChunkGenerator, MapPackageError> {
+        if self.environment.hydrology_evidence.is_some() {
+            return Err(MapPackageError::InvalidEnvironment);
+        }
         self.generator_with_elevation(elevation_pages)?
             .with_prepared_water(&self.environment, water_pages)
             .and_then(|generator| generator.with_prepared_biomes(&self.environment, biome_pages))

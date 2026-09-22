@@ -190,6 +190,8 @@ mod tests {
             water: None,
             vegetation: None,
             historical_land_use: None,
+
+            hydrology_evidence: None,
         };
         MapChunkGenerator::new([0; 32], 0, 128)
             .with_prepared_elevation(

@@ -178,6 +178,8 @@ mod tests {
             water: Some(pyramid()),
             vegetation: None,
             historical_land_use: None,
+
+            hydrology_evidence: None,
         };
         MapPackage::with_prepared_environment(
             1,

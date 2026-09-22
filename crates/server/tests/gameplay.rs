@@ -77,6 +77,28 @@ async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, Gamep
     (socket, welcome)
 }
 
+#[tokio::test]
+async fn gameplay_protocol_seven_handshake_is_rejected_by_version_eight() {
+    let (address, server, ticker) = setup().await;
+    let (mut stale, _) = connect_async(format!("ws://{address}/game/ws"))
+        .await
+        .expect("connect gameplay websocket");
+    send(
+        &mut stale,
+        GameplayClientMessage::Hello {
+            version: GAMEPLAY_VERSION - 1,
+            resume_token: None,
+        },
+    )
+    .await;
+    assert!(matches!(
+        receive(&mut stale).await,
+        GameplayServerMessage::Error { code: 426, .. }
+    ));
+    server.abort();
+    ticker.abort();
+}
+
 fn http_json(address: SocketAddr, path: &str, body: &str) -> String {
     let mut stream = TcpStream::connect(address).expect("connect HTTP");
     stream

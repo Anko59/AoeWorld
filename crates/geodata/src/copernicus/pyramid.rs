@@ -8,6 +8,15 @@ use std::collections::BTreeMap;
 #[path = "pyramid/water.rs"]
 mod water;
 use water::coarse_water;
+#[path = "pyramid/evidence.rs"]
+mod evidence;
+
+pub(super) fn store_hydrology_evidence(
+    stage: &Stage,
+    prepared: &crate::PreparedHydrology,
+) -> Result<(), GeodataError> {
+    evidence::store_hydrology_evidence(stage, prepared)
+}
 
 pub(super) struct DetailedFields {
     pub(super) elevation: FieldPyramid,

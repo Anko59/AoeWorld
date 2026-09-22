@@ -3,7 +3,8 @@ use super::{
     Tile, WaterKind, resources, surface,
 };
 use crate::{
-    ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey, PageLayer,
+    ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
+    HydrologyEvidenceMethod, HydrologyObservation, PageLayer,
     biome_rules::{biome_from_potential_class, material_for, tree_present},
 };
 use aoe_core::TileCoord;
@@ -61,7 +62,7 @@ pub(super) fn sample_tile(
                 Provenance::Fallback,
             )
         };
-    let (water, water_provenance) = if environment.water.is_some() {
+    let (mut water, water_provenance) = if environment.water.is_some() {
         let coverage = sample_water(generator, environment.samples_per_axis, tile, cancelled)?;
         coverage
             .map(|(ocean, inland)| match ocean {
@@ -77,6 +78,20 @@ pub(super) fn sample_tile(
     } else {
         (fallback_water, Provenance::Fallback)
     };
+    let (hydrology_observation, modern_land_cover_class) =
+        if let Some(index) = &environment.hydrology_evidence {
+            sample_typed_evidence(generator, index.samples_per_axis, tile, cancelled)?
+        } else {
+            (None, None)
+        };
+    if water == WaterKind::Lake
+        && hydrology_observation.is_some_and(|observation| {
+            observation.kind == crate::HydrologyKind::River
+                && observation.method == HydrologyEvidenceMethod::HydroRiversBufferedCorridor
+        })
+    {
+        water = WaterKind::River;
+    }
     let material = match water {
         WaterKind::None => material_for(biome.0, geographic_height_centimeters),
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -92,10 +107,67 @@ pub(super) fn sample_tile(
         water,
         elevation_provenance,
         water_provenance,
+        hydrology_observation,
+        modern_land_cover_class,
         passable: water == WaterKind::None
             && material != GroundMaterial::Ice
             && surface_kind.walkable(),
     })
+}
+
+fn sample_typed_evidence(
+    generator: &MapChunkGenerator,
+    samples: u16,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(Option<HydrologyObservation>, Option<u8>), EnvironmentPageError> {
+    let (source_x, source_y) = source_coordinate(tile.x, tile.y, samples, generator.width_tiles)?;
+    let x = source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES);
+    let y = source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES);
+    let observation_page = load_page(
+        generator,
+        EnvironmentPageKey {
+            layer: PageLayer::HydrologyEvidence,
+            level: 0,
+            x,
+            y,
+        },
+        cancelled,
+    )?;
+    let observation_page = match observation_page.as_ref() {
+        EnvironmentPage::HydrologyEvidence(page) => page,
+        _ => return Err(EnvironmentPageError::Corrupt),
+    };
+    let index = page_index(
+        observation_page.width,
+        observation_page.height,
+        source_x,
+        source_y,
+    )?;
+    let observation = observation_page
+        .observation(index)
+        .map_err(|_| EnvironmentPageError::Corrupt)?;
+    let cover_page = load_page(
+        generator,
+        EnvironmentPageKey {
+            layer: PageLayer::ModernLandCover,
+            level: 0,
+            x,
+            y,
+        },
+        cancelled,
+    )?;
+    let cover_page = match cover_page.as_ref() {
+        EnvironmentPage::ModernLandCover(page) => page,
+        _ => return Err(EnvironmentPageError::Corrupt),
+    };
+    if (cover_page.width, cover_page.height) != (observation_page.width, observation_page.height) {
+        return Err(EnvironmentPageError::Corrupt);
+    }
+    let class = cover_page
+        .class_at(index)
+        .map_err(|_| EnvironmentPageError::Corrupt)?;
+    Ok((Some(observation), Some(class)))
 }
 
 pub(super) fn resource_at(

@@ -56,6 +56,8 @@ fn flat_generator(geography_key: [u8; 32], procedural_seed: u64) -> MapChunkGene
             }],
         }),
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     MapChunkGenerator::new(geography_key, procedural_seed, 512)
         .with_prepared_elevation(
@@ -284,6 +286,8 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
                 },
             ],
         }),
+
+        hydrology_evidence: None,
     };
     let natural = (0..4)
         .flat_map(|y| {
@@ -359,6 +363,8 @@ fn prepared_inland_coverage_creates_a_non_passable_lake() {
         }),
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let terrain = generator(1)
         .with_prepared_water(&environment, vec![level_zero, overview])

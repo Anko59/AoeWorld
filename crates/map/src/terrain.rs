@@ -4,8 +4,8 @@ use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
     CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError,
-    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, PotentialBiomePage,
-    PreparedEnvironment, Ratio, WaterPage,
+    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, HydrologyObservation,
+    PotentialBiomePage, PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -86,6 +86,10 @@ pub struct Tile {
     pub water: WaterKind,
     pub elevation_provenance: Provenance,
     pub water_provenance: Provenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydrology_observation: Option<HydrologyObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modern_land_cover_class: Option<u8>,
     pub passable: bool,
 }
 

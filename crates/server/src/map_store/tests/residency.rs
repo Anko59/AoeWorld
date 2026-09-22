@@ -3,8 +3,12 @@ use super::prepared;
 use crate::page_residency::Registry;
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPageError, EnvironmentPageKey,
-    EnvironmentPageProvider, EnvironmentalProvenance, FieldPyramid, MapPackage, MapRequest,
-    PageLayer, PreparedEnvironment, ProjectionMetadata, PyramidLevel, ordered_page_root,
+    EnvironmentPageProvider, EnvironmentalProvenance, FieldPyramid, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyWaterPolicy,
+    MapPackage, MapRequest, ModernLandCoverPage, PageLayer, PreparedEnvironment,
+    ProjectionMetadata, PyramidLevel, WORLD_COVER_OBSERVATION_YEAR, WaterKind,
+    ordered_hydrology_page_root, ordered_modern_land_cover_page_root, ordered_page_root,
+    ordered_water_page_root,
 };
 use std::fs;
 
@@ -41,6 +45,9 @@ fn lazy_residency_matches_dense_chunks_and_fails_closed_for_page_errors() {
         .chunk(0, 0)
         .expect("lazy chunk");
     assert_eq!(lazy, dense);
+    assert!(lazy.tiles.iter().all(|tile| {
+        tile.hydrology_observation.is_none() && tile.modern_land_cover_class.is_none()
+    }));
     assert!(residency.resident_pages() <= super::super::residency::MAX_RESIDENT_ENVIRONMENT_PAGES);
 
     let elevation_key = EnvironmentPageKey {
@@ -233,3 +240,125 @@ fn large_elevation_package() -> (MapPackage, Vec<ElevationPage>) {
         pages,
     )
 }
+
+#[test]
+fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() {
+    let directory = tempfile::tempdir().expect("package directory");
+    let (base, elevation, mut water, vegetation, land_use) = prepared();
+    water[0].ocean_coverage_percent.fill(0);
+    let hydrology = vec![HydrologyEvidencePage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 3,
+        height: 3,
+        kind: vec![
+            HydrologyKind::River as u8,
+            HydrologyKind::Land as u8,
+            HydrologyKind::RegulatedLake as u8,
+            HydrologyKind::Land as u8,
+            HydrologyKind::Land as u8,
+            HydrologyKind::Land as u8,
+            HydrologyKind::Land as u8,
+            HydrologyKind::NoEvidence as u8,
+            HydrologyKind::River as u8,
+        ],
+        method: vec![
+            HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
+            HydrologyEvidenceMethod::WorldCoverClass as u8,
+            HydrologyEvidenceMethod::HydroLakesExtent as u8,
+            HydrologyEvidenceMethod::WorldCoverClass as u8,
+            HydrologyEvidenceMethod::WorldCoverClass as u8,
+            HydrologyEvidenceMethod::WorldCoverClass as u8,
+            HydrologyEvidenceMethod::WorldCoverClass as u8,
+            HydrologyEvidenceMethod::None as u8,
+            HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
+        ],
+    }];
+    let cover = vec![ModernLandCoverPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 3,
+        height: 3,
+        worldcover_class: vec![10, 40, 40, 40, 40, 40, 40, 0, 0],
+    }];
+    let mut environment = base.environment.clone();
+    environment.water.as_mut().expect("water field").levels[0].ordered_page_root =
+        ordered_water_page_root(&water[..1]).expect("water root");
+    environment.hydrology_evidence = Some(HydrologyEvidenceIndex {
+        samples_per_axis: 3,
+        page_samples: ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: WORLD_COVER_OBSERVATION_YEAR,
+        policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: ordered_hydrology_page_root(&hydrology).expect("hydrology root"),
+        modern_land_cover_page_root: ordered_modern_land_cover_page_root(&cover)
+            .expect("cover root"),
+    });
+    let package = MapPackage::with_prepared_environment(
+        base.generator_version,
+        base.request,
+        base.source_locks.clone(),
+        base.projection.clone(),
+        base.provenance.clone(),
+        environment,
+    )
+    .expect("typed package");
+    let root = directory
+        .path()
+        .join("pages")
+        .join(package.content_hash_hex());
+    fs::create_dir_all(root.join("hydrology-evidence")).expect("hydrology directory");
+    fs::create_dir_all(root.join("modern-land-cover")).expect("cover directory");
+    fs::write(
+        root.join("hydrology-evidence/0-0-0.json"),
+        serde_json::to_vec(&hydrology[0]).expect("hydrology json"),
+    )
+    .expect("write hydrology");
+    fs::write(
+        root.join("modern-land-cover/0-0-0.json"),
+        serde_json::to_vec(&cover[0]).expect("cover json"),
+    )
+    .expect("write cover");
+    persist_prepared(
+        Some(directory.path()),
+        &package,
+        &elevation,
+        &water,
+        &vegetation,
+        &land_use,
+    )
+    .expect("publish package");
+
+    let residency = PageResidency::open(directory.path(), &package, &|| false)
+        .expect("verified typed residency");
+    let generator = package
+        .generator_with_page_provider(residency)
+        .expect("typed provider generator");
+    let river = generator
+        .tile_at_with_cancel(aoe_core::TileCoord::new(0, 0), &|| false)
+        .expect("river query")
+        .expect("in bounds");
+    assert_eq!(river.water, WaterKind::River);
+    assert_eq!(
+        river.hydrology_observation.expect("observation").kind,
+        HydrologyKind::River
+    );
+    assert_eq!(river.modern_land_cover_class, Some(10));
+
+    let regulated_dry = generator
+        .tile_at_with_cancel(aoe_core::TileCoord::new(499, 0), &|| false)
+        .expect("regulated extent query")
+        .expect("in bounds");
+    assert_eq!(regulated_dry.water, WaterKind::None);
+    assert_eq!(regulated_dry.modern_land_cover_class, Some(40));
+
+    let river_on_dry_overview = generator
+        .tile_at_with_cancel(aoe_core::TileCoord::new(499, 499), &|| false)
+        .expect("dry river corridor query")
+        .expect("in bounds");
+    assert_eq!(river_on_dry_overview.water, WaterKind::None);
+    assert_eq!(river_on_dry_overview.modern_land_cover_class, Some(0));
+}
+
+mod evidence;
