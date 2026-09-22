@@ -44,3 +44,40 @@ test("creator shows measured phase counts without an invented overall percentage
   await expect(output).toContainText("Map creation cancelled");
   await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
 });
+
+test("lost submission acknowledgement reuses the saved key and request after reload", async ({ page }) => {
+  await gameAssets(page);
+  const submissions: { key: string | undefined; body: unknown }[] = [];
+  let original: Record<string, unknown> = {};
+  await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    original = route.request().postDataJSON();
+    submissions.push({ key: route.request().headers()["idempotency-key"], body: original });
+    if (submissions.length === 1) await route.abort("connectionfailed");
+    else await route.fulfill({ json: { id: 79 } });
+  });
+  await page.route("**/maps/jobs/79", async (route) => {
+    await route.fulfill({ json: { id: 79, state: "cancelled", request: original,
+      preparation: { mode: "procedural_fallback" } } });
+  });
+  await page.goto("/");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#playground")).toHaveAttribute("data-assets", "aoe2-local");
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.getByRole("button", { name: "Generate", exact: true }).click();
+  await expect(page.locator("#map-estimate")).toContainText("Recover this request");
+  await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#playground")).toHaveAttribute("data-assets", "aoe2-local");
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.getByRole("button", { name: "Recover request", exact: true }).click();
+  await expect(page.locator("#map-estimate")).toContainText("Map creation cancelled");
+  expect(submissions).toHaveLength(2);
+  expect(submissions[0]?.key).toMatch(/^[0-9a-f]{32}$/);
+  expect(submissions[1]).toEqual(submissions[0]);
+  await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
+});

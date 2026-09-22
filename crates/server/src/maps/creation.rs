@@ -33,13 +33,17 @@ pub(crate) async fn create_job(
         .request
         .estimate()
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
-    map_jobs::PreparationPlan::resolve(input, state.map_worker.is_some())
-        .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
-    let job = map_jobs::start(&state, input).await.map_err(|error| {
+    let key = headers
+        .get("Idempotency-Key")
+        .map(|value| value.to_str().map(str::to_owned))
+        .transpose()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid submission key".to_owned()))?;
+    let job = map_jobs::start(&state, input, key).await.map_err(|error| {
         let code = match error {
             map_jobs::StartError::Invalid(_) => StatusCode::BAD_REQUEST,
             map_jobs::StartError::Queue(_) => StatusCode::TOO_MANY_REQUESTS,
             map_jobs::StartError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            map_jobs::StartError::Conflict(_) => StatusCode::CONFLICT,
         };
         (code, error.to_string())
     })?;
