@@ -11,7 +11,7 @@ mod maps;
 mod page_residency;
 mod terrain_cache;
 pub use config::Config;
-pub use gameplay::GameplayService;
+pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
 pub use map_store::MapStoreError;
 
 use aoe_core::{EntityId, Region, Tick};
