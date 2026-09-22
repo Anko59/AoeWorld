@@ -1,13 +1,13 @@
-use crate::route_hierarchy::{portal_candidates, same_intermediate_region};
 use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-mod checked;
 mod planner;
-pub(crate) use checked::segment_path_checked;
-pub use planner::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RoutePlannerPoll};
+pub use planner::{
+    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, RoutePlanner,
+    RoutePlannerPoll,
+};
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
 pub const DIAGONAL_COST: u32 = 1_448;
@@ -62,51 +62,18 @@ pub fn find_path_segment_with_overlay(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    if !walkable_with_overlay(terrain, overlay, destination) {
-        return MovementOutcome::InvalidDestination;
-    }
-    if same_intermediate_region(origin, destination) {
-        return find_path_with(
-            terrain,
-            origin,
-            destination,
-            max_expansions,
-            Some(32),
-            |tile| walkable_with_overlay(terrain, overlay, tile),
-        );
-    }
-    let portals = portal_candidates(terrain, overlay, origin, destination);
-    if portals.is_empty() {
-        return if same_fine_chunk(origin, destination) {
-            find_path_with(
-                terrain,
-                origin,
-                destination,
-                max_expansions,
-                Some(32),
-                |tile| walkable_with_overlay(terrain, overlay, tile),
-            )
-        } else {
-            MovementOutcome::Unreachable
-        };
-    }
-    let attempts = portals.len().min(4) as u32;
-    let budget = max_expansions / attempts;
-    let mut exhausted = false;
-    for portal in portals.into_iter().take(attempts as usize) {
-        match find_path_with(terrain, origin, portal, budget, Some(32), |tile| {
-            walkable_with_overlay(terrain, overlay, tile)
-                && (tile == portal || same_fine_chunk(origin, tile))
-        }) {
-            MovementOutcome::Path(path) => return MovementOutcome::Path(path),
-            MovementOutcome::BudgetExceeded => exhausted = true,
-            MovementOutcome::InvalidDestination | MovementOutcome::Unreachable => {}
-        }
-    }
-    if exhausted {
-        MovementOutcome::BudgetExceeded
-    } else {
-        MovementOutcome::Unreachable
+    let mut planner = RoutePlanner::new(origin, destination, max_expansions);
+    match planner.poll(terrain, overlay, max_expansions, &|| false) {
+        RoutePlannerPoll::Path(path) => MovementOutcome::Path(path),
+        RoutePlannerPoll::Complete => MovementOutcome::Path(Path {
+            tiles: vec![origin],
+            cost: 0,
+        }),
+        RoutePlannerPoll::InvalidDestination => MovementOutcome::InvalidDestination,
+        RoutePlannerPoll::Unreachable => MovementOutcome::Unreachable,
+        RoutePlannerPoll::Pending
+        | RoutePlannerPoll::SearchLimit
+        | RoutePlannerPoll::Environment(_) => MovementOutcome::BudgetExceeded,
     }
 }
 
@@ -314,13 +281,6 @@ fn walkable_with_overlay(
             .is_ok_and(|object| object.is_none_or(|node| !overlay.blocks_node(node)))
 }
 
-fn same_fine_chunk(left: TileCoord, right: TileCoord) -> bool {
-    left.x.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
-        == right.x.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
-        && left.y.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
-            == right.y.div_euclid(MAX_ROUTE_SEGMENT_TILES as i32)
-}
-
 fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     let dx = u64::from((from.x - to.x).unsigned_abs());
     let dy = u64::from((from.y - to.y).unsigned_abs());
@@ -453,23 +413,6 @@ mod tests {
             EdgePassability::Passable
         },));
     }
-
-    #[test]
-    fn long_routes_choose_coarse_guidance_before_fine_portals() {
-        let origin = TileCoord::new(1, 1);
-        assert_eq!(
-            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(8_000, 8_000)),
-            TileCoord::new(2_047, 2_047)
-        );
-        assert_eq!(
-            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(300, 300)),
-            TileCoord::new(255, 255)
-        );
-        assert_eq!(
-            crate::route_hierarchy::hierarchy_boundary(origin, TileCoord::new(33, 33)),
-            TileCoord::new(31, 31)
-        );
-    }
 }
 
 #[cfg(test)]
@@ -479,3 +422,7 @@ mod asymmetric_tests;
 #[cfg(test)]
 #[path = "navigation/tests/resumable.rs"]
 mod resumable_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/long_routes.rs"]
+mod long_routes_tests;

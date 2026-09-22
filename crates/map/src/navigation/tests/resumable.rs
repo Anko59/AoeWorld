@@ -26,6 +26,40 @@ fn flat_terrain_with_width(width: i32) -> MapChunkGenerator {
         height: 1,
         geographic_height_centimeters: vec![0],
     };
+    let water_zero = WaterPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        ocean_coverage_percent: vec![0; 4],
+        inland_coverage_percent: vec![0; 4],
+    };
+    let water_overview = WaterPage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        ocean_coverage_percent: vec![0],
+        inland_coverage_percent: vec![0],
+    };
+    let barren_biome = PotentialBiomePage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        potential_biome_class: vec![28; 4],
+    };
+    let barren_overview = PotentialBiomePage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        potential_biome_class: vec![28],
+    };
     let environment = PreparedEnvironment {
         samples_per_axis: 2,
         geographic_millimeters_per_sample: 1_000,
@@ -44,8 +78,38 @@ fn flat_terrain_with_width(width: i32) -> MapChunkGenerator {
                 },
             ],
         },
-        water: None,
-        vegetation: None,
+        water: Some(FieldPyramid {
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_water_page_root(std::slice::from_ref(&water_zero))
+                        .expect("water root"),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: ordered_water_page_root(std::slice::from_ref(
+                        &water_overview,
+                    ))
+                    .expect("water overview root"),
+                },
+            ],
+        }),
+        vegetation: Some(FieldPyramid {
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_biome_page_root(std::slice::from_ref(&barren_biome))
+                        .expect("biome root"),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: ordered_biome_page_root(std::slice::from_ref(
+                        &barren_overview,
+                    ))
+                    .expect("biome overview root"),
+                },
+            ],
+        }),
         historical_land_use: None,
     };
     MapChunkGenerator::new([0; 32], 0, width)
@@ -55,6 +119,10 @@ fn flat_terrain_with_width(width: i32) -> MapChunkGenerator {
             vec![level_zero, overview],
         )
         .expect("flat terrain")
+        .with_prepared_water(&environment, vec![water_zero, water_overview])
+        .expect("dry coverage")
+        .with_prepared_biomes(&environment, vec![barren_biome, barren_overview])
+        .expect("barren biome")
 }
 
 fn cleared_overlay(terrain: &MapChunkGenerator) -> ResourceOverlay {
@@ -62,17 +130,8 @@ fn cleared_overlay(terrain: &MapChunkGenerator) -> ResourceOverlay {
 }
 
 fn cleared_overlay_with_width(terrain: &MapChunkGenerator, width: i32) -> ResourceOverlay {
-    let mut overlay = ResourceOverlay::default();
-    for y in 0..width {
-        for x in 0..width {
-            if let Some(node) = terrain.object_at(TileCoord::new(x, y)) {
-                overlay
-                    .deplete(terrain, node.id, node.initial_amount)
-                    .expect("resource");
-            }
-        }
-    }
-    overlay
+    let _ = (terrain, width);
+    ResourceOverlay::default()
 }
 
 fn enclosed_local_terrain() -> MapChunkGenerator {
@@ -198,6 +257,9 @@ fn equivalent_budget_partitions_reach_the_same_route_and_planner_hash() {
     assert_eq!(partitioned_hash.finalize(), single_hash.finalize());
 }
 
+#[path = "reconstruction.rs"]
+mod reconstruction_tests;
+
 #[test]
 fn planner_reports_search_limit_without_becoming_a_cacheable_unreachable() {
     let terrain = flat_terrain();
@@ -218,7 +280,7 @@ fn planner_reports_search_limit_without_becoming_a_cacheable_unreachable() {
 }
 
 #[test]
-fn portal_attempt_budget_exhaustion_does_not_restart_a_stale_frontier() {
+fn planner_budget_exhaustion_does_not_restart_a_stale_frontier() {
     let terrain = flat_terrain_with_width(512);
     let overlay = cleared_overlay_with_width(&terrain, 512);
     let mut planner = RoutePlanner::new(TileCoord::new(1, 1), TileCoord::new(300, 1), 1);
@@ -280,5 +342,25 @@ fn exhausted_direct_search_becomes_unreachable_once() {
     assert_eq!(
         planner.poll(&terrain, &overlay, 64, &|| false),
         RoutePlannerPoll::Unreachable
+    );
+}
+
+#[test]
+fn identical_origin_and_destination_emit_one_tile_path() {
+    let terrain = flat_terrain();
+    let overlay = cleared_overlay(&terrain);
+    let origin = TileCoord::new(1, 1);
+    let mut planner = RoutePlanner::new(origin, origin, 16);
+    assert_eq!(
+        planner.poll(&terrain, &overlay, 16, &|| false),
+        RoutePlannerPoll::Path(Path {
+            tiles: vec![origin],
+            cost: 0,
+        })
+    );
+    assert!(planner.is_terminal());
+    assert_eq!(
+        planner.poll(&terrain, &overlay, 0, &|| false),
+        RoutePlannerPoll::Complete
     );
 }
