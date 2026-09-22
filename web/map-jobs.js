@@ -88,7 +88,7 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, m
         const response = await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders() }, body: JSON.stringify(submission.request) });
         // These replies explicitly reject acceptance; transport/5xx uncertainty
         // retains the key so recovery cannot submit a second retained job.
-        if (response.status === 400 || response.status === 429) { submission = null; persist(); }
+        if ([400, 409, 429].includes(response.status)) { submission = null; persist(); }
         const job = await readJson(response);
         if (!Number.isSafeInteger(job.id) || job.id < 0) throw new Error('Invalid map job identifier.');
         remember(job.id);

@@ -299,7 +299,7 @@ recovery, not an indefinite global deduplication service.
 The creator stores the key and original request before POST, then replaces them
 with the accepted job ID in one localStorage value. After a lost acknowledgement,
 `Recover request` resends that exact submission after reconnecting. Transport or
-server failures keep the key; explicit 400/429 rejections permit a corrected new
+server failures keep the key; explicit 400/409/429 rejections permit a corrected new
 request. A returned job ID resumes normal polling and activation. If browser
 storage is unavailable, same-page retry still reuses the key; reload recovery
 then relies on server history. Deliberately retrying a failed/cancelled job uses
