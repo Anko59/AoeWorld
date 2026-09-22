@@ -254,8 +254,8 @@ Requests remain limited to 64 KiB, responses to 512 KiB, and diagnostics to
 8 KiB. Oversized output fails explicitly; readers drain without retaining excess
 bytes until termination, so a full pipe cannot prevent cancellation. Input is
 written separately so a worker that never reads stdin remains cancellable.
-These lifecycle guarantees do not provide a durable job journal or remove
-partially prepared source/cache files after a crash.
+The durable job journal described above records interrupted work; process
+termination alone does not remove every partially prepared source/cache file.
 
 Server-driven detailed preparation owns a separate directory below
 `<cache>/worker-scratch/`. The server and worker hold shared file leases;
@@ -266,3 +266,22 @@ active worker's pages. Cached source objects and resumable downloads remain
 shared. This ownership applies to detailed pyramid staging, not to every
 provider extraction temporary or incomplete immutable publication file.
 Direct CLI preparations retain their existing local staging cleanup behavior.
+
+Preparation status has optional version-1 `progress` evidence. Named phases
+cover source acquisition, overview/water sampling, pyramid construction,
+publication, and server verification. Downloads report bytes for the current
+source only; detailed pyramid construction reports persisted pages against
+its exact four-layer total, including partial edge pages and all levels.
+Counts are phase-local, never an overall completion percentage or time estimate.
+Unknown totals remain absent. Active status exposes these counters only while
+running; cancellation and terminal history do not retain stale progress.
+
+The worker atomically replaces a small progress file in its leased scratch,
+at most four times per second except phase changes and final counts. The server
+polls at most five times per second and accepts only regular files, version 1,
+known phases/units, at most 4 KiB, and coherent bounded counts. Malformed or
+missing progress retains the last valid observation and cannot publish a map.
+Progress is best-effort telemetry: write failures do not change job outcome,
+and brief phases may pass between polls. The existing cancellation, process
+and output bounds remain authoritative. No overall percentage is supplied until
+successful completion; no remaining-time estimate is manufactured.

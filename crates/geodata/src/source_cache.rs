@@ -306,6 +306,13 @@ fn download_once(
             return Err(CacheError::Integrity("response exceeds expected size"));
         }
         output.write_all(&buffer[..count])?;
+        crate::preparation_progress::count(
+            crate::preparation_progress::Phase::DownloadingSource,
+            None,
+            written,
+            bytes,
+            crate::preparation_progress::Unit::Bytes,
+        );
     }
     output.sync_all()?;
     if written != bytes {

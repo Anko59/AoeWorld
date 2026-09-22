@@ -22,6 +22,9 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
         } => {
             let prepared = prepare_overview(cache_root, request, samples_per_axis)?;
             let generated = GeneratedMap::from_prepared(request, prepared)?;
+            crate::preparation_progress::stage(
+                crate::preparation_progress::Phase::PublishingPackage,
+            );
             generated.write_directory(&output_directory)?;
             Ok(WorkerResponse::PreparedDirectory {
                 package: generated.package,

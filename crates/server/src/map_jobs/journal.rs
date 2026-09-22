@@ -164,12 +164,14 @@ impl Manager {
                         preparation,
                         state,
                         stage,
-                        percent: if state == JobState::Completed { 100 } else { 0 },
+                        percent: (state == JobState::Completed).then_some(100),
+                        progress: None,
                         eta_seconds: (state == JobState::Completed).then_some(0),
                         content_hash: hash,
                         error,
                     },
                     cancelled: Arc::new(AtomicBool::new(false)),
+                    progress: crate::map_worker::progress::State::default(),
                 },
             );
         }

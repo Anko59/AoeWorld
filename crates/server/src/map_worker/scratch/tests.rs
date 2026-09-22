@@ -97,6 +97,7 @@ fn cancelled_preparation_reaps_worker_before_removing_its_staging() {
                 explanation: "fixture",
             },
             &signal,
+            super::super::progress::State::default(),
         )
     });
     let started = Instant::now();
