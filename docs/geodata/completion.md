@@ -24,7 +24,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M2 | Detailed streaming preparation | Regional prep/residency/creator verified; large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
-| M5 | Resource lifecycle | Placement and persistence verified; network deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
+| M5 | Resource lifecycle | Persistence and synchronization verified; source-session qualification pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
 | M7 | Creation experience | Creator and publication verified; recovery/progress pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
@@ -338,3 +338,23 @@ is explicit. Independent review, hooks, test-unit, preflight (339 native tests),
 E2E (23), and clean pre-push preflight passed. This introduces no economy command;
 network deltas and client sprite invalidation remain open. Combined integration
 preflight passed 342 native tests.
+
+M5 resource synchronization is reviewed in
+[PR #30](https://github.com/Anko59/AoeWorld/pull/30), revision
+`356a9a0259a0f29e37f937262f294dbdd9f0dfa4`. Protocol 7 sends bounded sparse
+resets and exact-revision deltas, using a 1,024-entry server journal and full
+reset when history is unavailable. The client retains at most 65,536 amounts
+outside immutable chunk residency and filters exhausted sprites on both
+backends. Malformed/discontinuous updates close the stream and clear state;
+empty advancing deltas and increasing known amounts are rejected atomically.
+Independent review, hooks, preflight (346 native), WASM (13), E2E (23), perf-ci,
+size, and clean pre-push checks passed on the feature branch. Combined
+integration passed 349 native tests, E2E (23), and perf-ci before the final
+malformed-stream closure follow-up. Source-backed interactive depletion and
+long-session qualification remain open; no economy command is introduced.
+
+The final wire integration preflight rerun hit the previously observed diagnostic
+WebSocket scenario-reset assertion (`malformed_handshakes_resync_and_scenario_change_are_visible`):
+348/349 passed. An unchanged retry passed 349/349 and the size check. The
+five-message test assumes a small pending tick backlog; no assertion or gate
+was changed. This intermittent qualification issue remains recorded for M8.
