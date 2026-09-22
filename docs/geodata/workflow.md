@@ -221,3 +221,14 @@ Reset/delta validation, persistence-to-wire reconnect, queue overflow, and cache
 capacity are covered by native tests; both browser render backends are covered
 by the general E2E suite. Those tests do not yet constitute a source-backed
 interactive depletion or long-session performance qualification.
+
+Worker lifetime is bounded in the Dockerized Linux server. Preparation has a
+two-hour deadline and footprint projection a 30-second deadline. Cancellation,
+output overflow, deadline expiry, and normal worker exit terminate the worker's
+owned process group, including GDAL descendants, before joining pipe readers.
+Requests remain limited to 64 KiB, responses to 512 KiB, and diagnostics to
+8 KiB. Oversized output fails explicitly; readers drain without retaining excess
+bytes until termination, so a full pipe cannot prevent cancellation. Input is
+written separately so a worker that never reads stdin remains cancellable.
+These lifecycle guarantees do not provide a durable job journal or remove
+partially prepared source/cache files after a crash.

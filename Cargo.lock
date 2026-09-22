@@ -224,6 +224,7 @@ dependencies = [
  "aoe-simulation",
  "axum",
  "futures-util",
+ "nix",
  "serde",
  "serde_json",
  "tempfile",
