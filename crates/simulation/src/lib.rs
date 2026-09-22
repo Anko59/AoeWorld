@@ -9,8 +9,8 @@ mod movement_speed;
 mod navigation_cache;
 mod terrain;
 
-pub(crate) const MAX_ROUTE_EXPANSIONS_PER_ORDER: u32 = 4_096;
-pub(crate) const MAX_ROUTE_EXPANSIONS_PER_TICK: u32 = 16_384;
+pub(crate) const MAX_ROUTE_WORK_PER_ORDER: u32 = aoe_map::MAX_ROUTE_PLANNER_WORK;
+pub(crate) const MAX_ROUTE_WORK_PER_TICK: u32 = 16_384;
 
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;

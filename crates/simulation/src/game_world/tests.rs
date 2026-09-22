@@ -240,10 +240,27 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
         .next()
         .expect("resource");
     let mut world = GameWorld::new(config).expect("world");
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(10, 10)).expect("unit position"),
+        )
+        .expect("spawn unit");
+    let unit_index = world.lookup[&unit];
     world.terrain = Terrain::Map {
         generator,
         overlay: ResourceOverlay::default(),
     };
+    world.store_planner(
+        unit_index,
+        Some(RoutePlanner::new(
+            TileCoord::new(10, 10),
+            resource.tile,
+            4_096,
+        )),
+    );
+    assert_eq!(world.active_planner_count, 1);
+    assert_eq!(world.active_route_searches, 1);
     assert!(!world.terrain().passable(resource.tile, config));
     assert!(
         world
@@ -266,6 +283,8 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
     assert_eq!(final_depletion.remaining, 0);
     assert!(final_depletion.became_nonblocking);
     assert_eq!(world.navigation_cache.entry_count(), 0);
+    assert_eq!(world.active_planner_count, 0);
+    assert_eq!(world.active_route_searches, 0);
     assert_ne!(world.canonical_hash(), partial_hash);
     assert!(world.terrain().passable(resource.tile, config));
 }

@@ -44,6 +44,7 @@ impl GameWorld {
         hash.update(&self.tick.0.to_le_bytes());
         hash.update(&(self.planning_cursor as u64).to_le_bytes());
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
+        hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
         self.terrain.update_mutable_state_hash(&mut hash);
         for unit in &self.units {
