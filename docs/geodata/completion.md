@@ -369,3 +369,29 @@ Preparation is limited to two hours, projection to 30 seconds. Independent
 review, hooks, preflight (346 native), and clean pre-push checks passed.
 Combined integration preflight passed 353 native tests. Durable job history
 and geographic staging cleanup remain separate work.
+
+M3 regional evidence acquisition is reviewed in
+[PR #32](https://github.com/Anko59/AoeWorld/pull/32), revision
+`3879327379c0911d6ff4bdabde3b188eb8675eff`. WorldCover, HydroLAKES, and a
+bounded European HydroRIVERS pilot feed detailed preparation. Exact ranged
+responses and cached digests are verified; archive access uses GDAL's braced
+VSI syntax. Typed classes are still preparation intermediates, so this does
+not close historical reconstruction or typed terrain consumption. Independent
+review, hooks, native tests, preflight, and actual Paris generation/verification
+passed. Integration `0ca2cd174ef397b20fe5538441bf384988942a7f` passes 367 native
+tests. Dockerized `make map-generate-detailed` and `make map-verify` generated
+and verified recipe-3 Paris at 1024 samples per axis, hash
+`718664fc84d93df87e0ab3e47f706b5a3339e4a27570000ab66642029e7882ac`.
+
+M7 durable history and browser recovery are reviewed in
+[PR #33](https://github.com/Anko59/AoeWorld/pull/33), revision
+`09b0dcc9c09d3adfc12584148c0fe9a16bcdfa6b`. Bounded atomic history preserves
+original requests and monotonic IDs; interrupted work becomes explicitly
+retryable. Accepted browser jobs survive polling failures and reload without
+another POST. Checkpoint failures preserve live state or fail queued work
+explicitly. Valid immutable package artifacts can still be discovered at startup
+independently of failed job records; activation remains explicit. Independent
+review, hooks, preflight (356 native), browser-check, E2E (27), and clean
+pre-push passed. Combined integration `b9e41bd91880c4aecc9c6ec533231a3edb94d8d7`
+passes preflight and E2E (27). Lost POST acknowledgements before the job ID is
+received, measured progress, and cancelled staging cleanup remain open.
