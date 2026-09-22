@@ -114,7 +114,7 @@ async fn failed_enqueue_and_cancel_checkpoint_leave_live_state_unchanged() {
         request: MapRequest::default(),
         preparation: PreparationPreference::Automatic,
     };
-    assert!(crate::map_jobs::start(&state, input).await.is_err());
+    assert!(crate::map_jobs::start(&state, input, None).await.is_err());
     assert_eq!(state.map_jobs.lock().await.next_id, next_id);
     assert!(crate::map_jobs::cancel(&state, id).await.is_err());
     let manager = state.map_jobs.lock().await;

@@ -13,7 +13,7 @@ use std::{
 };
 
 const MAX_JOURNAL_BYTES: u64 = 2 * 1024 * 1024;
-const SCHEMA: u8 = 1;
+const SCHEMA: u8 = 2;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,6 +33,8 @@ struct Record {
     state: JobState,
     content_hash: Option<String>,
     error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    submission: Option<super::submission::Identity>,
 }
 
 fn bounded_records<'de, D: serde::Deserializer<'de>>(
@@ -95,14 +97,21 @@ impl Manager {
             return Err("job history exceeds its byte bound".into());
         }
         let journal: Journal = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-        if journal.schema != SCHEMA || journal.jobs.len() > MAX_RETAINED_JOBS {
+        if !matches!(journal.schema, 1 | SCHEMA) || journal.jobs.len() > MAX_RETAINED_JOBS {
             return Err("invalid job history schema or count".into());
         }
         let mut manager = Self {
             next_id: journal.next_id,
             jobs: BTreeMap::new(),
         };
+        let mut submission_keys = std::collections::BTreeSet::new();
         for record in journal.jobs {
+            if let Some(identity) = &record.submission {
+                identity.validate()?;
+                if !submission_keys.insert(identity.key.clone()) {
+                    return Err("duplicate submission key".into());
+                }
+            }
             if record.id >= journal.next_id
                 || manager.jobs.contains_key(&record.id)
                 || record
@@ -172,6 +181,7 @@ impl Manager {
                     },
                     cancelled: Arc::new(AtomicBool::new(false)),
                     progress: crate::map_worker::progress::State::default(),
+                    submission: record.submission,
                 },
             );
         }
@@ -196,6 +206,7 @@ pub(super) async fn persist(directory: Option<&Path>, manager: &Manager) -> Resu
                 state: entry.job.state,
                 content_hash: entry.job.content_hash.clone(),
                 error: entry.job.error.clone(),
+                submission: entry.submission.clone(),
             })
             .collect(),
     };
