@@ -20,4 +20,6 @@ fuzz_target!(|bytes: &[u8]| {
     check_page!(bytes, aoe_map::WaterPage);
     check_page!(bytes, aoe_map::PotentialBiomePage);
     check_page!(bytes, aoe_map::HistoricalLandUsePage);
+    check_page!(bytes, aoe_map::HydrologyEvidencePage);
+    check_page!(bytes, aoe_map::ModernLandCoverPage);
 });

@@ -168,6 +168,8 @@ fn restore_and_deplete_keep_provider_errors_and_cancellation_distinct() {
         water: None,
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let unavailable = terrain
         .with_page_provider(

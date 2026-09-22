@@ -54,6 +54,7 @@ fn package() -> MapPackage {
             water: None,
             vegetation: None,
             historical_land_use: None,
+            hydrology_evidence: None,
         },
     )
     .unwrap()

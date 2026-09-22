@@ -2,8 +2,10 @@ use super::*;
 use crate::PreparedOverview;
 use aoe_map::Ratio;
 use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, HistoricalLandUsePage, PageLayer, PotentialBiomePage,
-    PreparedEnvironment, ProjectionMetadata, WaterPage,
+    ElevationPage, EnvironmentalProvenance, HistoricalLandUsePage, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyWaterPolicy,
+    ModernLandCoverPage, PageLayer, PotentialBiomePage, PreparedEnvironment, ProjectionMetadata,
+    WaterPage, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
 use gdal::{DriverManager, raster::Buffer, spatial_ref::SpatialRef};
 use std::{
@@ -198,22 +200,40 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
     .expect("sampler");
     let stage = Stage::new(&root).expect("staging");
     let overview = overview_fixture();
+    let hydrology_pages = vec![HydrologyEvidencePage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        kind: vec![HydrologyKind::NoEvidence as u8; 4],
+        method: vec![HydrologyEvidenceMethod::None as u8; 4],
+    }];
+    let modern_land_cover_pages = vec![ModernLandCoverPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        worldcover_class: vec![40; 4],
+    }];
     let hydrology = crate::PreparedHydrology {
-        samples_per_axis: 1,
-        source_year: 2021,
+        samples_per_axis: 2,
+        evidence_index: HydrologyEvidenceIndex {
+            samples_per_axis: 2,
+            page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+            world_cover_year: aoe_map::WORLD_COVER_OBSERVATION_YEAR,
+            policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+            hydrology_page_root: ordered_hydrology_page_root(&hydrology_pages)
+                .expect("hydrology root"),
+            modern_land_cover_page_root: ordered_modern_land_cover_page_root(
+                &modern_land_cover_pages,
+            )
+            .expect("cover root"),
+        },
         source_locks: vec![],
-        hydrology_pages: vec![crate::HydrologyPage {
-            level: 0,
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-            kind: vec![crate::HydrologyKind::NoEvidence as u8],
-            surface_height_centimeters: vec![0],
-            surface_height_known: vec![0],
-            barrier_edges: vec![0],
-        }],
-        modern_land_cover_pages: vec![],
+        hydrology_pages,
+        modern_land_cover_pages,
     };
     let progress_path = root.join("progress.json");
     let _progress = crate::preparation_progress::Scope::new(Some(progress_path.clone()));

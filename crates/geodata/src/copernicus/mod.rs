@@ -129,6 +129,7 @@ pub(crate) fn prepare_with_staging(
     let cancelled = AtomicBool::new(false);
     let coverage = acquire_tiles(&cache, bounds, resolution, &cancelled)?;
     let stage = Stage::new(staging_root.as_deref().unwrap_or(&cache_root))?;
+    pyramid::store_hydrology_evidence(&stage, &hydrology)?;
     let overview_ocean = source_backed_overview_ocean(&overview)?;
     let mut sampler = Sampler::new(
         request,
@@ -177,6 +178,7 @@ pub(crate) fn prepare_with_staging(
         water: Some(fields.water),
         vegetation: Some(fields.vegetation),
         historical_land_use: Some(fields.historical_land_use),
+        hydrology_evidence: Some(hydrology.evidence_index.clone()),
     };
     let package = MapPackage::with_prepared_environment(
         MAP_SCHEMA_VERSION,

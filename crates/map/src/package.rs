@@ -202,7 +202,13 @@ impl MapPackage {
     /// its chunks. It rejects stale estimates, reordered source locks, and a
     /// content hash that no longer covers the package inputs.
     pub fn validate(&self) -> Result<(), MapPackageError> {
-        let canonical = Self::with_prepared_environment(
+        if self.schema_version != crate::MAP_SCHEMA_VERSION
+            && !(self.schema_version == crate::LEGACY_MAP_SCHEMA_VERSION
+                && self.environment.hydrology_evidence.is_none())
+        {
+            return Err(MapPackageError::NonCanonicalFields);
+        }
+        let mut canonical = Self::with_prepared_environment(
             self.generator_version,
             self.request,
             self.source_locks.clone(),
@@ -210,6 +216,11 @@ impl MapPackage {
             self.provenance.clone(),
             self.environment.clone(),
         )?;
+        // Schema 9 adds optional identity fields. Keep schema-8 packages whose
+        // omitted evidence field defaults to None on their original hash.
+        if self.schema_version == crate::LEGACY_MAP_SCHEMA_VERSION {
+            canonical.schema_version = crate::LEGACY_MAP_SCHEMA_VERSION;
+        }
         (canonical == *self)
             .then_some(())
             .ok_or(MapPackageError::NonCanonicalFields)
