@@ -183,6 +183,39 @@ pub(super) fn publish_staged_pages(
             ))?
             .levels,
     )?;
+    if let Some(index) = &package.environment.hydrology_evidence {
+        publish_evidence_layer(
+            stage,
+            output,
+            &hash,
+            PageLayer::HydrologyEvidence,
+            index.samples_per_axis,
+        )?;
+        publish_evidence_layer(
+            stage,
+            output,
+            &hash,
+            PageLayer::ModernLandCover,
+            index.samples_per_axis,
+        )?;
+    }
+    Ok(())
+}
+
+fn publish_evidence_layer(
+    stage: &Stage,
+    output: &Path,
+    hash: &str,
+    layer: PageLayer,
+    axis: u16,
+) -> Result<(), GeodataError> {
+    let count = usize::from(axis.div_ceil(PAGE));
+    for y in 0..count {
+        for x in 0..count {
+            let bytes = stage.read(layer, 0, x as u16, y as u16)?;
+            publish_streaming_page(output, hash, layer, 0, x as u16, y as u16, &bytes)?;
+        }
+    }
     Ok(())
 }
 

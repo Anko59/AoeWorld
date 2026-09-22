@@ -1,7 +1,16 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
+mod hydrology;
+mod pages;
 mod provider;
+pub use hydrology::{
+    HydrologyEvidenceIndex, HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind,
+    HydrologyObservation, HydrologyWaterPolicy, MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS,
+    ModernLandCoverPage, WORLD_COVER_OBSERVATION_YEAR, ordered_hydrology_page_root,
+    ordered_modern_land_cover_page_root,
+};
+pub(crate) use pages::level_zero_pages;
+pub use pages::{ordered_biome_page_root, ordered_page_root, ordered_water_page_root};
 pub use provider::{
     EnvironmentPage, EnvironmentPageError, EnvironmentPageKey, EnvironmentPageProvider,
 };
@@ -27,6 +36,10 @@ pub struct PreparedEnvironment {
     pub vegetation: Option<FieldPyramid>,
     /// Optional HYDE 600 AD land-use fractions and population pressure.
     pub historical_land_use: Option<FieldPyramid>,
+    /// Optional, independently sampled modern water and land-cover evidence.
+    /// It is a one-level source grid, not a pyramid over the elevation axis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydrology_evidence: Option<HydrologyEvidenceIndex>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
@@ -81,7 +94,8 @@ impl PreparedEnvironment {
             return (self.elevation.levels.is_empty()
                 && self.water.is_none()
                 && self.vegetation.is_none()
-                && self.historical_land_use.is_none())
+                && self.historical_land_use.is_none()
+                && self.hydrology_evidence.is_none())
             .then_some(())
             .ok_or(EnvironmentError::InvalidPyramid);
         }
@@ -100,7 +114,10 @@ impl PreparedEnvironment {
         })?;
         self.historical_land_use
             .as_ref()
-            .map_or(Ok(()), |land_use| land_use.validate(self.samples_per_axis))
+            .map_or(Ok(()), |land_use| land_use.validate(self.samples_per_axis))?;
+        self.hydrology_evidence
+            .as_ref()
+            .map_or(Ok(()), HydrologyEvidenceIndex::validate)
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {
@@ -115,6 +132,9 @@ impl PreparedEnvironment {
         hash_optional_field(hash, &self.water);
         hash_optional_field(hash, &self.vegetation);
         hash_optional_field(hash, &self.historical_land_use);
+        if let Some(evidence) = &self.hydrology_evidence {
+            evidence.hash_into(hash);
+        }
     }
 }
 
@@ -233,114 +253,6 @@ impl PotentialBiomePage {
     }
 }
 
-pub fn ordered_page_root(pages: &[ElevationPage]) -> Result<[u8; 32], EnvironmentError> {
-    if pages.is_empty() {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut ordered = pages.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|page| (page.y, page.x));
-    if ordered
-        .windows(2)
-        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
-    {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Elevation, ordered.len())?;
-    for page in ordered {
-        root.push(page.content_hash()?)?;
-    }
-    root.finish()
-}
-
-/// Computes the canonical identity of water coverage pages independently from
-/// elevation values, while retaining the same ordering guarantees.
-pub fn ordered_water_page_root(pages: &[WaterPage]) -> Result<[u8; 32], EnvironmentError> {
-    if pages.is_empty() {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut ordered = pages.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|page| (page.y, page.x));
-    if ordered
-        .windows(2)
-        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
-    {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Water, ordered.len())?;
-    for page in ordered {
-        root.push(page.content_hash()?)?;
-    }
-    root.finish()
-}
-
-/// Computes the canonical identity of potential-biome pages independently
-/// from elevation and water, while retaining the same ordering guarantees.
-pub fn ordered_biome_page_root(pages: &[PotentialBiomePage]) -> Result<[u8; 32], EnvironmentError> {
-    if pages.is_empty() {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut ordered = pages.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|page| (page.y, page.x));
-    if ordered
-        .windows(2)
-        .any(|pair| (pair[0].x, pair[0].y) == (pair[1].x, pair[1].y))
-    {
-        return Err(EnvironmentError::InvalidPyramid);
-    }
-    let mut root = crate::PageRootBuilder::new(crate::PageLayer::Vegetation, ordered.len())?;
-    for page in ordered {
-        root.push(page.content_hash()?)?;
-    }
-    root.finish()
-}
-
-pub(crate) fn level_zero_pages(
-    environment: &PreparedEnvironment,
-    pages: Vec<ElevationPage>,
-) -> Result<BTreeMap<(u16, u16), ElevationPage>, EnvironmentError> {
-    environment.validate()?;
-    let mut levels = (0..environment.elevation.levels.len())
-        .map(|_| Vec::new())
-        .collect::<Vec<Vec<ElevationPage>>>();
-    for page in pages {
-        let level = usize::from(page.level);
-        let metadata = environment
-            .elevation
-            .levels
-            .get(level)
-            .ok_or(EnvironmentError::InvalidPyramid)?;
-        let count = metadata
-            .samples_per_axis
-            .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-        page.validate()?;
-        if page.x >= count || page.y >= count {
-            return Err(EnvironmentError::InvalidPyramid);
-        }
-        levels[level].push(page);
-    }
-    let mut level_zero = BTreeMap::new();
-    for (level, (metadata, level_pages)) in
-        environment.elevation.levels.iter().zip(levels).enumerate()
-    {
-        let count = metadata
-            .samples_per_axis
-            .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
-        if level_pages.len() != usize::from(count).pow(2)
-            || ordered_page_root(&level_pages)? != metadata.ordered_page_root
-        {
-            return Err(EnvironmentError::InvalidPyramid);
-        }
-        if level == 0 {
-            for page in level_pages {
-                if level_zero.insert((page.x, page.y), page).is_some() {
-                    return Err(EnvironmentError::InvalidPyramid);
-                }
-            }
-        }
-    }
-    Ok(level_zero)
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum EnvironmentError {
     #[error("environmental field index is invalid")]
@@ -416,6 +328,8 @@ mod tests {
             water: None,
             vegetation: None,
             historical_land_use: None,
+
+            hydrology_evidence: None,
         };
         assert!(field.validate().is_ok());
         let mut invalid = field;
@@ -462,6 +376,8 @@ mod tests {
             water: None,
             vegetation: None,
             historical_land_use: None,
+
+            hydrology_evidence: None,
         };
         let request = crate::MapRequest {
             requested_side_meters: 250,

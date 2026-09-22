@@ -160,6 +160,7 @@ mod tests {
             water: None,
             vegetation: None,
             historical_land_use: None,
+            hydrology_evidence: None,
         };
         let package = MapPackage::with_prepared_environment(
             aoe_map::MAP_SCHEMA_VERSION,
