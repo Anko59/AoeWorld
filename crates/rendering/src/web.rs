@@ -1,13 +1,17 @@
+use crate::surface_mesh::ProjectedSurfaceTriangle;
 use aoe_protocol::EntityState;
 use bytemuck::{Pod, Zeroable};
 use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
 use wgpu::SurfaceTarget;
-
 const CAPACITY: usize = 16_384;
 const ATLAS_SIDE: u32 = 8;
 const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
+const GPU_INSTANCE_CAPACITY: usize = CAPACITY + crate::surface_mesh::MAX_SURFACE_TRIANGLES;
 
+#[cfg(test)]
+#[path = "web_tests.rs"]
+mod tests;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub(crate) struct Sprite {
@@ -16,7 +20,6 @@ pub(crate) struct Sprite {
     pub(crate) color: [f32; 4],
     pub(crate) uv: [f32; 4],
 }
-
 pub struct Renderer {
     adapter_label: String,
     surface: wgpu::Surface<'static>,
@@ -81,7 +84,7 @@ impl Renderer {
         });
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sprite instances"),
-            size: (CAPACITY * std::mem::size_of::<Sprite>()) as u64,
+            size: (GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -236,7 +239,6 @@ impl Renderer {
     pub fn adapter_label(&self) -> &str {
         &self.adapter_label
     }
-
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 || (self.config.width == width && self.config.height == height)
         {
@@ -289,9 +291,39 @@ impl Renderer {
         sprites: &[Sprite],
         clear: [f64; 4],
     ) -> Result<Counters, String> {
-        if !sprites.is_empty() {
+        self.render_world_layers(&[], sprites, clear)
+    }
+
+    pub(crate) fn render_world_layers(
+        &mut self,
+        surfaces: &[ProjectedSurfaceTriangle],
+        sprites: &[Sprite],
+        clear: [f64; 4],
+    ) -> Result<Counters, String> {
+        let mut instances = Vec::with_capacity(surfaces.len().saturating_add(sprites.len()));
+        let width = self.config.width.max(1) as f64;
+        let height = self.config.height.max(1) as f64;
+        for triangle in surfaces {
+            let point = |index: usize| {
+                screen_to_clip(
+                    triangle.points[index].screen.x,
+                    triangle.points[index].screen.y,
+                    width,
+                    height,
+                )
+            };
+            instances.push(surface_instance(
+                [point(0), point(1), point(2)],
+                [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
+            ));
+        }
+        instances.extend_from_slice(sprites);
+        if instances.len() > GPU_INSTANCE_CAPACITY {
+            return Err("visible world layers exceed the WebGPU instance limit".to_owned());
+        }
+        if !instances.is_empty() {
             self.queue
-                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(sprites));
+                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&instances));
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -300,7 +332,7 @@ impl Renderer {
                 return Ok(Counters {
                     visible: sprites.len(),
                     draw_calls: 0,
-                    gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                    gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
                     persistent_gpu_resources: 6,
                     atlas_pages: 1,
                     atlas_uploads: 1,
@@ -312,7 +344,7 @@ impl Renderer {
                 return Ok(Counters {
                     visible: sprites.len(),
                     draw_calls: 0,
-                    gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+                    gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
                     persistent_gpu_resources: 6,
                     atlas_pages: 1,
                     atlas_uploads: 1,
@@ -336,7 +368,7 @@ impl Renderer {
             });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("sprites"),
+                label: Some("world layers"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -358,18 +390,34 @@ impl Renderer {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.draw(0..6, 0..sprites.len() as u32);
+            pass.draw(0..6, 0..instances.len() as u32);
         }
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
         Ok(Counters {
             visible: sprites.len(),
-            draw_calls: 1,
-            gpu_buffer_bytes: CAPACITY * std::mem::size_of::<Sprite>(),
+            draw_calls: usize::from(!instances.is_empty()),
+            gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
             persistent_gpu_resources: 6,
             atlas_pages: 1,
             atlas_uploads: 1,
             atlas_bytes: ATLAS_BYTES,
         })
+    }
+}
+
+fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
+    [
+        (x / width * 2.0 - 1.0) as f32,
+        (1.0 - y / height * 2.0) as f32,
+    ]
+}
+
+fn surface_instance(points: [[f32; 2]; 3], color: [f32; 4]) -> Sprite {
+    Sprite {
+        position: points[0],
+        radius: points[1],
+        color,
+        uv: [points[2][0], points[2][1], 0.0, -1.0],
     }
 }
