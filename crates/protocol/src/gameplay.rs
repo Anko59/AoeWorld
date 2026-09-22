@@ -5,7 +5,10 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 6;
+mod resources;
+pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
+
+pub const VERSION: u16 = 7;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -117,6 +120,7 @@ pub enum ServerMessage {
     WorldReset {
         world_id: u64,
     },
+    ResourceState(ResourceState),
     Error {
         code: u16,
         message: String,
@@ -129,6 +133,8 @@ pub enum Error {
     TooLarge,
     #[error("collection exceeds {MAX_SUBSCRIBED_UNITS} units")]
     TooManyUnits,
+    #[error("invalid bounded resource state")]
+    InvalidResourceState,
     #[error("invalid postcard message: {0}")]
     Invalid(#[from] postcard::Error),
 }
@@ -179,6 +185,7 @@ where
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     match message {
+        ServerMessage::ResourceState(state) if !state.valid() => Err(Error::InvalidResourceState),
         ServerMessage::Snapshot { units, .. } if units.len() > MAX_SUBSCRIBED_UNITS => {
             Err(Error::TooManyUnits)
         }
@@ -215,7 +222,9 @@ pub fn encode_server(message: &ServerMessage) -> Result<Vec<u8>, Error> {
 
 pub fn decode_server(bytes: &[u8]) -> Result<ServerMessage, Error> {
     check_size(bytes)?;
-    Ok(postcard::from_bytes(bytes)?)
+    let message = postcard::from_bytes(bytes)?;
+    validate_server(&message)?;
+    Ok(message)
 }
 
 #[cfg(test)]

@@ -21,3 +21,5 @@ mod playground;
 
 #[cfg(target_arch = "wasm32")]
 mod game_assets;
+
+pub mod resource_state;

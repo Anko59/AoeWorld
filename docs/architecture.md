@@ -34,3 +34,11 @@ It deliberately has no filesystem, networking, browser, GDAL, or PROJ
 dependency. The configured native preparation worker owns those capabilities,
 executes source-backed preparation out of process, and has a separate bounded
 request for projected creator-map footprints.
+
+Mutable resource amounts are separate from immutable geographic chunks. The
+server restores map-bound snapshots before spawning and commits depletion only
+after persistence accepts it. Gameplay protocol 7 sends bounded sparse resets
+and exact-revision deltas; lagging consumers reset from the authoritative overlay.
+The client retains that state independently of chunk residency and removes
+exhausted sprites on both render backends. This supplies resource lifecycle
+infrastructure; gathering commands and an economy are outside this change.
