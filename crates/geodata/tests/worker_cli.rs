@@ -173,6 +173,8 @@ fn verification_accepts_one_canonical_manifest_and_rejects_ambiguity_and_tamperi
         water_pages: vec![],
         vegetation_pages: vec![],
         historical_land_use_pages: vec![],
+        hydrology_evidence_pages: vec![],
+        modern_land_cover_pages: vec![],
     };
     generated.write_directory(&output).unwrap();
     let hash = generated.package.content_hash_hex();

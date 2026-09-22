@@ -1,22 +1,60 @@
 use super::*;
 
 fn prepared(kinds: Vec<u8>) -> PreparedHydrology {
+    let methods = kinds
+        .iter()
+        .map(|kind| match HydrologyKind::try_from(*kind).expect("kind") {
+            HydrologyKind::Ocean => aoe_map::HydrologyEvidenceMethod::OverviewOcean as u8,
+            HydrologyKind::Lake
+            | HydrologyKind::Reservoir
+            | HydrologyKind::UnknownWater
+            | HydrologyKind::RegulatedLake => {
+                aoe_map::HydrologyEvidenceMethod::HydroLakesExtent as u8
+            }
+            HydrologyKind::River => {
+                aoe_map::HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8
+            }
+            HydrologyKind::NoEvidence => aoe_map::HydrologyEvidenceMethod::None as u8,
+            HydrologyKind::Land | HydrologyKind::Shallow => {
+                aoe_map::HydrologyEvidenceMethod::WorldCoverClass as u8
+            }
+        })
+        .collect::<Vec<_>>();
+    let hydrology_pages = vec![HydrologyPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        kind: kinds,
+        method: methods,
+    }];
+    let modern_land_cover_pages = vec![ModernLandCoverPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        worldcover_class: vec![40; 4],
+    }];
+    let evidence_index = aoe_map::HydrologyEvidenceIndex {
+        samples_per_axis: 2,
+        page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: aoe_map::WORLD_COVER_OBSERVATION_YEAR,
+        policy: aoe_map::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: aoe_map::ordered_hydrology_page_root(&hydrology_pages)
+            .expect("hydrology root"),
+        modern_land_cover_page_root: aoe_map::ordered_modern_land_cover_page_root(
+            &modern_land_cover_pages,
+        )
+        .expect("cover root"),
+    };
     PreparedHydrology {
         samples_per_axis: 2,
-        source_year: 2021,
+        evidence_index,
         source_locks: Vec::new(),
-        hydrology_pages: vec![HydrologyPage {
-            level: 0,
-            x: 0,
-            y: 0,
-            width: 2,
-            height: 2,
-            kind: kinds,
-            surface_height_centimeters: vec![0; 4],
-            surface_height_known: vec![0],
-            barrier_edges: vec![0; 4],
-        }],
-        modern_land_cover_pages: Vec::new(),
+        hydrology_pages,
+        modern_land_cover_pages,
     }
 }
 
@@ -56,6 +94,78 @@ fn modern_water_is_consumable_without_rewriting_historical_land_use() {
             .modern_water_override_at(2, 0, 0)
             .expect("water"),
         None
+    );
+}
+
+#[test]
+fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
+    let axis = 65_u16;
+    let mut hydrology_pages = Vec::new();
+    let mut cover_pages = Vec::new();
+    for y in 0..2_u16 {
+        for x in 0..2_u16 {
+            let width = (axis - x * 64).min(64) as u8;
+            let height = (axis - y * 64).min(64) as u8;
+            let len = usize::from(width) * usize::from(height);
+            let last_page = x == 1 && y == 1;
+            hydrology_pages.push(HydrologyPage {
+                level: 0,
+                x,
+                y,
+                width,
+                height,
+                kind: vec![
+                    if last_page {
+                        HydrologyKind::Lake as u8
+                    } else {
+                        HydrologyKind::Land as u8
+                    };
+                    len
+                ],
+                method: vec![
+                    if last_page {
+                        aoe_map::HydrologyEvidenceMethod::HydroLakesExtent as u8
+                    } else {
+                        aoe_map::HydrologyEvidenceMethod::WorldCoverClass as u8
+                    };
+                    len
+                ],
+            });
+            cover_pages.push(ModernLandCoverPage {
+                level: 0,
+                x,
+                y,
+                width,
+                height,
+                worldcover_class: vec![40; len],
+            });
+        }
+    }
+    let evidence_index = aoe_map::HydrologyEvidenceIndex {
+        samples_per_axis: axis,
+        page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: aoe_map::WORLD_COVER_OBSERVATION_YEAR,
+        policy: aoe_map::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: aoe_map::ordered_hydrology_page_root(&hydrology_pages)
+            .expect("hydrology root"),
+        modern_land_cover_page_root: aoe_map::ordered_modern_land_cover_page_root(&cover_pages)
+            .expect("cover root"),
+    };
+    evidence_index
+        .validate_pages(&hydrology_pages, &cover_pages)
+        .expect("complete typed pages");
+    let prepared = PreparedHydrology {
+        samples_per_axis: axis,
+        evidence_index,
+        source_locks: Vec::new(),
+        hydrology_pages,
+        modern_land_cover_pages: cover_pages,
+    };
+    assert_eq!(
+        prepared
+            .modern_water_override_at(axis, 64, 64)
+            .expect("last page"),
+        Some((0, 100))
     );
 }
 

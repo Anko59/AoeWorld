@@ -1,10 +1,11 @@
 use super::{
-    GeodataError, HydrologyKind, HydrologyPage, MapRequest, ModernLandCoverPage, OpenTile, PAGE,
-    Tile, WORLD_COVER_NODATA, WORLD_COVER_PERMANENT_WATER, WORLD_COVER_WETLAND,
+    GeodataError, HydrologyPage, MapRequest, ModernLandCoverPage, OpenTile, PAGE, Tile,
+    WORLD_COVER_NODATA, WORLD_COVER_PERMANENT_WATER, WORLD_COVER_WETLAND,
     hydrology_sampling::{
         open_vector_source, page_bounds, sample_worldcover_page, vector_features,
     },
 };
+use aoe_map::{HydrologyEvidenceMethod, HydrologyKind};
 use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
@@ -125,6 +126,7 @@ impl Sampler {
         };
         let classes = sample_worldcover_page(&self.tiles, &longitude, &latitude)?;
         let mut kinds = Vec::with_capacity(east.len());
+        let mut methods = Vec::with_capacity(east.len());
         for (index, (&local_east, &local_north)) in east.iter().zip(&north).enumerate() {
             let class = classes[index];
             let point = Geometry::from_wkt(&format!("POINT ({local_east} {local_north})"))
@@ -141,24 +143,11 @@ impl Sampler {
                 && river_features
                     .iter()
                     .any(|feature| feature.geometry.contains(&point));
-            let kind = if ocean {
-                HydrologyKind::Ocean
-            } else if let Some(feature) = lake {
-                feature.kind
-            } else if river {
-                HydrologyKind::River
-            } else if class == WORLD_COVER_WETLAND {
-                HydrologyKind::Shallow
-            } else if class == WORLD_COVER_PERMANENT_WATER {
-                HydrologyKind::UnknownWater
-            } else if class == WORLD_COVER_NODATA {
-                HydrologyKind::NoEvidence
-            } else {
-                HydrologyKind::Land
-            };
+            let (kind, method) =
+                classify_evidence(ocean, lake.map(|feature| feature.kind), river, class);
             kinds.push(kind as u8);
+            methods.push(method as u8);
         }
-        let size = kinds.len();
         Ok((
             HydrologyPage {
                 level: 0,
@@ -167,9 +156,7 @@ impl Sampler {
                 width,
                 height,
                 kind: kinds,
-                surface_height_centimeters: vec![0; size],
-                surface_height_known: vec![0; size.div_ceil(8)],
-                barrier_edges: vec![0; size],
+                method: methods,
             },
             ModernLandCoverPage {
                 level: 0,
@@ -180,5 +167,94 @@ impl Sampler {
                 worldcover_class: classes,
             },
         ))
+    }
+}
+
+fn classify_evidence(
+    ocean: bool,
+    lake: Option<HydrologyKind>,
+    river: bool,
+    worldcover_class: u8,
+) -> (HydrologyKind, HydrologyEvidenceMethod) {
+    if ocean {
+        (HydrologyKind::Ocean, HydrologyEvidenceMethod::OverviewOcean)
+    } else if let Some(kind) = lake {
+        (kind, HydrologyEvidenceMethod::HydroLakesExtent)
+    } else if river {
+        (
+            HydrologyKind::River,
+            HydrologyEvidenceMethod::HydroRiversBufferedCorridor,
+        )
+    } else if matches!(worldcover_class, WORLD_COVER_WETLAND | 95) {
+        (
+            HydrologyKind::Shallow,
+            HydrologyEvidenceMethod::WorldCoverClass,
+        )
+    } else if worldcover_class == WORLD_COVER_PERMANENT_WATER {
+        (
+            HydrologyKind::UnknownWater,
+            HydrologyEvidenceMethod::WorldCoverClass,
+        )
+    } else if worldcover_class == WORLD_COVER_NODATA {
+        (HydrologyKind::NoEvidence, HydrologyEvidenceMethod::None)
+    } else {
+        (
+            HydrologyKind::Land,
+            HydrologyEvidenceMethod::WorldCoverClass,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evidence_precedence_keeps_modern_water_observations_typed() {
+        assert_eq!(
+            classify_evidence(true, Some(HydrologyKind::Lake), true, 40),
+            (HydrologyKind::Ocean, HydrologyEvidenceMethod::OverviewOcean)
+        );
+        assert_eq!(
+            classify_evidence(false, Some(HydrologyKind::RegulatedLake), true, 80),
+            (
+                HydrologyKind::RegulatedLake,
+                HydrologyEvidenceMethod::HydroLakesExtent
+            )
+        );
+        assert_eq!(
+            classify_evidence(false, None, true, 40),
+            (
+                HydrologyKind::River,
+                HydrologyEvidenceMethod::HydroRiversBufferedCorridor
+            )
+        );
+        for class in [WORLD_COVER_WETLAND, 95] {
+            assert_eq!(
+                classify_evidence(false, None, false, class),
+                (
+                    HydrologyKind::Shallow,
+                    HydrologyEvidenceMethod::WorldCoverClass
+                )
+            );
+        }
+        assert_eq!(
+            classify_evidence(false, None, false, WORLD_COVER_PERMANENT_WATER),
+            (
+                HydrologyKind::UnknownWater,
+                HydrologyEvidenceMethod::WorldCoverClass
+            )
+        );
+        assert_eq!(
+            classify_evidence(false, None, false, WORLD_COVER_NODATA),
+            (HydrologyKind::NoEvidence, HydrologyEvidenceMethod::None)
+        );
+        assert_eq!(
+            classify_evidence(false, None, false, 40),
+            (
+                HydrologyKind::Land,
+                HydrologyEvidenceMethod::WorldCoverClass
+            )
+        );
     }
 }

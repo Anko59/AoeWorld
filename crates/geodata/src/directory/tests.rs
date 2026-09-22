@@ -1,7 +1,10 @@
 use super::*;
 use aoe_map::{
-    ElevationPage, EnvironmentalProvenance, FieldPyramid, MapPackage, MapRequest,
-    PreparedEnvironment, ProjectionMetadata, PyramidLevel, SourceLock, ordered_page_root,
+    ElevationPage, EnvironmentalProvenance, FieldPyramid, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyWaterPolicy,
+    MapPackage, MapRequest, ModernLandCoverPage, PreparedEnvironment, ProjectionMetadata,
+    PyramidLevel, SourceLock, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
+    ordered_page_root,
 };
 use std::path::PathBuf;
 
@@ -25,6 +28,8 @@ fn fallback_map() -> GeneratedMap {
         water_pages: Vec::new(),
         vegetation_pages: Vec::new(),
         historical_land_use_pages: Vec::new(),
+        hydrology_evidence_pages: Vec::new(),
+        modern_land_cover_pages: Vec::new(),
     }
 }
 
@@ -50,6 +55,8 @@ fn prepared_map() -> GeneratedMap {
         water: None,
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let package = MapPackage::with_prepared_environment(
         1,
@@ -66,7 +73,31 @@ fn prepared_map() -> GeneratedMap {
         water_pages: Vec::new(),
         vegetation_pages: Vec::new(),
         historical_land_use_pages: Vec::new(),
+        hydrology_evidence_pages: Vec::new(),
+        modern_land_cover_pages: Vec::new(),
     }
+}
+
+#[test]
+fn schema_eight_generated_map_keeps_vector_page_validation() {
+    let mut legacy = prepared_map();
+    legacy.package = MapPackage::with_prepared_environment(
+        8,
+        legacy.package.request,
+        legacy.package.source_locks.clone(),
+        legacy.package.projection.clone(),
+        legacy.package.provenance.clone(),
+        legacy.package.environment.clone(),
+    )
+    .expect("legacy generator package");
+    legacy.package.schema_version = aoe_map::LEGACY_MAP_SCHEMA_VERSION;
+    let identity = legacy.package.content_hash;
+    legacy.validate().expect("legacy vectors validate");
+    assert_eq!(legacy.package.content_hash, identity);
+
+    let mut malformed = legacy;
+    malformed.elevation_pages[0].geographic_height_centimeters[0] += 1;
+    assert!(malformed.validate().is_err());
 }
 
 fn fallback_with_acquisition_time(acquired_at: &str) -> GeneratedMap {
@@ -98,6 +129,8 @@ fn fallback_with_acquisition_time(acquired_at: &str) -> GeneratedMap {
         water_pages: Vec::new(),
         vegetation_pages: Vec::new(),
         historical_land_use_pages: Vec::new(),
+        hydrology_evidence_pages: Vec::new(),
+        modern_land_cover_pages: Vec::new(),
     }
 }
 
@@ -239,6 +272,94 @@ fn rehashed_wrong_page_shape_is_rejected_before_root_acceptance() {
         serde_json::to_vec(&map.package).expect("manifest"),
     )
     .expect("manifest");
+    assert!(GeneratedMap::verify_directory(&root, &hash).is_err());
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
+    let root = test_directory();
+    let base = prepared_map();
+    let hydrology = vec![HydrologyEvidencePage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        kind: vec![
+            HydrologyKind::River as u8,
+            HydrologyKind::RegulatedLake as u8,
+            HydrologyKind::River as u8,
+            HydrologyKind::NoEvidence as u8,
+        ],
+        method: vec![
+            HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
+            HydrologyEvidenceMethod::HydroLakesExtent as u8,
+            HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
+            HydrologyEvidenceMethod::None as u8,
+        ],
+    }];
+    let land_cover = vec![ModernLandCoverPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        worldcover_class: vec![10, 40, 80, 0],
+    }];
+    let mut environment = base.package.environment.clone();
+    environment.hydrology_evidence = Some(HydrologyEvidenceIndex {
+        samples_per_axis: 2,
+        page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: aoe_map::WORLD_COVER_OBSERVATION_YEAR,
+        policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: ordered_hydrology_page_root(&hydrology).expect("hydrology root"),
+        modern_land_cover_page_root: ordered_modern_land_cover_page_root(&land_cover)
+            .expect("land-cover root"),
+    });
+    let package = MapPackage::with_prepared_environment(
+        base.package.generator_version,
+        base.package.request,
+        base.package.source_locks.clone(),
+        base.package.projection.clone(),
+        base.package.provenance.clone(),
+        environment,
+    )
+    .expect("typed package");
+    let map = GeneratedMap {
+        package,
+        hydrology_evidence_pages: hydrology,
+        modern_land_cover_pages: land_cover,
+        ..base
+    };
+    let package_before_validation = map.package.clone();
+    map.validate().expect("typed generated map validates");
+    assert_eq!(map.package, package_before_validation);
+
+    let mut missing_page = map.clone();
+    missing_page.hydrology_evidence_pages.clear();
+    assert!(missing_page.validate().is_err());
+    let mut malformed_page = map.clone();
+    malformed_page.modern_land_cover_pages[0].worldcover_class[0] = 11;
+    assert!(malformed_page.validate().is_err());
+
+    let hash = map.package.content_hash_hex();
+    map.write_directory(&root).expect("write typed package");
+    GeneratedMap::verify_directory(&root, &hash).expect("stream verify typed pages");
+    assert_eq!(
+        GeneratedMap::read_directory(&root, &hash).expect("read typed pages"),
+        map
+    );
+    let mut changed = map.hydrology_evidence_pages[0].clone();
+    changed.kind[0] = HydrologyKind::Land as u8;
+    changed.method[0] = HydrologyEvidenceMethod::WorldCoverClass as u8;
+    fs::write(
+        root.join("pages")
+            .join(&hash)
+            .join("hydrology-evidence/0-0-0.json"),
+        serde_json::to_vec(&changed).expect("changed page JSON"),
+    )
+    .expect("replace typed evidence page");
     assert!(GeneratedMap::verify_directory(&root, &hash).is_err());
     fs::remove_dir_all(root).expect("cleanup");
 }

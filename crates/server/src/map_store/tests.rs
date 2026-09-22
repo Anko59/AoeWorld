@@ -131,6 +131,8 @@ pub(super) fn prepared() -> (
             ordered_land_use_page_root(&[land_use[0].clone()]).expect("land-use root"),
             ordered_land_use_page_root(&[land_use[1].clone()]).expect("land-use root"),
         ])),
+
+        hydrology_evidence: None,
     };
     let package = MapPackage::with_prepared_environment(
         1,

@@ -1,4 +1,5 @@
 use super::*;
+use aoe_map::PreparedEnvironment;
 
 #[test]
 fn local_projection_places_its_center_at_the_origin() {

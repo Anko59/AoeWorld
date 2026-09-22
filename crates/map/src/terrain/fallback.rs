@@ -132,6 +132,8 @@ impl MapChunkGenerator {
             water,
             elevation_provenance,
             water_provenance,
+            hydrology_observation: None,
+            modern_land_cover_class: None,
             passable: water == WaterKind::None
                 && material != GroundMaterial::Ice
                 && surface.walkable(),

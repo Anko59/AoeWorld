@@ -327,6 +327,8 @@ mod tests {
             water_pages: Vec::new(),
             vegetation_pages: Vec::new(),
             historical_land_use_pages: Vec::new(),
+            hydrology_evidence_pages: Vec::new(),
+            modern_land_cover_pages: Vec::new(),
         };
         generated.validate().expect("self-contained package");
     }

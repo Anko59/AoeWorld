@@ -5,12 +5,17 @@ use crate::{
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 
-const FORMAT_VERSION: u8 = 1;
-const TILE_BYTES: usize = 18;
+const LEGACY_FORMAT_VERSION: u8 = 1;
+const FORMAT_VERSION: u8 = 2;
+const LEGACY_TILE_BYTES: usize = 18;
+const TILE_BYTES: usize = 20;
 const RESOURCE_BYTES: usize = 21;
 const HEADER_BYTES: usize = 5;
 pub const MAX_DECODED_CHUNK_BYTES: usize = 128 * 1024;
 const MAX_CHUNK_TILES: usize = (CHUNK_TILES * CHUNK_TILES) as usize;
+
+mod evidence;
+use evidence::{pack_observation_properties, unpack_observation_properties};
 
 /// Compact, immutable transport representation for one 32 by 32 map chunk.
 ///
@@ -71,6 +76,7 @@ impl CompactChunk {
                 push_i16(&mut payload, height);
             }
             push_u32(&mut payload, pack_tile_properties(*tile));
+            push_u16(&mut payload, pack_observation_properties(*tile)?);
         }
         for resource in &chunk.resources {
             push_u64(&mut payload, resource.id);
@@ -94,7 +100,8 @@ impl CompactChunk {
             return Err(CompactChunkError::PayloadTooLarge);
         }
         let mut cursor = 0;
-        if read_u8(&payload, &mut cursor)? != FORMAT_VERSION {
+        let version = read_u8(&payload, &mut cursor)?;
+        if !matches!(version, LEGACY_FORMAT_VERSION | FORMAT_VERSION) {
             return Err(CompactChunkError::UnsupportedVersion);
         }
         let tile_count = read_u16(&payload, &mut cursor)? as usize;
@@ -105,8 +112,13 @@ impl CompactChunk {
         if resource_count > tile_count {
             return Err(CompactChunkError::TooManyResources);
         }
+        let tile_bytes = if version == LEGACY_FORMAT_VERSION {
+            LEGACY_TILE_BYTES
+        } else {
+            TILE_BYTES
+        };
         let expected = HEADER_BYTES
-            .checked_add(tile_count.saturating_mul(TILE_BYTES))
+            .checked_add(tile_count.saturating_mul(tile_bytes))
             .and_then(|value| value.checked_add(resource_count.saturating_mul(RESOURCE_BYTES)))
             .ok_or(CompactChunkError::PayloadTooLarge)?;
         if expected != payload.len() {
@@ -122,12 +134,18 @@ impl CompactChunk {
                 read_i16(&payload, &mut cursor)?,
                 read_i16(&payload, &mut cursor)?,
             ];
-            tiles.push(unpack_tile(
+            let tile = unpack_tile(
                 geographic_height_centimeters,
                 game_height_level,
                 corner_game_height_levels,
                 read_u32(&payload, &mut cursor)?,
-            )?);
+                if version == FORMAT_VERSION {
+                    Some(read_u16(&payload, &mut cursor)?)
+                } else {
+                    None
+                },
+            )?;
+            tiles.push(tile);
         }
         let mut resources = Vec::with_capacity(resource_count);
         for _ in 0..resource_count {
@@ -175,10 +193,15 @@ fn unpack_tile(
     game_height_level: i16,
     corner_game_height_levels: [i16; 4],
     properties: u32,
+    observation_properties: Option<u16>,
 ) -> Result<Tile, CompactChunkError> {
     if properties >> 24 != 0 {
         return Err(CompactChunkError::InvalidEnum);
     }
+    let (hydrology_observation, modern_land_cover_class) = observation_properties
+        .map(unpack_observation_properties)
+        .transpose()?
+        .unwrap_or((None, None));
     Ok(Tile {
         geographic_height_centimeters,
         game_height_level,
@@ -193,6 +216,8 @@ fn unpack_tile(
         water: water_kind(((properties >> 11) & 0x7) as u8)?,
         elevation_provenance: provenance(((properties >> 14) & 0x7) as u8)?,
         water_provenance: provenance(((properties >> 17) & 0x7) as u8)?,
+        hydrology_observation,
+        modern_land_cover_class,
         passable: (properties & (1 << 20)) != 0,
     })
 }
@@ -380,60 +405,4 @@ fn hex_value(value: u8) -> Result<u8, CompactChunkError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::MapChunkGenerator;
-
-    #[test]
-    fn compact_chunk_round_trips_every_terrain_field() {
-        let original = MapChunkGenerator::new([7; 32], 11, 64)
-            .chunk(1, 1)
-            .expect("fixture chunk");
-        let compact = CompactChunk::encode(&original).expect("encodes a map chunk");
-        assert!(compact.decoded_len().expect("decoded length") <= MAX_DECODED_CHUNK_BYTES);
-        assert_eq!(compact.decode().expect("decodes a map chunk"), original);
-    }
-
-    #[test]
-    fn maximum_chunk_has_a_bounded_payload() {
-        let generator = MapChunkGenerator::new([3; 32], 5, CHUNK_TILES);
-        let tile = generator.tile_at(TileCoord::new(0, 0)).expect("tile");
-        let resource = ResourceNode {
-            id: 0,
-            tile: TileCoord::new(0, 0),
-            kind: ResourceKind::Wood,
-            object: ObjectKind::Tree,
-            initial_amount: 100,
-            visual_variant: 0,
-        };
-        let chunk = Chunk {
-            x: 0,
-            y: 0,
-            tiles: vec![tile; MAX_CHUNK_TILES],
-            resources: vec![resource; MAX_CHUNK_TILES],
-        };
-        let compact = CompactChunk::encode(&chunk).expect("encodes maximum chunk");
-        assert!(compact.decoded_len().expect("decoded length") <= MAX_DECODED_CHUNK_BYTES);
-        assert_eq!(compact.decode().expect("decodes maximum chunk"), chunk);
-    }
-
-    #[test]
-    fn malformed_payload_is_rejected_before_decode() {
-        let compact = CompactChunk {
-            x: 0,
-            y: 0,
-            payload_hex: "zz".to_owned(),
-        };
-        assert_eq!(compact.decode(), Err(CompactChunkError::InvalidHex));
-    }
-
-    #[test]
-    fn oversized_hex_is_rejected_before_allocation() {
-        let compact = CompactChunk {
-            x: 0,
-            y: 0,
-            payload_hex: "00".repeat(MAX_DECODED_CHUNK_BYTES + 1),
-        };
-        assert_eq!(compact.decode(), Err(CompactChunkError::PayloadTooLarge));
-    }
-}
+mod tests;

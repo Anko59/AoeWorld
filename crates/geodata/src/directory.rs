@@ -1,8 +1,5 @@
 use crate::{GeneratedMap, GeodataError};
-use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, HistoricalLandUsePage, MapPackage, PageLayer,
-    PotentialBiomePage, WaterPage,
-};
+use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, MapPackage, PageLayer};
 use std::{
     fs,
     io::{Read, Write},
@@ -15,147 +12,39 @@ pub const DIRECTORY_SCHEMA_VERSION: u16 = 1;
 pub const MAX_DIRECTORY_MANIFEST_BYTES: u64 = 64 * 1024;
 pub const MAX_DIRECTORY_PAGE_BYTES: u64 = 128 * 1024;
 
+mod page;
 mod verify;
+use page::{PageRef, PageValue};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum DirectoryLayer {
+pub(super) enum DirectoryLayer {
     Elevation,
     Water,
     Vegetation,
     HistoricalLandUse,
+    HydrologyEvidence,
+    ModernLandCover,
 }
 
 impl DirectoryLayer {
-    fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         match self {
             Self::Elevation => "elevation",
             Self::Water => "water",
             Self::Vegetation => "vegetation",
             Self::HistoricalLandUse => "historical-land-use",
+            Self::HydrologyEvidence => "hydrology-evidence",
+            Self::ModernLandCover => "modern-land-cover",
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct PageKey {
-    layer: DirectoryLayer,
-    level: u8,
-    x: u16,
-    y: u16,
-}
-
-enum PageRef<'a> {
-    Elevation(&'a ElevationPage),
-    Water(&'a WaterPage),
-    Vegetation(&'a PotentialBiomePage),
-    HistoricalLandUse(&'a HistoricalLandUsePage),
-}
-
-impl PageRef<'_> {
-    fn layer(&self) -> DirectoryLayer {
-        match self {
-            Self::Elevation(_) => DirectoryLayer::Elevation,
-            Self::Water(_) => DirectoryLayer::Water,
-            Self::Vegetation(_) => DirectoryLayer::Vegetation,
-            Self::HistoricalLandUse(_) => DirectoryLayer::HistoricalLandUse,
-        }
-    }
-
-    fn key(&self) -> PageKey {
-        let (level, x, y) = match self {
-            Self::Elevation(page) => (page.level, page.x, page.y),
-            Self::Water(page) => (page.level, page.x, page.y),
-            Self::Vegetation(page) => (page.level, page.x, page.y),
-            Self::HistoricalLandUse(page) => (page.level, page.x, page.y),
-        };
-        PageKey {
-            layer: self.layer(),
-            level,
-            x,
-            y,
-        }
-    }
-
-    fn serialized(&self) -> Result<(PageKey, Vec<u8>), GeodataError> {
-        let bytes = match self {
-            Self::Elevation(page) => {
-                page.content_hash()?;
-                serde_json::to_vec(page).map_err(json_error)?
-            }
-            Self::Water(page) => {
-                page.content_hash()?;
-                serde_json::to_vec(page).map_err(json_error)?
-            }
-            Self::Vegetation(page) => {
-                page.content_hash()?;
-                serde_json::to_vec(page).map_err(json_error)?
-            }
-            Self::HistoricalLandUse(page) => {
-                page.content_hash()?;
-                serde_json::to_vec(page).map_err(json_error)?
-            }
-        };
-        if bytes.is_empty() || bytes.len() as u64 > MAX_DIRECTORY_PAGE_BYTES {
-            return Err(invalid("serialized page exceeds the directory page limit"));
-        }
-        Ok((self.key(), bytes))
-    }
-}
-
-enum PageValue {
-    Elevation(ElevationPage),
-    Water(WaterPage),
-    Vegetation(PotentialBiomePage),
-    HistoricalLandUse(HistoricalLandUsePage),
-}
-
-impl PageValue {
-    fn key(&self) -> PageKey {
-        match self {
-            Self::Elevation(page) => PageKey {
-                layer: DirectoryLayer::Elevation,
-                level: page.level,
-                x: page.x,
-                y: page.y,
-            },
-            Self::Water(page) => PageKey {
-                layer: DirectoryLayer::Water,
-                level: page.level,
-                x: page.x,
-                y: page.y,
-            },
-            Self::Vegetation(page) => PageKey {
-                layer: DirectoryLayer::Vegetation,
-                level: page.level,
-                x: page.x,
-                y: page.y,
-            },
-            Self::HistoricalLandUse(page) => PageKey {
-                layer: DirectoryLayer::HistoricalLandUse,
-                level: page.level,
-                x: page.x,
-                y: page.y,
-            },
-        }
-    }
-
-    fn content_hash(&self) -> Result<[u8; 32], GeodataError> {
-        Ok(match self {
-            Self::Elevation(page) => page.content_hash()?,
-            Self::Water(page) => page.content_hash()?,
-            Self::Vegetation(page) => page.content_hash()?,
-            Self::HistoricalLandUse(page) => page.content_hash()?,
-        })
-    }
-
-    fn dimensions(&self) -> (u8, u8) {
-        match self {
-            Self::Elevation(page) => (page.width, page.height),
-            Self::Water(page) => (page.width, page.height),
-            Self::Vegetation(page) => (page.width, page.height),
-            Self::HistoricalLandUse(page) => (page.width, page.height),
-        }
-    }
+pub(super) struct PageKey {
+    pub(super) layer: DirectoryLayer,
+    pub(super) level: u8,
+    pub(super) x: u16,
+    pub(super) y: u16,
 }
 
 impl GeneratedMap {
@@ -201,6 +90,8 @@ impl GeneratedMap {
             water_pages: Vec::new(),
             vegetation_pages: Vec::new(),
             historical_land_use_pages: Vec::new(),
+            hydrology_evidence_pages: Vec::new(),
+            modern_land_cover_pages: Vec::new(),
         };
         for page in verify::read_pages(directory, package_hash, &package)? {
             match page {
@@ -210,6 +101,8 @@ impl GeneratedMap {
                 PageValue::HistoricalLandUse(page) => {
                     generated.historical_land_use_pages.push(page)
                 }
+                PageValue::HydrologyEvidence(page) => generated.hydrology_evidence_pages.push(page),
+                PageValue::ModernLandCover(page) => generated.modern_land_cover_pages.push(page),
             }
         }
         generated.validate()?;
@@ -254,6 +147,14 @@ fn package_page_count(package: &MapPackage) -> usize {
     {
         count = count.saturating_add(field_page_count(&field.levels));
     }
+    if let Some(index) = &package.environment.hydrology_evidence {
+        let side = usize::from(
+            index
+                .samples_per_axis
+                .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES)),
+        );
+        count = count.saturating_add(side.saturating_mul(side).saturating_mul(2));
+    }
     count
 }
 
@@ -278,6 +179,16 @@ fn page_refs(map: &GeneratedMap) -> impl Iterator<Item = PageRef<'_>> {
             map.historical_land_use_pages
                 .iter()
                 .map(PageRef::HistoricalLandUse),
+        )
+        .chain(
+            map.hydrology_evidence_pages
+                .iter()
+                .map(PageRef::HydrologyEvidence),
+        )
+        .chain(
+            map.modern_land_cover_pages
+                .iter()
+                .map(PageRef::ModernLandCover),
         )
 }
 
@@ -416,6 +327,8 @@ pub(crate) fn publish_streaming_page(
         PageLayer::Water => DirectoryLayer::Water,
         PageLayer::Vegetation => DirectoryLayer::Vegetation,
         PageLayer::HistoricalLandUse => DirectoryLayer::HistoricalLandUse,
+        PageLayer::HydrologyEvidence => DirectoryLayer::HydrologyEvidence,
+        PageLayer::ModernLandCover => DirectoryLayer::ModernLandCover,
     };
     let path = directory.join(page_file(package_hash, PageKey { layer, level, x, y }));
     let parent = path
