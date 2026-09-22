@@ -11,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[path = "game_world/hash.rs"]
 mod hash;
+mod resources;
+pub use resources::PreparedResourceDepletion;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -298,11 +300,7 @@ impl GameWorld {
     ) -> Result<Depletion, ResourceOverlayError> {
         let depletion = self.terrain.deplete_resource(id, requested)?;
         if depletion.became_nonblocking {
-            self.navigation_cache.clear();
-            for index in 0..self.units.len() {
-                self.clear_planner(index);
-                self.units[index].last_movement_error = None;
-            }
+            self.resource_collision_changed();
         }
         Ok(depletion)
     }

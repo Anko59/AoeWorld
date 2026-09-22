@@ -18,6 +18,9 @@ use tokio::sync::{Mutex, RwLock, mpsc};
 
 #[path = "gameplay_commands.rs"]
 mod commands;
+#[path = "gameplay/resources.rs"]
+mod resources;
+pub use resources::{PersistedDepletion, ResourceLifecycleError};
 
 #[derive(Clone)]
 pub struct GameplayService {
@@ -29,6 +32,7 @@ pub struct GameplayService {
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
     primary_unit_id: EntityId,
+    resource_directory: Option<std::path::PathBuf>,
 }
 
 pub(super) struct Session {
@@ -119,6 +123,7 @@ impl GameplayService {
             map_content_hash,
             map_metadata,
             primary_unit_id,
+            resource_directory: None,
         }
     }
 

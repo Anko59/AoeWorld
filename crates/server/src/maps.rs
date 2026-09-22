@@ -189,22 +189,15 @@ async fn activate_completed(
     };
     let gameplay = tokio::task::spawn_blocking({
         let package = package.clone();
+        let directory = state.map_package_directory.clone();
         move || {
-            if let Some(provider) = provider {
-                GameplayService::from_prepared_provider_with_cancel(package, provider, &|| {
-                    cancelled.load(Ordering::Acquire)
-                })
-                .map_err(|error| error.to_string())
-            } else {
-                GameplayService::from_prepared_map(
-                    package,
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                )
-                .map_err(|error| error.to_string())
-            }
+            GameplayService::from_stored_map(
+                package,
+                provider.map(|value| value as Arc<dyn aoe_map::EnvironmentPageProvider>),
+                directory,
+                &|| cancelled.load(Ordering::Acquire),
+            )
+            .map_err(|error| error.to_string())
         }
     })
     .await

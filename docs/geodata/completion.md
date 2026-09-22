@@ -21,12 +21,12 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | ID | Deliverable | Status | Acceptance |
 | --- | --- | --- | --- |
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Regional prep/residency verified; creator/large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
+| M2 | Detailed streaming preparation | Regional prep/residency/creator verified; large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
 | M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
-| M5 | Resource lifecycle | Placement repaired; persistence/deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
+| M5 | Resource lifecycle | Placement and persistence verified; network deltas pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
-| M7 | Creation experience | Job history bounded; other acceptance pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
+| M7 | Creation experience | Creator and publication verified; recovery/progress pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
 M7 completion publication is reviewed in
@@ -325,3 +325,16 @@ Decoding and mutation cap changed resources at 65,536 logical entries; provider,
 capacity and revision errors leave state intact. Independent review, hooks,
 map-test, preflight (333 native tests), and clean pre-push preflight passed.
 Disk persistence and reconnect/delta consumers remain required.
+
+M5 server persistence is reviewed in
+[PR #29](https://github.com/Anko59/AoeWorld/pull/29), revision
+`7b0e9944defd81a480d669e0570e328d60777935`. Activation restores bounded resource
+snapshots before start selection and spawning. Persistence validates a candidate,
+atomically replaces the file, then commits live collision changes. Failed writes
+leave the world intact; stale service revisions cannot overwrite newer saves.
+One fixed staging file per map bounds crash leftovers and is recovered on retry.
+One server process owns the directory. Directory-sync uncertainty after replacement
+is explicit. Independent review, hooks, test-unit, preflight (339 native tests),
+E2E (23), and clean pre-push preflight passed. This introduces no economy command;
+network deltas and client sprite invalidation remain open. Combined integration
+preflight passed 342 native tests.
