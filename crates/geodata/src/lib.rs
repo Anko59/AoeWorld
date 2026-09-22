@@ -34,6 +34,11 @@ pub use footprint::{
 };
 mod hyde;
 pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
+mod hydrology;
+pub use hydrology::{
+    HydrologyKind, HydrologyPage, MAX_HYDROLOGY_SAMPLES_PER_AXIS, ModernLandCoverPage,
+    PreparedHydrology, prepare_hydrology,
+};
 mod source_cache;
 pub use source_cache::{
     AcquisitionEstimate, CacheError, DEFAULT_CACHE_QUOTA_BYTES,
@@ -46,9 +51,12 @@ pub use water::{PreparedWater, prepare_ocean_coverage};
 mod vegetation;
 pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potential_biome_legend};
 mod source_catalog;
+pub(crate) use source_catalog::worldcover_sources_for_bounds_cached;
 pub use source_catalog::{
-    ExpectedChecksum, KnownSource, SourceCatalogError, etopo_2022_60s_surface, hyde_sources,
-    natural_earth_10m_land, potential_biome_sources,
+    ExpectedChecksum, KnownSource, MAX_HYDROLOGY_DOWNLOAD_BYTES, MAX_WORLDCOVER_TILES,
+    SourceCatalogError, etopo_2022_60s_surface, hyde_sources, hydrology_vector_sources,
+    natural_earth_10m_land, potential_biome_sources, worldcover_sources_for_bounds,
+    worldcover_tile_ids,
 };
 /// Catalog identifiers required by the first source-backed overview recipe.
 /// They let offline verification report exactly which verified cache objects

@@ -12,12 +12,20 @@ const HYDE_DATASET_URL: &str = "https://archaeology.datastations.nl/api/datasets
 const HYDE_BASELINE: &str = "HYDE3_2_1-baseline.zip";
 const HYDE_SUPPLEMENTARY: &str = "HYDE3_2_1-general_supplementary.zip";
 const HYDE_README: &str = "readme_release_HYDE3.2.1.txt";
+pub(crate) const WORLD_COVER_BASE_URL: &str =
+    "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map";
+pub const MAX_WORLDCOVER_TILES: usize = 32;
 
-/// A checksum resolved from provider metadata or pinned after a verified,
-/// explicitly reviewed acquisition when the provider publishes no digest.
+/// A provider-verified digest, or an explicit trust-on-first-use policy for
+/// immutable fixed release URLs where the publisher exposes no digest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "algorithm", content = "digest")]
 pub enum ExpectedChecksum {
+    /// The fixed allowlisted HTTPS release has no published cryptographic
+    /// digest. This is not a checksum match: its first exact-size transfer is
+    /// pinned to SHA-256 in the content address and known-source lock, which
+    /// is re-hashed before every later use and carried in package provenance.
+    Sha256OnFirstAcquisition,
     Md5([u8; 16]),
     Sha1([u8; 20]),
     Sha256([u8; 32]),
@@ -26,6 +34,7 @@ pub enum ExpectedChecksum {
 impl ExpectedChecksum {
     pub(crate) fn matches(self, sha256: &[u8; 32], sha1: &[u8; 20], md5: &[u8; 16]) -> bool {
         match self {
+            Self::Sha256OnFirstAcquisition => false,
             Self::Md5(expected) => expected == *md5,
             Self::Sha1(expected) => expected == *sha1,
             Self::Sha256(expected) => expected == *sha256,
@@ -33,6 +42,7 @@ impl ExpectedChecksum {
     }
 }
 
+/// Returns current HYDE release sources after resolving the provider catalog.
 pub fn hyde_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
     let connector = ureq::native_tls::TlsConnector::new()
         .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
@@ -127,6 +137,41 @@ pub struct KnownSource {
     pub crs: String,
     pub vertical_datum: String,
     pub license_reference: String,
+}
+
+impl KnownSource {
+    pub(crate) fn has_valid_acquisition_policy(&self) -> bool {
+        match self.expected_checksum {
+            ExpectedChecksum::Sha256OnFirstAcquisition => {
+                let Some(name) = self.id.strip_prefix("worldcover-2021-v200:") else {
+                    return false;
+                };
+                self.provider == crate::Provider::EsaWorldCover
+                    && self.release == "ESA WorldCover 2021 v200"
+                    && self.url == format!("{WORLD_COVER_BASE_URL}/{name}")
+                    && name.starts_with("ESA_WorldCover_10m_2021_v200_")
+                    && name.ends_with("_Map.tif")
+                    && !name.contains('/')
+                    && !name.contains('\\')
+            }
+            _ => true,
+        }
+    }
+
+    pub(crate) fn accepts_acquired_bytes(
+        &self,
+        sha256: &[u8; 32],
+        sha1: &[u8; 20],
+        md5: &[u8; 16],
+    ) -> bool {
+        if !self.has_valid_acquisition_policy() {
+            return false;
+        }
+        match self.expected_checksum {
+            ExpectedChecksum::Sha256OnFirstAcquisition => true,
+            checksum => checksum.matches(sha256, sha1, md5),
+        }
+    }
 }
 
 pub fn potential_biome_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
@@ -308,77 +353,24 @@ pub enum SourceCatalogError {
     MissingRequiredFile(&'static str),
     #[error("provider metadata had an invalid checksum for {0}")]
     UnexpectedChecksum(&'static str),
+    #[error("source bounds are outside WorldCover coverage")]
+    InvalidBounds,
+    #[error("provider source did not publish a valid Content-Length")]
+    InvalidSourceSize,
+    #[error("WorldCover request intersects more than the bounded tile limit")]
+    TooManyWorldCoverTiles,
+    #[error("cached source metadata is invalid: {0}")]
+    Cache(String),
 }
+
+#[path = "hydrology.rs"]
+mod hydrology_catalog;
+pub(crate) use hydrology_catalog::worldcover_sources_for_bounds_cached;
+pub use hydrology_catalog::{
+    MAX_HYDROLOGY_DOWNLOAD_BYTES, hydrology_vector_sources, worldcover_sources_for_bounds,
+    worldcover_tile_ids,
+};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn catalog_requires_the_pinned_raster_and_class_lookup() {
-        let sources = parse_potential_biome_sources(
-            r#"{"files":[
-                {"key":"pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif","size":210668848,"checksum":"md5:e67c4778153fe5dcd9c637f4846e2f03","links":{"self":"https://zenodo.org/file.tif"}},
-                {"key":"pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv","size":2968,"checksum":"md5:874f169f966e039935108bc366773f80","links":{"self":"https://zenodo.org/file.csv"}}
-            ]}"#,
-        )
-        .expect("catalog");
-        assert_eq!(sources.len(), 2);
-        assert_eq!(sources[0].bytes, 210_668_848);
-        assert_eq!(
-            sources[1].expected_checksum,
-            ExpectedChecksum::Md5([
-                0x87, 0x4f, 0x16, 0x9f, 0x96, 0x6e, 0x03, 0x99, 0x35, 0x10, 0x8b, 0xc3, 0x66, 0x77,
-                0x3f, 0x80
-            ])
-        );
-    }
-
-    #[test]
-    fn overview_source_has_a_reviewed_sha256_checksum() {
-        let source = etopo_2022_60s_surface();
-        assert_eq!(source.bytes, 465_969_062);
-        assert!(matches!(
-            source.expected_checksum,
-            ExpectedChecksum::Sha256([0x9d, 0x27, 0xd4, 0xb8, ..])
-        ));
-        assert_eq!(
-            source.cache_lock().expect("cache lock").sha256,
-            "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
-        );
-    }
-
-    #[test]
-    fn coastline_fallback_is_a_pinned_independent_source() {
-        let source = natural_earth_10m_land();
-        assert_eq!(source.provider, Provider::NaturalEarth);
-        assert_eq!(source.bytes, 3_269_070);
-        assert_eq!(
-            source.cache_lock().expect("cache lock").sha256,
-            "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
-        );
-    }
-
-    #[test]
-    fn catalog_requires_hyde_baseline_supplementary_and_readme() {
-        let sources = parse_hyde_sources(
-            r#"{"data":{"latestVersion":{"files":[
-                {"dataFile":{"id":5490328,"filename":"HYDE3_2_1-baseline.zip","filesize":5339653974,"checksum":{"type":"SHA-1","value":"0d0e4ff97deb59664ce6c34dfdeeafa08e487d20"}}},
-                {"dataFile":{"id":5490327,"filename":"HYDE3_2_1-general_supplementary.zip","filesize":23585889,"checksum":{"type":"SHA-1","value":"3cfe98d21e70c9ce478460c7265962f1bb2b6aab"}}},
-                {"dataFile":{"id":5396388,"filename":"readme_release_HYDE3.2.1.txt","filesize":8826,"checksum":{"type":"SHA-1","value":"821309ce6035c68033c6e5b3522982cd515bd111"}}}
-            ]}}}"#,
-        )
-        .expect("HYDE catalog");
-        assert_eq!(sources.len(), 3);
-        assert_eq!(sources[0].bytes, 5_339_653_974);
-        assert!(matches!(
-            sources[0].expected_checksum,
-            ExpectedChecksum::Sha1(_)
-        ));
-        assert!(
-            sources
-                .iter()
-                .all(|source| source.provider == Provider::Dans)
-        );
-    }
-}
+#[path = "tests/catalog.rs"]
+mod tests;

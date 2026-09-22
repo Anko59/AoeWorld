@@ -166,13 +166,13 @@ map-estimate:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-estimate
 
 map-generate:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
 
 map-generate-detailed:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
 
 map-verify:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
 
 map-test:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-map

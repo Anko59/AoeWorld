@@ -1,5 +1,3 @@
-use crate::KnownSource;
-use sha2::{Digest, Sha256};
 use std::{
     fs::{self, OpenOptions},
     io::{self, Read, Write},
@@ -221,90 +219,6 @@ impl SourceCache {
         }
         unreachable!("retry loop always returns")
     }
-
-    pub fn acquire_known(
-        &self,
-        source: &KnownSource,
-        cancelled: &AtomicBool,
-    ) -> Result<SourceLock, CacheError> {
-        if source.id.is_empty() || source.bytes == 0 || !source.provider.permits(&source.url) {
-            return Err(CacheError::InvalidLock("known source metadata is invalid"));
-        }
-        if let Some(lock) = self.cached_known(source)? {
-            return Ok(lock);
-        }
-        if source.bytes > self.policy.job_acquisition_budget_bytes {
-            return Err(CacheError::Budget(
-                "source exceeds the per-job acquisition budget",
-            ));
-        }
-        let partial = self.root.join("partial").join(format!(
-            "known-{:x}.part",
-            Sha256::digest(source.id.as_bytes())
-        ));
-        let usage = directory_bytes(&self.root)?;
-        let partial_bytes = fs::metadata(&partial).map(|meta| meta.len()).unwrap_or(0);
-        if usage.saturating_add(source.bytes.saturating_sub(partial_bytes))
-            > self.policy.cache_quota_bytes
-        {
-            return Err(CacheError::Budget(
-                "source exceeds the remaining cache quota",
-            ));
-        }
-        for attempt in 0..=RETRIES {
-            if cancelled.load(Ordering::SeqCst) {
-                return Err(CacheError::Cancelled);
-            }
-            match download_once(&source.url, source.bytes, &partial, cancelled) {
-                Ok(()) => {
-                    let (sha256, sha1, md5) = file_hashes(&partial)?;
-                    if !source.expected_checksum.matches(&sha256, &sha1, &md5) {
-                        fs::remove_file(&partial)?;
-                        return Err(CacheError::Integrity(
-                            "catalog checksum differs from source",
-                        ));
-                    }
-                    let sha256 = digest_hex(&sha256);
-                    let lock = SourceLock {
-                        id: source.id.clone(),
-                        provider: source.provider,
-                        release: source.release.clone(),
-                        url: source.url.clone(),
-                        sha256,
-                        bytes: source.bytes,
-                        native_resolution: source.native_resolution.clone(),
-                        crs: source.crs.clone(),
-                        vertical_datum: source.vertical_datum.clone(),
-                        license_reference: source.license_reference.clone(),
-                    };
-                    let destination = self.object_path(&lock)?;
-                    match fs::hard_link(&partial, &destination) {
-                        Ok(()) => {
-                            fs::remove_file(&partial)?;
-                            self.remember_known(source, &lock)?;
-                            return Ok(lock);
-                        }
-                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                            if self.is_verified(&lock)? {
-                                fs::remove_file(&partial)?;
-                                self.remember_known(source, &lock)?;
-                                return Ok(lock);
-                            }
-                            return Err(CacheError::Io(error));
-                        }
-                        Err(error) => return Err(CacheError::Io(error)),
-                    }
-                }
-                Err(CacheError::Cancelled) => return Err(CacheError::Cancelled),
-                Err(error) if attempt < RETRIES => {
-                    thread::sleep(Duration::from_millis(200 * (1_u64 << attempt)));
-                    let _ = error;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        unreachable!("retry loop always returns")
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -333,10 +247,16 @@ fn download_once(
         fs::remove_file(partial)?;
         return Err(CacheError::Integrity("partial file exceeds expected size"));
     }
+    if offset == bytes {
+        return Ok(());
+    }
     let connector = ureq::native_tls::TlsConnector::new()
         .map_err(|error| CacheError::Download(error.to_string()))?;
     let agent = ureq::AgentBuilder::new()
         .tls_connector(Arc::new(connector))
+        .timeout_connect(Duration::from_secs(15))
+        .timeout_read(Duration::from_secs(15))
+        .timeout_write(Duration::from_secs(15))
         .build();
     let request = if offset == 0 {
         agent.get(url)
@@ -353,10 +273,19 @@ fn download_once(
             "provider ignored a ranged resume request".to_owned(),
         ));
     }
-    if !(status == 206 || (offset == 0 && status == 200)) {
+    if !((offset == 0 && status == 200) || (offset > 0 && status == 206)) {
         return Err(CacheError::Download(format!(
             "unexpected HTTP status {status}"
         )));
+    }
+    if offset > 0 {
+        let expected_range = format!("bytes {offset}-{}/{bytes}", bytes - 1);
+        if response.header("Content-Range") != Some(expected_range.as_str()) {
+            fs::remove_file(partial)?;
+            return Err(CacheError::Download(
+                "provider returned an invalid ranged response".to_owned(),
+            ));
+        }
     }
     let mut output = OpenOptions::new().create(true).append(true).open(partial)?;
     let mut input = response.into_reader();

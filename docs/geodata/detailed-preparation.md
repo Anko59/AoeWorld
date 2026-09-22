@@ -34,9 +34,52 @@ world preparation: runtime page
 residency, multi-region scheduling, and larger than 4096 sample requests are
 outside this slice. COG samples are transformed from the request's local
 azimuthal-equidistant grid and written as 64 by 64 pages. Pyramid reductions
-are page-at-a-time from disk; water, potential vegetation, and HYDE pages are
+are page-at-a-time from disk. Potential vegetation and HYDE pages are
 nearest-resampled from the existing bounded 128-sample overview so the modern
-DSM is not presented as new historical or land-cover detail.
+DSM is not presented as new historical or land-cover detail. Water keeps the
+overview values wherever the detailed source sampler has no supported class.
+Hydrology samples currently cap at 1024 per axis; denser DEM grids nearest-map
+those categories and do not imply finer water evidence.
+
+Detailed water preparation also samples every WorldCover 2021 tile intersecting
+the conservative request bounds, plus global HydroLAKES. The current HydroRIVERS
+input is the Europe release and is sampled only when the full request bounds fit
+inside the documented pilot window of 36–60°N, 12°W–25°E; outside it, river
+evidence is explicitly marked unavailable in source-lock preprocessing metadata.
+These are modern evidence sources; they do not rewrite HYDE's circa-600 land-use
+estimates. Source locks record source metadata and SHA-256 digests.
+HydroSHEDS archives use reviewed pinned hashes. WorldCover's fixed release
+endpoint publishes no digest, so its narrowly allowlisted first HTTPS transfer
+establishes a local SHA-256 pin; that first-use digest is not a provider-published
+checksum. It is checked on every cache reuse. The HydroRIVERS input is the
+Europe/Middle East release and is only evidence within the pilot bounds above;
+outside them, the package does not claim river coverage. Coarse Natural Earth
+coastline sampling and classified natural lakes/rivers may update the existing
+prepared water layer. Wetlands, reservoirs, regulated lakes, and otherwise
+unknown water remain evidence-only until a historical reconstruction can
+classify them.
+
+`HydrologyPage` and `ModernLandCoverPage` are preparation intermediates, not
+persisted package layers. Supported modern ocean/lake/river evidence is folded
+into the existing `WaterPage` ocean and inland coverage percentages; lake and
+river are therefore indistinguishable to the current terrain consumer. Flow,
+barrier, confidence, and WorldCover class values are not retained in the
+package. HYDE remains the source of the year-600 land-use layer: this slice does
+not correct HYDE cell allocations, and modern WorldCover classes are not treated
+as year-600 land cover. A typed persisted hydrology layer and its terrain
+consumer remain follow-up work.
+Hydrology planning is capped at 32 WorldCover tiles. A job may download at
+most 2 GiB of missing hydrology sources; verified cache hits do not count
+toward that transfer budget. Cache storage has its separate 100 GiB quota.
+WorldCover reads are grouped into at most 2048 by 2048 pixel windows (4 Mi
+pixels); each vector-sampled page is limited to 10,000 features and 16 MiB of
+serialized transformed/retained geometry. River buffers count both their
+transient source WKB and retained output WKB. This is an allocation guard for
+the page's geometry data, not a hard process-RSS limit on GDAL internals.
+Preparation currently stops through worker-process termination rather than a
+live cancellation callback. A partial source download remains under its stable
+cache key; the next attempt resumes from its verified byte offset with a
+bounded ranged request, using 15-second connect/read/write timeouts.
 
 The first slice rejects footprints that touch or cross a pole or the antimeridian;
 wrapped geocell selection is reserved for a later regional scheduling slice.

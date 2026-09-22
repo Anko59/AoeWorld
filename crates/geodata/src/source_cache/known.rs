@@ -1,11 +1,105 @@
 use super::{
-    CacheError, KnownSource, SourceCache, SourceLock,
+    CacheError, SourceCache, SourceLock,
     digest::{digest_hex, file_hashes},
 };
+use crate::KnownSource;
 use sha2::{Digest, Sha256};
-use std::{fs, io};
+use std::{
+    fs, io,
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
+    time::Duration,
+};
 
 impl SourceCache {
+    pub fn acquire_known(
+        &self,
+        source: &KnownSource,
+        cancelled: &AtomicBool,
+    ) -> Result<SourceLock, CacheError> {
+        if source.id.is_empty()
+            || source.bytes == 0
+            || !source.provider.permits(&source.url)
+            || !source.has_valid_acquisition_policy()
+        {
+            return Err(CacheError::InvalidLock("known source metadata is invalid"));
+        }
+        if let Some(lock) = self.cached_known(source)? {
+            return Ok(lock);
+        }
+        if source.bytes > self.policy.job_acquisition_budget_bytes {
+            return Err(CacheError::Budget(
+                "source exceeds the per-job acquisition budget",
+            ));
+        }
+        let partial = self.root.join("partial").join(format!(
+            "known-{:x}.part",
+            Sha256::digest(source.id.as_bytes())
+        ));
+        let usage = super::directory_bytes(&self.root)?;
+        let partial_bytes = fs::metadata(&partial).map(|meta| meta.len()).unwrap_or(0);
+        if usage.saturating_add(source.bytes.saturating_sub(partial_bytes))
+            > self.policy.cache_quota_bytes
+        {
+            return Err(CacheError::Budget(
+                "source exceeds the remaining cache quota",
+            ));
+        }
+        for attempt in 0..=super::RETRIES {
+            if cancelled.load(Ordering::SeqCst) {
+                return Err(CacheError::Cancelled);
+            }
+            match super::download_once(&source.url, source.bytes, &partial, cancelled) {
+                Ok(()) => {
+                    let (sha256, sha1, md5) = file_hashes(&partial)?;
+                    if !source.accepts_acquired_bytes(&sha256, &sha1, &md5) {
+                        fs::remove_file(&partial)?;
+                        return Err(CacheError::Integrity(
+                            "catalog checksum differs from source",
+                        ));
+                    }
+                    let sha256 = digest_hex(&sha256);
+                    let lock = SourceLock {
+                        id: source.id.clone(),
+                        provider: source.provider,
+                        release: source.release.clone(),
+                        url: source.url.clone(),
+                        sha256,
+                        bytes: source.bytes,
+                        native_resolution: source.native_resolution.clone(),
+                        crs: source.crs.clone(),
+                        vertical_datum: source.vertical_datum.clone(),
+                        license_reference: source.license_reference.clone(),
+                    };
+                    let destination = self.object_path(&lock)?;
+                    match fs::hard_link(&partial, &destination) {
+                        Ok(()) => {
+                            fs::remove_file(&partial)?;
+                            self.remember_known(source, &lock)?;
+                            return Ok(lock);
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                            if self.is_verified(&lock)? {
+                                fs::remove_file(&partial)?;
+                                self.remember_known(source, &lock)?;
+                                return Ok(lock);
+                            }
+                            return Err(CacheError::Io(error));
+                        }
+                        Err(error) => return Err(CacheError::Io(error)),
+                    }
+                }
+                Err(CacheError::Cancelled) => return Err(CacheError::Cancelled),
+                Err(error) if attempt < super::RETRIES => {
+                    thread::sleep(Duration::from_millis(200 * (1_u64 << attempt)));
+                    let _ = error;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        unreachable!("retry loop always returns")
+    }
+
     pub fn known_lock(&self, id: &str) -> Result<Option<SourceLock>, CacheError> {
         let path = self.known_path_for_id(id);
         let bytes = match fs::read(path) {
@@ -15,10 +109,7 @@ impl SourceCache {
         };
         let lock = serde_json::from_slice::<SourceLock>(&bytes)
             .map_err(|_| CacheError::Integrity("known source lock is invalid"))?;
-        let object = self.object_path(&lock)?;
-        let intact = lock.id == id
-            && fs::metadata(object)
-                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == lock.bytes);
+        let intact = lock.id == id && self.is_verified(&lock)?;
         Ok(intact.then_some(lock))
     }
 
@@ -26,8 +117,8 @@ impl SourceCache {
         &self,
         source: &KnownSource,
     ) -> Result<Option<SourceLock>, CacheError> {
-        // The lock is recorded only after a provider checksum verification.
-        // `offline_missing` remains the explicit full SHA-256 audit path.
+        // Fixed-checksum sources are checked against their catalog digest;
+        // WorldCover's explicit first-acquisition policy pins to this lock.
         let path = self.known_path(source);
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
@@ -38,10 +129,19 @@ impl SourceCache {
         };
         let lock = serde_json::from_slice::<SourceLock>(&bytes)
             .map_err(|_| CacheError::Integrity("known source lock is invalid"))?;
+        if !same_source(source, &lock) || lock.validate().is_err() {
+            return Ok(None);
+        }
         let object = self.object_path(&lock)?;
-        let intact = fs::metadata(object)
-            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == source.bytes);
-        if !same_source(source, &lock) || !intact {
+        if !fs::metadata(&object)
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == lock.bytes)
+        {
+            return Ok(None);
+        }
+        let (sha256, sha1, md5) = file_hashes(&object)?;
+        if digest_hex(&sha256) != lock.sha256
+            || !source.accepts_acquired_bytes(&sha256, &sha1, &md5)
+        {
             return Ok(None);
         }
         Ok(Some(lock))
@@ -149,7 +249,12 @@ mod tests {
             serde_json::to_vec(&lock).expect("lock JSON"),
         )
         .expect("recorded lock");
-        assert_eq!(cache.known_lock(&lock.id).expect("cached lock"), Some(lock));
+        assert_eq!(
+            cache.known_lock(&lock.id).expect("cached lock"),
+            Some(lock.clone())
+        );
+        fs::write(cache.object_path(&lock).expect("object"), b"abd").expect("tamper object");
+        assert_eq!(cache.known_lock(&lock.id).expect("tampered lock"), None);
         fs::remove_dir_all(root).expect("remove temporary cache");
     }
 }

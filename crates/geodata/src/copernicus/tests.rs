@@ -198,7 +198,24 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
     .expect("sampler");
     let stage = Stage::new(&root).expect("staging");
     let overview = overview_fixture();
-    let fields = super::pyramid::build_pyramids(&mut sampler, &stage, 65, &overview)
+    let hydrology = crate::PreparedHydrology {
+        samples_per_axis: 1,
+        source_year: 2021,
+        source_locks: vec![],
+        hydrology_pages: vec![crate::HydrologyPage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            kind: vec![crate::HydrologyKind::NoEvidence as u8],
+            surface_height_centimeters: vec![0],
+            surface_height_known: vec![0],
+            barrier_edges: vec![0],
+        }],
+        modern_land_cover_pages: vec![],
+    };
+    let fields = super::pyramid::build_pyramids(&mut sampler, &stage, 65, &overview, &hydrology)
         .expect("detailed pyramids");
     assert_eq!(fields.elevation.levels.len(), 8);
     assert_eq!(fields.water.levels[0].samples_per_axis, 65);
