@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_CREATOR_DETAILED_SIDE_METERS: u64 = 120_000;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PreparationPreference {
     #[default]

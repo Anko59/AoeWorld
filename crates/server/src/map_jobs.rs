@@ -12,6 +12,7 @@ use std::{
 
 mod journal;
 mod preparation;
+mod submission;
 pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
 
 const MAX_QUEUED_JOBS: usize = 2;
@@ -25,6 +26,8 @@ pub(super) enum StartError {
     Queue(String),
     #[error("{0}")]
     Storage(String),
+    #[error("{0}")]
+    Conflict(String),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -71,6 +74,7 @@ struct Entry {
     job: Job,
     cancelled: Arc<AtomicBool>,
     progress: progress::State,
+    submission: Option<submission::Identity>,
 }
 
 impl Entry {
@@ -179,6 +183,7 @@ impl Manager {
                 job,
                 cancelled: Arc::new(AtomicBool::new(false)),
                 progress: progress::State::default(),
+                submission: None,
             },
         );
         let start = self.start_next();
@@ -191,9 +196,13 @@ impl Manager {
     }
 }
 
-pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Job, StartError> {
-    let preparation =
-        PreparationPlan::resolve(input, state.map_worker.is_some()).map_err(StartError::Invalid)?;
+pub(super) async fn start(
+    state: &AppState,
+    input: CreationRequest,
+    key: Option<String>,
+) -> Result<Job, StartError> {
+    let identity =
+        submission::Identity::new(key, input.preparation).map_err(StartError::Invalid)?;
     let request = input
         .request
         .normalized()
@@ -203,10 +212,20 @@ pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Jo
         .map_err(|error| StartError::Invalid(error.to_string()))?;
     let (job, start) = {
         let mut manager = state.map_jobs.lock().await;
+        if let Some(job) = submission::existing(&manager, identity.as_ref(), request)? {
+            return Ok(job);
+        }
+        let preparation = PreparationPlan::resolve(input, state.map_worker.is_some())
+            .map_err(StartError::Invalid)?;
         let mut candidate = manager.clone();
         let result = candidate
             .enqueue(request, estimate, preparation)
             .map_err(StartError::Queue)?;
+        candidate
+            .jobs
+            .get_mut(&result.0.id)
+            .ok_or_else(|| StartError::Queue("new job disappeared".into()))?
+            .submission = identity;
         journal::persist(state.map_package_directory.as_deref(), &candidate)
             .await
             .map_err(StartError::Storage)?;

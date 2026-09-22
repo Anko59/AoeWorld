@@ -285,3 +285,22 @@ Progress is best-effort telemetry: write failures do not change job outcome,
 and brief phases may pass between polls. The existing cancellation, process
 and output bounds remain authoritative. No overall percentage is supplied until
 successful completion; no remaining-time estimate is manufactured.
+
+Creation POST requests may carry `Idempotency-Key`, exactly 32 lowercase hex
+characters generated independently of the map seed. While its job remains in
+the bounded 128-record history, the same key and normalized request/preference
+return the original job, including after restart, without another worker launch.
+Changing coordinates, seed, scale or preparation preference with an existing key
+returns HTTP 409. Invalid keys return 400. Journal schema 2 persists keys and
+continues to read schema 1; malformed or duplicate saved keys fail startup.
+Retiring a terminal history record also retires its key: this is bounded request
+recovery, not an indefinite global deduplication service.
+
+The creator stores the key and original request before POST, then replaces them
+with the accepted job ID in one localStorage value. After a lost acknowledgement,
+`Recover request` resends that exact submission after reconnecting. Transport or
+server failures keep the key; explicit 400/409/429 rejections permit a corrected new
+request. A returned job ID resumes normal polling and activation. If browser
+storage is unavailable, same-page retry still reuses the key; reload recovery
+then relies on server history. Deliberately retrying a failed/cancelled job uses
+a new key so it can perform new work.
