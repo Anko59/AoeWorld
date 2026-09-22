@@ -203,6 +203,10 @@ pub(super) fn build_pyramids(
     overview: &crate::PreparedOverview,
     hydrology: &crate::PreparedHydrology,
 ) -> Result<DetailedFields, GeodataError> {
+    use crate::preparation_progress::{self as progress, Phase, Unit};
+    let total_pages = progress::pyramid_page_count(samples_per_axis) * 4;
+    let mut completed = 0;
+    progress::count(Phase::BuildingPyramids, None, 0, total_pages, Unit::Pages);
     let mut elevation = Vec::new();
     let mut water = Vec::new();
     let mut vegetation = Vec::new();
@@ -267,6 +271,14 @@ pub(super) fn build_pyramids(
                 let historical_hash =
                     store_page(stage, &historical_page, level, x as u16, y as u16)?;
                 historical_root.push(historical_hash)?;
+                completed += 4;
+                progress::count(
+                    Phase::BuildingPyramids,
+                    None,
+                    completed,
+                    total_pages,
+                    Unit::Pages,
+                );
             }
         }
         elevation.push(PyramidLevel {

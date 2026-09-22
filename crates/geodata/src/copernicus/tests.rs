@@ -215,8 +215,15 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
         }],
         modern_land_cover_pages: vec![],
     };
+    let progress_path = root.join("progress.json");
+    let _progress = crate::preparation_progress::Scope::new(Some(progress_path.clone()));
     let fields = super::pyramid::build_pyramids(&mut sampler, &stage, 65, &overview, &hydrology)
         .expect("detailed pyramids");
+    let progress: serde_json::Value =
+        serde_json::from_slice(&fs::read(progress_path).unwrap()).unwrap();
+    assert_eq!(progress["phase"], "building_pyramids");
+    assert_eq!(progress["completed"], 44);
+    assert_eq!(progress["total"], 44);
     assert_eq!(fields.elevation.levels.len(), 8);
     assert_eq!(fields.water.levels[0].samples_per_axis, 65);
     assert_eq!(fields.vegetation.levels[0].samples_per_axis, 65);

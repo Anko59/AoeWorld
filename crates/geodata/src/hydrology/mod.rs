@@ -304,6 +304,7 @@ pub(crate) fn prepare_hydrology_with_plan(
     let rivers = paths.get("hydrorivers-v1.0-eu-shp").map(PathBuf::as_path);
     let ocean =
         hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
+    crate::preparation_progress::stage(crate::preparation_progress::Phase::SamplingWater);
     let mut sampler = Sampler::new(
         request,
         samples_per_axis,
