@@ -22,6 +22,10 @@ so it is not included in the default game sprite pack. `make assets-verify`
 validates every local pack. The Rust importer bounds DRS, palette, and SLP
 decoding, creates deterministic padded PNG atlas pages with separate player,
 shadow, and outline masks, and writes a versioned manifest.
+Importer-generated pages use RGBA8 with transparent black, opaque color and
+player pixels, and black shadows at alpha 128. The browser client reconstructs
+PNG samples directly, preserving the full RGBA values allowed by manifest
+version 1, including arbitrary partial alpha in externally produced packs.
 
 To inspect a pack in the local app, start `make dev` with
 `AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game imports cavalry walking/standing resources
