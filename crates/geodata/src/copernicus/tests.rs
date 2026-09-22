@@ -410,3 +410,35 @@ fn temporary_directory() -> std::path::PathBuf {
         std::process::id()
     ))
 }
+
+#[test]
+fn worker_staging_lease_rejects_missing_or_recovering_scope() {
+    let root = temporary_directory();
+    fs::create_dir_all(&root).expect("scope");
+    assert!(Stage::lease(&root).is_err());
+    let path = root.join("lease");
+    let owner = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .expect("lease");
+    owner.lock().expect("exclusive recovery");
+    assert!(Stage::lease(&root).is_err());
+    owner.unlock().expect("release recovery");
+    owner.lock_shared().expect("parent lease");
+    let worker = Stage::lease(&root).expect("worker shares parent lease");
+    let contender = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .expect("contender");
+    drop(owner);
+    assert!(matches!(
+        contender.try_lock(),
+        Err(fs::TryLockError::WouldBlock)
+    ));
+    drop(worker);
+    contender.try_lock().expect("released worker lease");
+    fs::remove_dir_all(root).expect("cleanup");
+}

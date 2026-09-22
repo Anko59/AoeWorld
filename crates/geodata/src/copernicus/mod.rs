@@ -78,6 +78,25 @@ pub fn prepare_detailed_directory(
     samples_per_axis: u16,
     resolution: DemResolution,
 ) -> Result<MapPackage, GeodataError> {
+    prepare_with_staging(
+        cache_root,
+        output_directory,
+        request,
+        samples_per_axis,
+        resolution,
+        None,
+    )
+}
+
+pub(crate) fn prepare_with_staging(
+    cache_root: PathBuf,
+    output_directory: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+    resolution: DemResolution,
+    staging_root: Option<PathBuf>,
+) -> Result<MapPackage, GeodataError> {
+    let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     if !(2..=MAX_DETAILED_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "detailed preparation supports 2 through 4096 samples per axis",
@@ -109,7 +128,7 @@ pub fn prepare_detailed_directory(
     )?;
     let cancelled = AtomicBool::new(false);
     let coverage = acquire_tiles(&cache, bounds, resolution, &cancelled)?;
-    let stage = Stage::new(&cache_root)?;
+    let stage = Stage::new(staging_root.as_deref().unwrap_or(&cache_root))?;
     let overview_ocean = source_backed_overview_ocean(&overview)?;
     let mut sampler = Sampler::new(
         request,

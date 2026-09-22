@@ -17,6 +17,27 @@ pub(super) struct Stage {
 }
 
 impl Stage {
+    pub(super) fn lease(root: &Path) -> Result<fs::File, GeodataError> {
+        let path = root.join("lease");
+        if !fs::symlink_metadata(&path)?.file_type().is_file() {
+            return Err(GeodataError::Preparation(
+                "worker staging lease is not a regular file",
+            ));
+        }
+        let lease = fs::OpenOptions::new().read(true).write(true).open(&path)?;
+        lease
+            .try_lock_shared()
+            .map_err(|_| GeodataError::Preparation("worker staging is being recovered"))?;
+        // A recovery pass may have removed the directory before this lock was
+        // acquired. Never start writing against an already-unlinked lease.
+        if !path.is_file() {
+            return Err(GeodataError::Preparation(
+                "worker staging was recovered before acquiring its lease",
+            ));
+        }
+        Ok(lease)
+    }
+
     pub(super) fn new(cache_root: &Path) -> Result<Self, GeodataError> {
         let parent = cache_root.join("detailed-staging");
         fs::create_dir_all(&parent)?;

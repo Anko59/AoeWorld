@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::atomic::AtomicBool};
 
 mod execution;
+mod scratch;
 use execution::execute;
+pub(super) use scratch::recover as recover_scratch;
 
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
@@ -51,7 +53,13 @@ pub(super) fn prepare(
             return Err("fallback is not a source-worker operation".to_owned());
         }
     };
+    let scratch = if preparation.mode == crate::map_jobs::PreparationMode::Detailed {
+        Some(scratch::Scratch::new(cache_root)?)
+    } else {
+        None
+    };
     let input = serde_json::to_vec(&serde_json::json!({
+        "staging_root": scratch.as_ref().map(|scratch| &scratch.root),
         "operation": operation,
         "cache_root": cache_root,
         "output_directory": output_directory,
