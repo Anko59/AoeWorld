@@ -299,3 +299,12 @@ Hooks, preflight (302 native tests), browser-check, test-e2e (23), and clean
 pre-push preflight passed. Normal development worker startup and writable output
 mounts still need their follow-up, then actual creator source-backed evidence.
 Water/history detail, broader footprints, progress, and recovery remain open.
+
+M7 normal development worker startup is reviewed in
+[PR #27](https://github.com/Anko59/AoeWorld/pull/27), revision
+`b161174b8f4b44180f10fc3aac443283a1754264`. Development builds the native
+worker and mounts only package output and the canonical geodata cache writable.
+The checkout remains read-only; missing or non-executable workers fail startup.
+Hooks, preflight (324 native tests), E2E (23), and clean pre-push preflight
+passed on that branch. Integration preserves the recipe-3 maps-v7 directory.
+Actual source-backed creator verification remains pending.

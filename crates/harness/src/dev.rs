@@ -1,15 +1,18 @@
 //! Checkout-scoped Docker lifecycle for the local AoeWorld server.
 use std::{
     error::Error,
+    fs,
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
     thread,
     time::{Duration, Instant},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+const RUST_TOOLS_IMAGE: &str = "aoeworld/rust-tools:1.93.1";
 
 trait Runtime {
     fn docker(&self, args: &[&str]) -> Result<String>;
@@ -129,6 +132,42 @@ fn healthy() -> bool {
         .is_ok_and(|count| bytes[..count].starts_with(b"HTTP/1.1 200"))
 }
 
+fn verified_worker(root: &Path) -> Result<PathBuf> {
+    let worker = root
+        .join("target/release/aoe-map-worker")
+        .canonicalize()
+        .map_err(|_| "the release aoe-map-worker executable is required")?;
+    if !worker.starts_with(root) || !is_executable(&worker) {
+        return Err("the release aoe-map-worker executable is required".into());
+    }
+    Ok(worker)
+}
+
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+fn writable_directory(root: &Path, relative: &str) -> Result<(PathBuf, PathBuf)> {
+    let requested = root.join(relative);
+    fs::create_dir_all(&requested)?;
+    let source = requested.canonicalize()?;
+    Ok((source.clone(), source))
+}
+
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
@@ -174,6 +213,19 @@ fn start_with<R: Runtime>(
     if !executable.is_file() || !root.join("web/pkg/aoe_client_bg.wasm").is_file() {
         return Err("build-wasm and the release server build are required".into());
     }
+    let worker = verified_worker(root)?;
+    let (map_directory, map_target) =
+        writable_directory(root, aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY)?;
+    let (cache_directory, cache_target) =
+        writable_directory(root, aoe_server::Config::DEFAULT_GEODATA_CACHE_DIRECTORY)?;
+    let map_mount = format!("{}:{}:rw", map_directory.display(), map_target.display());
+    let cache_mount = format!(
+        "{}:{}:rw",
+        cache_directory.display(),
+        cache_target.display()
+    );
+    let worker_env = format!("AOE_MAP_WORKER={}", worker.display());
+    let cache_env = format!("AOE_GEODATA_CACHE={}", cache_target.display());
     runtime.docker(&[
         "run",
         "--rm",
@@ -196,13 +248,21 @@ fn start_with<R: Runtime>(
         &build_env,
         "-e",
         &asset_env,
+        "-e",
+        &worker_env,
+        "-e",
+        &cache_env,
         "-p",
         "127.0.0.1:8080:8080",
         "-v",
         &mount,
+        "-v",
+        &map_mount,
+        "-v",
+        &cache_mount,
         "-w",
         root.to_str().ok_or("non-UTF-8 checkout path")?,
-        "aoeworld/rust-tools:1.93.1",
+        RUST_TOOLS_IMAGE,
         executable.to_str().ok_or("non-UTF-8 server path")?,
     ])?;
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -266,187 +326,4 @@ fn logs_with<R: Runtime>(runtime: &R, name: &str) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::{Cell, RefCell};
-
-    #[derive(Default)]
-    struct FakeRuntime {
-        calls: RefCell<Vec<Vec<String>>>,
-        exists: Cell<bool>,
-        running: Cell<bool>,
-        healthy: Cell<bool>,
-        dies_on_start: bool,
-    }
-
-    impl Runtime for FakeRuntime {
-        fn docker(&self, args: &[&str]) -> Result<String> {
-            self.calls
-                .borrow_mut()
-                .push(args.iter().map(|value| (*value).to_owned()).collect());
-            match args {
-                ["ps", ..] => Ok(if self.exists.get() { "container" } else { "" }.to_owned()),
-                ["inspect", ..] => Ok(self.running.get().to_string()),
-                ["rm", ..] | ["stop", ..] => {
-                    self.exists.set(false);
-                    self.running.set(false);
-                    Ok(String::new())
-                }
-                ["run", ..] => {
-                    self.exists.set(true);
-                    self.running.set(!self.dies_on_start);
-                    Ok("container".to_owned())
-                }
-                _ => Err(format!("unexpected Docker call: {args:?}").into()),
-            }
-        }
-
-        fn recent_logs(&self, _: &str, _: &str) -> Result<String> {
-            Ok("startup failed".to_owned())
-        }
-
-        fn healthy(&self) -> bool {
-            self.healthy.get()
-        }
-    }
-
-    fn built_checkout() -> tempfile::TempDir {
-        let temp = tempfile::tempdir().expect("checkout");
-        let server = temp.path().join("target/release/aoe-server");
-        let wasm = temp.path().join("web/pkg/aoe_client_bg.wasm");
-        std::fs::create_dir_all(server.parent().expect("server parent")).expect("server dir");
-        std::fs::create_dir_all(wasm.parent().expect("WASM parent")).expect("WASM dir");
-        std::fs::write(server, b"server").expect("server");
-        std::fs::write(wasm, b"wasm").expect("WASM");
-        temp
-    }
-
-    #[test]
-    fn checkout_names_are_stable_and_isolated() {
-        assert_eq!(name(Path::new("/tmp/a")), name(Path::new("/tmp/a")));
-        assert_ne!(name(Path::new("/tmp/a")), name(Path::new("/tmp/b")));
-    }
-
-    #[test]
-    fn development_build_identity_tracks_revision_and_dirty_state() {
-        let checkout = tempfile::tempdir().expect("repository");
-        assert!(build_identity(checkout.path()).is_err());
-        git(checkout.path(), &["init", "-q"]).expect("init");
-        std::fs::write(checkout.path().join("sample"), "initial").expect("file");
-        git(checkout.path(), &["add", "sample"]).expect("add");
-        git(
-            checkout.path(),
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "-q",
-                "-m",
-                "seed",
-            ],
-        )
-        .expect("commit");
-        let revision = git(checkout.path(), &["rev-parse", "HEAD"]).expect("revision");
-        assert_eq!(build_identity(checkout.path()).expect("clean"), revision);
-        std::fs::write(checkout.path().join("sample"), "changed").expect("change");
-        assert_eq!(
-            build_identity(checkout.path()).expect("dirty"),
-            format!("{revision}-dirty")
-        );
-    }
-
-    #[test]
-    fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
-        let checkout = built_checkout();
-        let runtime = FakeRuntime::default();
-        runtime.exists.set(true);
-        runtime.healthy.set(true);
-        start_with(
-            &runtime,
-            checkout.path(),
-            "smoke",
-            "revision",
-            Some("local-assets/packs/example"),
-        )
-        .expect("start");
-        let calls = runtime.calls.borrow();
-        assert!(
-            calls
-                .iter()
-                .any(|args| args == &["rm", &name(checkout.path())])
-        );
-        let run = calls
-            .iter()
-            .find(|args| args.first().is_some_and(|arg| arg == "run"))
-            .expect("Docker run");
-        assert!(run.contains(&name(checkout.path())));
-        assert!(run.contains(&"AOE_SCENARIO=smoke".to_owned()));
-        assert!(run.contains(&"AOE_BUILD_SHA=revision".to_owned()));
-        assert!(run.contains(&"AOE_ASSET_PACK=local-assets/packs/example".to_owned()));
-        assert!(run.contains(&"--read-only".to_owned()));
-        drop(calls);
-        status_with(&runtime, &name(checkout.path())).expect("running status");
-        logs_with(&runtime, &name(checkout.path())).expect("logs");
-        down_with(&runtime, &name(checkout.path())).expect("stop");
-        assert!(!runtime.exists.get());
-        assert!(logs_with(&runtime, &name(checkout.path())).is_err());
-        down_with(&runtime, &name(checkout.path())).expect("idempotent stop");
-        status_with(&runtime, &name(checkout.path())).expect("stopped status");
-    }
-
-    #[test]
-    fn invalid_configuration_or_missing_build_never_launches_docker_container() {
-        let checkout = built_checkout();
-        let runtime = FakeRuntime::default();
-        assert!(start_with(&runtime, checkout.path(), "unknown", "revision", None).is_err());
-        std::fs::remove_file(checkout.path().join("web/pkg/aoe_client_bg.wasm"))
-            .expect("remove WASM");
-        assert!(start_with(&runtime, checkout.path(), "smoke", "revision", None).is_err());
-        assert!(
-            !runtime
-                .calls
-                .borrow()
-                .iter()
-                .any(|args| args.first().is_some_and(|arg| arg == "run"))
-        );
-    }
-
-    #[test]
-    fn failed_start_stops_only_its_checkout_container() {
-        let checkout = built_checkout();
-        let runtime = FakeRuntime {
-            dies_on_start: true,
-            ..Default::default()
-        };
-        let error = start_with(&runtime, checkout.path(), "smoke", "revision", None)
-            .expect_err("failed start")
-            .to_string();
-        assert!(error.contains("startup failed"));
-        let calls = runtime.calls.borrow();
-        assert!(
-            calls
-                .iter()
-                .any(|args| args == &["stop", &name(checkout.path())])
-        );
-    }
-
-    #[test]
-    fn existing_running_lab_is_not_replaced() {
-        let checkout = built_checkout();
-        let runtime = FakeRuntime::default();
-        runtime.exists.set(true);
-        runtime.running.set(true);
-        start_with(&runtime, checkout.path(), "smoke", "revision", None).expect("already running");
-        assert!(
-            !runtime
-                .calls
-                .borrow()
-                .iter()
-                .any(|args| matches!(args.first().map(String::as_str), Some("rm" | "run")))
-        );
-    }
-}
+mod tests;

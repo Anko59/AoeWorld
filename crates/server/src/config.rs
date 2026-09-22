@@ -13,6 +13,9 @@ pub struct Config {
 }
 
 impl Config {
+    pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/maps-v7";
+    pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
+
     pub fn from_env() -> Result<Self, String> {
         let bind = env::var("AOE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
         let name = env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
@@ -45,6 +48,9 @@ impl Config {
             }
             config.map_worker = Some(worker);
         }
+        if let Some(cache) = configured_geodata_cache(env::var_os("AOE_GEODATA_CACHE"))? {
+            config.geodata_cache_directory = cache;
+        }
         Ok(config)
     }
 
@@ -64,11 +70,24 @@ impl Config {
             asset_pack: None,
             // Generation recipe 3 changes immutable package identity. Keep maps-v6
             // intact and regenerate compatible packages in the new directory.
-            map_package_directory: Some(PathBuf::from("local-assets/maps-v7")),
+            map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),
             map_worker: None,
-            geodata_cache_directory: PathBuf::from(".cache/geodata"),
+            geodata_cache_directory: PathBuf::from(Self::DEFAULT_GEODATA_CACHE_DIRECTORY),
         })
     }
+}
+
+fn configured_geodata_cache(path: Option<std::ffi::OsString>) -> Result<Option<PathBuf>, String> {
+    let Some(path) = path.filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let cache = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|e| format!("invalid AOE_GEODATA_CACHE: {e}"))?;
+    if !cache.is_dir() {
+        return Err("AOE_GEODATA_CACHE must name a directory".to_owned());
+    }
+    Ok(Some(cache))
 }
 
 #[cfg(test)]
@@ -82,11 +101,11 @@ mod tests {
         assert_eq!(config.scenario.name, "target-hotspot");
         assert_eq!(
             config.map_package_directory,
-            Some(PathBuf::from("local-assets/maps-v7"))
+            Some(PathBuf::from(Config::DEFAULT_MAP_PACKAGE_DIRECTORY))
         );
         assert_eq!(
             config.geodata_cache_directory,
-            PathBuf::from(".cache/geodata")
+            PathBuf::from(Config::DEFAULT_GEODATA_CACHE_DIRECTORY)
         );
         assert!(config.map_worker.is_none());
         assert!(Config::parse("bad", "smoke", "20").is_err());
@@ -94,5 +113,19 @@ mod tests {
         assert!(Config::parse("127.0.0.1:0", "smoke", "bad").is_err());
         assert!(Config::parse("127.0.0.1:0", "smoke", "0").is_err());
         assert!(Config::parse("127.0.0.1:0", "smoke", "61").is_err());
+    }
+
+    #[test]
+    fn explicit_geodata_cache_is_canonical_and_must_be_a_directory() {
+        let cache = tempfile::tempdir().expect("cache");
+        assert_eq!(
+            configured_geodata_cache(Some(cache.path().as_os_str().to_owned()))
+                .expect("configured cache"),
+            Some(cache.path().canonicalize().expect("canonical cache"))
+        );
+        assert_eq!(configured_geodata_cache(None).expect("default"), None);
+        let file = cache.path().join("file");
+        std::fs::write(&file, "not a directory").expect("file");
+        assert!(configured_geodata_cache(Some(file.into_os_string())).is_err());
     }
 }
