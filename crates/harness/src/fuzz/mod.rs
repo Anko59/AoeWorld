@@ -4,7 +4,16 @@ use serde::Serialize;
 use std::{error::Error, fs, path::Path, process::Command, time::Duration};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-const TARGETS: [&str; 4] = ["drs", "slp", "palette", "manifest"];
+mod seeds;
+const TARGETS: [&str; 7] = [
+    "drs",
+    "slp",
+    "palette",
+    "manifest",
+    "map_package",
+    "environment_page",
+    "map_chunk",
+];
 
 #[derive(Clone, Copy)]
 pub enum Mode {
@@ -43,7 +52,7 @@ struct Report {
     mode: &'static str,
     toolchain: &'static str,
     cargo_fuzz: &'static str,
-    targets: [&'static str; 4],
+    targets: [&'static str; 7],
     limit: &'static str,
     result: &'static str,
 }
@@ -107,6 +116,7 @@ pub fn run(mode: Mode) -> Result<()> {
     if !Path::new("Cargo.toml").is_file() || !root.join("fuzz/fuzz_targets").is_dir() {
         return Err("fuzz command must run in fuzz directory".into());
     }
+    seeds::prepare(&root)?;
     execute(mode, |args, deadline| {
         process::run("cargo", args, deadline).map_err(Into::into)
     })?;
@@ -160,7 +170,10 @@ mod tests {
                 serde_json::from_slice(&fs::read(path).expect("report")).expect("JSON");
             assert_eq!(value["result"], "PASS");
             assert_eq!(value["dirty"], true);
-            assert_eq!(value["targets"].as_array().expect("targets").len(), 4);
+            assert_eq!(
+                value["targets"].as_array().expect("targets").len(),
+                TARGETS.len()
+            );
         }
     }
 
