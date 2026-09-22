@@ -103,6 +103,20 @@ pub fn projected_surface_triangles(
                 color,
                 tile,
                 skirt: false,
+                material: sample.material,
+                texture_mode: texture_mode(sample.surface.triangulation, order as u8),
+                tint: if sample.surface.water == 1 {
+                    4
+                } else if sample.surface.water != 0 {
+                    0
+                } else {
+                    match sample.surface.kind {
+                        SceneTerrainSurface::RAMP => 1,
+                        SceneTerrainSurface::CLIFF => 2,
+                        _ => 0,
+                    }
+                },
+                texture_uv: None,
                 pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
                 order: order as u8,
             });
@@ -372,7 +386,16 @@ fn average_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
     triangle
         .points
         .iter()
-        .map(|point| point.world[0] + point.world[1])
+        .map(|point| surface_depth(point.world))
         .sum::<f64>()
         / 3.0
+}
+
+fn texture_mode(triangulation: u8, order: u8) -> u8 {
+    match (triangulation, order) {
+        (0, 0) => 0,
+        (0, _) => 1,
+        (_, 0) => 2,
+        _ => 3,
+    }
 }

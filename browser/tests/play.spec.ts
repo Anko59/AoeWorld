@@ -43,6 +43,29 @@ function syntheticTerrainCoverage(image: PNG) {
   return covered / samples;
 }
 
+function assetTerrainColorVariety(image: PNG) {
+  const colors = new Set<string>();
+  for (let y = 32; y < image.height - 96; y += 16) {
+    for (let x = 32; x < image.width - 32; x += 16) {
+      if (x > image.width - 260 && y < 80) continue;
+      if (x < 620 && y > image.height - 110) continue;
+      if (
+        x > image.width / 2 - 50 &&
+        x < image.width / 2 + 50 &&
+        y > image.height / 2 - 80 &&
+        y < image.height / 2 + 80
+      ) {
+        continue;
+      }
+      const offset = (y * image.width + x) * 4;
+      colors.add(
+        `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]}`,
+      );
+    }
+  }
+  return colors.size;
+}
+
 test.beforeEach(async ({ request }) => {
   const response = await request.post("/maps/reset");
   expect(response.status()).toBe(204);
@@ -68,7 +91,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
     .poll(() => bluePixels(canvas), { timeout: 10_000 })
     .toBeGreaterThan(10);
   const first = await canvas.screenshot({
-    path: "../reports/e2e/aoeworld-map.png",
+    path: `../reports/e2e/aoeworld-map-${testInfo.project.name}.png`,
   });
   const image = PNG.sync.read(first);
   let green = 0;
@@ -84,7 +107,16 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   }
   expect(green).toBeGreaterThan(image.width * image.height * 0.6);
   expect(blue).toBeGreaterThan(10);
-  expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
+  if (evidence === "generated CI fixtures") {
+    expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
+  } else {
+    const terrainColors = assetTerrainColorVariety(image);
+    testInfo.annotations.push({
+      type: "asset terrain colors",
+      description: `${terrainColors} distinct sampled terrain colors`,
+    });
+    expect(terrainColors).toBeGreaterThan(12);
+  }
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");

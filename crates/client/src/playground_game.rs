@@ -55,6 +55,7 @@ pub(super) struct Client {
     pub focus_map_hash: Option<[u8; 32]>,
     pub resources: crate::resource_state::ResourceStateCache,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
+    pub terrain_height_bounds: Option<(i16, i16)>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
     pub revision: u64,
@@ -263,8 +264,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.focus_map_hash = None;
                 }
                 client.resources.clear();
-                client.terrain_chunks.clear();
-                client.terrain_inflight.clear();
+                map::clear_terrain_cache(&mut client);
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
                 storage::save_token(resume_token);
@@ -330,8 +330,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.focus_map_hash = None;
                 client.camera.focus_elevation_meters = 0.0;
                 client.resources.clear();
-                client.terrain_chunks.clear();
-                client.terrain_inflight.clear();
+                map::clear_terrain_cache(&mut client);
                 client.token = None;
                 storage::save_token(None);
                 client.status = "map changed; reconnecting".to_owned();

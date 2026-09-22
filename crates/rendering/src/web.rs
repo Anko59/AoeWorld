@@ -304,18 +304,7 @@ impl Renderer {
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
         for triangle in surfaces {
-            let point = |index: usize| {
-                screen_to_clip(
-                    triangle.points[index].screen.x,
-                    triangle.points[index].screen.y,
-                    width,
-                    height,
-                )
-            };
-            instances.push(surface_instance(
-                [point(0), point(1), point(2)],
-                [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
-            ));
+            instances.push(surface_instance(triangle, [width, height]));
         }
         instances.extend_from_slice(sprites);
         if instances.len() > GPU_INSTANCE_CAPACITY {
@@ -413,11 +402,34 @@ fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
     ]
 }
 
-fn surface_instance(points: [[f32; 2]; 3], color: [f32; 4]) -> Sprite {
-    Sprite {
-        position: points[0],
-        radius: points[1],
-        color,
-        uv: [points[2][0], points[2][1], 0.0, -1.0],
+pub(crate) fn surface_instance(triangle: &ProjectedSurfaceTriangle, viewport: [f64; 2]) -> Sprite {
+    let points = triangle.points.map(|point| {
+        screen_to_clip(
+            point.screen.x,
+            point.screen.y,
+            viewport[0].max(1.0),
+            viewport[1].max(1.0),
+        )
+    });
+    let second = points[1];
+    let third = points[2];
+    match triangle.texture_uv {
+        Some(uv) => Sprite {
+            position: points[0],
+            radius: second,
+            color: [
+                third[0],
+                third[1],
+                f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
+                -1.0,
+            ],
+            uv,
+        },
+        None => Sprite {
+            position: points[0],
+            radius: second,
+            color: [third[0], third[1], 0.0, -2.0],
+            uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
+        },
     }
 }

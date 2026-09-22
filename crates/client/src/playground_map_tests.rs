@@ -62,6 +62,33 @@ fn unit_and_resource_contacts_follow_the_rendered_surface_diagonal() {
 }
 
 #[wasm_bindgen_test]
+fn resident_surface_bounds_expand_terrain_visibility_to_high_relief() {
+    let Ok(config) = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1)) else {
+        assert!(false, "valid visibility world");
+        return;
+    };
+    let camera = Camera {
+        center: [256.0, 256.0],
+        zoom: 1.0,
+        viewport: [512.0, 256.0],
+        focus_elevation_meters: 0.0,
+    };
+    let ground = visible_tiles_for_height_bounds(camera, config, 0.0, None);
+    let high_relief = visible_tiles_for_height_bounds(camera, config, 0.0, Some((-3, 40)));
+    assert!(high_relief.width() > ground.width());
+    assert!(high_relief.height() > ground.height());
+
+    let Ok(mut chunk) = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0) else {
+        assert!(false, "fixture chunk");
+        return;
+    };
+    for tile in &mut chunk.tiles {
+        tile.surface.corner_game_height_levels = [0, 0, 40, -3];
+    }
+    assert_eq!(heights::chunk_height_bounds(&chunk), Some((-3, 40)));
+}
+
+#[wasm_bindgen_test]
 fn nonconverging_height_pick_returns_unavailable() {
     let camera = Camera {
         center: [10.0, 10.0],

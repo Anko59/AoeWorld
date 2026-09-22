@@ -1,9 +1,12 @@
-use crate::{SceneCamera, SceneTerrain, SceneTerrainSurface};
+use crate::{GAME_ATLAS_SIDE, GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
 use aoe_core::{Camera, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 mod lod;
 pub use lod::projected_surface_triangles;
+
+#[cfg(test)]
+mod tests;
 
 pub const MAX_SURFACE_TILES: usize = 4_096;
 pub const MAX_SURFACE_TRIANGLES: usize = MAX_SURFACE_TILES * 6;
@@ -21,8 +24,12 @@ pub struct ProjectedSurfaceTriangle {
     pub color: [f32; 3],
     pub tile: [i32; 2],
     pub skirt: bool,
-    pickable: bool,
-    order: u8,
+    pub(crate) material: u8,
+    pub(crate) texture_mode: u8,
+    pub(crate) tint: u8,
+    pub(crate) texture_uv: Option<[f32; 4]>,
+    pub(crate) pickable: bool,
+    pub(crate) order: u8,
 }
 
 pub fn sample_surface_height(
@@ -67,8 +74,11 @@ pub fn pick_surface_point(
                 + triangle.points[1].world[1] * weights[1]
                 + triangle.points[2].world[1] * weights[2],
         ];
+        let elevation = triangle.points[0].world[2] * weights[0]
+            + triangle.points[1].world[2] * weights[1]
+            + triangle.points[2].world[2] * weights[2];
         let hit = (
-            world[0] + world[1],
+            surface_depth([world[0], world[1], elevation]),
             triangle.tile,
             triangle.skirt,
             triangle.pickable,
@@ -87,33 +97,170 @@ pub fn pick_surface_point(
     best.and_then(|(_, _, skirt, pickable, world)| (!skirt && pickable).then_some(world))
 }
 
-pub fn draw_surface_mesh(
-    context: &CanvasRenderingContext2d,
+pub fn surface_depth_at(
     triangles: &[ProjectedSurfaceTriangle],
-) -> Result<(), String> {
+    screen: ScreenPoint,
+) -> Option<f64> {
+    triangles
+        .iter()
+        .filter_map(|triangle| {
+            let weights = barycentric(triangle.points, screen)?;
+            let world = [
+                triangle.points[0].world[0] * weights[0]
+                    + triangle.points[1].world[0] * weights[1]
+                    + triangle.points[2].world[0] * weights[2],
+                triangle.points[0].world[1] * weights[0]
+                    + triangle.points[1].world[1] * weights[1]
+                    + triangle.points[2].world[1] * weights[2],
+                triangle.points[0].world[2] * weights[0]
+                    + triangle.points[1].world[2] * weights[1]
+                    + triangle.points[2].world[2] * weights[2],
+            ];
+            Some(surface_depth(world))
+        })
+        .max_by(f64::total_cmp)
+}
+
+pub(crate) fn surface_depth(world: [f64; 3]) -> f64 {
+    world[0] + world[1] + 2.0 * world[2]
+}
+
+pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
-        let [r, g, b] = triangle.color;
-        let color = [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8];
-        let style = [
-            b'#',
-            HEX_DIGITS[usize::from(color[0] >> 4)],
-            HEX_DIGITS[usize::from(color[0] & 0x0f)],
-            HEX_DIGITS[usize::from(color[1] >> 4)],
-            HEX_DIGITS[usize::from(color[1] & 0x0f)],
-            HEX_DIGITS[usize::from(color[2] >> 4)],
-            HEX_DIGITS[usize::from(color[2] & 0x0f)],
-        ];
-        context.set_fill_style_str(std::str::from_utf8(&style).unwrap_or("#000000"));
-        context.begin_path();
-        let first = triangle.points[0].screen;
-        context.move_to(first.x, first.y);
-        for point in triangle.points.iter().skip(1) {
-            context.line_to(point.screen.x, point.screen.y);
-        }
-        context.close_path();
-        context.fill();
+        let frame = terrain_texture_frame(art, triangle.material, triangle.tile);
+        triangle.texture_uv = frame.map(|frame| frame.uv);
     }
-    Ok(())
+}
+
+fn terrain_texture_frame(art: &GameArt, material: u8, tile: [i32; 2]) -> Option<GameFrame> {
+    let frames = art
+        .terrain
+        .get(usize::from(material))
+        .filter(|frames| !frames.is_empty())
+        .unwrap_or(&art.grass);
+    if frames.is_empty() {
+        return None;
+    }
+    let index = (tile[0]
+        .wrapping_mul(7)
+        .wrapping_add(tile[1].wrapping_mul(13))
+        .unsigned_abs() as usize)
+        % frames.len();
+    frames.get(index).copied()
+}
+
+pub(crate) fn triangle_texture_coordinates(mode: u8) -> [[f64; 2]; 3] {
+    match mode {
+        0 | 4 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+        1 | 5 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        2 => [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        3 => [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        _ => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+    }
+}
+
+pub(crate) fn draw_surface_triangle(
+    context: &CanvasRenderingContext2d,
+    atlas: &web_sys::HtmlCanvasElement,
+    triangle: &ProjectedSurfaceTriangle,
+) -> Result<(), String> {
+    let uv = triangle_texture_coordinates(triangle.texture_mode);
+    context.save();
+    context.begin_path();
+    context.move_to(triangle.points[0].screen.x, triangle.points[0].screen.y);
+    for point in triangle.points.iter().skip(1) {
+        context.line_to(point.screen.x, point.screen.y);
+    }
+    context.close_path();
+    let draw_result = (|| {
+        if let Some(rect) = triangle.texture_uv {
+            context.clip();
+            let transform = texture_transform(triangle.points, uv);
+            context
+                .set_transform(
+                    transform[0],
+                    transform[1],
+                    transform[2],
+                    transform[3],
+                    transform[4],
+                    transform[5],
+                )
+                .map_err(|error| format!("Canvas terrain transform: {error:?}"))?;
+            let [x, y, width, height] = rect.map(f64::from);
+            let atlas_side = f64::from(GAME_ATLAS_SIDE);
+            context
+                .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                    atlas,
+                    x * atlas_side,
+                    y * atlas_side,
+                    width * atlas_side,
+                    height * atlas_side,
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                )
+                .map_err(|error| format!("Canvas terrain texture: {error:?}"))?;
+            apply_canvas_tint(context, triangle.tint);
+        } else {
+            let [r, g, b] = triangle.color;
+            let color = [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8];
+            let style = [
+                b'#',
+                HEX_DIGITS[usize::from(color[0] >> 4)],
+                HEX_DIGITS[usize::from(color[0] & 0x0f)],
+                HEX_DIGITS[usize::from(color[1] >> 4)],
+                HEX_DIGITS[usize::from(color[1] & 0x0f)],
+                HEX_DIGITS[usize::from(color[2] >> 4)],
+                HEX_DIGITS[usize::from(color[2] & 0x0f)],
+            ];
+            context.set_fill_style_str(std::str::from_utf8(&style).unwrap_or("#000000"));
+            context.fill();
+        }
+        Ok(())
+    })();
+    context.restore();
+    draw_result
+}
+
+pub(crate) fn texture_transform(points: [SurfacePoint; 3], uv: [[f64; 2]; 3]) -> [f64; 6] {
+    let [u0, v0] = uv[0];
+    let du1 = uv[1][0] - u0;
+    let dv1 = uv[1][1] - v0;
+    let du2 = uv[2][0] - u0;
+    let dv2 = uv[2][1] - v0;
+    let determinant = du1 * dv2 - du2 * dv1;
+    if determinant.abs() < f64::EPSILON {
+        return [0.0; 6];
+    }
+    let dx1 = points[1].screen.x - points[0].screen.x;
+    let dx2 = points[2].screen.x - points[0].screen.x;
+    let dy1 = points[1].screen.y - points[0].screen.y;
+    let dy2 = points[2].screen.y - points[0].screen.y;
+    let a = (dx1 * dv2 - dx2 * dv1) / determinant;
+    let c = (du1 * dx2 - du2 * dx1) / determinant;
+    let b = (dy1 * dv2 - dy2 * dv1) / determinant;
+    let d = (du1 * dy2 - du2 * dy1) / determinant;
+    [
+        a,
+        b,
+        c,
+        d,
+        points[0].screen.x - a * u0 - c * v0,
+        points[0].screen.y - b * u0 - d * v0,
+    ]
+}
+
+fn apply_canvas_tint(context: &CanvasRenderingContext2d, tint: u8) {
+    let style = match tint {
+        1 => "rgba(0,0,0,0.08)",
+        2 => "rgba(0,0,0,0.22)",
+        3 => "rgba(0,0,0,0.28)",
+        4 => "rgba(38,113,190,0.14)",
+        _ => return,
+    };
+    context.set_fill_style_str(style);
+    context.fill_rect(0.0, 0.0, 1.0, 1.0);
 }
 
 #[derive(Clone, Copy)]
@@ -184,6 +331,10 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
+        material: 4,
+        texture_mode: 4,
+        tint: 3,
+        texture_uv: None,
         pickable: false,
         order: skirt_order(edge),
     });
@@ -192,6 +343,10 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
+        material: 4,
+        texture_mode: 5,
+        tint: 3,
+        texture_uv: None,
         pickable: false,
         order: skirt_order(edge) + 1,
     });
