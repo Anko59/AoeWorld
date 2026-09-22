@@ -298,6 +298,10 @@ fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
     )
     .expect("schema-nine package");
     assert!(matches!(
+        package.generator_with_elevation(Vec::new()),
+        Err(MapPackageError::InvalidEnvironment)
+    ));
+    assert!(matches!(
         package.generator_with_environment(Vec::new(), Vec::new(), Vec::new(), Vec::new()),
         Err(MapPackageError::InvalidEnvironment)
     ));

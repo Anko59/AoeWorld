@@ -11,6 +11,9 @@ impl MapPackage {
         &self,
         pages: Vec<ElevationPage>,
     ) -> Result<MapChunkGenerator, MapPackageError> {
+        if self.environment.hydrology_evidence.is_some() {
+            return Err(MapPackageError::InvalidEnvironment);
+        }
         if self.environment.samples_per_axis == 0 {
             return pages
                 .is_empty()
