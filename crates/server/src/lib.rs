@@ -9,10 +9,16 @@ mod map_store;
 mod map_worker;
 mod maps;
 mod page_residency;
+mod source_qualification;
 mod terrain_cache;
 pub use config::Config;
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
 pub use map_store::MapStoreError;
+pub use source_qualification::{
+    SourceQualificationProgress, SourceQualificationReport, run_source_qualification,
+};
+
+pub(crate) use map_store::{PageResidency, load as load_map_packages};
 
 use aoe_core::{EntityId, Region, Tick};
 use aoe_map::MapPackage;
