@@ -1,7 +1,7 @@
 use super::*;
 use std::{future::Future, task::Poll};
 
-fn state_with_job() -> (AppState, u64, MapPackage) {
+pub(super) fn state_with_job() -> (AppState, u64, MapPackage) {
     let config = crate::Config {
         bind: "127.0.0.1:0".parse().expect("bind"),
         scenario: aoe_scenario::SMOKE,
@@ -64,7 +64,11 @@ async fn cancellation_during_publication_wait_prevents_success_and_registration(
             .is_pending()
     );
     assert_eq!(
-        cancel(&state, id).await.expect("job").state,
+        cancel(&state, id)
+            .await
+            .expect("cancel")
+            .expect("job")
+            .state,
         JobState::CancelRequested
     );
     drop(registry);

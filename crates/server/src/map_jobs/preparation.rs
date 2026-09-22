@@ -20,7 +20,7 @@ pub(crate) struct CreationRequest {
     pub preparation: PreparationPreference,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PreparationMode {
     ProceduralFallback,

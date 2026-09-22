@@ -130,13 +130,34 @@ The creation service runs one job at a time and queues at most two more. It
 retains at most 128 job records in memory, evicting the oldest terminal record
 when new work is accepted; running, cancelling, and queued jobs are preserved.
 An evicted job ID is no longer available from job status endpoints. Saved map
-packages remain independent of this history. Job history resets when the
-server restarts. Preparation has no time estimate until measured progress is
+packages remain independent of this history. With a package directory, bounded history is atomically checkpointed under
+`jobs/history.json` before accepting a request, cancellation, or completion.
+A restart restores terminal records and monotonic IDs. Interrupted queued or
+running jobs become failed with an explicit retry message; cancellation requests
+become cancelled. The creator lists retained requests and can retry failed/cancelled work using
+its original coordinates, scale, seed and preparation mode. Accepted job IDs
+remain in browser storage across reloads and status/activation network errors;
+Resume checks the existing job instead of submitting another preparation.
+Running or completed work can also be resumed through the history selector. Completed
+history requires the matching stored package; a missing package becomes a
+retryable failure. The worker does not automatically resume execution after a
+restart, but verified source cache entries are reusable. Without a package
+directory history remains memory-only. Malformed or oversized history fails
+startup explicitly instead of silently dropping accepted work. Preparation has no time estimate until measured progress is
 available; a completed job reports zero remaining seconds.
 Completion is published only after the map is registered for package retrieval
 and activation. Cancellation received while registration is waiting wins over
-success; the cancelled result is not registered by that job. This in-memory
-ordering does not provide crash recovery for files already prepared on disk.
+success; the cancelled result is not registered by that job. Completion and queue advancement share one history checkpoint before becoming
+observable. A failed checkpoint rejects new requests/cancellation without
+mutating the manager; failure to record a worker outcome marks it and queued requests failed,
+retaining their original requests for retry rather than leaving a stalled queue,
+and does not publish its package in the running registry. Complete immutable
+package files may already exist; startup discovers these valid saved packages
+independently of failed/cancelled history, without activating gameplay. The journal is limited to 2 MiB and 128 jobs;
+one fixed staging file bounds crash leftovers. One process owns the directory.
+Directory-sync failure after rename reports uncertain crash durability in the
+server log while retaining the committed state. Partial geographic preparation
+files are not garbage-collected by this journal.
 
 The creator's Automatic detail mode selects regional Copernicus elevation for
 squares up to 120 km with centers within 75 degrees latitude and 170 degrees
