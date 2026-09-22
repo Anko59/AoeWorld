@@ -138,7 +138,7 @@ fn all_ocean(environment: &PreparedEnvironment, pages: &[WaterPage]) -> bool {
     })
 }
 
-fn map_metadata(package: &MapPackage) -> MapMetadata {
+pub(crate) fn map_metadata(package: &MapPackage) -> MapMetadata {
     MapMetadata {
         tile_size_meters: GAME_TILE_METERS as u8,
         compression_numerator: package.request.compression.numerator,

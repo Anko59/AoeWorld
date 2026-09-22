@@ -190,3 +190,16 @@ generation and synthetic sampling only; use the repository performance gates
 plus recorded hardware, source-backed workloads, and a review of frame,
 memory, worker, and network budgets before making a production performance
 claim.
+
+Resource persistence belongs to the authoritative server process. Activation
+loads `resource-overlays/<content-hash>.json` before choosing a start or spawning
+units. Files are limited to 4 MiB, and snapshot entry limits still apply.
+`GameplayService::deplete_resource_persisted` validates an exclusive candidate,
+writes and syncs a temporary file, replaces the snapshot, then commits live
+collision state. A rejected write leaves the world unchanged; a failed directory
+sync after replacement commits live state and explicitly reports uncertain
+crash durability. A stale service revision cannot overwrite newer saved state.
+A fixed temporary name limits crash leftovers to one per map and the next
+write recovers it under the process lock. One server process must own a package directory; this is not a shared database.
+No gather command or economy is introduced. Network synchronization of resource
+amounts and client sprite invalidation remain separate consumers.
