@@ -146,7 +146,8 @@ pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         .values()
         .flat_map(|chunk| chunk.resources.iter())
         .filter(|resource| {
-            resource.tile.x >= visible.min.x
+            client.resources.visible(resource.id)
+                && resource.tile.x >= visible.min.x
                 && resource.tile.x < visible.max.x
                 && resource.tile.y >= visible.min.y
                 && resource.tile.y < visible.max.y

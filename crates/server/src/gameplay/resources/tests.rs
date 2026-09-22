@@ -230,3 +230,89 @@ fn interrupted_temporary_snapshot_is_recovered_without_accumulating_files() {
     );
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
 }
+
+fn resource_message(
+    receiver: &mut tokio::sync::mpsc::Receiver<aoe_protocol::GameplayServerMessage>,
+) -> aoe_protocol::ResourceState {
+    while let Ok(message) = receiver.try_recv() {
+        if let aoe_protocol::GameplayServerMessage::ResourceState(state) = message {
+            return state;
+        }
+    }
+    panic!("resource message was not published");
+}
+
+#[tokio::test]
+async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
+    use aoe_protocol::GameplayServerMessage;
+    let directory = tempfile::tempdir().unwrap();
+    let package = package();
+    let node = node(&package);
+    let service = GameplayService::from_stored_map(
+        package,
+        Some(Arc::new(Flat)),
+        Some(directory.path().to_owned()),
+        &|| false,
+    )
+    .unwrap()
+    .unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+    let (id, welcome) = service.register(None, sender).await;
+    let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {
+        panic!("welcome");
+    };
+    service
+        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
+        .await;
+    service.tick().await;
+    let initial = resource_message(&mut receiver);
+    assert_eq!(initial.from_revision, None);
+    assert_eq!(initial.revision, 0);
+    assert!(initial.changes.is_empty());
+    service
+        .deplete_resource_persisted(node.id, node.initial_amount)
+        .await
+        .unwrap();
+    service.tick().await;
+    let delta = resource_message(&mut receiver);
+    assert_eq!(delta.from_revision, Some(0));
+    assert_eq!(delta.revision, 1);
+    assert_eq!(
+        delta.changes,
+        vec![aoe_protocol::ResourceAmount {
+            id: node.id,
+            remaining: 0
+        }]
+    );
+    service.disconnect(id).await;
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+    let (id, _) = service.register(resume_token, sender).await;
+    service
+        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
+        .await;
+    service.tick().await;
+    let restored = resource_message(&mut receiver);
+    assert_eq!(restored.from_revision, None);
+    assert_eq!(restored.revision, 1);
+    assert_eq!(restored.changes, delta.changes);
+}
+
+#[tokio::test]
+async fn resource_backpressure_disconnects_without_advancing_delivery_state() {
+    let service =
+        GameplayService::from_stored_map(package(), Some(Arc::new(Flat)), None, &|| false)
+            .unwrap()
+            .unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let (id, _) = service.register(None, sender).await;
+    service
+        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
+        .await;
+    service.tick().await;
+    assert!(service.sessions.lock().await.get(&id).is_none());
+    assert!(receiver.try_recv().is_ok());
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    ));
+}
