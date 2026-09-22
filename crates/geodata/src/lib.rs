@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 mod elevation;
+#[path = "lib/progress.rs"]
+pub mod preparation_progress;
 pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
 mod directory;
 pub use directory::{
@@ -326,6 +328,7 @@ pub fn prepare_overview(
         acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
+    preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
     let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
     let lake_coverage =
         prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;

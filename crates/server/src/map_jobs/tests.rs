@@ -103,7 +103,7 @@ fn manager_limits_waiting_work_and_starts_in_request_order() {
     );
     assert_eq!(manager.queued(), 2);
     assert_eq!(first.stage, JobStage::BuildingFallbackPackage);
-    assert_eq!(first.percent, 5);
+    assert_eq!(first.percent, None);
     assert_eq!(first.eta_seconds, None);
     manager.jobs.get_mut(&first.id).expect("job").job.state = JobState::Completed;
     assert_eq!(manager.start_next(), Some(1));
@@ -186,4 +186,33 @@ fn identifier_exhaustion_does_not_overwrite_or_retire_jobs() {
     assert_eq!(manager.next_id, u64::MAX);
     assert_eq!(manager.jobs.len(), 1);
     assert_eq!(manager.jobs[&0].job.state, JobState::Running);
+}
+
+#[test]
+fn measured_progress_is_visible_only_while_running() {
+    let request = MapRequest::default();
+    let mut manager = Manager::default();
+    let (job, _) = manager
+        .enqueue(
+            request,
+            request.estimate().unwrap(),
+            PreparationPlan::fallback(),
+        )
+        .unwrap();
+    let entry = manager.jobs.get_mut(&job.id).unwrap();
+    progress::stage(&entry.progress, progress::Phase::SamplingWater);
+    assert_eq!(
+        entry.snapshot().progress.unwrap().phase,
+        progress::Phase::SamplingWater
+    );
+    assert_eq!(entry.snapshot().percent, None);
+    for state in [
+        JobState::CancelRequested,
+        JobState::Cancelled,
+        JobState::Failed,
+        JobState::Completed,
+    ] {
+        entry.job.state = state;
+        assert!(entry.snapshot().progress.is_none());
+    }
 }

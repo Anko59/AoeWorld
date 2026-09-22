@@ -1,4 +1,4 @@
-export function initMapJobs({ readJson, controllerHeaders, preparationSummary, formatTime, mapRequest, refreshPackages, estimate, generate, retry, cancel }) {
+export function initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel }) {
   const historySelect = document.getElementById('job-history');
   const historyRetry = document.getElementById('retry-history');
   const storageKey = 'aoeworld.map-creation-job';
@@ -50,9 +50,13 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, f
         remember(null);
         throw new Error(job.error || 'Map creation cancelled.');
       }
-      const eta = job.eta_seconds === null ? '' : ` · ${formatTime(job.eta_seconds)} remaining`;
+      const progress = job.progress;
+      const phase = progress?.phase || job.stage;
+      const count = progress && Number.isSafeInteger(progress.completed) && Number.isSafeInteger(progress.total)
+        ? ` · ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} ${progress.unit}` : '';
+      const scope = phase === 'downloading_source' ? ' (current source)' : '';
       estimate.className = '';
-      estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}\n${preparationSummary(job.preparation)}`;
+      estimate.textContent = `${phase.replaceAll('_', ' ')}${scope}${count}\n${preparationSummary(job.preparation)}`;
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   };

@@ -129,6 +129,7 @@ pub(super) fn publish_staged_pages(
     package: &MapPackage,
     samples_per_axis: u16,
 ) -> Result<(), GeodataError> {
+    crate::preparation_progress::stage(crate::preparation_progress::Phase::PublishingPackage);
     let hash = package.content_hash_hex();
     if package.environment.samples_per_axis != samples_per_axis {
         return Err(GeodataError::Preparation(

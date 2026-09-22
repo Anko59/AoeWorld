@@ -51,8 +51,9 @@ pub(super) fn execute(
     worker: &Path,
     input: Vec<u8>,
     cancelled: &AtomicBool,
+    observe: impl FnMut(),
 ) -> Result<Vec<u8>, String> {
-    execute_with_deadline(worker, input, cancelled, PREPARATION_DEADLINE)
+    execute_observed(worker, input, cancelled, PREPARATION_DEADLINE, observe)
 }
 
 pub(super) fn execute_with_deadline(
@@ -60,6 +61,16 @@ pub(super) fn execute_with_deadline(
     input: Vec<u8>,
     cancelled: &AtomicBool,
     deadline: Duration,
+) -> Result<Vec<u8>, String> {
+    execute_observed(worker, input, cancelled, deadline, || {})
+}
+
+fn execute_observed(
+    worker: &Path,
+    input: Vec<u8>,
+    cancelled: &AtomicBool,
+    deadline: Duration,
+    mut observe: impl FnMut(),
 ) -> Result<Vec<u8>, String> {
     if input.len() > MAX_REQUEST_BYTES {
         return Err("map-worker request exceeds the configured bound".to_owned());
@@ -110,6 +121,7 @@ pub(super) fn execute_with_deadline(
         thread::spawn(move || read_bounded(stderr, MAX_ERROR_BYTES, &error_overflow));
     let started = Instant::now();
     let outcome = loop {
+        observe();
         if cancelled.load(Ordering::Acquire) {
             break Err("map creation cancelled".to_owned());
         }

@@ -337,7 +337,7 @@
       const grid = plan.samples_per_axis ? `${plan.samples_per_axis} × ${plan.samples_per_axis} samples · ${(plan.geographic_millimeters_per_sample / 1000).toLocaleString()} m spacing\n` : '';
       return grid + plan.explanation;
     };
-    const { refreshHistory } = initMapJobs({ readJson, controllerHeaders, preparationSummary, formatTime, mapRequest, refreshPackages, estimate, generate, retry, cancel });
+    const { refreshHistory } = initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel });
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
       if (!creator.hidden) Promise.all([refreshPackages(), refreshHistory()]).catch(error => {

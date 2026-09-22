@@ -33,6 +33,16 @@ fn run_worker() -> Result<(), String> {
     }
     let request = serde_json::from_slice::<WorkerRequest>(&bytes)
         .map_err(|error| format!("invalid worker request: {error}"))?;
+    #[derive(serde::Deserialize)]
+    struct Options {
+        progress_path: Option<std::path::PathBuf>,
+    }
+    let options: Options = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    let _lease = aoe_geodata::preparation_progress::worker_lease(options.progress_path.as_deref())?;
+    let _progress = aoe_geodata::preparation_progress::Scope::new(options.progress_path);
+    aoe_geodata::preparation_progress::stage(
+        aoe_geodata::preparation_progress::Phase::PreparingSources,
+    );
     let response = execute(request).map_err(|error| error.to_string())?;
     let output = serde_json::to_vec(&response)
         .map_err(|error| format!("could not encode worker response: {error}"))?;
