@@ -142,6 +142,7 @@ fn map_generate_detailed() -> Result<(), String> {
         request,
         samples_per_axis,
         resolution,
+        staging_root: None,
     })
     .map_err(|error| error.to_string())?;
     let WorkerResponse::PreparedDirectory { package } = response else {

@@ -1,8 +1,8 @@
 use super::{
     GeneratedMap, GeodataError, WorkerRequest, WorkerResponse, etopo_2022_60s_surface,
-    hyde_sources, local_aeqd_definition, potential_biome_sources, prepare_detailed_directory,
-    prepare_elevation, prepare_overview, project_wgs84, projected_footprint, projection_distortion,
-    raster_dimensions, round_meters,
+    hyde_sources, local_aeqd_definition, potential_biome_sources, prepare_elevation,
+    prepare_overview, project_wgs84, projected_footprint, projection_distortion, raster_dimensions,
+    round_meters,
 };
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -33,13 +33,15 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             request,
             samples_per_axis,
             resolution,
+            staging_root,
         } => Ok(WorkerResponse::PreparedDirectory {
-            package: prepare_detailed_directory(
+            package: crate::copernicus::prepare_with_staging(
                 cache_root,
                 output_directory,
                 request,
                 samples_per_axis,
                 resolution,
+                staging_root,
             )?,
         }),
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {
