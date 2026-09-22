@@ -81,3 +81,28 @@ test("lost submission acknowledgement reuses the saved key and request after rel
   expect(submissions[1]).toEqual(submissions[0]);
   await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
 });
+
+
+test("explicit submission conflict permits a fresh key instead of trapping recovery", async ({ page }) => {
+  await gameAssets(page);
+  const keys: (string | undefined)[] = [];
+  await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() === "GET") await route.fulfill({ json: [] });
+    else {
+      keys.push(route.request().headers()["idempotency-key"]);
+      await route.fulfill({ status: 409, body: "submission key was already used for another request" });
+    }
+  });
+  await page.goto("/");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#playground")).toHaveAttribute("data-assets", "aoe2-local");
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  const generate = page.getByRole("button", { name: "Generate", exact: true });
+  await generate.click();
+  await expect(page.locator("#map-estimate")).toContainText("already used");
+  await expect(generate).toBeEnabled();
+  await generate.click();
+  await expect.poll(() => keys.length).toBe(2);
+  expect(keys[0]).toMatch(/^[0-9a-f]{32}$/);
+  expect(keys[1]).not.toBe(keys[0]);
+});
