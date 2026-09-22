@@ -364,11 +364,26 @@ impl MapChunkGenerator {
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {
-        if id & 1 != 0 {
-            return None;
+        self.resource_by_id_with_cancel(id, &|| false)
+            .ok()
+            .flatten()
+    }
+
+    pub fn resource_by_id_with_cancel(
+        &self,
+        id: u64,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if id & 1 != 0 || id >> 37 != 0 {
+            return Ok(None);
         }
         let tile = TileCoord::new(((id >> 1) & 0x3_ffff) as i32, (id >> 19) as i32);
-        self.object_at(tile).filter(|node| node.id == id)
+        Ok(self
+            .object_at_with_cancel(tile, cancelled)?
+            .filter(|node| node.id == id))
     }
 }
 

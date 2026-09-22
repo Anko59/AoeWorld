@@ -28,7 +28,10 @@ pub use navigation::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_SEGMENT_TILES, MovementOutcome, Path, RoutePlanner,
     RoutePlannerPoll, find_path, find_path_segment_with_overlay, find_path_with_overlay,
 };
-pub use overlay::{Depletion, ResourceOverlay, ResourceOverlayError};
+pub use overlay::{
+    Depletion, MAX_RESOURCE_OVERLAY_CHANGES, RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange,
+    ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot,
+};
 pub use package::{
     EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, ProjectionMetadata,
     SourceLock, VerticalDatum,

@@ -157,6 +157,23 @@ These grid spacings describe sampling, not a guarantee of source accuracy or
 historical precision. Source transfer size and completion time are not yet
 estimated; the existing source quotas apply.
 
+## Mutable resource snapshots
+
+`ResourceOverlaySnapshot` schema 1 binds depletion state to the complete map
+content hash. Changes are sorted by stable resource ID and contain only amounts
+below the generated initial amount. Loading validates the schema, map identity,
+IDs, amounts, ordering, revision, and availability for referenced resources
+before returning a
+replacement overlay. Failure leaves the caller's current overlay untouched.
+The revision counts changing depletion calls; zero-removal calls do not advance
+it. Restored collision and subsequent depletion use the same authoritative state.
+
+At most 65,536 changed resources may be retained or decoded in one overlay.
+Adding another changed resource fails explicitly without partial depletion;
+already changed resources can still deplete. This is an entry count, not an RSS
+claim. The map crate provides the bounded snapshot contract only: disk adapters,
+network deltas, reconnect, and lifecycle integration are separate work.
+
 ## Tests and performance evidence
 
 ```sh
