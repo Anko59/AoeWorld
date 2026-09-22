@@ -13,7 +13,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/maps-v7";
+    pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/maps-v8";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
 
     pub fn from_env() -> Result<Self, String> {
@@ -68,8 +68,8 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Generation recipe 3 changes immutable package identity. Keep maps-v6
-            // intact and regenerate compatible packages in the new directory.
+            // Generation recipe 4 changes source-elevation sampling identity.
+            // Keep maps-v7 intact and regenerate compatible packages separately.
             map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),
             map_worker: None,
             geodata_cache_directory: PathBuf::from(Self::DEFAULT_GEODATA_CACHE_DIRECTORY),

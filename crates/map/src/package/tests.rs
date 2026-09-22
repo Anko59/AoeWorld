@@ -143,6 +143,53 @@ fn validation_rejects_tampering_and_old_generation_recipe_identity() {
         ]
     );
 }
+
+#[test]
+fn recipe_three_serialization_and_hash_stay_legacy_while_recipe_four_is_distinct() {
+    let legacy = MapPackage::with_generation_recipe(
+        1,
+        crate::LEGACY_GENERATION_RECIPE_VERSION,
+        MapRequest::default(),
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        PreparedEnvironment::default(),
+    )
+    .expect("legacy package");
+    assert_eq!(
+        legacy.generation_recipe_version,
+        crate::LEGACY_GENERATION_RECIPE_VERSION
+    );
+    assert!(legacy.validate().is_ok());
+    let serialized = serde_json::to_value(&legacy).expect("legacy JSON");
+    assert!(
+        !serialized
+            .as_object()
+            .expect("package object")
+            .contains_key("generation_recipe_version")
+    );
+    let decoded: MapPackage = serde_json::from_value(serialized).expect("legacy decode");
+    assert_eq!(decoded, legacy);
+    assert!(decoded.validate().is_ok());
+
+    let current = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("current package");
+    assert_eq!(
+        current.generation_recipe_version,
+        crate::GENERATION_RECIPE_VERSION
+    );
+    assert_ne!(current.content_hash, legacy.content_hash);
+    assert_eq!(
+        serde_json::to_value(&current).expect("current JSON")["generation_recipe_version"],
+        crate::GENERATION_RECIPE_VERSION
+    );
+
+    let mut unknown = current;
+    unknown.generation_recipe_version = 99;
+    assert_eq!(
+        unknown.validate(),
+        Err(MapPackageError::InvalidGenerationRecipeVersion)
+    );
+}
 #[test]
 fn packages_require_and_hash_projection_metadata() {
     assert!(matches!(

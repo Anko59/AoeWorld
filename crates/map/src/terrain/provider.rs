@@ -1,3 +1,4 @@
+use super::elevation::{AxisPosition, bilinear_height, source_axis_position};
 use super::{
     Biome, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind, ResourceNode,
     Tile, WaterKind, resources, surface,
@@ -128,7 +129,9 @@ pub(super) fn resource_at(
         None
     };
     let historically_cleared = land_use
-        .map(|(crop, grazing, _)| value % 100 < u64::from(crop + grazing))
+        .map(|(crop, grazing, _)| {
+            generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
+        })
         .unwrap_or(false);
     if !historically_cleared && tree_present(generator.geography_key, tile.x, tile.y, sample.biome)
     {
@@ -165,8 +168,6 @@ fn occupied_without_access(
     if !sample.passable {
         return Ok(true);
     }
-    let value = super::unsigned_noise(generator.geography_key, b"objects", tile.x, tile.y)
-        ^ generator.procedural_seed.rotate_left(17);
     let land_use = if generator
         .provider_environment
         .as_ref()
@@ -186,7 +187,9 @@ fn occupied_without_access(
         None
     };
     let historically_cleared = land_use
-        .map(|(crop, grazing, _)| value % 100 < u64::from(crop + grazing))
+        .map(|(crop, grazing, _)| {
+            generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
+        })
         .unwrap_or(false);
     if !historically_cleared && tree_present(generator.geography_key, tile.x, tile.y, sample.biome)
     {
@@ -207,22 +210,80 @@ fn sample_elevation(
         (tile.x.saturating_add(1), tile.y.saturating_add(1)),
         (tile.x, tile.y.saturating_add(1)),
     ];
+    if generator.elevation_sampling_recipe == crate::GENERATION_RECIPE_VERSION {
+        let height = sample_bilinear_elevation(
+            generator,
+            tile.x,
+            tile.y,
+            samples,
+            AxisPosition::TileCenter,
+            cancelled,
+        )?;
+        let mut corners = [0; 4];
+        for (index, (x, y)) in coordinates.into_iter().enumerate() {
+            corners[index] = sample_bilinear_elevation(
+                generator,
+                x,
+                y,
+                samples,
+                AxisPosition::Corner,
+                cancelled,
+            )?;
+        }
+        return Ok((height, corners));
+    }
     let mut corners = [0; 4];
     for (index, (x, y)) in coordinates.into_iter().enumerate() {
         let (source_x, source_y) = source_coordinate(x, y, samples, generator.width_tiles)?;
-        let page = load_page(
-            generator,
-            EnvironmentPageKey {
-                layer: PageLayer::Elevation,
-                level: 0,
-                x: source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-                y: source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-            },
-            cancelled,
-        )?;
-        corners[index] = elevation_value(&page, source_x, source_y)?;
+        corners[index] = provider_elevation(generator, source_x, source_y, cancelled)?;
     }
     Ok((corners[0], corners))
+}
+
+fn sample_bilinear_elevation(
+    generator: &MapChunkGenerator,
+    x: i32,
+    y: i32,
+    samples: u16,
+    position: AxisPosition,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<i32, EnvironmentPageError> {
+    let (x0, x1, x_remainder, denominator) =
+        source_axis_position(x, samples, generator.width_tiles, position)
+            .ok_or(EnvironmentPageError::Invalid)?;
+    let (y0, y1, y_remainder, _) =
+        source_axis_position(y, samples, generator.width_tiles, position)
+            .ok_or(EnvironmentPageError::Invalid)?;
+    Ok(bilinear_height(
+        [
+            provider_elevation(generator, x0, y0, cancelled)?,
+            provider_elevation(generator, x1, y0, cancelled)?,
+            provider_elevation(generator, x1, y1, cancelled)?,
+            provider_elevation(generator, x0, y1, cancelled)?,
+        ],
+        x_remainder,
+        y_remainder,
+        denominator,
+    ))
+}
+
+fn provider_elevation(
+    generator: &MapChunkGenerator,
+    source_x: u16,
+    source_y: u16,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<i32, EnvironmentPageError> {
+    let page = load_page(
+        generator,
+        EnvironmentPageKey {
+            layer: PageLayer::Elevation,
+            level: 0,
+            x: source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES),
+            y: source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
+        },
+        cancelled,
+    )?;
+    elevation_value(&page, source_x, source_y)
 }
 
 fn sample_water(

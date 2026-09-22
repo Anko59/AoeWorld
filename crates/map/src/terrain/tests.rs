@@ -1,5 +1,7 @@
 use super::*;
 
+mod elevation_interpolation;
+
 fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
 }

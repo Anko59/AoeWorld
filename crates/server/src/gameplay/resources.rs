@@ -46,6 +46,7 @@ impl GameplayService {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Self>, ResourceLifecycleError> {
         let content_hash = package.content_hash;
+        let generation_recipe_version = package.generation_recipe_version;
         let metadata = crate::gameplay_map::map_metadata(&package);
         let mut world = if let Some(provider) = provider {
             GameWorld::from_page_provider(package, provider)?
@@ -64,7 +65,7 @@ impl GameplayService {
         let config = world.config();
         let start = world
             .terrain()
-            .search_start_checked(config, 64, cancelled)
+            .search_start_for_recipe(config, generation_recipe_version, 64, cancelled)
             .map_err(GameWorldError::Environment)?;
         let tile = match start {
             StartSearchResult::Found(tile) => tile,

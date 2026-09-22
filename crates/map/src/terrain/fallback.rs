@@ -162,7 +162,11 @@ impl MapChunkGenerator {
             .as_ref()
             .and_then(|land_use| land_use.at(tile, self.width_tiles))
             .is_some_and(|land_use| {
-                value % 100 < u64::from(land_use.crop_percent + land_use.grazing_percent)
+                self.is_tree_suppressed_by_historical_land_use(
+                    tile,
+                    land_use.crop_percent,
+                    land_use.grazing_percent,
+                )
             });
         (!historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
             .then_some(ResourceNode {
