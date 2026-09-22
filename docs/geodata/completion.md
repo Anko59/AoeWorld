@@ -26,7 +26,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M4 | Physical movement and long routes | Physical speed and bounded detours implemented; 100 km qualification pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Persistence and synchronization verified; source-session qualification pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
-| M7 | Creation experience | Creator, recovery and scratch verified; progress/preview pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
+| M7 | Creation experience | Creator, recovery and measured progress verified; submission recovery pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
 M7 completion publication is reviewed in
@@ -272,3 +272,17 @@ pass. Combined integration `4c3c385432c24522f462bc093d93e921f8c21796` passes
 preflight (398 native tests), test-wasm (18), test-e2e (27), and perf-ci.
 These are local Dockerized checks; no remote CI or hardware qualification is
 claimed.
+
+M7 measured preparation progress is reviewed in
+[PR #38](https://github.com/Anko59/AoeWorld/pull/38), revision
+`52947e8672787e5b96f59e4d703c139a15bf68e2`. Download bytes and persisted
+four-layer pyramid pages are phase-local measured counters; sampling,
+publication and verification have named phases with absent unknown totals.
+The creator no longer displays fixed 5%/10% placeholders. Bounded atomic
+telemetry is optional, and both overview/detailed workers retain scratch leases.
+Independent review caught and verified the overview lease fix. Hooks, preflight
+(392 native), E2E (29), and clean pre-push pass. Combined integration
+`3f57de0223878ad3ebbaf5d97d971a93aae06168` passes preflight (402) and E2E (29).
+No overall time estimate or full-product qualification is inferred from these
+counters. The combined PNG size at `4c3c385` was 198,336 gzip bytes, passing the
+unchanged 217,240-byte baseline; the earlier feature count remains revision-bound.
