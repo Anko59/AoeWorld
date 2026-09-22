@@ -437,14 +437,30 @@ async fn malformed_handshakes_resync_and_scenario_change_are_visible() {
     ));
 
     assert!(http(address, "POST", "/scenario/smoke").starts_with("HTTP/1.1 200"));
-    let mut changed = false;
-    for _ in 0..5 {
-        if matches!(receive(&mut client).await, ServerMessage::Hello { .. }) {
-            changed = true;
-            break;
+    // Pending deltas depend on scheduler timing, not on reset correctness.
+    // Bound the entire wait by the existing receive deadline, and reject any
+    // unexpected message instead of accepting an arbitrary five-frame backlog.
+    timeout(Duration::from_secs(2), async {
+        loop {
+            match receive(&mut client).await {
+                ServerMessage::Delta { .. } => {}
+                ServerMessage::Hello {
+                    version,
+                    scenario,
+                    world_size,
+                    ..
+                } => {
+                    assert_eq!(version, VERSION);
+                    assert_eq!(scenario, "smoke");
+                    assert_eq!(world_size, SMOKE.world_size);
+                    break;
+                }
+                other => panic!("unexpected message before scenario reset: {other:?}"),
+            }
         }
-    }
-    assert!(changed, "scenario change must reset the client visibly");
+    })
+    .await
+    .expect("scenario change must reset the client within two seconds");
     send(&mut client, ClientMessage::Hello { version: VERSION }).await;
     assert!(matches!(
         receive(&mut client).await,
