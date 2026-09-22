@@ -1,6 +1,12 @@
 use crate::{MapChunkGenerator, ResourceNode};
 use std::collections::BTreeMap;
 
+mod snapshot;
+pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
+
+/// Logical entry limit; allocator overhead is not included in this count.
+pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 65_536;
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ResourceOverlay {
     remaining: BTreeMap<u64, u16>,
@@ -20,6 +26,16 @@ pub struct Depletion {
 pub enum ResourceOverlayError {
     #[error("resource does not exist in this map")]
     UnknownResource,
+    #[error("resource overlay has reached its changed-resource limit")]
+    Capacity,
+    #[error("resource overlay revision is exhausted")]
+    RevisionExhausted,
+    #[error("resource overlay snapshot is invalid")]
+    InvalidSnapshot,
+    #[error("resource overlay belongs to a different immutable map")]
+    WrongMap,
+    #[error("resource terrain could not be read: {0}")]
+    Environment(#[from] crate::EnvironmentPageError),
 }
 
 impl ResourceOverlay {
@@ -58,7 +74,7 @@ impl ResourceOverlay {
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
         let node = terrain
-            .resource_by_id(id)
+            .resource_by_id_with_cancel(id, &|| false)?
             .ok_or(ResourceOverlayError::UnknownResource)?;
         let previous = self
             .remaining
@@ -69,8 +85,17 @@ impl ResourceOverlay {
         let remaining = previous - removed;
         let became_nonblocking = previous > 0 && remaining == 0;
         if removed > 0 {
+            if !self.remaining.contains_key(&id)
+                && self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
+            {
+                return Err(ResourceOverlayError::Capacity);
+            }
+            let revision = self
+                .revision
+                .checked_add(1)
+                .ok_or(ResourceOverlayError::RevisionExhausted)?;
             self.remaining.insert(id, remaining);
-            self.revision = self.revision.saturating_add(1);
+            self.revision = revision;
         }
         Ok(Depletion {
             id,
@@ -95,7 +120,7 @@ mod tests {
     use super::*;
     use crate::ResourceNode;
 
-    fn resource() -> (MapChunkGenerator, ResourceNode) {
+    pub(super) fn resource() -> (MapChunkGenerator, ResourceNode) {
         let terrain = MapChunkGenerator::new([3; 32], 1, 128);
         let node = (0..4)
             .flat_map(|y| {
