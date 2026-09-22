@@ -78,6 +78,28 @@ fn prepared_map() -> GeneratedMap {
     }
 }
 
+#[test]
+fn schema_eight_generated_map_keeps_vector_page_validation() {
+    let mut legacy = prepared_map();
+    legacy.package = MapPackage::with_prepared_environment(
+        8,
+        legacy.package.request,
+        legacy.package.source_locks.clone(),
+        legacy.package.projection.clone(),
+        legacy.package.provenance.clone(),
+        legacy.package.environment.clone(),
+    )
+    .expect("legacy generator package");
+    legacy.package.schema_version = aoe_map::LEGACY_MAP_SCHEMA_VERSION;
+    let identity = legacy.package.content_hash;
+    legacy.validate().expect("legacy vectors validate");
+    assert_eq!(legacy.package.content_hash, identity);
+
+    let mut malformed = legacy;
+    malformed.elevation_pages[0].geographic_height_centimeters[0] += 1;
+    assert!(malformed.validate().is_err());
+}
+
 fn fallback_with_acquisition_time(acquired_at: &str) -> GeneratedMap {
     let source = SourceLock {
         id: "test-source".to_owned(),
@@ -310,6 +332,17 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
         modern_land_cover_pages: land_cover,
         ..base
     };
+    let package_before_validation = map.package.clone();
+    map.validate().expect("typed generated map validates");
+    assert_eq!(map.package, package_before_validation);
+
+    let mut missing_page = map.clone();
+    missing_page.hydrology_evidence_pages.clear();
+    assert!(missing_page.validate().is_err());
+    let mut malformed_page = map.clone();
+    malformed_page.modern_land_cover_pages[0].worldcover_class[0] = 11;
+    assert!(malformed_page.validate().is_err());
+
     let hash = map.package.content_hash_hex();
     map.write_directory(&root).expect("write typed package");
     GeneratedMap::verify_directory(&root, &hash).expect("stream verify typed pages");

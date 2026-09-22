@@ -146,17 +146,21 @@ impl GeneratedMap {
     /// terrain generation without asking a provider for additional data.
     pub fn validate(&self) -> Result<(), GeodataError> {
         self.package.validate()?;
+        // These builders check vector-backed fields only. Typed evidence is
+        // validated against the original package index below.
+        let mut vector_environment = self.package.environment.clone();
+        vector_environment.hydrology_evidence = None;
         let generator = self.package.generator().with_prepared_elevation(
             self.package.request.compression,
-            &self.package.environment,
+            &vector_environment,
             self.elevation_pages.clone(),
         )?;
         let generator =
-            generator.with_prepared_water(&self.package.environment, self.water_pages.clone())?;
-        let generator = generator
-            .with_prepared_biomes(&self.package.environment, self.vegetation_pages.clone())?;
+            generator.with_prepared_water(&vector_environment, self.water_pages.clone())?;
+        let generator =
+            generator.with_prepared_biomes(&vector_environment, self.vegetation_pages.clone())?;
         let _generator = generator.with_historical_land_use(
-            &self.package.environment,
+            &vector_environment,
             self.historical_land_use_pages.clone(),
         )?;
         if let Some(index) = &self.package.environment.hydrology_evidence {

@@ -4,6 +4,63 @@ fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
 }
 
+fn environment_with_typed_evidence() -> PreparedEnvironment {
+    PreparedEnvironment {
+        samples_per_axis: 2,
+        geographic_millimeters_per_sample: 1_000,
+        page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+        elevation: crate::FieldPyramid {
+            levels: vec![
+                crate::PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: [1; 32],
+                },
+                crate::PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [2; 32],
+                },
+            ],
+        },
+        water: None,
+        vegetation: None,
+        historical_land_use: None,
+        hydrology_evidence: Some(crate::HydrologyEvidenceIndex {
+            samples_per_axis: 2,
+            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+            world_cover_year: crate::WORLD_COVER_OBSERVATION_YEAR,
+            policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+            hydrology_page_root: [3; 32],
+            modern_land_cover_page_root: [4; 32],
+        }),
+    }
+}
+
+#[test]
+fn public_vector_builders_reject_typed_evidence_without_its_pages() {
+    let environment = environment_with_typed_evidence();
+    let compression = Ratio {
+        numerator: 1,
+        denominator: 1,
+    };
+
+    assert!(matches!(
+        generator(1).with_prepared_elevation(compression, &environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_prepared_water(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_prepared_biomes(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_historical_land_use(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+}
+
 fn flat_generator(geography_key: [u8; 32], procedural_seed: u64) -> MapChunkGenerator {
     let elevation = ElevationPage {
         level: 0,

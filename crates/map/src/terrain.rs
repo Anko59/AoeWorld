@@ -19,6 +19,13 @@ mod surface;
 use elevation::PreparedElevation;
 pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
 
+fn validate_vector_environment(environment: &PreparedEnvironment) -> Result<(), EnvironmentError> {
+    if environment.hydrology_evidence.is_some() {
+        return Err(EnvironmentError::InvalidIndex);
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum GroundMaterial {
@@ -169,6 +176,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<ElevationPage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let level_zero = crate::environment::level_zero_pages(environment, pages)?;
         Ok(Self {
             geography_key: self.geography_key,
@@ -195,6 +203,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<WaterPage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.water else {
             return pages
                 .is_empty()
@@ -226,6 +235,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<PotentialBiomePage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.vegetation else {
             return pages
                 .is_empty()
@@ -256,6 +266,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<HistoricalLandUsePage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.historical_land_use else {
             return pages
                 .is_empty()
