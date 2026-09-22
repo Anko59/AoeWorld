@@ -350,7 +350,13 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             Ok(GameplayServerMessage::Error { message, .. }) => {
                 client.status = format!("server error: {message}")
             }
-            _ => client.status = "protocol error".to_owned(),
+            _ => {
+                client.status = "protocol error; reconnect required".to_owned();
+                client.resources.clear();
+                if let Some(socket) = &client.socket {
+                    let _ = socket.close();
+                }
+            }
         }
     });
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
