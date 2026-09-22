@@ -83,10 +83,13 @@ The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
 locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
-Copernicus elevation while retaining coarse water and historical inputs.
-ESA WorldCover, HydroLAKES, and HydroRIVERS remain unwired. Source availability, the
-requested date, and the normalized package provenance are kept distinct so a
-modern source cannot be mistaken for a historical reconstruction.
+Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
+Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
+vegetation and historical inputs. Its modern water evidence is folded into the
+legacy water coverage layer; typed hydrology classes are not persisted or yet
+exposed to terrain. Source availability, the requested date, and normalized
+package provenance remain distinct so a modern source cannot be mistaken for a
+historical reconstruction.
 
 HYDE contributes a coarse historical land-use signal. It does not establish
 the exact location of medieval forests, farms, settlements, roads, bridges,

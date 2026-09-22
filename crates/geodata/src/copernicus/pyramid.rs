@@ -5,6 +5,10 @@ use aoe_map::{
 };
 use std::collections::BTreeMap;
 
+#[path = "pyramid/water.rs"]
+mod water;
+use water::coarse_water;
+
 pub(super) struct DetailedFields {
     pub(super) elevation: FieldPyramid,
     pub(super) water: FieldPyramid,
@@ -197,6 +201,7 @@ pub(super) fn build_pyramids(
     stage: &Stage,
     samples_per_axis: u16,
     overview: &crate::PreparedOverview,
+    hydrology: &crate::PreparedHydrology,
 ) -> Result<DetailedFields, GeodataError> {
     let mut elevation = Vec::new();
     let mut water = Vec::new();
@@ -223,7 +228,7 @@ pub(super) fn build_pyramids(
                 elevation_root.push(elevation_hash)?;
                 let water_page: WaterPage = if level == 0 {
                     coarse_page(axis, level, x as u16, y as u16, |gx, gy| {
-                        coarse_water(overview, axis, gx, gy)
+                        coarse_water(hydrology, overview, axis, gx, gy)
                     })?
                 } else {
                     nearest_page::<WaterPage>(stage, previous_axis, level, x as u16, y as u16)?
@@ -431,26 +436,6 @@ pub(super) fn coarse_coordinate(axis: u16, value: u16) -> u16 {
     let numerator = (u32::from(value) * 2 + 1) * 128;
     let denominator = u32::from(axis) * 2;
     (numerator / denominator).min(127) as u16
-}
-
-fn coarse_water(
-    overview: &crate::PreparedOverview,
-    axis: u16,
-    x: u16,
-    y: u16,
-) -> Result<(u8, u8), GeodataError> {
-    let x = coarse_coordinate(axis, x);
-    let y = coarse_coordinate(axis, y);
-    let page = overview
-        .water_pages
-        .iter()
-        .find(|page| page.level == 0 && page.x == x / PAGE && page.y == y / PAGE)
-        .ok_or(GeodataError::Preparation("overview water page is missing"))?;
-    let index = usize::from(y % PAGE) * usize::from(page.width) + usize::from(x % PAGE);
-    Ok((
-        page.ocean_coverage_percent[index],
-        page.inland_coverage_percent[index],
-    ))
 }
 
 fn coarse_vegetation(
