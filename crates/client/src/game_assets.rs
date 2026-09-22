@@ -3,7 +3,7 @@ use aoe_assets::catalog::{AssetRole, OPTIONAL_RESOURCE_SOURCES, REQUIRED_RENDER_
 use aoe_assets::pack::{FrameRecord, Manifest};
 use aoe_rendering::{GAME_ATLAS_SIDE, GameArt, GameFrame};
 use js_sys::Uint8Array;
-use std::{collections::BTreeMap, io::Cursor};
+use std::collections::BTreeMap;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
@@ -27,20 +27,7 @@ async fn page(name: &str) -> Result<Vec<u8>, JsValue> {
         return Err(JsValue::from_str("Invalid atlas page name"));
     }
     let bytes = fetch(&format!("/asset-pack/{name}")).await?;
-    let mut decoder = png::Decoder::new(Cursor::new(bytes));
-    decoder.set_limits(png::Limits {
-        bytes: 32 * 1024 * 1024,
-    });
-    let mut reader = decoder.read_info().map_err(error)?;
-    if reader.info().width != 2048 || reader.info().height != 2048 {
-        return Err(JsValue::from_str("Unsupported atlas dimensions"));
-    }
-    let mut pixels = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut pixels).map_err(error)?;
-    if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
-        return Err(JsValue::from_str("Unsupported atlas pixel format"));
-    }
-    Ok(pixels)
+    crate::png_page::decode(bytes).await
 }
 
 fn error(e: impl std::fmt::Display) -> JsValue {
