@@ -1,7 +1,10 @@
 use super::Client;
 use aoe_core::{Camera, ScreenPoint, TileRect};
-use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, SurfaceKind, Tile};
-use aoe_rendering::{SceneResource, SceneTerrain};
+use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, Tile};
+use aoe_rendering::{
+    SceneResource, SceneTerrain, SceneTerrainSurface, pick_surface_point,
+    projected_surface_triangles, sample_surface_height,
+};
 use std::{cell::RefCell, mem::size_of, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
@@ -130,9 +133,15 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
                 continue;
             }
             terrain.push(SceneTerrain {
-                position: [f64::from(x), f64::from(y)],
+                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                 material: terrain_material(tile.material),
-                elevation_meters: f64::from(tile.game_height_level),
+                elevation_meters: tile_center_elevation(tile),
+                surface: SceneTerrainSurface {
+                    corner_game_height_levels: tile.surface.corner_game_height_levels,
+                    kind: tile.surface.kind as u8,
+                    triangulation: tile.surface.triangulation as u8,
+                    water: tile.water as u8,
+                },
             });
         }
     }
@@ -153,7 +162,10 @@ pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         })
         .map(|resource| SceneResource {
             id: resource.id,
-            position: [f64::from(resource.tile.x), f64::from(resource.tile.y)],
+            position: [
+                f64::from(resource.tile.x) + 0.5,
+                f64::from(resource.tile.y) + 0.5,
+            ],
             kind: resource.kind as u8,
             visual_variant: resource.visual_variant,
             elevation_meters: elevation_at_tile(client, resource.tile.x, resource.tile.y),
@@ -165,7 +177,11 @@ pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
 }
 
 pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
-    elevation_at_tile(client, world[0].floor() as i32, world[1].floor() as i32)
+    let x = world[0].floor() as i32;
+    let y = world[1].floor() as i32;
+    terrain_tile(client, x, y).map_or(0.0, |tile| {
+        surface_elevation(tile, world[0] - f64::from(x), world[1] - f64::from(y))
+    })
 }
 
 pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
@@ -175,14 +191,20 @@ pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
 }
 
 pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
-    world_at_screen_with_height(client.camera, screen, |x, y| {
-        if client.map_content_hash.is_none() {
-            return Some(0.0);
-        }
-        let tile = terrain_tile(client, x, y)?;
-        (!matches!(tile.surface.kind, SurfaceKind::Cliff))
-            .then_some(f64::from(tile.game_height_level))
-    })
+    if client.map_content_hash.is_none() {
+        return world_at_screen_with_height(client.camera, screen, |_, _| Some(0.0));
+    }
+    let terrain = scene_terrain(client);
+    let triangles = projected_surface_triangles(
+        &terrain,
+        aoe_rendering::SceneCamera {
+            center: client.camera.center,
+            zoom: client.camera.zoom,
+            viewport: client.camera.viewport,
+            focus_elevation_meters: client.camera.focus_elevation_meters,
+        },
+    );
+    pick_surface_point(&triangles, screen)
 }
 
 fn world_at_screen_with_height(
@@ -205,7 +227,25 @@ fn world_at_screen_with_height(
 }
 
 fn elevation_at_tile(client: &Client, x: i32, y: i32) -> f64 {
-    terrain_tile(client, x, y).map_or(0.0, |tile| f64::from(tile.game_height_level))
+    terrain_tile(client, x, y).map_or(0.0, tile_center_elevation)
+}
+
+fn tile_center_elevation(tile: &Tile) -> f64 {
+    sample_surface_height(
+        tile.surface.corner_game_height_levels,
+        tile.surface.triangulation as u8,
+        0.5,
+        0.5,
+    )
+}
+
+fn surface_elevation(tile: &Tile, x: f64, y: f64) -> f64 {
+    sample_surface_height(
+        tile.surface.corner_game_height_levels,
+        tile.surface.triangulation as u8,
+        x,
+        y,
+    )
 }
 
 fn terrain_tile(client: &Client, x: i32, y: i32) -> Option<&Tile> {
@@ -397,59 +437,5 @@ async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<Chunk, JsValu
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_map::MapChunkGenerator;
-    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
-
-    wasm_bindgen_test_configure!(run_in_browser);
-
-    #[wasm_bindgen_test]
-    fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
-        let chunk = MapChunkGenerator::new([0; 32], 1, 32)
-            .chunk(0, 0)
-            .expect("fixture chunk");
-        assert_eq!(
-            chunk_resident_bytes(&chunk),
-            size_of::<Chunk>()
-                + chunk.tiles.capacity() * size_of::<Tile>()
-                + chunk.resources.capacity() * size_of::<ResourceNode>()
-        );
-    }
-
-    #[wasm_bindgen_test]
-    fn decoded_cache_limit_matches_the_product_budget() {
-        assert_eq!(MAX_CACHED_CHUNKS, 512);
-        assert_eq!(MAX_CACHED_CHUNK_BYTES, 128 * 1024 * 1024);
-    }
-
-    #[wasm_bindgen_test]
-    fn partial_edge_chunk_uses_active_map_dimensions_for_rows() {
-        let chunk = MapChunkGenerator::new([0; 32], 1, 500)
-            .chunk(15, 15)
-            .expect("fixture chunk");
-        assert_eq!(chunk.tiles.len(), 20 * 20);
-        assert_eq!(chunk_tile_index(500, 500, &chunk, 480, 480), Some(0));
-        assert_eq!(chunk_tile_index(500, 500, &chunk, 499, 499), Some(399));
-        assert_eq!(chunk_tile_index(500, 500, &chunk, 500, 499), None);
-    }
-
-    #[wasm_bindgen_test]
-    fn nonconverging_height_pick_returns_unavailable() {
-        let camera = Camera {
-            center: [10.0, 10.0],
-            zoom: 1.0,
-            viewport: [256.0, 128.0],
-            focus_elevation_meters: 0.0,
-        };
-        let result =
-            world_at_screen_with_height(camera, ScreenPoint { x: 128.0, y: 64.0 }, |x, y| {
-                match (x, y) {
-                    (10, 10) => Some(2.0),
-                    (11, 9) => Some(0.0),
-                    _ => None,
-                }
-            });
-        assert!(result.is_none());
-    }
-}
+#[path = "playground_map_tests.rs"]
+mod tests;
