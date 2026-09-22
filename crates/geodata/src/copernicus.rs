@@ -91,7 +91,15 @@ pub fn prepare_detailed_directory(
         .map_err(|_| GeodataError::Preparation("invalid map request estimate"))?;
     let bounds = geographic_bounds(request, estimate.effective_side_meters)?;
     validate_tile_budget(bounds)?;
+    let hydrology_plan = crate::hydrology::preflight_hydrology(&cache_root, request)?;
     let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
+    let hydrology = crate::hydrology::prepare_hydrology_with_plan(
+        cache_root.clone(),
+        request,
+        samples_per_axis.min(crate::MAX_HYDROLOGY_SAMPLES_PER_AXIS),
+        hydrology_plan,
+        &overview.water_pages,
+    )?;
     let cache = SourceCache::new(
         cache_root.clone(),
         DownloadPolicy {
@@ -111,7 +119,13 @@ pub fn prepare_detailed_directory(
         coverage.tiles,
         overview_ocean,
     )?;
-    let fields = build_pyramids(&mut sampler, &stage, samples_per_axis, &overview)?;
+    let fields = build_pyramids(
+        &mut sampler,
+        &stage,
+        samples_per_axis,
+        &overview,
+        &hydrology,
+    )?;
     let mut sources = vec![
         overview.source_lock,
         overview.water_source_lock,
@@ -131,6 +145,7 @@ pub fn prepare_detailed_directory(
             })
             .collect::<Result<Vec<_>, _>>()?,
     );
+    sources.extend(hydrology.source_locks.iter().cloned());
     let environment = PreparedEnvironment {
         samples_per_axis,
         geographic_millimeters_per_sample: estimate

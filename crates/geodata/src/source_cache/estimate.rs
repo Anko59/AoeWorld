@@ -27,6 +27,7 @@ impl SourceCache {
             if source.id.is_empty()
                 || source.bytes == 0
                 || !source.provider.permits(&source.url)
+                || !source.has_valid_acquisition_policy()
                 || !identifiers.insert(source.id.as_str())
             {
                 return Err(CacheError::InvalidLock(
