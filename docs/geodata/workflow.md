@@ -203,3 +203,15 @@ A fixed temporary name limits crash leftovers to one per map and the next
 write recovers it under the process lock. One server process must own a package directory; this is not a shared database.
 No gather command or economy is introduced. Network synchronization of resource
 amounts and client sprite invalidation remain separate consumers.
+
+
+Worker lifetime is bounded in the Dockerized Linux server. Preparation has a
+two-hour deadline and footprint projection a 30-second deadline. Cancellation,
+output overflow, deadline expiry, and normal worker exit terminate the worker's
+owned process group, including GDAL descendants, before joining pipe readers.
+Requests remain limited to 64 KiB, responses to 512 KiB, and diagnostics to
+8 KiB. Oversized output fails explicitly; readers drain without retaining excess
+bytes until termination, so a full pipe cannot prevent cancellation. Input is
+written separately so a worker that never reads stdin remains cancellable.
+These lifecycle guarantees do not provide a durable job journal or remove
+partially prepared source/cache files after a crash.
