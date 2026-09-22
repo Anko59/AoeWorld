@@ -6,6 +6,7 @@ use crate::KnownSource;
 use sha2::{Digest, Sha256};
 use std::{
     fs, io,
+    io::Read,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
@@ -102,7 +103,7 @@ impl SourceCache {
 
     pub fn known_lock(&self, id: &str) -> Result<Option<SourceLock>, CacheError> {
         let path = self.known_path_for_id(id);
-        let bytes = match fs::read(path) {
+        let bytes = match read_lock(&path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(CacheError::Io(error)),
@@ -120,7 +121,7 @@ impl SourceCache {
         // Fixed-checksum sources are checked against their catalog digest;
         // WorldCover's explicit first-acquisition policy pins to this lock.
         let path = self.known_path(source);
-        let bytes = match fs::read(path) {
+        let bytes = match read_lock(&path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 return self.recover_known(source);
@@ -191,6 +192,10 @@ impl SourceCache {
             if !source.expected_checksum.matches(&sha256, &sha1, &md5) {
                 continue;
             }
+            let digest = digest_hex(&sha256);
+            if entry.file_name().to_str() != Some(digest.as_str()) {
+                continue;
+            }
             let lock = SourceLock {
                 id: source.id.clone(),
                 provider: source.provider,
@@ -210,6 +215,28 @@ impl SourceCache {
     }
 }
 
+const MAX_KNOWN_LOCK_BYTES: u64 = 64 * 1024;
+
+fn read_lock(path: &std::path::Path) -> io::Result<Vec<u8>> {
+    let file = fs::File::open(path)?;
+    if file.metadata()?.len() > MAX_KNOWN_LOCK_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "known source lock exceeds 64 KiB",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_KNOWN_LOCK_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_KNOWN_LOCK_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "known source lock exceeds 64 KiB",
+        ));
+    }
+    Ok(bytes)
+}
+
 fn same_source(source: &KnownSource, lock: &SourceLock) -> bool {
     source.id == lock.id
         && source.provider == lock.provider
@@ -223,38 +250,4 @@ fn same_source(source: &KnownSource, lock: &SourceLock) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recorded_lock_is_usable_when_the_catalog_is_offline() {
-        let root = std::env::temp_dir().join(format!("aoe-known-lock-{}", std::process::id()));
-        let cache =
-            SourceCache::new(root.clone(), super::super::DownloadPolicy::default()).expect("cache");
-        let lock = SourceLock {
-            id: "offline-source".to_owned(),
-            provider: super::super::Provider::Noaa,
-            release: "test".to_owned(),
-            url: "https://www.ngdc.noaa.gov/source.tif".to_owned(),
-            sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned(),
-            bytes: 3,
-            native_resolution: "test".to_owned(),
-            crs: "EPSG:4326".to_owned(),
-            vertical_datum: "test".to_owned(),
-            license_reference: "test".to_owned(),
-        };
-        fs::write(cache.object_path(&lock).expect("object"), b"abc").expect("object bytes");
-        fs::write(
-            cache.known_path_for_id(&lock.id),
-            serde_json::to_vec(&lock).expect("lock JSON"),
-        )
-        .expect("recorded lock");
-        assert_eq!(
-            cache.known_lock(&lock.id).expect("cached lock"),
-            Some(lock.clone())
-        );
-        fs::write(cache.object_path(&lock).expect("object"), b"abd").expect("tamper object");
-        assert_eq!(cache.known_lock(&lock.id).expect("tampered lock"), None);
-        fs::remove_dir_all(root).expect("remove temporary cache");
-    }
-}
+mod tests;
