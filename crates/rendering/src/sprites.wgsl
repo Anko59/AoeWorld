@@ -12,6 +12,7 @@ struct VertexOutput {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
     @location(1) uv: vec2<f32>,
+    @location(2) @interpolate(flat) solid: u32,
 };
 
 @vertex
@@ -21,13 +22,27 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
-    out.clip = vec4<f32>(sprite.position + corners[vertex] * sprite.radius, 0.0, 1.0);
+    let is_surface = sprite.uv.w < 0.0;
+    if is_surface {
+        let points = array<vec2<f32>, 6>(
+            sprite.position, sprite.radius, sprite.uv.xy,
+            sprite.uv.xy, sprite.uv.xy, sprite.uv.xy);
+        out.clip = vec4<f32>(points[vertex], 0.0, 1.0);
+        out.uv = vec2<f32>(0.0);
+        out.solid = 1u;
+    } else {
+        out.clip = vec4<f32>(sprite.position + corners[vertex] * sprite.radius, 0.0, 1.0);
+        out.uv = sprite.uv.xy + vec2<f32>((corners[vertex].x + 1.0) * 0.5, (1.0 - corners[vertex].y) * 0.5) * sprite.uv.zw;
+        out.solid = 0u;
+    }
     out.color = sprite.color;
-    out.uv = sprite.uv.xy + vec2<f32>((corners[vertex].x + 1.0) * 0.5, (1.0 - corners[vertex].y) * 0.5) * sprite.uv.zw;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(sprite_atlas, sprite_sampler, in.uv) * in.color;
+    if in.solid == 1u {
+        return in.color;
+    }
+    return textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0) * in.color;
 }
