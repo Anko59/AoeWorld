@@ -134,6 +134,8 @@ pub enum WorkerRequest {
         request: MapRequest,
         samples_per_axis: u16,
         resolution: DemResolution,
+        #[serde(default)]
+        staging_root: Option<PathBuf>,
     },
     ListOverviewSources,
     ListPotentialBiomeSources,

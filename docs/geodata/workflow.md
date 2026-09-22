@@ -256,3 +256,13 @@ bytes until termination, so a full pipe cannot prevent cancellation. Input is
 written separately so a worker that never reads stdin remains cancellable.
 These lifecycle guarantees do not provide a durable job journal or remove
 partially prepared source/cache files after a crash.
+
+Server-driven detailed preparation owns a separate directory below
+`<cache>/worker-scratch/`. The server and worker hold shared file leases;
+startup and the next preparation recover only directories with no live lease.
+Normal completion, failure, and cancellation remove the owned scratch after the
+worker group has been reaped. This bounds crash leftovers without deleting an
+active worker's pages. Cached source objects and resumable downloads remain
+shared. This ownership applies to detailed pyramid staging, not to every
+provider extraction temporary or incomplete immutable publication file.
+Direct CLI preparations retain their existing local staging cleanup behavior.

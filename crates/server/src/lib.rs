@@ -69,6 +69,10 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Result<Self, AppStateError> {
+        if config.map_worker.is_some() {
+            map_worker::recover_scratch(&config.geodata_cache_directory)
+                .map_err(AppStateError::MapJobs)?;
+        }
         let map_packages = map_store::load(config.map_package_directory.as_deref())?;
         let map_jobs =
             map_jobs::Manager::load(config.map_package_directory.as_deref(), &map_packages)
