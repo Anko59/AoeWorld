@@ -359,3 +359,107 @@ test("unavailable renderers stop loading with a visible error", async ({
     "Canvas 2D is unavailable",
   );
 });
+
+test("map creator retries a recovered request with its original detail", async ({
+  page,
+}) => {
+  await gameAssets(page);
+  const request = {
+    center_latitude_e7: 488566000,
+    center_longitude_e7: 23522000,
+    requested_side_meters: 42000,
+    compression: { numerator: 21, denominator: 1 },
+    seed: 17,
+    year_ce: 600,
+    schema_version: 1,
+  };
+  await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: [
+          {
+            id: 41,
+            state: "failed",
+            request,
+            preparation: { mode: "overview" },
+          },
+        ],
+      });
+    } else {
+      expect(route.request().postDataJSON()).toEqual({
+        ...request,
+        preparation: "overview",
+      });
+      await route.fulfill({ status: 500, body: "controlled retry response" });
+    }
+  });
+  await page.goto("/");
+  await waitForGame(page);
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.getByLabel("Previous map requests").selectOption("41");
+  const retry = page.waitForRequest(
+    (value) => value.url().endsWith("/maps/jobs") && value.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Retry selected request" }).click();
+  await retry;
+  await expect(page.locator("#map-estimate")).toContainText(
+    "controlled retry response",
+  );
+});
+
+test("accepted creation survives a polling error and reload without duplicate submission", async ({
+  page,
+}) => {
+  await gameAssets(page);
+  let submitted = 0;
+  let polls = 0;
+  let original: Record<string, unknown> = {};
+  await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: [] });
+    } else {
+      submitted += 1;
+      original = route.request().postDataJSON();
+      await route.fulfill({ json: { id: 77 } });
+    }
+  });
+  await page.route("**/maps/jobs/77", async (route) => {
+    polls += 1;
+    if (polls === 1) {
+      await route.fulfill({ status: 500, body: "temporary status error" });
+    } else {
+      await route.fulfill({
+        json: {
+          id: 77,
+          state: "cancelled",
+          request: original,
+          preparation: { mode: "procedural_fallback" },
+        },
+      });
+    }
+  });
+  await page.goto("/");
+  await waitForGame(page);
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.getByRole("button", { name: "Generate", exact: true }).click();
+  await expect(page.locator("#map-estimate")).toContainText(
+    "temporary status error",
+  );
+  await expect(
+    page.getByRole("button", { name: "Resume job", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Generate", exact: true }),
+  ).toBeDisabled();
+  await page.reload();
+  await waitForGame(page);
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await expect(page.locator("#map-estimate")).toContainText(
+    "Map creation cancelled",
+  );
+  await expect(
+    page.getByRole("button", { name: "Generate", exact: true }),
+  ).toBeEnabled();
+  expect(submitted).toBe(1);
+  expect(polls).toBe(2);
+});
