@@ -1,9 +1,10 @@
 use super::*;
-use crate::game_movement::MAX_ACTIVE_ROUTE_PLANNERS;
+use crate::MAX_ROUTE_WORK_PER_TICK;
+use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPage, EnvironmentPageError,
     EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, PreparedEnvironment, PyramidLevel,
-    Ratio, WaterPage, ordered_page_root,
+    Ratio, RoutePlannerPoll, WaterPage, ordered_page_root,
 };
 use std::sync::{
     Arc,
@@ -227,12 +228,12 @@ fn resumable_planners_rotate_with_a_shared_one_expansion_budget() {
         .planner
         .as_ref()
         .expect("first planner")
-        .expansions();
+        .work();
     let second_progress = world.units[world.lookup[&second]]
         .planner
         .as_ref()
         .expect("second planner")
-        .expansions();
+        .work();
     assert!(first_progress > second_progress);
 
     world.planning_budget = 1;
@@ -241,12 +242,12 @@ fn resumable_planners_rotate_with_a_shared_one_expansion_budget() {
         .planner
         .as_ref()
         .expect("first planner")
-        .expansions();
+        .work();
     let second_again = world.units[world.lookup[&second]]
         .planner
         .as_ref()
         .expect("second planner")
-        .expansions();
+        .work();
     assert!(second_again > second_progress);
     assert_eq!(first_again, first_progress);
 }
@@ -256,6 +257,20 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let mut world = GameWorld::new(config).expect("world");
     world.terrain = flat_map_terrain();
+
+    let mut continuation = world
+        .terrain
+        .route_planner(TileCoord::new(1, 1), TileCoord::new(55, 1), 4_096)
+        .expect("map planner");
+    assert!(matches!(
+        world
+            .terrain
+            .poll_route_planner(&mut continuation, 4_096, &|| false),
+        Some(RoutePlannerPoll::Path(_))
+    ));
+    assert!(continuation.has_route_continuation());
+    assert!(!continuation.requires_search_slot());
+
     let mut planner_units = Vec::new();
     for raw in 0..MAX_ACTIVE_ROUTE_PLANNERS {
         let tile = TileCoord::new(1 + (raw as i32 % 8), 1 + (raw as i32 / 8));
@@ -268,15 +283,16 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
         let index = world.lookup[&id];
         world.store_planner(
             index,
-            Some(RoutePlanner::new(
-                tile,
-                TileCoord::new(tile.x + 20, tile.y),
-                4_096,
-            )),
+            Some(if raw < MAX_ACTIVE_ROUTE_SEARCHES {
+                RoutePlanner::new(tile, TileCoord::new(tile.x + 20, tile.y), 4_096)
+            } else {
+                continuation.clone()
+            }),
         );
         planner_units.push(id);
     }
     assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES);
 
     let queued = world
         .spawn_unit(
@@ -284,34 +300,51 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
             WorldPosition::from_tile_center(TileCoord::new(10, 1)).expect("queued origin"),
         )
         .expect("queued spawn");
-    let target = WorldPosition::from_tile_center(TileCoord::new(20, 1)).expect("target");
+    let target = WorldPosition::from_tile_center(TileCoord::new(63, 1)).expect("target");
     world.planning_budget = 1;
     assert!(world.issue_move(queued, target).expect("deferred order"));
     assert!(world.movement_order(queued).is_some());
     assert!(world.unit(queued).expect("unit").planning);
     assert!(world.units[world.lookup[&queued]].planner.is_none());
     assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES);
+    assert_eq!(world.planning_budget, 1);
 
     let redirected = planner_units[0];
     let redirect_target =
-        WorldPosition::from_tile_center(TileCoord::new(20, 8)).expect("redirect target");
+        WorldPosition::from_tile_center(TileCoord::new(63, 1)).expect("redirect target");
+    world.planning_budget = MAX_ROUTE_WORK_PER_TICK;
     assert!(
         world
             .issue_move(redirected, redirect_target)
             .expect("redirect")
     );
     assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES - 1);
 
     world.clear_planner(world.lookup[&planner_units[1]]);
     assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS - 1);
-    world.planning_budget = 1;
-    world.advance();
-    assert!(world.active_planner_count <= MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_route_searches, 0);
+    world.planning_budget = MAX_ROUTE_WORK_PER_TICK;
+    assert!(
+        world
+            .issue_move(queued, target)
+            .expect("resumed deferred order")
+    );
+    assert!(
+        world.units[world.lookup[&queued]]
+            .planner
+            .as_ref()
+            .is_some_and(|planner| planner.has_route_continuation())
+    );
+    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_route_searches, 0);
     assert!(world.movement_order(queued).is_some());
     for index in 0..world.units.len() {
         world.clear_planner(index);
     }
     assert_eq!(world.active_planner_count, 0);
+    assert_eq!(world.active_route_searches, 0);
 }
 
 #[test]

@@ -23,7 +23,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
 | M2 | Detailed streaming preparation | Regional prep/residency/creator verified; large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
 | M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
-| M4 | Physical movement and long routes | Physical speed verified; routes pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
+| M4 | Physical movement and long routes | Physical speed and bounded detours implemented; 100 km qualification pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Persistence and synchronization verified; source-session qualification pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
 | M7 | Creation experience | Creator and publication verified; recovery/progress pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
@@ -47,8 +47,25 @@ errors remain typed, exhausted local searches terminate, and retained search
 entries are capped before insertion. Planner progress and budget participate
 in replay hashes. Hooks, map-test (58), preflight (288 native tests), and clean
 pre-push preflight passed. Cache byte accounting is a logical payload budget,
-not allocator-inclusive RSS. Four-portal segment selection still needs the
-long-detour connectivity work and source-backed 100 km qualification.
+not allocator-inclusive RSS. The focused long-route follow-up replaces the
+earlier four-portal routing with resumable exact sparse A* and retains a proven full
+route continuation across 32-tile movement segments. It charges queue pops,
+neighbor probes, parent hops, and route conversion steps; caps one search at
+12,800,000 work units and 524,288 logical
+retained planner entries across search, reconstruction, and continuation, and
+limits a world to 64 planners with at most two heavy searches. A fixed
+4,094-tile straight corridor crossed 128 movement
+segments in 45,026 work units and 32,756 peak entries; a 62-tile wall detour
+through its only gateway used 19,207 work units and 2,825 entries, while the
+matching sealed wall was proven unreachable in 19,394 work units and 2,084
+entries. Straight and detour work includes one unit per parent hop and route
+conversion step. Map-test passes 66 tests. These synthetic fixtures
+establish exact continuation and boundedness for their cases, not source-backed
+100 km behavior or RTS latency. At 16,384 shared route-work units per tick,
+the 12.8 million per-search cap could consume up to 782 fully allocated ticks
+(about 39 seconds at 20 Hz); this is a budget bound, not a measured route
+delay. A 100 km order spans 50,000 two-meter tiles and remains a separate
+qualification target.
 
 M8 native geodata fixtures are reviewed in
 [PR #22](https://github.com/Anko59/AoeWorld/pull/22), revision

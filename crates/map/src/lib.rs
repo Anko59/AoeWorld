@@ -11,7 +11,6 @@ mod navigation;
 mod overlay;
 mod package;
 mod request;
-mod route_hierarchy;
 mod terrain;
 mod water;
 mod wire;
@@ -25,8 +24,9 @@ pub use environment::{
 };
 pub use land_use::{HistoricalLandUsePage, ordered_land_use_page_root};
 pub use navigation::{
-    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_SEGMENT_TILES, MovementOutcome, Path, RoutePlanner,
-    RoutePlannerPoll, find_path, find_path_segment_with_overlay, find_path_with_overlay,
+    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES,
+    MovementOutcome, Path, RoutePlanner, RoutePlannerPoll, find_path,
+    find_path_segment_with_overlay, find_path_with_overlay,
 };
 pub use overlay::{
     Depletion, MAX_RESOURCE_OVERLAY_CHANGES, RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange,

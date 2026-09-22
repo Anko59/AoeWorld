@@ -93,6 +93,7 @@ pub struct GameWorld {
     pub(crate) navigation_cache: NavigationCache,
     pub(crate) planning_cursor: usize,
     pub(crate) active_planner_count: usize,
+    pub(crate) active_route_searches: usize,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -109,10 +110,11 @@ impl GameWorld {
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
-            planning_budget: crate::MAX_ROUTE_EXPANSIONS_PER_TICK,
+            planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
             navigation_cache: NavigationCache::default(),
             planning_cursor: 0,
             active_planner_count: 0,
+            active_route_searches: 0,
         }
     }
 
@@ -336,6 +338,10 @@ impl GameWorld {
                 Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
                     let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
                     (waypoint, route, None, false)
+                }
+                Some(MapRoutePlan::Segment(path, planner)) => {
+                    let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
+                    (waypoint, route, planner, false)
                 }
                 Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
                     return Err(GameWorldError::InvalidPosition);
