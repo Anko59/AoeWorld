@@ -16,7 +16,7 @@
     #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; pointer-events: none; }
     #connection { color: #d2e5a7; }
     #unsupported { position: fixed; left: 14px; top: 14px; z-index: 3; max-width: 420px; color: #ffd29a; }
-    #map-creator { position: fixed; left: 14px; top: 14px; z-index: 2; width: 310px; padding: 12px; color: #e8efd9; background: #142314ed; border: 1px solid #60764d; border-radius: 5px; }
+    #map-creator { position: fixed; left: 14px; top: 14px; z-index: 2; width: 310px; max-height: calc(100vh - 54px); overflow: auto; padding: 12px; color: #e8efd9; background: #142314ed; border: 1px solid #60764d; border-radius: 5px; }
     #map-creator[hidden] { display: none; }
     #map-creator h1 { margin: 0 0 10px; font-size: 16px; }
     #map-creator p { margin: 0 0 10px; color: #c8d8ae; line-height: 1.35; }
@@ -67,6 +67,8 @@
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
       <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
+      <label>Previous map requests <select id="job-history"><option value="">No previous request selected</option></select></label>
+      <button id="retry-history" type="button" disabled>Retry selected request</button>
       <label>Preview layer <select id="preview-layer" aria-label="Terrain preview layer"><option value="elevation">Elevation</option><option value="water">Water</option><option value="vegetation">Vegetation</option><option value="suitability">Passable ground</option></select></label>
       <section id="terrain-preview" hidden aria-label="Saved map technical preview"><canvas id="terrain-preview-canvas" width="128" height="128"></canvas><p id="terrain-preview-summary"></p></section>
       <div id="creator-actions"><button id="estimate-map" type="button">Estimate</button><button id="generate-map" type="button">Generate</button><button id="retry-map" type="button" disabled>Retry</button><button id="cancel-map" type="button" disabled>Cancel</button></div>
@@ -78,6 +80,7 @@
   </main>
   <script type="module">
     import init from '/pkg/aoe_client.js';
+    import { initMapJobs } from '/map-jobs.js';
     const creator = document.getElementById('map-creator');
     const estimate = document.getElementById('map-estimate');
     const generate = document.getElementById('generate-map');
@@ -108,8 +111,6 @@
       antarctic: { name: 'Antarctic interior', latitude: -80.0, longitude: 0.0 },
       continental: { name: 'Continental Europe/Africa', latitude: 35.0, longitude: 15.0 }
     });
-    let activeJob = null;
-    let retryRequest = null;
     let currentTerrainPreview = null;
     const overviewView = { x: 0, y: 0, width: 360, height: 180 };
     let overviewDrag = null;
@@ -332,30 +333,20 @@
         packageSelect.add(new Option(`${latitude}, ${longitude} · ${item.estimate.tiles_per_side.toLocaleString()} tiles · ${detail}`, item.content_hash));
       }
     };
-    const waitForJob = async id => {
-      for (;;) {
-        const job = await readJson(await fetch(`/maps/jobs/${id}`));
-        if (job.state === 'completed') return job;
-        if (job.state === 'cancelled') throw new Error('Map creation cancelled.');
-        if (job.state === 'failed') throw new Error(job.error || 'Map creation failed.');
-        const eta = job.eta_seconds === null ? '' : ` · ${formatTime(job.eta_seconds)} remaining`;
-        estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}\n${preparationSummary(job.preparation)}`;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    };
     const preparationSummary = plan => {
       const grid = plan.samples_per_axis ? `${plan.samples_per_axis} × ${plan.samples_per_axis} samples · ${(plan.geographic_millimeters_per_sample / 1000).toLocaleString()} m spacing\n` : '';
       return grid + plan.explanation;
     };
+    const { refreshHistory } = initMapJobs({ readJson, controllerHeaders, preparationSummary, formatTime, mapRequest, refreshPackages, estimate, generate, retry, cancel });
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
-      if (!creator.hidden) refreshPackages().catch(error => {
+      if (!creator.hidden) Promise.all([refreshPackages(), refreshHistory()]).catch(error => {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to list saved maps.';
       });
     });
     document.getElementById('refresh-maps').addEventListener('click', () => {
-      refreshPackages().catch(error => {
+      Promise.all([refreshPackages(), refreshHistory()]).catch(error => {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to list saved maps.';
       });
@@ -380,55 +371,6 @@
       } catch (error) {
         estimate.className = 'error';
         estimate.textContent = error.message || 'Unable to estimate this map.';
-      }
-    });
-    const startGeneration = async request => {
-      generate.disabled = true;
-      retry.disabled = true;
-      cancel.disabled = false;
-      try {
-        const job = await readJson(await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', ...controllerHeaders() }, body: JSON.stringify(request) }));
-        activeJob = job.id;
-        const completed = await waitForJob(job.id);
-        const value = await readJson(await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() }));
-        await refreshPackages();
-        estimate.className = '';
-        const source = value.uses_fallback_data ? 'Fallback' : 'Source-backed';
-        if (!value.start_available) {
-          estimate.textContent = `${source} package available for preview: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\n${value.message || 'No suitable land start.'} Open its terrain preview; gameplay was not replaced.`;
-          return;
-        }
-        estimate.textContent = `${source} package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`;
-      } catch (error) {
-        estimate.className = 'error';
-        estimate.textContent = error.message || 'Unable to activate this map.';
-        retry.disabled = false;
-      } finally {
-        activeJob = null;
-        generate.disabled = false;
-        cancel.disabled = true;
-      }
-    };
-    generate.addEventListener('click', () => {
-      try {
-        retryRequest = mapRequest();
-        startGeneration(retryRequest);
-      } catch (error) {
-        estimate.className = 'error';
-        estimate.textContent = error.message || 'Unable to create this map request.';
-      }
-    });
-    retry.addEventListener('click', () => {
-      if (retryRequest) startGeneration(retryRequest);
-    });
-    cancel.addEventListener('click', async () => {
-      if (activeJob === null) return;
-      cancel.disabled = true;
-      try {
-        await readJson(await fetch(`/maps/jobs/${activeJob}/cancel`, { method: 'POST', headers: controllerHeaders() }));
-      } catch (error) {
-        estimate.className = 'error';
-        estimate.textContent = error.message || 'Unable to cancel map creation.';
       }
     });
     document.getElementById('open-map').addEventListener('click', async () => {

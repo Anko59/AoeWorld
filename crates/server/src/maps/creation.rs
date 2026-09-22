@@ -35,9 +35,14 @@ pub(crate) async fn create_job(
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
     map_jobs::PreparationPlan::resolve(input, state.map_worker.is_some())
         .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
-    let job = map_jobs::start(&state, input)
-        .await
-        .map_err(|error| (StatusCode::TOO_MANY_REQUESTS, error))?;
+    let job = map_jobs::start(&state, input).await.map_err(|error| {
+        let code = match error {
+            map_jobs::StartError::Invalid(_) => StatusCode::BAD_REQUEST,
+            map_jobs::StartError::Queue(_) => StatusCode::TOO_MANY_REQUESTS,
+            map_jobs::StartError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (code, error.to_string())
+    })?;
     Ok((StatusCode::ACCEPTED, Json(job)))
 }
 
@@ -63,6 +68,7 @@ pub(crate) async fn cancel_job(
     require_controller(&state, &headers).await?;
     map_jobs::cancel(&state, job_id)
         .await
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?
         .map(Json)
         .ok_or((StatusCode::NOT_FOUND, "unknown map creation job".to_owned()))
 }

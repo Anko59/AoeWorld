@@ -1,6 +1,6 @@
 use crate::{AppState, map_store, map_worker};
 use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -9,13 +9,24 @@ use std::{
     },
 };
 
+mod journal;
 mod preparation;
 pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
 
 const MAX_QUEUED_JOBS: usize = 2;
 const MAX_RETAINED_JOBS: usize = 128;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, thiserror::Error)]
+pub(super) enum StartError {
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{0}")]
+    Queue(String),
+    #[error("{0}")]
+    Storage(String),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum JobState {
     Queued,
@@ -26,7 +37,7 @@ pub(super) enum JobState {
     Failed,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum JobStage {
     Queued,
@@ -53,12 +64,13 @@ pub(super) struct Job {
     pub error: Option<String>,
 }
 
+#[derive(Clone)]
 struct Entry {
     job: Job,
     cancelled: Arc<AtomicBool>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Manager {
     next_id: u64,
     jobs: BTreeMap<u64, Entry>,
@@ -164,16 +176,27 @@ impl Manager {
     }
 }
 
-pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Job, String> {
-    let preparation = PreparationPlan::resolve(input, state.map_worker.is_some())?;
+pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Job, StartError> {
+    let preparation =
+        PreparationPlan::resolve(input, state.map_worker.is_some()).map_err(StartError::Invalid)?;
     let request = input
         .request
         .normalized()
-        .map_err(|error| error.to_string())?;
-    let estimate = request.estimate().map_err(|error| error.to_string())?;
+        .map_err(|error| StartError::Invalid(error.to_string()))?;
+    let estimate = request
+        .estimate()
+        .map_err(|error| StartError::Invalid(error.to_string()))?;
     let (job, start) = {
         let mut manager = state.map_jobs.lock().await;
-        manager.enqueue(request, estimate, preparation)?
+        let mut candidate = manager.clone();
+        let result = candidate
+            .enqueue(request, estimate, preparation)
+            .map_err(StartError::Queue)?;
+        journal::persist(state.map_package_directory.as_deref(), &candidate)
+            .await
+            .map_err(StartError::Storage)?;
+        *manager = candidate;
+        result
     };
     if let Some(id) = start {
         launch(state.clone(), id);
@@ -202,27 +225,34 @@ pub(super) async fn list(state: &AppState) -> Vec<Job> {
         .collect()
 }
 
-pub(super) async fn cancel(state: &AppState, id: u64) -> Option<Job> {
+pub(super) async fn cancel(state: &AppState, id: u64) -> Result<Option<Job>, String> {
     let mut manager = state.map_jobs.lock().await;
-    let entry = manager.jobs.get_mut(&id)?;
-    match entry.job.state {
+    let mut candidate = manager.clone();
+    let Some(entry) = candidate.jobs.get_mut(&id) else {
+        return Ok(None);
+    };
+    let signal = match entry.job.state {
         JobState::Queued => {
             entry.job.state = JobState::Cancelled;
             entry.job.stage = JobStage::Cancelled;
             entry.job.eta_seconds = None;
+            None
         }
         JobState::Running => {
-            entry.cancelled.store(true, Ordering::SeqCst);
             entry.job.state = JobState::CancelRequested;
             entry.job.stage = JobStage::Cancelling;
             entry.job.eta_seconds = None;
+            Some(entry.cancelled.clone())
         }
-        JobState::CancelRequested
-        | JobState::Completed
-        | JobState::Cancelled
-        | JobState::Failed => {}
+        _ => return Ok(Some(entry.job.clone())),
+    };
+    let job = entry.job.clone();
+    journal::persist(state.map_package_directory.as_deref(), &candidate).await?;
+    *manager = candidate;
+    if let Some(signal) = signal {
+        signal.store(true, Ordering::SeqCst);
     }
-    Some(entry.job.clone())
+    Ok(Some(job))
 }
 
 fn launch(state: AppState, id: u64) {
@@ -314,18 +344,21 @@ async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
     };
     let next = {
         let mut manager = state.map_jobs.lock().await;
-        let Some(entry) = manager.jobs.get_mut(&id) else {
+        let mut candidate = manager.clone();
+        let Some(entry) = candidate.jobs.get_mut(&id) else {
             return;
         };
+        let mut publication_package = None;
         if entry.cancelled.load(Ordering::SeqCst) {
             entry.job.state = JobState::Cancelled;
             entry.job.stage = JobStage::Cancelled;
             entry.job.eta_seconds = None;
         } else {
             match publication {
-                Ok((mut packages, package)) => {
+                Ok((packages, package)) => {
                     let hash = package.content_hash_hex();
-                    packages.insert(hash.clone(), package);
+                    // Keep the registry guard until the durable outcome is saved.
+                    publication_package = Some((packages, package));
                     entry.job.state = JobState::Completed;
                     entry.job.stage = JobStage::Completed;
                     entry.job.percent = 100;
@@ -340,7 +373,25 @@ async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
                 }
             }
         };
-        manager.start_next()
+        let next = candidate.start_next();
+        if let Err(error) =
+            journal::persist(state.map_package_directory.as_deref(), &candidate).await
+        {
+            for (job_id, entry) in &mut manager.jobs {
+                if *job_id == id || entry.job.state == JobState::Queued {
+                    entry.job.state = JobState::Failed;
+                    entry.job.stage = JobStage::Failed;
+                    entry.job.eta_seconds = None;
+                    entry.job.error = Some(error.clone());
+                }
+            }
+            return;
+        }
+        if let Some((mut packages, package)) = publication_package {
+            packages.insert(package.content_hash_hex(), package);
+        }
+        *manager = candidate;
+        next
     };
     if let Some(next) = next {
         launch(state.clone(), next);

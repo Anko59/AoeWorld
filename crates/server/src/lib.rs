@@ -70,6 +70,9 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Result<Self, AppStateError> {
         let map_packages = map_store::load(config.map_package_directory.as_deref())?;
+        let map_jobs =
+            map_jobs::Manager::load(config.map_package_directory.as_deref(), &map_packages)
+                .map_err(AppStateError::MapJobs)?;
         Ok(Self {
             world: Arc::new(RwLock::new(None)),
             diagnostic_scenario: config.scenario,
@@ -84,7 +87,7 @@ impl AppState {
             map_packages: Arc::new(RwLock::new(map_packages)),
             page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
             terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
-            map_jobs: Arc::new(Mutex::new(map_jobs::Manager::default())),
+            map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         })
     }
@@ -142,6 +145,8 @@ impl AppState {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppStateError {
+    #[error("map job history error: {0}")]
+    MapJobs(String),
     #[error(transparent)]
     MapStore(#[from] MapStoreError),
     #[error(transparent)]
