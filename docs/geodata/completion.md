@@ -358,3 +358,14 @@ WebSocket scenario-reset assertion (`malformed_handshakes_resync_and_scenario_ch
 348/349 passed. An unchanged retry passed 349/349 and the size check. The
 five-message test assumes a small pending tick backlog; no assertion or gate
 was changed. This intermittent qualification issue remains recorded for M8.
+
+M7 worker lifetime is reviewed in
+[PR #31](https://github.com/Anko59/AoeWorld/pull/31), revision
+`3e972f7959096b7b4ec5decf1dca228a44cdcd95`. The Dockerized Linux server owns a
+worker process group, drains bounded output, writes requests independently,
+and terminates worker/GDAL descendants before joining pipes. Cancellation,
+overflow, normal exit, and deadlines have process-level regression fixtures.
+Preparation is limited to two hours, projection to 30 seconds. Independent
+review, hooks, preflight (346 native), and clean pre-push checks passed.
+Combined integration preflight passed 353 native tests. Durable job history
+and geographic staging cleanup remain separate work.
