@@ -16,7 +16,7 @@ serde.workspace = true
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "sync", "time", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.7", features = ["fs"] }
 
 [dev-dependencies]
 tempfile = "3"
