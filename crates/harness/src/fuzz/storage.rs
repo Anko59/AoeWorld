@@ -49,13 +49,7 @@ impl Policy {
         })
     }
 
-    pub(super) fn enforce(&self, root: &Path) -> Result<Snapshot> {
-        let snapshot = self.inspect(root)?;
-        self.validate(snapshot)?;
-        Ok(snapshot)
-    }
-
-    fn validate(&self, snapshot: Snapshot) -> Result<()> {
+    pub(super) fn validate(&self, snapshot: Snapshot) -> Result<()> {
         for (name, actual, limit) in [
             (
                 "corpus files",
@@ -139,7 +133,8 @@ mod tests {
         fs::write(artifacts.join("preserved-crash"), b"artifact bytes").expect("artifact file");
 
         let policy = Policy::default();
-        let snapshot = policy.enforce(root.path()).expect("bounded storage");
+        let snapshot = policy.inspect(root.path()).expect("bounded storage");
+        policy.validate(snapshot).expect("bounded storage");
         assert_eq!(
             snapshot.corpus,
             Usage {
@@ -162,7 +157,17 @@ mod tests {
             artifact_byte_limit: 0,
             retention: Policy::default().retention,
         };
-        assert!(strict.enforce(root.path()).is_err());
+        let before_growth = Snapshot {
+            corpus: Usage { files: 0, bytes: 0 },
+            artifacts: Usage { files: 0, bytes: 0 },
+        };
+        assert!(strict.validate(before_growth).is_ok());
+        assert!(strict.validate(snapshot).is_err());
+        assert!(
+            strict
+                .validate(strict.inspect(root.path()).unwrap())
+                .is_err()
+        );
         assert_eq!(
             fs::read(corpus.join("preserved-seed")).unwrap(),
             b"corpus bytes"
