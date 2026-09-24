@@ -21,11 +21,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoe-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "aoe-map"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "blake3",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "aoeworld-fuzz"
 version = "0.0.0"
 dependencies = [
  "aoe-assets",
+ "aoe-map",
  "libfuzzer-sys",
+ "serde_json",
 ]
 
 [[package]]

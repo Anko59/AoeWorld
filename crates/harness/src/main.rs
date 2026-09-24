@@ -197,12 +197,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
         Command::CiSelect => gates::ci_select()?,
         Command::CiCheck => gates::ci_check()?,
-        Command::Fmt => process::run("cargo", &["fmt", "--all"], Duration::from_secs(120))?,
-        Command::FmtCheck => process::run(
-            "cargo",
-            &["fmt", "--all", "--", "--check"],
-            Duration::from_secs(120),
-        )?,
+        Command::Fmt => format_commands(false)?,
+        Command::FmtCheck => format_commands(true)?,
         Command::Lint => process::run(
             "cargo",
             &[
@@ -335,6 +331,23 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn format_commands(check: bool) -> Result<(), Box<dyn std::error::Error>> {
+    for args in format_invocations(check) {
+        process::run("cargo", &args, Duration::from_secs(120))?;
+    }
+    Ok(())
+}
+
+fn format_invocations(check: bool) -> [Vec<&'static str>; 2] {
+    let mut root = vec!["fmt", "--all"];
+    let mut fuzz = vec!["fmt", "--manifest-path", "fuzz/Cargo.toml"];
+    if check {
+        root.extend(["--", "--check"]);
+        fuzz.extend(["--", "--check"]);
+    }
+    [root, fuzz]
+}
+
 fn hook_path(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let result = OsCommand::new("git")
         .args(["rev-parse", "--git-path", &format!("hooks/{name}")])
@@ -349,5 +362,28 @@ fn main() {
     if let Err(error) = run(Args::parse().command) {
         eprintln!("error: {error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_validation_includes_the_fuzz_workspace() {
+        assert_eq!(
+            format_invocations(false),
+            [
+                vec!["fmt", "--all"],
+                vec!["fmt", "--manifest-path", "fuzz/Cargo.toml"],
+            ]
+        );
+        assert_eq!(
+            format_invocations(true),
+            [
+                vec!["fmt", "--all", "--", "--check"],
+                vec!["fmt", "--manifest-path", "fuzz/Cargo.toml", "--", "--check"],
+            ]
+        );
     }
 }

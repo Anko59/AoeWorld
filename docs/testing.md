@@ -24,8 +24,10 @@ requires graceful shutdown so its execution counters are written. These are
 native coverage records, not instrumentation of JavaScript or browser WASM.
 Browser, WASM, asset, performance, QA, and artifact gates need
 separate evidence.
-`make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette, and
-pack-manifest parser. It uses a separately pinned nightly toolchain and keeps
+`make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette,
+pack-manifest, map-package/request, environmental-page, and compact-chunk parser.
+The map campaigns begin with generated valid seeds; accepted package/page/chunk
+values must retain their meaning and identity through serialization roundtrips. It uses a separately pinned nightly toolchain and keeps
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
 each target a 300-second campaign. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
