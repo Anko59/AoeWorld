@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 aoe-assets = { path = "../assets" }
 serde_json = "1.0"
-png = "0.17"
+png = "0.18"
 aoe-core.workspace = true
 aoe-protocol.workspace = true
 aoe-simulation.workspace = true
