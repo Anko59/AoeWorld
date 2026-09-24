@@ -8,10 +8,16 @@ fuzz_target!(|bytes: &[u8]| {
         payload_hex.push(char::from(HEX[usize::from(byte >> 4)]));
         payload_hex.push(char::from(HEX[usize::from(byte & 15)]));
     }
-    let encoded = aoe_map::CompactChunk { x: 0, y: 0, payload_hex };
+    let encoded = aoe_map::CompactChunk {
+        x: 0,
+        y: 0,
+        payload_hex,
+    };
     if let Ok(chunk) = encoded.decode() {
-        assert!(aoe_map::CompactChunk::encode(&chunk)
-            .and_then(|value| value.decode())
-            .is_ok_and(|roundtrip| roundtrip == chunk));
+        assert!(
+            aoe_map::CompactChunk::encode(&chunk)
+                .and_then(|value| value.decode())
+                .is_ok_and(|roundtrip| roundtrip == chunk)
+        );
     }
 });

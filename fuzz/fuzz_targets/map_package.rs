@@ -7,9 +7,13 @@ fuzz_target!(|bytes: &[u8]| {
         let _ = request.estimate();
     }
     if let Ok(package) = serde_json::from_slice::<aoe_map::MapPackage>(bytes)
-        && package.validate().is_ok() {
-        assert!(serde_json::to_vec(&package).ok()
-            .and_then(|bytes| serde_json::from_slice::<aoe_map::MapPackage>(&bytes).ok())
-            .is_some_and(|value| value == package && value.validate().is_ok()));
+        && package.validate().is_ok()
+    {
+        assert!(
+            serde_json::to_vec(&package)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<aoe_map::MapPackage>(&bytes).ok())
+                .is_some_and(|value| value == package && value.validate().is_ok())
+        );
     }
 });
