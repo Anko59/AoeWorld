@@ -151,17 +151,19 @@ fn terrain_texture_frame(art: &GameArt, material: u8, tile: [i32; 2]) -> Option<
 
 pub(crate) fn triangle_texture_coordinates(mode: u8) -> [[f64; 2]; 3] {
     match mode {
-        0 | 4 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-        1 | 5 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-        2 => [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
-        3 => [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        0 => [[0.5, 0.0], [1.0, 0.5], [0.5, 1.0]],
+        1 => [[0.5, 0.0], [0.5, 1.0], [0.0, 0.5]],
+        2 => [[0.5, 0.0], [1.0, 0.5], [0.0, 0.5]],
+        3 => [[1.0, 0.5], [0.5, 1.0], [0.0, 0.5]],
+        4 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+        5 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
         _ => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
     }
 }
 
 pub(crate) fn draw_surface_triangle(
     context: &CanvasRenderingContext2d,
-    atlas: &web_sys::HtmlCanvasElement,
+    atlases: &[web_sys::HtmlCanvasElement; 5],
     triangle: &ProjectedSurfaceTriangle,
 ) -> Result<(), String> {
     let uv = triangle_texture_coordinates(triangle.texture_mode);
@@ -188,9 +190,12 @@ pub(crate) fn draw_surface_triangle(
                 .map_err(|error| format!("Canvas terrain transform: {error:?}"))?;
             let [x, y, width, height] = rect.map(f64::from);
             let atlas_side = f64::from(GAME_ATLAS_SIDE);
+            let texture_atlas = atlases
+                .get(usize::from(triangle.tint))
+                .unwrap_or(&atlases[0]);
             context
                 .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                    atlas,
+                    texture_atlas,
                     x * atlas_side,
                     y * atlas_side,
                     width * atlas_side,
@@ -201,7 +206,6 @@ pub(crate) fn draw_surface_triangle(
                     1.0,
                 )
                 .map_err(|error| format!("Canvas terrain texture: {error:?}"))?;
-            apply_canvas_tint(context, triangle.tint);
         } else {
             let [r, g, b] = triangle.color;
             let color = [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8];
@@ -251,16 +255,28 @@ pub(crate) fn texture_transform(points: [SurfacePoint; 3], uv: [[f64; 2]; 3]) ->
     ]
 }
 
-fn apply_canvas_tint(context: &CanvasRenderingContext2d, tint: u8) {
-    let style = match tint {
-        1 => "rgba(0,0,0,0.08)",
-        2 => "rgba(0,0,0,0.22)",
-        3 => "rgba(0,0,0,0.28)",
-        4 => "rgba(38,113,190,0.14)",
-        _ => return,
-    };
-    context.set_fill_style_str(style);
-    context.fill_rect(0.0, 0.0, 1.0, 1.0);
+pub(crate) fn tint_atlas_pixels(pixels: &[u8], tint: u8) -> Option<Vec<u8>> {
+    if pixels.len() % 4 != 0 {
+        return None;
+    }
+    let mut tinted = pixels.to_vec();
+    for texel in tinted.chunks_exact_mut(4) {
+        match tint {
+            1 | 2 | 3 => {
+                let factor = [0.92, 0.78, 0.72][usize::from(tint - 1)];
+                for channel in &mut texel[..3] {
+                    *channel = (f32::from(*channel) * factor).round() as u8;
+                }
+            }
+            4 => {
+                for (channel, water) in texel[..3].iter_mut().zip([38_u8, 113, 190]) {
+                    *channel = (f32::from(*channel) * 0.86 + f32::from(water) * 0.14).round() as u8;
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(tinted)
 }
 
 #[derive(Clone, Copy)]

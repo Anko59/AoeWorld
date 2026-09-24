@@ -8,11 +8,11 @@ pub(super) fn world_sprite_frames(
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
-) -> Vec<(Sprite, GameFrame, bool, f64)> {
+) -> Vec<(Sprite, GameFrame, f64)> {
     let mut result = if terrain.is_empty() {
         visible_terrain_frames(art, terrain, camera)
             .into_iter()
-            .map(|(sprite, frame)| (sprite, frame, false, f64::NEG_INFINITY))
+            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY))
             .collect::<Vec<_>>()
     } else {
         Vec::new()
@@ -53,7 +53,6 @@ pub(super) fn world_sprite_frames(
                 result.push((
                     sprite,
                     scaled(frame, camera.zoom as f32),
-                    false,
                     object_depth(object),
                 ));
             }
@@ -107,7 +106,7 @@ pub(super) fn world_sprite_frames(
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
         scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-        result.push((sprite, scaled_frame, unit.selected, object_depth(object)));
+        result.push((sprite, scaled_frame, object_depth(object)));
     }
     result
 }

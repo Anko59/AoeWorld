@@ -1,4 +1,4 @@
-use crate::{GAME_ATLAS_SIDE, SceneCamera, web::Sprite};
+use crate::{GAME_ATLAS_SIDE, SceneCamera, surface_mesh::surface_depth, web::Sprite};
 use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use web_sys::CanvasRenderingContext2d;
 
@@ -8,27 +8,55 @@ pub(crate) fn selection_ring(
     camera: SceneCamera,
     position: [f64; 2],
     elevation_meters: f64,
-) -> Vec<Sprite> {
+) -> Vec<(Sprite, f64)> {
     let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
     let radius_x = 24.0 * camera.zoom;
     let radius_y = 8.0 * camera.zoom;
     let mut sprites = Vec::with_capacity(32);
     for index in 0..32 {
         let angle = f64::from(index) * std::f64::consts::TAU / 32.0;
-        sprites.push(Sprite {
-            position: to_clip(
-                ScreenPoint {
-                    x: screen.x + angle.cos() * radius_x,
-                    y: screen.y + angle.sin() * radius_y,
-                },
-                camera.viewport,
-            ),
-            radius: pixel_radius(camera.viewport, 1.5),
-            color: [0.95, 0.85, 0.35, 1.0],
-            uv: solid_uv(),
-        });
+        let point = ScreenPoint {
+            x: screen.x + angle.cos() * radius_x,
+            y: screen.y + angle.sin() * radius_y,
+        };
+        let world = camera_projection(camera).screen_to_world_at_height(point, elevation_meters);
+        sprites.push((
+            Sprite {
+                position: to_clip(point, camera.viewport),
+                radius: pixel_radius(camera.viewport, 1.5),
+                color: [0.95, 0.85, 0.35, 1.0],
+                uv: solid_uv(),
+            },
+            surface_depth([world[0], world[1], elevation_meters]),
+        ));
     }
     sprites
+}
+
+pub(crate) fn draw_selection_marker(
+    context: &CanvasRenderingContext2d,
+    sprite: Sprite,
+    viewport: [f64; 2],
+) -> Result<(), String> {
+    let center_x = (f64::from(sprite.position[0]) + 1.0) * viewport[0] * 0.5;
+    let center_y = (1.0 - f64::from(sprite.position[1])) * viewport[1] * 0.5;
+    let radius_x = f64::from(sprite.radius[0]) * viewport[0];
+    let radius_y = f64::from(sprite.radius[1]) * viewport[1];
+    context.begin_path();
+    context.set_fill_style_str("rgba(242,217,89,1)");
+    context
+        .ellipse(
+            center_x,
+            center_y,
+            radius_x,
+            radius_y,
+            0.0,
+            0.0,
+            std::f64::consts::TAU,
+        )
+        .map_err(|error| format!("Canvas selection marker: {error:?}"))?;
+    context.fill();
+    Ok(())
 }
 
 pub(crate) fn grid_sprites(camera: SceneCamera) -> Vec<Sprite> {

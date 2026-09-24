@@ -1,14 +1,20 @@
 use super::*;
 
+const INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 40.0;
+
 pub(super) fn visible_tiles_for_height_bounds(
     camera: Camera,
     config: aoe_core::WorldConfig,
     focus: f64,
     bounds: Option<(i16, i16)>,
 ) -> TileRect {
-    let (minimum, maximum) = bounds.map_or((focus, focus), |(min, max)| {
-        (focus.min(f64::from(min)), focus.max(f64::from(max)))
-    });
+    let (minimum, maximum) = bounds.map_or(
+        (
+            focus - INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS,
+            focus + INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS,
+        ),
+        |(min, max)| (focus.min(f64::from(min)), focus.max(f64::from(max))),
+    );
     let lower = camera.visible_tiles_at_height(config, 8.0, minimum);
     let upper = camera.visible_tiles_at_height(config, 8.0, maximum);
     TileRect::new(

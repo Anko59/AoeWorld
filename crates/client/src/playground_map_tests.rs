@@ -74,7 +74,7 @@ fn resident_surface_bounds_expand_terrain_visibility_to_high_relief() {
         focus_elevation_meters: 0.0,
     };
     let ground = visible_tiles_for_height_bounds(camera, config, 0.0, None);
-    let high_relief = visible_tiles_for_height_bounds(camera, config, 0.0, Some((-3, 40)));
+    let high_relief = visible_tiles_for_height_bounds(camera, config, 0.0, Some((-80, 80)));
     assert!(high_relief.width() > ground.width());
     assert!(high_relief.height() > ground.height());
 
@@ -83,9 +83,29 @@ fn resident_surface_bounds_expand_terrain_visibility_to_high_relief() {
         return;
     };
     for tile in &mut chunk.tiles {
-        tile.surface.corner_game_height_levels = [0, 0, 40, -3];
+        tile.surface.corner_game_height_levels = [0, 0, 80, -80];
     }
-    assert_eq!(heights::chunk_height_bounds(&chunk), Some((-3, 40)));
+    assert_eq!(heights::chunk_height_bounds(&chunk), Some((-80, 80)));
+}
+
+#[wasm_bindgen_test]
+fn initial_terrain_requests_cover_an_unseen_forty_level_plateau() {
+    let Ok(config) = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1)) else {
+        assert!(false, "valid visibility world");
+        return;
+    };
+    let camera = Camera {
+        center: [256.0, 256.0],
+        zoom: 1.0,
+        viewport: [512.0, 256.0],
+        focus_elevation_meters: 0.0,
+    };
+    let initial = visible_tiles_for_height_bounds(camera, config, 0.0, None);
+    let high_plateau = camera.visible_tiles_at_height(config, 8.0, 40.0);
+    assert!(initial.min.x <= high_plateau.min.x);
+    assert!(initial.min.y <= high_plateau.min.y);
+    assert!(initial.max.x >= high_plateau.max.x);
+    assert!(initial.max.y >= high_plateau.max.y);
 }
 
 #[wasm_bindgen_test]
