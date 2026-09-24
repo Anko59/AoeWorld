@@ -38,10 +38,12 @@ fn cancellation_and_budget_are_not_proof_of_absence() {
         terrain.search_start(config, 0, || false),
         StartSearchResult::LimitReached
     );
-    assert_eq!(
-        terrain.search_start(config, START_SEARCH_CHUNKS, || false),
-        StartSearchResult::Found(TileCoord::new(31, 31))
-    );
+    for max_chunks in [1, START_SEARCH_CHUNKS] {
+        assert_eq!(
+            terrain.search_start(config, max_chunks, || false),
+            StartSearchResult::Found(TileCoord::new(31, 31))
+        );
+    }
 }
 
 #[test]
