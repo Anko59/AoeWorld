@@ -1,6 +1,6 @@
 use crate::{
-    CHUNK_TILES, GENERATION_RECIPE_VERSION, MapChunkGenerator, MapEstimate, MapRequest,
-    MapRequestError, PreparedEnvironment,
+    CHUNK_TILES, GENERATION_RECIPE_VERSION, LEGACY_GENERATION_RECIPE_VERSION, MapChunkGenerator,
+    MapEstimate, MapRequest, MapRequestError, PRIOR_GENERATION_RECIPE_VERSION, PreparedEnvironment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +78,13 @@ pub struct SourceLock {
 pub struct MapPackage {
     pub schema_version: u16,
     pub generator_version: u16,
+    /// Runtime generation behavior used by this immutable package. Missing
+    /// values deserialize as recipe 3 so existing schema-8 hashes remain valid.
+    #[serde(
+        default = "legacy_generation_recipe_version",
+        skip_serializing_if = "is_legacy_generation_recipe_version"
+    )]
+    pub generation_recipe_version: u16,
     pub request: MapRequest,
     pub estimate: MapEstimate,
     pub source_locks: Vec<SourceLock>,
@@ -136,11 +143,39 @@ impl MapPackage {
     pub fn with_prepared_environment(
         generator_version: u16,
         request: MapRequest,
+        source_locks: Vec<SourceLock>,
+        projection: ProjectionMetadata,
+        provenance: EnvironmentalProvenance,
+        environment: PreparedEnvironment,
+    ) -> Result<Self, MapPackageError> {
+        Self::with_generation_recipe(
+            generator_version,
+            GENERATION_RECIPE_VERSION,
+            request,
+            source_locks,
+            projection,
+            provenance,
+            environment,
+        )
+    }
+
+    fn with_generation_recipe(
+        generator_version: u16,
+        generation_recipe_version: u16,
+        request: MapRequest,
         mut source_locks: Vec<SourceLock>,
         projection: ProjectionMetadata,
         provenance: EnvironmentalProvenance,
         environment: PreparedEnvironment,
     ) -> Result<Self, MapPackageError> {
+        if !matches!(
+            generation_recipe_version,
+            LEGACY_GENERATION_RECIPE_VERSION
+                | PRIOR_GENERATION_RECIPE_VERSION
+                | GENERATION_RECIPE_VERSION
+        ) {
+            return Err(MapPackageError::InvalidGenerationRecipeVersion);
+        }
         let request = request.normalized()?;
         let estimate = request.estimate()?;
         source_locks.sort_by(|left, right| left.id.cmp(&right.id));
@@ -174,11 +209,12 @@ impl MapPackage {
             &projection,
             &provenance,
             &environment,
-            HashMode::Content(Some(GENERATION_RECIPE_VERSION)),
+            HashMode::Content(Some(generation_recipe_version)),
         );
         Ok(Self {
             schema_version: crate::MAP_SCHEMA_VERSION,
             generator_version,
+            generation_recipe_version,
             request,
             estimate,
             source_locks,
@@ -208,8 +244,9 @@ impl MapPackage {
         {
             return Err(MapPackageError::NonCanonicalFields);
         }
-        let mut canonical = Self::with_prepared_environment(
+        let mut canonical = Self::with_generation_recipe(
             self.generator_version,
+            self.generation_recipe_version,
             self.request,
             self.source_locks.clone(),
             self.projection.clone(),
@@ -241,11 +278,20 @@ impl MapPackage {
             self.request.seed,
             self.estimate.tiles_per_side as i32,
         )
+        .with_elevation_sampling_recipe(self.generation_recipe_version)
     }
 
     pub fn chunk_count_per_side(&self) -> u64 {
         self.estimate.tiles_per_side.div_ceil(CHUNK_TILES as u64)
     }
+}
+
+fn legacy_generation_recipe_version() -> u16 {
+    LEGACY_GENERATION_RECIPE_VERSION
+}
+
+fn is_legacy_generation_recipe_version(version: &u16) -> bool {
+    *version == LEGACY_GENERATION_RECIPE_VERSION
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -258,6 +304,8 @@ pub enum MapPackageError {
     InvalidProjection,
     #[error("prepared environmental index is invalid")]
     InvalidEnvironment,
+    #[error("generation recipe version is unsupported")]
+    InvalidGenerationRecipeVersion,
     #[error("package fields do not reproduce the canonical package")]
     NonCanonicalFields,
 }

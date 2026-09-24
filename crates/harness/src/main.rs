@@ -116,6 +116,14 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+    SourceQualify {
+        #[arg(long)]
+        package_directory: PathBuf,
+        #[arg(long)]
+        content_hash: String,
+        #[arg(long, default_value_t = 1_200_000)]
+        max_ticks: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -331,6 +339,27 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             release::rehearse(&candidate, &previous)?;
         }
         Command::RepoPolicyCheck => repo_policy::check()?,
+        Command::SourceQualify {
+            package_directory,
+            content_hash,
+            max_ticks,
+        } => {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            let report = runtime.block_on(aoe_server::run_source_qualification(
+                &package_directory,
+                &content_hash,
+                max_ticks,
+                |progress| {
+                    eprintln!(
+                        "source qualification: tick={} leg={} moved_m={:.1}",
+                        progress.tick, progress.leg, progress.moved_meters
+                    );
+                },
+            ))?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
     }
     Ok(())
 }

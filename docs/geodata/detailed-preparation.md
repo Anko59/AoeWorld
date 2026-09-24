@@ -59,15 +59,18 @@ prepared water layer. Wetlands, reservoirs, regulated lakes, and otherwise
 unknown water remain evidence-only until a historical reconstruction can
 classify them.
 
-`HydrologyPage` and `ModernLandCoverPage` are preparation intermediates, not
-persisted package layers. Supported modern ocean/lake/river evidence is folded
-into the existing `WaterPage` ocean and inland coverage percentages; lake and
-river are therefore indistinguishable to the current terrain consumer. Flow,
-barrier, confidence, and WorldCover class values are not retained in the
-package. HYDE remains the source of the year-600 land-use layer: this slice does
-not correct HYDE cell allocations, and modern WorldCover classes are not treated
-as year-600 land cover. A typed persisted hydrology layer and its terrain
-consumer remain follow-up work.
+Schema-9 packages persist `HydrologyEvidencePage` and `ModernLandCoverPage` as
+separate level-zero evidence grids. Hydrology records the supported kind and
+its acquisition method; modern land cover retains the raw WorldCover class.
+Both grids participate in package roots, verification, and bounded residency,
+and terrain reads them through the package provider. Legacy `WaterPage`
+coverage remains present for schema-8 compatibility and overview fallback.
+The package does not invent flow, barrier, confidence, water-level, or
+historical-date values that the sources do not supply. HYDE remains the source
+of the year-600 land-use layer: this slice does not correct HYDE cell
+allocations, and modern WorldCover classes are not treated as year-600 land
+cover. Reservoir and regulated-lake observations therefore remain explicit
+modern evidence rather than automatic historical water.
 Hydrology planning is capped at 32 WorldCover tiles. A job may download at
 most 2 GiB of missing hydrology sources; verified cache hits do not count
 toward that transfer budget. Cache storage has its separate 100 GiB quota.

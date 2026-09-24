@@ -85,11 +85,13 @@ locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
 Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
 Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
-vegetation and historical inputs. Its modern water evidence is folded into the
-legacy water coverage layer; typed hydrology classes are not persisted or yet
-exposed to terrain. Source availability, the requested date, and normalized
-package provenance remain distinct so a modern source cannot be mistaken for a
-historical reconstruction.
+vegetation and historical inputs. Schema-9 packages persist typed hydrology and
+modern land-cover evidence in bounded, independently verified pages. Terrain
+consumes those observations through the package provider while retaining the
+legacy water coverage layer for compatibility; schema-8 packages remain
+readable with typed evidence absent. Source availability, the requested date,
+and normalized package provenance remain distinct so a modern source cannot be
+mistaken for a historical reconstruction.
 
 HYDE contributes a coarse historical land-use signal. It does not establish
 the exact location of medieval forests, farms, settlements, roads, bridges,

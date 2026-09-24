@@ -50,7 +50,7 @@ pub(super) fn candidate(
     tile: TileCoord,
     sample: Tile,
 ) -> Option<ResourceNode> {
-    if !sample.passable {
+    if !sample.passable || super::clearing::contains(generator, tile) {
         return None;
     }
     let key = detail_key(generator);
@@ -243,14 +243,45 @@ mod tests {
     }
 
     #[test]
-    fn resource_detail_recipe_two_keeps_its_published_hash_domain() {
-        let generator = MapChunkGenerator::new([7; 32], 3, 64);
-        assert_eq!(
-            detail_key(&generator),
-            [
-                145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195,
-                208, 205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
-            ]
-        );
+    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_five() {
+        let expected = [
+            145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195, 208,
+            205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
+        ];
+        for recipe in [
+            crate::LEGACY_GENERATION_RECIPE_VERSION,
+            crate::PRIOR_GENERATION_RECIPE_VERSION,
+            crate::GENERATION_RECIPE_VERSION,
+        ] {
+            let generator =
+                MapChunkGenerator::new([7; 32], 3, 64).with_elevation_sampling_recipe(recipe);
+            assert_eq!(detail_key(&generator), expected);
+        }
+    }
+
+    #[test]
+    fn recipe_five_only_suppresses_resource_candidates_inside_clearings() {
+        let prior = MapChunkGenerator::new([71; 32], 5, 512)
+            .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
+        let current = MapChunkGenerator::new([71; 32], 5, 512)
+            .with_elevation_sampling_recipe(crate::GENERATION_RECIPE_VERSION);
+        let mut retained = 0;
+        let mut suppressed = 0;
+        for y in 0..96 {
+            for x in 0..96 {
+                let tile = TileCoord::new(x, y);
+                let sample = current.tile_at(tile).expect("current tile");
+                let prior_candidate = candidate(&prior, tile, sample);
+                let current_candidate = candidate(&current, tile, sample);
+                if super::super::clearing::contains(&current, tile) {
+                    assert!(current_candidate.is_none());
+                    suppressed += usize::from(prior_candidate.is_some());
+                } else {
+                    assert_eq!(current_candidate, prior_candidate);
+                    retained += usize::from(prior_candidate.is_some());
+                }
+            }
+        }
+        assert_eq!((retained, suppressed), (27, 8));
     }
 }

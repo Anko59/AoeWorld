@@ -107,7 +107,6 @@ impl PageResidency {
         }))
     }
 
-    #[cfg(test)]
     pub(crate) fn resident_pages(&self) -> usize {
         self.cache
             .lock()
@@ -115,7 +114,6 @@ impl PageResidency {
             .unwrap_or(0)
     }
 
-    #[cfg(test)]
     pub(crate) fn indexed_pages(&self) -> usize {
         self.entries.len()
     }
