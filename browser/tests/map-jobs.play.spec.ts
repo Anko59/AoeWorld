@@ -6,7 +6,9 @@ test.beforeEach(async ({ request }) => {
   expect(response.status()).toBe(204);
 });
 
-test("creator shows measured phase counts without an invented overall percentage", async ({ page }) => {
+test("creator shows measured phase counts without an invented overall percentage", async ({
+  page,
+}) => {
   await gameAssets(page);
   let original: Record<string, unknown> = {};
   let phase = "building_pyramids";
@@ -20,17 +22,34 @@ test("creator shows measured phase counts without an invented overall percentage
     }
   });
   await page.route("**/maps/jobs/78", async (route) => {
-    await route.fulfill({ json: {
-      id: 78, request: original, state: complete ? "cancelled" : "running",
-      stage: "preparing_detailed", percent: null, eta_seconds: null,
-      preparation: { mode: "detailed", explanation: "Regional source preparation" },
-      progress: { version: 1, phase, completed: phase === "building_pyramids" ? 4 : null,
-        total: phase === "building_pyramids" ? 16 : null, unit: phase === "building_pyramids" ? "pages" : null },
-    } });
+    await route.fulfill({
+      json: {
+        id: 78,
+        request: original,
+        state: complete ? "cancelled" : "running",
+        stage: "preparing_detailed",
+        percent: null,
+        eta_seconds: null,
+        preparation: {
+          mode: "detailed",
+          explanation: "Regional source preparation",
+        },
+        progress: {
+          version: 1,
+          phase,
+          completed: phase === "building_pyramids" ? 4 : null,
+          total: phase === "building_pyramids" ? 16 : null,
+          unit: phase === "building_pyramids" ? "pages" : null,
+        },
+      },
+    });
   });
   await page.goto("/");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#playground")).toHaveAttribute("data-assets", "aoe2-local");
+  await expect(page.locator("#playground")).toHaveAttribute(
+    "data-assets",
+    "aoe2-local",
+  );
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
   const output = page.locator("#map-estimate");
@@ -42,5 +61,7 @@ test("creator shows measured phase counts without an invented overall percentage
   await expect(output).not.toContainText("4 / 16");
   complete = true;
   await expect(output).toContainText("Map creation cancelled");
-  await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Generate", exact: true }),
+  ).toBeEnabled();
 });
