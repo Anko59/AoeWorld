@@ -103,13 +103,14 @@ fn request_bounds_and_initial_cancellation_prevent_spawn() {
         execute(
             missing,
             vec![0; MAX_REQUEST_BYTES + 1],
-            &AtomicBool::new(false)
+            &AtomicBool::new(false),
+            || {}
         )
         .unwrap_err()
         .contains("request exceeds")
     );
     assert!(
-        execute(missing, Vec::new(), &AtomicBool::new(true))
+        execute(missing, Vec::new(), &AtomicBool::new(true), || {})
             .unwrap_err()
             .contains("cancelled")
     );

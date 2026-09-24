@@ -1,7 +1,8 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
     GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, canvas_scene::draw_scene_sprite, game_grid,
-    playground::game_sprites, terrain::visible_terrain_frames, web::Sprite,
+    playground::game_sprites, surface_mesh::projected_surface_triangles,
+    terrain::visible_terrain_frames, web::Sprite,
 };
 use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
@@ -39,6 +40,34 @@ pub struct SceneTerrain {
     /// One of the six `GameArt::terrain` groups.
     pub material: u8,
     pub elevation_meters: f64,
+    pub surface: SceneTerrainSurface,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SceneTerrainSurface {
+    /// Shared corners ordered northwest, northeast, southeast, southwest.
+    pub corner_game_height_levels: [i16; 4],
+    /// aoe-map `SurfaceKind` discriminant: plateau, ramp, cliff.
+    pub kind: u8,
+    /// aoe-map `SurfaceDiagonal` discriminant.
+    pub triangulation: u8,
+    /// aoe-map `WaterKind` discriminant; zero means no water.
+    pub water: u8,
+}
+
+impl SceneTerrainSurface {
+    pub const PLATEAU: u8 = 0;
+    pub const RAMP: u8 = 1;
+    pub const CLIFF: u8 = 2;
+
+    pub const fn flat(elevation_meters: f64) -> Self {
+        Self {
+            corner_game_height_levels: [elevation_meters as i16; 4],
+            kind: Self::PLATEAU,
+            triangulation: 0,
+            water: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -198,9 +227,10 @@ impl GameRenderer {
         grid: bool,
     ) -> Result<(), String> {
         let sprites = world_sprites(art, terrain, resources, units, camera, animation, grid);
+        let surfaces = projected_surface_triangles(terrain, camera);
         match self {
             Self::WebGpu(renderer) => renderer
-                .render_sprites_with_clear(&sprites, [0.16, 0.29, 0.14, 1.0])
+                .render_world_layers(&surfaces, &sprites, [0.16, 0.29, 0.14, 1.0])
                 .map(|_| ()),
             Self::Canvas {
                 canvas,
@@ -212,6 +242,7 @@ impl GameRenderer {
                 context.set_fill_style_str("#294a26");
                 context.fill_rect(0.0, 0.0, width, height);
                 context.set_image_smoothing_enabled(false);
+                crate::surface_mesh::draw_surface_mesh(context, &surfaces)?;
                 if grid {
                     game_grid::draw_grid(context, camera);
                 }

@@ -4,13 +4,14 @@ use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
     CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError,
-    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, PotentialBiomePage,
-    PreparedEnvironment, Ratio, WaterPage,
+    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, HydrologyObservation,
+    PotentialBiomePage, PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod clearing;
 mod elevation;
 mod fallback;
 mod provider;
@@ -18,6 +19,13 @@ mod resources;
 mod surface;
 use elevation::PreparedElevation;
 pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
+
+fn validate_vector_environment(environment: &PreparedEnvironment) -> Result<(), EnvironmentError> {
+    if environment.hydrology_evidence.is_some() {
+        return Err(EnvironmentError::InvalidIndex);
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
@@ -86,6 +94,10 @@ pub struct Tile {
     pub water: WaterKind,
     pub elevation_provenance: Provenance,
     pub water_provenance: Provenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydrology_observation: Option<HydrologyObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modern_land_cover_class: Option<u8>,
     pub passable: bool,
 }
 
@@ -144,6 +156,10 @@ impl MapChunkGenerator {
         self
     }
 
+    pub(crate) const fn generation_recipe_version(&self) -> u16 {
+        self.elevation_sampling_recipe
+    }
+
     /// Binds an immutable page provider without retaining a complete page
     /// vector. The provider owns source access and residency; this generator
     /// retains only package metadata and deterministic terrain inputs.
@@ -172,6 +188,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<ElevationPage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let level_zero = crate::environment::level_zero_pages(environment, pages)?;
         Ok(Self {
             geography_key: self.geography_key,
@@ -200,6 +217,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<WaterPage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.water else {
             return pages
                 .is_empty()
@@ -232,6 +250,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<PotentialBiomePage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.vegetation else {
             return pages
                 .is_empty()
@@ -263,6 +282,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<HistoricalLandUsePage>,
     ) -> Result<Self, EnvironmentError> {
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.historical_land_use else {
             return pages
                 .is_empty()
@@ -385,7 +405,7 @@ impl MapChunkGenerator {
     ) -> bool {
         let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
             ^ self.procedural_seed.rotate_left(17);
-        value % 100 < u64::from(crop_percent + grazing_percent)
+        value % 100 < u64::from(crop_percent) + u64::from(grazing_percent)
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {

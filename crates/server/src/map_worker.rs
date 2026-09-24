@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::atomic::AtomicBool};
 
 mod execution;
+pub(crate) mod progress;
+mod scratch;
 use execution::execute;
+pub(super) use scratch::recover as recover_scratch;
 
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
@@ -42,6 +45,7 @@ pub(super) fn prepare(
     request: MapRequest,
     preparation: crate::map_jobs::PreparationPlan,
     cancelled: &AtomicBool,
+    progress_state: progress::State,
 ) -> Result<MapPackage, String> {
     let request = request.normalized().map_err(|error| error.to_string())?;
     let operation = match preparation.mode {
@@ -51,7 +55,12 @@ pub(super) fn prepare(
             return Err("fallback is not a source-worker operation".to_owned());
         }
     };
+    let scratch = scratch::Scratch::new(cache_root)?;
+    let progress_path = scratch.root.join("progress.json");
+    let mut monitor = progress::Monitor::new(progress_path.clone(), progress_state);
     let input = serde_json::to_vec(&serde_json::json!({
+        "staging_root": scratch.root,
+        "progress_path": progress_path,
         "operation": operation,
         "cache_root": cache_root,
         "output_directory": output_directory,
@@ -60,7 +69,7 @@ pub(super) fn prepare(
         "resolution": "glo30_prefer_glo90",
     }))
     .map_err(|error| format!("could not encode map-worker request: {error}"))?;
-    let output = execute(worker, input, cancelled)?;
+    let output = execute(worker, input, cancelled, || monitor.poll())?;
     decode_prepared_output(&output, request, preparation.samples_per_axis)
 }
 
@@ -151,6 +160,7 @@ mod tests {
             water: None,
             vegetation: None,
             historical_land_use: None,
+            hydrology_evidence: None,
         };
         let package = MapPackage::with_prepared_environment(
             aoe_map::MAP_SCHEMA_VERSION,

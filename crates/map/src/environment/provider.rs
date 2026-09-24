@@ -1,4 +1,7 @@
-use super::{ElevationPage, EnvironmentError, PotentialBiomePage, WaterPage};
+use super::{
+    ElevationPage, EnvironmentError, HydrologyEvidencePage, ModernLandCoverPage,
+    PotentialBiomePage, WaterPage,
+};
 use crate::{HistoricalLandUsePage, PageLayer};
 use std::sync::Arc;
 
@@ -20,6 +23,8 @@ pub enum EnvironmentPage {
     Water(WaterPage),
     Vegetation(PotentialBiomePage),
     HistoricalLandUse(HistoricalLandUsePage),
+    HydrologyEvidence(HydrologyEvidencePage),
+    ModernLandCover(ModernLandCoverPage),
 }
 
 impl EnvironmentPage {
@@ -49,6 +54,18 @@ impl EnvironmentPage {
                 x: page.x,
                 y: page.y,
             },
+            Self::HydrologyEvidence(page) => EnvironmentPageKey {
+                layer: PageLayer::HydrologyEvidence,
+                level: page.level,
+                x: page.x,
+                y: page.y,
+            },
+            Self::ModernLandCover(page) => EnvironmentPageKey {
+                layer: PageLayer::ModernLandCover,
+                level: page.level,
+                x: page.x,
+                y: page.y,
+            },
         }
     }
 
@@ -58,6 +75,8 @@ impl EnvironmentPage {
             Self::Water(page) => page.validate(),
             Self::Vegetation(page) => page.validate(),
             Self::HistoricalLandUse(page) => page.validate(),
+            Self::HydrologyEvidence(page) => page.validate(),
+            Self::ModernLandCover(page) => page.validate(),
         }
     }
 
@@ -67,6 +86,8 @@ impl EnvironmentPage {
             Self::Water(page) => page.content_hash(),
             Self::Vegetation(page) => page.content_hash(),
             Self::HistoricalLandUse(page) => page.content_hash(),
+            Self::HydrologyEvidence(page) => page.content_hash(),
+            Self::ModernLandCover(page) => page.content_hash(),
         }
     }
 }

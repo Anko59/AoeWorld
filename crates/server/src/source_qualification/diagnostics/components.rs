@@ -162,7 +162,7 @@ pub(super) fn start_component_diagnostic(
         })
         .collect::<Vec<_>>();
     Ok(format!(
-        "eligible_3x3_candidates={total}, candidates_in_selected_start_component={connected_to_start}, candidates_connected_to_east_endpoint={connected_to_east}, local_worldcover={worldcover}, components=[{}]",
+        "eligible_5x5_candidates={total}, candidates_in_selected_start_component={connected_to_start}, candidates_connected_to_east_endpoint={connected_to_east}, local_worldcover={worldcover}, components=[{}]",
         summaries.join(";")
     ))
 }

@@ -1,9 +1,68 @@
 use super::*;
 
 mod elevation_interpolation;
+mod forest_clearing;
 
 fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
+}
+
+fn environment_with_typed_evidence() -> PreparedEnvironment {
+    PreparedEnvironment {
+        samples_per_axis: 2,
+        geographic_millimeters_per_sample: 1_000,
+        page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+        elevation: crate::FieldPyramid {
+            levels: vec![
+                crate::PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: [1; 32],
+                },
+                crate::PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [2; 32],
+                },
+            ],
+        },
+        water: None,
+        vegetation: None,
+        historical_land_use: None,
+        hydrology_evidence: Some(crate::HydrologyEvidenceIndex {
+            samples_per_axis: 2,
+            page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+            world_cover_year: crate::WORLD_COVER_OBSERVATION_YEAR,
+            policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+            hydrology_page_root: [3; 32],
+            modern_land_cover_page_root: [4; 32],
+        }),
+    }
+}
+
+#[test]
+fn public_vector_builders_reject_typed_evidence_without_its_pages() {
+    let environment = environment_with_typed_evidence();
+    let compression = Ratio {
+        numerator: 1,
+        denominator: 1,
+    };
+
+    assert!(matches!(
+        generator(1).with_prepared_elevation(compression, &environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_prepared_water(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_prepared_biomes(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
+    assert!(matches!(
+        generator(1).with_historical_land_use(&environment, Vec::new()),
+        Err(EnvironmentError::InvalidIndex)
+    ));
 }
 
 fn flat_generator(geography_key: [u8; 32], procedural_seed: u64) -> MapChunkGenerator {
@@ -58,8 +117,11 @@ fn flat_generator(geography_key: [u8; 32], procedural_seed: u64) -> MapChunkGene
             }],
         }),
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     MapChunkGenerator::new(geography_key, procedural_seed, 512)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
         .with_prepared_elevation(
             Ratio {
                 numerator: 1,
@@ -286,6 +348,8 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
                 },
             ],
         }),
+
+        hydrology_evidence: None,
     };
     let natural = (0..4)
         .flat_map(|y| {
@@ -303,6 +367,36 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         })
         .collect::<Vec<_>>();
     assert!(cleared.iter().all(|node| node.kind != ResourceKind::Wood));
+}
+
+#[test]
+fn historical_clearing_percent_boundaries_and_determinism_are_exact() {
+    let terrain = MapChunkGenerator::new([3; 32], 1, 512)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
+    let threshold_tile = TileCoord::new(0, 0);
+    let zero = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 0, 0);
+    let equality = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 43, 0);
+    let above = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 44, 0);
+    let partial_tile = TileCoord::new(11, 13);
+    let partial = terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17);
+    assert_eq!((zero, equality, above, partial), (false, false, true, true));
+    assert_eq!(
+        [
+            terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17),
+            terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17),
+        ],
+        [partial; 2]
+    );
+}
+
+#[test]
+fn historical_clearing_percentages_add_without_overflow() {
+    let generator = generator(7);
+    assert!(generator.is_tree_suppressed_by_historical_land_use(
+        TileCoord::new(11, 13),
+        u8::MAX,
+        u8::MAX,
+    ));
 }
 
 #[test]
@@ -361,6 +455,8 @@ fn prepared_inland_coverage_creates_a_non_passable_lake() {
         }),
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let terrain = generator(1)
         .with_prepared_water(&environment, vec![level_zero, overview])

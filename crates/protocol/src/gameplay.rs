@@ -8,7 +8,7 @@ use std::{fmt, marker::PhantomData};
 mod resources;
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 
-pub const VERSION: u16 = 7;
+pub const VERSION: u16 = 8;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;

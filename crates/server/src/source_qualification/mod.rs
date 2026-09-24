@@ -1,22 +1,31 @@
 //! Bounded qualification against immutable, verified source-backed packages.
 
 mod diagnostics;
+mod lifecycle;
+mod metrics;
+mod movement;
+mod network;
+mod pages;
 mod report;
 mod route;
+mod workload;
 
+use report::{LogicalMemoryEvidence, SimulationWork};
 pub use report::{
     SourceQualificationError, SourceQualificationProgress, SourceQualificationReport,
 };
 
 use crate::{GameplayService, PageResidency, load_map_packages};
-use aoe_core::{PlayerId, TileCoord, WorldPosition};
-use aoe_map::{
-    EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, LayerProvenance, MapPackage,
-    PageLayer, ResourceNode,
-};
-use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
+use aoe_core::TileCoord;
+#[cfg(test)]
+use aoe_map::MapPackage;
+use aoe_map::{EnvironmentPageProvider, LayerProvenance, ResourceNode};
+use aoe_simulation::{GameWorld, StartSearchResult};
 use diagnostics::start_diagnostic;
-use route::{classify_route_failure, issue_leg};
+use movement::{MovementInput, exercise_movement};
+use pages::page_keys;
+#[cfg(test)]
+use pages::pyramid_page_count;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -30,12 +39,13 @@ use std::{
 #[cfg(test)]
 mod tests;
 
-const MAX_AXIS_TILES: u64 = 50_000;
+const QUALIFICATION_AXIS_TILES: u64 = 50_000;
 const MAX_ROUTE_TICKS: u64 = 1_200_000;
 const MAX_RESOURCE_SCAN_SIDE: i32 = 64;
-const HASH_CHECK_INTERVAL: u64 = 8_192;
 const MAX_RESIDENT_PAGES: usize = 128;
 const QUALIFICATION_CASE: &str = "source-backed-100km-50k-tiles-1-to-1";
+const NAVIGATION_CACHE_BYTE_SCOPE: &str =
+    "logical payload only; excludes allocator and map container overhead";
 
 /// Exercises overlay durability, verified page eviction, and physical
 /// movement on one source-backed package. Movement follows fixed opposite
@@ -47,6 +57,7 @@ pub async fn run_source_qualification(
     max_ticks: u64,
     mut progress: impl FnMut(SourceQualificationProgress),
 ) -> Result<SourceQualificationReport, SourceQualificationError> {
+    let mut rss = metrics::ProcessRssSampler::start();
     if max_ticks == 0 || max_ticks > MAX_ROUTE_TICKS {
         return Err(SourceQualificationError::TickLimit);
     }
@@ -60,10 +71,15 @@ pub async fn run_source_qualification(
     package
         .validate()
         .map_err(|_| SourceQualificationError::UnsupportedPackage)?;
+    if package.generation_recipe_version != aoe_map::GENERATION_RECIPE_VERSION {
+        return Err(SourceQualificationError::UnsupportedGenerationRecipe(
+            package.generation_recipe_version,
+        ));
+    }
     if package.source_locks.is_empty()
         || package.request.compression.numerator != 1
         || package.request.compression.denominator != 1
-        || package.estimate.tiles_per_side != MAX_AXIS_TILES
+        || package.estimate.tiles_per_side != QUALIFICATION_AXIS_TILES
         || package.estimate.game_side_meters != 100_000
         || package.environment.samples_per_axis == 0
         || package.provenance.elevation != LayerProvenance::SourceDerived
@@ -76,7 +92,10 @@ pub async fn run_source_qualification(
     let provider = PageResidency::open(package_directory, &package, &|| false)?;
     let indexed_page_count = provider.indexed_pages();
     if indexed_page_count <= MAX_RESIDENT_PAGES {
-        return Err(SourceQualificationError::NoEnvironmentPages);
+        return Err(SourceQualificationError::InsufficientPageChurn {
+            indexed_pages: indexed_page_count,
+            required_unique_pages: MAX_RESIDENT_PAGES + 1,
+        });
     }
     if keys.len() != indexed_page_count {
         return Err(SourceQualificationError::PageIndexMismatch {
@@ -86,6 +105,7 @@ pub async fn run_source_qualification(
     }
     let generator = package.generator_with_page_provider(provider.clone())?;
     let node = find_center_resource(&generator, package.estimate.tiles_per_side as i32)?;
+    rss.observe();
     let activation_probe = GameWorld::from_page_provider(
         package.clone(),
         provider.clone() as Arc<dyn EnvironmentPageProvider>,
@@ -130,17 +150,18 @@ pub async fn run_source_qualification(
         &|| false,
     )?
     .ok_or(SourceQualificationError::NoStart)?;
-    let depleted = gameplay
-        .deplete_resource_persisted(node.id, node.initial_amount)
-        .await?;
-    if depleted.depletion.remaining != 0 || !depleted.depletion.became_nonblocking {
-        return Err(SourceQualificationError::NoResource);
-    }
-    let overlay_snapshot = gameplay
-        .resource_snapshot()
-        .await
-        .ok_or(SourceQualificationError::NoResource)?;
+    let lifecycle_run = lifecycle::exercise_resource_lifecycle(
+        gameplay,
+        &package,
+        package_directory,
+        &scratch.path,
+        &node,
+    )
+    .await?;
+    let lifecycle_evidence = lifecycle_run.evidence;
+    let overlay_snapshot = lifecycle_run.persisted_snapshot;
     let overlay_revision = overlay_snapshot.revision;
+    rss.observe();
 
     let first_key = *keys
         .first()
@@ -151,7 +172,10 @@ pub async fn run_source_qualification(
         provider.page(*key, &|| false)?;
         peak_resident_pages = peak_resident_pages.max(provider.resident_pages());
         if peak_resident_pages > MAX_RESIDENT_PAGES {
-            return Err(SourceQualificationError::NoEnvironmentPages);
+            return Err(SourceQualificationError::ResidentPageLimitExceeded {
+                observed_pages: peak_resident_pages,
+                maximum_pages: MAX_RESIDENT_PAGES,
+            });
         }
     }
     let reloaded_hash = provider.page(first_key, &|| false)?.content_hash()?;
@@ -162,183 +186,30 @@ pub async fn run_source_qualification(
         ));
     }
 
-    let restored_provider = PageResidency::open(package_directory, &package, &|| false)?;
-    let restored = GameplayService::from_stored_map(
-        package.clone(),
-        Some(restored_provider as Arc<dyn EnvironmentPageProvider>),
-        Some(scratch.path.clone()),
-        &|| false,
-    )?
-    .ok_or(SourceQualificationError::NoStart)?;
-    let restored_snapshot = restored
-        .resource_snapshot()
-        .await
-        .ok_or(SourceQualificationError::NoResource)?;
-    let resource_overlay_reloaded_equal = overlay_snapshot == restored_snapshot;
-    if !resource_overlay_reloaded_equal {
-        return Err(SourceQualificationError::OverlayMismatch);
-    }
+    let resource_overlay_reloaded_equal = lifecycle_evidence.persisted_snapshot_verified;
 
     let movement_provider = PageResidency::open(package_directory, &package, &|| false)?;
     let replay_provider = PageResidency::open(package_directory, &package, &|| false)?;
-    let mut world = GameWorld::from_page_provider(
-        package.clone(),
-        movement_provider.clone() as Arc<dyn EnvironmentPageProvider>,
-    )?;
-    let mut replay = GameWorld::from_page_provider(
-        package.clone(),
-        replay_provider.clone() as Arc<dyn EnvironmentPageProvider>,
-    )?;
-    let config = world.config();
-    let start = match world.terrain().search_start_for_recipe(
-        config,
-        package.generation_recipe_version,
-        64,
-        || false,
-    )? {
-        StartSearchResult::Found(tile) => tile,
-        StartSearchResult::Unavailable
-        | StartSearchResult::LimitReached
-        | StartSearchResult::Cancelled => return Err(SourceQualificationError::NoStart),
-    };
-    let unit = world.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(start)?)?;
-    let replay_unit = replay.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(start)?)?;
-    let axis = config.width_tiles;
-    let center_y = (config.height_tiles - 1) / 2;
-    let waypoints = [
-        TileCoord::new(axis - 2, center_y),
-        TileCoord::new(1, center_y),
-    ];
-    issue_leg(
-        &mut world,
-        &generator,
-        &package,
-        &movement_provider,
-        unit,
-        waypoints[0],
-    )?;
-    issue_leg(
-        &mut replay,
-        &generator,
-        &package,
-        &replay_provider,
-        replay_unit,
-        waypoints[0],
-    )?;
-
-    let mut leg = 0_usize;
-    let mut replay_leg = 0_usize;
-    let mut last_position = world
-        .unit(unit)
-        .ok_or(GameWorldError::UnknownEntity)?
-        .position;
-    let mut replay_last_position = replay
-        .unit(replay_unit)
-        .ok_or(GameWorldError::UnknownEntity)?
-        .position;
-    let mut moved_subunits = 0.0_f64;
-    let mut replay_moved_subunits = 0.0_f64;
-    let mut checkpoints = 0_usize;
-    let mut movement_ticks = 0_u64;
-    let mut peak_resident_pages = peak_resident_pages
-        .max(provider.resident_pages())
-        .max(movement_provider.resident_pages())
-        .max(replay_provider.resident_pages());
-    for tick in 1..=max_ticks {
-        world.advance();
-        replay.advance();
-        movement_ticks = tick;
-        let state = world.unit(unit).ok_or(GameWorldError::UnknownEntity)?;
-        let replay_state = replay
-            .unit(replay_unit)
-            .ok_or(GameWorldError::UnknownEntity)?;
-        moved_subunits += displacement(last_position, state.position);
-        replay_moved_subunits += displacement(replay_last_position, replay_state.position);
-        last_position = state.position;
-        replay_last_position = replay_state.position;
-        peak_resident_pages = peak_resident_pages
-            .max(provider.resident_pages())
-            .max(movement_provider.resident_pages())
-            .max(replay_provider.resident_pages());
-        if let Some(error) = world.movement_failure(unit) {
-            return Err(classify_route_failure(
-                error,
-                waypoints[leg.min(waypoints.len() - 1)],
-            ));
-        }
-        if let Some(error) = replay.movement_failure(replay_unit) {
-            return Err(classify_route_failure(
-                error,
-                waypoints[replay_leg.min(waypoints.len() - 1)],
-            ));
-        }
-        if tick % HASH_CHECK_INTERVAL == 0 {
-            let route_hash = world.canonical_hash();
-            let replay_hash = replay.canonical_hash();
-            if route_hash != replay_hash || state != replay_state {
-                return Err(SourceQualificationError::ReplayDiverged(tick));
-            }
-            checkpoints += 1;
-        }
-        if world.movement_order(unit).is_none() {
-            leg += 1;
-            if leg < waypoints.len() {
-                issue_leg(
-                    &mut world,
-                    &generator,
-                    &package,
-                    &movement_provider,
-                    unit,
-                    waypoints[leg],
-                )?;
-            }
-        }
-        if replay.movement_order(replay_unit).is_none() {
-            replay_leg += 1;
-            if replay_leg < waypoints.len() {
-                issue_leg(
-                    &mut replay,
-                    &generator,
-                    &package,
-                    &replay_provider,
-                    replay_unit,
-                    waypoints[replay_leg],
-                )?;
-            }
-        }
-        if leg == waypoints.len() && replay_leg == waypoints.len() {
-            let route_hash = world.canonical_hash();
-            let replay_hash = replay.canonical_hash();
-            if route_hash != replay_hash || state != replay_state {
-                return Err(SourceQualificationError::ReplayDiverged(tick));
-            }
-            break;
-        }
-        if tick % 50_000 == 0 {
-            progress(SourceQualificationProgress {
-                tick,
-                leg,
-                moved_meters: moved_subunits / 1_024.0 * 2.0,
-            });
-        }
-        if tick == max_ticks {
-            return Err(SourceQualificationError::TickLimit);
-        }
-    }
-    let route_hash = world.canonical_hash();
-    let replay_hash = replay.canonical_hash();
-    if route_hash != replay_hash {
-        return Err(SourceQualificationError::ReplayDiverged(movement_ticks));
-    }
-    let moved_meters = moved_subunits / 1_024.0 * 2.0;
-    if moved_meters < 100_000.0 || (replay_moved_subunits / 1_024.0 * 2.0) != moved_meters {
-        return Err(SourceQualificationError::InsufficientDistance(moved_meters));
-    }
+    let movement_initial_peak = peak_resident_pages
+        .max(lifecycle_run.restart_provider_resident_pages)
+        .max(provider.resident_pages());
+    let movement = exercise_movement(MovementInput {
+        package: &package,
+        generator: &generator,
+        movement_provider,
+        replay_provider,
+        initial_peak_resident_pages: movement_initial_peak,
+        max_ticks,
+        progress: &mut progress,
+        rss: &mut rss,
+    })?;
+    let peak_resident_pages = movement.peak_resident_pages;
     let source_lock_ids = package
         .source_locks
         .iter()
         .map(|source| source.id.clone())
         .collect::<Vec<_>>();
+    let process_rss_bytes = rss.finish();
     Ok(SourceQualificationReport {
         qualification_case: QUALIFICATION_CASE,
         package_hash: package.content_hash_hex(),
@@ -350,15 +221,19 @@ pub async fn run_source_qualification(
         sample_axis: package.environment.samples_per_axis,
         source_lock_count: package.source_locks.len(),
         source_lock_ids,
-        start_tile: [start.x, start.y],
-        route_waypoints: waypoints.iter().map(|tile| [tile.x, tile.y]).collect(),
-        movement_ticks,
-        simulated_seconds: movement_ticks as f64 / f64::from(config.tick_hz),
-        moved_meters,
+        start_tile: [movement.start_tile.x, movement.start_tile.y],
+        route_waypoints: movement
+            .route_waypoints
+            .iter()
+            .map(|tile| [tile.x, tile.y])
+            .collect(),
+        movement_ticks: movement.movement_ticks,
+        simulated_seconds: movement.movement_ticks as f64 / f64::from(activation_config.tick_hz),
+        moved_meters: movement.route_moved_meters,
         wall_seconds: wall_started.elapsed().as_secs_f64(),
-        replay_hash: hex(&route_hash),
+        replay_hash: hex(&movement.replay_hash),
         replay_matches: true,
-        route_checkpoint_count: checkpoints,
+        route_checkpoint_count: movement.route_checkpoint_count,
         indexed_page_count: provider.indexed_pages(),
         page_churn_unique_count: keys.len(),
         peak_resident_page_count_per_provider: peak_resident_pages,
@@ -367,13 +242,42 @@ pub async fn run_source_qualification(
         resource_tile: [node.tile.x, node.tile.y],
         resource_overlay_revision: overlay_revision,
         resource_overlay_reloaded_equal,
+        logical_memory: LogicalMemoryEvidence {
+            indexed_page_count,
+            page_churn_count: keys.len(),
+            peak_resident_pages_per_provider: peak_resident_pages,
+            peak_route_navigation_cache_entries: movement.navigation_cache_peaks.route_entries,
+            peak_replay_navigation_cache_entries: movement.navigation_cache_peaks.replay_entries,
+            peak_combined_navigation_cache_entries: movement
+                .navigation_cache_peaks
+                .combined_entries,
+            peak_route_navigation_cache_logical_retained_bytes: movement
+                .navigation_cache_peaks
+                .route_logical_retained_bytes,
+            peak_replay_navigation_cache_logical_retained_bytes: movement
+                .navigation_cache_peaks
+                .replay_logical_retained_bytes,
+            peak_combined_navigation_cache_logical_retained_bytes: movement
+                .navigation_cache_peaks
+                .combined_logical_retained_bytes,
+            navigation_cache_byte_scope: NAVIGATION_CACHE_BYTE_SCOPE,
+            resource_overlay_change_count: overlay_snapshot.revision as usize,
+        },
+        process_rss_bytes,
+        simulation_work: SimulationWork {
+            movement_ticks: movement.movement_ticks,
+            simulated_seconds: movement.movement_ticks as f64
+                / f64::from(activation_config.tick_hz),
+            route_movement_leg_count: movement.route_movement_leg_count,
+            replay_movement_leg_count: movement.replay_movement_leg_count,
+            route_moved_meters: movement.route_moved_meters,
+            replay_moved_meters: movement.replay_moved_meters,
+            route_checkpoint_count: movement.route_checkpoint_count,
+            movement_replay_comparison_count: movement.movement_replay_comparison_count,
+            resource_lifecycle: lifecycle_evidence,
+        },
+        source_workload_contracts: workload::source_workload_contracts(),
     })
-}
-
-fn displacement(from: WorldPosition, to: WorldPosition) -> f64 {
-    let dx = f64::from(to.x) - f64::from(from.x);
-    let dy = f64::from(to.y) - f64::from(from.y);
-    dx.hypot(dy)
 }
 
 fn find_center_resource(
@@ -390,41 +294,6 @@ fn find_center_resource(
         }
     }
     Err(SourceQualificationError::NoResource)
-}
-
-fn page_keys(package: &MapPackage) -> Vec<EnvironmentPageKey> {
-    let mut keys = Vec::new();
-    append_keys(
-        &mut keys,
-        PageLayer::Elevation,
-        &package.environment.elevation,
-    );
-    if let Some(field) = &package.environment.water {
-        append_keys(&mut keys, PageLayer::Water, field);
-    }
-    if let Some(field) = &package.environment.vegetation {
-        append_keys(&mut keys, PageLayer::Vegetation, field);
-    }
-    if let Some(field) = &package.environment.historical_land_use {
-        append_keys(&mut keys, PageLayer::HistoricalLandUse, field);
-    }
-    keys
-}
-
-fn append_keys(keys: &mut Vec<EnvironmentPageKey>, layer: PageLayer, field: &FieldPyramid) {
-    for (level, metadata) in field.levels.iter().enumerate() {
-        let count = metadata.samples_per_axis.div_ceil(64);
-        for y in 0..count {
-            for x in 0..count {
-                keys.push(EnvironmentPageKey {
-                    layer,
-                    level: level as u8,
-                    x,
-                    y,
-                });
-            }
-        }
-    }
 }
 
 struct QualificationDirectory {

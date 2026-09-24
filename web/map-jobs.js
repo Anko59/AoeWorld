@@ -1,29 +1,45 @@
-export function initMapJobs({ readJson, controllerHeaders, preparationSummary, formatTime, mapRequest, refreshPackages, estimate, generate, retry, cancel }) {
+export function initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel }) {
   const historySelect = document.getElementById('job-history');
   const historyRetry = document.getElementById('retry-history');
   const storageKey = 'aoeworld.map-creation-job';
   let acceptedId = null;
+  let submission = null;
   let retryRequest = null;
   let previousJobs = [];
   let busy = false;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
     if (Number.isSafeInteger(saved) && saved >= 0) acceptedId = saved;
-  } catch { /* Storage may be unavailable; the server history remains usable. */ }
+    else if (saved && typeof saved === 'object') {
+      if (Number.isSafeInteger(saved.id) && saved.id >= 0) acceptedId = saved.id;
+      else if (/^[0-9a-f]{32}$/.test(saved.submission?.key) && saved.submission.request) {
+        submission = saved.submission;
+        retryRequest = submission.request;
+      }
+    }
+  } catch { /* Storage may be unavailable; server history remains usable. */ }
+  const persist = () => {
+    try {
+      if (acceptedId === null && submission === null) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, JSON.stringify({ id: acceptedId, submission }));
+    } catch { /* In-memory retries still reuse the same key. */ }
+  };
   const remember = id => {
     acceptedId = id;
-    try {
-      if (id === null) localStorage.removeItem(storageKey);
-      else localStorage.setItem(storageKey, JSON.stringify(id));
-    } catch { /* Recovery is still available from the history selector. */ }
+    submission = null;
+    persist();
   };
+  const newSubmission = request => ({
+    key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''),
+    request,
+  });
   const originalRequest = job => ({ ...job.request, preparation: job.preparation.mode === 'procedural_fallback' ? 'automatic' : job.preparation.mode });
   const controls = () => {
-    generate.disabled = busy || acceptedId !== null;
+    generate.disabled = busy || acceptedId !== null || submission !== null;
     retry.disabled = busy || (acceptedId === null && retryRequest === null);
-    retry.textContent = acceptedId === null ? 'Retry' : 'Resume job';
+    retry.textContent = acceptedId !== null ? 'Resume job' : submission !== null ? 'Recover request' : 'Retry';
     cancel.disabled = acceptedId === null;
-    historyRetry.disabled = busy || acceptedId !== null || !historySelect.value;
+    historyRetry.disabled = busy || acceptedId !== null || submission !== null || !historySelect.value;
     const selected = previousJobs.find(job => String(job.id) === historySelect.value);
     historyRetry.textContent = selected && !['failed', 'cancelled'].includes(selected.state) ? 'Resume selected job' : 'Retry selected request';
   };
@@ -50,9 +66,13 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, f
         remember(null);
         throw new Error(job.error || 'Map creation cancelled.');
       }
-      const eta = job.eta_seconds === null ? '' : ` · ${formatTime(job.eta_seconds)} remaining`;
+      const progress = job.progress;
+      const phase = progress?.phase || job.stage;
+      const count = progress && Number.isSafeInteger(progress.completed) && Number.isSafeInteger(progress.total)
+        ? ` · ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} ${progress.unit}` : '';
+      const scope = phase === 'downloading_source' ? ' (current source)' : '';
       estimate.className = '';
-      estimate.textContent = `${job.stage.replaceAll('_', ' ')}: ${job.percent}%${eta}\n${preparationSummary(job.preparation)}`;
+      estimate.textContent = `${phase.replaceAll('_', ' ')}${scope}${count}\n${preparationSummary(job.preparation)}`;
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   };
@@ -62,8 +82,14 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, f
     controls();
     try {
       if (existingId === null) {
-        retryRequest = request;
-        const job = await readJson(await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', ...controllerHeaders() }, body: JSON.stringify(request) }));
+        submission ??= newSubmission(request);
+        retryRequest = submission.request;
+        persist();
+        const response = await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders() }, body: JSON.stringify(submission.request) });
+        // These replies explicitly reject acceptance; transport/5xx uncertainty
+        // retains the key so recovery cannot submit a second retained job.
+        if ([400, 409, 429].includes(response.status)) { submission = null; persist(); }
+        const job = await readJson(response);
         if (!Number.isSafeInteger(job.id) || job.id < 0) throw new Error('Invalid map job identifier.');
         remember(job.id);
       } else {
@@ -83,7 +109,7 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, f
       retryRequest = null;
     } catch (error) {
       estimate.className = 'error';
-      const resume = acceptedId === null ? '' : ' Resume this job to check its status; no new job will be submitted.';
+      const resume = acceptedId !== null ? ' Resume this job to check its status; no new job will be submitted.' : submission !== null ? ' Recover this request using its saved submission key.' : '';
       estimate.textContent = (error.message || 'Unable to complete map creation.') + resume;
     } finally {
       busy = false;

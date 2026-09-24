@@ -1,6 +1,6 @@
 use crate::{
     CHUNK_TILES, GENERATION_RECIPE_VERSION, LEGACY_GENERATION_RECIPE_VERSION, MapChunkGenerator,
-    MapEstimate, MapRequest, MapRequestError, PreparedEnvironment,
+    MapEstimate, MapRequest, MapRequestError, PRIOR_GENERATION_RECIPE_VERSION, PreparedEnvironment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -170,7 +170,9 @@ impl MapPackage {
     ) -> Result<Self, MapPackageError> {
         if !matches!(
             generation_recipe_version,
-            LEGACY_GENERATION_RECIPE_VERSION | GENERATION_RECIPE_VERSION
+            LEGACY_GENERATION_RECIPE_VERSION
+                | PRIOR_GENERATION_RECIPE_VERSION
+                | GENERATION_RECIPE_VERSION
         ) {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
         }
@@ -236,7 +238,13 @@ impl MapPackage {
     /// its chunks. It rejects stale estimates, reordered source locks, and a
     /// content hash that no longer covers the package inputs.
     pub fn validate(&self) -> Result<(), MapPackageError> {
-        let canonical = Self::with_generation_recipe(
+        if self.schema_version != crate::MAP_SCHEMA_VERSION
+            && !(self.schema_version == crate::LEGACY_MAP_SCHEMA_VERSION
+                && self.environment.hydrology_evidence.is_none())
+        {
+            return Err(MapPackageError::NonCanonicalFields);
+        }
+        let mut canonical = Self::with_generation_recipe(
             self.generator_version,
             self.generation_recipe_version,
             self.request,
@@ -245,6 +253,11 @@ impl MapPackage {
             self.provenance.clone(),
             self.environment.clone(),
         )?;
+        // Schema 9 adds optional identity fields. Keep schema-8 packages whose
+        // omitted evidence field defaults to None on their original hash.
+        if self.schema_version == crate::LEGACY_MAP_SCHEMA_VERSION {
+            canonical.schema_version = crate::LEGACY_MAP_SCHEMA_VERSION;
+        }
         (canonical == *self)
             .then_some(())
             .ok_or(MapPackageError::NonCanonicalFields)

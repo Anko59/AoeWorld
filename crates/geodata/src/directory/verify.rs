@@ -54,6 +54,24 @@ pub(super) fn verify_manifest(
             .as_ref()
             .map(|field| field.levels.as_slice()),
     )?;
+    if let Some(index) = &package.environment.hydrology_evidence {
+        count += verify_evidence_layer(
+            directory,
+            package_hash,
+            DirectoryLayer::HydrologyEvidence,
+            index.samples_per_axis,
+            PageLayer::HydrologyEvidence,
+            index.hydrology_page_root,
+        )?;
+        count += verify_evidence_layer(
+            directory,
+            package_hash,
+            DirectoryLayer::ModernLandCover,
+            index.samples_per_axis,
+            PageLayer::ModernLandCover,
+            index.modern_land_cover_page_root,
+        )?;
+    }
     count += verify_layer(
         directory,
         package_hash,
@@ -78,6 +96,38 @@ pub(super) fn verify_manifest(
         return Err(invalid("prepared package has no indexed pages"));
     }
     Ok(())
+}
+
+fn verify_evidence_layer(
+    directory: &Path,
+    package_hash: &str,
+    layer: DirectoryLayer,
+    axis: u16,
+    page_layer: PageLayer,
+    expected_root: [u8; 32],
+) -> Result<usize, GeodataError> {
+    let side = usize::from(ENVIRONMENT_PAGE_SAMPLES);
+    let count = usize::from(axis).div_ceil(side);
+    let mut root = PageRootBuilder::new(page_layer, count.saturating_mul(count))?;
+    for y in 0..count {
+        for x in 0..count {
+            let key = page_key(layer, 0, x, y)?;
+            let page = read_page(directory, package_hash, key)?;
+            if page.key() != key {
+                return Err(invalid("typed page coordinates do not match its path"));
+            }
+            let width = (usize::from(axis) - x * side).min(side) as u8;
+            let height = (usize::from(axis) - y * side).min(side) as u8;
+            if page.dimensions() != (width, height) {
+                return Err(invalid("typed page dimensions do not match its grid"));
+            }
+            root.push(page.content_hash()?)?;
+        }
+    }
+    if root.finish()? != expected_root {
+        return Err(invalid("typed pages do not reproduce the indexed root"));
+    }
+    Ok(count.saturating_mul(count))
 }
 
 fn verify_layer(
@@ -129,6 +179,8 @@ fn page_layer(layer: DirectoryLayer) -> PageLayer {
         DirectoryLayer::Water => PageLayer::Water,
         DirectoryLayer::Vegetation => PageLayer::Vegetation,
         DirectoryLayer::HistoricalLandUse => PageLayer::HistoricalLandUse,
+        DirectoryLayer::HydrologyEvidence => PageLayer::HydrologyEvidence,
+        DirectoryLayer::ModernLandCover => PageLayer::ModernLandCover,
     }
 }
 
@@ -178,7 +230,43 @@ pub(super) fn read_pages(
             .map(|field| field.levels.as_slice()),
         &mut pages,
     )?;
+    if let Some(index) = &package.environment.hydrology_evidence {
+        read_evidence_pages(
+            directory,
+            package_hash,
+            DirectoryLayer::HydrologyEvidence,
+            index.samples_per_axis,
+            &mut pages,
+        )?;
+        read_evidence_pages(
+            directory,
+            package_hash,
+            DirectoryLayer::ModernLandCover,
+            index.samples_per_axis,
+            &mut pages,
+        )?;
+    }
     Ok(pages)
+}
+
+fn read_evidence_pages(
+    directory: &Path,
+    package_hash: &str,
+    layer: DirectoryLayer,
+    axis: u16,
+    pages: &mut Vec<PageValue>,
+) -> Result<(), GeodataError> {
+    let count = usize::from(axis.div_ceil(ENVIRONMENT_PAGE_SAMPLES as u16));
+    for y in 0..count {
+        for x in 0..count {
+            pages.push(read_page(
+                directory,
+                package_hash,
+                page_key(layer, 0, x, y)?,
+            )?);
+        }
+    }
+    Ok(())
 }
 
 fn read_layer_pages(
@@ -250,12 +338,20 @@ fn read_page(
         DirectoryLayer::HistoricalLandUse => {
             PageValue::HistoricalLandUse(serde_json::from_slice(&bytes).map_err(json_error)?)
         }
+        DirectoryLayer::HydrologyEvidence => {
+            PageValue::HydrologyEvidence(serde_json::from_slice(&bytes).map_err(json_error)?)
+        }
+        DirectoryLayer::ModernLandCover => {
+            PageValue::ModernLandCover(serde_json::from_slice(&bytes).map_err(json_error)?)
+        }
     };
     match &page {
         PageValue::Elevation(page) => page.validate()?,
         PageValue::Water(page) => page.validate()?,
         PageValue::Vegetation(page) => page.validate()?,
         PageValue::HistoricalLandUse(page) => page.validate()?,
+        PageValue::HydrologyEvidence(page) => page.validate()?,
+        PageValue::ModernLandCover(page) => page.validate()?,
     }
     Ok(page)
 }
@@ -279,6 +375,8 @@ fn verify_files(
         DirectoryLayer::Water,
         DirectoryLayer::Vegetation,
         DirectoryLayer::HistoricalLandUse,
+        DirectoryLayer::HydrologyEvidence,
+        DirectoryLayer::ModernLandCover,
     ] {
         let path = pages_root.join(package_hash).join(layer.name());
         if let Ok(metadata) = fs::symlink_metadata(&path)

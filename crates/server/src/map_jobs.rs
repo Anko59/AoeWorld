@@ -1,5 +1,6 @@
 use crate::{AppState, map_store, map_worker};
 use aoe_map::{MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequest};
+use map_worker::progress;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -11,6 +12,7 @@ use std::{
 
 mod journal;
 mod preparation;
+mod submission;
 pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
 
 const MAX_QUEUED_JOBS: usize = 2;
@@ -24,6 +26,8 @@ pub(super) enum StartError {
     Queue(String),
     #[error("{0}")]
     Storage(String),
+    #[error("{0}")]
+    Conflict(String),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -58,7 +62,8 @@ pub(super) struct Job {
     pub preparation: PreparationPlan,
     pub state: JobState,
     pub stage: JobStage,
-    pub percent: u8,
+    pub percent: Option<u8>,
+    pub progress: Option<progress::Progress>,
     pub eta_seconds: Option<u64>,
     pub content_hash: Option<String>,
     pub error: Option<String>,
@@ -68,6 +73,18 @@ pub(super) struct Job {
 struct Entry {
     job: Job,
     cancelled: Arc<AtomicBool>,
+    progress: progress::State,
+    submission: Option<submission::Identity>,
+}
+
+impl Entry {
+    fn snapshot(&self) -> Job {
+        let mut job = self.job.clone();
+        if job.state == JobState::Running {
+            job.progress = progress::snapshot(&self.progress);
+        }
+        job
+    }
 }
 
 #[derive(Clone, Default)]
@@ -127,7 +144,7 @@ impl Manager {
             PreparationMode::Overview => JobStage::PreparingOverview,
             PreparationMode::Detailed => JobStage::PreparingDetailed,
         };
-        job.percent = 5;
+        job.percent = None;
         job.eta_seconds = None;
         Some(id)
     }
@@ -154,7 +171,8 @@ impl Manager {
             preparation,
             state: JobState::Queued,
             stage: JobStage::Queued,
-            percent: 0,
+            percent: None,
+            progress: None,
             eta_seconds: None,
             content_hash: None,
             error: None,
@@ -164,21 +182,27 @@ impl Manager {
             Entry {
                 job,
                 cancelled: Arc::new(AtomicBool::new(false)),
+                progress: progress::State::default(),
+                submission: None,
             },
         );
         let start = self.start_next();
         let job = self
             .jobs
             .get(&id)
-            .map(|entry| entry.job.clone())
+            .map(Entry::snapshot)
             .ok_or_else(|| "map job disappeared after insertion".to_owned())?;
         Ok((job, start))
     }
 }
 
-pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Job, StartError> {
-    let preparation =
-        PreparationPlan::resolve(input, state.map_worker.is_some()).map_err(StartError::Invalid)?;
+pub(super) async fn start(
+    state: &AppState,
+    input: CreationRequest,
+    key: Option<String>,
+) -> Result<Job, StartError> {
+    let identity =
+        submission::Identity::new(key, input.preparation).map_err(StartError::Invalid)?;
     let request = input
         .request
         .normalized()
@@ -188,10 +212,20 @@ pub(super) async fn start(state: &AppState, input: CreationRequest) -> Result<Jo
         .map_err(|error| StartError::Invalid(error.to_string()))?;
     let (job, start) = {
         let mut manager = state.map_jobs.lock().await;
+        if let Some(job) = submission::existing(&manager, identity.as_ref(), request)? {
+            return Ok(job);
+        }
+        let preparation = PreparationPlan::resolve(input, state.map_worker.is_some())
+            .map_err(StartError::Invalid)?;
         let mut candidate = manager.clone();
         let result = candidate
             .enqueue(request, estimate, preparation)
             .map_err(StartError::Queue)?;
+        candidate
+            .jobs
+            .get_mut(&result.0.id)
+            .ok_or_else(|| StartError::Queue("new job disappeared".into()))?
+            .submission = identity;
         journal::persist(state.map_package_directory.as_deref(), &candidate)
             .await
             .map_err(StartError::Storage)?;
@@ -211,7 +245,7 @@ pub(super) async fn status(state: &AppState, id: u64) -> Option<Job> {
         .await
         .jobs
         .get(&id)
-        .map(|entry| entry.job.clone())
+        .map(Entry::snapshot)
 }
 
 pub(super) async fn list(state: &AppState) -> Vec<Job> {
@@ -221,7 +255,7 @@ pub(super) async fn list(state: &AppState) -> Vec<Job> {
         .await
         .jobs
         .values()
-        .map(|entry| entry.job.clone())
+        .map(Entry::snapshot)
         .collect()
 }
 
@@ -257,7 +291,9 @@ pub(super) async fn cancel(state: &AppState, id: u64) -> Result<Option<Job>, Str
 
 fn launch(state: AppState, id: u64) {
     tokio::spawn(async move {
-        let Some((request, preparation, cancelled)) = active_input(&state, id).await else {
+        let Some((request, preparation, cancelled, progress_state)) =
+            active_input(&state, id).await
+        else {
             return;
         };
         let directory = state.map_package_directory.clone();
@@ -285,7 +321,9 @@ fn launch(state: AppState, id: u64) {
                     request,
                     preparation,
                     &cancelled,
+                    progress_state.clone(),
                 )?;
+                progress::stage(&progress_state, progress::Phase::VerifyingPackage);
                 map_store::verify_stored(directory, &package).map_err(|error| error.to_string())?
             } else {
                 let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
@@ -311,7 +349,7 @@ async fn set_stage(state: &AppState, id: u64, stage: JobStage) {
         && entry.job.state == JobState::Running
     {
         entry.job.stage = stage;
-        entry.job.percent = 10;
+        entry.job.percent = None;
         entry.job.eta_seconds = None;
     }
 }
@@ -319,7 +357,12 @@ async fn set_stage(state: &AppState, id: u64, stage: JobStage) {
 async fn active_input(
     state: &AppState,
     id: u64,
-) -> Option<(MapRequest, PreparationPlan, Arc<AtomicBool>)> {
+) -> Option<(
+    MapRequest,
+    PreparationPlan,
+    Arc<AtomicBool>,
+    progress::State,
+)> {
     let manager = state.map_jobs.lock().await;
     let entry = manager.jobs.get(&id)?;
     matches!(
@@ -331,6 +374,7 @@ async fn active_input(
             entry.job.request,
             entry.job.preparation,
             entry.cancelled.clone(),
+            entry.progress.clone(),
         )
     })
 }
@@ -361,7 +405,7 @@ async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
                     publication_package = Some((packages, package));
                     entry.job.state = JobState::Completed;
                     entry.job.stage = JobStage::Completed;
-                    entry.job.percent = 100;
+                    entry.job.percent = Some(100);
                     entry.job.eta_seconds = Some(0);
                     entry.job.content_hash = Some(hash);
                 }

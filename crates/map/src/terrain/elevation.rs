@@ -46,7 +46,7 @@ impl PreparedElevation {
     }
 
     fn sample(&self, x: i32, y: i32, width_tiles: i32, position: AxisPosition) -> Option<i32> {
-        if self.sampling_recipe == crate::GENERATION_RECIPE_VERSION {
+        if self.sampling_recipe != crate::LEGACY_GENERATION_RECIPE_VERSION {
             return self.sample_bilinear(x, y, width_tiles, position);
         }
         let source_x = nearest_source_coordinate(x, self.samples_per_axis, width_tiles)?;
@@ -164,10 +164,14 @@ pub(super) fn bilinear_height(
         + i128::from(values[2]) * x1 * y1
         + i128::from(values[3]) * x0 * y1;
     let scale = denominator * denominator;
-    let rounded = if total >= 0 {
-        (total + scale / 2) / scale
-    } else {
-        (total - scale / 2) / scale
-    };
+    // Round to nearest with exact half values away from zero. Euclidean
+    // remainder keeps negative heights symmetric with positive heights.
+    let magnitude = total.unsigned_abs();
+    let scale = scale as u128;
+    let mut rounded = (magnitude / scale) as i128;
+    if magnitude % scale * 2 >= scale {
+        rounded += 1;
+    }
+    let rounded = if total < 0 { -rounded } else { rounded };
     rounded.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
 }

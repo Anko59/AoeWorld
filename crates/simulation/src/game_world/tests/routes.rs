@@ -108,6 +108,8 @@ fn flat_map_terrain() -> Terrain {
         }),
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let generator = MapChunkGenerator::new([0; 32], 0, 64)
         .with_prepared_elevation(
@@ -170,6 +172,8 @@ fn toggle_provider_terrain() -> (Terrain, Arc<AtomicBool>) {
         water: None,
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     let fail = Arc::new(AtomicBool::new(false));
     let provider = ToggleProvider {

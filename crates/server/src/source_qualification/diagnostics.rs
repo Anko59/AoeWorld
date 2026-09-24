@@ -77,10 +77,11 @@ pub(super) fn start_diagnostic(
     let mut clear_three_windows = 0_usize;
     let mut reachable_windows = 0_usize;
     let mut reachable_three_windows = 0_usize;
-    let mut maximum_reachable_tiles = 0_usize;
+    let mut maximum_reachable_start_tiles = 0_usize;
+    let mut maximum_reachable_three_tiles = 0_usize;
     let mut land_use_candidates = 0_usize;
     let mut land_use_cleared_candidates = 0_usize;
-    let mut eligible_three_candidates = Vec::new();
+    let mut eligible_start_candidates = Vec::new();
     for (chunk_x, chunk_y) in &chunks {
         let start_x = chunk_x * CHUNK_TILES;
         let start_y = chunk_y * CHUNK_TILES;
@@ -104,18 +105,27 @@ pub(super) fn start_diagnostic(
                 )?;
                 if clear_three {
                     clear_three_windows += 1;
-                    let reachable = reachable_tiles(terrain, candidate, config, &mut passable)?;
-                    maximum_reachable_tiles = maximum_reachable_tiles.max(reachable);
-                    if reachable >= START_REACHABLE_TILES {
-                        reachable_three_windows += 1;
-                        eligible_three_candidates.push(candidate);
-                        if clear_five {
-                            reachable_windows += 1;
-                        }
-                    }
                 }
                 if clear_five {
                     clear_windows += 1;
+                }
+                let reachable = if clear_three || clear_five {
+                    Some(reachable_tiles(terrain, candidate, config, &mut passable)?)
+                } else {
+                    None
+                };
+                if clear_three {
+                    let reachable = reachable.ok_or(EnvironmentPageError::Invalid)?;
+                    maximum_reachable_three_tiles = maximum_reachable_three_tiles.max(reachable);
+                    reachable_three_windows += usize::from(reachable >= START_REACHABLE_TILES);
+                }
+                if clear_five {
+                    let reachable = reachable.ok_or(EnvironmentPageError::Invalid)?;
+                    maximum_reachable_start_tiles = maximum_reachable_start_tiles.max(reachable);
+                    if reachable >= START_REACHABLE_TILES {
+                        reachable_windows += 1;
+                        eligible_start_candidates.push(candidate);
+                    }
                 }
                 let Some(tile) = generator.tile_at_with_cancel(candidate, &|| false)? else {
                     continue;
@@ -145,13 +155,13 @@ pub(super) fn start_diagnostic(
         terrain,
         generator,
         package,
-        &eligible_three_candidates,
+        &eligible_start_candidates,
         selected_start,
         TileCoord::new(config.width_tiles - 2, (config.height_tiles - 1) / 2),
         config,
     )?;
     Ok(format!(
-        "center=({},{}), center_clear_5x5_tiles={center_clear_tiles}/25, center_clear_3x3_tiles={center_clear_three_tiles}/9, center_objects={center_objects}, cliffs={cliffs}, center_material={:?}, center_biome={:?}, center_water={:?}, center_passable={}, center_surface={:?}, center_object={:?}, center_height_cm={}, cardinal_sample_heights={neighbor_heights:?}, max_adjacent_rise_cm={max_neighbor_rise_cm}, max_2m_edge_grade_percent={max_edge_grade_percent:.2}, scanned_chunks={}, candidate_tiles={candidate_tiles}, fully_clear_5x5_windows={clear_windows}, clear_5x5_windows_reaching_256={reachable_windows}, fully_clear_3x3_windows={clear_three_windows}, clear_3x3_windows_reaching_256={reachable_three_windows}, max_reachable_tiles_from_clear_window={maximum_reachable_tiles}, center_hyde_crop_pct={:?}, center_hyde_grazing_pct={:?}, center_hyde_clears_tree={center_clearing_frequency:?}, scanned_hyde_cleared_tiles={land_use_cleared_candidates}/{land_use_candidates}, scanned_hyde_clearing_frequency_percent={clearing_frequency_percent:.3}, start_component_diagnostic={component_diagnostic}",
+        "center=({},{}), center_clear_5x5_tiles={center_clear_tiles}/25, center_clear_3x3_tiles={center_clear_three_tiles}/9, center_objects={center_objects}, cliffs={cliffs}, center_material={:?}, center_biome={:?}, center_water={:?}, center_passable={}, center_surface={:?}, center_object={:?}, center_height_cm={}, cardinal_sample_heights={neighbor_heights:?}, max_adjacent_rise_cm={max_neighbor_rise_cm}, max_2m_edge_grade_percent={max_edge_grade_percent:.2}, scanned_chunks={}, candidate_tiles={candidate_tiles}, fully_clear_5x5_windows={clear_windows}, clear_5x5_windows_reaching_256={reachable_windows}, fully_clear_3x3_windows={clear_three_windows}, clear_3x3_windows_reaching_256={reachable_three_windows}, max_reachable_tiles_from_clear_5x5_window={maximum_reachable_start_tiles}, max_reachable_tiles_from_clear_3x3_window={maximum_reachable_three_tiles}, center_hyde_crop_pct={:?}, center_hyde_grazing_pct={:?}, center_hyde_clears_tree={center_clearing_frequency:?}, scanned_hyde_cleared_tiles={land_use_cleared_candidates}/{land_use_candidates}, scanned_hyde_clearing_frequency_percent={clearing_frequency_percent:.3}, start_component_diagnostic={component_diagnostic}",
         center.x,
         center.y,
         center_tile.material,

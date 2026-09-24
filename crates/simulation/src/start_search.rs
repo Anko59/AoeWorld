@@ -3,12 +3,13 @@ use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{CHUNK_TILES, EnvironmentPageError};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-const LEGACY_START_CLEAR_RADIUS: i32 = 2;
-const RECIPE_4_START_CLEAR_RADIUS: i32 = 1;
+const START_CLEAR_RADIUS: i32 = 2;
 const START_REACHABLE_TILES: usize = 256;
+const START_SEARCH_CHUNKS: usize = 64;
 const START_CACHE_CHUNKS: usize = 256;
 const LEGACY_START_RECIPE: u16 = 3;
 const RECIPE_4_START_RECIPE: u16 = 4;
+const RECIPE_5_START_RECIPE: u16 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartSearchResult {
@@ -19,11 +20,11 @@ pub enum StartSearchResult {
 }
 
 impl Terrain {
-    /// Finds the closest legacy playable 5×5 clearing without allocating
-    /// terrain state proportional to the virtual map area. Candidates use
-    /// squared tile-center distance, followed by canonical `(y, x)` ordering.
+    /// Finds the closest playable 5×5 clearing without allocating terrain
+    /// state proportional to the virtual map area. Candidates use squared
+    /// tile-center distance, followed by canonical `(y, x)` ordering.
     pub fn starting_tile(&self, config: WorldConfig) -> Option<TileCoord> {
-        match self.search_start(config, 64, || false) {
+        match self.search_start(config, START_SEARCH_CHUNKS, || false) {
             StartSearchResult::Found(tile) => Some(tile),
             _ => None,
         }
@@ -50,9 +51,8 @@ impl Terrain {
         self.search_start_for_recipe(config, LEGACY_START_RECIPE, max_chunks, cancelled)
     }
 
-    /// Searches with the start footprint bound to the package generation
-    /// recipe. Recipe 3 keeps the original 5×5 clearing; recipe 4 uses a 3×3
-    /// clearing while retaining the same reachable-area requirement.
+    /// Validates the package recipe while preserving the established start
+    /// footprint and bounded search for all supported generation recipes.
     pub fn search_start_for_recipe(
         &self,
         config: WorldConfig,
@@ -60,11 +60,10 @@ impl Terrain {
         max_chunks: usize,
         cancelled: impl Fn() -> bool,
     ) -> Result<StartSearchResult, EnvironmentPageError> {
-        let clear_radius = match generation_recipe_version {
-            LEGACY_START_RECIPE => LEGACY_START_CLEAR_RADIUS,
-            RECIPE_4_START_RECIPE => RECIPE_4_START_CLEAR_RADIUS,
+        match generation_recipe_version {
+            LEGACY_START_RECIPE | RECIPE_4_START_RECIPE | RECIPE_5_START_RECIPE => {}
             _ => return Err(EnvironmentPageError::Invalid),
-        };
+        }
         if cancelled() {
             return Ok(StartSearchResult::Cancelled);
         }
@@ -73,7 +72,7 @@ impl Terrain {
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
-        if valid_start(&mut cache, center, clear_radius)? {
+        if valid_start(&mut cache, center)? {
             return Ok(StartSearchResult::Found(center));
         }
         let center_chunk = TileCoord::new(
@@ -101,7 +100,7 @@ impl Terrain {
                     return Ok(StartSearchResult::LimitReached);
                 }
                 scanned += 1;
-                scan_start_chunk(&mut cache, chunk_x, chunk_y, clear_radius, &mut best)?;
+                scan_start_chunk(&mut cache, chunk_x, chunk_y, &mut best)?;
             }
             if best.is_some_and(|tile| farther_than_best(tile, config, center_chunk, ring)) {
                 return Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found));
@@ -225,7 +224,6 @@ fn scan_start_chunk(
     cache: &mut StartPassabilityCache<'_>,
     chunk_x: i32,
     chunk_y: i32,
-    clear_radius: i32,
     best: &mut Option<TileCoord>,
 ) -> Result<(), EnvironmentPageError> {
     let config = cache.config;
@@ -241,7 +239,7 @@ fn scan_start_chunk(
         if best.is_some_and(|current| start_key(candidate, config) >= start_key(current, config)) {
             continue;
         }
-        if valid_start(cache, candidate, clear_radius)? {
+        if valid_start(cache, candidate)? {
             *best = Some(candidate);
         }
     }
@@ -251,19 +249,16 @@ fn scan_start_chunk(
 fn valid_start(
     cache: &mut StartPassabilityCache<'_>,
     candidate: TileCoord,
-    clear_radius: i32,
 ) -> Result<bool, EnvironmentPageError> {
-    Ok(clear_starting_area(cache, candidate, clear_radius)?
-        && cache.reaches_required_tiles(candidate)?)
+    Ok(clear_starting_area(cache, candidate)? && cache.reaches_required_tiles(candidate)?)
 }
 
 fn clear_starting_area(
     cache: &mut StartPassabilityCache<'_>,
     center: TileCoord,
-    radius: i32,
 ) -> Result<bool, EnvironmentPageError> {
-    for offset_y in -radius..=radius {
-        for offset_x in -radius..=radius {
+    for offset_y in -START_CLEAR_RADIUS..=START_CLEAR_RADIUS {
+        for offset_x in -START_CLEAR_RADIUS..=START_CLEAR_RADIUS {
             if !cache.passable(TileCoord::new(center.x + offset_x, center.y + offset_y))? {
                 return Ok(false);
             }

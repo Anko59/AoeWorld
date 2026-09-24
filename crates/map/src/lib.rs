@@ -19,8 +19,12 @@ pub use biome_rules::Biome;
 pub use environment::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, EnvironmentPage,
     EnvironmentPageError, EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid,
-    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, PotentialBiomePage, PreparedEnvironment, PyramidLevel,
-    WaterPage, ordered_biome_page_root, ordered_page_root, ordered_water_page_root,
+    HydrologyEvidenceIndex, HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind,
+    HydrologyObservation, HydrologyWaterPolicy, MAX_ENVIRONMENT_SAMPLES_PER_AXIS,
+    MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS, ModernLandCoverPage, PotentialBiomePage,
+    PreparedEnvironment, PyramidLevel, WORLD_COVER_OBSERVATION_YEAR, WaterPage,
+    ordered_biome_page_root, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
+    ordered_page_root, ordered_water_page_root,
 };
 pub use land_use::{HistoricalLandUsePage, ordered_land_use_page_root};
 pub use navigation::{
@@ -46,8 +50,10 @@ pub use terrain::{
 pub use wire::{CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 
 pub const CHUNK_TILES: i32 = 32;
-/// Version 8 adds separately persisted inland-lake coverage.
-pub const MAP_SCHEMA_VERSION: u16 = 8;
+/// Version 9 adds independently rooted modern hydrology and land-cover pages.
+pub const MAP_SCHEMA_VERSION: u16 = 9;
+/// Version 8 packages remain readable when they contain no typed evidence.
+pub const LEGACY_MAP_SCHEMA_VERSION: u16 = 8;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;
@@ -55,7 +61,9 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// Increment when deterministic generation behavior changes. This version is
 /// part of the canonical package identity but does not reseed geography.
-pub const GENERATION_RECIPE_VERSION: u16 = 4;
+pub const GENERATION_RECIPE_VERSION: u16 = 5;
+/// Recipe 4 retains bilinear elevation and the published recipe-2 resources.
+pub const PRIOR_GENERATION_RECIPE_VERSION: u16 = 4;
 pub const LEGACY_GENERATION_RECIPE_VERSION: u16 = 3;
 /// Resource placement keeps its recipe identity separate so terrain recipe
 /// changes do not reseed already published resource detail.

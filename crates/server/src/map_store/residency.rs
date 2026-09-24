@@ -1,8 +1,9 @@
 use super::{MAX_PAGE_BYTES, MapStoreError, read_bounded_file};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPage, EnvironmentPageError,
-    EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, HistoricalLandUsePage, MapPackage,
-    PageLayer, PageRootBuilder, PotentialBiomePage, WaterPage,
+    EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, HistoricalLandUsePage,
+    HydrologyEvidencePage, MapPackage, ModernLandCoverPage, PageLayer, PageRootBuilder,
+    PotentialBiomePage, WaterPage,
 };
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -12,9 +13,8 @@ use std::{
 };
 
 pub(crate) const MAX_RESIDENT_ENVIRONMENT_PAGES: usize = 128;
-// 64 MiB admits the supported 16,384-sample pyramid with all four optional
-// layers (349,548 records at the conservative fixed-record budget) while
-// keeping the metadata separate from the decoded-page payload cache.
+// 64 MiB admits the supported 16,384-sample pyramid with its four layered
+// fields plus the separately bounded typed evidence grids.
 const MAX_PAGE_INDEX_BYTES: usize = 64 * 1024 * 1024;
 // The index stores one fixed-size key/hash/location record per page. The
 // shared root path is accounted for once in PageResidency rather than once
@@ -78,6 +78,24 @@ impl PageResidency {
                 &root,
                 PageLayer::HistoricalLandUse,
                 field,
+                &mut entries,
+                cancelled,
+            )?;
+        }
+        if let Some(index) = &package.environment.hydrology_evidence {
+            scan_evidence_layer(
+                &root,
+                PageLayer::HydrologyEvidence,
+                index.samples_per_axis,
+                index.hydrology_page_root,
+                &mut entries,
+                cancelled,
+            )?;
+            scan_evidence_layer(
+                &root,
+                PageLayer::ModernLandCover,
+                index.samples_per_axis,
+                index.modern_land_cover_page_root,
                 &mut entries,
                 cancelled,
             )?;
@@ -246,6 +264,73 @@ fn scan_layer(
     Ok(())
 }
 
+fn scan_evidence_layer(
+    root: &Path,
+    layer: PageLayer,
+    axis: u16,
+    expected_root: [u8; 32],
+    entries: &mut BTreeMap<EnvironmentPageKey, PageEntry>,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(), MapStoreError> {
+    let directory = root.join(layer.directory_name());
+    let side = usize::from(ENVIRONMENT_PAGE_SAMPLES);
+    let count = usize::from(axis).div_ceil(side);
+    let mut digest = PageRootBuilder::new(layer, count.saturating_mul(count))
+        .map_err(|error| invalid(&directory, error))?;
+    for y in 0..count {
+        for x in 0..count {
+            if cancelled() {
+                return Err(MapStoreError::Cancelled);
+            }
+            if entries.len().saturating_add(1) > MAX_PAGE_INDEX_BYTES / PAGE_INDEX_ENTRY_BYTES {
+                return Err(invalid(&directory, "prepared page index exceeds its bound"));
+            }
+            let key = EnvironmentPageKey {
+                layer,
+                level: 0,
+                x: x as u16,
+                y: y as u16,
+            };
+            let path = directory.join(format!("0-{x}-{y}.json"));
+            let bytes = read_bounded_file(&path, MAX_PAGE_BYTES, "environment page")?;
+            let page = decode_page(key, &bytes).map_err(|reason| invalid(&path, reason))?;
+            let width = (usize::from(axis) - x * side).min(side) as u8;
+            let height = (usize::from(axis) - y * side).min(side) as u8;
+            if page_dimensions(&page) != (width, height) {
+                return Err(invalid(
+                    &path,
+                    "typed page dimensions do not match its index",
+                ));
+            }
+            let hash = page.content_hash().map_err(|error| invalid(&path, error))?;
+            digest.push(hash).map_err(|error| invalid(&path, error))?;
+            if entries
+                .insert(
+                    key,
+                    PageEntry {
+                        expected_hash: hash,
+                        location: PageLocation::Coordinate,
+                    },
+                )
+                .is_some()
+            {
+                return Err(invalid(&directory, "duplicate prepared page coordinate"));
+            }
+        }
+    }
+    if digest
+        .finish()
+        .map_err(|error| invalid(&directory, error))?
+        != expected_root
+    {
+        return Err(invalid(
+            &directory,
+            "typed pages do not reproduce the indexed root",
+        ));
+    }
+    Ok(())
+}
+
 impl PageEntry {
     fn path(&self, root: &Path, key: EnvironmentPageKey) -> PathBuf {
         match self.location {
@@ -270,6 +355,10 @@ fn decode_page(key: EnvironmentPageKey, bytes: &[u8]) -> Result<EnvironmentPage,
         }
         PageLayer::HistoricalLandUse => serde_json::from_slice::<HistoricalLandUsePage>(bytes)
             .map(EnvironmentPage::HistoricalLandUse),
+        PageLayer::HydrologyEvidence => serde_json::from_slice::<HydrologyEvidencePage>(bytes)
+            .map(EnvironmentPage::HydrologyEvidence),
+        PageLayer::ModernLandCover => serde_json::from_slice::<ModernLandCoverPage>(bytes)
+            .map(EnvironmentPage::ModernLandCover),
     }
     .map_err(|_| "page JSON is invalid")?;
     if page.key() != key {
@@ -285,6 +374,8 @@ fn page_dimensions(page: &EnvironmentPage) -> (u8, u8) {
         EnvironmentPage::Water(page) => (page.width, page.height),
         EnvironmentPage::Vegetation(page) => (page.width, page.height),
         EnvironmentPage::HistoricalLandUse(page) => (page.width, page.height),
+        EnvironmentPage::HydrologyEvidence(page) => (page.width, page.height),
+        EnvironmentPage::ModernLandCover(page) => (page.width, page.height),
     }
 }
 

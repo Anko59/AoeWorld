@@ -90,6 +90,7 @@ fn flat_terrain_with_water_wall(width: i32, wall_x: i32, gap_y: i32) -> MapChunk
             levels: biome_levels,
         }),
         historical_land_use: None,
+        hydrology_evidence: None,
     };
     MapChunkGenerator::new([0; 32], 0, width)
         .with_prepared_elevation(

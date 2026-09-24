@@ -1,6 +1,6 @@
 use super::{
     Biome, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind, ResourceNode,
-    Tile, WaterKind, compression_fallback, quantize_game_height, resource_id, resources,
+    Tile, WaterKind, clearing, compression_fallback, quantize_game_height, resource_id, resources,
     signed_noise, surface, unsigned_noise,
 };
 use crate::biome_rules::{biome_from_potential_class, material_for, tree_present};
@@ -132,6 +132,8 @@ impl MapChunkGenerator {
             water,
             elevation_provenance,
             water_provenance,
+            hydrology_observation: None,
+            modern_land_cover_class: None,
             passable: water == WaterKind::None
                 && material != GroundMaterial::Ice
                 && surface.walkable(),
@@ -142,6 +144,9 @@ impl MapChunkGenerator {
         if !sample.passable {
             return None;
         }
+        if clearing::contains(self, tile) {
+            return None;
+        }
         if let Some(tree) = self.tree_at(tile, sample) {
             return Some(tree);
         }
@@ -149,9 +154,12 @@ impl MapChunkGenerator {
     }
 
     pub(super) fn occupied_without_access(&self, tile: TileCoord, sample: Tile) -> bool {
-        !sample.passable
-            || self.tree_at(tile, sample).is_some()
-            || resources::candidate(self, tile, sample).is_some()
+        if !sample.passable {
+            return true;
+        }
+        !clearing::contains(self, tile)
+            && (self.tree_at(tile, sample).is_some()
+                || resources::candidate(self, tile, sample).is_some())
     }
 
     fn tree_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
@@ -168,14 +176,16 @@ impl MapChunkGenerator {
                     land_use.grazing_percent,
                 )
             });
-        (!historically_cleared && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
-            .then_some(ResourceNode {
-                id: resource_id(tile, 0),
-                tile,
-                kind: ResourceKind::Wood,
-                object: ObjectKind::Tree,
-                initial_amount: 100,
-                visual_variant: (value >> 8) as u8,
-            })
+        (!historically_cleared
+            && !clearing::contains(self, tile)
+            && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
+        .then_some(ResourceNode {
+            id: resource_id(tile, 0),
+            tile,
+            kind: ResourceKind::Wood,
+            object: ObjectKind::Tree,
+            initial_amount: 100,
+            visual_variant: (value >> 8) as u8,
+        })
     }
 }

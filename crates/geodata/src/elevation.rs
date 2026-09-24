@@ -133,6 +133,8 @@ fn prepare_elevation_dataset(
         water: None,
         vegetation: None,
         historical_land_use: None,
+
+        hydrology_evidence: None,
     };
     environment.validate()?;
     Ok(PreparedElevation { environment, pages })

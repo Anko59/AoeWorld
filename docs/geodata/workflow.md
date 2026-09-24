@@ -85,11 +85,13 @@ locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
 Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
 Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
-vegetation and historical inputs. Its modern water evidence is folded into the
-legacy water coverage layer; typed hydrology classes are not persisted or yet
-exposed to terrain. Source availability, the requested date, and normalized
-package provenance remain distinct so a modern source cannot be mistaken for a
-historical reconstruction.
+vegetation and historical inputs. Schema-9 packages persist typed hydrology and
+modern land-cover evidence in bounded, independently verified pages. Terrain
+consumes those observations through the package provider while retaining the
+legacy water coverage layer for compatibility; schema-8 packages remain
+readable with typed evidence absent. Source availability, the requested date,
+and normalized package provenance remain distinct so a modern source cannot be
+mistaken for a historical reconstruction.
 
 HYDE contributes a coarse historical land-use signal. It does not establish
 the exact location of medieval forests, farms, settlements, roads, bridges,
@@ -254,5 +256,53 @@ Requests remain limited to 64 KiB, responses to 512 KiB, and diagnostics to
 8 KiB. Oversized output fails explicitly; readers drain without retaining excess
 bytes until termination, so a full pipe cannot prevent cancellation. Input is
 written separately so a worker that never reads stdin remains cancellable.
-These lifecycle guarantees do not provide a durable job journal or remove
-partially prepared source/cache files after a crash.
+The durable job journal described above records interrupted work; process
+termination alone does not remove every partially prepared source/cache file.
+
+Server-driven detailed preparation owns a separate directory below
+`<cache>/worker-scratch/`. The server and worker hold shared file leases;
+startup and the next preparation recover only directories with no live lease.
+Normal completion, failure, and cancellation remove the owned scratch after the
+worker group has been reaped. This bounds crash leftovers without deleting an
+active worker's pages. Cached source objects and resumable downloads remain
+shared. This ownership applies to detailed pyramid staging, not to every
+provider extraction temporary or incomplete immutable publication file.
+Direct CLI preparations retain their existing local staging cleanup behavior.
+
+Preparation status has optional version-1 `progress` evidence. Named phases
+cover source acquisition, overview/water sampling, pyramid construction,
+publication, and server verification. Downloads report bytes for the current
+source only; detailed pyramid construction reports persisted pages against
+its exact four-layer total, including partial edge pages and all levels.
+Counts are phase-local, never an overall completion percentage or time estimate.
+Unknown totals remain absent. Active status exposes these counters only while
+running; cancellation and terminal history do not retain stale progress.
+
+The worker atomically replaces a small progress file in its leased scratch,
+at most four times per second except phase changes and final counts. The server
+polls at most five times per second and accepts only regular files, version 1,
+known phases/units, at most 4 KiB, and coherent bounded counts. Malformed or
+missing progress retains the last valid observation and cannot publish a map.
+Progress is best-effort telemetry: write failures do not change job outcome,
+and brief phases may pass between polls. The existing cancellation, process
+and output bounds remain authoritative. No overall percentage is supplied until
+successful completion; no remaining-time estimate is manufactured.
+
+Creation POST requests may carry `Idempotency-Key`, exactly 32 lowercase hex
+characters generated independently of the map seed. While its job remains in
+the bounded 128-record history, the same key and normalized request/preference
+return the original job, including after restart, without another worker launch.
+Changing coordinates, seed, scale or preparation preference with an existing key
+returns HTTP 409. Invalid keys return 400. Journal schema 2 persists keys and
+continues to read schema 1; malformed or duplicate saved keys fail startup.
+Retiring a terminal history record also retires its key: this is bounded request
+recovery, not an indefinite global deduplication service.
+
+The creator stores the key and original request before POST, then replaces them
+with the accepted job ID in one localStorage value. After a lost acknowledgement,
+`Recover request` resends that exact submission after reconnecting. Transport or
+server failures keep the key; explicit 400/409/429 rejections permit a corrected new
+request. A returned job ID resumes normal polling and activation. If browser
+storage is unavailable, same-page retry still reuses the key; reload recovery
+then relies on server history. Deliberately retrying a failed/cancelled job uses
+a new key so it can perform new work.

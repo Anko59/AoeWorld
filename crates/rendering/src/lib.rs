@@ -16,6 +16,15 @@ mod game_grid;
 #[cfg(target_arch = "wasm32")]
 mod game_renderer;
 #[cfg(target_arch = "wasm32")]
+mod surface_mesh;
+#[cfg(target_arch = "wasm32")]
 mod terrain;
 #[cfg(target_arch = "wasm32")]
-pub use game_renderer::{GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneUnit};
+pub use game_renderer::{
+    GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneTerrainSurface, SceneUnit,
+};
+#[cfg(target_arch = "wasm32")]
+pub use surface_mesh::{
+    ProjectedSurfaceTriangle, pick_surface_point, projected_surface_triangles,
+    sample_surface_height,
+};

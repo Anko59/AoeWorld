@@ -68,8 +68,9 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Generation recipe 4 changes source-elevation sampling identity.
-            // Keep maps-v7 intact and regenerate compatible packages separately.
+            // Generation recipe 5 changes source-elevation sampling identity.
+            // Keep prior package directories intact and regenerate compatible
+            // packages separately.
             map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),
             map_worker: None,
             geodata_cache_directory: PathBuf::from(Self::DEFAULT_GEODATA_CACHE_DIRECTORY),

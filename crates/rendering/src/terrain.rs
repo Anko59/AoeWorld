@@ -1,4 +1,4 @@
-use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, web::Sprite};
+use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface, web::Sprite};
 use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, TileCoord};
 use std::collections::BTreeMap;
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
@@ -47,6 +47,7 @@ pub(crate) fn visible_terrain_frames(
                     position,
                     material: 0,
                     elevation_meters: 0.0,
+                    surface: SceneTerrainSurface::flat(0.0),
                 },
                 frame,
                 camera,
@@ -111,6 +112,9 @@ fn map_candidate(
     camera: SceneCamera,
     projection: &Camera,
 ) -> Option<TerrainCandidate> {
+    if sample.surface.kind != SceneTerrainSurface::PLATEAU || sample.surface.water != 0 {
+        return None;
+    }
     let frames = art
         .terrain
         .get(usize::from(sample.material))

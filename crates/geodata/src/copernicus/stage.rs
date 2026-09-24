@@ -17,6 +17,27 @@ pub(super) struct Stage {
 }
 
 impl Stage {
+    pub(super) fn lease(root: &Path) -> Result<fs::File, GeodataError> {
+        let path = root.join("lease");
+        if !fs::symlink_metadata(&path)?.file_type().is_file() {
+            return Err(GeodataError::Preparation(
+                "worker staging lease is not a regular file",
+            ));
+        }
+        let lease = fs::OpenOptions::new().read(true).write(true).open(&path)?;
+        lease
+            .try_lock_shared()
+            .map_err(|_| GeodataError::Preparation("worker staging is being recovered"))?;
+        // A recovery pass may have removed the directory before this lock was
+        // acquired. Never start writing against an already-unlinked lease.
+        if !path.is_file() {
+            return Err(GeodataError::Preparation(
+                "worker staging was recovered before acquiring its lease",
+            ));
+        }
+        Ok(lease)
+    }
+
     pub(super) fn new(cache_root: &Path) -> Result<Self, GeodataError> {
         let parent = cache_root.join("detailed-staging");
         fs::create_dir_all(&parent)?;
@@ -108,6 +129,7 @@ pub(super) fn publish_staged_pages(
     package: &MapPackage,
     samples_per_axis: u16,
 ) -> Result<(), GeodataError> {
+    crate::preparation_progress::stage(crate::preparation_progress::Phase::PublishingPackage);
     let hash = package.content_hash_hex();
     if package.environment.samples_per_axis != samples_per_axis {
         return Err(GeodataError::Preparation(
@@ -161,6 +183,39 @@ pub(super) fn publish_staged_pages(
             ))?
             .levels,
     )?;
+    if let Some(index) = &package.environment.hydrology_evidence {
+        publish_evidence_layer(
+            stage,
+            output,
+            &hash,
+            PageLayer::HydrologyEvidence,
+            index.samples_per_axis,
+        )?;
+        publish_evidence_layer(
+            stage,
+            output,
+            &hash,
+            PageLayer::ModernLandCover,
+            index.samples_per_axis,
+        )?;
+    }
+    Ok(())
+}
+
+fn publish_evidence_layer(
+    stage: &Stage,
+    output: &Path,
+    hash: &str,
+    layer: PageLayer,
+    axis: u16,
+) -> Result<(), GeodataError> {
+    let count = usize::from(axis.div_ceil(PAGE));
+    for y in 0..count {
+        for x in 0..count {
+            let bytes = stage.read(layer, 0, x as u16, y as u16)?;
+            publish_streaming_page(output, hash, layer, 0, x as u16, y as u16, &bytes)?;
+        }
+    }
     Ok(())
 }
 

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_CREATOR_DETAILED_SIDE_METERS: u64 = 120_000;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PreparationPreference {
     #[default]
@@ -90,7 +90,7 @@ impl PreparationPlan {
             samples_per_axis: samples,
             geographic_millimeters_per_sample: Some(sample_spacing(estimate, samples)),
             explanation: if detailed {
-                "Regional elevation: modern Copernicus GLO30, GLO90 only where GLO30 is absent. Water, vegetation and year-600 land use retain overview detail. Source errors fail the job."
+                "Regional elevation: modern Copernicus GLO30, with GLO90 only where GLO30 is absent. Modern WorldCover and European/Middle Eastern hydrography are stored as observations; mapped river corridors and lake extents only refine existing inland overview water. Vegetation and year-600 land use retain overview grids. Reservoirs and uncertain water remain evidence, not historical water. Source errors fail the job."
             } else {
                 "Overview: global elevation, water, potential vegetation and modeled year-600 land use on a 128-sample grid. Fine local detail is unavailable at this preparation level."
             },
