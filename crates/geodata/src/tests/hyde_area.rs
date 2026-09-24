@@ -36,6 +36,31 @@ fn target(polygon: Vec<HydeGeographicPoint>) -> HydeTargetAreaCell {
     HydeTargetAreaCell { polygon }
 }
 
+fn land_source(
+    polygon: Vec<HydeGeographicPoint>,
+    crop: f64,
+    grazing: f64,
+    population: f64,
+) -> HydeSourceAreaCell {
+    source(
+        polygon,
+        HydeAreaState::Land,
+        Some(crop),
+        Some(grazing),
+        Some(population),
+    )
+}
+
+fn projected_area_square_kilometers(polygon: &[HydeGeographicPoint]) -> f64 {
+    project_polygon(
+        polygon,
+        &equal_area_transform(0, 0).expect("local equal-area transform"),
+    )
+    .expect("projected polygon")
+    .area
+        / 1_000_000.0
+}
+
 fn close(actual: f64, expected: f64) {
     assert!(
         (actual - expected).abs() <= expected.abs().max(1.0) * 1.0e-8,
@@ -339,4 +364,125 @@ fn required_land_values_cannot_be_silently_replaced_with_zero() {
     let result =
         allocate_hyde_area_window(&[missing], &[target(rectangle(-0.1, -0.1, 0.1, 0.1))], 0, 0);
     assert!(matches!(result, Err(GeodataError::Preparation(_))));
+}
+
+#[test]
+fn antimeridian_edges_fail_closed_for_sources_and_targets() {
+    let crossing = rectangle(179.5, -0.1, -179.5, 0.1);
+    let ordinary = rectangle(-0.1, -0.1, 0.1, 0.1);
+    let cases = [
+        (
+            vec![land_source(crossing.clone(), 0.0, 0.0, 0.0)],
+            vec![target(ordinary.clone())],
+        ),
+        (
+            vec![land_source(ordinary.clone(), 0.0, 0.0, 0.0)],
+            vec![target(crossing)],
+        ),
+    ];
+
+    for (sources, targets) in cases {
+        let result = allocate_hyde_area_window(&sources, &targets, 0, 0);
+        assert!(
+            matches!(
+                result,
+                Err(GeodataError::Preparation(reason)) if reason.contains("antimeridian")
+            ),
+            "expected antimeridian rejection"
+        );
+    }
+}
+
+#[test]
+fn pole_boundary_edges_fail_closed_for_sources_and_targets() {
+    let touching = rectangle(-0.5, 89.9, 0.5, 90.0);
+    let ordinary = rectangle(-0.5, -0.1, 0.5, 0.1);
+    let cases = [
+        (
+            vec![land_source(touching.clone(), 0.0, 0.0, 0.0)],
+            vec![target(ordinary.clone())],
+        ),
+        (
+            vec![land_source(ordinary, 0.0, 0.0, 0.0)],
+            vec![target(touching)],
+        ),
+    ];
+
+    for (sources, targets) in cases {
+        let result = allocate_hyde_area_window(&sources, &targets, 0, 0);
+        assert!(
+            matches!(
+                result,
+                Err(GeodataError::Preparation(reason)) if reason.contains("pole")
+            ),
+            "expected pole rejection"
+        );
+    }
+}
+
+#[test]
+fn edges_strictly_inside_geographic_boundaries_are_accepted() {
+    let antimeridian_interior = rectangle(179.5, -0.1, 179.9, 0.1);
+    let polar_interior = rectangle(-0.5, 89.0, 0.5, 89.9);
+    let centers = [(0, 1_797_000_000), (89_500_000, 0)];
+
+    for (polygon, (latitude, longitude)) in [antimeridian_interior, polar_interior]
+        .into_iter()
+        .zip(centers)
+    {
+        allocate_hyde_area_window(
+            &[land_source(polygon.clone(), 0.0, 0.0, 0.0)],
+            &[target(polygon)],
+            latitude,
+            longitude,
+        )
+        .expect("strictly interior geographic edges should be accepted");
+    }
+}
+
+#[test]
+fn source_land_quantities_at_combined_capacity_are_accepted() {
+    let polygon = rectangle(-0.2, -0.1, 0.2, 0.1);
+    let land_area = projected_area_square_kilometers(&polygon);
+    let half = land_area / 2.0;
+    let allocations = allocate_hyde_area_window(
+        &[land_source(polygon.clone(), half, half, 100.0)],
+        &[target(polygon)],
+        0,
+        0,
+    )
+    .expect("capacity boundary should be accepted");
+
+    close(
+        allocations[0].crop_area_square_kilometers + allocations[0].grazing_area_square_kilometers,
+        allocations[0].land_area_square_meters / 1_000_000.0,
+    );
+}
+
+#[test]
+fn source_land_quantities_above_area_or_combined_capacity_are_rejected() {
+    let polygon = rectangle(-0.2, -0.1, 0.2, 0.1);
+    let land_area = projected_area_square_kilometers(&polygon);
+    let half = land_area / 2.0;
+    let cases = [
+        (land_area + 1.0, 0.0, "land area"),
+        (0.0, land_area + 1.0, "land area"),
+        (half, half + 1.0, "capacity"),
+    ];
+
+    for (crop, grazing, expected_reason) in cases {
+        let result = allocate_hyde_area_window(
+            &[land_source(polygon.clone(), crop, grazing, 0.0)],
+            &[target(polygon.clone())],
+            0,
+            0,
+        );
+        assert!(
+            matches!(
+                result,
+                Err(GeodataError::Preparation(reason)) if reason.contains(expected_reason)
+            ),
+            "expected rejection containing {expected_reason:?}"
+        );
+    }
 }

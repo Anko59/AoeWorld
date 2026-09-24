@@ -71,8 +71,12 @@ totals use the same explicit bound. The
 weighted pyramid accepts up to 1,024 samples per axis and combines unrounded
 quantities and land areas before producing the existing rounded land-use
 pages. Land cells with missing crop, grazing, or population values fail;
-zero-valued land cells remain valid. Lakes, ocean, nodata, and uncovered area
-are retained as separate allocation totals.
+zero-valued land cells remain valid. Crop and grazing areas must fit within
+the projected source-cell land area individually and together; exceeding
+either bound fails instead of being clamped. Source or target polygon edges
+that touch or cross a pole or the antimeridian also fail closed because this
+bounded API does not implement wrap-safe spherical geometry. Lakes, ocean,
+nodata, and uncovered area are retained as separate allocation totals.
 
 This API is the bounded allocation core. It accepts WGS84 source/target cell
 polygons from its caller; it does not extract or read the HYDE archives. The

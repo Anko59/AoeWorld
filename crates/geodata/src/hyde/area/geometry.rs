@@ -62,6 +62,7 @@ pub(super) fn project_polygon(
             "HYDE allocation polygon coordinates are invalid",
         ));
     }
+    validate_boundary_edges(geographic)?;
     let geographic = densify_geographic(geographic);
     let mut x = geographic
         .iter()
@@ -100,6 +101,27 @@ pub(super) fn project_polygon(
         bounds,
         area,
     })
+}
+
+fn validate_boundary_edges(geographic: &[HydeGeographicPoint]) -> Result<(), GeodataError> {
+    for index in 0..geographic.len() {
+        let start = geographic[index];
+        let end = geographic[(index + 1) % geographic.len()];
+        if start.longitude_degrees.abs() >= 180.0
+            || end.longitude_degrees.abs() >= 180.0
+            || (start.longitude_degrees - end.longitude_degrees).abs() > 180.0
+        {
+            return Err(GeodataError::Preparation(
+                "HYDE allocation polygon touches or crosses the antimeridian",
+            ));
+        }
+        if start.latitude_degrees.abs() >= 90.0 || end.latitude_degrees.abs() >= 90.0 {
+            return Err(GeodataError::Preparation(
+                "HYDE allocation polygon touches or crosses a pole",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn normalize_polygon(points: &mut [Point]) -> Result<(), GeodataError> {
