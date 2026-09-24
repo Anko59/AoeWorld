@@ -61,7 +61,10 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// Increment when deterministic generation behavior changes. This version is
 /// part of the canonical package identity but does not reseed geography.
-pub const GENERATION_RECIPE_VERSION: u16 = 3;
+pub const GENERATION_RECIPE_VERSION: u16 = 5;
+/// Recipe 4 retains bilinear elevation and the published recipe-2 resources.
+pub const PRIOR_GENERATION_RECIPE_VERSION: u16 = 4;
+pub const LEGACY_GENERATION_RECIPE_VERSION: u16 = 3;
 /// Resource placement keeps its recipe identity separate so terrain recipe
 /// changes do not reseed already published resource detail.
 pub const RESOURCE_PLACEMENT_RECIPE_VERSION: u16 = 2;

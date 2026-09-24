@@ -1,7 +1,11 @@
 use super::*;
 
+mod elevation_interpolation;
+mod forest_clearing;
+
 fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
 }
 
 fn environment_with_typed_evidence() -> PreparedEnvironment {
@@ -117,6 +121,7 @@ fn flat_generator(geography_key: [u8; 32], procedural_seed: u64) -> MapChunkGene
         hydrology_evidence: None,
     };
     MapChunkGenerator::new(geography_key, procedural_seed, 512)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
         .with_prepared_elevation(
             Ratio {
                 numerator: 1,
@@ -362,6 +367,36 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         })
         .collect::<Vec<_>>();
     assert!(cleared.iter().all(|node| node.kind != ResourceKind::Wood));
+}
+
+#[test]
+fn historical_clearing_percent_boundaries_and_determinism_are_exact() {
+    let terrain = MapChunkGenerator::new([3; 32], 1, 512)
+        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
+    let threshold_tile = TileCoord::new(0, 0);
+    let zero = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 0, 0);
+    let equality = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 43, 0);
+    let above = terrain.is_tree_suppressed_by_historical_land_use(threshold_tile, 44, 0);
+    let partial_tile = TileCoord::new(11, 13);
+    let partial = terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17);
+    assert_eq!((zero, equality, above, partial), (false, false, true, true));
+    assert_eq!(
+        [
+            terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17),
+            terrain.is_tree_suppressed_by_historical_land_use(partial_tile, 24, 17),
+        ],
+        [partial; 2]
+    );
+}
+
+#[test]
+fn historical_clearing_percentages_add_without_overflow() {
+    let generator = generator(7);
+    assert!(generator.is_tree_suppressed_by_historical_land_use(
+        TileCoord::new(11, 13),
+        u8::MAX,
+        u8::MAX,
+    ));
 }
 
 #[test]

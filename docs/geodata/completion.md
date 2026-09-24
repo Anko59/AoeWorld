@@ -26,7 +26,7 @@ distinguishable. No economy, buildings, combat, or naval units in this scope.
 | M4 | Physical movement and long routes | Physical speed and bounded detours implemented; 100 km qualification pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
 | M5 | Resource lifecycle | Persistence and synchronization verified; source-session qualification pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
 | M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
-| M7 | Creation experience | Creator, recovery and measured progress verified; submission recovery pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
+| M7 | Creation experience | Creator, recovery and measured progress verified; final integrated source-backed reopen pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
 | M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
 
 M7 completion publication is reviewed in
