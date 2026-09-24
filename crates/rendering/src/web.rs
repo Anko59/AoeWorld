@@ -7,7 +7,9 @@ use wgpu::SurfaceTarget;
 const CAPACITY: usize = 16_384;
 const ATLAS_SIDE: u32 = 8;
 const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
-const GPU_INSTANCE_CAPACITY: usize = CAPACITY + crate::surface_mesh::MAX_SURFACE_TRIANGLES;
+const GPU_INSTANCE_CAPACITY: usize = CAPACITY
+    + crate::surface_mesh::MAX_SURFACE_TRIANGLES
+    + crate::game_grid::SELECTION_RING_SPRITES;
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
@@ -300,6 +302,14 @@ impl Renderer {
         sprites: &[Sprite],
         clear: [f64; 4],
     ) -> Result<Counters, String> {
+        let allocated_capacity = usize::try_from(
+            self.buffer.size() / u64::try_from(std::mem::size_of::<Sprite>()).unwrap_or(1),
+        )
+        .unwrap_or(usize::MAX);
+        ensure_instance_capacity(
+            surfaces.len().saturating_add(sprites.len()),
+            allocated_capacity,
+        )?;
         let mut instances = Vec::with_capacity(surfaces.len().saturating_add(sprites.len()));
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
@@ -307,9 +317,6 @@ impl Renderer {
             instances.push(surface_instance(triangle, [width, height]));
         }
         instances.extend_from_slice(sprites);
-        if instances.len() > GPU_INSTANCE_CAPACITY {
-            return Err("visible world layers exceed the WebGPU instance limit".to_owned());
-        }
         if !instances.is_empty() {
             self.queue
                 .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&instances));
@@ -393,6 +400,13 @@ impl Renderer {
             atlas_bytes: ATLAS_BYTES,
         })
     }
+}
+
+fn ensure_instance_capacity(count: usize, allocated_capacity: usize) -> Result<(), String> {
+    if count > allocated_capacity {
+        return Err("visible world layers exceed the WebGPU instance limit".to_owned());
+    }
+    Ok(())
 }
 
 fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {

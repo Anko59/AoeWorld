@@ -87,8 +87,9 @@ pub fn pick_surface_point(
         if best.as_ref().is_none_or(|current| {
             hit.0
                 .total_cmp(&current.0)
+                .then((!hit.2).cmp(&(!current.2)))
+                .then(hit.3.cmp(&current.3))
                 .then(hit.1.cmp(&current.1))
-                .then(hit.2.cmp(&current.2))
                 .is_gt()
         }) {
             best = Some(hit);

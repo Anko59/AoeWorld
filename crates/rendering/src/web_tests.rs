@@ -5,6 +5,25 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
+fn instance_capacity_includes_selection_ring_sprites() {
+    let camera = crate::SceneCamera {
+        center: [0.5, 0.5],
+        zoom: 1.0,
+        viewport: [256.0, 128.0],
+        focus_elevation_meters: 0.0,
+    };
+    let ring = crate::game_grid::selection_ring(camera, [0.5, 0.5], 0.0);
+
+    assert_eq!(ring.len(), 32);
+    assert_eq!(
+        GPU_INSTANCE_CAPACITY,
+        CAPACITY + crate::surface_mesh::MAX_SURFACE_TRIANGLES + ring.len()
+    );
+    assert!(ensure_instance_capacity(GPU_INSTANCE_CAPACITY, GPU_INSTANCE_CAPACITY).is_ok());
+    assert!(ensure_instance_capacity(GPU_INSTANCE_CAPACITY + 1, GPU_INSTANCE_CAPACITY).is_err());
+}
+
+#[wasm_bindgen_test]
 fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
     let regular_atlas_frame = Sprite {
         position: [0.0; 2],

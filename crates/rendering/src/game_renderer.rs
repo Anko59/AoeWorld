@@ -328,7 +328,7 @@ fn ordered_world_layers(
         surfaces
             .len()
             .saturating_add(objects.len())
-            .saturating_add(selected_count.saturating_mul(32)),
+            .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
     );
     let mut sequence = 0;
     for triangle in surfaces {

@@ -3,6 +3,7 @@ use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use web_sys::CanvasRenderingContext2d;
 
 const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
+pub(crate) const SELECTION_RING_SPRITES: usize = 32;
 
 pub(crate) fn selection_ring(
     camera: SceneCamera,
@@ -12,9 +13,9 @@ pub(crate) fn selection_ring(
     let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
     let radius_x = 24.0 * camera.zoom;
     let radius_y = 8.0 * camera.zoom;
-    let mut sprites = Vec::with_capacity(32);
-    for index in 0..32 {
-        let angle = f64::from(index) * std::f64::consts::TAU / 32.0;
+    let mut sprites = Vec::with_capacity(SELECTION_RING_SPRITES);
+    for index in 0..SELECTION_RING_SPRITES {
+        let angle = index as f64 * std::f64::consts::TAU / SELECTION_RING_SPRITES as f64;
         let point = ScreenPoint {
             x: screen.x + angle.cos() * radius_x,
             y: screen.y + angle.sin() * radius_y,

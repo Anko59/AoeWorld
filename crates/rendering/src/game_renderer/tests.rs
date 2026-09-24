@@ -117,6 +117,40 @@ fn pickable_elevated_plateau_wins_over_overlapping_lower_ground() {
 }
 
 #[wasm_bindgen_test]
+fn pickable_ground_wins_an_exact_tie_against_an_unpickable_skirt() {
+    let screen = ScreenPoint { x: 96.0, y: 48.0 };
+    let points = [
+        SurfacePoint {
+            world: [4.0, 8.0, 0.0],
+            screen: ScreenPoint { x: 32.0, y: 16.0 },
+        },
+        SurfacePoint {
+            world: [4.0, 8.0, 0.0],
+            screen: ScreenPoint { x: 160.0, y: 16.0 },
+        },
+        SurfacePoint {
+            world: [4.0, 8.0, 0.0],
+            screen: ScreenPoint { x: 96.0, y: 80.0 },
+        },
+    ];
+    let triangle = |skirt, pickable| ProjectedSurfaceTriangle {
+        points,
+        color: [0.2, 0.3, 0.4],
+        tile: [7, 11],
+        skirt,
+        material: 0,
+        texture_mode: 4,
+        tint: 0,
+        texture_uv: None,
+        pickable,
+        order: 0,
+    };
+    let triangles = [triangle(true, false), triangle(false, true)];
+
+    assert_eq!(pick_surface_point(&triangles, screen), Some([4.0, 8.0]));
+}
+
+#[wasm_bindgen_test]
 fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
     let camera = SceneCamera {
         center: [0.5, 0.5],
