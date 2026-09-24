@@ -86,6 +86,18 @@ are wired by the generation orchestrator. Those preprocessing changes must be
 included in the new recipe/package identity before it is used for published
 maps.
 
+`HistoricalCorrectionDocument` is the versioned JSON contract for sparse
+whole-cell corrections. Schema 1 targets 600 CE, accepts grids from 2 through
+1,024 samples per axis, requires unique records in canonical row-major order,
+and is limited to 64 MiB. Each tagged evidence value keeps HYDE's historical
+model, a dated modern observation, a procedural addition, fallback data, or an
+explicit unknown distinct; only HYDE evidence is exposed as historical
+quantity. Complete whole-cell allocations become HYDE evidence, while nodata
+or caller-uncovered area becomes explicit unknown evidence. Serialization and
+deserialization validate the schema, target year, coordinates, quantity
+capacity, ordering, evidence fields, and byte limit before accepting a
+document; versions other than schema 1 fail closed.
+
 `HydrologyPage` and `ModernLandCoverPage` are preparation intermediates, not
 persisted package layers. Supported modern ocean/lake/river evidence is folded
 into the existing `WaterPage` ocean and inland coverage percentages; lake and

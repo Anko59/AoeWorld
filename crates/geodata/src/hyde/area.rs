@@ -290,7 +290,7 @@ impl HydeAreaAllocation {
         }
     }
 
-    fn is_valid(&self) -> bool {
+    pub(super) fn is_valid(&self) -> bool {
         [
             self.land_area_square_meters,
             self.lake_area_square_meters,

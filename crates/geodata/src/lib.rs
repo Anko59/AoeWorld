@@ -33,9 +33,13 @@ pub use footprint::{
 };
 mod hyde;
 pub use hyde::{
+    HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
+    HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
     HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
-    PreparedHistoricalLandUse, allocate_hyde_area_window, prepare_hyde_600,
-    prepare_hyde_area_pyramid, prepare_hyde_lake_coverage,
+    HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
+    MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS, PreparedHistoricalLandUse,
+    allocate_hyde_area_window, prepare_hyde_600, prepare_hyde_area_pyramid,
+    prepare_hyde_lake_coverage,
 };
 mod hydrology;
 pub use hydrology::{
@@ -102,6 +106,8 @@ pub enum GeodataError {
     Coordinate,
     #[error("geographic preparation failed: {0}")]
     Preparation(&'static str),
+    #[error("historical correction format is invalid: {0}")]
+    HistoricalCorrection(String),
     #[error("public Copernicus source failed: {0}")]
     Source(String),
     #[error("directory map package is invalid: {0}")]
