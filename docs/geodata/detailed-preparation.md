@@ -59,15 +59,37 @@ prepared water layer. Wetlands, reservoirs, regulated lakes, and otherwise
 unknown water remain evidence-only until a historical reconstruction can
 classify them.
 
+The callable `prepare_hyde_600` path retains recipe-3 nearest-cell behavior for
+existing packages. New recipe callers can use `allocate_hyde_area_window` and
+`prepare_hyde_area_pyramid`: source and target polygons are projected into a
+request-centered Lambert azimuthal equal-area plane using deterministic
+0.1-degree edge densification, then crop area, grazing area, population, and
+coverage area are allocated by polygon overlap divided by full source-cell
+area. Each call accepts one target page (at most 64 by 64 cells), up to
+1,000,000 source cells, and 4,194,304 input polygon vertices; densified vertex
+totals use the same explicit bound. The
+weighted pyramid accepts up to 1,024 samples per axis and combines unrounded
+quantities and land areas before producing the existing rounded land-use
+pages. Land cells with missing crop, grazing, or population values fail;
+zero-valued land cells remain valid. Lakes, ocean, nodata, and uncovered area
+are retained as separate allocation totals.
+
+This API is the bounded allocation core. It accepts WGS84 source/target cell
+polygons from its caller; it does not extract or read the HYDE archives. The
+overview worker still uses `prepare_hyde_600`, so normal generation remains on
+recipe 3 until archive-window enumeration, page assembly, and recipe identity
+are wired by the generation orchestrator. Those preprocessing changes must be
+included in the new recipe/package identity before it is used for published
+maps.
+
 `HydrologyPage` and `ModernLandCoverPage` are preparation intermediates, not
 persisted package layers. Supported modern ocean/lake/river evidence is folded
 into the existing `WaterPage` ocean and inland coverage percentages; lake and
 river are therefore indistinguishable to the current terrain consumer. Flow,
 barrier, confidence, and WorldCover class values are not retained in the
-package. HYDE remains the source of the year-600 land-use layer: this slice does
-not correct HYDE cell allocations, and modern WorldCover classes are not treated
-as year-600 land cover. A typed persisted hydrology layer and its terrain
-consumer remain follow-up work.
+package. HYDE remains the source of the year-600 land-use layer, and modern
+WorldCover classes are not treated as year-600 land cover. A typed persisted
+hydrology layer and its terrain consumer remain follow-up work.
 Hydrology planning is capped at 32 WorldCover tiles. A job may download at
 most 2 GiB of missing hydrology sources; verified cache hits do not count
 toward that transfer budget. Cache storage has its separate 100 GiB quota.

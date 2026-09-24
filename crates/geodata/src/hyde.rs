@@ -15,6 +15,12 @@ use std::{
 };
 use zip::ZipArchive;
 
+mod area;
+pub use area::{
+    HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    allocate_hyde_area_window, prepare_hyde_area_pyramid,
+};
+
 const HYDE_600_MEMBERS: [&str; 5] = [
     "baseline/asc/600AD_lu/cropland600AD.asc",
     "baseline/asc/600AD_lu/grazing600AD.asc",

@@ -32,7 +32,11 @@ pub use footprint::{
     projection_distortion,
 };
 mod hyde;
-pub use hyde::{PreparedHistoricalLandUse, prepare_hyde_600, prepare_hyde_lake_coverage};
+pub use hyde::{
+    HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    PreparedHistoricalLandUse, allocate_hyde_area_window, prepare_hyde_600,
+    prepare_hyde_area_pyramid, prepare_hyde_lake_coverage,
+};
 mod hydrology;
 pub use hydrology::{
     HydrologyKind, HydrologyPage, MAX_HYDROLOGY_SAMPLES_PER_AXIS, PreparedHydrology,
