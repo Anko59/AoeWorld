@@ -5,6 +5,7 @@ use std::{error::Error, fs, path::Path, process::Command, time::Duration};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 mod seeds;
+mod storage;
 const TARGETS: [&str; 7] = [
     "drs",
     "slp",
@@ -54,9 +55,13 @@ struct Report {
     cargo_fuzz: &'static str,
     targets: [&'static str; 7],
     limit: &'static str,
-    seeds: Vec<seeds::Seed>,
+    prepared_seeds: Vec<seeds::Seed>,
+    verified_legacy_seeds: Vec<seeds::Seed>,
     corpus_directory: &'static str,
     artifact_directory: &'static str,
+    storage_policy: storage::Policy,
+    storage_before: storage::Snapshot,
+    storage_after: storage::Snapshot,
     result: &'static str,
 }
 
@@ -90,31 +95,11 @@ fn git(args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn write_report(
-    root: &Path,
-    mode: Mode,
-    revision: String,
-    dirty: bool,
-    seeds: Vec<seeds::Seed>,
-) -> Result<()> {
-    let report = Report {
-        version: 2,
-        revision,
-        dirty,
-        mode: mode.label(),
-        toolchain: "nightly-2026-09-01",
-        cargo_fuzz: "0.13.2",
-        targets: TARGETS,
-        limit: mode.limit(),
-        seeds,
-        corpus_directory: "fuzz/corpus",
-        artifact_directory: "fuzz/artifacts",
-        result: "PASS",
-    };
+fn write_report(root: &Path, report: Report) -> Result<()> {
     let directory = root.join("reports/fuzz");
     fs::create_dir_all(&directory)?;
     fs::write(
-        directory.join(format!("{}.json", mode.label())),
+        directory.join(format!("{}.json", report.mode)),
         serde_json::to_vec_pretty(&report)?,
     )?;
     Ok(())
@@ -129,16 +114,33 @@ pub fn run(mode: Mode) -> Result<()> {
         return Err("fuzz command must run in fuzz directory".into());
     }
     fs::create_dir_all(root.join("fuzz/artifacts"))?;
+    let storage_policy = storage::Policy::default();
+    let storage_before = storage_policy.enforce(&root)?;
     let seeds = seeds::prepare(&root)?;
     execute(mode, |args, deadline| {
         process::run("cargo", args, deadline).map_err(Into::into)
     })?;
+    let storage_after = storage_policy.enforce(&root)?;
     write_report(
         &root,
-        mode,
-        git(&["rev-parse", "HEAD"])?,
-        !git(&["status", "--porcelain"])?.is_empty(),
-        seeds,
+        Report {
+            version: 3,
+            revision: git(&["rev-parse", "HEAD"])?,
+            dirty: !git(&["status", "--porcelain"])?.is_empty(),
+            mode: mode.label(),
+            toolchain: "nightly-2026-09-01",
+            cargo_fuzz: "0.13.2",
+            targets: TARGETS,
+            limit: mode.limit(),
+            prepared_seeds: seeds.prepared_seeds,
+            verified_legacy_seeds: seeds.verified_legacy_seeds,
+            corpus_directory: "fuzz/corpus",
+            artifact_directory: "fuzz/artifacts",
+            storage_policy,
+            storage_before,
+            storage_after,
+            result: "PASS",
+        },
     )
 }
 
@@ -175,15 +177,44 @@ mod tests {
     #[test]
     fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
         let temp = tempfile::tempdir().expect("directory");
+        const KNOWN_SEED_BYTES: &[u8] = b"";
+        const KNOWN_SEED_BLAKE3_HEX: &str =
+            "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+        let seed = seeds::Seed::new(
+            "map_chunk",
+            "known-seed".into(),
+            "fuzz/corpus/map_chunk/known-seed".into(),
+            KNOWN_SEED_BYTES,
+        );
+        assert_eq!(seed.bytes, KNOWN_SEED_BYTES.len());
+        assert_eq!(seed.blake3_hex, KNOWN_SEED_BLAKE3_HEX);
+        let mut inventory = seeds::prepare(temp.path()).expect("seed inventory");
+        inventory.prepared_seeds = vec![seed];
+        let storage_policy = storage::Policy::default();
+        let storage = storage_policy.inspect(temp.path()).expect("storage usage");
         for mode in [Mode::Smoke, Mode::Nightly] {
-            let seed = seeds::Seed {
-                target: "map_chunk",
-                name: "schema9-typed-v2".into(),
-                path: "fuzz/corpus/map_chunk/schema9-typed-v2".into(),
-                bytes: 4,
-                sha256: "seed-digest".into(),
-            };
-            write_report(temp.path(), mode, "revision".into(), true, vec![seed]).expect("report");
+            write_report(
+                temp.path(),
+                Report {
+                    version: 3,
+                    revision: "revision".into(),
+                    dirty: true,
+                    mode: mode.label(),
+                    toolchain: "nightly-2026-09-01",
+                    cargo_fuzz: "0.13.2",
+                    targets: TARGETS,
+                    limit: mode.limit(),
+                    prepared_seeds: inventory.prepared_seeds.clone(),
+                    verified_legacy_seeds: inventory.verified_legacy_seeds.clone(),
+                    corpus_directory: "fuzz/corpus",
+                    artifact_directory: "fuzz/artifacts",
+                    storage_policy,
+                    storage_before: storage,
+                    storage_after: storage,
+                    result: "PASS",
+                },
+            )
+            .expect("report");
             let path = temp
                 .path()
                 .join(format!("reports/fuzz/{}.json", mode.label()));
@@ -195,13 +226,51 @@ mod tests {
                 value["targets"].as_array().expect("targets").len(),
                 TARGETS.len()
             );
-            assert_eq!(value["version"], 2);
+            assert_eq!(value["version"], 3);
             assert_eq!(value["corpus_directory"], "fuzz/corpus");
             assert_eq!(value["artifact_directory"], "fuzz/artifacts");
             assert_eq!(
-                value["seeds"][0]["path"],
-                "fuzz/corpus/map_chunk/schema9-typed-v2"
+                value["prepared_seeds"][0]["blake3_hex"],
+                KNOWN_SEED_BLAKE3_HEX
             );
+            let legacy = value["verified_legacy_seeds"]
+                .as_array()
+                .expect("verified legacy seeds");
+            assert_eq!(legacy.len(), 4);
+            for (entry, expected) in legacy.iter().zip([
+                (
+                    "fuzz/corpus/drs/one-entry.drs",
+                    "bdab473e663ab54eb10feb602b7cdc49360155889bdaebbcb50c113ad80308ef",
+                    include_bytes!("../../../../fuzz/corpus/drs/one-entry.drs").as_slice(),
+                ),
+                (
+                    "fuzz/corpus/manifest/minimal.json",
+                    "f904f26ecd0c86b2022e697bcad3ea3a3f4bd34c0494c06ba51d4123579b4400",
+                    include_bytes!("../../../../fuzz/corpus/manifest/minimal.json").as_slice(),
+                ),
+                (
+                    "fuzz/corpus/palette/jasc.pal",
+                    "bc31db7bdd8c5091d614bc0f8cb1396c4c05085c0ead9355953d1a4489ecfb5f",
+                    include_bytes!("../../../../fuzz/corpus/palette/jasc.pal").as_slice(),
+                ),
+                (
+                    "fuzz/corpus/slp/two-pixels.slp",
+                    "ab8a0a54eba7a0263293d72d6ac7862ae099e452bd88fcb06d934d9f33953ee3",
+                    include_bytes!("../../../../fuzz/corpus/slp/two-pixels.slp").as_slice(),
+                ),
+            ]) {
+                let (path, digest, expected_bytes) = expected;
+                assert_eq!(entry["path"], path);
+                assert_eq!(entry["blake3_hex"], digest);
+                let bytes = fs::read(temp.path().join(path)).expect("legacy bytes");
+                assert_eq!(bytes, expected_bytes);
+                assert_eq!(blake3::hash(&bytes).to_hex().to_string(), digest);
+            }
+            assert_eq!(
+                value["storage_policy"]["retention"],
+                "never-delete; archive or explicitly remove excess storage outside fuzzing"
+            );
+            assert_eq!(value["storage_before"], value["storage_after"]);
         }
     }
 

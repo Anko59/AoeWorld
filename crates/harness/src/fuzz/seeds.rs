@@ -19,21 +19,68 @@ pub(super) struct Seed {
     pub name: String,
     pub path: String,
     pub bytes: usize,
-    pub sha256: String,
+    pub blake3_hex: String,
 }
+
+impl Seed {
+    pub(super) fn new(target: &'static str, name: String, path: String, bytes: &[u8]) -> Self {
+        Self {
+            target,
+            name,
+            path,
+            bytes: bytes.len(),
+            blake3_hex: blake3_hex(bytes),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(super) struct SeedInventory {
+    pub prepared_seeds: Vec<Seed>,
+    pub verified_legacy_seeds: Vec<Seed>,
+}
+
+struct LegacySeed {
+    target: &'static str,
+    name: &'static str,
+    bytes: &'static [u8],
+}
+
+const LEGACY_SEEDS: [LegacySeed; 4] = [
+    LegacySeed {
+        target: "drs",
+        name: "one-entry.drs",
+        bytes: include_bytes!("../../../../fuzz/corpus/drs/one-entry.drs"),
+    },
+    LegacySeed {
+        target: "manifest",
+        name: "minimal.json",
+        bytes: include_bytes!("../../../../fuzz/corpus/manifest/minimal.json"),
+    },
+    LegacySeed {
+        target: "palette",
+        name: "jasc.pal",
+        bytes: include_bytes!("../../../../fuzz/corpus/palette/jasc.pal"),
+    },
+    LegacySeed {
+        target: "slp",
+        name: "two-pixels.slp",
+        bytes: include_bytes!("../../../../fuzz/corpus/slp/two-pixels.slp"),
+    },
+];
 
 /// Valid seeds reach validation and roundtrip paths from the first smoke run.
 /// Generated inputs and discovered mutations stay in the ignored corpus tree.
-pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
-    let mut inventory = Vec::new();
+pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
+    let mut prepared_seeds = Vec::new();
     let package = MapPackage::new(MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())?;
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_package",
         "package",
         &serde_json::to_vec(&package)?,
     )?);
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_package",
         "request",
@@ -94,13 +141,13 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         Default::default(),
         environment,
     )?;
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_package",
         "typed-package",
         &serde_json::to_vec(&typed)?,
     )?);
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_package",
         "schema8-default",
@@ -132,7 +179,7 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
                 .ok_or("page fields are not an object")?
                 .clone(),
         );
-        inventory.push(write(
+        prepared_seeds.push(write(
             root,
             "environment_page",
             name,
@@ -140,7 +187,7 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         )?);
     }
     for name in ["hydrology-evidence", "schema9-typed-hydrology"] {
-        inventory.push(write(
+        prepared_seeds.push(write(
             root,
             "environment_page",
             name,
@@ -148,7 +195,7 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         )?);
     }
     for name in ["modern-land-cover", "schema9-modern-land-cover"] {
-        inventory.push(write(
+        prepared_seeds.push(write(
             root,
             "environment_page",
             name,
@@ -156,7 +203,7 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         )?);
     }
     let chunk = MapChunkGenerator::new([3; 32], 7, 32).chunk(0, 0)?;
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_chunk",
         "full-chunk",
@@ -174,15 +221,15 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         tiles: vec![observed_tile],
         resources: Vec::new(),
     };
-    inventory.push(write(
+    prepared_seeds.push(write(
         root,
         "map_chunk",
         "typed-v2",
         &chunk_bytes(&observed)?,
     )?);
-    inventory.push(write(root, "map_chunk", "invalid-hex", b"not-hex-payload")?);
-    inventory.push(write(root, "map_chunk", "empty-legacy", &[1, 0, 0, 0, 0])?);
-    inventory.push(write(
+    prepared_seeds.push(write(root, "map_chunk", "invalid-hex", b"not-hex-payload")?);
+    prepared_seeds.push(write(root, "map_chunk", "empty-legacy", &[1, 0, 0, 0, 0])?);
+    prepared_seeds.push(write(
         root,
         "map_chunk",
         "one-tile-v1",
@@ -191,7 +238,10 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
             0xa9, 0xff, 0x65, 0xc3, 0x16, 0x00,
         ],
     )?);
-    Ok(inventory)
+    Ok(SeedInventory {
+        prepared_seeds,
+        verified_legacy_seeds: verify_legacy_seeds(root)?,
+    })
 }
 
 fn chunk_bytes(chunk: &aoe_map::Chunk) -> Result<Vec<u8>> {
@@ -210,7 +260,7 @@ fn write(root: &Path, target: &'static str, name: &str, bytes: &[u8]) -> Result<
     } else {
         // Existing bytes are never overwritten. A changed generator gets a
         // deterministic content-addressed name while the earlier seed stays.
-        let digest = blake3::hash(bytes).to_hex();
+        let digest = blake3_hex(bytes);
         let unique_name = format!("{name}.{digest}");
         if !retain(&directory.join(&unique_name), bytes)? {
             return Err("content-addressed fuzz seed collision".into());
@@ -218,13 +268,7 @@ fn write(root: &Path, target: &'static str, name: &str, bytes: &[u8]) -> Result<
         unique_name
     };
     let path = format!("fuzz/corpus/{target}/{retained_name}");
-    Ok(Seed {
-        target,
-        name: retained_name,
-        path,
-        bytes: bytes.len(),
-        sha256: blake3::hash(bytes).to_hex().to_string(),
-    })
+    Ok(Seed::new(target, retained_name, path, bytes))
 }
 
 fn retain(path: &Path, bytes: &[u8]) -> Result<bool> {
@@ -241,6 +285,29 @@ fn retain(path: &Path, bytes: &[u8]) -> Result<bool> {
         }
         Err(error) => Err(error.into()),
     }
+}
+
+pub(super) fn verify_legacy_seeds(root: &Path) -> Result<Vec<Seed>> {
+    LEGACY_SEEDS
+        .iter()
+        .map(|legacy| {
+            let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);
+            fs::create_dir_all(root.join("fuzz/corpus").join(legacy.target))?;
+            if !retain(&root.join(&path), legacy.bytes)? {
+                return Err(format!("legacy fuzz seed changed; refusing to replace {path}").into());
+            }
+            Ok(Seed::new(
+                legacy.target,
+                legacy.name.to_owned(),
+                path,
+                legacy.bytes,
+            ))
+        })
+        .collect()
+}
+
+pub(super) fn blake3_hex(bytes: &[u8]) -> String {
+    blake3::hash(bytes).to_hex().to_string()
 }
 
 #[cfg(test)]
@@ -297,8 +364,43 @@ mod tests {
             "fuzz/corpus/environment_page/schema9-modern-land-cover",
             "fuzz/corpus/map_chunk/one-tile-v1",
         ] {
-            assert!(inventory.iter().any(|seed| seed.path == path));
+            assert!(
+                inventory
+                    .prepared_seeds
+                    .iter()
+                    .any(|seed| seed.path == path)
+            );
         }
+        for legacy in &LEGACY_SEEDS {
+            let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);
+            assert_eq!(fs::read(root.path().join(&path)).unwrap(), legacy.bytes);
+            let seed = inventory
+                .verified_legacy_seeds
+                .iter()
+                .find(|seed| seed.path == path)
+                .expect("verified legacy seed");
+            assert_eq!(
+                seed.blake3_hex,
+                blake3::hash(legacy.bytes).to_hex().to_string()
+            );
+        }
+        let hydrology_alias = fs::read(corpus.join("environment_page/hydrology-evidence")).unwrap();
+        let hydrology_schema9 =
+            fs::read(corpus.join("environment_page/schema9-typed-hydrology")).unwrap();
+        let land_cover_alias = fs::read(corpus.join("environment_page/modern-land-cover")).unwrap();
+        let land_cover_schema9 =
+            fs::read(corpus.join("environment_page/schema9-modern-land-cover")).unwrap();
+        assert_eq!(hydrology_alias, hydrology_schema9);
+        assert_eq!(land_cover_alias, land_cover_schema9);
+        assert_ne!(hydrology_schema9, land_cover_schema9);
+        let hydrology: aoe_map::HydrologyEvidencePage =
+            serde_json::from_slice(&hydrology_schema9).unwrap();
+        let land_cover: aoe_map::ModernLandCoverPage =
+            serde_json::from_slice(&land_cover_schema9).unwrap();
+        assert_ne!(
+            hydrology.content_hash().unwrap(),
+            land_cover.content_hash().unwrap()
+        );
         for name in ["one-tile-v1", "typed-v2"] {
             let bytes = fs::read(corpus.join("map_chunk").join(name)).unwrap();
             assert_eq!(bytes[0], if name == "one-tile-v1" { 1 } else { 2 });
@@ -344,6 +446,7 @@ mod tests {
             ("package", generated, &first),
         ] {
             let retained = second
+                .prepared_seeds
                 .iter()
                 .find(|seed| {
                     seed.target
@@ -356,7 +459,12 @@ mod tests {
                 })
                 .expect("content-addressed replacement seed");
             assert_ne!(preferred, root.path().join(&retained.path));
-            assert!(inventory.iter().all(|seed| seed.path != retained.path));
+            assert!(
+                inventory
+                    .prepared_seeds
+                    .iter()
+                    .all(|seed| seed.path != retained.path)
+            );
             assert_eq!(
                 retained.bytes,
                 fs::read(root.path().join(&retained.path)).unwrap().len()
@@ -371,6 +479,19 @@ mod tests {
             count,
             fs::read_dir(corpus.join("map_chunk")).unwrap().count()
                 + fs::read_dir(corpus.join("map_package")).unwrap().count()
+        );
+    }
+
+    #[test]
+    fn changed_legacy_blob_is_preserved_and_blocks_the_fuzz_campaign() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("fuzz/corpus/drs");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("one-entry.drs"), b"preserved older blob").unwrap();
+        assert!(verify_legacy_seeds(root.path()).is_err());
+        assert_eq!(
+            fs::read(directory.join("one-entry.drs")).unwrap(),
+            b"preserved older blob"
         );
     }
 }
