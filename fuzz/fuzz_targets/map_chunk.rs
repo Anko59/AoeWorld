@@ -2,12 +2,9 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|bytes: &[u8]| {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut payload_hex = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        payload_hex.push(char::from(HEX[usize::from(byte >> 4)]));
-        payload_hex.push(char::from(HEX[usize::from(byte & 15)]));
-    }
+    // Feed the parser the fuzz bytes as the hex field itself so malformed
+    // ASCII, odd-length input, and non-UTF-8 byte sequences reach decode_hex.
+    let payload_hex = String::from_utf8_lossy(bytes).into_owned();
     let encoded = aoe_map::CompactChunk {
         x: 0,
         y: 0,

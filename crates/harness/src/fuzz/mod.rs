@@ -54,6 +54,9 @@ struct Report {
     cargo_fuzz: &'static str,
     targets: [&'static str; 7],
     limit: &'static str,
+    seeds: Vec<seeds::Seed>,
+    corpus_directory: &'static str,
+    artifact_directory: &'static str,
     result: &'static str,
 }
 
@@ -87,9 +90,15 @@ fn git(args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn write_report(root: &Path, mode: Mode, revision: String, dirty: bool) -> Result<()> {
+fn write_report(
+    root: &Path,
+    mode: Mode,
+    revision: String,
+    dirty: bool,
+    seeds: Vec<seeds::Seed>,
+) -> Result<()> {
     let report = Report {
-        version: 1,
+        version: 2,
         revision,
         dirty,
         mode: mode.label(),
@@ -97,6 +106,9 @@ fn write_report(root: &Path, mode: Mode, revision: String, dirty: bool) -> Resul
         cargo_fuzz: "0.13.2",
         targets: TARGETS,
         limit: mode.limit(),
+        seeds,
+        corpus_directory: "fuzz/corpus",
+        artifact_directory: "fuzz/artifacts",
         result: "PASS",
     };
     let directory = root.join("reports/fuzz");
@@ -116,7 +128,8 @@ pub fn run(mode: Mode) -> Result<()> {
     if !Path::new("Cargo.toml").is_file() || !root.join("fuzz/fuzz_targets").is_dir() {
         return Err("fuzz command must run in fuzz directory".into());
     }
-    seeds::prepare(&root)?;
+    fs::create_dir_all(root.join("fuzz/artifacts"))?;
+    let seeds = seeds::prepare(&root)?;
     execute(mode, |args, deadline| {
         process::run("cargo", args, deadline).map_err(Into::into)
     })?;
@@ -125,6 +138,7 @@ pub fn run(mode: Mode) -> Result<()> {
         mode,
         git(&["rev-parse", "HEAD"])?,
         !git(&["status", "--porcelain"])?.is_empty(),
+        seeds,
     )
 }
 
@@ -162,7 +176,14 @@ mod tests {
     fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
         let temp = tempfile::tempdir().expect("directory");
         for mode in [Mode::Smoke, Mode::Nightly] {
-            write_report(temp.path(), mode, "revision".into(), true).expect("report");
+            let seed = seeds::Seed {
+                target: "map_chunk",
+                name: "schema9-typed-v2".into(),
+                path: "fuzz/corpus/map_chunk/schema9-typed-v2".into(),
+                bytes: 4,
+                sha256: "seed-digest".into(),
+            };
+            write_report(temp.path(), mode, "revision".into(), true, vec![seed]).expect("report");
             let path = temp
                 .path()
                 .join(format!("reports/fuzz/{}.json", mode.label()));
@@ -173,6 +194,13 @@ mod tests {
             assert_eq!(
                 value["targets"].as_array().expect("targets").len(),
                 TARGETS.len()
+            );
+            assert_eq!(value["version"], 2);
+            assert_eq!(value["corpus_directory"], "fuzz/corpus");
+            assert_eq!(value["artifact_directory"], "fuzz/artifacts");
+            assert_eq!(
+                value["seeds"][0]["path"],
+                "fuzz/corpus/map_chunk/schema9-typed-v2"
             );
         }
     }

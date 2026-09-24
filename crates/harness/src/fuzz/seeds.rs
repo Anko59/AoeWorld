@@ -6,24 +6,39 @@ use aoe_map::{
     ModernLandCoverPage, PreparedEnvironment, PyramidLevel, WORLD_COVER_OBSERVATION_YEAR,
     ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
-use std::{fs, path::Path};
+use serde::Serialize;
+use std::{
+    fs,
+    io::{ErrorKind, Write},
+    path::Path,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(super) struct Seed {
+    pub target: &'static str,
+    pub name: String,
+    pub path: String,
+    pub bytes: usize,
+    pub sha256: String,
+}
 
 /// Valid seeds reach validation and roundtrip paths from the first smoke run.
 /// Generated inputs and discovered mutations stay in the ignored corpus tree.
-pub(super) fn prepare(root: &Path) -> Result<()> {
+pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
+    let mut inventory = Vec::new();
     let package = MapPackage::new(MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())?;
-    write(
+    inventory.push(write(
         root,
         "map_package",
         "package",
         &serde_json::to_vec(&package)?,
-    )?;
-    write(
+    )?);
+    inventory.push(write(
         root,
         "map_package",
         "request",
         &serde_json::to_vec(&package.request)?,
-    )?;
+    )?);
     let hydrology = HydrologyEvidencePage {
         level: 0,
         x: 0,
@@ -79,18 +94,18 @@ pub(super) fn prepare(root: &Path) -> Result<()> {
         Default::default(),
         environment,
     )?;
-    write(
+    inventory.push(write(
         root,
         "map_package",
         "typed-package",
         &serde_json::to_vec(&typed)?,
-    )?;
-    write(
+    )?);
+    inventory.push(write(
         root,
         "map_package",
         "schema8-default",
         include_bytes!("../../../map/tests/fixtures/schema8-default-package.json"),
-    )?;
+    )?);
     for (name, field) in [
         (
             "elevation",
@@ -117,22 +132,36 @@ pub(super) fn prepare(root: &Path) -> Result<()> {
                 .ok_or("page fields are not an object")?
                 .clone(),
         );
-        write(root, "environment_page", name, &serde_json::to_vec(&page)?)?;
+        inventory.push(write(
+            root,
+            "environment_page",
+            name,
+            &serde_json::to_vec(&page)?,
+        )?);
     }
-    write(
-        root,
-        "environment_page",
-        "hydrology-evidence",
-        &serde_json::to_vec(&hydrology)?,
-    )?;
-    write(
-        root,
-        "environment_page",
-        "modern-land-cover",
-        &serde_json::to_vec(&land_cover)?,
-    )?;
+    for name in ["hydrology-evidence", "schema9-typed-hydrology"] {
+        inventory.push(write(
+            root,
+            "environment_page",
+            name,
+            &serde_json::to_vec(&hydrology)?,
+        )?);
+    }
+    for name in ["modern-land-cover", "schema9-modern-land-cover"] {
+        inventory.push(write(
+            root,
+            "environment_page",
+            name,
+            &serde_json::to_vec(&land_cover)?,
+        )?);
+    }
     let chunk = MapChunkGenerator::new([3; 32], 7, 32).chunk(0, 0)?;
-    write(root, "map_chunk", "full-chunk", &chunk_bytes(&chunk)?)?;
+    inventory.push(write(
+        root,
+        "map_chunk",
+        "full-chunk",
+        &chunk_bytes(&chunk)?,
+    )?);
     let mut observed_tile = chunk.tiles[0];
     observed_tile.hydrology_observation = Some(HydrologyObservation {
         kind: HydrologyKind::Land,
@@ -145,9 +174,15 @@ pub(super) fn prepare(root: &Path) -> Result<()> {
         tiles: vec![observed_tile],
         resources: Vec::new(),
     };
-    write(root, "map_chunk", "typed-v2", &chunk_bytes(&observed)?)?;
-    write(root, "map_chunk", "empty-legacy", &[1, 0, 0, 0, 0])?;
-    write(
+    inventory.push(write(
+        root,
+        "map_chunk",
+        "typed-v2",
+        &chunk_bytes(&observed)?,
+    )?);
+    inventory.push(write(root, "map_chunk", "invalid-hex", b"not-hex-payload")?);
+    inventory.push(write(root, "map_chunk", "empty-legacy", &[1, 0, 0, 0, 0])?);
+    inventory.push(write(
         root,
         "map_chunk",
         "one-tile-v1",
@@ -155,8 +190,8 @@ pub(super) fn prepare(root: &Path) -> Result<()> {
             1, 1, 0, 0, 0, 2, 0xde, 0xff, 0xff, 0xa9, 0xff, 0xa9, 0xff, 0xa9, 0xff, 0xa9, 0xff,
             0xa9, 0xff, 0x65, 0xc3, 0x16, 0x00,
         ],
-    )?;
-    Ok(())
+    )?);
+    Ok(inventory)
 }
 
 fn chunk_bytes(chunk: &aoe_map::Chunk) -> Result<Vec<u8>> {
@@ -166,11 +201,46 @@ fn chunk_bytes(chunk: &aoe_map::Chunk) -> Result<Vec<u8>> {
         .map(|pair| u8::from_str_radix(std::str::from_utf8(pair)?, 16).map_err(Into::into))
         .collect()
 }
-fn write(root: &Path, target: &str, name: &str, bytes: &[u8]) -> Result<()> {
+fn write(root: &Path, target: &'static str, name: &str, bytes: &[u8]) -> Result<Seed> {
     let directory = root.join("fuzz/corpus").join(target);
     fs::create_dir_all(&directory)?;
-    fs::write(directory.join(name), bytes)?;
-    Ok(())
+    let preferred = directory.join(name);
+    let retained_name = if retain(&preferred, bytes)? {
+        name.to_owned()
+    } else {
+        // Existing bytes are never overwritten. A changed generator gets a
+        // deterministic content-addressed name while the earlier seed stays.
+        let digest = blake3::hash(bytes).to_hex();
+        let unique_name = format!("{name}.{digest}");
+        if !retain(&directory.join(&unique_name), bytes)? {
+            return Err("content-addressed fuzz seed collision".into());
+        }
+        unique_name
+    };
+    let path = format!("fuzz/corpus/{target}/{retained_name}");
+    Ok(Seed {
+        target,
+        name: retained_name,
+        path,
+        bytes: bytes.len(),
+        sha256: blake3::hash(bytes).to_hex().to_string(),
+    })
+}
+
+fn retain(path: &Path, bytes: &[u8]) -> Result<bool> {
+    match fs::read(path) {
+        Ok(existing) if existing == bytes => Ok(true),
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)?;
+            file.write_all(bytes)?;
+            Ok(true)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[cfg(test)]
@@ -179,7 +249,7 @@ mod tests {
     #[test]
     fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
         let root = tempfile::tempdir().unwrap();
-        prepare(root.path()).unwrap();
+        let inventory = prepare(root.path()).unwrap();
         let corpus = root.path().join("fuzz/corpus");
         let package: MapPackage =
             serde_json::from_slice(&fs::read(corpus.join("map_package/package")).unwrap()).unwrap();
@@ -189,6 +259,11 @@ mod tests {
                 serde_json::from_slice(&fs::read(corpus.join("map_package").join(name)).unwrap())
                     .unwrap();
             package.validate().unwrap();
+            if name == "typed-package" {
+                assert_eq!(package.schema_version, MAP_SCHEMA_VERSION);
+                assert_eq!(package.schema_version, 9);
+                assert!(package.environment.hydrology_evidence.is_some());
+            }
         }
         macro_rules! check {
             ($name:expr, $kind:ty) => {
@@ -204,7 +279,26 @@ mod tests {
         check!("vegetation", aoe_map::PotentialBiomePage);
         check!("history", aoe_map::HistoricalLandUsePage);
         check!("hydrology-evidence", aoe_map::HydrologyEvidencePage);
+        check!("schema9-typed-hydrology", aoe_map::HydrologyEvidencePage);
         check!("modern-land-cover", aoe_map::ModernLandCoverPage);
+        check!("schema9-modern-land-cover", aoe_map::ModernLandCoverPage);
+        let invalid = fs::read(corpus.join("map_chunk/invalid-hex")).unwrap();
+        assert_eq!(
+            CompactChunk {
+                x: 0,
+                y: 0,
+                payload_hex: String::from_utf8_lossy(&invalid).into_owned(),
+            }
+            .decode(),
+            Err(aoe_map::CompactChunkError::InvalidHex)
+        );
+        for path in [
+            "fuzz/corpus/environment_page/schema9-typed-hydrology",
+            "fuzz/corpus/environment_page/schema9-modern-land-cover",
+            "fuzz/corpus/map_chunk/one-tile-v1",
+        ] {
+            assert!(inventory.iter().any(|seed| seed.path == path));
+        }
         for name in ["one-tile-v1", "typed-v2"] {
             let bytes = fs::read(corpus.join("map_chunk").join(name)).unwrap();
             assert_eq!(bytes[0], if name == "one-tile-v1" { 1 } else { 2 });
@@ -227,6 +321,56 @@ mod tests {
         assert_eq!(
             fs::read(corpus.join("map_chunk/discovered")).unwrap(),
             b"keep"
+        );
+    }
+
+    #[test]
+    fn fixed_seed_names_retain_existing_bytes_and_changed_names_stay_stable() {
+        let root = tempfile::tempdir().unwrap();
+        let first = prepare(root.path()).unwrap();
+        let corpus = root.path().join("fuzz/corpus");
+        let legacy = corpus.join("map_chunk/one-tile-v1");
+        let generated = corpus.join("map_package/package");
+        let captured_legacy = fs::read(&legacy).unwrap();
+        assert_eq!(captured_legacy.first(), Some(&1));
+        fs::write(&legacy, b"retained legacy seed").unwrap();
+        fs::write(&generated, b"retained generated seed").unwrap();
+
+        let second = prepare(root.path()).unwrap();
+        assert_eq!(fs::read(&legacy).unwrap(), b"retained legacy seed");
+        assert_eq!(fs::read(&generated).unwrap(), b"retained generated seed");
+        for (name, preferred, inventory) in [
+            ("one-tile-v1", legacy, &first),
+            ("package", generated, &first),
+        ] {
+            let retained = second
+                .iter()
+                .find(|seed| {
+                    seed.target
+                        == if name == "package" {
+                            "map_package"
+                        } else {
+                            "map_chunk"
+                        }
+                        && seed.name.starts_with(&format!("{name}."))
+                })
+                .expect("content-addressed replacement seed");
+            assert_ne!(preferred, root.path().join(&retained.path));
+            assert!(inventory.iter().all(|seed| seed.path != retained.path));
+            assert_eq!(
+                retained.bytes,
+                fs::read(root.path().join(&retained.path)).unwrap().len()
+            );
+        }
+
+        let count = fs::read_dir(corpus.join("map_chunk")).unwrap().count()
+            + fs::read_dir(corpus.join("map_package")).unwrap().count();
+        let third = prepare(root.path()).unwrap();
+        assert_eq!(second, third);
+        assert_eq!(
+            count,
+            fs::read_dir(corpus.join("map_chunk")).unwrap().count()
+                + fs::read_dir(corpus.join("map_package")).unwrap().count()
         );
     }
 }
