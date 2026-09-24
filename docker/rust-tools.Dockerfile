@@ -1,4 +1,4 @@
-FROM rust:1.93.1-bookworm@sha256:1d33950f982ca6411f5e0ee4850be46e03f066f1a9efaeb41922a0e59497c9c2
+FROM rust:1.98.1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
 RUN rustup target add wasm32-unknown-unknown && rustup component add clippy rustfmt
 RUN cargo install wasm-bindgen-cli --version 0.2.128 --locked
 RUN curl --fail --location --silent --show-error https://get.nexte.st/0.9.144/linux --output /tmp/cargo-nextest.tar.gz \
