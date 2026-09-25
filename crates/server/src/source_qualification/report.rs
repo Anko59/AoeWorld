@@ -432,35 +432,4 @@ pub enum SourceQualificationError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::RouteEvidence;
-
-    #[test]
-    fn route_evidence_records_local_extent_repetitions_ticks_distance_and_hash() {
-        let evidence = RouteEvidence {
-            contract: "fixed-cardinal-repeat-within-ordinary-component-v1",
-            spatial_scope: "ordinary_activation_component_local",
-            start_tile: [24_999, 24_999],
-            alternate_tile: [25_001, 24_999],
-            offset_tiles: [2, 0],
-            spatial_extent_tiles: [2, 0],
-            leg_length_tiles: 2,
-            leg_length_meters: 4.0,
-            repetition_count: 25_000,
-            required_distance_meters: 100_000.0,
-            movement_ticks: 666_667,
-            moved_meters: 100_000.0,
-            replay_hash: "00".repeat(32),
-            replay_matches: true,
-        };
-        let json = serde_json::to_value(evidence).expect("route evidence JSON");
-
-        assert_eq!(json["spatial_extent_tiles"], serde_json::json!([2, 0]));
-        assert_eq!(json["leg_length_meters"], 4.0);
-        assert_eq!(json["repetition_count"], 25_000);
-        assert_eq!(json["movement_ticks"], 666_667);
-        assert_eq!(json["moved_meters"], 100_000.0);
-        assert_eq!(json["replay_hash"].as_str().expect("hash").len(), 64);
-        assert_eq!(json["replay_matches"], true);
-    }
-}
+mod tests;

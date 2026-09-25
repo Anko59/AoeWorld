@@ -70,3 +70,37 @@ fn resource_search_is_a_fixed_bounded_center_window() {
     assert_eq!((center - half, center + half), (24_967, 25_031));
     assert_eq!((2 * half) * (2 * half), 4_096);
 }
+
+#[test]
+fn center_resource_search_and_temporary_state_are_bounded() {
+    let empty = aoe_map::MapChunkGenerator::new([3; 32], 1, 0);
+    assert!(matches!(
+        find_center_resource(&empty, 0),
+        Err(SourceQualificationError::NoResource)
+    ));
+
+    let node = (0_u64..32)
+        .find_map(|seed| {
+            find_center_resource(&aoe_map::MapChunkGenerator::new([3; 32], seed, 64), 64).ok()
+        })
+        .expect("bounded procedural resource");
+    assert!(node.tile.x >= 0 && node.tile.x < 64);
+    assert!(node.tile.y >= 0 && node.tile.y < 64);
+
+    let scratch = QualificationDirectory::new().expect("scratch directory");
+    let path = scratch.path.clone();
+    assert!(path.is_dir());
+    drop(scratch);
+    assert!(!path.exists());
+    assert_eq!(hex(&[0, 1, 15, 255]), "00010fff");
+}
+
+#[tokio::test]
+async fn qualification_rejects_unbounded_tick_requests_before_source_access() {
+    for max_ticks in [0, MAX_ROUTE_TICKS + 1] {
+        assert!(matches!(
+            run_source_qualification(Path::new("missing"), "missing", max_ticks, |_| {}).await,
+            Err(SourceQualificationError::TickLimit)
+        ));
+    }
+}

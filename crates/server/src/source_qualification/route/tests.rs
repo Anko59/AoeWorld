@@ -1,5 +1,5 @@
 use super::*;
-use aoe_core::Seed;
+use aoe_core::{Seed, WorldPosition};
 use std::collections::BTreeSet;
 
 #[derive(Debug)]
@@ -142,5 +142,85 @@ fn continuous_expected_ticks_preserve_fractional_speed_across_all_legs() {
     assert_eq!(
         route.expected_ticks(config).expect("continuous ticks"),
         666_667
+    );
+}
+
+#[test]
+fn route_helpers_and_contextual_failures_cover_bounded_error_paths() {
+    let route = plan_fixed_repeated_route_with(&StaticLeg::open(), TileCoord::new(10, 10))
+        .expect("preferred route");
+    assert_eq!(route.waypoints(), [route.start, route.alternate]);
+    assert_eq!(route.movement_waypoints().expect("waypoints").len(), 25_000);
+
+    let config = WorldConfig::new(64, 64, Seed(9)).expect("config");
+    let mut zero_speed = config;
+    zero_speed.move_speed_subunits_per_tick = 0;
+    assert!(matches!(
+        route.expected_ticks(zero_speed),
+        Err(SourceQualificationError::FixedRouteTickBound {
+            required: u64::MAX,
+            maximum: 0
+        })
+    ));
+    let mut zero_denominator = config;
+    zero_denominator.move_speed_subunits_per_tick_denominator = 0;
+    assert!(matches!(
+        route.expected_ticks(zero_denominator),
+        Err(SourceQualificationError::FixedRouteTickBound {
+            required: u64::MAX,
+            maximum: 0
+        })
+    ));
+    let mut overflowing = route;
+    overflowing.repetitions = u64::MAX;
+    assert!(matches!(
+        overflowing.expected_ticks(config),
+        Err(SourceQualificationError::FixedRouteTickBound {
+            required: u64::MAX,
+            maximum: 0
+        })
+    ));
+
+    let generator = MapChunkGenerator::new([0; 32], 1, 64);
+    let origin = TileCoord::new(10, 10);
+    let destination = TileCoord::new(12, 10);
+    assert!(matches!(
+        contextual_route_failure(
+            GameWorldError::InvalidPosition,
+            &generator,
+            origin,
+            destination
+        ),
+        SourceQualificationError::ImpassableWaypoint { x: 12, y: 10 }
+    ));
+    let unreachable =
+        contextual_route_failure(GameWorldError::Unreachable, &generator, origin, destination);
+    assert!(matches!(
+        unreachable,
+        SourceQualificationError::UnreachableWaypoint { x: 12, y: 10, .. }
+    ));
+    assert!(matches!(
+        contextual_route_failure(
+            GameWorldError::UnknownEntity,
+            &generator,
+            origin,
+            destination
+        ),
+        SourceQualificationError::Movement(GameWorldError::UnknownEntity)
+    ));
+    assert!(
+        destination_diagnostic(&generator, destination)
+            .expect("destination detail")
+            .contains("destination_material=")
+    );
+    assert!(matches!(
+        destination_diagnostic(&generator, TileCoord::new(64, 64)),
+        Err(SourceQualificationError::Page(_))
+    ));
+    assert_eq!(
+        WorldPosition::from_tile_center(destination)
+            .expect("destination position")
+            .tile_floor(),
+        destination
     );
 }

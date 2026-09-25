@@ -10,6 +10,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 mod components;
 use components::start_component_diagnostic;
 
+#[cfg(test)]
+mod tests;
+
 const START_CLEAR_RADIUS: i32 = 2;
 const START_COMPARISON_RADIUS: i32 = 1;
 const START_REACHABLE_TILES: usize = 256;
