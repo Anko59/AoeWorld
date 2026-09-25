@@ -83,6 +83,7 @@ test("shared terrain textures, painter transitions, and selection render", async
     page,
     selectedPng,
     project,
+    renderer,
     evidence,
     "surface",
   );
