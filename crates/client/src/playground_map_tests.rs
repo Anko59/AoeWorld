@@ -176,6 +176,90 @@ fn rectangular_frontier_converges_over_every_chunk_without_a_height_margin() {
 }
 
 #[wasm_bindgen_test]
+fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
+    let Ok(config) = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1)) else {
+        assert!(false, "valid visibility world");
+        return;
+    };
+    let camera = Camera {
+        center: [256.0, 256.0],
+        zoom: 1.0,
+        viewport: [512.0, 256.0],
+        focus_elevation_meters: 0.0,
+    };
+    let high_tile = (290, 274);
+    let Ok(mut high) = MapChunkGenerator::new([0; 32], 1, 512).chunk(9, 8) else {
+        assert!(false, "high-relief fetch chunk");
+        return;
+    };
+    for tile in &mut high.tiles {
+        tile.game_height_level = 0;
+        tile.surface.corner_game_height_levels = [0; 4];
+    }
+    high.tiles[514].game_height_level = 52;
+    high.tiles[514].surface.corner_game_height_levels = [52; 4];
+
+    let Ok(mut low) = MapChunkGenerator::new([0; 32], 1, 512).chunk(8, 8) else {
+        assert!(false, "low-relief fetch chunk");
+        return;
+    };
+    for tile in &mut low.tiles {
+        tile.game_height_level = 0;
+        tile.surface.corner_game_height_levels = [0; 4];
+    }
+
+    let mut chunks = std::collections::BTreeMap::from([((8, 8), low), ((9, 8), high.clone())]);
+    let mut request_bounds = None;
+    let mut resident_bounds = None;
+    let mut discovered = std::collections::BTreeSet::new();
+    for coordinate in [(8, 8), (9, 8)] {
+        let Some(chunk) = chunks.get(&coordinate) else {
+            assert!(false, "fetched chunk is resident");
+            return;
+        };
+        heights::merge_chunk_height_bounds(&mut request_bounds, chunk);
+        heights::merge_chunk_height_bounds(&mut resident_bounds, chunk);
+        discovered.insert(coordinate);
+    }
+    assert_eq!(request_bounds, Some((0, 52)));
+    assert_eq!(resident_bounds, Some((0, 52)));
+
+    let initial = visible_tiles_for_height_bounds(camera, config, 0.0, None);
+    assert!(
+        high_tile.0 < initial.min.x
+            || high_tile.0 >= initial.max.x
+            || high_tile.1 < initial.min.y
+            || high_tile.1 >= initial.max.y
+    );
+
+    // Eviction drops resident evidence and discovery eligibility, but the
+    // monotonic request bound still makes the high chunk re-requestable.
+    chunks.remove(&(9, 8));
+    discovered.remove(&(9, 8));
+    resident_bounds = heights::resident_height_bounds(chunks.values());
+    assert_eq!(resident_bounds, Some((0, 0)));
+    assert_eq!(request_bounds, Some((0, 52)));
+    let requested = visible_tiles_for_height_bounds(camera, config, 0.0, request_bounds);
+    assert!(
+        high_tile.0 >= requested.min.x
+            && high_tile.0 < requested.max.x
+            && high_tile.1 >= requested.min.y
+            && high_tile.1 < requested.max.y
+    );
+    let re_request = heights::frontier_chunks([8, 8], [16, 16], 64, |coordinate| {
+        chunks.contains_key(&coordinate) || discovered.contains(&coordinate)
+    });
+    assert!(re_request.contains(&(9, 8)));
+
+    chunks.insert((9, 8), high);
+    discovered.insert((9, 8));
+    assert_eq!(
+        heights::resident_height_bounds(chunks.values()),
+        Some((0, 52))
+    );
+}
+
+#[wasm_bindgen_test]
 fn nonconverging_height_pick_returns_unavailable() {
     let camera = Camera {
         center: [10.0, 10.0],

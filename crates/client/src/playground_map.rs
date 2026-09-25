@@ -42,6 +42,7 @@ pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_chunks.clear();
     client.terrain_discovered.clear();
     client.terrain_height_bounds = None;
+    client.terrain_resident_height_bounds = None;
     client.terrain_inflight.clear();
 }
 
@@ -126,7 +127,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
 }
 
 pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
-    let visible = terrain_visible_tiles(client);
+    let visible = resident_visible_tiles(client);
     let mut terrain = Vec::new();
     for chunk in client.terrain_chunks.values() {
         let (chunk_width, chunk_height) = chunk_dimensions(client, chunk.x, chunk.y);
@@ -172,7 +173,7 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
 }
 
 pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
-    let visible = terrain_visible_tiles(client);
+    let visible = resident_visible_tiles(client);
     let mut resources = client
         .terrain_chunks
         .values()
@@ -309,6 +310,15 @@ pub(super) fn terrain_visible_tiles(client: &Client) -> TileRect {
     )
 }
 
+pub(super) fn resident_visible_tiles(client: &Client) -> TileRect {
+    visible_tiles_for_height_bounds(
+        client.camera,
+        client.config,
+        client.camera.focus_elevation_meters,
+        client.terrain_resident_height_bounds,
+    )
+}
+
 fn initialize_altitude_focus(client: &mut Client) {
     let Some(map_hash) = client.map_content_hash else {
         return;
@@ -417,6 +427,7 @@ fn evict_distant_chunks(client: &mut Client) {
         }
         if let Some(chunk) = client.terrain_chunks.remove(&coordinate) {
             cached_bytes = cached_bytes.saturating_sub(chunk_resident_bytes(&chunk));
+            client.terrain_discovered.remove(&coordinate);
             removed = true;
         }
     }

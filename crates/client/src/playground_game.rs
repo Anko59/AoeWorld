@@ -51,6 +51,7 @@ pub(super) struct Client {
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
+    pub terrain_resident_height_bounds: Option<(i16, i16)>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
     pub revision: u64,

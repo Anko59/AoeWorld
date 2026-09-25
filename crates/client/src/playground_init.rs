@@ -49,6 +49,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         terrain_chunks: BTreeMap::new(),
         terrain_discovered: Default::default(),
         terrain_height_bounds: None,
+        terrain_resident_height_bounds: None,
         terrain_inflight: Default::default(),
         token: super::storage::stored_token(),
         revision: 0,

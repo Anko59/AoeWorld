@@ -104,31 +104,41 @@ pub(super) fn visible_tiles_for_height_bounds(
 }
 
 pub(super) fn include_chunk_height_bounds(client: &mut Client, chunk: &Chunk) {
-    let Some((minimum, maximum)) = chunk_height_bounds(chunk) else {
-        return;
-    };
-    client.terrain_height_bounds = Some(
-        client
-            .terrain_height_bounds
-            .map_or((minimum, maximum), |(old_minimum, old_maximum)| {
-                (old_minimum.min(minimum), old_maximum.max(maximum))
-            }),
-    );
+    if merge_chunk_height_bounds(&mut client.terrain_height_bounds, chunk).is_some() {
+        merge_chunk_height_bounds(&mut client.terrain_resident_height_bounds, chunk);
+    }
 }
 
 pub(super) fn refresh_chunk_height_bounds(client: &mut Client) {
-    client.terrain_height_bounds = client
-        .terrain_chunks
-        .values()
+    client.terrain_resident_height_bounds = resident_height_bounds(client.terrain_chunks.values());
+}
+
+pub(super) fn merge_chunk_height_bounds(
+    target: &mut Option<(i16, i16)>,
+    chunk: &Chunk,
+) -> Option<(i16, i16)> {
+    let bounds = chunk_height_bounds(chunk)?;
+    merge_height_bounds(target, bounds);
+    Some(bounds)
+}
+
+pub(super) fn merge_height_bounds(target: &mut Option<(i16, i16)>, (minimum, maximum): (i16, i16)) {
+    *target = Some(
+        target.map_or((minimum, maximum), |(old_minimum, old_maximum)| {
+            (old_minimum.min(minimum), old_maximum.max(maximum))
+        }),
+    );
+}
+
+pub(super) fn resident_height_bounds<'a>(
+    chunks: impl Iterator<Item = &'a Chunk>,
+) -> Option<(i16, i16)> {
+    chunks
         .filter_map(chunk_height_bounds)
-        .fold(None, |bounds, (minimum, maximum)| {
-            Some(bounds.map_or(
-                (minimum, maximum),
-                |(old_minimum, old_maximum): (i16, i16)| {
-                    (old_minimum.min(minimum), old_maximum.max(maximum))
-                },
-            ))
-        });
+        .fold(None, |mut bounds, next| {
+            merge_height_bounds(&mut bounds, next);
+            bounds
+        })
 }
 
 pub(super) fn chunk_height_bounds(chunk: &Chunk) -> Option<(i16, i16)> {
