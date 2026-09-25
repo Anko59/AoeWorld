@@ -1,15 +1,21 @@
 use super::*;
+use aoe_core::WorldConfig;
 use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, PageLayer};
 
 #[test]
-fn fixed_centerline_route_uses_opposite_interior_edges() {
-    let axis = QUALIFICATION_AXIS_TILES as i32;
-    let y = (axis - 1) / 2;
-    let points = [TileCoord::new(axis - 2, y), TileCoord::new(1, y)];
-    assert_eq!(points[0], TileCoord::new(49_998, 24_999));
-    assert_eq!(points[1], TileCoord::new(1, 24_999));
-    assert_eq!(points[0].x.abs_diff(points[1].x), 49_997);
-    assert!(points.windows(2).all(|pair| pair[0] != pair[1]));
+fn ordinary_activation_search_is_unchanged_and_route_extent_is_local() {
+    assert_eq!(ORDINARY_ACTIVATION_SEARCH_CHUNKS, 64);
+    let config = WorldConfig::new(64, 64, aoe_core::Seed(5)).expect("config");
+    let start = TileCoord::new(32, 32);
+    let fixed = route::plan_fixed_repeated_route(
+        &aoe_simulation::Terrain::uniform(config.seed.0),
+        config,
+        start,
+    )
+    .expect("fixed local route");
+    assert_eq!(fixed.start, start);
+    assert_eq!(fixed.spatial_extent_tiles(), [2, 0]);
+    assert!(fixed.spatial_extent_tiles()[0] < config.width_tiles);
 }
 
 #[test]

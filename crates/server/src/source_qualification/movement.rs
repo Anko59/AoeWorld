@@ -1,25 +1,25 @@
 use super::{
     SourceQualificationError, SourceQualificationProgress,
     metrics::{NavigationCachePeaks, ProcessRssSampler},
-    route::{classify_route_failure, issue_leg},
+    route::{FixedRoute, contextual_route_failure, issue_leg},
 };
 use crate::PageResidency;
 use aoe_core::{PlayerId, TileCoord, WorldPosition};
 use aoe_map::MapPackage;
-use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
+use aoe_simulation::{GameWorld, GameWorldError};
 
 const HASH_CHECK_INTERVAL: u64 = 8_192;
 
 pub(super) struct MovementRun {
     pub(super) start_tile: TileCoord,
-    pub(super) route_waypoints: Vec<TileCoord>,
+    pub(super) route: FixedRoute,
     pub(super) movement_ticks: u64,
     pub(super) route_moved_meters: f64,
     pub(super) replay_moved_meters: f64,
     pub(super) route_checkpoint_count: usize,
     pub(super) movement_replay_comparison_count: usize,
-    pub(super) route_movement_leg_count: usize,
-    pub(super) replay_movement_leg_count: usize,
+    pub(super) route_movement_leg_count: u64,
+    pub(super) replay_movement_leg_count: u64,
     pub(super) peak_resident_pages: usize,
     pub(super) navigation_cache_peaks: NavigationCachePeaks,
     pub(super) replay_hash: [u8; 32],
@@ -32,6 +32,7 @@ pub(super) struct MovementInput<'a> {
     pub(super) replay_provider: std::sync::Arc<PageResidency>,
     pub(super) initial_peak_resident_pages: usize,
     pub(super) max_ticks: u64,
+    pub(super) route: FixedRoute,
     pub(super) progress: &'a mut dyn FnMut(SourceQualificationProgress),
     pub(super) rss: &'a mut ProcessRssSampler,
 }
@@ -46,6 +47,7 @@ pub(super) fn exercise_movement(
         replay_provider,
         initial_peak_resident_pages,
         max_ticks,
+        route,
         progress,
         rss,
     } = input;
@@ -57,52 +59,23 @@ pub(super) fn exercise_movement(
         package.clone(),
         replay_provider.clone() as std::sync::Arc<dyn aoe_map::EnvironmentPageProvider>,
     )?;
-    let config = world.config();
-    let start = match world.terrain().search_start_for_recipe(
-        config,
-        package.generation_recipe_version,
-        64,
-        || false,
-    )? {
-        StartSearchResult::Found(tile) => tile,
-        StartSearchResult::Unavailable
-        | StartSearchResult::LimitReached
-        | StartSearchResult::Cancelled => return Err(SourceQualificationError::NoStart),
-    };
-    let unit = world.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(start)?)?;
-    let replay_unit = replay.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(start)?)?;
-    let axis = config.width_tiles;
-    let center_y = (config.height_tiles - 1) / 2;
-    let waypoints = [
-        TileCoord::new(axis - 2, center_y),
-        TileCoord::new(1, center_y),
-    ];
+    route.ensure_tick_bound(world.config(), max_ticks)?;
+    let unit = world.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(route.start)?)?;
+    let replay_unit =
+        replay.spawn_unit(PlayerId(0), WorldPosition::from_tile_center(route.start)?)?;
     let mut navigation_cache_peaks = NavigationCachePeaks::default();
     let mut movement_replay_comparison_count = 0_usize;
-    let mut route_movement_leg_count = 0_usize;
-    let mut replay_movement_leg_count = 0_usize;
-    issue_leg(
-        &mut world,
-        generator,
-        package,
-        &movement_provider,
-        unit,
-        waypoints[0],
-    )?;
-    route_movement_leg_count += 1;
+    let mut route_movement_leg_count = 1_u64;
+    let mut replay_movement_leg_count = 1_u64;
+    issue_leg(&mut world, generator, unit, route.destination_for_leg(0))?;
     issue_leg(
         &mut replay,
         generator,
-        package,
-        &replay_provider,
         replay_unit,
-        waypoints[0],
+        route.destination_for_leg(0),
     )?;
-    replay_movement_leg_count += 1;
     navigation_cache_peaks.observe(&world, &replay);
 
-    let mut leg = 0_usize;
-    let mut replay_leg = 0_usize;
     let mut last_position = world
         .unit(unit)
         .ok_or(GameWorldError::UnknownEntity)?
@@ -135,68 +108,62 @@ pub(super) fn exercise_movement(
             .max(replay_provider.resident_pages());
         navigation_cache_peaks.observe(&world, &replay);
         if let Some(error) = world.movement_failure(unit) {
-            return Err(classify_route_failure(
+            let destination = route.destination_for_leg(route_movement_leg_count - 1);
+            let origin = state.position.tile_floor();
+            return Err(contextual_route_failure(
                 error,
-                waypoints[leg.min(waypoints.len() - 1)],
+                generator,
+                origin,
+                destination,
             ));
         }
         if let Some(error) = replay.movement_failure(replay_unit) {
-            return Err(classify_route_failure(
+            let destination = route.destination_for_leg(replay_movement_leg_count - 1);
+            let origin = replay_state.position.tile_floor();
+            return Err(contextual_route_failure(
                 error,
-                waypoints[replay_leg.min(waypoints.len() - 1)],
+                generator,
+                origin,
+                destination,
             ));
         }
         if tick % HASH_CHECK_INTERVAL == 0 {
             rss.observe();
             movement_replay_comparison_count += 1;
-            let route_hash = world.canonical_hash();
-            let replay_hash = replay.canonical_hash();
-            if route_hash != replay_hash || state != replay_state {
+            if state != replay_state {
                 return Err(SourceQualificationError::ReplayDiverged(tick));
             }
+            ensure_replay(world.canonical_hash(), replay.canonical_hash(), tick)?;
             route_checkpoint_count += 1;
         }
-        if world.movement_order(unit).is_none() {
-            leg += 1;
-            if leg < waypoints.len() {
-                issue_leg(
-                    &mut world,
-                    generator,
-                    package,
-                    &movement_provider,
-                    unit,
-                    waypoints[leg],
-                )?;
-                route_movement_leg_count += 1;
-            }
+        if world.movement_order(unit).is_none() && route_movement_leg_count < route.repetitions {
+            let destination = route.destination_for_leg(route_movement_leg_count);
+            issue_leg(&mut world, generator, unit, destination)?;
+            route_movement_leg_count += 1;
         }
-        if replay.movement_order(replay_unit).is_none() {
-            replay_leg += 1;
-            if replay_leg < waypoints.len() {
-                issue_leg(
-                    &mut replay,
-                    generator,
-                    package,
-                    &replay_provider,
-                    replay_unit,
-                    waypoints[replay_leg],
-                )?;
-                replay_movement_leg_count += 1;
-            }
+        if replay.movement_order(replay_unit).is_none()
+            && replay_movement_leg_count < route.repetitions
+        {
+            let destination = route.destination_for_leg(replay_movement_leg_count);
+            issue_leg(&mut replay, generator, replay_unit, destination)?;
+            replay_movement_leg_count += 1;
         }
-        if leg == waypoints.len() && replay_leg == waypoints.len() {
+        if route_movement_leg_count == route.repetitions
+            && replay_movement_leg_count == route.repetitions
+            && world.movement_order(unit).is_none()
+            && replay.movement_order(replay_unit).is_none()
+        {
             movement_replay_comparison_count += 1;
-            let route_hash = world.canonical_hash();
-            let replay_hash = replay.canonical_hash();
-            if route_hash != replay_hash || state != replay_state {
+            if state != replay_state {
                 return Err(SourceQualificationError::ReplayDiverged(tick));
             }
+            ensure_replay(world.canonical_hash(), replay.canonical_hash(), tick)?;
             break;
         }
         if tick % 50_000 == 0 {
             progress(SourceQualificationProgress {
                 tick,
-                leg,
+                leg: route_movement_leg_count as usize,
                 moved_meters: moved_subunits / 1_024.0 * 2.0,
             });
         }
@@ -207,24 +174,18 @@ pub(super) fn exercise_movement(
     movement_replay_comparison_count += 1;
     let route_hash = world.canonical_hash();
     let replay_hash = replay.canonical_hash();
-    if route_hash != replay_hash {
-        return Err(SourceQualificationError::ReplayDiverged(movement_ticks));
-    }
+    ensure_replay(route_hash, replay_hash, movement_ticks)?;
     let route_moved_meters = moved_subunits / 1_024.0 * 2.0;
     let replay_moved_meters = replay_moved_subunits / 1_024.0 * 2.0;
-    if route_moved_meters < 100_000.0 || replay_moved_meters != route_moved_meters {
-        return Err(SourceQualificationError::InsufficientDistance(
-            route_moved_meters,
-        ));
-    }
+    validate_distance(route, route_moved_meters, replay_moved_meters)?;
     navigation_cache_peaks.observe(&world, &replay);
     peak_resident_pages = peak_resident_pages
         .max(movement_provider.resident_pages())
         .max(replay_provider.resident_pages());
     rss.observe();
     Ok(MovementRun {
-        start_tile: start,
-        route_waypoints: waypoints.to_vec(),
+        start_tile: route.start,
+        route,
         movement_ticks,
         route_moved_meters,
         replay_moved_meters,
@@ -238,8 +199,36 @@ pub(super) fn exercise_movement(
     })
 }
 
+fn ensure_replay(
+    route_hash: [u8; 32],
+    replay_hash: [u8; 32],
+    tick: u64,
+) -> Result<(), SourceQualificationError> {
+    if route_hash != replay_hash {
+        return Err(SourceQualificationError::ReplayDiverged(tick));
+    }
+    Ok(())
+}
+
+fn validate_distance(
+    route: FixedRoute,
+    route_meters: f64,
+    replay_meters: f64,
+) -> Result<(), SourceQualificationError> {
+    if route_meters < route.accumulated_distance_meters(route.repetitions)
+        || route_meters < super::route::REQUIRED_TRAVEL_METERS
+        || replay_meters != route_meters
+    {
+        return Err(SourceQualificationError::InsufficientDistance(route_meters));
+    }
+    Ok(())
+}
+
 fn displacement(from: WorldPosition, to: WorldPosition) -> f64 {
     let dx = f64::from(to.x) - f64::from(from.x);
     let dy = f64::from(to.y) - f64::from(from.y);
     dx.hypot(dy)
 }
+
+#[cfg(test)]
+mod tests;

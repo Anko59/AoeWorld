@@ -1,25 +1,190 @@
-use super::{SourceQualificationError, diagnostics::start_diagnostic};
-use crate::PageResidency;
-use aoe_core::{TileCoord, WorldPosition};
-use aoe_map::{
-    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MapChunkGenerator, MapPackage,
-    RoutePlannerPoll,
-};
-use aoe_simulation::{GameWorld, GameWorldError};
+use super::SourceQualificationError;
+use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord, WorldConfig, WorldPosition};
+use aoe_map::{EnvironmentPageError, MapChunkGenerator};
+use aoe_simulation::{GameWorld, GameWorldError, Terrain};
+
+pub(super) const ROUTE_CONTRACT: &str = "fixed-cardinal-repeat-within-ordinary-component-v1";
+pub(super) const REQUIRED_TRAVEL_METERS: f64 = 100_000.0;
+const METERS_PER_TILE: f64 = 2.0;
+const PREFERRED_OFFSET: (i32, i32) = (2, 0);
+const CARDINAL_OFFSETS: [(i32, i32); 4] = [(2, 0), (0, 2), (-2, 0), (0, -2)];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct FixedRoute {
+    pub(super) start: TileCoord,
+    pub(super) alternate: TileCoord,
+    pub(super) offset: (i32, i32),
+    pub(super) leg_length_tiles: u32,
+    pub(super) leg_length_meters: f64,
+    pub(super) repetitions: u64,
+}
+
+impl FixedRoute {
+    pub(super) fn waypoints(self) -> [TileCoord; 2] {
+        [self.start, self.alternate]
+    }
+
+    pub(super) fn spatial_extent_tiles(self) -> [i32; 2] {
+        [
+            self.start.x.abs_diff(self.alternate.x) as i32,
+            self.start.y.abs_diff(self.alternate.y) as i32,
+        ]
+    }
+
+    pub(super) fn destination_for_leg(self, leg_index: u64) -> TileCoord {
+        if leg_index.is_multiple_of(2) {
+            self.alternate
+        } else {
+            self.start
+        }
+    }
+
+    pub(super) fn accumulated_distance_meters(self, legs: u64) -> f64 {
+        f64::from(legs as u32) * self.leg_length_meters
+    }
+
+    pub(super) fn minimum_ticks(
+        self,
+        config: WorldConfig,
+    ) -> Result<u64, SourceQualificationError> {
+        let distance_subunits =
+            u128::from(self.leg_length_tiles) * u128::from(FIXED_SUBUNITS_PER_TILE.unsigned_abs());
+        let speed = u128::try_from(config.move_speed_subunits_per_tick).map_err(|_| {
+            SourceQualificationError::FixedRouteTickBound {
+                required: u64::MAX,
+                maximum: 0,
+            }
+        })?;
+        if speed == 0 || config.move_speed_subunits_per_tick_denominator == 0 {
+            return Err(SourceQualificationError::FixedRouteTickBound {
+                required: u64::MAX,
+                maximum: 0,
+            });
+        }
+        let numerator =
+            distance_subunits * u128::from(config.move_speed_subunits_per_tick_denominator);
+        let ticks_per_leg = numerator.div_ceil(speed);
+        u64::try_from(ticks_per_leg)
+            .ok()
+            .and_then(|ticks| ticks.checked_mul(self.repetitions))
+            .ok_or(SourceQualificationError::FixedRouteTickBound {
+                required: u64::MAX,
+                maximum: 0,
+            })
+    }
+
+    pub(super) fn ensure_tick_bound(
+        self,
+        config: WorldConfig,
+        max_ticks: u64,
+    ) -> Result<(), SourceQualificationError> {
+        let required = self.minimum_ticks(config)?;
+        if required > max_ticks {
+            return Err(SourceQualificationError::FixedRouteTickBound {
+                required,
+                maximum: max_ticks,
+            });
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn plan_fixed_repeated_route(
+    terrain: &Terrain,
+    config: WorldConfig,
+    start: TileCoord,
+) -> Result<FixedRoute, SourceQualificationError> {
+    plan_fixed_repeated_route_with(&TerrainFixedLegQuery { terrain, config }, start)
+}
+
+trait FixedLegQuery {
+    fn passable(&self, tile: TileCoord) -> Result<bool, EnvironmentPageError>;
+
+    fn crossable(&self, from: TileCoord, to: TileCoord) -> Result<bool, EnvironmentPageError>;
+}
+
+struct TerrainFixedLegQuery<'a> {
+    terrain: &'a Terrain,
+    config: WorldConfig,
+}
+
+impl FixedLegQuery for TerrainFixedLegQuery<'_> {
+    fn passable(&self, tile: TileCoord) -> Result<bool, EnvironmentPageError> {
+        self.terrain
+            .passable_with_cancel(tile, self.config, &|| false)
+    }
+
+    fn crossable(&self, from: TileCoord, to: TileCoord) -> Result<bool, EnvironmentPageError> {
+        self.terrain
+            .crossable_with_cancel(from, to, self.config, &|| false)
+    }
+}
+
+fn plan_fixed_repeated_route_with<Q: FixedLegQuery>(
+    query: &Q,
+    start: TileCoord,
+) -> Result<FixedRoute, SourceQualificationError> {
+    let mut attempts = Vec::<String>::new();
+    for offset in CARDINAL_OFFSETS {
+        let alternate = TileCoord::new(
+            start.x.saturating_add(offset.0),
+            start.y.saturating_add(offset.1),
+        );
+        if offset == PREFERRED_OFFSET {
+            attempts.push(format!("preferred={offset:?}"));
+        }
+        let crossable = query.passable(start)?
+            && query.passable(alternate)?
+            && leg_is_crossable(query, start, alternate)?;
+        if crossable {
+            let leg_length_tiles = offset.0.unsigned_abs() + offset.1.unsigned_abs();
+            let leg_length_meters = f64::from(leg_length_tiles) * METERS_PER_TILE;
+            let repetitions = (REQUIRED_TRAVEL_METERS / leg_length_meters).ceil() as u64;
+            return Ok(FixedRoute {
+                start,
+                alternate,
+                offset,
+                leg_length_tiles,
+                leg_length_meters,
+                repetitions,
+            });
+        }
+        attempts.push(format!("offset={offset:?},crossable=false"));
+    }
+    Err(SourceQualificationError::FixedRouteLegUnavailable {
+        start: [start.x, start.y],
+        diagnostic: attempts.join(";"),
+    })
+}
+
+fn leg_is_crossable<Q: FixedLegQuery>(
+    query: &Q,
+    start: TileCoord,
+    alternate: TileCoord,
+) -> Result<bool, EnvironmentPageError> {
+    let step_x = (alternate.x - start.x).signum();
+    let step_y = (alternate.y - start.y).signum();
+    let mut from = start;
+    while from != alternate {
+        let to = TileCoord::new(from.x + step_x, from.y + step_y);
+        if !query.passable(to)? || !query.crossable(from, to)? || !query.crossable(to, from)? {
+            return Ok(false);
+        }
+        from = to;
+    }
+    Ok(true)
+}
 
 pub(super) fn issue_leg(
     world: &mut GameWorld,
     generator: &MapChunkGenerator,
-    package: &MapPackage,
-    provider: &PageResidency,
     id: aoe_core::EntityId,
     destination: TileCoord,
 ) -> Result<(), SourceQualificationError> {
     let position = WorldPosition::from_tile_center(destination)?;
-    let destination_tile = position.tile_floor();
     if !world
         .terrain()
-        .passable_with_cancel(destination_tile, world.config(), &|| false)?
+        .passable_with_cancel(destination, world.config(), &|| false)?
     {
         return Err(SourceQualificationError::ImpassableWaypoint {
             x: destination.x,
@@ -31,183 +196,21 @@ pub(super) fn issue_leg(
         .ok_or(GameWorldError::UnknownEntity)?
         .position
         .tile_floor();
-    if let Err(error) = world.issue_move(id, position) {
-        if matches!(&error, GameWorldError::Unreachable) {
-            let diagnostic = unreachable_route_diagnostic(
-                world,
-                generator,
-                package,
-                provider,
-                origin,
-                destination_tile,
-                destination,
-            )?;
-            return Err(SourceQualificationError::UnreachableWaypoint {
-                x: destination.x,
-                y: destination.y,
-                diagnostic,
-            });
-        }
-        return Err(classify_route_failure(error, destination));
+    match world.issue_move(id, position) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(contextual_route_failure(
+            error,
+            generator,
+            origin,
+            destination,
+        )),
     }
-    Ok(())
 }
 
-fn unreachable_route_diagnostic(
-    world: &GameWorld,
-    generator: &MapChunkGenerator,
-    package: &MapPackage,
-    provider: &PageResidency,
-    origin: TileCoord,
-    destination_tile: TileCoord,
-    destination: TileCoord,
-) -> Result<String, SourceQualificationError> {
-    let endpoint = endpoint_diagnostic(generator, destination)?;
-    let route_probe = route_probe(world, origin, destination_tile)?;
-    let nearby = nearby_waypoint_probes(world, origin, destination)?;
-    let starts = start_diagnostic(
-        world.terrain(),
-        generator,
-        package,
-        provider,
-        world.config(),
-        64,
-        Some(origin),
-    )?;
-    Ok(format!(
-        "start_tile=({},{}), start_connected_component={}, A*_outcome={}, A*_work={}/{MAX_ROUTE_PLANNER_WORK}, A*_peak_entries={}/{MAX_ROUTE_PLANNER_NODES}, {endpoint}, nearby_fixed_waypoint_probes={nearby}, {starts}",
-        origin.x,
-        origin.y,
-        route_probe.connected,
-        route_probe.outcome,
-        route_probe.work,
-        route_probe.peak_entries,
-    ))
-}
-
-struct RouteProbe {
-    connected: &'static str,
-    outcome: &'static str,
-    work: u32,
-    peak_entries: usize,
-}
-
-fn route_probe(
-    world: &GameWorld,
-    origin: TileCoord,
-    destination: TileCoord,
-) -> Result<RouteProbe, SourceQualificationError> {
-    let Some(mut planner) =
-        world
-            .terrain()
-            .route_planner(origin, destination, MAX_ROUTE_PLANNER_WORK)
-    else {
-        return Err(GameWorldError::InvalidTerrain.into());
-    };
-    let result = world
-        .terrain()
-        .poll_route_planner(&mut planner, MAX_ROUTE_PLANNER_WORK, &|| false)
-        .ok_or(GameWorldError::InvalidTerrain)?;
-    let (connected, outcome) = match result {
-        RoutePlannerPoll::Path(_) => ("true", "path_segment"),
-        RoutePlannerPoll::Complete => ("true", "complete"),
-        RoutePlannerPoll::Unreachable => ("false", "unreachable"),
-        RoutePlannerPoll::InvalidDestination => ("false", "invalid_destination"),
-        RoutePlannerPoll::SearchLimit => ("unknown", "search_limit"),
-        RoutePlannerPoll::Pending => ("unknown", "pending"),
-        RoutePlannerPoll::Environment(error) => {
-            return Err(SourceQualificationError::Page(error));
-        }
-    };
-    Ok(RouteProbe {
-        connected,
-        outcome,
-        work: planner.work(),
-        peak_entries: planner.peak_retained_entries(),
-    })
-}
-
-fn nearby_waypoint_probes(
-    world: &GameWorld,
-    origin: TileCoord,
-    failed_east_waypoint: TileCoord,
-) -> Result<String, SourceQualificationError> {
-    const EAST_EDGE_Y_OFFSETS: [i32; 8] = [-128, -32, -8, -1, 1, 8, 32, 128];
-    const EAST_EDGE_X_OFFSETS: [i32; 4] = [-128, -32, -8, -1];
-    let config = world.config();
-    let west_endpoint = TileCoord::new(1, (config.height_tiles - 1) / 2);
-    let mut candidates = EAST_EDGE_Y_OFFSETS
-        .iter()
-        .map(|offset| {
-            (
-                format!("east_y{offset:+}"),
-                TileCoord::new(failed_east_waypoint.x, failed_east_waypoint.y + offset),
-            )
-        })
-        .collect::<Vec<_>>();
-    candidates.extend(EAST_EDGE_X_OFFSETS.iter().map(|offset| {
-        (
-            format!("east_x{offset:+}"),
-            TileCoord::new(failed_east_waypoint.x + offset, failed_east_waypoint.y),
-        )
-    }));
-    candidates.push(("west_endpoint".to_owned(), west_endpoint));
-    candidates.extend(EAST_EDGE_Y_OFFSETS.iter().map(|offset| {
-        (
-            format!("west_y{offset:+}"),
-            TileCoord::new(west_endpoint.x, west_endpoint.y + offset),
-        )
-    }));
-    let mut probes = Vec::with_capacity(candidates.len());
-    for (label, destination) in candidates {
-        if destination.y < 0 || destination.y >= config.height_tiles {
-            probes.push(format!("{label}=outside"));
-            continue;
-        }
-        let passable = world
-            .terrain()
-            .passable_with_cancel(destination, config, &|| false)?;
-        if !passable {
-            probes.push(format!("{label}=impassable"));
-            continue;
-        }
-        let result = route_probe(world, origin, destination)?;
-        probes.push(format!(
-            "{label}={}/{}:{}/{}",
-            result.connected, result.outcome, result.work, result.peak_entries
-        ));
-    }
-    Ok(format!("[{}]", probes.join(";")))
-}
-
-fn endpoint_diagnostic(
-    generator: &MapChunkGenerator,
-    destination: TileCoord,
-) -> Result<String, SourceQualificationError> {
-    let tile = generator
-        .tile_at_with_cancel(destination, &|| false)?
-        .ok_or(aoe_map::EnvironmentPageError::Invalid)?;
-    let resource = generator
-        .object_at_with_cancel(destination, &|| false)?
-        .map(|node| (node.kind, node.object, node.id));
-    let mut max_adjacent_rise_cm = 0_i32;
-    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-        let neighbor = TileCoord::new(destination.x + dx, destination.y + dy);
-        let Some(sample) = generator.tile_at_with_cancel(neighbor, &|| false)? else {
-            continue;
-        };
-        max_adjacent_rise_cm = max_adjacent_rise_cm
-            .max((tile.geographic_height_centimeters - sample.geographic_height_centimeters).abs());
-    }
-    let edge_grade_percent = f64::from(max_adjacent_rise_cm) / 2.0;
-    Ok(format!(
-        "endpoint_material={:?}, endpoint_water={:?}, endpoint_resource={resource:?}, endpoint_passable={}, endpoint_surface={:?}, endpoint_height_cm={}, endpoint_max_adjacent_rise_cm={max_adjacent_rise_cm}, endpoint_max_2m_edge_grade_percent={edge_grade_percent:.2}",
-        tile.material, tile.water, tile.passable, tile.surface, tile.geographic_height_centimeters,
-    ))
-}
-
-pub(super) fn classify_route_failure(
+pub(super) fn contextual_route_failure(
     error: GameWorldError,
+    generator: &MapChunkGenerator,
+    origin: TileCoord,
     destination: TileCoord,
 ) -> SourceQualificationError {
     match error {
@@ -218,8 +221,40 @@ pub(super) fn classify_route_failure(
         GameWorldError::Unreachable => SourceQualificationError::UnreachableWaypoint {
             x: destination.x,
             y: destination.y,
-            diagnostic: "movement planner returned unreachable after route qualification".into(),
+            diagnostic: unreachable_route_diagnostic(generator, origin, destination),
         },
         error => SourceQualificationError::Movement(error),
     }
 }
+
+fn unreachable_route_diagnostic(
+    generator: &MapChunkGenerator,
+    origin: TileCoord,
+    destination: TileCoord,
+) -> String {
+    let destination_detail = destination_diagnostic(generator, destination)
+        .unwrap_or_else(|error| format!("destination_read_error={error}"));
+    format!(
+        "contract={ROUTE_CONTRACT},origin=({},{}),failed_destination=({},{}),{destination_detail}",
+        origin.x, origin.y, destination.x, destination.y,
+    )
+}
+
+fn destination_diagnostic(
+    generator: &MapChunkGenerator,
+    destination: TileCoord,
+) -> Result<String, SourceQualificationError> {
+    let tile = generator
+        .tile_at_with_cancel(destination, &|| false)?
+        .ok_or(EnvironmentPageError::Invalid)?;
+    let resource = generator
+        .object_at_with_cancel(destination, &|| false)?
+        .map(|node| (node.kind, node.object, node.id));
+    Ok(format!(
+        "destination_material={:?},destination_water={:?},destination_resource={resource:?},destination_passable={},destination_surface={:?},destination_height_cm={}",
+        tile.material, tile.water, tile.passable, tile.surface, tile.geographic_height_centimeters,
+    ))
+}
+
+#[cfg(test)]
+mod tests;

@@ -61,13 +61,32 @@ pub struct ResourceLifecycleEvidence {
 pub struct SimulationWork {
     pub movement_ticks: u64,
     pub simulated_seconds: f64,
-    pub route_movement_leg_count: usize,
-    pub replay_movement_leg_count: usize,
+    pub route_movement_leg_count: u64,
+    pub replay_movement_leg_count: u64,
+    pub route_repetition_count: u64,
     pub route_moved_meters: f64,
     pub replay_moved_meters: f64,
     pub route_checkpoint_count: usize,
     pub movement_replay_comparison_count: usize,
     pub resource_lifecycle: ResourceLifecycleEvidence,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RouteEvidence {
+    pub contract: &'static str,
+    pub spatial_scope: &'static str,
+    pub start_tile: [i32; 2],
+    pub alternate_tile: [i32; 2],
+    pub offset_tiles: [i32; 2],
+    pub spatial_extent_tiles: [i32; 2],
+    pub leg_length_tiles: u32,
+    pub leg_length_meters: f64,
+    pub repetition_count: u64,
+    pub required_distance_meters: f64,
+    pub movement_ticks: u64,
+    pub moved_meters: f64,
+    pub replay_hash: String,
+    pub replay_matches: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -106,7 +125,10 @@ pub struct SourceQualificationReport {
     pub source_lock_count: usize,
     pub source_lock_ids: Vec<String>,
     pub start_tile: [i32; 2],
+    pub activation_component_policy: &'static str,
+    pub activation_component_diagnostic: String,
     pub route_waypoints: Vec<[i32; 2]>,
+    pub route_evidence: RouteEvidence,
     pub movement_ticks: u64,
     pub simulated_seconds: f64,
     pub moved_meters: f64,
@@ -176,6 +198,23 @@ pub enum SourceQualificationError {
     ImpassableWaypoint { x: i32, y: i32 },
     #[error("fixed route waypoint ({x},{y}) is unreachable: {diagnostic}")]
     UnreachableWaypoint { x: i32, y: i32, diagnostic: String },
+    #[error(
+        "bounded activation component diagnostic exceeded {phase} at {observed}/{maximum}: {diagnostic}"
+    )]
+    ActivationLimit {
+        phase: &'static str,
+        observed: u64,
+        maximum: u64,
+        diagnostic: String,
+    },
+    #[error(
+        "fixed repeated route has no crossable cardinal leg from start {start:?}: {diagnostic}"
+    )]
+    FixedRouteLegUnavailable { start: [i32; 2], diagnostic: String },
+    #[error(
+        "fixed repeated route requires at least {required} ticks but the configured bound is {maximum}"
+    )]
+    FixedRouteTickBound { required: u64, maximum: u64 },
     #[error("normal activation start search returned {outcome}; center diagnosis: {diagnostic}")]
     StartSearchLimit {
         outcome: &'static str,
@@ -207,4 +246,38 @@ pub enum SourceQualificationError {
     Io(#[from] std::io::Error),
     #[error("qualification package JSON could not be encoded: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RouteEvidence;
+
+    #[test]
+    fn route_evidence_records_local_extent_repetitions_ticks_distance_and_hash() {
+        let evidence = RouteEvidence {
+            contract: "fixed-cardinal-repeat-within-ordinary-component-v1",
+            spatial_scope: "ordinary_activation_component_local",
+            start_tile: [24_999, 24_999],
+            alternate_tile: [25_001, 24_999],
+            offset_tiles: [2, 0],
+            spatial_extent_tiles: [2, 0],
+            leg_length_tiles: 2,
+            leg_length_meters: 4.0,
+            repetition_count: 25_000,
+            required_distance_meters: 100_000.0,
+            movement_ticks: 675_000,
+            moved_meters: 100_000.0,
+            replay_hash: "00".repeat(32),
+            replay_matches: true,
+        };
+        let json = serde_json::to_value(evidence).expect("route evidence JSON");
+
+        assert_eq!(json["spatial_extent_tiles"], serde_json::json!([2, 0]));
+        assert_eq!(json["leg_length_meters"], 4.0);
+        assert_eq!(json["repetition_count"], 25_000);
+        assert_eq!(json["movement_ticks"], 675_000);
+        assert_eq!(json["moved_meters"], 100_000.0);
+        assert_eq!(json["replay_hash"].as_str().expect("hash").len(), 64);
+        assert_eq!(json["replay_matches"], true);
+    }
 }
