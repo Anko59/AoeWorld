@@ -43,9 +43,11 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         primary: None,
         role: None,
         map_content_hash: None,
+        surface_fixture: false,
         focus_map_hash: None,
         resources: crate::resource_state::ResourceStateCache::default(),
         terrain_chunks: BTreeMap::new(),
+        terrain_discovered: Default::default(),
         terrain_height_bounds: None,
         terrain_inflight: Default::default(),
         token: super::storage::stored_token(),
@@ -64,6 +66,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         status: "loading".to_owned(),
     }));
     resize(&mut shared.borrow_mut());
+    super::fixture::set_active(&shared);
     controls::install(shared.clone())?;
     connect(shared.clone())?;
     animate(shared)?;

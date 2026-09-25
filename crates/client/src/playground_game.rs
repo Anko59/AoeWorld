@@ -18,27 +18,20 @@ use web_sys::{Document, Event, HtmlCanvasElement, MessageEvent, WebSocket};
 
 #[path = "playground_controls.rs"]
 mod controls;
+#[path = "playground_fixture.rs"]
+mod fixture;
 #[path = "playground_init.rs"]
 mod init;
 #[path = "playground_map.rs"]
 mod map;
+use map::{
+    state::{Drag, Sample},
+    ui::set_text,
+};
 #[path = "playground_status.rs"]
 mod status;
 #[path = "playground_storage.rs"]
 mod storage;
-
-#[derive(Clone, Copy)]
-pub(super) struct Sample {
-    pub tick: u64,
-    pub position: WorldPosition,
-}
-
-pub(super) struct Drag {
-    pub start: ScreenPoint,
-    pub current: ScreenPoint,
-    pub middle: bool,
-    pub center: [f64; 2],
-}
 
 pub(super) struct Client {
     pub document: Document,
@@ -52,9 +45,11 @@ pub(super) struct Client {
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
     pub map_content_hash: Option<[u8; 32]>,
+    pub surface_fixture: bool,
     pub focus_map_hash: Option<[u8; 32]>,
     pub resources: crate::resource_state::ResourceStateCache,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
+    pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
@@ -71,12 +66,6 @@ pub(super) struct Client {
     pub pointer: Option<ScreenPoint>,
     pub last_frame: f64,
     pub status: String,
-}
-
-pub(super) fn set_text(document: &Document, id: &str, value: &str) {
-    if let Some(element) = document.get_element_by_id(id) {
-        element.set_text_content(Some(value));
-    }
 }
 
 pub(super) fn now() -> f64 {
@@ -256,15 +245,19 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
                 client.role = Some(role);
-                client.map_content_hash = map_content_hash;
-                if map_changed {
+                if !client.surface_fixture {
+                    client.map_content_hash = map_content_hash;
+                }
+                if map_changed && !client.surface_fixture {
                     client.camera.center =
                         [f64::from(width_tiles) / 2.0, f64::from(height_tiles) / 2.0];
                     client.camera.focus_elevation_meters = 0.0;
                     client.focus_map_hash = None;
                 }
                 client.resources.clear();
-                map::clear_terrain_cache(&mut client);
+                if !client.surface_fixture {
+                    map::clear_terrain_cache(&mut client);
+                }
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
                 storage::save_token(resume_token);
@@ -326,11 +319,15 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.history.clear();
                 client.role = None;
                 client.primary = None;
-                client.map_content_hash = None;
-                client.focus_map_hash = None;
+                if !client.surface_fixture {
+                    client.map_content_hash = None;
+                    client.focus_map_hash = None;
+                }
                 client.camera.focus_elevation_meters = 0.0;
                 client.resources.clear();
-                map::clear_terrain_cache(&mut client);
+                if !client.surface_fixture {
+                    map::clear_terrain_cache(&mut client);
+                }
                 client.token = None;
                 storage::save_token(None);
                 client.status = "map changed; reconnecting".to_owned();
@@ -471,8 +468,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.camera.center[0], client.camera.center[1]
             ),
         );
+        let surface_fixture = client.surface_fixture;
         drop(client);
-        map::request_visible(shared.clone());
+        if !surface_fixture {
+            map::request_visible(shared.clone());
+        }
         if let Some(window) = web_sys::window()
             && let Some(cb) = next.borrow().as_ref()
         {

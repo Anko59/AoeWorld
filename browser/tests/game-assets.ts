@@ -1,24 +1,154 @@
 import type { Page } from "@playwright/test";
 import { PNG } from "pngjs";
 
+const terrainSourceColors = {
+  grass: [70, 120, 55],
+  ramp: [215, 72, 45],
+  cliff: [92, 82, 105],
+  water: [32, 104, 210],
+  shore: [218, 185, 92],
+} as const;
+
+const terrainSourceAccents = {
+  grass: [42, 82, 38],
+  ramp: [170, 34, 22],
+  dirt: [115, 54, 30],
+  cliff: [44, 42, 64],
+  water: [80, 160, 220],
+  shore: [164, 119, 54],
+} as const;
+
+const tint = (source: readonly number[], factor: number) =>
+  source.map((value) => Math.round(value * factor));
+const blendWater = (source: readonly number[]) =>
+  source.map((value, index) =>
+    Math.round(value * 0.86 + ([38, 113, 190][index] ?? 0) * 0.14),
+  );
+
+export const syntheticSurfaceColors = {
+  grass: terrainSourceColors.grass,
+  grassAccent: terrainSourceAccents.grass,
+  ramp: tint(terrainSourceColors.ramp, 0.92),
+  rampAccent: tint(terrainSourceAccents.ramp, 0.92),
+  cliff: tint(terrainSourceColors.cliff, 0.78),
+  cliffAccent: tint(terrainSourceAccents.cliff, 0.78),
+  skirt: tint(terrainSourceColors.cliff, 0.72),
+  water: blendWater(terrainSourceColors.water),
+  waterAccent: blendWater(terrainSourceAccents.water),
+  shore: terrainSourceColors.shore,
+  shoreAccent: terrainSourceAccents.shore,
+  ring: [242, 217, 89],
+} as const;
+
+type TerrainSource = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  base: readonly number[];
+  accent: readonly number[];
+};
+
+const terrainSources = new Map<number, TerrainSource>([
+  [
+    15008,
+    {
+      x: 0,
+      y: 0,
+      width: 97,
+      height: 49,
+      base: terrainSourceColors.grass,
+      accent: terrainSourceAccents.grass,
+    },
+  ],
+  [
+    15007,
+    {
+      x: 0,
+      y: 160,
+      width: 25,
+      height: 45,
+      base: terrainSourceColors.ramp,
+      accent: terrainSourceAccents.ramp,
+    },
+  ],
+  [
+    15000,
+    {
+      x: 300,
+      y: 160,
+      width: 25,
+      height: 45,
+      base: [166, 92, 48],
+      accent: terrainSourceAccents.dirt,
+    },
+  ],
+  [
+    15010,
+    {
+      x: 600,
+      y: 160,
+      width: 25,
+      height: 45,
+      base: terrainSourceColors.shore,
+      accent: terrainSourceAccents.shore,
+    },
+  ],
+  [
+    15018,
+    {
+      x: 900,
+      y: 160,
+      width: 25,
+      height: 45,
+      base: terrainSourceColors.cliff,
+      accent: terrainSourceAccents.cliff,
+    },
+  ],
+  [
+    15002,
+    {
+      x: 1200,
+      y: 160,
+      width: 25,
+      height: 45,
+      base: terrainSourceColors.water,
+      accent: terrainSourceAccents.water,
+    },
+  ],
+]);
+
 /** Public CI uses original generated fixtures; local runs use the real pack. */
-export async function gameAssets(page: Page): Promise<string> {
-  const response = await page.request.get("/asset-pack/manifest.json");
-  if (response.ok()) return "local AoE II pack";
+export async function gameAssets(
+  page: Page,
+  forceSynthetic = false,
+): Promise<string> {
+  if (!forceSynthetic) {
+    const response = await page.request.get("/asset-pack/manifest.json");
+    if (response.ok()) return "local AoE II pack";
+  }
   const color = new PNG({ width: 2048, height: 2048 });
-  const pixel = (x: number, y: number, rgb: number[]) => {
+  const pixel = (x: number, y: number, rgb: readonly number[]) => {
     const offset = (y * 2048 + x) * 4;
     rgb.forEach((value, i) => (color.data[offset + i] = value));
     color.data[offset + 3] = 255;
   };
-  for (let y = 0; y < 49; y += 1) {
-    for (let x = 0; x < 97; x += 1) {
-      if (Math.abs(x - 48) / 48 + Math.abs(y - 24) / 24 <= 1.03)
-        pixel(x, y, [70, 120, 55]);
+  for (const source of terrainSources.values()) {
+    for (let frame = 0; frame < 10; frame += 1) {
+      for (let y = 0; y < source.height; y += 1) {
+        for (let x = 0; x < source.width; x += 1) {
+          const accent = (x * 2 + y + frame) % 9 === 0;
+          pixel(
+            source.x + frame * source.width + x,
+            source.y + y,
+            accent ? source.accent : source.base,
+          );
+        }
+      }
     }
   }
   for (let y = 80; y < 125; y += 1)
-    for (let x = 10; x < 35; x += 1) pixel(x, y, [65, 145, 245]);
+    for (let x = 160; x < 185; x += 1) pixel(x, y, [65, 145, 245]);
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
@@ -28,20 +158,21 @@ export async function gameAssets(page: Page): Promise<string> {
       10,
     ]),
     ["graphics", 435, 4],
-  ].flatMap(([archive, id, count]) =>
-    Array.from({ length: Number(count) }, (_, frame) => ({
+  ].flatMap(([archive, id, count]) => {
+    const source = terrainSources.get(Number(id));
+    return Array.from({ length: Number(count) }, (_, frame) => ({
       source: `${archive}.drs:[32, 112, 108, 115]:${id}`,
       source_hash: "fixture",
       frame,
       page: 0,
-      x: id === 15008 ? 0 : 10,
-      y: id === 15008 ? 0 : 80,
-      width: id === 15008 ? 97 : 25,
-      height: id === 15008 ? 49 : 45,
-      anchor_x: id === 15008 ? 0 : 12,
-      anchor_y: id === 15008 ? 0 : 42,
-    })),
-  );
+      x: source ? source.x + frame * source.width : 160,
+      y: source?.y ?? 80,
+      width: source?.width ?? 25,
+      height: source?.height ?? 45,
+      anchor_x: source ? 0 : 12,
+      anchor_y: source ? 0 : 42,
+    }));
+  });
   const manifest = {
     version: 1,
     converter: "test fixture",

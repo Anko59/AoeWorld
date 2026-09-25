@@ -2,6 +2,85 @@ use super::*;
 
 const INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 40.0;
 
+/// Missing chunks form a deterministic camera-centered frontier. Resident
+/// chunks expand exact height visibility, while this frontier prevents unseen
+/// high relief from being permanently outside the first request rectangle.
+/// Progress is bounded by the map, request concurrency, and cache limits; no
+/// fixed elevation margin is used as the convergence proof.
+pub(super) fn discovery_chunks(client: &Client, budget: usize) -> Vec<(i32, i32)> {
+    let center = [
+        (client.camera.center[0] / f64::from(CHUNK_TILES)) as i32,
+        (client.camera.center[1] / f64::from(CHUNK_TILES)) as i32,
+    ];
+    let extent = [
+        (client.config.width_tiles + CHUNK_TILES - 1) / CHUNK_TILES,
+        (client.config.height_tiles + CHUNK_TILES - 1) / CHUNK_TILES,
+    ];
+    frontier_chunks(center, extent, budget, |coordinate| {
+        client.terrain_chunks.contains_key(&coordinate)
+            || client.terrain_discovered.contains(&coordinate)
+            || client.terrain_inflight.contains(&coordinate)
+    })
+}
+
+pub(super) fn frontier_chunks(
+    center: [i32; 2],
+    extent: [i32; 2],
+    budget: usize,
+    mut excluded: impl FnMut((i32, i32)) -> bool,
+) -> Vec<(i32, i32)> {
+    if budget == 0 {
+        return Vec::new();
+    }
+    let mut result = Vec::with_capacity(budget);
+    for radius in 0..extent[0].max(extent[1]) {
+        for coordinate in discovery_ring(center, extent, radius) {
+            if excluded(coordinate) {
+                continue;
+            }
+            result.push(coordinate);
+            if result.len() == budget {
+                return result;
+            }
+        }
+    }
+    result
+}
+
+pub(super) fn discovery_ring(center: [i32; 2], extent: [i32; 2], radius: i32) -> Vec<(i32, i32)> {
+    if radius == 0 {
+        return valid_chunk(center, extent).into_iter().collect();
+    }
+    let mut chunks = Vec::new();
+    for y in center[1] - radius..=center[1] + radius {
+        for x in center[0] - radius..=center[0] + radius {
+            if x.abs_diff(center[0]) == radius as u32 || y.abs_diff(center[1]) == radius as u32 {
+                chunks.extend(valid_chunk([x, y], extent));
+            }
+        }
+    }
+    chunks.sort_by(|left, right| {
+        chunk_distance(*left, center)
+            .total_cmp(&chunk_distance(*right, center))
+            .then(left.cmp(right))
+    });
+    chunks
+}
+
+fn valid_chunk(coordinate: [i32; 2], extent: [i32; 2]) -> Option<(i32, i32)> {
+    (coordinate[0] >= 0
+        && coordinate[1] >= 0
+        && coordinate[0] < extent[0]
+        && coordinate[1] < extent[1])
+        .then_some((coordinate[0], coordinate[1]))
+}
+
+fn chunk_distance(coordinate: (i32, i32), center: [i32; 2]) -> f64 {
+    let x = f64::from(coordinate.0 - center[0]);
+    let y = f64::from(coordinate.1 - center[1]);
+    x.mul_add(x, y * y)
+}
+
 pub(super) fn visible_tiles_for_height_bounds(
     camera: Camera,
     config: aoe_core::WorldConfig,

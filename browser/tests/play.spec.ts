@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
+import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
 
 async function waitForGame(page: Page) {
@@ -22,25 +23,6 @@ async function bluePixels(canvas: ReturnType<Page["locator"]>) {
     if (b > 150 && b > r + 30 && b > g + 30) blue += 1;
   }
   return blue;
-}
-
-function syntheticTerrainCoverage(image: PNG) {
-  let covered = 0;
-  let samples = 0;
-  for (let y = 8; y < image.height - 8; y += 8) {
-    for (let x = 8; x < image.width - 8; x += 8) {
-      const offset = (y * image.width + x) * 4;
-      samples += 1;
-      if (
-        image.data[offset] === 70 &&
-        image.data[offset + 1] === 120 &&
-        image.data[offset + 2] === 55
-      ) {
-        covered += 1;
-      }
-    }
-  }
-  return covered / samples;
 }
 
 function assetTerrainColorVariety(image: PNG) {
@@ -90,9 +72,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   await expect
     .poll(() => bluePixels(canvas), { timeout: 10_000 })
     .toBeGreaterThan(10);
-  const first = await canvas.screenshot({
-    path: `../reports/e2e/aoeworld-map-${testInfo.project.name}.png`,
-  });
+  const first = await canvas.screenshot();
   const image = PNG.sync.read(first);
   let green = 0;
   let blue = 0;

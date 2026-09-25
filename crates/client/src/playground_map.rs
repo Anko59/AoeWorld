@@ -12,9 +12,17 @@ use web_sys::Response;
 
 #[path = "playground_map/heights.rs"]
 mod heights;
+#[path = "playground_map/state.rs"]
+pub(crate) mod state;
+#[path = "playground_map/ui.rs"]
+pub(crate) mod ui;
 use heights::{
     include_chunk_height_bounds, refresh_chunk_height_bounds, visible_tiles_for_height_bounds,
 };
+
+pub(super) fn install_fixture_chunk(client: &mut Client, chunk: &Chunk) {
+    include_chunk_height_bounds(client, chunk);
+}
 
 const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 512;
@@ -32,6 +40,7 @@ pub(super) fn cache_status(client: &Client) -> String {
 
 pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_chunks.clear();
+    client.terrain_discovered.clear();
     client.terrain_height_bounds = None;
     client.terrain_inflight.clear();
 }
@@ -74,13 +83,18 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let Some(content_hash) = client.map_content_hash else {
             return;
         };
-        let requests = visible_chunks(&client)
-            .into_iter()
-            .filter(|coordinate| {
-                !client.terrain_chunks.contains_key(coordinate)
-                    && client.terrain_inflight.insert(*coordinate)
-            })
-            .collect::<Vec<_>>();
+        let mut requests = visible_chunks(&client);
+        if requests.len() < MAX_REQUESTED_CHUNKS {
+            requests.extend(heights::discovery_chunks(
+                &client,
+                MAX_REQUESTED_CHUNKS - requests.len(),
+            ));
+        }
+        requests.truncate(MAX_REQUESTED_CHUNKS);
+        requests.retain(|coordinate| {
+            !client.terrain_chunks.contains_key(coordinate)
+                && client.terrain_inflight.insert(*coordinate)
+        });
         (client.connection_id, content_hash, requests)
     };
     let content_hash = map_hash
@@ -100,6 +114,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
             match result {
                 Ok(chunk) => {
                     include_chunk_height_bounds(&mut client, &chunk);
+                    client.terrain_discovered.insert((x, y));
                     client.terrain_chunks.insert((x, y), chunk);
                     initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
