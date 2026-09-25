@@ -413,6 +413,33 @@ fn overview_fixture() -> PreparedOverview {
     }
 }
 
+#[test]
+fn source_backed_overview_ocean_rejects_provenance_and_grid_corruption() {
+    let mut fixture = overview_fixture();
+    fixture.provenance.water = LayerProvenance::SourceDerived;
+    let values = super::source_backed_overview_ocean(&fixture).expect("complete grid");
+    assert_eq!(values.len(), 128 * 128);
+    assert!(values.iter().all(|value| *value == 100));
+
+    fixture.provenance.water = LayerProvenance::Fallback;
+    assert!(super::source_backed_overview_ocean(&fixture).is_err());
+
+    let mut incomplete = overview_fixture();
+    incomplete.provenance.water = LayerProvenance::SourceDerived;
+    incomplete.water_pages.pop();
+    assert!(super::source_backed_overview_ocean(&incomplete).is_err());
+
+    let mut duplicate = overview_fixture();
+    duplicate.provenance.water = LayerProvenance::SourceDerived;
+    duplicate.water_pages.push(duplicate.water_pages[0].clone());
+    assert!(super::source_backed_overview_ocean(&duplicate).is_err());
+
+    let mut outside = overview_fixture();
+    outside.provenance.water = LayerProvenance::SourceDerived;
+    outside.water_pages[0].x = 2;
+    assert!(super::source_backed_overview_ocean(&outside).is_err());
+}
+
 fn fixture_source_lock(id: &str) -> aoe_map::SourceLock {
     aoe_map::SourceLock {
         id: id.to_owned(),

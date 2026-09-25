@@ -119,6 +119,31 @@ fn reserved_observation_bits_and_unknown_kinds_are_rejected() {
 }
 
 #[test]
+fn worldcover_evidence_codes_round_trip_every_documented_class() {
+    let mut tile = MapChunkGenerator::new([7; 32], 11, 64)
+        .tile_at(TileCoord::new(0, 0))
+        .expect("fixture tile");
+    for class in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100] {
+        tile.hydrology_observation = None;
+        tile.modern_land_cover_class = Some(class);
+        let properties =
+            pack_observation_properties(Tile { ..tile }).expect("valid WorldCover class");
+        assert_eq!(
+            unpack_observation_properties(properties).expect("decoded class"),
+            (None, Some(class))
+        );
+    }
+    tile.hydrology_observation = None;
+    tile.modern_land_cover_class = None;
+    assert_eq!(pack_observation_properties(tile), Ok(0));
+    tile.modern_land_cover_class = Some(55);
+    assert_eq!(
+        pack_observation_properties(tile),
+        Err(CompactChunkError::InvalidEnum)
+    );
+}
+
+#[test]
 fn compact_chunk_rejects_truncated_and_trailing_payload_bytes() {
     for length in [HEADER_BYTES + TILE_BYTES - 1, HEADER_BYTES + TILE_BYTES + 1] {
         let mut bytes = vec![0; length];
@@ -151,4 +176,105 @@ fn oversized_hex_is_rejected_before_allocation() {
         payload_hex: "00".repeat(MAX_DECODED_CHUNK_BYTES + 1),
     };
     assert_eq!(compact.decode(), Err(CompactChunkError::PayloadTooLarge));
+}
+
+#[test]
+fn encode_and_decode_reject_impossible_tile_resource_counts_before_allocating() {
+    let tile = MapChunkGenerator::new([1; 32], 2, 32)
+        .tile_at(TileCoord::new(0, 0))
+        .expect("tile");
+    let too_many_tiles = Chunk {
+        x: 0,
+        y: 0,
+        tiles: vec![tile; MAX_CHUNK_TILES + 1],
+        resources: Vec::new(),
+    };
+    assert_eq!(
+        CompactChunk::encode(&too_many_tiles),
+        Err(CompactChunkError::TooManyTiles)
+    );
+
+    let resource = ResourceNode {
+        id: 1,
+        tile: TileCoord::new(0, 0),
+        kind: ResourceKind::Wood,
+        object: ObjectKind::Tree,
+        initial_amount: 10,
+        visual_variant: 0,
+    };
+    let too_many_resources = Chunk {
+        x: 0,
+        y: 0,
+        tiles: vec![tile],
+        resources: vec![resource, resource],
+    };
+    assert_eq!(
+        CompactChunk::encode(&too_many_resources),
+        Err(CompactChunkError::TooManyResources)
+    );
+
+    let unsupported = CompactChunk {
+        x: 0,
+        y: 0,
+        payload_hex: encode_hex(&[3, 0, 0, 0, 0]),
+    };
+    assert_eq!(
+        unsupported.decode(),
+        Err(CompactChunkError::UnsupportedVersion)
+    );
+
+    let too_many_decoded_tiles = CompactChunk {
+        x: 0,
+        y: 0,
+        payload_hex: encode_hex(&[2, 1, 4, 0, 0]),
+    };
+    assert_eq!(
+        too_many_decoded_tiles.decode(),
+        Err(CompactChunkError::TooManyTiles)
+    );
+
+    let too_many_decoded_resources = CompactChunk {
+        x: 0,
+        y: 0,
+        payload_hex: encode_hex(&[2, 1, 0, 2, 0]),
+    };
+    assert_eq!(
+        too_many_decoded_resources.decode(),
+        Err(CompactChunkError::TooManyResources)
+    );
+}
+
+#[test]
+fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
+    for value in 0..=11 {
+        assert!(ground_material(value).is_ok(), "material {value}");
+    }
+    for value in 0..=9 {
+        assert!(biome(value).is_ok(), "biome {value}");
+    }
+    for value in 0..=4 {
+        assert!(provenance(value).is_ok(), "provenance {value}");
+        assert!(water_kind(value).is_ok(), "water {value}");
+    }
+    for value in 0..=2 {
+        assert!(surface_kind(value).is_ok(), "surface {value}");
+    }
+    for value in 0..=1 {
+        assert!(diagonal(value).is_ok(), "diagonal {value}");
+    }
+    for value in 0..=3 {
+        assert!(resource_kind(value).is_ok(), "resource {value}");
+    }
+    for value in 0..=4 {
+        assert!(object_kind(value).is_ok(), "object {value}");
+    }
+
+    assert_eq!(ground_material(12), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(biome(10), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(provenance(5), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(water_kind(5), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(surface_kind(3), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(diagonal(2), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(resource_kind(4), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(object_kind(5), Err(CompactChunkError::InvalidEnum));
 }

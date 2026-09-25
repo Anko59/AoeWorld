@@ -79,8 +79,10 @@ it is not a prepared-page generation fixture.
 The uncommitted recipe-4 source branch generated and verified the same fixed
 Paris request at hash
 `f591d9b8c347c2d268dfcf4baaa8c97a8390ffb8c41c857b5dc402fee26302b3`.
-Its 3×3 start-footprint policy activates while preserving the old recipe-3
-5×5 policy. The fixed east endpoint `(49998,24999)` is passable grass with no
+An earlier staged version briefly used a 3×3 start footprint only for recipe 4.
+That policy change was rejected during integration: recipes 3 and 4 both keep
+the established 5×5 clear start footprint. The fixed east endpoint
+`(49998,24999)` is passable grass with no
 resource or water, but exact sparse A* proves it disconnected from the chosen
 start in 4,137 work units and 461 peak retained entries, far below the
 12,800,000/524,288 caps. All 23 eligible starts found within the same 64

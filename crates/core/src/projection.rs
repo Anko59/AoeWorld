@@ -272,4 +272,40 @@ mod tests {
         assert_eq!(rect.min, TileCoord::new(0, 0));
         assert!(rect.max.x <= 100 && rect.max.y <= 80);
     }
+
+    #[test]
+    fn camera_center_is_clamped_inside_virtual_world_bounds() {
+        let config = WorldConfig::new(10, 8, Seed(1)).unwrap();
+        let camera = Camera {
+            center: [0.0, 0.0],
+            zoom: 1.0,
+            viewport: [512.0, 256.0],
+            focus_elevation_meters: 0.0,
+        }
+        .clamp_center(config);
+        assert_eq!(camera.center, [4.0, 0.0]);
+
+        let far = Camera {
+            center: [1_000.0, 1_000.0],
+            zoom: 1.0,
+            viewport: [512.0, 256.0],
+            focus_elevation_meters: 0.0,
+        }
+        .clamp_center(config);
+        assert_eq!(far.center, [6.0, 8.0]);
+    }
+
+    #[test]
+    fn ground_screen_round_trip_uses_the_shared_isometric_plane() {
+        let camera = Camera::new([12.0, 7.0], [800.0, 600.0]);
+        let world = [18.25, 4.5];
+        let screen = camera.world_to_screen(world);
+        let picked = camera.screen_to_world(screen);
+        assert!((picked[0] - world[0]).abs() < 1e-9);
+        assert!((picked[1] - world[1]).abs() < 1e-9);
+        assert_eq!(
+            camera.world_to_screen(camera.center),
+            ScreenPoint { x: 400.0, y: 300.0 }
+        );
+    }
 }

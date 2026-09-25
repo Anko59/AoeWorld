@@ -11,6 +11,7 @@ use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod clearing;
 mod elevation;
 mod fallback;
 mod provider;
@@ -130,6 +131,7 @@ pub struct MapChunkGenerator {
     provider: Option<Arc<dyn EnvironmentPageProvider>>,
     provider_environment: Option<Arc<PreparedEnvironment>>,
     provider_compression: Option<Ratio>,
+    elevation_sampling_recipe: u16,
 }
 
 impl MapChunkGenerator {
@@ -145,7 +147,17 @@ impl MapChunkGenerator {
             provider: None,
             provider_environment: None,
             provider_compression: None,
+            elevation_sampling_recipe: crate::GENERATION_RECIPE_VERSION,
         }
+    }
+
+    pub(crate) fn with_elevation_sampling_recipe(mut self, recipe: u16) -> Self {
+        self.elevation_sampling_recipe = recipe;
+        self
+    }
+
+    pub(crate) const fn generation_recipe_version(&self) -> u16 {
+        self.elevation_sampling_recipe
     }
 
     /// Binds an immutable page provider without retaining a complete page
@@ -186,6 +198,7 @@ impl MapChunkGenerator {
                 samples_per_axis: environment.samples_per_axis,
                 compression,
                 pages: level_zero,
+                sampling_recipe: self.elevation_sampling_recipe,
             })),
             water: self.water,
             biome: self.biome,
@@ -193,6 +206,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -225,6 +239,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -257,6 +272,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -288,6 +304,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -376,6 +393,19 @@ impl MapChunkGenerator {
         } else {
             Ok(self.resource_at(tile, sample))
         }
+    }
+
+    /// Applies the deterministic crop/grazing roll used to clear procedural
+    /// vegetation from tiles with historical land-use evidence.
+    pub fn is_tree_suppressed_by_historical_land_use(
+        &self,
+        tile: TileCoord,
+        crop_percent: u8,
+        grazing_percent: u8,
+    ) -> bool {
+        let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
+            ^ self.procedural_seed.rotate_left(17);
+        value % 100 < u64::from(crop_percent) + u64::from(grazing_percent)
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {

@@ -46,8 +46,30 @@ fn ocean_page_flatten_rejects_missing_and_duplicate_pages() {
     };
     assert!(flatten_ocean_pages(2, std::slice::from_ref(&page)).is_ok());
     assert!(flatten_ocean_pages(3, std::slice::from_ref(&page)).is_err());
-    assert!(flatten_ocean_pages(2, &[page.clone(), page]).is_err());
+    assert!(flatten_ocean_pages(2, &[page.clone(), page.clone()]).is_err());
     assert!(flatten_ocean_pages(2, &[]).is_err());
+
+    let zero_height = aoe_map::WaterPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 0,
+        ocean_coverage_percent: Vec::new(),
+        inland_coverage_percent: Vec::new(),
+    };
+    assert!(matches!(
+        flatten_ocean_pages(2, std::slice::from_ref(&zero_height)),
+        Err(GeodataError::Preparation("ocean page has zero dimensions"))
+    ));
+    let malformed = aoe_map::WaterPage {
+        ocean_coverage_percent: vec![0; 3],
+        ..page.clone()
+    };
+    assert!(matches!(
+        flatten_ocean_pages(2, std::slice::from_ref(&malformed)),
+        Err(GeodataError::Preparation("ocean page shape is invalid"))
+    ));
 }
 
 #[test]
@@ -80,6 +102,12 @@ fn overview_ocean_coverage_resamples_by_target_cell_center() {
         resample_ocean_coverage(4, 2, &[page]).expect("downsample"),
         vec![5, 7, 13, 15]
     );
+    assert!(matches!(
+        resample_ocean_coverage(1, 2, &[]),
+        Err(GeodataError::Preparation(
+            "ocean resampling axes are outside supported bounds"
+        ))
+    ));
 }
 
 #[test]
@@ -89,4 +117,126 @@ fn vector_geometry_budget_counts_retained_buffer_and_transient_source() {
         60
     );
     assert!(checked_geometry_bytes(1, MAX_PAGE_GEOMETRY_BYTES, 1).is_err());
+}
+
+#[test]
+fn hydrology_page_bounds_pad_the_query_without_accepting_empty_or_mismatched_shapes() {
+    assert_eq!(
+        page_bounds(&[2.0, 3.0], &[48.0, 49.0]).expect("bounds"),
+        (1.99, 47.99, 3.01, 49.01)
+    );
+    assert!(matches!(
+        page_bounds(&[], &[]),
+        Err(GeodataError::Preparation(
+            "hydrology page has no coordinates"
+        ))
+    ));
+    assert!(page_bounds(&[2.0], &[48.0, 49.0]).is_err());
+}
+
+#[test]
+fn vector_source_and_local_transform_fail_closed_without_a_real_archive() {
+    assert!(
+        open_vector_source(
+            std::path::Path::new("/tmp/definitely-missing-hydrology.zip"),
+            "missing.shp"
+        )
+        .is_err()
+    );
+    assert!(local_transform("not a projection definition").is_err());
+    assert!(local_transform(&crate::local_aeqd_definition(48_850_000, 2_350_000)).is_ok());
+}
+
+fn worldcover_tile(
+    path: &std::path::Path,
+    latitude: i32,
+    longitude: i32,
+    transform: [f64; 6],
+    value: u8,
+    epsg: i32,
+) -> OpenTile {
+    let driver = gdal::DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
+    let mut dataset = driver
+        .create_with_band_type::<u8, _>(path, 3, 3, 1)
+        .expect("worldcover raster");
+    dataset.set_geo_transform(&transform).expect("transform");
+    dataset
+        .set_spatial_ref(
+            &gdal::spatial_ref::SpatialRef::from_epsg(u32::try_from(epsg).expect("EPSG"))
+                .expect("spatial ref"),
+        )
+        .expect("spatial reference");
+    let mut band = dataset.rasterband(1).expect("band");
+    let mut values = gdal::raster::Buffer::new((3, 3), vec![value; 9]);
+    band.write((0, 0), (3, 3), &mut values).expect("values");
+    dataset.flush_cache().expect("flush");
+    OpenTile {
+        latitude,
+        longitude,
+        dataset,
+    }
+}
+
+#[test]
+fn worldcover_sampling_validates_shape_crs_transform_coverage_and_class() {
+    let directory =
+        std::env::temp_dir().join(format!("aoe-worldcover-sampling-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("WorldCover fixture");
+    let north_up = [2.0, 1.0, 0.0, 50.0, 0.0, -1.0];
+    let first = directory.join("first.tif");
+    let tile = worldcover_tile(&first, 47, 2, north_up, 40, 4326);
+    assert!(matches!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[2.1], &[48.1, 48.2]),
+        Err(GeodataError::Preparation(
+            "WorldCover coordinate shape is invalid"
+        ))
+    ));
+    assert_eq!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[2.1, 2.2], &[48.1, 48.2])
+            .expect("covered samples"),
+        vec![40, 40]
+    );
+    assert!(matches!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[6.0], &[48.0]),
+        Err(GeodataError::Preparation(
+            "selected WorldCover tiles do not cover every requested coordinate"
+        ))
+    ));
+
+    let bad_crs = directory.join("bad-crs.tif");
+    let tile = worldcover_tile(&bad_crs, 47, 2, north_up, 40, 3857);
+    assert!(matches!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[2.5], &[48.5]),
+        Err(GeodataError::Preparation(
+            "WorldCover raster CRS is not EPSG:4326"
+        ))
+    ));
+
+    let rotated = directory.join("rotated.tif");
+    let tile = worldcover_tile(&rotated, 47, 2, [2.0, 1.0, 0.1, 50.0, 0.0, -1.0], 40, 4326);
+    assert!(matches!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[2.5], &[48.5]),
+        Err(GeodataError::Preparation(
+            "WorldCover geotransform is not north-up"
+        ))
+    ));
+
+    let unknown = directory.join("unknown.tif");
+    let tile = worldcover_tile(&unknown, 47, 2, north_up, 55, 4326);
+    assert!(matches!(
+        sample_worldcover_page(std::slice::from_ref(&tile), &[2.5], &[48.5]),
+        Err(GeodataError::Preparation(
+            "WorldCover raster contains an unknown class value"
+        ))
+    ));
+
+    let disagreement = directory.join("disagreement.tif");
+    let second = worldcover_tile(&disagreement, 47, 2, north_up, 30, 4326);
+    assert!(matches!(
+        sample_worldcover_page(&[tile, second], &[2.5], &[48.5]),
+        Err(GeodataError::Preparation(
+            "overlapping WorldCover tiles disagree at a sample"
+        ))
+    ));
+    std::fs::remove_dir_all(directory).expect("remove WorldCover fixture");
 }

@@ -86,3 +86,43 @@ impl GameWorld {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_map::{EnvironmentPage, EnvironmentPageError, EnvironmentPageKey};
+
+    #[derive(Debug)]
+    struct UnusedProvider;
+
+    impl EnvironmentPageProvider for UnusedProvider {
+        fn page(
+            &self,
+            _key: EnvironmentPageKey,
+            _cancelled: &dyn Fn() -> bool,
+        ) -> Result<Arc<EnvironmentPage>, EnvironmentPageError> {
+            panic!("provider must not be queried while constructing a world");
+        }
+    }
+
+    #[test]
+    fn prepared_map_constructor_builds_the_same_bounded_world_as_a_package() {
+        let package =
+            MapPackage::new(1, aoe_map::MapRequest::default(), Vec::new()).expect("package");
+        let world =
+            GameWorld::from_prepared_map(package, Vec::new(), Vec::new(), Vec::new(), Vec::new())
+                .expect("prepared world");
+        assert!(world.terrain().has_map_navigation());
+        assert_eq!(world.config().width_tiles, world.config().height_tiles);
+    }
+
+    #[test]
+    fn page_provider_requires_an_environment_index_before_binding() {
+        let package =
+            MapPackage::new(1, aoe_map::MapRequest::default(), Vec::new()).expect("package");
+        assert!(matches!(
+            GameWorld::from_page_provider(package, Arc::new(UnusedProvider)),
+            Err(GameWorldError::InvalidTerrain)
+        ));
+    }
+}

@@ -151,6 +151,83 @@ fn validation_rejects_tampering_and_old_generation_recipe_identity() {
         ]
     );
 }
+
+fn schema_nine_package_for_recipe(generation_recipe_version: u16) -> MapPackage {
+    MapPackage::with_generation_recipe(
+        crate::MAP_SCHEMA_VERSION,
+        generation_recipe_version,
+        MapRequest::default(),
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        PreparedEnvironment::default(),
+    )
+    .expect("package")
+}
+
+#[test]
+fn supported_generation_recipes_preserve_serialization_and_identity() {
+    let legacy = schema_nine_package_for_recipe(crate::LEGACY_GENERATION_RECIPE_VERSION);
+    let prior = schema_nine_package_for_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
+    let current = schema_nine_package_for_recipe(crate::GENERATION_RECIPE_VERSION);
+
+    assert_eq!(
+        legacy.generation_recipe_version,
+        crate::LEGACY_GENERATION_RECIPE_VERSION
+    );
+    assert_eq!(
+        legacy.content_hash_hex(),
+        "d8aa78b19092802ca080ce67b34389196eb20dcb33bc8dc117f2de9815c9228d"
+    );
+    assert!(legacy.validate().is_ok());
+    let serialized = serde_json::to_value(&legacy).expect("legacy JSON");
+    assert!(
+        !serialized
+            .as_object()
+            .expect("package object")
+            .contains_key("generation_recipe_version")
+    );
+    let decoded: MapPackage = serde_json::from_value(serialized).expect("legacy decode");
+    assert_eq!(decoded, legacy);
+    assert!(decoded.validate().is_ok());
+
+    assert_eq!(
+        prior.generation_recipe_version,
+        crate::PRIOR_GENERATION_RECIPE_VERSION
+    );
+    assert_eq!(
+        prior.content_hash_hex(),
+        "1eb4f33086e24910842a52b65c8a70ec2a40c7c9aba7db5f7b3c566f4f5f8c0c"
+    );
+    assert_eq!(
+        current.generation_recipe_version,
+        crate::GENERATION_RECIPE_VERSION
+    );
+    assert_eq!(
+        MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())
+            .expect("current package"),
+        current
+    );
+    assert_ne!(current.content_hash, legacy.content_hash);
+    assert_ne!(current.content_hash, prior.content_hash);
+    for package in [&prior, &current] {
+        let serialized = serde_json::to_value(package).expect("versioned package JSON");
+        assert_eq!(
+            serialized["generation_recipe_version"],
+            package.generation_recipe_version
+        );
+        let decoded: MapPackage = serde_json::from_value(serialized).expect("versioned decode");
+        assert_eq!(decoded, *package);
+        assert!(decoded.validate().is_ok());
+    }
+
+    let mut unknown = current;
+    unknown.generation_recipe_version = 99;
+    assert_eq!(
+        unknown.validate(),
+        Err(MapPackageError::InvalidGenerationRecipeVersion)
+    );
+}
 #[test]
 fn packages_require_and_hash_projection_metadata() {
     assert!(matches!(
@@ -264,12 +341,20 @@ fn schema_eight_manifest_and_hash_remain_readable_after_schema_nine() {
 
     let current = MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), vec![])
         .expect("current schema package");
+    // The published recipe-4 identity uses the schema-9 generator input; it
+    // is neither the generator-version-1 fixture nor the recipe-5 default.
+    let prior = schema_nine_package_for_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
     assert_eq!(current.schema_version, 9);
     assert_eq!(current.generator_version, 9);
     assert_eq!(
-        current.content_hash_hex(),
-        "d8aa78b19092802ca080ce67b34389196eb20dcb33bc8dc117f2de9815c9228d"
+        current.generation_recipe_version,
+        crate::GENERATION_RECIPE_VERSION
     );
+    assert_eq!(
+        prior.content_hash_hex(),
+        "1eb4f33086e24910842a52b65c8a70ec2a40c7c9aba7db5f7b3c566f4f5f8c0c"
+    );
+    assert_ne!(current.content_hash, prior.content_hash);
     let current_chunk = current
         .generator()
         .chunk(0, 0)

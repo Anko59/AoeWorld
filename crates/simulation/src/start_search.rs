@@ -5,7 +5,11 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 const START_CLEAR_RADIUS: i32 = 2;
 const START_REACHABLE_TILES: usize = 256;
+const START_SEARCH_CHUNKS: usize = 64;
 const START_CACHE_CHUNKS: usize = 256;
+const LEGACY_START_RECIPE: u16 = 3;
+const RECIPE_4_START_RECIPE: u16 = 4;
+const RECIPE_5_START_RECIPE: u16 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartSearchResult {
@@ -20,7 +24,7 @@ impl Terrain {
     /// state proportional to the virtual map area. Candidates use squared
     /// tile-center distance, followed by canonical `(y, x)` ordering.
     pub fn starting_tile(&self, config: WorldConfig) -> Option<TileCoord> {
-        match self.search_start(config, 64, || false) {
+        match self.search_start(config, START_SEARCH_CHUNKS, || false) {
             StartSearchResult::Found(tile) => Some(tile),
             _ => None,
         }
@@ -44,6 +48,22 @@ impl Terrain {
         max_chunks: usize,
         cancelled: impl Fn() -> bool,
     ) -> Result<StartSearchResult, EnvironmentPageError> {
+        self.search_start_for_recipe(config, LEGACY_START_RECIPE, max_chunks, cancelled)
+    }
+
+    /// Validates the package recipe while preserving the established start
+    /// footprint and bounded search for all supported generation recipes.
+    pub fn search_start_for_recipe(
+        &self,
+        config: WorldConfig,
+        generation_recipe_version: u16,
+        max_chunks: usize,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<StartSearchResult, EnvironmentPageError> {
+        match generation_recipe_version {
+            LEGACY_START_RECIPE | RECIPE_4_START_RECIPE | RECIPE_5_START_RECIPE => {}
+            _ => return Err(EnvironmentPageError::Invalid),
+        }
         if cancelled() {
             return Ok(StartSearchResult::Cancelled);
         }
@@ -316,37 +336,5 @@ fn ring_chunks(center: TileCoord, ring: i32) -> Vec<(i32, i32)> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_core::Seed;
-
-    #[test]
-    fn rings_only_visit_their_perimeter_once() {
-        for radius in 1..100 {
-            let ring = ring_chunks(TileCoord::new(4, 7), radius);
-            assert_eq!(ring.len(), radius as usize * 8);
-            assert_eq!(
-                ring.iter().copied().collect::<BTreeSet<_>>().len(),
-                ring.len()
-            );
-        }
-    }
-
-    #[test]
-    fn cancellation_and_budget_are_not_proof_of_absence() {
-        let terrain = Terrain::uniform(1);
-        let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
-        assert_eq!(
-            terrain.search_start(config, 64, || true),
-            StartSearchResult::Cancelled
-        );
-        assert_eq!(
-            terrain.search_start(config, 0, || false),
-            StartSearchResult::LimitReached
-        );
-        assert_eq!(
-            terrain.search_start(config, 1, || false),
-            StartSearchResult::Found(TileCoord::new(31, 31))
-        );
-    }
-}
+#[path = "start_search/tests/start_search.rs"]
+mod tests;
