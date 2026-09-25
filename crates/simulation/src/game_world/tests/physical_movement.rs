@@ -201,3 +201,50 @@ fn physical_corner_replay_has_the_same_canonical_hash() {
         })
     );
 }
+
+#[test]
+fn multi_waypoint_hundred_kilometers_finishes_in_666667_fractional_ticks() {
+    let config = WorldConfig::new(64, 64, Seed(11)).expect("config");
+    let (mut world, unit) = GameWorld::with_cavalry(config).expect("world");
+    let start = world.unit(unit).expect("unit").position;
+    let east = WorldPosition::from_tile_center(TileCoord::new(34, 32)).expect("east");
+    let west = WorldPosition::from_tile_center(TileCoord::new(32, 32)).expect("west");
+    let waypoints = (0..25_000)
+        .map(|leg| if leg % 2 == 0 { east } else { west })
+        .collect::<Vec<_>>();
+    assert!(
+        world
+            .issue_move_waypoints(unit, &waypoints)
+            .expect("predetermined route")
+    );
+
+    let distance_subunits = 25_000_u128 * 2_048;
+    let expected_ticks = (distance_subunits
+        * u128::from(world.config().move_speed_subunits_per_tick_denominator))
+    .div_ceil(u128::try_from(world.config().move_speed_subunits_per_tick).expect("positive speed"));
+    assert_eq!(expected_ticks, 666_667);
+    let denominator = world.config().move_speed_subunits_per_tick_denominator;
+    let mut previous_origin = start;
+    let mut fractional_boundaries = 0_u64;
+    let mut completed_at = None;
+    for tick in 1..=expected_ticks {
+        world.advance();
+        if let Some(order) = world.movement_order(unit) {
+            if order.origin != previous_origin {
+                assert!(order.speed_carry < denominator);
+                if order.speed_carry > 0 {
+                    fractional_boundaries += 1;
+                }
+            }
+            previous_origin = order.origin;
+        } else {
+            completed_at = Some(tick);
+            assert_eq!(tick, expected_ticks);
+        }
+    }
+
+    assert_eq!(completed_at, Some(expected_ticks));
+    assert!(fractional_boundaries > 0);
+    assert_eq!(world.movement_order(unit), None);
+    assert_eq!(world.unit(unit).expect("unit").position, start);
+}
