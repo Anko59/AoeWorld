@@ -194,3 +194,71 @@ fn river_evidence_is_limited_to_the_documented_western_europe_window() {
     let outside = request_bounds(outside).expect("outside bounds");
     assert!(!supports_hydrorivers(outside));
 }
+
+#[test]
+fn hydrology_plan_rejects_invalid_requests_before_creating_a_cache() {
+    let root =
+        std::env::temp_dir().join(format!("aoe-hydrology-plan-invalid-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let invalid = MapRequest {
+        schema_version: 2,
+        ..MapRequest::default()
+    };
+    assert!(matches!(
+        preflight_hydrology(&root, invalid),
+        Err(GeodataError::Preparation("invalid map request"))
+    ));
+    assert!(!root.exists());
+}
+
+#[test]
+fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
+    let root =
+        std::env::temp_dir().join(format!("aoe-hydrology-plan-prepare-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let plan = HydrologySourcePlan {
+        worldcover: Vec::new(),
+        sources: Vec::new(),
+        rivers_available: false,
+    };
+    assert!(matches!(
+        prepare_hydrology_with_plan(
+            root.clone(),
+            MapRequest::default(),
+            1,
+            HydrologySourcePlan {
+                worldcover: Vec::new(),
+                sources: Vec::new(),
+                rivers_available: false,
+            },
+            &[],
+        ),
+        Err(GeodataError::Preparation(
+            "hydrology preparation supports 2 through 1024 samples per axis"
+        ))
+    ));
+    assert!(matches!(
+        prepare_hydrology_with_plan(
+            root.clone(),
+            MapRequest {
+                schema_version: 2,
+                ..MapRequest::default()
+            },
+            2,
+            HydrologySourcePlan {
+                worldcover: Vec::new(),
+                sources: Vec::new(),
+                rivers_available: false,
+            },
+            &[],
+        ),
+        Err(GeodataError::Preparation("invalid map request"))
+    ));
+    assert!(matches!(
+        prepare_hydrology_with_plan(root.clone(), MapRequest::default(), 2, plan, &[]),
+        Err(GeodataError::Preparation(
+            "HydroLAKES cache path is missing"
+        ))
+    ));
+    let _ = std::fs::remove_dir_all(root);
+}

@@ -55,3 +55,75 @@ impl GameplayService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_core::Seed;
+    use aoe_protocol::GameplayServerMessage;
+    use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn controller_disconnect_retire_and_delivery_are_observable() {
+        let service = GameplayService::new(Seed(1));
+        assert!(service.world_id() > 0);
+
+        let (controller_tx, mut controller_rx) = mpsc::channel(8);
+        let (controller_id, welcome) = service.register(None, controller_tx).await;
+        let token = match welcome {
+            GameplayServerMessage::Welcome {
+                role, resume_token, ..
+            } => {
+                assert_eq!(role, GameplayRole::Controller);
+                resume_token.expect("controller resume token")
+            }
+            message => panic!("unexpected welcome: {message:?}"),
+        };
+        assert!(service.is_controller(token).await);
+
+        let (spectator_tx, mut spectator_rx) = mpsc::channel(8);
+        let (spectator_id, welcome) = service.register(None, spectator_tx).await;
+        assert!(matches!(
+            welcome,
+            GameplayServerMessage::Welcome {
+                role: GameplayRole::Spectator,
+                resume_token: None,
+                ..
+            }
+        ));
+
+        service
+            .send_to(
+                spectator_id,
+                GameplayServerMessage::Error {
+                    code: 400,
+                    message: "test delivery".to_owned(),
+                },
+            )
+            .await;
+        assert!(matches!(
+            spectator_rx.try_recv().expect("spectator message"),
+            GameplayServerMessage::Error { code: 400, .. }
+        ));
+
+        service.disconnect(controller_id).await;
+        assert!(!service.is_controller(token).await);
+
+        service.retire(99).await;
+        assert!(matches!(
+            spectator_rx.try_recv().expect("retirement reset"),
+            GameplayServerMessage::WorldReset { world_id: 99 }
+        ));
+        service
+            .send_to(
+                spectator_id,
+                GameplayServerMessage::Error {
+                    code: 500,
+                    message: "after retire".to_owned(),
+                },
+            )
+            .await;
+        assert!(spectator_rx.try_recv().is_err());
+        assert!(controller_rx.try_recv().is_err());
+    }
+}
