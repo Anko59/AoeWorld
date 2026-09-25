@@ -101,3 +101,58 @@ impl GameWorld {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_core::CoordinateError;
+    use aoe_map::EnvironmentPageError;
+
+    #[test]
+    fn movement_error_codes_stay_stable_for_replay_compatibility() {
+        for (error, expected) in [
+            (
+                GameWorldError::InvalidConfig(CoordinateError::NegativeTile),
+                1,
+            ),
+            (GameWorldError::InvalidConfig(CoordinateError::Overflow), 2),
+            (
+                GameWorldError::InvalidConfig(CoordinateError::InvalidDimensions),
+                3,
+            ),
+            (
+                GameWorldError::InvalidConfig(CoordinateError::InvalidSimulationConfig),
+                4,
+            ),
+            (GameWorldError::InvalidPosition, 5),
+            (GameWorldError::Unreachable, 6),
+            (GameWorldError::PathBudgetExceeded, 7),
+            (GameWorldError::UnknownEntity, 8),
+            (GameWorldError::StartSearchLimit, 9),
+            (GameWorldError::EntityIdExhausted, 10),
+            (GameWorldError::InvalidTerrain, 11),
+            (
+                GameWorldError::Environment(EnvironmentPageError::Missing),
+                20,
+            ),
+            (
+                GameWorldError::Environment(EnvironmentPageError::Corrupt),
+                21,
+            ),
+            (
+                GameWorldError::Environment(EnvironmentPageError::Unavailable),
+                22,
+            ),
+            (
+                GameWorldError::Environment(EnvironmentPageError::Cancelled),
+                23,
+            ),
+            (
+                GameWorldError::Environment(EnvironmentPageError::Invalid),
+                24,
+            ),
+        ] {
+            assert_eq!(movement_error_code(error), expected, "{error}");
+        }
+    }
+}

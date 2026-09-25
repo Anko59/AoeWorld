@@ -126,3 +126,65 @@ pub(super) fn make_token(world_id: u64, counter: u64) -> ResumeToken {
     }
     ResumeToken(bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_core::Seed;
+    use std::time::Instant;
+
+    #[tokio::test]
+    async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
+        let service = GameplayService::new(Seed(1));
+        let (old_tx, _old_rx) = mpsc::channel(8);
+        let (old_id, _) = service.register(None, old_tx).await;
+        let (next_tx, mut next_rx) = mpsc::channel(8);
+        let (next_id, _) = service.register(None, next_tx).await;
+
+        let mut ownership = service.ownership.lock().await;
+        let mut sessions = service.sessions.lock().await;
+        sessions.remove(&old_id);
+        let expired_at = Instant::now()
+            .checked_sub(LEASE_RESERVATION)
+            .unwrap_or_else(Instant::now);
+        ownership.controller = Some(ControllerLease {
+            session_id: old_id,
+            token: make_token(service.world_id, ownership.next_token),
+            disconnected_at: Some(expired_at),
+        });
+
+        promote_expired(&mut ownership, &mut sessions, service.world_id, EntityId(7));
+        assert_eq!(
+            sessions.get(&next_id).map(|session| session.role),
+            Some(GameplayRole::Controller)
+        );
+        assert_eq!(
+            ownership.controller.as_ref().map(|lease| lease.session_id),
+            Some(next_id)
+        );
+        assert!(matches!(
+            next_rx.try_recv().expect("role change"),
+            GameplayServerMessage::RoleChange {
+                role: GameplayRole::Controller,
+                primary_unit_id: EntityId(7),
+                resume_token: Some(_),
+            }
+        ));
+
+        ownership.controller = Some(ControllerLease {
+            session_id: next_id,
+            token: make_token(service.world_id, ownership.next_token),
+            disconnected_at: Some(expired_at),
+        });
+        sessions.clear();
+        promote_expired(&mut ownership, &mut sessions, service.world_id, EntityId(7));
+        assert!(ownership.controller.is_none());
+    }
+
+    #[test]
+    fn token_generation_is_deterministic_for_world_and_counter() {
+        assert_eq!(make_token(42, 7), make_token(42, 7));
+        assert_ne!(make_token(42, 7), make_token(42, 8));
+        assert_ne!(make_token(42, 7), make_token(43, 7));
+    }
+}

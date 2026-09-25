@@ -133,6 +133,119 @@ mod tests {
         fs::remove_dir_all(root).expect("remove temporary cache");
     }
 
+    fn static_source(bytes: u64) -> KnownSource {
+        KnownSource {
+            id: "estimate-budget-source".to_owned(),
+            provider: Provider::Noaa,
+            release: "test".to_owned(),
+            url: "https://www.ngdc.noaa.gov/estimate-budget.tif".to_owned(),
+            bytes,
+            expected_checksum: ExpectedChecksum::Sha256([7; 32]),
+            native_resolution: "test".to_owned(),
+            crs: "EPSG:4326".to_owned(),
+            vertical_datum: "test".to_owned(),
+            license_reference: "test".to_owned(),
+        }
+    }
+
+    #[test]
+    fn acquisition_estimate_rejects_invalid_batches_before_budget_accounting() {
+        let root = temporary_directory();
+        let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
+        let duplicate = static_source(3);
+        let error = cache
+            .estimate_known_acquisition(&[duplicate.clone(), duplicate])
+            .expect_err("duplicate identifier");
+        assert!(matches!(error, CacheError::InvalidLock(_)));
+        let mut empty_id = static_source(3);
+        empty_id.id.clear();
+        assert!(matches!(
+            cache.estimate_known_acquisition(&[empty_id]),
+            Err(CacheError::InvalidLock(_))
+        ));
+        fs::remove_dir_all(root).expect("remove temporary cache");
+    }
+
+    #[test]
+    fn acquisition_estimate_enforces_both_transfer_budgets() {
+        let source = static_source(3);
+        let job_limited_root = temporary_directory();
+        let job_limited = SourceCache::new(
+            job_limited_root.clone(),
+            DownloadPolicy {
+                cache_quota_bytes: 100,
+                job_acquisition_budget_bytes: 2,
+            },
+        )
+        .expect("job-limited cache");
+        assert!(matches!(
+            job_limited.estimate_known_acquisition(std::slice::from_ref(&source)),
+            Err(CacheError::Budget(_))
+        ));
+        fs::remove_dir_all(job_limited_root).expect("remove job-limited cache");
+
+        let quota_limited_root = temporary_directory();
+        let quota_limited = SourceCache::new(
+            quota_limited_root.clone(),
+            DownloadPolicy {
+                cache_quota_bytes: 2,
+                job_acquisition_budget_bytes: 3,
+            },
+        )
+        .expect("quota-limited cache");
+        assert!(matches!(
+            quota_limited.estimate_known_acquisition(&[source]),
+            Err(CacheError::Budget(_))
+        ));
+        fs::remove_dir_all(quota_limited_root).expect("remove quota-limited cache");
+    }
+
+    #[test]
+    fn provider_verified_dynamic_lock_counts_as_cached_transfer() {
+        let root = temporary_directory();
+        let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
+        let source = KnownSource {
+            id: "worldcover-2021-v200:ESA_WorldCover_10m_2021_v200_N00E000_Map.tif".to_owned(),
+            provider: Provider::EsaWorldCover,
+            release: "ESA WorldCover 2021 v200".to_owned(),
+            url: format!(
+                "{}/ESA_WorldCover_10m_2021_v200_N00E000_Map.tif",
+                "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map"
+            ),
+            bytes: 3,
+            expected_checksum: ExpectedChecksum::Sha256OnFirstAcquisition,
+            native_resolution: "10 meters".to_owned(),
+            crs: "EPSG:4326".to_owned(),
+            vertical_datum: "not applicable".to_owned(),
+            license_reference: "CC BY 4.0; ESA WorldCover attribution required".to_owned(),
+        };
+        let lock = crate::SourceLock {
+            id: source.id.clone(),
+            provider: source.provider,
+            release: source.release.clone(),
+            url: source.url.clone(),
+            sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned(),
+            bytes: source.bytes,
+            native_resolution: source.native_resolution.clone(),
+            crs: source.crs.clone(),
+            vertical_datum: source.vertical_datum.clone(),
+            license_reference: source.license_reference.clone(),
+        };
+        fs::write(cache.object_path(&lock).expect("object"), b"abc").expect("object bytes");
+        cache.remember_known(&source, &lock).expect("known lock");
+        assert_eq!(
+            cache
+                .estimate_known_acquisition(std::slice::from_ref(&source))
+                .expect("dynamic cached estimate"),
+            AcquisitionEstimate {
+                source_count: 1,
+                cached_bytes: 3,
+                download_bytes: 0
+            }
+        );
+        fs::remove_dir_all(root).expect("remove temporary cache");
+    }
+
     fn temporary_directory() -> std::path::PathBuf {
         let serial = NEXT_TEMP.fetch_add(1, Ordering::SeqCst);
         let nanos = SystemTime::now()
