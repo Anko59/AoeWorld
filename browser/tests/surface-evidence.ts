@@ -23,6 +23,7 @@ export async function saveSelectedCapture(
   page: Page,
   image: Buffer,
   project: string,
+  renderer: string,
   evidence: string,
   kind: CaptureKind,
 ): Promise<string> {
@@ -42,6 +43,18 @@ export async function saveSelectedCapture(
   await mkdir(directory, { recursive: true });
   await writeFile(capture, image);
   expect((await readFile(capture)).equals(image)).toBe(true);
+  const metadata = {
+    version: 1,
+    project,
+    renderer,
+    asset_source: privateAssets ? "local AoE II pack" : "generated CI fixtures",
+    capture: fileURLToPath(capture),
+    kind,
+  };
+  await writeFile(
+    new URL(`${prefix}-${scope}${project}.json`, directory),
+    JSON.stringify(metadata, null, 2),
+  );
   return fileURLToPath(capture);
 }
 

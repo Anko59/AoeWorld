@@ -120,7 +120,7 @@ fn frontier_discovers_unseen_high_relief_that_expands_the_authoritative_bound() 
         viewport: [512.0, 256.0],
         focus_elevation_meters: 0.0,
     };
-    let high_tile = (290, 274);
+    let high_tile = (290, 272);
     let initial = visible_tiles_for_height_bounds(camera, config, 0.0, None);
     assert!(
         high_tile.0 < initial.min.x
@@ -137,7 +137,8 @@ fn frontier_discovers_unseen_high_relief_that_expands_the_authoritative_bound() 
         tile.game_height_level = 0;
         tile.surface.corner_game_height_levels = [0; 4];
     }
-    let evidence = &mut chunk.tiles[514];
+    let high_index = fixture_chunk_tile_index(high_tile, (9, 8));
+    let evidence = &mut chunk.tiles[high_index];
     evidence.game_height_level = 52;
     evidence.surface.corner_game_height_levels = [52; 4];
     assert_eq!(heights::chunk_height_bounds(&chunk), Some((0, 52)));
@@ -187,7 +188,8 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         viewport: [512.0, 256.0],
         focus_elevation_meters: 0.0,
     };
-    let high_tile = (290, 274);
+    let high_tile = (290, 272);
+    let high_index = fixture_chunk_tile_index(high_tile, (9, 8));
     let Ok(mut high) = MapChunkGenerator::new([0; 32], 1, 512).chunk(9, 8) else {
         assert!(false, "high-relief fetch chunk");
         return;
@@ -196,8 +198,8 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         tile.game_height_level = 0;
         tile.surface.corner_game_height_levels = [0; 4];
     }
-    high.tiles[514].game_height_level = 52;
-    high.tiles[514].surface.corner_game_height_levels = [52; 4];
+    high.tiles[high_index].game_height_level = 52;
+    high.tiles[high_index].surface.corner_game_height_levels = [52; 4];
 
     let Ok(mut low) = MapChunkGenerator::new([0; 32], 1, 512).chunk(8, 8) else {
         assert!(false, "low-relief fetch chunk");
@@ -261,10 +263,27 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
 
     chunks.insert((9, 8), high);
     discovered.insert((9, 8));
+    let Some(resident) = chunks.get(&(9, 8)) else {
+        assert!(false, "high-relief chunk is resident");
+        return;
+    };
+    assert_eq!(resident.tiles[high_index].game_height_level, 52);
     assert_eq!(
         heights::resident_height_bounds(chunks.values()),
         Some((0, 52))
     );
+}
+
+fn fixture_chunk_tile_index(tile: (i32, i32), chunk: (i32, i32)) -> usize {
+    let Ok(local_x) = usize::try_from(tile.0 - chunk.0 * CHUNK_TILES) else {
+        assert!(false, "local x is inside the chunk");
+        return 0;
+    };
+    let Ok(local_y) = usize::try_from(tile.1 - chunk.1 * CHUNK_TILES) else {
+        assert!(false, "local y is inside the chunk");
+        return 0;
+    };
+    local_y * (CHUNK_TILES as usize) + local_x
 }
 
 #[wasm_bindgen_test]
