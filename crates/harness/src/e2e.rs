@@ -41,6 +41,8 @@ impl Drop for Server {
 
 struct BrowserContainer(String);
 
+const BROWSER_RUN_DEADLINE: Duration = Duration::from_secs(300);
+
 impl Drop for BrowserContainer {
     fn drop(&mut self) {
         let _ = Command::new("docker")
@@ -143,7 +145,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let result = process::run_cancellable(
                 "docker",
                 &refs,
-                Duration::from_secs(180),
+                BROWSER_RUN_DEADLINE,
                 &worker_cancellation,
             );
             let _ = sender.send(result);
