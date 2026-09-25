@@ -124,8 +124,7 @@ fn overview_preflight_and_helpers_fail_closed_without_cached_catalogs() {
         },
     )
     .expect("source cache");
-    let potential = potential_biome_sources().expect("potential sources");
-    let hyde = hyde_sources().expect("hyde sources");
+    let (potential, hyde) = catalog_fixtures();
     preflight_overview_acquisition(&cache, Some(&potential), Some(&hyde)).expect("preflight");
     assert!(matches!(
         preflight_overview_acquisition(&cache, None, None),
@@ -148,6 +147,44 @@ fn overview_preflight_and_helpers_fail_closed_without_cached_catalogs() {
     ));
     assert!(acquisition_marker().starts_with("unix-seconds-"));
     std::fs::remove_dir_all(directory).expect("cleanup");
+}
+
+fn catalog_fixtures() -> (Vec<KnownSource>, Vec<KnownSource>) {
+    let source = |id: &str, provider, host: &str| KnownSource {
+        id: id.to_owned(),
+        provider,
+        release: "deterministic test fixture".to_owned(),
+        url: format!("https://{host}/fixture"),
+        bytes: 1,
+        expected_checksum: ExpectedChecksum::Sha256([0; 32]),
+        native_resolution: "fixture".to_owned(),
+        crs: "EPSG:4326".to_owned(),
+        vertical_datum: "not applicable".to_owned(),
+        license_reference: "test fixture".to_owned(),
+    };
+    (
+        vec![
+            source(POTENTIAL_BIOME_RASTER_ID, Provider::Zenodo, "zenodo.org"),
+            source(POTENTIAL_BIOME_CLASSES_ID, Provider::Zenodo, "zenodo.org"),
+        ],
+        vec![
+            source(
+                HYDE_BASELINE_ID,
+                Provider::Dans,
+                "archaeology.datastations.nl",
+            ),
+            source(
+                HYDE_SUPPLEMENTARY_ID,
+                Provider::Dans,
+                "archaeology.datastations.nl",
+            ),
+            source(
+                HYDE_README_ID,
+                Provider::Dans,
+                "archaeology.datastations.nl",
+            ),
+        ],
+    )
 }
 
 fn source_lock(id: &str, byte: u8, url: &str, resolution: &str) -> aoe_map::SourceLock {
