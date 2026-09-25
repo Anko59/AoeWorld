@@ -1,5 +1,6 @@
 use super::*;
 use aoe_map::PreparedEnvironment;
+use std::{path::Path, sync::atomic::AtomicBool};
 
 #[test]
 fn local_projection_places_its_center_at_the_origin() {
@@ -105,6 +106,48 @@ fn overview_response_keeps_its_bounded_protocol_shape_when_boxed() {
     assert_eq!(encoded["water_source_lock"]["id"], "coastline");
     assert_eq!(encoded["vegetation_source_lock"]["id"], "vegetation");
     assert!(encoded.get("value").is_none());
+}
+
+#[test]
+fn overview_preflight_and_helpers_fail_closed_without_cached_catalogs() {
+    let directory = std::env::temp_dir().join(format!(
+        "aoe-geodata-preflight-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    std::fs::create_dir(&directory).expect("cache directory");
+    let cache = SourceCache::new(
+        directory.clone(),
+        DownloadPolicy {
+            cache_quota_bytes: DEFAULT_CACHE_QUOTA_BYTES,
+            job_acquisition_budget_bytes: MAX_OVERVIEW_INPUT_BYTES,
+        },
+    )
+    .expect("source cache");
+    let potential = potential_biome_sources().expect("potential sources");
+    let hyde = hyde_sources().expect("hyde sources");
+    preflight_overview_acquisition(&cache, Some(&potential), Some(&hyde)).expect("preflight");
+    assert!(matches!(
+        preflight_overview_acquisition(&cache, None, None),
+        Err(GeodataError::Preparation(_))
+    ));
+
+    let cancelled = AtomicBool::new(false);
+    assert!(matches!(
+        acquire_or_cached(&cache, None, "missing", &cancelled),
+        Err(GeodataError::Preparation(_))
+    ));
+    assert_eq!(round_meters(1.4).expect("round"), 1);
+    assert!(matches!(
+        round_meters(f64::NAN),
+        Err(GeodataError::Coordinate)
+    ));
+    assert!(matches!(
+        raster_dimensions(Path::new("missing")),
+        Err(GeodataError::Gdal(_))
+    ));
+    assert!(acquisition_marker().starts_with("unix-seconds-"));
+    std::fs::remove_dir_all(directory).expect("cleanup");
 }
 
 fn source_lock(id: &str, byte: u8, url: &str, resolution: &str) -> aoe_map::SourceLock {
