@@ -1,10 +1,11 @@
 use super::SourceQualificationError;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord, WorldConfig, WorldPosition};
 use aoe_map::{EnvironmentPageError, MapChunkGenerator};
-use aoe_simulation::{GameWorld, GameWorldError, Terrain};
+use aoe_simulation::{GameWorldError, Terrain};
 
 pub(super) const ROUTE_CONTRACT: &str = "fixed-cardinal-repeat-within-ordinary-component-v1";
 pub(super) const REQUIRED_TRAVEL_METERS: f64 = 100_000.0;
+pub(super) const REQUIRED_REPETITIONS: u64 = 25_000;
 const METERS_PER_TILE: f64 = 2.0;
 const PREFERRED_OFFSET: (i32, i32) = (2, 0);
 const CARDINAL_OFFSETS: [(i32, i32); 4] = [(2, 0), (0, 2), (-2, 0), (0, -2)];
@@ -43,12 +44,20 @@ impl FixedRoute {
         f64::from(legs as u32) * self.leg_length_meters
     }
 
-    pub(super) fn minimum_ticks(
+    pub(super) fn movement_waypoints(self) -> Result<Vec<WorldPosition>, SourceQualificationError> {
+        let waypoints = (0..self.repetitions)
+            .map(|leg| WorldPosition::from_tile_center(self.destination_for_leg(leg)))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(waypoints)
+    }
+
+    pub(super) fn expected_ticks(
         self,
         config: WorldConfig,
     ) -> Result<u64, SourceQualificationError> {
-        let distance_subunits =
+        let leg_subunits =
             u128::from(self.leg_length_tiles) * u128::from(FIXED_SUBUNITS_PER_TILE.unsigned_abs());
+        let distance_subunits = leg_subunits * u128::from(self.repetitions);
         let speed = u128::try_from(config.move_speed_subunits_per_tick).map_err(|_| {
             SourceQualificationError::FixedRouteTickBound {
                 required: u64::MAX,
@@ -63,10 +72,9 @@ impl FixedRoute {
         }
         let numerator =
             distance_subunits * u128::from(config.move_speed_subunits_per_tick_denominator);
-        let ticks_per_leg = numerator.div_ceil(speed);
-        u64::try_from(ticks_per_leg)
+        let expected_ticks = numerator.div_ceil(speed);
+        u64::try_from(expected_ticks)
             .ok()
-            .and_then(|ticks| ticks.checked_mul(self.repetitions))
             .ok_or(SourceQualificationError::FixedRouteTickBound {
                 required: u64::MAX,
                 maximum: 0,
@@ -78,7 +86,7 @@ impl FixedRoute {
         config: WorldConfig,
         max_ticks: u64,
     ) -> Result<(), SourceQualificationError> {
-        let required = self.minimum_ticks(config)?;
+        let required = self.expected_ticks(config)?;
         if required > max_ticks {
             return Err(SourceQualificationError::FixedRouteTickBound {
                 required,
@@ -173,38 +181,6 @@ fn leg_is_crossable<Q: FixedLegQuery>(
         from = to;
     }
     Ok(true)
-}
-
-pub(super) fn issue_leg(
-    world: &mut GameWorld,
-    generator: &MapChunkGenerator,
-    id: aoe_core::EntityId,
-    destination: TileCoord,
-) -> Result<(), SourceQualificationError> {
-    let position = WorldPosition::from_tile_center(destination)?;
-    if !world
-        .terrain()
-        .passable_with_cancel(destination, world.config(), &|| false)?
-    {
-        return Err(SourceQualificationError::ImpassableWaypoint {
-            x: destination.x,
-            y: destination.y,
-        });
-    }
-    let origin = world
-        .unit(id)
-        .ok_or(GameWorldError::UnknownEntity)?
-        .position
-        .tile_floor();
-    match world.issue_move(id, position) {
-        Ok(_) => Ok(()),
-        Err(error) => Err(contextual_route_failure(
-            error,
-            generator,
-            origin,
-            destination,
-        )),
-    }
 }
 
 pub(super) fn contextual_route_failure(

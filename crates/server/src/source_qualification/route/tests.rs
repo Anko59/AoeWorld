@@ -111,7 +111,7 @@ fn max_tick_bound_fails_closed_before_movement() {
     let mut config = WorldConfig::new(64, 64, Seed(4)).expect("config");
     config.move_speed_subunits_per_tick = 1;
     config.move_speed_subunits_per_tick_denominator = 1;
-    let required = route.minimum_ticks(config).expect("bounded arithmetic");
+    let required = route.expected_ticks(config).expect("bounded arithmetic");
     assert_eq!(required, 51_200_000);
 
     let error = route
@@ -124,4 +124,23 @@ fn max_tick_bound_fails_closed_before_movement() {
             maximum
         } if maximum == required - 1
     ));
+}
+
+#[test]
+fn continuous_expected_ticks_preserve_fractional_speed_across_all_legs() {
+    let route = plan_fixed_repeated_route_with(&StaticLeg::open(), TileCoord::new(10, 10))
+        .expect("preferred leg");
+    let config =
+        aoe_simulation::GameWorld::with_cavalry(WorldConfig::new(64, 64, Seed(9)).expect("config"))
+            .expect("cavalry world")
+            .0
+            .config();
+
+    assert_eq!(config.tick_hz, 20);
+    assert_eq!(config.move_speed_subunits_per_tick, 384);
+    assert_eq!(config.move_speed_subunits_per_tick_denominator, 5);
+    assert_eq!(
+        route.expected_ticks(config).expect("continuous ticks"),
+        666_667
+    );
 }

@@ -150,6 +150,163 @@ pub struct SourceQualificationReport {
     pub source_workload_contracts: Vec<SourceWorkloadContract>,
 }
 
+pub(super) fn ensure_report_agreement(
+    report: &SourceQualificationReport,
+    tick_hz: u32,
+) -> Result<(), SourceQualificationError> {
+    ensure_equal(
+        "route_evidence.movement_ticks",
+        report.route_evidence.movement_ticks,
+        report.movement_ticks,
+    )?;
+    ensure_equal(
+        "simulation_work.movement_ticks",
+        report.simulation_work.movement_ticks,
+        report.movement_ticks,
+    )?;
+    ensure_equal(
+        "route_evidence.repetition_count",
+        report.route_evidence.repetition_count,
+        super::route::REQUIRED_REPETITIONS,
+    )?;
+    ensure_equal(
+        "simulation_work.route_repetition_count",
+        report.simulation_work.route_repetition_count,
+        super::route::REQUIRED_REPETITIONS,
+    )?;
+    ensure_equal(
+        "simulation_work.route_movement_leg_count",
+        report.simulation_work.route_movement_leg_count,
+        super::route::REQUIRED_REPETITIONS,
+    )?;
+    ensure_equal(
+        "simulation_work.replay_movement_leg_count",
+        report.simulation_work.replay_movement_leg_count,
+        super::route::REQUIRED_REPETITIONS,
+    )?;
+    ensure_exact_distance(
+        "route_evidence.moved_meters",
+        report.route_evidence.moved_meters,
+    )?;
+    ensure_exact_distance("moved_meters", report.moved_meters)?;
+    ensure_exact_distance(
+        "simulation_work.route_moved_meters",
+        report.simulation_work.route_moved_meters,
+    )?;
+    ensure_exact_distance(
+        "simulation_work.replay_moved_meters",
+        report.simulation_work.replay_moved_meters,
+    )?;
+    ensure_equal(
+        "route_evidence.replay_hash",
+        report.route_evidence.replay_hash.as_str(),
+        report.replay_hash.as_str(),
+    )?;
+    if report.route_evidence.replay_hash.len() != 64 {
+        return Err(SourceQualificationError::ReportFieldMismatch {
+            field: "route_evidence.replay_hash.length",
+            left: report.route_evidence.replay_hash.len().to_string(),
+            right: "64".to_owned(),
+        });
+    }
+    for (field, replay_matches) in [
+        (
+            "route_evidence.replay_matches",
+            report.route_evidence.replay_matches,
+        ),
+        ("replay_matches", report.replay_matches),
+    ] {
+        if !replay_matches {
+            return Err(SourceQualificationError::ReportFieldMismatch {
+                field,
+                left: "false".to_owned(),
+                right: "true".to_owned(),
+            });
+        }
+    }
+    ensure_equal(
+        "route_checkpoint_count",
+        report.route_checkpoint_count,
+        report.simulation_work.route_checkpoint_count,
+    )?;
+    ensure_equal(
+        "start_tile",
+        report.start_tile,
+        report.route_evidence.start_tile,
+    )?;
+    ensure_equal(
+        "route_waypoints.start",
+        report.route_waypoints.first().copied(),
+        Some(report.route_evidence.start_tile),
+    )?;
+    ensure_equal(
+        "route_waypoints.alternate",
+        report.route_waypoints.get(1).copied(),
+        Some(report.route_evidence.alternate_tile),
+    )?;
+    ensure_equal("route_waypoints.count", report.route_waypoints.len(), 2)?;
+    if report.route_evidence.spatial_extent_tiles != [2, 0]
+        || report.route_evidence.spatial_scope != "ordinary_activation_component_local"
+    {
+        return Err(SourceQualificationError::ReportFieldMismatch {
+            field: "route_evidence.spatial_extent_tiles",
+            left: format!(
+                "{:?}/{}",
+                report.route_evidence.spatial_extent_tiles, report.route_evidence.spatial_scope
+            ),
+            right: "[2, 0]/ordinary_activation_component_local".to_owned(),
+        });
+    }
+    let expected_seconds = report.movement_ticks as f64 / f64::from(tick_hz);
+    ensure_exact_float(
+        "simulated_seconds",
+        report.simulated_seconds,
+        expected_seconds,
+    )?;
+    ensure_exact_float(
+        "simulation_work.simulated_seconds",
+        report.simulation_work.simulated_seconds,
+        expected_seconds,
+    )
+}
+
+fn ensure_equal<T: PartialEq + std::fmt::Debug>(
+    field: &'static str,
+    left: T,
+    right: T,
+) -> Result<(), SourceQualificationError> {
+    if left != right {
+        return Err(SourceQualificationError::ReportFieldMismatch {
+            field,
+            left: format!("{left:?}"),
+            right: format!("{right:?}"),
+        });
+    }
+    Ok(())
+}
+
+fn ensure_exact_distance(
+    field: &'static str,
+    observed: f64,
+) -> Result<(), SourceQualificationError> {
+    ensure_exact_float(field, observed, super::route::REQUIRED_TRAVEL_METERS)
+}
+
+fn ensure_exact_float(
+    field: &'static str,
+    left: f64,
+    right: f64,
+) -> Result<(), SourceQualificationError> {
+    if left != right {
+        return Err(SourceQualificationError::ReportFieldMismatch {
+            field,
+            left: format!("{left:.12}"),
+            right: format!("{right:.12}"),
+        });
+    }
+    Ok(())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SourceQualificationError {
     #[error(transparent)]
@@ -215,6 +372,34 @@ pub enum SourceQualificationError {
         "fixed repeated route requires at least {required} ticks but the configured bound is {maximum}"
     )]
     FixedRouteTickBound { required: u64, maximum: u64 },
+    #[error(
+        "continuous fixed route expected exactly {expected} movement ticks but observed {observed}"
+    )]
+    MovementTickMismatch { expected: u64, observed: u64 },
+    #[error("source route expected exactly {expected} repetitions but observed {observed}")]
+    MovementRepetitionMismatch { expected: u64, observed: u64 },
+    #[error("source route expected exactly {expected:.3} m but observed {observed:.3} m")]
+    MovementDistanceMismatch { expected: f64, observed: f64 },
+    #[error("source route expected endpoint {expected:?} but observed {observed:?}")]
+    MovementEndpointMismatch {
+        expected: [i32; 2],
+        observed: [i32; 2],
+    },
+    #[error("source route expected {expected} queued waypoints but observed {observed}")]
+    MovementQueueMismatch { expected: usize, observed: usize },
+    #[error(
+        "replay distance {replay_meters:.3} m does not match route distance {route_meters:.3} m"
+    )]
+    ReplayDistanceMismatch {
+        route_meters: f64,
+        replay_meters: f64,
+    },
+    #[error("report field `{field}` disagrees: {left} != {right}")]
+    ReportFieldMismatch {
+        field: &'static str,
+        left: String,
+        right: String,
+    },
     #[error("normal activation start search returned {outcome}; center diagnosis: {diagnostic}")]
     StartSearchLimit {
         outcome: &'static str,
@@ -230,8 +415,6 @@ pub enum SourceQualificationError {
     Package(#[from] aoe_map::MapPackageError),
     #[error("source qualification exceeded its {MAX_ROUTE_TICKS}-tick hard bound")]
     TickLimit,
-    #[error("source route moved only {0:.3} m; at least 100,000 m is required")]
-    InsufficientDistance(f64),
     #[error("replay diverged at tick {0}")]
     ReplayDiverged(u64),
     #[error("persisted resource overlay changed across reload")]
@@ -265,7 +448,7 @@ mod tests {
             leg_length_meters: 4.0,
             repetition_count: 25_000,
             required_distance_meters: 100_000.0,
-            movement_ticks: 675_000,
+            movement_ticks: 666_667,
             moved_meters: 100_000.0,
             replay_hash: "00".repeat(32),
             replay_matches: true,
@@ -275,7 +458,7 @@ mod tests {
         assert_eq!(json["spatial_extent_tiles"], serde_json::json!([2, 0]));
         assert_eq!(json["leg_length_meters"], 4.0);
         assert_eq!(json["repetition_count"], 25_000);
-        assert_eq!(json["movement_ticks"], 675_000);
+        assert_eq!(json["movement_ticks"], 666_667);
         assert_eq!(json["moved_meters"], 100_000.0);
         assert_eq!(json["replay_hash"].as_str().expect("hash").len(), 64);
         assert_eq!(json["replay_matches"], true);

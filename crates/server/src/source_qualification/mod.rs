@@ -11,7 +11,7 @@ mod report;
 mod route;
 mod workload;
 
-use report::{LogicalMemoryEvidence, SimulationWork};
+use report::{LogicalMemoryEvidence, SimulationWork, ensure_report_agreement};
 pub use report::{
     SourceQualificationError, SourceQualificationProgress, SourceQualificationReport,
 };
@@ -226,7 +226,7 @@ pub async fn run_source_qualification(
         .collect::<Vec<_>>();
     let process_rss_bytes = rss.finish();
     let replay_hash = hex(&movement.replay_hash);
-    Ok(SourceQualificationReport {
+    let report = SourceQualificationReport {
         qualification_case: QUALIFICATION_CASE,
         package_hash: package.content_hash_hex(),
         schema_version: package.schema_version,
@@ -313,7 +313,9 @@ pub async fn run_source_qualification(
             resource_lifecycle: lifecycle_evidence,
         },
         source_workload_contracts: workload::source_workload_contracts(),
-    })
+    };
+    ensure_report_agreement(&report, activation_config.tick_hz)?;
+    Ok(report)
 }
 
 fn find_center_resource(

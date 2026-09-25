@@ -127,7 +127,7 @@ impl GameWorld {
                     finished = true;
                     break;
                 }
-                if order.waypoint == order.destination {
+                if order.waypoint == order.destination && self.units[index].route.is_empty() {
                     self.clear_planner(index);
                     self.units[index].state.moving = false;
                     self.units[index].state.planning = false;
