@@ -15,16 +15,26 @@ fn point(client: &Client, event: &PointerEvent) -> ScreenPoint {
 }
 
 fn pick(client: &Client, target: ScreenPoint) -> Option<aoe_core::EntityId> {
+    let terrain_depth = map::surface_depth_at_screen(client, target);
     client
         .units
         .keys()
-        .rev()
-        .find(|id| {
-            let screen = map::screen_position(client, position_at(client, **id));
-            (screen.x - target.x).abs() < 32.0 * client.camera.zoom
-                && (screen.y - target.y).abs() < 48.0 * client.camera.zoom
+        .filter_map(|id| {
+            let position = position_at(client, *id);
+            let screen = map::screen_position(client, position);
+            if (screen.x - target.x).abs() >= 32.0 * client.camera.zoom
+                || (screen.y - target.y).abs() >= 48.0 * client.camera.zoom
+            {
+                return None;
+            }
+            let depth = position[0] + position[1] + 2.0 * map::elevation_at_world(client, position);
+            if terrain_depth.is_some_and(|surface| surface > depth + 1e-6) {
+                return None;
+            }
+            Some((depth, *id))
         })
-        .copied()
+        .max_by(|left, right| left.0.total_cmp(&right.0).then(left.1.cmp(&right.1)))
+        .map(|(_, id)| id)
 }
 
 fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe_core::EntityId> {

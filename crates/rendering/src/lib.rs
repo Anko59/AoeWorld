@@ -26,5 +26,5 @@ pub use game_renderer::{
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{
     ProjectedSurfaceTriangle, pick_surface_point, projected_surface_triangles,
-    sample_surface_height,
+    sample_surface_height, surface_depth_at,
 };

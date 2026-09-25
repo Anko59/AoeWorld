@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
+import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
 
 async function waitForGame(page: Page) {
@@ -24,23 +25,27 @@ async function bluePixels(canvas: ReturnType<Page["locator"]>) {
   return blue;
 }
 
-function syntheticTerrainCoverage(image: PNG) {
-  let covered = 0;
-  let samples = 0;
-  for (let y = 8; y < image.height - 8; y += 8) {
-    for (let x = 8; x < image.width - 8; x += 8) {
-      const offset = (y * image.width + x) * 4;
-      samples += 1;
+function assetTerrainColorVariety(image: PNG) {
+  const colors = new Set<string>();
+  for (let y = 32; y < image.height - 96; y += 16) {
+    for (let x = 32; x < image.width - 32; x += 16) {
+      if (x > image.width - 260 && y < 80) continue;
+      if (x < 620 && y > image.height - 110) continue;
       if (
-        image.data[offset] === 70 &&
-        image.data[offset + 1] === 120 &&
-        image.data[offset + 2] === 55
+        x > image.width / 2 - 50 &&
+        x < image.width / 2 + 50 &&
+        y > image.height / 2 - 80 &&
+        y < image.height / 2 + 80
       ) {
-        covered += 1;
+        continue;
       }
+      const offset = (y * image.width + x) * 4;
+      colors.add(
+        `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]}`,
+      );
     }
   }
-  return covered / samples;
+  return colors.size;
 }
 
 test.beforeEach(async ({ request }) => {
@@ -67,9 +72,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   await expect
     .poll(() => bluePixels(canvas), { timeout: 10_000 })
     .toBeGreaterThan(10);
-  const first = await canvas.screenshot({
-    path: "../reports/e2e/aoeworld-map.png",
-  });
+  const first = await canvas.screenshot();
   const image = PNG.sync.read(first);
   let green = 0;
   let blue = 0;
@@ -84,7 +87,16 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   }
   expect(green).toBeGreaterThan(image.width * image.height * 0.6);
   expect(blue).toBeGreaterThan(10);
-  expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
+  if (evidence === "generated CI fixtures") {
+    expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
+  } else {
+    const terrainColors = assetTerrainColorVariety(image);
+    testInfo.annotations.push({
+      type: "asset terrain colors",
+      description: `${terrainColors} distinct sampled terrain colors`,
+    });
+    expect(terrainColors).toBeGreaterThan(12);
+  }
 
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");

@@ -399,7 +399,7 @@ fn overlapping_surface_pick_uses_interpolated_world_depth() {
             triangle
                 .points
                 .iter()
-                .map(|point| point.world[0] + point.world[1])
+                .map(|point| point.world[0] + point.world[1] + 2.0 * point.world[2])
                 .sum::<f64>()
                 / 3.0
         })

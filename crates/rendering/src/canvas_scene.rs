@@ -7,7 +7,6 @@ pub(super) fn draw_scene_sprite(
     atlas: &HtmlCanvasElement,
     canvas: &HtmlCanvasElement,
     sprite: (Sprite, GameFrame),
-    selected: bool,
 ) -> Result<(), String> {
     let (sprite, frame) = sprite;
     let width = f64::from(canvas.width());
@@ -53,22 +52,6 @@ pub(super) fn draw_scene_sprite(
     };
     context.restore();
     result?;
-    if selected {
-        context.begin_path();
-        context.set_stroke_style_str("#f2dc78");
-        context
-            .ellipse(
-                x + f64::from(frame.size[0]) / 2.0,
-                y + f64::from(frame.size[1]),
-                f64::from(frame.size[0]) * 0.55,
-                f64::from(frame.size[1]) * 0.105,
-                0.0,
-                0.0,
-                std::f64::consts::TAU,
-            )
-            .map_err(error)?;
-        context.stroke();
-    }
     Ok(())
 }
 

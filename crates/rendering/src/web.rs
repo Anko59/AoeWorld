@@ -7,7 +7,10 @@ use wgpu::SurfaceTarget;
 const CAPACITY: usize = 16_384;
 const ATLAS_SIDE: u32 = 8;
 const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
-const GPU_INSTANCE_CAPACITY: usize = CAPACITY + crate::surface_mesh::MAX_SURFACE_TRIANGLES;
+
+#[path = "web_buffer.rs"]
+mod instance_buffer;
+use instance_buffer::{InstanceBuffer, required_capacity};
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
@@ -27,8 +30,7 @@ pub struct Renderer {
     pub(crate) queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub(crate) pipeline: wgpu::RenderPipeline,
-    pub(crate) bind_group: wgpu::BindGroup,
-    pub(crate) buffer: wgpu::Buffer,
+    pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
 }
 
@@ -81,12 +83,6 @@ impl Renderer {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("synthetic sprites"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sprites.wgsl"))),
-        });
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("sprite instances"),
-            size: (GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
         });
         let atlas = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("synthetic sprite atlas"),
@@ -175,24 +171,6 @@ impl Renderer {
                 },
             ],
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sprite data"),
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&atlas_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sprite pipeline layout"),
             bind_group_layouts: &[Some(&layout)],
@@ -223,6 +201,12 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let instances = InstanceBuffer::new(
+            &device,
+            &pipeline.get_bind_group_layout(0),
+            &atlas_view,
+            &sampler,
+        );
         Ok(Self {
             adapter_label,
             surface,
@@ -230,8 +214,7 @@ impl Renderer {
             queue,
             config,
             pipeline,
-            bind_group,
-            buffer,
+            instances,
             _atlas: atlas,
         })
     }
@@ -300,31 +283,20 @@ impl Renderer {
         sprites: &[Sprite],
         clear: [f64; 4],
     ) -> Result<Counters, String> {
-        let mut instances = Vec::with_capacity(surfaces.len().saturating_add(sprites.len()));
+        let required = required_capacity(surfaces, sprites)?;
+        self.instances.ensure_capacity(
+            required,
+            &self.device,
+            &self.pipeline.get_bind_group_layout(0),
+        )?;
+        let mut instances = Vec::with_capacity(required);
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
         for triangle in surfaces {
-            let point = |index: usize| {
-                screen_to_clip(
-                    triangle.points[index].screen.x,
-                    triangle.points[index].screen.y,
-                    width,
-                    height,
-                )
-            };
-            instances.push(surface_instance(
-                [point(0), point(1), point(2)],
-                [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
-            ));
+            instances.push(surface_instance(triangle, [width, height]));
         }
         instances.extend_from_slice(sprites);
-        if instances.len() > GPU_INSTANCE_CAPACITY {
-            return Err("visible world layers exceed the WebGPU instance limit".to_owned());
-        }
-        if !instances.is_empty() {
-            self.queue
-                .write_buffer(&self.buffer, 0, bytemuck::cast_slice(&instances));
-        }
+        self.instances.write(&self.queue, &instances);
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
@@ -332,7 +304,7 @@ impl Renderer {
                 return Ok(Counters {
                     visible: sprites.len(),
                     draw_calls: 0,
-                    gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
+                    gpu_buffer_bytes: self.instances.bytes(),
                     persistent_gpu_resources: 6,
                     atlas_pages: 1,
                     atlas_uploads: 1,
@@ -344,7 +316,7 @@ impl Renderer {
                 return Ok(Counters {
                     visible: sprites.len(),
                     draw_calls: 0,
-                    gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
+                    gpu_buffer_bytes: self.instances.bytes(),
                     persistent_gpu_resources: 6,
                     atlas_pages: 1,
                     atlas_uploads: 1,
@@ -389,7 +361,7 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.bind_group, &[]);
+            self.instances.set_on(&mut pass);
             pass.draw(0..6, 0..instances.len() as u32);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -397,7 +369,7 @@ impl Renderer {
         Ok(Counters {
             visible: sprites.len(),
             draw_calls: usize::from(!instances.is_empty()),
-            gpu_buffer_bytes: GPU_INSTANCE_CAPACITY * std::mem::size_of::<Sprite>(),
+            gpu_buffer_bytes: self.instances.bytes(),
             persistent_gpu_resources: 6,
             atlas_pages: 1,
             atlas_uploads: 1,
@@ -413,11 +385,34 @@ fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
     ]
 }
 
-fn surface_instance(points: [[f32; 2]; 3], color: [f32; 4]) -> Sprite {
-    Sprite {
-        position: points[0],
-        radius: points[1],
-        color,
-        uv: [points[2][0], points[2][1], 0.0, -1.0],
+pub(crate) fn surface_instance(triangle: &ProjectedSurfaceTriangle, viewport: [f64; 2]) -> Sprite {
+    let points = triangle.points.map(|point| {
+        screen_to_clip(
+            point.screen.x,
+            point.screen.y,
+            viewport[0].max(1.0),
+            viewport[1].max(1.0),
+        )
+    });
+    let second = points[1];
+    let third = points[2];
+    match triangle.texture_uv {
+        Some(uv) => Sprite {
+            position: points[0],
+            radius: second,
+            color: [
+                third[0],
+                third[1],
+                f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
+                -1.0,
+            ],
+            uv,
+        },
+        None => Sprite {
+            position: points[0],
+            radius: second,
+            color: [third[0], third[1], 0.0, -2.0],
+            uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
+        },
     }
 }
