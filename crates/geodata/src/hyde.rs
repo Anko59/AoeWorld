@@ -15,6 +15,19 @@ use std::{
 };
 use zip::ZipArchive;
 
+mod area;
+mod correction;
+pub use area::{
+    HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    allocate_hyde_area_window, prepare_hyde_area_pyramid,
+};
+pub use correction::{
+    HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
+    HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
+    HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
+    MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS,
+};
+
 const HYDE_600_MEMBERS: [&str; 5] = [
     "baseline/asc/600AD_lu/cropland600AD.asc",
     "baseline/asc/600AD_lu/grazing600AD.asc",

@@ -71,6 +71,53 @@ of the year-600 land-use layer: this slice does not correct HYDE cell
 allocations, and modern WorldCover classes are not treated as year-600 land
 cover. Reservoir and regulated-lake observations therefore remain explicit
 modern evidence rather than automatic historical water.
+
+The callable `prepare_hyde_600` path retains recipe-3 nearest-cell behavior for
+existing packages. New recipe callers can use `allocate_hyde_area_window` and
+`prepare_hyde_area_pyramid`: source and target polygons are projected into a
+request-centered Lambert azimuthal equal-area plane using deterministic
+0.1-degree edge densification, then crop area, grazing area, population, and
+coverage area are allocated by polygon overlap divided by full source-cell
+area. Each call accepts one target page (at most 64 by 64 cells), up to
+1,000,000 source cells, and 4,194,304 input polygon vertices; densified vertex
+totals use the same explicit bound. The
+weighted pyramid accepts up to 1,024 samples per axis and combines unrounded
+quantities and land areas before producing the existing rounded land-use
+pages. Land cells with missing crop, grazing, or population values fail;
+zero-valued land cells remain valid. Crop and grazing areas must fit within
+the projected source-cell land area individually and together; exceeding
+either bound fails instead of being clamped. Source or target polygon edges
+that touch or cross a pole or the antimeridian also fail closed because this
+bounded API does not implement wrap-safe spherical geometry. Lakes, ocean,
+nodata, and uncovered area are retained as separate allocation totals.
+
+This API is the bounded allocation core. It accepts WGS84 source/target cell
+polygons from its caller; it does not extract or read the HYDE archives. The
+overview worker still uses `prepare_hyde_600`, so normal generation remains on
+recipe 3 until archive-window enumeration, page assembly, and recipe identity
+are wired by the generation orchestrator. Those preprocessing changes must be
+included in the new recipe/package identity before it is used for published
+maps.
+
+`HistoricalCorrectionDocument` is the versioned JSON contract for sparse
+whole-cell corrections. Schema 1 targets 600 CE, accepts grids from 2 through
+1,024 samples per axis, requires unique records in canonical row-major order,
+and is limited to 64 MiB. Each tagged evidence value keeps HYDE's historical
+model, a dated modern observation, a procedural addition, fallback data, or an
+explicit unknown distinct; only HYDE evidence is exposed as historical
+quantity. Complete whole-cell allocations become HYDE evidence, while nodata
+or caller-uncovered area becomes explicit unknown evidence. Serialization and
+deserialization validate the schema, target year, coordinates, quantity
+capacity, ordering, evidence fields, and byte limit before accepting a
+document; versions other than schema 1 fail closed.
+
+The standalone allocation helpers keep `HydrologyPage` and
+`ModernLandCoverPage` as preparation intermediates. Schema-9 publication
+upgrades those inputs to the typed persisted evidence pages described above, so
+supported lake/river kinds and raw WorldCover classes remain distinguishable to
+terrain consumers. Flow, barrier, confidence, and invented historical-date
+values remain absent. HYDE stays the source of the year-600 land-use layer, and
+modern WorldCover classes are not treated as year-600 land cover.
 Hydrology planning is capped at 32 WorldCover tiles. A job may download at
 most 2 GiB of missing hydrology sources; verified cache hits do not count
 toward that transfer budget. Cache storage has its separate 100 GiB quota.
