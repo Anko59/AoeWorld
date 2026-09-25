@@ -10,12 +10,15 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::Response;
 
+#[path = "playground_map/eviction.rs"]
+mod eviction;
 #[path = "playground_map/heights.rs"]
 mod heights;
 #[path = "playground_map/state.rs"]
 pub(crate) mod state;
 #[path = "playground_map/ui.rs"]
 pub(crate) mod ui;
+pub(super) use eviction::evict_distant_chunks_with_limits;
 use heights::{
     include_chunk_height_bounds, refresh_chunk_height_bounds, visible_tiles_for_height_bounds,
 };
@@ -402,35 +405,24 @@ fn visible_chunks(client: &Client) -> Vec<(i32, i32)> {
 }
 
 fn chunk_distance((x, y): (i32, i32), client: &Client) -> f64 {
-    let center_x = f64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - client.camera.center[0];
-    let center_y = f64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - client.camera.center[1];
+    chunk_distance_for((x, y), client.camera, client.config)
+}
+
+fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::WorldConfig) -> f64 {
+    let center_x = f64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[0];
+    let center_y = f64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[1];
     center_x.mul_add(center_x, center_y * center_y)
 }
 
 fn evict_distant_chunks(client: &mut Client) {
-    let mut cached_bytes = cached_chunk_bytes(client);
-    if client.terrain_chunks.len() <= MAX_CACHED_CHUNKS && cached_bytes <= MAX_CACHED_CHUNK_BYTES {
-        return;
-    }
-    let mut coordinates = client.terrain_chunks.keys().copied().collect::<Vec<_>>();
-    coordinates.sort_by(|left, right| {
-        chunk_distance(*right, client)
-            .total_cmp(&chunk_distance(*left, client))
-            .then(right.cmp(left))
-    });
-    let mut removed = false;
-    for coordinate in coordinates {
-        if client.terrain_chunks.len() <= MAX_CACHED_CHUNKS
-            && cached_bytes <= MAX_CACHED_CHUNK_BYTES
-        {
-            break;
-        }
-        if let Some(chunk) = client.terrain_chunks.remove(&coordinate) {
-            cached_bytes = cached_bytes.saturating_sub(chunk_resident_bytes(&chunk));
-            client.terrain_discovered.remove(&coordinate);
-            removed = true;
-        }
-    }
+    let (removed, _) = evict_distant_chunks_with_limits(
+        &mut client.terrain_chunks,
+        &mut client.terrain_discovered,
+        client.camera,
+        client.config,
+        MAX_CACHED_CHUNKS,
+        MAX_CACHED_CHUNK_BYTES,
+    );
     if removed {
         refresh_chunk_height_bounds(client);
     }

@@ -232,11 +232,19 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
             || high_tile.1 >= initial.max.y
     );
 
-    // Eviction drops resident evidence and discovery eligibility, but the
-    // monotonic request bound still makes the high chunk re-requestable.
-    chunks.remove(&(9, 8));
-    discovered.remove(&(9, 8));
-    resident_bounds = heights::resident_height_bounds(chunks.values());
+    // The production eviction policy drops resident evidence and discovery
+    // eligibility while preserving the monotonic request bound.
+    let (removed, refreshed) = evict_distant_chunks_with_limits(
+        &mut chunks,
+        &mut discovered,
+        camera,
+        config,
+        1,
+        MAX_CACHED_CHUNK_BYTES,
+    );
+    assert!(removed);
+    assert!(!discovered.contains(&(9, 8)));
+    resident_bounds = refreshed;
     assert_eq!(resident_bounds, Some((0, 0)));
     assert_eq!(request_bounds, Some((0, 52)));
     let requested = visible_tiles_for_height_bounds(camera, config, 0.0, request_bounds);
