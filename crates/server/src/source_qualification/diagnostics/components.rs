@@ -167,6 +167,18 @@ pub(super) fn start_component_diagnostic(
     ))
 }
 
+pub(super) fn component_blocker_diagnostic(
+    terrain: &Terrain,
+    generator: &MapChunkGenerator,
+    tiles: &BTreeSet<TileCoord>,
+    config: WorldConfig,
+) -> Result<String, EnvironmentPageError> {
+    let (edge_counts, blocker_tiles) = boundary_counts(terrain, generator, tiles, config)?;
+    Ok(format!(
+        "blocked_frontier_edges={edge_counts:?},distinct_blocker_tiles={blocker_tiles:?}"
+    ))
+}
+
 fn biome_counts(
     generator: &MapChunkGenerator,
     tiles: &BTreeSet<TileCoord>,

@@ -478,4 +478,7 @@ use pyramid::build_pyramids;
 mod stage;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "tests/stage.rs"]
+mod tests_stage;
 use stage::{Stage, publish_staged_pages};

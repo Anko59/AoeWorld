@@ -95,6 +95,46 @@ fn configured_geodata_cache(path: Option<std::ffi::OsString>) -> Result<Option<P
 mod tests {
     use super::*;
 
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct EnvironmentGuard(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+    impl EnvironmentGuard {
+        fn scoped() -> Self {
+            let names = [
+                "AOE_BIND",
+                "AOE_SCENARIO",
+                "AOE_TICK_HZ",
+                "AOE_ASSET_PACK",
+                "AOE_MAP_WORKER",
+                "AOE_GEODATA_CACHE",
+            ];
+            Self(
+                names
+                    .into_iter()
+                    .map(|name| (name, env::var_os(name)))
+                    .collect(),
+            )
+        }
+
+        fn set(&self, name: &str, value: Option<impl AsRef<std::ffi::OsStr>>) {
+            unsafe {
+                match value {
+                    Some(value) => env::set_var(name, value),
+                    None => env::remove_var(name),
+                }
+            }
+        }
+    }
+
+    impl Drop for EnvironmentGuard {
+        fn drop(&mut self) {
+            for (name, value) in &self.0 {
+                self.set(name, value.as_ref());
+            }
+        }
+    }
+
     #[test]
     fn parses_valid_and_rejects_invalid_configuration() {
         let config = Config::parse("127.0.0.1:0", "target-hotspot", "20").expect("valid config");
@@ -128,5 +168,35 @@ mod tests {
         let file = cache.path().join("file");
         std::fs::write(&file, "not a directory").expect("file");
         assert!(configured_geodata_cache(Some(file.into_os_string())).is_err());
+    }
+
+    #[test]
+    fn environment_paths_are_canonicalized_and_reject_non_executable_workers() {
+        let _serialized = ENV_LOCK.lock().expect("environment lock");
+        let guard = EnvironmentGuard::scoped();
+        guard.set("AOE_BIND", None::<&str>);
+        guard.set("AOE_SCENARIO", None::<&str>);
+        guard.set("AOE_TICK_HZ", None::<&str>);
+        guard.set("AOE_ASSET_PACK", None::<&str>);
+        guard.set("AOE_GEODATA_CACHE", None::<&str>);
+
+        let worker = tempfile::tempdir().expect("worker directory");
+        guard.set("AOE_MAP_WORKER", Some(worker.path()));
+        let error = Config::from_env().expect_err("directory is not an executable");
+        assert!(error.contains("regular native executable"), "{error}");
+
+        let worker_file = worker.path().join("worker");
+        std::fs::write(&worker_file, b"fixture").expect("worker file");
+        guard.set("AOE_MAP_WORKER", Some(&worker_file));
+        let config = Config::from_env().expect("configured environment");
+        assert_eq!(config.map_worker.as_deref(), Some(worker_file.as_path()));
+
+        guard.set("AOE_MAP_WORKER", None::<&str>);
+        guard.set(
+            "AOE_ASSET_PACK",
+            Some(worker.path().join("missing-pack").as_os_str()),
+        );
+        let error = Config::from_env().expect_err("missing asset pack");
+        assert!(error.contains("invalid AOE_ASSET_PACK"), "{error}");
     }
 }

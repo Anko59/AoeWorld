@@ -1,5 +1,6 @@
 //! Bounded qualification against immutable, verified source-backed packages.
 
+mod activation;
 mod diagnostics;
 mod lifecycle;
 mod metrics;
@@ -10,7 +11,7 @@ mod report;
 mod route;
 mod workload;
 
-use report::{LogicalMemoryEvidence, SimulationWork};
+use report::{LogicalMemoryEvidence, SimulationWork, ensure_report_agreement};
 pub use report::{
     SourceQualificationError, SourceQualificationProgress, SourceQualificationReport,
 };
@@ -41,6 +42,7 @@ mod tests;
 
 const QUALIFICATION_AXIS_TILES: u64 = 50_000;
 const MAX_ROUTE_TICKS: u64 = 1_200_000;
+const ORDINARY_ACTIVATION_SEARCH_CHUNKS: usize = 64;
 const MAX_RESOURCE_SCAN_SIDE: i32 = 64;
 const MAX_RESIDENT_PAGES: usize = 128;
 const QUALIFICATION_CASE: &str = "source-backed-100km-50k-tiles-1-to-1";
@@ -48,9 +50,9 @@ const NAVIGATION_CACHE_BYTE_SCOPE: &str =
     "logical payload only; excludes allocator and map container overhead";
 
 /// Exercises overlay durability, verified page eviction, and physical
-/// movement on one source-backed package. Movement follows fixed opposite
-/// points on the package centerline; no seed, route, or destination search is
-/// performed to obtain a successful result.
+/// movement on one source-backed package. Movement follows deterministic
+/// fixed cardinal repetitions inside the ordinary activation component;
+/// travel distance is accumulated without claiming cross-map displacement.
 pub async fn run_source_qualification(
     package_directory: &Path,
     content_hash: &str,
@@ -114,10 +116,10 @@ pub async fn run_source_qualification(
     let activation_start = activation_probe.terrain().search_start_for_recipe(
         activation_config,
         package.generation_recipe_version,
-        64,
+        ORDINARY_ACTIVATION_SEARCH_CHUNKS,
         || false,
     )?;
-    let Some(_standard_start) = (match activation_start {
+    let Some(standard_start) = (match activation_start {
         StartSearchResult::Found(tile) => Some(tile),
         StartSearchResult::Unavailable => return Err(SourceQualificationError::NoStart),
         StartSearchResult::LimitReached | StartSearchResult::Cancelled => None,
@@ -128,7 +130,7 @@ pub async fn run_source_qualification(
             &package,
             provider.as_ref(),
             activation_config,
-            64,
+            ORDINARY_ACTIVATION_SEARCH_CHUNKS,
             None,
         )?;
         let outcome = match activation_start {
@@ -142,6 +144,18 @@ pub async fn run_source_qualification(
             diagnostic,
         });
     };
+    let activation_component_diagnostic = activation::ordinary_activation_component_diagnostic(
+        activation_probe.terrain(),
+        &generator,
+        standard_start,
+        activation_config,
+    )?;
+    let route = route::plan_fixed_repeated_route(
+        activation_probe.terrain(),
+        activation_config,
+        standard_start,
+    )?;
+    route.ensure_tick_bound(activation_config, max_ticks)?;
     let scratch = QualificationDirectory::new()?;
     let gameplay = GameplayService::from_stored_map(
         package.clone(),
@@ -200,6 +214,7 @@ pub async fn run_source_qualification(
         replay_provider,
         initial_peak_resident_pages: movement_initial_peak,
         max_ticks,
+        route,
         progress: &mut progress,
         rss: &mut rss,
     })?;
@@ -210,7 +225,8 @@ pub async fn run_source_qualification(
         .map(|source| source.id.clone())
         .collect::<Vec<_>>();
     let process_rss_bytes = rss.finish();
-    Ok(SourceQualificationReport {
+    let replay_hash = hex(&movement.replay_hash);
+    let report = SourceQualificationReport {
         qualification_case: QUALIFICATION_CASE,
         package_hash: package.content_hash_hex(),
         schema_version: package.schema_version,
@@ -222,16 +238,35 @@ pub async fn run_source_qualification(
         source_lock_count: package.source_locks.len(),
         source_lock_ids,
         start_tile: [movement.start_tile.x, movement.start_tile.y],
+        activation_component_policy: activation::ACTIVATION_COMPONENT_POLICY,
+        activation_component_diagnostic,
         route_waypoints: movement
-            .route_waypoints
+            .route
+            .waypoints()
             .iter()
             .map(|tile| [tile.x, tile.y])
             .collect(),
+        route_evidence: report::RouteEvidence {
+            contract: route::ROUTE_CONTRACT,
+            spatial_scope: "ordinary_activation_component_local",
+            start_tile: [movement.route.start.x, movement.route.start.y],
+            alternate_tile: [movement.route.alternate.x, movement.route.alternate.y],
+            offset_tiles: [movement.route.offset.0, movement.route.offset.1],
+            spatial_extent_tiles: movement.route.spatial_extent_tiles(),
+            leg_length_tiles: movement.route.leg_length_tiles,
+            leg_length_meters: movement.route.leg_length_meters,
+            repetition_count: movement.route.repetitions,
+            required_distance_meters: route::REQUIRED_TRAVEL_METERS,
+            movement_ticks: movement.movement_ticks,
+            moved_meters: movement.route_moved_meters,
+            replay_hash: replay_hash.clone(),
+            replay_matches: true,
+        },
         movement_ticks: movement.movement_ticks,
         simulated_seconds: movement.movement_ticks as f64 / f64::from(activation_config.tick_hz),
         moved_meters: movement.route_moved_meters,
         wall_seconds: wall_started.elapsed().as_secs_f64(),
-        replay_hash: hex(&movement.replay_hash),
+        replay_hash,
         replay_matches: true,
         route_checkpoint_count: movement.route_checkpoint_count,
         indexed_page_count: provider.indexed_pages(),
@@ -270,6 +305,7 @@ pub async fn run_source_qualification(
                 / f64::from(activation_config.tick_hz),
             route_movement_leg_count: movement.route_movement_leg_count,
             replay_movement_leg_count: movement.replay_movement_leg_count,
+            route_repetition_count: movement.route.repetitions,
             route_moved_meters: movement.route_moved_meters,
             replay_moved_meters: movement.replay_moved_meters,
             route_checkpoint_count: movement.route_checkpoint_count,
@@ -277,7 +313,9 @@ pub async fn run_source_qualification(
             resource_lifecycle: lifecycle_evidence,
         },
         source_workload_contracts: workload::source_workload_contracts(),
-    })
+    };
+    ensure_report_agreement(&report, activation_config.tick_hz)?;
+    Ok(report)
 }
 
 fn find_center_resource(

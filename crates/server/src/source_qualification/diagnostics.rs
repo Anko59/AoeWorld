@@ -14,6 +14,15 @@ const START_CLEAR_RADIUS: i32 = 2;
 const START_COMPARISON_RADIUS: i32 = 1;
 const START_REACHABLE_TILES: usize = 256;
 
+pub(super) fn component_blocker_diagnostic(
+    terrain: &Terrain,
+    generator: &aoe_map::MapChunkGenerator,
+    tiles: &BTreeSet<TileCoord>,
+    config: WorldConfig,
+) -> Result<String, aoe_map::EnvironmentPageError> {
+    components::component_blocker_diagnostic(terrain, generator, tiles, config)
+}
+
 pub(super) fn start_diagnostic(
     terrain: &Terrain,
     generator: &aoe_map::MapChunkGenerator,

@@ -175,6 +175,10 @@ fn supported_generation_recipes_preserve_serialization_and_identity() {
         legacy.generation_recipe_version,
         crate::LEGACY_GENERATION_RECIPE_VERSION
     );
+    assert_eq!(
+        legacy.content_hash_hex(),
+        "d8aa78b19092802ca080ce67b34389196eb20dcb33bc8dc117f2de9815c9228d"
+    );
     assert!(legacy.validate().is_ok());
     let serialized = serde_json::to_value(&legacy).expect("legacy JSON");
     assert!(
