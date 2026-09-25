@@ -3,7 +3,7 @@ use std::{error::Error, fs, path::Path};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-const CORPUS_FILE_LIMIT: u64 = 4_096;
+const CORPUS_FILE_LIMIT: u64 = 8_192;
 const CORPUS_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
 const ARTIFACT_FILE_LIMIT: u64 = 256;
 const ARTIFACT_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
