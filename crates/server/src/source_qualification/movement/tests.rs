@@ -1,5 +1,119 @@
 use super::*;
 use aoe_core::{Seed, WorldConfig};
+use aoe_map::{
+    ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentalProvenance, FieldPyramid, MapRequest,
+    PreparedEnvironment, ProjectionMetadata, PyramidLevel, ordered_page_root,
+};
+use std::fs;
+
+fn elevation(level: u8) -> ElevationPage {
+    let side = if level == 0 { 2 } else { 1 };
+    ElevationPage {
+        level,
+        x: 0,
+        y: 0,
+        width: side,
+        height: side,
+        geographic_height_centimeters: vec![0; usize::from(side).pow(2)],
+    }
+}
+
+fn package() -> MapPackage {
+    MapPackage::with_prepared_environment(
+        1,
+        MapRequest {
+            requested_side_meters: 3_840,
+            ..MapRequest::default()
+        },
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        PreparedEnvironment {
+            samples_per_axis: 2,
+            geographic_millimeters_per_sample: 1_920_000,
+            page_samples: ENVIRONMENT_PAGE_SAMPLES,
+            elevation: FieldPyramid {
+                levels: (0..2)
+                    .map(|level| PyramidLevel {
+                        samples_per_axis: if level == 0 { 2 } else { 1 },
+                        ordered_page_root: ordered_page_root(&[elevation(level)]).unwrap(),
+                    })
+                    .collect(),
+            },
+            water: None,
+            vegetation: None,
+            historical_land_use: None,
+            hydrology_evidence: None,
+        },
+    )
+    .unwrap()
+}
+
+fn write_elevation_pages(directory: &std::path::Path, package: &MapPackage) {
+    let root = directory
+        .join("pages")
+        .join(package.content_hash_hex())
+        .join("elevation");
+    fs::create_dir_all(&root).unwrap();
+    for level in 0..2 {
+        let page = elevation(level);
+        fs::write(
+            root.join(format!("{level}-0-0.json")),
+            serde_json::to_vec(&page).unwrap(),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn continuous_source_free_run_completes_all_repeated_waypoints() {
+    let directory = tempfile::tempdir().expect("package directory");
+    let package = package();
+    write_elevation_pages(directory.path(), &package);
+    let generator = package.generator();
+    let world = GameWorld::from_map(package.clone()).expect("movement world");
+    let config = world.config();
+    let route = [
+        TileCoord::new(10, 10),
+        TileCoord::new(32, 32),
+        TileCoord::new(64, 64),
+        TileCoord::new(128, 128),
+    ]
+    .into_iter()
+    .find_map(|start| {
+        super::super::route::plan_fixed_repeated_route(world.terrain(), config, start).ok()
+    })
+    .expect("open fixed route");
+    let movement_provider =
+        PageResidency::open(directory.path(), &package, &|| false).expect("movement provider");
+    let replay_provider =
+        PageResidency::open(directory.path(), &package, &|| false).expect("replay provider");
+    let mut progress_ticks = Vec::new();
+    let mut progress = |progress: SourceQualificationProgress| progress_ticks.push(progress.tick);
+    let mut rss = ProcessRssSampler::start();
+
+    let run = exercise_movement(MovementInput {
+        package: &package,
+        generator: &generator,
+        movement_provider,
+        replay_provider,
+        initial_peak_resident_pages: 128,
+        max_ticks: 666_667,
+        route,
+        progress: &mut progress,
+        rss: &mut rss,
+    })
+    .expect("continuous movement run");
+
+    assert_eq!(run.movement_ticks, 666_667);
+    assert_eq!(run.route_moved_meters, 100_000.0);
+    assert_eq!(run.replay_moved_meters, 100_000.0);
+    assert_eq!(run.route_movement_leg_count, 25_000);
+    assert_eq!(run.replay_movement_leg_count, 25_000);
+    assert_eq!(run.route_checkpoint_count, 81);
+    assert_eq!(run.movement_replay_comparison_count, 83);
+    assert_eq!(progress_ticks.len(), 13);
+}
 
 #[test]
 fn exact_distance_requires_identical_replay_distance() {
@@ -130,4 +244,56 @@ fn deterministic_replay_has_identical_hash_and_position() {
             .position
     );
     assert_ne!(start, destination);
+}
+
+#[test]
+fn movement_validation_and_distance_transitions_fail_closed() {
+    let route = super::super::route::plan_fixed_repeated_route(
+        &aoe_simulation::Terrain::uniform(9),
+        WorldConfig::new(64, 64, Seed(9)).expect("config"),
+        TileCoord::new(10, 10),
+    )
+    .expect("fixed route");
+    let mut short_route = route;
+    short_route.repetitions -= 1;
+    assert!(matches!(
+        validate_distance(short_route, 100_000.0, 100_000.0),
+        Err(SourceQualificationError::MovementDistanceMismatch { .. })
+    ));
+
+    let mut wrong_legs = exact_run(route, 666_667);
+    wrong_legs.route_movement_leg_count -= 1;
+    assert!(matches!(
+        wrong_legs.validate(
+            GameWorld::with_cavalry(WorldConfig::new(64, 64, Seed(9)).expect("config"))
+                .expect("config")
+                .0
+                .config()
+        ),
+        Err(SourceQualificationError::MovementRepetitionMismatch { .. })
+    ));
+
+    let before = WorldPosition::from_tile_center(TileCoord::new(10, 10)).expect("before");
+    let waypoint = WorldPosition::from_tile_center(TileCoord::new(11, 10)).expect("waypoint");
+    let after = WorldPosition::from_tile_center(TileCoord::new(12, 10)).expect("after");
+    let order = aoe_simulation::MovementOrder {
+        origin: before,
+        destination: after,
+        waypoint,
+        target_tile: TileCoord::new(12, 10),
+        segment_length: 2,
+        travelled: 1,
+        speed_carry: 0,
+    };
+    assert_eq!(advanced_distance(before, None, after, None), 2_048.0);
+    assert_eq!(advanced_distance(before, Some(order), after, None), 2_048.0);
+    assert_eq!(
+        advanced_distance(before, Some(order), after, Some(order)),
+        2_048.0
+    );
+    let changed = aoe_simulation::MovementOrder {
+        waypoint: WorldPosition::from_tile_center(TileCoord::new(11, 11)).expect("changed"),
+        ..order
+    };
+    assert!(advanced_distance(before, Some(changed), after, Some(order)) > 2_048.0);
 }
