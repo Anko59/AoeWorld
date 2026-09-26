@@ -83,6 +83,7 @@ fn footprint_boundary_candidates_fail_closed_for_every_supported_recipe() {
         LEGACY_START_RECIPE,
         RECIPE_4_START_RECIPE,
         RECIPE_5_START_RECIPE,
+        WATER_MODEL_START_RECIPE,
     ] {
         assert_eq!(
             terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
@@ -97,7 +98,11 @@ fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
     let terrain = Terrain::uniform(1);
     let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
     let expected = StartSearchResult::Found(TileCoord::new(31, 31));
-    for recipe in [LEGACY_START_RECIPE, RECIPE_4_START_RECIPE] {
+    for recipe in [
+        LEGACY_START_RECIPE,
+        RECIPE_4_START_RECIPE,
+        WATER_MODEL_START_RECIPE,
+    ] {
         let selected = terrain
             .search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false)
             .expect("open-fixture recipe search");
@@ -118,22 +123,23 @@ fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
 }
 
 #[test]
-fn dense_recipe_five_temperate_start_preserves_the_fixed_contract() {
-    let terrain = Terrain::Map {
-        generator: flat_temperate_generator(RECIPE_5_START_RECIPE),
-        overlay: ResourceOverlay::default(),
-    };
+fn dense_modern_recipes_preserve_the_fixed_start_contract() {
     let config = WorldConfig::new(512, 512, Seed(1)).expect("config");
-    let selected = terrain
-        .search_start_for_recipe(config, RECIPE_5_START_RECIPE, START_SEARCH_CHUNKS, || false)
-        .expect("recipe 5 search");
-    assert_eq!(
-        terrain
-            .search_start_for_recipe(config, RECIPE_5_START_RECIPE, START_SEARCH_CHUNKS, || false,),
-        Ok(selected),
-        "recipe 5 selection is deterministic"
-    );
-    assert_start_contract(&terrain, config, selected);
+    for recipe in [RECIPE_5_START_RECIPE, WATER_MODEL_START_RECIPE] {
+        let terrain = Terrain::Map {
+            generator: flat_temperate_generator(recipe),
+            overlay: ResourceOverlay::default(),
+        };
+        let selected = terrain
+            .search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false)
+            .expect("supported recipe search");
+        assert_eq!(
+            terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
+            Ok(selected),
+            "recipe {recipe} selection is deterministic"
+        );
+        assert_start_contract(&terrain, config, selected);
+    }
 }
 
 #[test]
