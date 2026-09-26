@@ -56,7 +56,12 @@ mod source_manifest;
 mod water;
 pub use water::{PreparedWater, prepare_ocean_coverage};
 mod vegetation;
-pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potential_biome_legend};
+pub use vegetation::{
+    PreparedVegetation, VEGETATION_PATCH_PREPROCESSING_IDENTITY, VegetationPatch,
+    VegetationPatchBinding, VegetationPatchDocument, VegetationPatchOperation,
+    VegetationPatchSource, prepare_potential_biomes, prepare_potential_biomes_with_corrections,
+    verify_potential_biome_legend,
+};
 mod source_catalog;
 pub(crate) use source_catalog::worldcover_sources_for_bounds_cached;
 pub use source_catalog::{
@@ -133,6 +138,20 @@ pub fn prepare_overview(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedOverview, GeodataError> {
+    prepare_overview_with_vegetation_corrections(cache_root, request, samples_per_axis, None)
+}
+
+pub fn prepare_overview_with_vegetation_corrections(
+    cache_root: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+    vegetation_corrections: Option<&VegetationPatchDocument>,
+) -> Result<PreparedOverview, GeodataError> {
+    let vegetation_corrections = match vegetation_corrections {
+        Some(document) => std::borrow::Cow::Borrowed(document),
+        None => std::borrow::Cow::Owned(VegetationPatchDocument::empty(request, samples_per_axis)?),
+    };
+    vegetation_corrections.validate_for(request, samples_per_axis)?;
     let source = etopo_2022_60s_surface();
     let lock = source
         .cache_lock()
@@ -211,7 +230,12 @@ pub fn prepare_overview(
         total_pages,
         preparation_progress::Unit::Pages,
     );
-    let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
+    let vegetation = prepare_potential_biomes_with_corrections(
+        &vegetation_path,
+        request,
+        samples_per_axis,
+        &vegetation_corrections,
+    )?;
     completed_pages += vegetation.pages.len() as u64;
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
@@ -248,7 +272,11 @@ pub fn prepare_overview(
         )?,
         vegetation_source_lock: vegetation_lock.to_map_source_lock(
             acquisition_marker(),
-            "potential-biome-nearest-gdal-0.19".to_owned(),
+            format!(
+                "{};corrections-sha256={}",
+                VEGETATION_PATCH_PREPROCESSING_IDENTITY,
+                vegetation_corrections.digest_hex(request)?
+            ),
         )?,
         vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
             acquisition_marker(),
@@ -273,7 +301,11 @@ pub fn prepare_overview(
         provenance: EnvironmentalProvenance {
             elevation: LayerProvenance::SourceDerived,
             water: LayerProvenance::SourceDerived,
-            vegetation: LayerProvenance::SourceDerived,
+            vegetation: if vegetation_corrections.changes_historical_vegetation() {
+                LayerProvenance::HistoricallyCorrected
+            } else {
+                LayerProvenance::SourceDerived
+            },
             historical_land_use: LayerProvenance::SourceDerived,
         },
         environment: prepared.environment,
