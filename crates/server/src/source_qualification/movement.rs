@@ -324,7 +324,7 @@ fn displacement(from: WorldPosition, to: WorldPosition) -> f64 {
     dx.hypot(dy)
 }
 
-fn advanced_distance(
+pub(super) fn advanced_distance(
     before: WorldPosition,
     order_before: Option<aoe_simulation::MovementOrder>,
     after: WorldPosition,

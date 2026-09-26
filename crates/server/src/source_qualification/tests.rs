@@ -19,6 +19,21 @@ fn ordinary_activation_search_is_unchanged_and_route_extent_is_local() {
 }
 
 #[test]
+fn paris_failure_diagnostic_matches_the_verified_reference_package_center() {
+    let paris = aoe_map::MapRequest {
+        center_longitude_e7: 20_000_000,
+        ..aoe_map::MapRequest::default()
+    };
+    let package = aoe_map::MapPackage::new(9, paris, Vec::new()).expect("Paris package");
+    assert!(is_paris_diagnostic_reference(&package));
+
+    let default_request = aoe_map::MapRequest::default();
+    let different_center =
+        aoe_map::MapPackage::new(9, default_request, Vec::new()).expect("other package");
+    assert!(!is_paris_diagnostic_reference(&different_center));
+}
+
+#[test]
 fn provider_page_key_enumeration_is_bounded_by_supported_pyramids() {
     // Bound the walker from the largest supported prepared pyramid and typed
     // evidence grids, rather than one fixture's 1,024-sample fields.
