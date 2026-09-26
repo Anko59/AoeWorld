@@ -9,7 +9,10 @@ use std::{
     collections::{BTreeMap, VecDeque},
     io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 pub(crate) const MAX_RESIDENT_ENVIRONMENT_PAGES: usize = 128;
@@ -47,6 +50,7 @@ pub(crate) struct PageResidency {
     root: PathBuf,
     entries: BTreeMap<EnvironmentPageKey, PageEntry>,
     cache: Mutex<PageCache>,
+    verified_page_loads: AtomicU64,
 }
 
 impl PageResidency {
@@ -104,6 +108,7 @@ impl PageResidency {
             root,
             entries,
             cache: Mutex::new(PageCache::default()),
+            verified_page_loads: AtomicU64::new(0),
         }))
     }
 
@@ -116,6 +121,11 @@ impl PageResidency {
 
     pub(crate) fn indexed_pages(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Number of verified page payloads read after a cache miss.
+    pub(crate) fn verified_page_loads(&self) -> u64 {
+        self.verified_page_loads.load(Ordering::Relaxed)
     }
 }
 
@@ -152,6 +162,7 @@ impl EnvironmentPageProvider for PageResidency {
         {
             return Err(EnvironmentPageError::Corrupt);
         }
+        self.verified_page_loads.fetch_add(1, Ordering::Relaxed);
         let page = Arc::new(page);
         let mut cache = self
             .cache

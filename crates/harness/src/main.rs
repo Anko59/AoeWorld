@@ -121,6 +121,24 @@ enum Command {
         package_directory: PathBuf,
         #[arg(long)]
         content_hash: String,
+        #[arg(long)]
+        geographic_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        geographic_content_hash: Option<String>,
+        #[arg(long)]
+        scale_512_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_512_content_hash: Option<String>,
+        #[arg(long)]
+        scale_16384_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_16384_content_hash: Option<String>,
+        #[arg(long)]
+        scale_262144_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_262144_content_hash: Option<String>,
+        #[arg(long)]
+        scale_only: bool,
         #[arg(long, default_value_t = 1_200_000)]
         max_ticks: u64,
     },
@@ -338,22 +356,86 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::SourceQualify {
             package_directory,
             content_hash,
+            geographic_package_directory,
+            geographic_content_hash,
+            scale_512_package_directory,
+            scale_512_content_hash,
+            scale_16384_package_directory,
+            scale_16384_content_hash,
+            scale_262144_package_directory,
+            scale_262144_content_hash,
+            scale_only,
             max_ticks,
         } => {
+            let scale_packages = [
+                (
+                    512,
+                    scale_512_package_directory,
+                    scale_512_content_hash,
+                ),
+                (
+                    16_384,
+                    scale_16384_package_directory,
+                    scale_16384_content_hash,
+                ),
+                (
+                    262_144,
+                    scale_262144_package_directory,
+                    scale_262144_content_hash,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(tiles_per_side, directory, content_hash)| {
+                match (directory, content_hash) {
+                    (Some(directory), Some(content_hash)) => Some(Ok(
+                        aoe_server::SourceScalePackageReference {
+                            tiles_per_side,
+                            directory,
+                            content_hash,
+                        },
+                    )),
+                    (None, None) => None,
+                    _ => Some(Err(format!(
+                        "scale {tiles_per_side} package directory and content hash must be supplied together"
+                    ))),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+            if scale_only {
+                if geographic_package_directory.is_some() || geographic_content_hash.is_some() {
+                    return Err(
+                        "--scale-only cannot be combined with geographic route inputs".into(),
+                    );
+                }
+                let mut references = scale_packages;
+                references.push(aoe_server::SourceScalePackageReference {
+                    tiles_per_side: 50_000,
+                    directory: package_directory,
+                    content_hash,
+                });
+                let evidence = aoe_server::run_source_scale_qualification(&references)?;
+                println!("{}", serde_json::to_string_pretty(&evidence)?);
+                return Ok(());
+            }
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            let report = runtime.block_on(aoe_server::run_source_qualification(
-                &package_directory,
-                &content_hash,
-                max_ticks,
-                |progress| {
-                    eprintln!(
-                        "source qualification: tick={} leg={} moved_m={:.1}",
-                        progress.tick, progress.leg, progress.moved_meters
-                    );
-                },
-            ))?;
+            let report = runtime.block_on(
+                aoe_server::run_source_qualification_with_geographic_reference(
+                    &package_directory,
+                    &content_hash,
+                    geographic_package_directory.as_deref(),
+                    geographic_content_hash.as_deref(),
+                    &scale_packages,
+                    max_ticks,
+                    |progress| {
+                        eprintln!(
+                            "source qualification: tick={} leg={} moved_m={:.1}",
+                            progress.tick, progress.leg, progress.moved_meters
+                        );
+                    },
+                ),
+            )?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }

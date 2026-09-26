@@ -15,7 +15,9 @@ pub use config::Config;
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
 pub use map_store::MapStoreError;
 pub use source_qualification::{
-    SourceQualificationProgress, SourceQualificationReport, run_source_qualification,
+    ScaleQualificationError, SourceQualificationProgress, SourceQualificationReport,
+    SourceScaleEvidence, SourceScalePackageReference, run_source_qualification,
+    run_source_qualification_with_geographic_reference, run_source_scale_qualification,
 };
 
 pub(crate) use map_store::{PageResidency, load as load_map_packages};

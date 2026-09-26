@@ -1,3 +1,6 @@
+use super::components::{
+    BoundaryTerrainEvidence, ForestPatternEvidence, diagnostic_conclusion, forest_pattern,
+};
 use super::*;
 use crate::PageResidency;
 use aoe_core::Seed;
@@ -61,6 +64,87 @@ fn component_diagnostics_group_candidates_and_classify_frontier_tiles() {
         .expect("blocker diagnostic");
     assert!(blocker.contains("blocked_frontier_edges="));
     assert!(blocker.contains("distinct_blocker_tiles="));
+    assert!(blocker.contains("geographic_cliff_gradient="));
+    assert!(blocker.contains("forest_pattern="));
+    assert!(blocker.contains("diagnostic_conclusion="));
+}
+
+#[test]
+fn obstruction_conclusion_distinguishes_elevation_and_fragmented_tree_barriers() {
+    let supported_cliffs = BoundaryTerrainEvidence {
+        cliff_surface_edges: 4,
+        cliff_edges_supported_by_geographic_rise: 3,
+        ..BoundaryTerrainEvidence::default()
+    };
+    assert_eq!(
+        diagnostic_conclusion(&supported_cliffs, &ForestPatternEvidence::default()),
+        "geographic_elevation_supports_most_cliff_frontier_edges"
+    );
+    let weak_cliffs = BoundaryTerrainEvidence {
+        cliff_surface_edges: 4,
+        cliff_edges_supported_by_geographic_rise: 1,
+        ..BoundaryTerrainEvidence::default()
+    };
+    assert!(
+        diagnostic_conclusion(&weak_cliffs, &ForestPatternEvidence::default())
+            .contains("review_raster_or_quantization_fragmentation")
+    );
+    let fragmented_forest = ForestPatternEvidence {
+        tree_blocker_tiles: 4,
+        isolated_tree_tiles: 3,
+        ..ForestPatternEvidence::default()
+    };
+    assert!(
+        diagnostic_conclusion(&BoundaryTerrainEvidence::default(), &fragmented_forest)
+            .contains("review_procedural_forest_fragmentation")
+    );
+}
+
+#[test]
+fn boundary_tree_objects_are_grouped_as_eight_connected_forest_clumps() {
+    let blocker_cells = BTreeMap::from([
+        (TileCoord::new(1, 1), "tree_object"),
+        (TileCoord::new(2, 1), "tree_object"),
+        (TileCoord::new(2, 2), "tree_object"),
+        (TileCoord::new(10, 10), "tree_object"),
+    ]);
+    let evidence = forest_pattern(&blocker_cells);
+    assert_eq!(evidence.tree_blocker_tiles, 4);
+    assert_eq!(evidence.eight_connected_clumps, 2);
+    assert_eq!(evidence.largest_clump_tiles, 3);
+    assert_eq!(evidence.isolated_tree_tiles, 1);
+}
+
+#[test]
+fn bounded_connectivity_probe_distinguishes_proven_and_exhausted_components() {
+    let config = WorldConfig::new(8, 8, Seed(1)).expect("config");
+    let terrain = Terrain::uniform(1);
+    let connected = bounded_connectivity_diagnostic(
+        &terrain,
+        config,
+        TileCoord::new(3, 1),
+        TileCoord::new(3, 5),
+    )
+    .expect("connected probe");
+    assert_eq!(
+        connected.outcome,
+        super::super::navigation_report::ConnectivityProbeOutcome::Connected
+    );
+    assert_eq!(connected.connected_parallel_corridor_x_offset, Some(0));
+    assert!(connected.visited_tiles < connected.node_limit);
+
+    let disconnected = bounded_connectivity_diagnostic(
+        &terrain,
+        config,
+        TileCoord::new(3, 1),
+        TileCoord::new(10, 1),
+    )
+    .expect("exhausted probe");
+    assert_eq!(
+        disconnected.outcome,
+        super::super::navigation_report::ConnectivityProbeOutcome::Disconnected
+    );
+    assert_eq!(disconnected.frontier_tiles_at_stop, 0);
 }
 
 #[test]
