@@ -37,6 +37,7 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             samples_per_axis,
             resolution,
             staging_root,
+            water_corrections,
         } => Ok(WorkerResponse::PreparedDirectory {
             package: crate::copernicus::prepare_with_staging(
                 cache_root,
@@ -45,6 +46,7 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
                 samples_per_axis,
                 resolution,
                 staging_root,
+                water_corrections,
             )?,
         }),
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {

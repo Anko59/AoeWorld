@@ -71,23 +71,6 @@ fn tool_version() -> String {
     format!("GDAL {gdal} / PROJ {proj}")
 }
 
-pub fn prepare_detailed_directory(
-    cache_root: PathBuf,
-    output_directory: PathBuf,
-    request: MapRequest,
-    samples_per_axis: u16,
-    resolution: DemResolution,
-) -> Result<MapPackage, GeodataError> {
-    prepare_with_staging(
-        cache_root,
-        output_directory,
-        request,
-        samples_per_axis,
-        resolution,
-        None,
-    )
-}
-
 pub(crate) fn prepare_with_staging(
     cache_root: PathBuf,
     output_directory: PathBuf,
@@ -95,6 +78,7 @@ pub(crate) fn prepare_with_staging(
     samples_per_axis: u16,
     resolution: DemResolution,
     staging_root: Option<PathBuf>,
+    water_corrections: Option<aoe_map::WaterCorrectionDocument>,
 ) -> Result<MapPackage, GeodataError> {
     let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     if !(2..=MAX_DETAILED_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
@@ -105,6 +89,14 @@ pub(crate) fn prepare_with_staging(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let hydrology_axis = samples_per_axis.min(crate::MAX_HYDROLOGY_SAMPLES_PER_AXIS);
+    let water_corrections = water_corrections
+        .map(Ok)
+        .unwrap_or_else(|| aoe_map::WaterCorrectionDocument::empty(request, hydrology_axis))
+        .map_err(|_| GeodataError::Preparation("invalid water correction document"))?;
+    water_corrections
+        .validate_for(request, hydrology_axis)
+        .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     let estimate = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid map request estimate"))?;
@@ -112,12 +104,18 @@ pub(crate) fn prepare_with_staging(
     validate_tile_budget(bounds)?;
     let hydrology_plan = crate::hydrology::preflight_hydrology(&cache_root, request)?;
     let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
-    let hydrology = crate::hydrology::prepare_hydrology_with_plan(
+    let mut hydrology = crate::hydrology::prepare_hydrology_with_plan(
         cache_root.clone(),
         request,
-        samples_per_axis.min(crate::MAX_HYDROLOGY_SAMPLES_PER_AXIS),
+        hydrology_axis,
         hydrology_plan,
         &overview.water_pages,
+    )?;
+    crate::hydrology::apply_water_model(
+        &mut hydrology,
+        request,
+        &overview.pages,
+        water_corrections,
     )?;
     let cache = SourceCache::new(
         cache_root.clone(),
@@ -468,6 +466,11 @@ fn tile_prefix(latitude: i32, longitude: i32, suffix: &str) -> String {
     };
     format!("Copernicus_DSM_COG_{suffix}_{lat}_{lon}_DEM")
 }
+
+mod entry;
+pub use entry::{
+    prepare_detailed_directory, prepare_detailed_directory_with_water_corrections,
+};
 
 mod sampler;
 use sampler::Sampler;

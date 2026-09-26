@@ -42,7 +42,10 @@ pub(super) fn contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
 }
 
 pub(super) fn geometry(generator: &MapChunkGenerator, tile: TileCoord) -> Option<Geometry> {
-    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION {
+    if !matches!(
+        generator.generation_recipe_version(),
+        crate::GENERATION_RECIPE_VERSION | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
+    ) {
         return None;
     }
     let cell = (tile.x.div_euclid(CELL_TILES), tile.y.div_euclid(CELL_TILES));

@@ -157,6 +157,7 @@ impl Sampler {
                 height,
                 kind: kinds,
                 method: methods,
+                water_model: None,
             },
             ModernLandCoverPage {
                 level: 0,

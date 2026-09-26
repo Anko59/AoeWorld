@@ -4,7 +4,8 @@ use crate::{
 };
 use aoe_map::{
     HydrologyEvidenceIndex, HydrologyEvidencePage, HydrologyWaterPolicy, MapRequest,
-    WORLD_COVER_OBSERVATION_YEAR, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
+    WORLD_COVER_OBSERVATION_YEAR, WaterCorrectionDocument, WaterModelProvenance,
+    ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
 pub use aoe_map::{HydrologyKind, ModernLandCoverPage};
 use gdal::Dataset;
@@ -21,6 +22,8 @@ use hydrology_sampling::{Bounds, request_bounds, tile_latitude, tile_longitude};
 #[path = "sampler.rs"]
 mod sampler;
 use sampler::Sampler;
+#[path = "model.rs"]
+mod water_model;
 
 pub const MAX_HYDROLOGY_SAMPLES_PER_AXIS: u16 = 1_024;
 const PAGE: u16 = 64;
@@ -44,10 +47,10 @@ pub struct PreparedHydrology {
 }
 
 impl PreparedHydrology {
-    /// Returns a modern override for the existing gameplay water field. HYDE
-    /// 600 remains authoritative for historical coverage: reservoirs,
-    /// wetlands, and unclassified WorldCover water are evidence only until a
-    /// separate reconstruction gives them a defensible historical meaning.
+    /// Returns the shared modeled-water override for the gameplay water field.
+    /// Modern natural lakes and rivers remain mapped evidence, not a claim of
+    /// historical extent; reservoirs, wetlands, and unclassified water remain
+    /// evidence-only unless an explicit geographic correction changes a cell.
     pub fn modern_water_override_at(
         &self,
         target_axis: u16,
@@ -84,9 +87,35 @@ impl PreparedHydrology {
         let observation = page
             .observation(index)
             .map_err(|_| GeodataError::Preparation("hydrology page value is invalid"))?;
-        Ok(match observation.kind {
+        let modeled = page
+            .water_model
+            .as_ref()
+            .map(|model| {
+                let kind = model
+                    .kind_at(index)
+                    .map_err(|_| GeodataError::Preparation("water model page value is invalid"))?;
+                let provenance = model
+                    .provenance
+                    .get(index)
+                    .copied()
+                    .ok_or(GeodataError::Preparation(
+                        "water model provenance is missing",
+                    ))?
+                    .try_into()
+                    .map_err(|_| GeodataError::Preparation("water model provenance is invalid"))?;
+                Ok::<_, GeodataError>((kind, provenance))
+            })
+            .transpose()?;
+        let kind = modeled.map(|(kind, _)| kind).unwrap_or(observation.kind);
+        let provenance = modeled.map(|(_, provenance)| provenance);
+        Ok(match kind {
             HydrologyKind::Ocean => Some((100, 0)),
             HydrologyKind::Lake | HydrologyKind::River => Some((0, 100)),
+            HydrologyKind::Land
+                if provenance == Some(WaterModelProvenance::GeographicCorrection) =>
+            {
+                Some((0, 0))
+            }
             HydrologyKind::Land
             | HydrologyKind::Shallow
             | HydrologyKind::Reservoir
@@ -130,13 +159,38 @@ pub fn prepare_hydrology(
     }
     let plan = preflight_hydrology(&cache_root, request)?;
     let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
-    prepare_hydrology_with_plan(
+    let mut prepared = prepare_hydrology_with_plan(
         cache_root,
         request,
         samples_per_axis,
         plan,
         &overview.water_pages,
-    )
+    )?;
+    let corrections = WaterCorrectionDocument::empty(request, samples_per_axis)
+        .map_err(|_| GeodataError::Preparation("could not create default water corrections"))?;
+    apply_water_model(&mut prepared, request, &overview.pages, corrections)?;
+    Ok(prepared)
+}
+
+pub(crate) fn apply_water_model(
+    prepared: &mut PreparedHydrology,
+    request: MapRequest,
+    overview_elevation_pages: &[aoe_map::ElevationPage],
+    corrections: WaterCorrectionDocument,
+) -> Result<(), GeodataError> {
+    let model = water_model::prepare_water_model(
+        request,
+        &mut prepared.hydrology_pages,
+        overview_elevation_pages,
+        corrections,
+    )?;
+    prepared.evidence_index.water_model = Some(model);
+    prepared.evidence_index.hydrology_page_root =
+        ordered_hydrology_page_root(&prepared.hydrology_pages)?;
+    prepared
+        .evidence_index
+        .validate_pages(&prepared.hydrology_pages, &prepared.modern_land_cover_pages)?;
+    Ok(())
 }
 
 pub(crate) fn preflight_hydrology(
@@ -275,6 +329,7 @@ pub(crate) fn prepare_hydrology_with_plan(
         policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
         hydrology_page_root: ordered_hydrology_page_root(&hydrology_pages)?,
         modern_land_cover_page_root: ordered_modern_land_cover_page_root(&modern_land_cover_pages)?,
+        water_model: None,
     };
     evidence_index.validate_pages(&hydrology_pages, &modern_land_cover_pages)?;
     let river_coverage = if plan.rivers_available {
@@ -282,7 +337,7 @@ pub(crate) fn prepare_hydrology_with_plan(
     } else {
         "hydrorivers=unavailable-outside-western-europe"
     };
-    let preprocessing = format!("hydrology-gdal-page-v2;{river_coverage}");
+    let preprocessing = format!("hydrology-gdal-page-v2;lake-surface-model-v1;{river_coverage}");
     let source_locks = locks
         .iter()
         .map(|lock| lock.to_map_source_lock(acquisition_marker(), preprocessing.clone()))

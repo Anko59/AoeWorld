@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "tests/water_model.rs"]
+mod water_model;
+
 fn environment() -> PreparedEnvironment {
     PreparedEnvironment {
         samples_per_axis: 4,
@@ -228,6 +231,7 @@ fn supported_generation_recipes_preserve_serialization_and_identity() {
         Err(MapPackageError::InvalidGenerationRecipeVersion)
     );
 }
+
 #[test]
 fn packages_require_and_hash_projection_metadata() {
     assert!(matches!(
@@ -372,6 +376,7 @@ fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
         policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
         hydrology_page_root: [4; 32],
         modern_land_cover_page_root: [5; 32],
+        water_model: None,
     });
     let package = MapPackage::with_prepared_environment(
         crate::MAP_SCHEMA_VERSION,

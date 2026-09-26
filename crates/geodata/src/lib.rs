@@ -25,6 +25,7 @@ mod copernicus;
 pub use copernicus::{
     DemResolution, MAX_DETAILED_INPUT_BYTES, MAX_DETAILED_SAMPLES_PER_AXIS,
     MAX_DETAILED_STAGING_BYTES, MAX_DETAILED_TILES, prepare_detailed_directory,
+    prepare_detailed_directory_with_water_corrections,
 };
 mod footprint;
 pub use footprint::{

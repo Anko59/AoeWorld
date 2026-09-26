@@ -28,6 +28,7 @@ fn prepared(kinds: Vec<u8>) -> PreparedHydrology {
         height: 2,
         kind: kinds,
         method: methods,
+        water_model: None,
     }];
     let modern_land_cover_pages = vec![ModernLandCoverPage {
         level: 0,
@@ -48,6 +49,7 @@ fn prepared(kinds: Vec<u8>) -> PreparedHydrology {
             &modern_land_cover_pages,
         )
         .expect("cover root"),
+        water_model: None,
     };
     PreparedHydrology {
         samples_per_axis: 2,
@@ -98,6 +100,92 @@ fn modern_water_is_consumable_without_rewriting_historical_land_use() {
 }
 
 #[test]
+fn modeled_water_correction_overrides_the_shared_coverage_without_promoting_reservoirs() {
+    let mut prepared = prepared(vec![
+        HydrologyKind::Lake as u8,
+        HydrologyKind::Reservoir as u8,
+        HydrologyKind::River as u8,
+        HydrologyKind::Land as u8,
+    ]);
+    prepared.hydrology_pages[0].water_model = Some(aoe_map::HydrologyWaterModelPage {
+        kind: vec![
+            HydrologyKind::Land as u8,
+            HydrologyKind::Reservoir as u8,
+            HydrologyKind::River as u8,
+            HydrologyKind::Land as u8,
+        ],
+        surface_level_centimeters: vec![None; 4],
+        flow_direction: vec![aoe_map::WaterFlowDirection::Unknown as u8; 4],
+        provenance: vec![
+            aoe_map::WaterModelProvenance::GeographicCorrection as u8,
+            aoe_map::WaterModelProvenance::EvidenceOnly as u8,
+            aoe_map::WaterModelProvenance::EvidenceOnly as u8,
+            aoe_map::WaterModelProvenance::EvidenceOnly as u8,
+        ],
+    });
+    let corrections = aoe_map::WaterCorrectionDocument::new(
+        MapRequest::default(),
+        2,
+        vec![aoe_map::GeographicWaterPatch {
+            id: "fixture-set-land".to_owned(),
+            precedence: 1,
+            applies_from_year_ce: 500,
+            applies_through_year_ce: 700,
+            source_citation: "test fixture".to_owned(),
+            operation: aoe_map::WaterCorrectionOperation::SetLand,
+            polygon: vec![
+                aoe_map::WaterCorrectionVertex {
+                    longitude_e7: 21_000_000,
+                    latitude_e7: 488_500_000,
+                },
+                aoe_map::WaterCorrectionVertex {
+                    longitude_e7: 23_500_000,
+                    latitude_e7: 488_500_000,
+                },
+                aoe_map::WaterCorrectionVertex {
+                    longitude_e7: 23_500_000,
+                    latitude_e7: 490_500_000,
+                },
+                aoe_map::WaterCorrectionVertex {
+                    longitude_e7: 21_000_000,
+                    latitude_e7: 490_500_000,
+                },
+            ],
+        }],
+    )
+    .expect("correction document");
+    prepared.evidence_index.water_model = Some(aoe_map::HydrologyWaterModelIndex {
+        model_version: aoe_map::HYDROLOGY_WATER_MODEL_VERSION,
+        samples_per_axis: 2,
+        target_year_ce: aoe_map::WATER_CORRECTION_TARGET_YEAR_CE,
+        correction_document: corrections,
+    });
+    prepared.evidence_index.hydrology_page_root =
+        ordered_hydrology_page_root(&prepared.hydrology_pages).expect("modeled root");
+    prepared
+        .evidence_index
+        .validate_pages(&prepared.hydrology_pages, &prepared.modern_land_cover_pages)
+        .expect("verified modeled evidence");
+
+    assert_eq!(
+        prepared
+            .modern_water_override_at(2, 0, 0)
+            .expect("corrected land"),
+        Some((0, 0))
+    );
+    assert_eq!(
+        prepared
+            .modern_water_override_at(2, 1, 0)
+            .expect("reservoir"),
+        None
+    );
+    assert_eq!(
+        prepared.modern_water_override_at(2, 0, 1).expect("river"),
+        Some((0, 100))
+    );
+}
+
+#[test]
 fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
     let axis = 65_u16;
     let mut hydrology_pages = Vec::new();
@@ -130,6 +218,7 @@ fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
                     };
                     len
                 ],
+                water_model: None,
             });
             cover_pages.push(ModernLandCoverPage {
                 level: 0,
@@ -150,6 +239,7 @@ fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
             .expect("hydrology root"),
         modern_land_cover_page_root: aoe_map::ordered_modern_land_cover_page_root(&cover_pages)
             .expect("cover root"),
+        water_model: None,
     };
     evidence_index
         .validate_pages(&hydrology_pages, &cover_pages)

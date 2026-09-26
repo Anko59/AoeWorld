@@ -1,4 +1,17 @@
 use super::{ENVIRONMENT_PAGE_SAMPLES, EnvironmentError};
+#[path = "hydrology/correction.rs"]
+mod correction;
+#[path = "hydrology/model.rs"]
+mod model;
+pub use correction::{
+    GeographicWaterPatch, MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS,
+    WATER_CORRECTION_SCHEMA_VERSION, WATER_CORRECTION_TARGET_YEAR_CE, WaterCorrectionDocument,
+    WaterCorrectionOperation, WaterCorrectionProjection, WaterCorrectionVertex,
+};
+pub use model::{
+    HYDROLOGY_WATER_MODEL_VERSION, HydrologyWaterModelIndex, HydrologyWaterModelPage,
+    MODELLING_GRID_LIMIT, WaterFlowDirection, WaterModelProvenance,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -108,6 +121,8 @@ pub struct HydrologyEvidenceIndex {
     pub policy: HydrologyWaterPolicy,
     pub hydrology_page_root: [u8; 32],
     pub modern_land_cover_page_root: [u8; 32],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water_model: Option<HydrologyWaterModelIndex>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -129,6 +144,12 @@ impl HydrologyEvidenceIndex {
         {
             return Err(EnvironmentError::InvalidIndex);
         }
+        if let Some(model) = &self.water_model {
+            model.validate()?;
+            if model.samples_per_axis != self.samples_per_axis {
+                return Err(EnvironmentError::InvalidIndex);
+            }
+        }
         Ok(())
     }
 
@@ -140,6 +161,12 @@ impl HydrologyEvidenceIndex {
         hash.update(&[self.policy as u8]);
         hash.update(&self.hydrology_page_root);
         hash.update(&self.modern_land_cover_page_root);
+        if let Some(model) = &self.water_model {
+            hash.update(&[1]);
+            model.hash_into(hash);
+        } else {
+            hash.update(&[0]);
+        }
     }
 
     pub fn validate_pages(
@@ -148,6 +175,14 @@ impl HydrologyEvidenceIndex {
         land_cover: &[ModernLandCoverPage],
     ) -> Result<(), EnvironmentError> {
         self.validate()?;
+        if let Some(model) = &self.water_model {
+            model.validate()?;
+            if model.samples_per_axis != self.samples_per_axis
+                || model.correction_document.samples_per_axis != self.samples_per_axis
+            {
+                return Err(EnvironmentError::InvalidIndex);
+            }
+        }
         validate_page_set(
             self.samples_per_axis,
             hydrology,
@@ -162,6 +197,13 @@ impl HydrologyEvidenceIndex {
         )?;
         if ordered_hydrology_page_root(hydrology)? != self.hydrology_page_root
             || ordered_modern_land_cover_page_root(land_cover)? != self.modern_land_cover_page_root
+        {
+            return Err(EnvironmentError::InvalidPyramid);
+        }
+        let expects_model = self.water_model.is_some();
+        if hydrology
+            .iter()
+            .any(|page| page.water_model.is_some() != expects_model)
         {
             return Err(EnvironmentError::InvalidPyramid);
         }
@@ -208,6 +250,8 @@ pub struct HydrologyEvidencePage {
     pub height: u8,
     pub kind: Vec<u8>,
     pub method: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water_model: Option<HydrologyWaterModelPage>,
 }
 
 impl HydrologyEvidencePage {
@@ -229,6 +273,9 @@ impl HydrologyEvidencePage {
                 method: method.try_into()?,
             }
             .validate()?;
+        }
+        if let Some(model) = &self.water_model {
+            model.validate(&self.kind)?;
         }
         Ok(())
     }
@@ -273,6 +320,19 @@ impl HydrologyEvidencePage {
         hash.update(&[self.width, self.height]);
         hash.update(&self.kind);
         hash.update(&self.method);
+        if let Some(model) = &self.water_model {
+            hash.update(b"modeled-water-v1\0");
+            for index in 0..model.kind.len() {
+                hash.update(&[model.kind[index]]);
+                if let Some(level) = model.surface_level_centimeters[index] {
+                    hash.update(&[1]);
+                    hash.update(&level.to_le_bytes());
+                } else {
+                    hash.update(&[0]);
+                }
+                hash.update(&[model.flow_direction[index], model.provenance[index]]);
+            }
+        }
         Ok(*hash.finalize().as_bytes())
     }
 }
