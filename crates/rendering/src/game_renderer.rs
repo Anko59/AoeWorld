@@ -1,12 +1,10 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
-    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer,
-    canvas_scene::draw_scene_sprite,
-    game_grid,
+    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid,
     playground::game_sprites,
     surface_mesh::{
         ProjectedSurfaceTriangle, apply_terrain_textures, projected_surface_triangles,
-        surface_depth,
+        surface_depth, surface_render_depth,
     },
     web::Sprite,
 };
@@ -18,15 +16,26 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 mod world_sprites;
 use world_sprites::world_sprite_frames;
 
+#[path = "game_renderer/canvas_depth.rs"]
+mod canvas_depth;
+use canvas_depth::render_canvas_world;
+
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "game_renderer/canvas_depth_tests.rs"]
+mod canvas_depth_tests;
 
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
     Canvas {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
-        atlases: [HtmlCanvasElement; 5],
+        atlas: HtmlCanvasElement,
+        source_atlas: Vec<u8>,
+        color_buffer: Vec<u8>,
+        depth_buffer: Vec<f64>,
     },
 }
 #[derive(Clone, Copy)]
@@ -122,18 +131,15 @@ impl GameRenderer {
             .ok_or("Canvas is detached")?
             .replace_child(&replacement, &canvas)
             .map_err(error)?;
-        let context = context(&replacement)?;
+        let main_context = context(&replacement)?;
         Ok((
             Self::Canvas {
                 canvas: replacement.clone(),
-                context,
-                atlases: [
-                    new_atlas(&replacement)?,
-                    new_atlas(&replacement)?,
-                    new_atlas(&replacement)?,
-                    new_atlas(&replacement)?,
-                    new_atlas(&replacement)?,
-                ],
+                context: main_context,
+                atlas: new_atlas(&replacement)?,
+                source_atlas: Vec::new(),
+                color_buffer: Vec::new(),
+                depth_buffer: Vec::new(),
             },
             replacement,
         ))
@@ -149,34 +155,33 @@ impl GameRenderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(pixels),
-            Self::Canvas { atlases, .. } => {
+            Self::Canvas {
+                atlas,
+                source_atlas,
+                ..
+            } => {
                 if pixels.len() != (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize {
                     return Err("Invalid game atlas size".into());
                 }
-                for (tint, atlas) in atlases.iter().enumerate() {
-                    let tinted = crate::surface_mesh::tint_atlas_pixels(
-                        pixels,
-                        tint.try_into().expect("five terrain tint classes"),
-                    )
-                    .ok_or_else(|| "Invalid RGBA game atlas".to_owned())?;
-                    let data = ImageData::new_with_u8_clamped_array_and_sh(
-                        Clamped(&tinted),
-                        GAME_ATLAS_SIDE,
-                        GAME_ATLAS_SIDE,
-                    )
+                let data = ImageData::new_with_u8_clamped_array_and_sh(
+                    Clamped(pixels),
+                    GAME_ATLAS_SIDE,
+                    GAME_ATLAS_SIDE,
+                )
+                .map_err(error)?;
+                context(atlas)?
+                    .put_image_data(&data, 0.0, 0.0)
                     .map_err(error)?;
-                    context(atlas)?
-                        .put_image_data(&data, 0.0, 0.0)
-                        .map_err(error)?;
-                }
+                *source_atlas = pixels.to_vec();
                 Ok(())
             }
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        if let Self::WebGpu(renderer) = self {
-            renderer.resize(width, height);
+        match self {
+            Self::WebGpu(renderer) => renderer.resize(width, height),
+            Self::Canvas { .. } => {}
         }
     }
 
@@ -196,7 +201,7 @@ impl GameRenderer {
             Self::Canvas {
                 canvas,
                 context,
-                atlases,
+                atlas,
                 ..
             } => {
                 let width = f64::from(canvas.width());
@@ -229,7 +234,7 @@ impl GameRenderer {
                     } else {
                         context.translate(x, y).map_err(error)?;
                     }
-                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(&atlases[0], sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
+                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(atlas, sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
                     context.restore();
                     result?;
                 }
@@ -254,13 +259,23 @@ impl GameRenderer {
         let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
         match self {
             Self::WebGpu(renderer) => {
+                let depth_origin = surface_depth([
+                    camera.center[0],
+                    camera.center[1],
+                    camera.focus_elevation_meters,
+                ]);
                 let mut instances = layers
                     .iter()
                     .map(|layer| match layer {
                         WorldLayer::Surface(triangle) => {
-                            crate::web::surface_instance(triangle, camera.viewport)
+                            crate::web::surface_instance(triangle, camera.viewport, depth_origin)
                         }
-                        WorldLayer::Selection(sprite) | WorldLayer::Sprite(sprite, _) => *sprite,
+                        WorldLayer::Selection(sprite, depth)
+                        | WorldLayer::Sprite(sprite, _, depth) => {
+                            let mut sprite = *sprite;
+                            sprite.depths = [(*depth - depth_origin) as f32; 4];
+                            sprite
+                        }
                     })
                     .collect::<Vec<_>>();
                 if grid {
@@ -273,33 +288,20 @@ impl GameRenderer {
             Self::Canvas {
                 canvas,
                 context,
-                atlases,
-            } => {
-                let width = f64::from(canvas.width());
-                let height = f64::from(canvas.height());
-                context.set_fill_style_str("#294a26");
-                context.fill_rect(0.0, 0.0, width, height);
-                context.set_image_smoothing_enabled(false);
-                for layer in layers {
-                    match layer {
-                        WorldLayer::Surface(triangle) => {
-                            crate::surface_mesh::draw_surface_triangle(
-                                context, atlases, &triangle,
-                            )?;
-                        }
-                        WorldLayer::Selection(sprite) => {
-                            game_grid::draw_selection_marker(context, sprite, camera.viewport)?;
-                        }
-                        WorldLayer::Sprite(sprite, frame) => {
-                            draw_scene_sprite(context, &atlases[0], canvas, (sprite, frame))?;
-                        }
-                    }
-                }
-                if grid {
-                    game_grid::draw_grid(context, camera);
-                }
-                Ok(())
-            }
+                source_atlas,
+                color_buffer,
+                depth_buffer,
+                ..
+            } => render_canvas_world(
+                canvas,
+                context,
+                source_atlas,
+                color_buffer,
+                depth_buffer,
+                &layers,
+                camera,
+                grid,
+            ),
         }
     }
 }
@@ -344,16 +346,22 @@ fn ordered_world_layers(
         for (sprite, depth) in
             game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
         {
-            entries.push((depth, 1_u8, sequence, WorldLayer::Selection(sprite)));
+            entries.push((depth, 1_u8, sequence, WorldLayer::Selection(sprite, depth)));
             sequence += 1;
         }
     }
     for (sprite, frame, depth) in objects {
-        entries.push((depth, 2_u8, sequence, WorldLayer::Sprite(sprite, frame)));
+        entries.push((
+            depth,
+            2_u8,
+            sequence,
+            WorldLayer::Sprite(sprite, frame, depth),
+        ));
         sequence += 1;
     }
-    // Average painter depth orders the selected markers with the world layers;
-    // exact terrain-to-sprite intersections still need a shared depth buffer.
+    // Canvas 2D consumes a deterministic average-depth order. WebGPU also
+    // receives camera-relative per-vertex depths and resolves each fragment in
+    // its depth buffer, including terrain/sprite intersections.
     entries.sort_by(|left, right| {
         left.0
             .total_cmp(&right.0)
@@ -367,13 +375,13 @@ fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
     triangle
         .points
         .iter()
-        .map(|point| surface_depth(point.world))
+        .map(|point| surface_render_depth(point.world, triangle.skirt))
         .sum::<f64>()
         / 3.0
 }
 
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
-    Selection(Sprite),
-    Sprite(Sprite, GameFrame),
+    Selection(Sprite, f64),
+    Sprite(Sprite, GameFrame, f64),
 }

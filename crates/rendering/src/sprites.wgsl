@@ -3,6 +3,7 @@ struct Sprite {
     radius: vec2<f32>,
     color: vec4<f32>,
     uv: vec4<f32>,
+    depths: vec4<f32>,
 };
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d<f32>;
@@ -72,7 +73,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     if is_surface {
         let surface_points = array<vec2<f32>, 3>(sprite.position, sprite.radius, sprite.color.xy);
         let corner = min(vertex, 2u);
-        out.clip = vec4<f32>(surface_points[corner], 0.0, 1.0);
+        out.clip = vec4<f32>(surface_points[corner], sprite.depths[corner], 1.0);
         if sprite.color.w < -1.5 {
             out.color = vec4<f32>(sprite.uv.xyz, 1.0);
             out.uv = vec2<f32>(0.0);
@@ -87,7 +88,11 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             out.tint_kind = code / 8u;
         }
     } else {
-        out.clip = vec4<f32>(sprite.position + corners[vertex] * sprite.radius, 0.0, 1.0);
+        out.clip = vec4<f32>(
+            sprite.position + corners[vertex] * sprite.radius,
+            sprite.depths.x,
+            1.0,
+        );
         out.uv = sprite.uv.xy + vec2<f32>((corners[vertex].x + 1.0) * 0.5, (1.0 - corners[vertex].y) * 0.5) * sprite.uv.zw;
         out.color = sprite.color;
         out.solid = 0u;
@@ -102,6 +107,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return in.color;
     }
     let texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0);
+    if texel.a <= 0.0 {
+        discard;
+    }
     if in.tint_kind == 4u {
         let water = vec3<f32>(0.14901961, 0.44313726, 0.74509805);
         return vec4<f32>(mix(texel.rgb, water, 0.14), texel.a);

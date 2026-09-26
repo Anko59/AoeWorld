@@ -22,6 +22,9 @@ pub(crate) struct Sprite {
     pub(crate) radius: [f32; 2],
     pub(crate) color: [f32; 4],
     pub(crate) uv: [f32; 4],
+    /// Camera-relative world depth for the sprite's vertices. Terrain uses
+    /// three values so the depth buffer interpolates the actual surface plane.
+    pub(crate) depths: [f32; 4],
 }
 pub struct Renderer {
     adapter_label: String,
@@ -32,6 +35,7 @@ pub struct Renderer {
     pub(crate) pipeline: wgpu::RenderPipeline,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
+    depth: wgpu::Texture,
 }
 
 #[derive(Clone, Copy)]
@@ -196,7 +200,13 @@ impl Renderer {
                 compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth24Plus,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
             cache: None,
@@ -207,6 +217,7 @@ impl Renderer {
             &atlas_view,
             &sampler,
         );
+        let depth = create_depth_texture(&device, width, height);
         Ok(Self {
             adapter_label,
             surface,
@@ -216,6 +227,7 @@ impl Renderer {
             pipeline,
             instances,
             _atlas: atlas,
+            depth,
         })
     }
 
@@ -230,6 +242,7 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        self.depth = create_depth_texture(&self.device, width, height);
     }
 
     pub fn render(
@@ -260,6 +273,7 @@ impl Renderer {
                 radius: [3.0 * camera.zoom / width, 3.0 * camera.zoom / height],
                 color: palette[entity.player.0 as usize % palette.len()],
                 uv: [0.0, 0.0, 1.0, 1.0],
+                depths: [0.0; 4],
             });
         }
         self.render_sprites(&sprites)
@@ -293,9 +307,10 @@ impl Renderer {
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
         for triangle in surfaces {
-            instances.push(surface_instance(triangle, [width, height]));
+            instances.push(surface_instance(triangle, [width, height], 0.0));
         }
         instances.extend_from_slice(sprites);
+        normalize_depths(&mut instances);
         self.instances.write(&self.queue, &instances);
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -305,7 +320,7 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 6,
+                    persistent_gpu_resources: 7,
                     atlas_pages: 1,
                     atlas_uploads: 1,
                     atlas_bytes: ATLAS_BYTES,
@@ -317,7 +332,7 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 6,
+                    persistent_gpu_resources: 7,
                     atlas_pages: 1,
                     atlas_uploads: 1,
                     atlas_bytes: ATLAS_BYTES,
@@ -332,6 +347,9 @@ impl Renderer {
         };
         let view = frame
             .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_view = self
+            .depth
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
@@ -355,7 +373,14 @@ impl Renderer {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
                 multiview_mask: None,
@@ -370,7 +395,7 @@ impl Renderer {
             visible: sprites.len(),
             draw_calls: usize::from(!instances.is_empty()),
             gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 6,
+            persistent_gpu_resources: 7,
             atlas_pages: 1,
             atlas_uploads: 1,
             atlas_bytes: ATLAS_BYTES,
@@ -385,7 +410,11 @@ fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
     ]
 }
 
-pub(crate) fn surface_instance(triangle: &ProjectedSurfaceTriangle, viewport: [f64; 2]) -> Sprite {
+pub(crate) fn surface_instance(
+    triangle: &ProjectedSurfaceTriangle,
+    viewport: [f64; 2],
+    depth_origin: f64,
+) -> Sprite {
     let points = triangle.points.map(|point| {
         screen_to_clip(
             point.screen.x,
@@ -393,6 +422,10 @@ pub(crate) fn surface_instance(triangle: &ProjectedSurfaceTriangle, viewport: [f
             viewport[0].max(1.0),
             viewport[1].max(1.0),
         )
+    });
+    let depths = triangle.points.map(|point| {
+        (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt) - depth_origin)
+            as f32
     });
     let second = points[1];
     let third = points[2];
@@ -407,12 +440,61 @@ pub(crate) fn surface_instance(triangle: &ProjectedSurfaceTriangle, viewport: [f
                 -1.0,
             ],
             uv,
+            depths: [depths[0], depths[1], depths[2], 0.0],
         },
         None => Sprite {
             position: points[0],
             radius: second,
             color: [third[0], third[1], 0.0, -2.0],
             uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
+            depths: [depths[0], depths[1], depths[2], 0.0],
         },
     }
+}
+
+fn normalize_depths(instances: &mut [Sprite]) {
+    let Some((minimum, maximum)) = instances
+        .iter()
+        .flat_map(|sprite| sprite.depths[..3].iter().copied())
+        .filter(|depth| depth.is_finite())
+        .fold(None, |range: Option<(f32, f32)>, depth| {
+            Some(range.map_or((depth, depth), |(minimum, maximum)| {
+                (minimum.min(depth), maximum.max(depth))
+            }))
+        })
+    else {
+        for sprite in instances {
+            sprite.depths = [0.0; 4];
+        }
+        return;
+    };
+    let span = maximum - minimum;
+    for sprite in instances {
+        for depth in &mut sprite.depths {
+            *depth = if !depth.is_finite() {
+                0.0
+            } else if span <= f32::EPSILON {
+                0.5
+            } else {
+                ((maximum - *depth) / span).clamp(0.0, 1.0)
+            };
+        }
+    }
+}
+
+fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("world depth"),
+        size: wgpu::Extent3d {
+            width: width.max(1),
+            height: height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth24Plus,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    })
 }

@@ -148,6 +148,7 @@ fn pickable_ground_wins_an_exact_tie_against_an_unpickable_skirt() {
     let triangles = [triangle(true, false), triangle(false, true)];
 
     assert_eq!(pick_surface_point(&triangles, screen), Some([4.0, 8.0]));
+    assert_eq!(surface_depth_at(&triangles, screen), Some(12.0));
 }
 
 #[wasm_bindgen_test]
@@ -213,7 +214,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
     let marker_index = layers
         .iter()
         .position(|layer| {
-            matches!(layer, WorldLayer::Selection(sprite) if sprite.position == marker.position)
+            matches!(layer, WorldLayer::Selection(sprite, _) if sprite.position == marker.position)
         })
         .unwrap();
     let cliff_index = layers
@@ -269,7 +270,7 @@ fn units_order_behind_and_in_front_of_a_raised_surface_at_contact_height() {
     let sprite_indices = layers
         .iter()
         .enumerate()
-        .filter_map(|(index, layer)| matches!(layer, WorldLayer::Sprite(_, _)).then_some(index))
+        .filter_map(|(index, layer)| matches!(layer, WorldLayer::Sprite(_, _, _)).then_some(index))
         .collect::<Vec<_>>();
     assert_eq!(sprite_indices.len(), 2);
     assert!(sprite_indices[0] < surface_index);
@@ -309,9 +310,9 @@ fn depleted_resource_disappears_from_both_backend_draw_lists() {
         .iter()
         .map(|layer| match layer {
             WorldLayer::Surface(triangle) => {
-                crate::web::surface_instance(triangle, camera.viewport)
+                crate::web::surface_instance(triangle, camera.viewport, 0.0)
             }
-            WorldLayer::Selection(sprite) | WorldLayer::Sprite(sprite, _) => *sprite,
+            WorldLayer::Selection(sprite, _) | WorldLayer::Sprite(sprite, _, _) => *sprite,
         })
         .collect::<Vec<_>>();
     assert_eq!(instances.len(), layers.len());
