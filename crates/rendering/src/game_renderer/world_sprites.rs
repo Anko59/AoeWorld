@@ -102,6 +102,7 @@ pub(super) fn world_sprite_frames(
             ],
             color: [1.0; 4],
             uv,
+            depths: [0.0; 4],
         };
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
@@ -180,6 +181,7 @@ fn scene_sprite(
         ],
         color: [1.0; 4],
         uv: frame.uv,
+        depths: [0.0; 4],
     })
 }
 

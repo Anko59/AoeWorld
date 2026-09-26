@@ -145,6 +145,7 @@ fn push(
         radius: [w / 960.0, h / 640.0],
         color: [1.0; 4],
         uv,
+        depths: [0.0; 4],
     });
 }
 
@@ -163,6 +164,7 @@ fn ring(sprites: &mut Vec<Sprite>, p: [f32; 2], color: [f32; 4], radius: f32) {
                 1.0 / GAME_ATLAS_SIDE as f32,
                 1.0 / GAME_ATLAS_SIDE as f32,
             ],
+            depths: [0.0; 4],
         });
     }
 }

@@ -1,5 +1,8 @@
-use crate::{GAME_ATLAS_SIDE, GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
+#[cfg(test)]
+use crate::GAME_ATLAS_SIDE;
+use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
 use aoe_core::{Camera, ScreenPoint};
+#[cfg(test)]
 use web_sys::CanvasRenderingContext2d;
 
 mod lod;
@@ -10,6 +13,7 @@ mod tests;
 
 pub const MAX_SURFACE_TILES: usize = 4_096;
 pub const MAX_SURFACE_TRIANGLES: usize = MAX_SURFACE_TILES * 6;
+#[cfg(test)]
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
 #[derive(Clone, Copy, Debug)]
@@ -78,7 +82,7 @@ pub fn pick_surface_point(
             + triangle.points[1].world[2] * weights[1]
             + triangle.points[2].world[2] * weights[2];
         let hit = (
-            surface_depth([world[0], world[1], elevation]),
+            surface_render_depth([world[0], world[1], elevation], triangle.skirt),
             triangle.tile,
             triangle.skirt,
             triangle.pickable,
@@ -117,13 +121,20 @@ pub fn surface_depth_at(
                     + triangle.points[1].world[2] * weights[1]
                     + triangle.points[2].world[2] * weights[2],
             ];
-            Some(surface_depth(world))
+            Some(surface_render_depth(world, triangle.skirt))
         })
         .max_by(f64::total_cmp)
 }
 
 pub(crate) fn surface_depth(world: [f64; 3]) -> f64 {
     world[0] + world[1] + 2.0 * world[2]
+}
+
+/// Shared cliff faces lose an exact depth tie to the terrain surface, matching
+/// picking's non-skirt preference and preventing a coplanar skirt from covering
+/// the walkable top at the depth buffer's equal comparison.
+pub(crate) fn surface_render_depth(world: [f64; 3], skirt: bool) -> f64 {
+    surface_depth(world) - if skirt { 0.01 } else { 0.0 }
 }
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
@@ -162,6 +173,7 @@ pub(crate) fn triangle_texture_coordinates(mode: u8) -> [[f64; 2]; 3] {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn draw_surface_triangle(
     context: &CanvasRenderingContext2d,
     atlases: &[web_sys::HtmlCanvasElement; 5],
@@ -228,6 +240,7 @@ pub(crate) fn draw_surface_triangle(
     draw_result
 }
 
+#[cfg(test)]
 pub(crate) fn texture_transform(points: [SurfacePoint; 3], uv: [[f64; 2]; 3]) -> [f64; 6] {
     let [u0, v0] = uv[0];
     let du1 = uv[1][0] - u0;
@@ -256,6 +269,7 @@ pub(crate) fn texture_transform(points: [SurfacePoint; 3], uv: [[f64; 2]; 3]) ->
     ]
 }
 
+#[cfg(test)]
 pub(crate) fn tint_atlas_pixels(pixels: &[u8], tint: u8) -> Option<Vec<u8>> {
     if pixels.len() % 4 != 0 {
         return None;
