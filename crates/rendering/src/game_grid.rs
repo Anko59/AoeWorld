@@ -27,37 +27,12 @@ pub(crate) fn selection_ring(
                 radius: pixel_radius(camera.viewport, 1.5),
                 color: [0.95, 0.85, 0.35, 1.0],
                 uv: solid_uv(),
+                depths: [0.0; 4],
             },
             surface_depth([world[0], world[1], elevation_meters]),
         ));
     }
     sprites
-}
-
-pub(crate) fn draw_selection_marker(
-    context: &CanvasRenderingContext2d,
-    sprite: Sprite,
-    viewport: [f64; 2],
-) -> Result<(), String> {
-    let center_x = (f64::from(sprite.position[0]) + 1.0) * viewport[0] * 0.5;
-    let center_y = (1.0 - f64::from(sprite.position[1])) * viewport[1] * 0.5;
-    let radius_x = f64::from(sprite.radius[0]) * viewport[0];
-    let radius_y = f64::from(sprite.radius[1]) * viewport[1];
-    context.begin_path();
-    context.set_fill_style_str("rgba(242,217,89,1)");
-    context
-        .ellipse(
-            center_x,
-            center_y,
-            radius_x,
-            radius_y,
-            0.0,
-            0.0,
-            std::f64::consts::TAU,
-        )
-        .map_err(|error| format!("Canvas selection marker: {error:?}"))?;
-    context.fill();
-    Ok(())
 }
 
 pub(crate) fn grid_sprites(camera: SceneCamera) -> Vec<Sprite> {
@@ -186,6 +161,7 @@ fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, vie
             radius: pixel_radius(viewport, 2.0),
             color: GRID_COLOR,
             uv: solid_uv(),
+            depths: [f32::INFINITY; 4],
         });
     }
 }
