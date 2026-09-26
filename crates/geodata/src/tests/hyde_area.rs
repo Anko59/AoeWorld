@@ -29,6 +29,7 @@ fn source(
         crop_area_square_kilometers: crop,
         grazing_area_square_kilometers: grazing,
         population,
+        valid_land_area_square_kilometers: None,
     }
 }
 
@@ -72,6 +73,11 @@ fn allocations_for_three_by_three() -> Vec<HydeAreaAllocation> {
     (1..=9)
         .map(|quantity| HydeAreaAllocation {
             land_area_square_meters: if quantity == 9 {
+                900_000_000.0
+            } else {
+                100_000_000.0
+            },
+            valid_land_area_square_meters: if quantity == 9 {
                 900_000_000.0
             } else {
                 100_000_000.0
@@ -486,3 +492,6 @@ fn source_land_quantities_above_area_or_combined_capacity_are_rejected() {
         );
     }
 }
+
+#[path = "hyde_area_valid.rs"]
+mod valid_land_tests;
