@@ -3,6 +3,25 @@ use aoe_map::PreparedEnvironment;
 use std::{path::Path, sync::atomic::AtomicBool};
 
 #[test]
+fn vegetation_correction_rejects_other_geography_before_source_acquisition() {
+    let document = VegetationPatchDocument::empty(MapRequest::default(), 2).unwrap();
+    let mut other = MapRequest::default();
+    other.center_longitude_e7 += 1_000_000;
+    let result = prepare_overview_with_vegetation_corrections(
+        PathBuf::from("/missing-cache"),
+        other,
+        2,
+        Some(&document),
+    );
+    assert!(matches!(
+        result,
+        Err(GeodataError::Preparation(
+            "vegetation patch binding does not match request"
+        ))
+    ));
+}
+
+#[test]
 fn local_projection_places_its_center_at_the_origin() {
     let definition = local_aeqd_definition(488_500_000, 23_500_000);
     let (east, north) = project_wgs84(&definition, 2.35, 48.85).expect("projection");

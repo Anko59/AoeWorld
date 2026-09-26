@@ -115,6 +115,7 @@ fn map_generate() -> Result<(), String> {
         output_directory: output,
         request,
         samples_per_axis: OVERVIEW_SAMPLES_PER_AXIS,
+        vegetation_corrections: None,
     })
     .map_err(|error| error.to_string())?;
     let WorkerResponse::PreparedDirectory { package } = response else {
