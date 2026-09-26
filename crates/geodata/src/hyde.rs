@@ -19,16 +19,23 @@ mod area;
 mod area_reader;
 pub(super) mod area_stream;
 mod correction;
+mod geographic_correction;
 pub use area::{
     HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
     allocate_hyde_area_window, prepare_hyde_area_pyramid,
 };
 pub use area_reader::prepare_hyde_area_600;
+pub use area_reader::prepare_hyde_area_600_with_corrections;
 pub use correction::{
     HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
     HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
     HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
     MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS,
+};
+pub use geographic_correction::{
+    GEOGRAPHIC_HISTORICAL_CORRECTION_SCHEMA_VERSION, GeographicHistoricalCorrection,
+    GeographicHistoricalCorrectionDocument, GeographicHistoricalEvidence, HistoricalGridBinding,
+    HistoricalQuantityPatch, HistoricalSourceCitation,
 };
 
 const HYDE_600_MEMBERS: [&str; 5] = [
@@ -42,6 +49,7 @@ const MAX_HYDE_MEMBER_BYTES: u64 = 128 * 1024 * 1024;
 /// Historical land-use fields may be prepared more finely than overview
 /// elevation. This is an independent field limit, not an elevation limit.
 pub const MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS: u16 = 1_024;
+pub const HYDE_AREA_PREPROCESSING_IDENTITY: &str = "hyde-600ad-area-pages-v2";
 
 #[derive(Clone, Debug)]
 pub struct PreparedHistoricalLandUse {

@@ -1,6 +1,9 @@
 use super::*;
 use aoe_map::PreparedEnvironment;
-use std::{path::Path, sync::atomic::AtomicBool};
+use std::{
+    path::{Path, PathBuf},
+    sync::atomic::AtomicBool,
+};
 
 #[test]
 fn local_projection_places_its_center_at_the_origin() {
@@ -8,6 +11,26 @@ fn local_projection_places_its_center_at_the_origin() {
     let (east, north) = project_wgs84(&definition, 2.35, 48.85).expect("projection");
     assert!(east.abs() < 0.01);
     assert!(north.abs() < 0.01);
+}
+
+#[test]
+fn wrong_location_correction_fails_before_source_acquisition() {
+    let request = MapRequest::default();
+    let document = GeographicHistoricalCorrectionDocument::empty(
+        request,
+        128,
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )
+    .unwrap();
+    let mut elsewhere = request;
+    elsewhere.center_latitude_e7 += 1_000_000;
+    let result = prepare_overview_with_corrections(
+        PathBuf::from("/nonexistent-geodata-cache"),
+        elsewhere,
+        128,
+        Some(&document),
+    );
+    assert!(matches!(result, Err(GeodataError::HistoricalCorrection(_))));
 }
 
 #[test]

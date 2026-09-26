@@ -4,8 +4,10 @@ pub(super) use self::values::validate_target_geography;
 #[cfg(test)]
 use super::HydeAreaAllocation;
 use super::{
-    HYDE_600_MEMBERS, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
-    PreparedHistoricalLandUse, allocate_hyde_area_window, area_stream::HistoricalPageStream,
+    HYDE_600_MEMBERS, HYDE_AREA_PREPROCESSING_IDENTITY, HydeAreaState, HydeGeographicPoint,
+    HydeSourceAreaCell, HydeTargetAreaCell, PreparedHistoricalLandUse, allocate_hyde_area_window,
+    area_stream::HistoricalPageStream,
+    geographic_correction::GeographicHistoricalCorrectionDocument,
 };
 use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
 use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, MapRequest};
@@ -37,6 +39,32 @@ pub fn prepare_hyde_area_600(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedHistoricalLandUse, GeodataError> {
+    if !(2..=super::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+        return Err(GeodataError::Preparation(
+            "area-aware HYDE grid is outside historical bounds",
+        ));
+    }
+    let corrections = GeographicHistoricalCorrectionDocument::empty(
+        request,
+        samples_per_axis,
+        HYDE_AREA_PREPROCESSING_IDENTITY,
+    )?;
+    prepare_hyde_area_600_with_corrections(
+        baseline_archive,
+        supplementary_archive,
+        request,
+        samples_per_axis,
+        &corrections,
+    )
+}
+
+pub fn prepare_hyde_area_600_with_corrections(
+    baseline_archive: &Path,
+    supplementary_archive: &Path,
+    request: MapRequest,
+    samples_per_axis: u16,
+    corrections: &GeographicHistoricalCorrectionDocument,
+) -> Result<PreparedHistoricalLandUse, GeodataError> {
     // Ordinary overview requests still use 128; this independent historical
     // path can stream up to 1024 without a full-grid allocation buffer.
     if !(2..=super::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
@@ -47,6 +75,7 @@ pub fn prepare_hyde_area_600(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid request"))?;
+    corrections.validate_for(request, samples_per_axis, HYDE_AREA_PREPROCESSING_IDENTITY)?;
     let estimate = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid request estimate"))?;
@@ -73,7 +102,7 @@ pub fn prepare_hyde_area_600(
                 f64::from(request.center_longitude_e7) / 10_000_000.0,
             )?;
             let sources = reader.source_cells(&targets)?;
-            let page_allocations = allocate_hyde_area_window(
+            let mut page_allocations = allocate_hyde_area_window(
                 &sources,
                 &targets,
                 request.center_latitude_e7,
@@ -88,6 +117,13 @@ pub fn prepare_hyde_area_600(
                     ));
                 }
             }
+            corrections.apply_page_validated(
+                page_x,
+                page_y,
+                width,
+                height,
+                &mut page_allocations,
+            )?;
             stream.push(
                 page_x / PAGE_SAMPLES,
                 page_y / PAGE_SAMPLES,

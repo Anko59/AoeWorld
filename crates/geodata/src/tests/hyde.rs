@@ -96,6 +96,57 @@ fn production_area_path_prepares_the_offline_archive_fixture_deterministically()
 }
 
 #[test]
+fn production_archive_path_applies_cited_history_and_unknown_before_page_publication() {
+    let archives = test_hyde_archives();
+    let request = MapRequest::default();
+    let mut document =
+        GeographicHistoricalCorrectionDocument::empty(request, 2, HYDE_AREA_PREPROCESSING_IDENTITY)
+            .unwrap();
+    document.sources = vec![HistoricalSourceCitation {
+        id: "offline-fixture".into(),
+        citation: "Synthetic archive regression fixture".into(),
+    }];
+    document.corrections = vec![
+        GeographicHistoricalCorrection {
+            cell_x: 0,
+            cell_y: 0,
+            source_id: "offline-fixture".into(),
+            evidence: GeographicHistoricalEvidence::HistoricalModel {
+                quantities: HistoricalQuantityPatch {
+                    valid_land_area_square_meters: 100_000.0,
+                    crop_area_square_kilometers: 0.05,
+                    grazing_area_square_kilometers: 0.0,
+                    population: 1.0,
+                },
+            },
+        },
+        GeographicHistoricalCorrection {
+            cell_x: 1,
+            cell_y: 0,
+            source_id: "offline-fixture".into(),
+            evidence: GeographicHistoricalEvidence::Unknown,
+        },
+    ];
+    let corrected = prepare_hyde_area_600_with_corrections(
+        &archives.baseline,
+        &archives.supplementary,
+        request,
+        2,
+        &document,
+    )
+    .unwrap();
+    let ordinary =
+        prepare_hyde_area_600(&archives.baseline, &archives.supplementary, request, 2).unwrap();
+    let corrected_page = &corrected.pages[0];
+    assert_eq!(corrected_page.crop_percent[0], 50);
+    assert_eq!(corrected_page.coverage[1].valid_land_percent, 0);
+    assert_ne!(
+        corrected.field.levels[0].ordered_page_root,
+        ordinary.field.levels[0].ordered_page_root
+    );
+}
+
+#[test]
 fn production_area_path_prepares_a_full_overview_axis() {
     let archives = test_hyde_archives();
     let prepared = prepare_hyde_area_600(

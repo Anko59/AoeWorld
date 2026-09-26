@@ -71,30 +71,17 @@ fn tool_version() -> String {
     format!("GDAL {gdal} / PROJ {proj}")
 }
 
-pub fn prepare_detailed_directory(
-    cache_root: PathBuf,
-    output_directory: PathBuf,
-    request: MapRequest,
-    samples_per_axis: u16,
-    resolution: DemResolution,
-) -> Result<MapPackage, GeodataError> {
-    prepare_with_staging(
-        cache_root,
-        output_directory,
-        request,
-        samples_per_axis,
-        resolution,
-        None,
-    )
-}
+mod entry;
+pub use entry::prepare_detailed_directory;
 
-pub(crate) fn prepare_with_staging(
+pub(crate) fn prepare_with_staging_and_corrections(
     cache_root: PathBuf,
     output_directory: PathBuf,
     request: MapRequest,
     samples_per_axis: u16,
     resolution: DemResolution,
     staging_root: Option<PathBuf>,
+    historical_corrections: Option<&crate::GeographicHistoricalCorrectionDocument>,
 ) -> Result<MapPackage, GeodataError> {
     let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     if !(2..=MAX_DETAILED_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
@@ -105,13 +92,27 @@ pub(crate) fn prepare_with_staging(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let historical_axis = samples_per_axis.min(crate::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS);
+    if let Some(document) = historical_corrections {
+        document.validate_for(
+            request,
+            historical_axis,
+            crate::hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+        )?;
+    }
     let estimate = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid map request estimate"))?;
     let bounds = geographic_bounds(request, estimate.effective_side_meters)?;
     validate_tile_budget(bounds)?;
     let hydrology_plan = crate::hydrology::preflight_hydrology(&cache_root, request)?;
-    let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
+    let overview = crate::prepare_overview_with_historical_axis(
+        cache_root.clone(),
+        request,
+        128,
+        historical_axis,
+        historical_corrections,
+    )?;
     let hydrology = crate::hydrology::prepare_hydrology_with_plan(
         cache_root.clone(),
         request,

@@ -41,6 +41,27 @@ fn detailed_sample_cap_is_rejected_before_any_source_access() {
 }
 
 #[test]
+fn detailed_historical_correction_binds_to_its_independent_grid_before_acquisition() {
+    let request = MapRequest::default();
+    let correction = crate::GeographicHistoricalCorrectionDocument::empty(
+        request,
+        128,
+        crate::hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )
+    .unwrap();
+    let result = prepare_with_staging_and_corrections(
+        std::env::temp_dir().join("aoe-detailed-history-axis-cache"),
+        std::env::temp_dir().join("aoe-detailed-history-axis-output"),
+        request,
+        512,
+        DemResolution::Glo90,
+        None,
+        Some(&correction),
+    );
+    assert!(matches!(result, Err(GeodataError::HistoricalCorrection(_))));
+}
+
+#[test]
 fn oversized_tile_extent_is_rejected_before_overview_acquisition() {
     let request = MapRequest {
         requested_side_meters: 2_000_000,

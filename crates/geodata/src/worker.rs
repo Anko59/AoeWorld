@@ -1,8 +1,8 @@
 use super::{
     GeneratedMap, GeodataError, WorkerRequest, WorkerResponse, etopo_2022_60s_surface,
     hyde_sources, local_aeqd_definition, potential_biome_sources, prepare_elevation,
-    prepare_overview, project_wgs84, projected_footprint, projection_distortion, raster_dimensions,
-    round_meters,
+    prepare_overview, prepare_overview_with_corrections, project_wgs84, projected_footprint,
+    projection_distortion, raster_dimensions, round_meters,
 };
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -19,8 +19,14 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             output_directory,
             request,
             samples_per_axis,
+            historical_corrections,
         } => {
-            let prepared = prepare_overview(cache_root, request, samples_per_axis)?;
+            let prepared = prepare_overview_with_corrections(
+                cache_root,
+                request,
+                samples_per_axis,
+                historical_corrections.as_ref(),
+            )?;
             let generated = GeneratedMap::from_prepared(request, prepared)?;
             crate::preparation_progress::stage(
                 crate::preparation_progress::Phase::PublishingPackage,
@@ -37,14 +43,16 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             samples_per_axis,
             resolution,
             staging_root,
+            historical_corrections,
         } => Ok(WorkerResponse::PreparedDirectory {
-            package: crate::copernicus::prepare_with_staging(
+            package: crate::copernicus::prepare_with_staging_and_corrections(
                 cache_root,
                 output_directory,
                 request,
                 samples_per_axis,
                 resolution,
                 staging_root,
+                historical_corrections.as_ref(),
             )?,
         }),
         WorkerRequest::ListOverviewSources => Ok(WorkerResponse::KnownSources {

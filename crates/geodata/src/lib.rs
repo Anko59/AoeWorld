@@ -33,13 +33,16 @@ pub use footprint::{
 };
 mod hyde;
 pub use hyde::{
+    GEOGRAPHIC_HISTORICAL_CORRECTION_SCHEMA_VERSION, GeographicHistoricalCorrection,
+    GeographicHistoricalCorrectionDocument, GeographicHistoricalEvidence,
     HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
     HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
-    HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    HistoricalGridBinding, HistoricalQuantityPatch, HistoricalSourceCitation, HydeAreaAllocation,
+    HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
     HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
     MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS, MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS,
     PreparedHistoricalLandUse, allocate_hyde_area_window, prepare_hyde_600, prepare_hyde_area_600,
-    prepare_hyde_area_pyramid, prepare_hyde_lake_coverage,
+    prepare_hyde_area_600_with_corrections, prepare_hyde_area_pyramid, prepare_hyde_lake_coverage,
 };
 mod hydrology;
 pub use hydrology::{
@@ -133,6 +136,49 @@ pub fn prepare_overview(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedOverview, GeodataError> {
+    prepare_overview_with_corrections(cache_root, request, samples_per_axis, None)
+}
+
+pub fn prepare_overview_with_corrections(
+    cache_root: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+    historical_corrections: Option<&GeographicHistoricalCorrectionDocument>,
+) -> Result<PreparedOverview, GeodataError> {
+    prepare_overview_with_historical_axis(
+        cache_root,
+        request,
+        samples_per_axis,
+        samples_per_axis,
+        historical_corrections,
+    )
+}
+
+/// Detailed preparation retains its 128-sample elevation overview while
+/// sampling history on an independent, bounded grid.
+pub fn prepare_overview_with_historical_axis(
+    cache_root: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+    historical_samples_per_axis: u16,
+    historical_corrections: Option<&GeographicHistoricalCorrectionDocument>,
+) -> Result<PreparedOverview, GeodataError> {
+    let request = request
+        .normalized()
+        .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let historical_corrections = match historical_corrections {
+        Some(document) => std::borrow::Cow::Borrowed(document),
+        None => std::borrow::Cow::Owned(GeographicHistoricalCorrectionDocument::empty(
+            request,
+            historical_samples_per_axis,
+            hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+        )?),
+    };
+    historical_corrections.validate_for(
+        request,
+        historical_samples_per_axis,
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )?;
     let source = etopo_2022_60s_surface();
     let lock = source
         .cache_lock()
@@ -194,11 +240,17 @@ pub fn prepare_overview(
         prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;
     let water = prepare_ocean_coverage(&water_path, request, samples_per_axis, lake_coverage)?;
     let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
-    let historical_land_use = prepare_hyde_area_600(
+    let historical_preprocessing = format!(
+        "{};corrections-sha256={}",
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+        historical_corrections.canonical_digest_hex(request)?
+    );
+    let historical_land_use = prepare_hyde_area_600_with_corrections(
         &hyde_baseline_path,
         &hyde_supplementary_path,
         request,
-        samples_per_axis,
+        historical_samples_per_axis,
+        &historical_corrections,
     )?;
     verify_potential_biome_legend(&vegetation_classes_path)?;
     prepared.environment.water = Some(water.field);
@@ -221,9 +273,9 @@ pub fn prepare_overview(
             "potential-biome-class-legend-v0.2".to_owned(),
         )?,
         hyde_baseline_source_lock: hyde_baseline_lock
-            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v2".to_owned())?,
+            .to_map_source_lock(acquisition_marker(), historical_preprocessing.clone())?,
         hyde_supplementary_source_lock: hyde_supplementary_lock
-            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v2".to_owned())?,
+            .to_map_source_lock(acquisition_marker(), historical_preprocessing)?,
         hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
             acquisition_marker(),
             "hyde-3.2.1-release-notes-v1".to_owned(),
@@ -240,7 +292,11 @@ pub fn prepare_overview(
             elevation: LayerProvenance::SourceDerived,
             water: LayerProvenance::SourceDerived,
             vegetation: LayerProvenance::SourceDerived,
-            historical_land_use: LayerProvenance::SourceDerived,
+            historical_land_use: if historical_corrections.changes_historical_land_use() {
+                LayerProvenance::HistoricallyCorrected
+            } else {
+                LayerProvenance::SourceDerived
+            },
         },
         environment: prepared.environment,
         pages: prepared.pages,

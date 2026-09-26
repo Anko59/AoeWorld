@@ -114,7 +114,23 @@ coverage still fail production preparation.
 The public `prepare_hyde_600` function remains available for recipe-3 package
 reproduction and keeps its nearest-cell semantics. Production source locks
 identify this coverage-aware preparation as `hyde-600ad-area-pages-v2`, so its package
-identity changes through preprocessing identity and historical page roots.
+identity changes through preprocessing identity and historical page roots. The
+ordinary worker binds an empty schema-2 geographic historical correction set
+to the normalized footprint, projection, history grid, year 600, and HYDE
+preprocessing identity. Its canonical SHA-256 digest is part of both HYDE source
+locks, so any future cited correction changes package identity. A correction
+bound to another location, projection, grid, year, or preprocessing identity
+fails before the archive page stream runs. Historical-model corrections replace
+only valid-land and historical quantity totals; modern observations and
+fallback records stay cited evidence, and explicit unknown clears valid-land
+history. The geographic document is capped at 24 KiB so it can share the
+worker's 64 KiB request with bounded water and vegetation patches. Overview
+history uses the requested overview axis (normally 128). Detailed generation
+prepares history directly from the HYDE archive on an independent
+`min(detailed elevation axis, 1024)` grid; its 128-axis elevation overview
+does not become a claim of 1024-axis source detail. The package records the
+actual historical field axis and provider lookup uses that axis. The older schema-1
+quantity document remains an intermediate format.
 Terrain generation semantics did not change, so the generation recipe remains
 unchanged.
 
