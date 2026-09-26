@@ -188,18 +188,52 @@ pub fn prepare_overview(
         acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
+    let total_pages = preparation_progress::pyramid_page_count(samples_per_axis) * 4;
+    let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
     let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
+    completed_pages += prepared.pages.len() as u64;
+    preparation_progress::count(
+        preparation_progress::Phase::SamplingOverview,
+        None,
+        completed_pages,
+        total_pages,
+        preparation_progress::Unit::Pages,
+    );
     let lake_coverage =
         prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;
     let water = prepare_ocean_coverage(&water_path, request, samples_per_axis, lake_coverage)?;
+    completed_pages += water.pages.len() as u64;
+    preparation_progress::count(
+        preparation_progress::Phase::SamplingOverview,
+        None,
+        completed_pages,
+        total_pages,
+        preparation_progress::Unit::Pages,
+    );
     let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
+    completed_pages += vegetation.pages.len() as u64;
+    preparation_progress::count(
+        preparation_progress::Phase::SamplingOverview,
+        None,
+        completed_pages,
+        total_pages,
+        preparation_progress::Unit::Pages,
+    );
     let historical_land_use = prepare_hyde_600(
         &hyde_baseline_path,
         &hyde_supplementary_path,
         request,
         samples_per_axis,
     )?;
+    completed_pages += historical_land_use.pages.len() as u64;
+    preparation_progress::count(
+        preparation_progress::Phase::SamplingOverview,
+        None,
+        completed_pages,
+        total_pages,
+        preparation_progress::Unit::Pages,
+    );
     verify_potential_biome_legend(&vegetation_classes_path)?;
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);

@@ -131,6 +131,23 @@ diagnostics, including for preview-only all-water or all-ice packages. The
 passable-ground layer is not a spawn claim: the authoritative activation search
 still decides whether a valid starting position exists.
 
+`AOE_GEODATA_CACHE=/absolute/cache make test-creator-source` runs the ordinary
+Paris overview creator in Chromium, checks the visible footprint and estimate,
+measured page progress, source-backed activation and layer preview, then restarts
+the server without a worker or source cache. The second browser session opens
+the same saved map and requests a previously unseen chunk from published pages.
+The revision-bound result, source locks, package identity, and captures are
+written under ignored `reports/creator/`. This journey uses the fixed Paris
+request in `reference-matrix.json`.
+
+`AOE_GEODATA_CACHE=/absolute/cache make test-geographic-matrix` prepares the
+fixed 600 CE overview requests in `reference-matrix.json` with the ordinary
+worker. It verifies each published directory. The
+runner records each case and any typed failure in ignored
+`reports/geodata/matrix.json`. It does not attempt starting-position activation,
+so an uninhabitable selection can still pass generation. Matrix generation alone does not establish activation,
+visual fidelity, or memory qualification for all regions.
+
 The creation service runs one job at a time and queues at most two more. It
 retains at most 128 job records in memory, evicting the oldest terminal record
 when new work is accepted; running, cancelling, and queued jobs are preserved.
