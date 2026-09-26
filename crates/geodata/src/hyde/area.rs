@@ -6,6 +6,8 @@ use geometry::{
 };
 use std::cmp::Ordering;
 
+#[path = "area/coverage.rs"]
+mod coverage;
 mod geometry;
 
 /// A HYDE cell's explicit coverage state. `OutsideCoverage` is also assigned
@@ -248,7 +250,20 @@ pub fn prepare_hyde_area_pyramid(
             .iter()
             .map(|value| value.to_land_use())
             .collect::<Vec<_>>();
-        let level_pages = super::pages_for(levels.len() as u8, axis, &rounded)?;
+        let mut level_pages = super::pages_for(levels.len() as u8, axis, &rounded)?;
+        for page in &mut level_pages {
+            let page_size = u16::from(aoe_map::ENVIRONMENT_PAGE_SAMPLES);
+            for row in 0..u16::from(page.height) {
+                for column in 0..u16::from(page.width) {
+                    let source_x = page.x * page_size + column;
+                    let source_y = page.y * page_size + row;
+                    page.coverage.push(
+                        values[usize::from(source_y) * usize::from(axis) + usize::from(source_x)]
+                            .to_coverage(),
+                    );
+                }
+            }
+        }
         levels.push(PyramidLevel {
             samples_per_axis: axis,
             ordered_page_root: ordered_land_use_page_root(&level_pages)?,
@@ -285,7 +300,7 @@ impl HydeAreaAllocation {
         }
     }
 
-    fn to_land_use(self) -> super::LandUseValue {
+    pub(super) fn to_land_use(self) -> super::LandUseValue {
         let land_km2 = self.valid_land_area_square_meters / 1_000_000.0;
         if land_km2 <= 0.0 {
             return super::LandUseValue {
@@ -359,7 +374,7 @@ fn reduce_area_grid(
     Ok(reduced)
 }
 
-fn add_allocation(target: &mut HydeAreaAllocation, source: HydeAreaAllocation) {
+pub(super) fn add_allocation(target: &mut HydeAreaAllocation, source: HydeAreaAllocation) {
     target.land_area_square_meters += source.land_area_square_meters;
     target.valid_land_area_square_meters += source.valid_land_area_square_meters;
     target.lake_area_square_meters += source.lake_area_square_meters;

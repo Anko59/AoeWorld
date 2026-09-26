@@ -112,12 +112,30 @@ impl PreparedEnvironment {
         self.vegetation.as_ref().map_or(Ok(()), |vegetation| {
             vegetation.validate(self.samples_per_axis)
         })?;
-        self.historical_land_use
-            .as_ref()
-            .map_or(Ok(()), |land_use| land_use.validate(self.samples_per_axis))?;
+        if let Some(land_use) = &self.historical_land_use {
+            let axis = land_use
+                .levels
+                .first()
+                .ok_or(EnvironmentError::InvalidPyramid)?
+                .samples_per_axis;
+            if axis == 0 || axis > MAX_ENVIRONMENT_SAMPLES_PER_AXIS {
+                return Err(EnvironmentError::InvalidPyramid);
+            }
+            land_use.validate(axis)?;
+        }
         self.hydrology_evidence
             .as_ref()
             .map_or(Ok(()), HydrologyEvidenceIndex::validate)
+    }
+
+    /// History has its own prepared axis. Legacy packages use the same axis
+    /// for history and elevation.
+    pub fn historical_samples_per_axis(&self) -> Option<u16> {
+        self.historical_land_use
+            .as_ref()?
+            .levels
+            .first()
+            .map(|level| level.samples_per_axis)
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {
@@ -335,6 +353,43 @@ mod tests {
         let mut invalid = field;
         invalid.elevation.levels[1].samples_per_axis = 3;
         assert_eq!(invalid.validate(), Err(EnvironmentError::InvalidPyramid));
+    }
+
+    #[test]
+    fn historical_field_uses_its_own_declared_grid_axis() {
+        let mut environment = PreparedEnvironment {
+            samples_per_axis: 4,
+            geographic_millimeters_per_sample: 30_000,
+            page_samples: ENVIRONMENT_PAGE_SAMPLES,
+            elevation: FieldPyramid {
+                levels: [4, 2, 1]
+                    .into_iter()
+                    .map(|axis| PyramidLevel {
+                        samples_per_axis: axis,
+                        ordered_page_root: [axis as u8; 32],
+                    })
+                    .collect(),
+            },
+            water: None,
+            vegetation: None,
+            historical_land_use: Some(FieldPyramid {
+                levels: [2, 1]
+                    .into_iter()
+                    .map(|axis| PyramidLevel {
+                        samples_per_axis: axis,
+                        ordered_page_root: [axis as u8; 32],
+                    })
+                    .collect(),
+            }),
+            hydrology_evidence: None,
+        };
+        assert_eq!(environment.historical_samples_per_axis(), Some(2));
+        assert_eq!(environment.validate(), Ok(()));
+        environment.historical_land_use.as_mut().unwrap().levels[0].samples_per_axis = 5_000;
+        assert_eq!(
+            environment.validate(),
+            Err(EnvironmentError::InvalidPyramid)
+        );
     }
 
     #[test]

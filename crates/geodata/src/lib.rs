@@ -255,9 +255,9 @@ pub fn prepare_overview(
             "potential-biome-class-legend-v0.2".to_owned(),
         )?,
         hyde_baseline_source_lock: hyde_baseline_lock
-            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v1".to_owned())?,
+            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v2".to_owned())?,
         hyde_supplementary_source_lock: hyde_supplementary_lock
-            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v1".to_owned())?,
+            .to_map_source_lock(acquisition_marker(), "hyde-600ad-area-pages-v2".to_owned())?,
         hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
             acquisition_marker(),
             "hyde-3.2.1-release-notes-v1".to_owned(),

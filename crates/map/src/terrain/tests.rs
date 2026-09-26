@@ -2,6 +2,7 @@ use super::*;
 
 mod elevation_interpolation;
 mod forest_clearing;
+mod historical_field_axis;
 
 fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
@@ -301,6 +302,7 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         crop_percent: vec![100; 4],
         grazing_percent: vec![0; 4],
         population_pressure_per_square_kilometer: vec![u16::MAX; 4],
+        coverage: Vec::new(),
     };
     let overview = HistoricalLandUsePage {
         level: 1,
@@ -311,6 +313,7 @@ fn historical_land_use_clears_wood_without_creating_settlements() {
         crop_percent: vec![100],
         grazing_percent: vec![0],
         population_pressure_per_square_kilometer: vec![u16::MAX],
+        coverage: Vec::new(),
     };
     let environment = PreparedEnvironment {
         samples_per_axis: 2,

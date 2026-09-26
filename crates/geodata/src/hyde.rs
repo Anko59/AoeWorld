@@ -17,6 +17,7 @@ use zip::ZipArchive;
 
 mod area;
 mod area_reader;
+pub(super) mod area_stream;
 mod correction;
 pub use area::{
     HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
@@ -385,6 +386,7 @@ fn pages_for(
                 crop_percent,
                 grazing_percent,
                 population_pressure_per_square_kilometer,
+                coverage: Vec::new(),
             });
         }
     }

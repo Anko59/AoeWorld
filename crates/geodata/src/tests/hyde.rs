@@ -111,6 +111,27 @@ fn production_area_path_prepares_a_full_overview_axis() {
 }
 
 #[test]
+fn production_archive_stream_prepares_the_independent_1024_axis() {
+    let archives = test_hyde_archives();
+    let prepared = prepare_hyde_area_600(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        1_024,
+    )
+    .expect("streamed full historical grid from bounded archive windows");
+    assert_eq!(prepared.field.levels[0].samples_per_axis, 1_024);
+    assert_eq!(prepared.field.levels.last().unwrap().samples_per_axis, 1);
+    assert_eq!(prepared.pages.len(), 347);
+    assert!(
+        prepared.pages[0]
+            .crop_percent
+            .iter()
+            .all(|value| *value == 40)
+    );
+}
+
+#[test]
 fn production_area_path_fails_closed_when_land_quantities_are_missing() {
     let archives = test_hyde_archives_with_crop("-9999");
     assert!(matches!(

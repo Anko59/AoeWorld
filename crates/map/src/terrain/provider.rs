@@ -198,7 +198,7 @@ pub(super) fn resource_at(
             generator
                 .provider_environment
                 .as_ref()
-                .map(|environment| environment.samples_per_axis)
+                .and_then(|environment| environment.historical_samples_per_axis())
                 .unwrap_or(0),
             tile,
             cancelled,
@@ -259,7 +259,7 @@ fn occupied_without_access(
             generator
                 .provider_environment
                 .as_ref()
-                .map(|environment| environment.samples_per_axis)
+                .and_then(|environment| environment.historical_samples_per_axis())
                 .unwrap_or(0),
             tile,
             cancelled,
@@ -442,6 +442,9 @@ fn sample_land_use(
         _ => return Err(EnvironmentPageError::Corrupt),
     };
     let index = page_index(page.width, page.height, source_x, source_y)?;
+    if !page.coverage.is_empty() && page.coverage[index].valid_land_percent == 0 {
+        return Ok(None);
+    }
     Ok(Some((
         page.crop_percent[index],
         page.grazing_percent[index],

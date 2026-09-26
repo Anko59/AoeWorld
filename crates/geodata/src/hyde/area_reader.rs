@@ -1,9 +1,11 @@
 pub(super) use self::values::validate_polar_footprint;
 #[cfg(test)]
 pub(super) use self::values::validate_target_geography;
+#[cfg(test)]
+use super::HydeAreaAllocation;
 use super::{
-    HYDE_600_MEMBERS, HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell,
-    HydeTargetAreaCell, PreparedHistoricalLandUse, allocate_hyde_area_window,
+    HYDE_600_MEMBERS, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    PreparedHistoricalLandUse, allocate_hyde_area_window, area_stream::HistoricalPageStream,
 };
 use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
 use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, MapRequest};
@@ -35,13 +37,11 @@ pub fn prepare_hyde_area_600(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedHistoricalLandUse, GeodataError> {
-    // This archive reader returns a complete field and currently serves the
-    // same bounded 128-axis overview as elevation, water, and vegetation.
-    // The weighted pyramid helper supports 1024, but archive-backed streaming
-    // at that resolution is a separate implementation.
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+    // Ordinary overview requests still use 128; this independent historical
+    // path can stream up to 1024 without a full-grid allocation buffer.
+    if !(2..=super::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
-            "area-aware HYDE grid is outside overview bounds",
+            "area-aware HYDE grid is outside historical bounds",
         ));
     }
     let request = request
@@ -53,14 +53,14 @@ pub fn prepare_hyde_area_600(
     validate_polar_footprint(request, estimate.effective_side_meters)?;
     let reader = ArchiveReader::open(baseline_archive, supplementary_archive)?;
     let page_transform = target_to_wgs84(request)?;
-    let mut allocations = vec![HydeAreaAllocation::default(); usize::from(samples_per_axis).pow(2)];
+    let mut stream = HistoricalPageStream::new(samples_per_axis)?;
     let mut page_y = 0;
     while page_y < samples_per_axis {
         let height = (samples_per_axis - page_y).min(PAGE_SAMPLES);
         let mut page_x = 0;
         while page_x < samples_per_axis {
             let width = (samples_per_axis - page_x).min(PAGE_SAMPLES);
-            let (targets, target_indices) = target_page(
+            let (targets, _) = target_page(
                 &page_transform,
                 estimate.effective_side_meters,
                 samples_per_axis,
@@ -79,7 +79,7 @@ pub fn prepare_hyde_area_600(
                 request.center_latitude_e7,
                 request.center_longitude_e7,
             )?;
-            for (target_index, allocation) in target_indices.into_iter().zip(page_allocations) {
+            for allocation in &page_allocations {
                 if allocation.outside_area_square_meters
                     > allocation.covered_area_square_meters().max(1.0) * 1.0e-9
                 {
@@ -87,13 +87,17 @@ pub fn prepare_hyde_area_600(
                         "HYDE source coverage does not contain the requested target page",
                     ));
                 }
-                allocations[target_index] = allocation;
             }
+            stream.push(
+                page_x / PAGE_SAMPLES,
+                page_y / PAGE_SAMPLES,
+                page_allocations,
+            )?;
             page_x += width;
         }
         page_y += height;
     }
-    super::prepare_hyde_area_pyramid(samples_per_axis, allocations)
+    stream.finish()
 }
 
 pub(super) fn prepare_hyde_lake_coverage(
