@@ -17,8 +17,95 @@ pub struct HistoricalLandUsePage {
     pub population_pressure_per_square_kilometer: Vec<u16>,
     /// Empty only in legacy packages. New pages publish source coverage for
     /// every cell, including areas with no valid historical land quantity.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "coverage_wire")]
     pub coverage: Vec<HistoricalCoverage>,
+}
+
+/// Six raw coverage bytes per cell are encoded as hex. A full 64x64 page
+/// then fits the existing 128 KiB directory-page bound. Object-form coverage
+/// from earlier schema-9 preparation remains readable.
+mod coverage_wire {
+    use super::HistoricalCoverage;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    const MAX_CELLS: usize = 64 * 64;
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    pub fn serialize<S>(
+        coverage: &Vec<HistoricalCoverage>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut encoded = String::with_capacity(coverage.len() * 12);
+        for cell in coverage {
+            for byte in [
+                cell.land_percent,
+                cell.valid_land_percent,
+                cell.lake_percent,
+                cell.ocean_percent,
+                cell.nodata_percent,
+                cell.outside_percent,
+            ] {
+                encoded.push(HEX[usize::from(byte >> 4)] as char);
+                encoded.push(HEX[usize::from(byte & 0x0f)] as char);
+            }
+        }
+        serializer.serialize_str(&encoded)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<HistoricalCoverage>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Wire {
+            Compact(String),
+            Legacy(Vec<HistoricalCoverage>),
+        }
+        match Wire::deserialize(deserializer)? {
+            Wire::Legacy(cells) if cells.len() <= MAX_CELLS => Ok(cells),
+            Wire::Legacy(_) => Err(D::Error::custom("historical coverage exceeds one page")),
+            Wire::Compact(hex) => {
+                let bytes = hex.as_bytes();
+                if bytes.len() > MAX_CELLS * 12 || bytes.len() % 12 != 0 {
+                    return Err(D::Error::custom("historical coverage length is invalid"));
+                }
+                let mut cells = Vec::with_capacity(bytes.len() / 12);
+                for cell in bytes.chunks_exact(12) {
+                    let mut values = [0; 6];
+                    for (index, pair) in cell.chunks_exact(2).enumerate() {
+                        let high = digit(pair[0]).ok_or_else(|| {
+                            D::Error::custom("historical coverage hex is invalid")
+                        })?;
+                        let low = digit(pair[1]).ok_or_else(|| {
+                            D::Error::custom("historical coverage hex is invalid")
+                        })?;
+                        values[index] = (high << 4) | low;
+                    }
+                    cells.push(HistoricalCoverage {
+                        land_percent: values[0],
+                        valid_land_percent: values[1],
+                        lake_percent: values[2],
+                        ocean_percent: values[3],
+                        nodata_percent: values[4],
+                        outside_percent: values[5],
+                    });
+                }
+                Ok(cells)
+            }
+        }
+    }
+
+    fn digit(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

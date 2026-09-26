@@ -21,6 +21,8 @@ pub enum WorkerRequest {
         output_directory: PathBuf,
         request: MapRequest,
         samples_per_axis: u16,
+        #[serde(default)]
+        historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
     },
     PrepareDetailedDirectory {
         cache_root: PathBuf,
@@ -30,6 +32,8 @@ pub enum WorkerRequest {
         resolution: DemResolution,
         #[serde(default)]
         staging_root: Option<PathBuf>,
+        #[serde(default)]
+        historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
     },
     ListOverviewSources,
     ListPotentialBiomeSources,
@@ -227,6 +231,25 @@ mod tests {
             request,
             WorkerRequest::PrepareDetailedDirectory {
                 staging_root: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn overview_worker_request_accepts_absent_historical_corrections() {
+        let request: WorkerRequest = serde_json::from_value(serde_json::json!({
+            "operation": "prepare_overview_directory",
+            "cache_root": "/cache",
+            "output_directory": "/maps",
+            "request": MapRequest::default(),
+            "samples_per_axis": 128
+        }))
+        .unwrap();
+        assert!(matches!(
+            request,
+            WorkerRequest::PrepareOverviewDirectory {
+                historical_corrections: None,
                 ..
             }
         ));
