@@ -1,4 +1,5 @@
 use super::*;
+mod overview_fixture;
 use crate::PreparedOverview;
 use aoe_map::Ratio;
 use aoe_map::{
@@ -8,6 +9,7 @@ use aoe_map::{
     WaterPage, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
 use gdal::{DriverManager, raster::Buffer, spatial_ref::SpatialRef};
+use overview_fixture::overview_fixture;
 use std::{
     collections::BTreeSet,
     fs,
@@ -242,12 +244,12 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
     let progress: serde_json::Value =
         serde_json::from_slice(&fs::read(progress_path).unwrap()).unwrap();
     assert_eq!(progress["phase"], "building_pyramids");
-    assert_eq!(progress["completed"], 44);
-    assert_eq!(progress["total"], 44);
+    assert_eq!(progress["completed"], 33);
+    assert_eq!(progress["total"], 33);
     assert_eq!(fields.elevation.levels.len(), 8);
     assert_eq!(fields.water.levels[0].samples_per_axis, 65);
     assert_eq!(fields.vegetation.levels[0].samples_per_axis, 65);
-    assert_eq!(fields.historical_land_use.levels[0].samples_per_axis, 65);
+    assert_eq!(fields.historical_land_use.levels[0].samples_per_axis, 128);
     assert_ne!(fields.elevation.levels[0].ordered_page_root, [0; 32]);
     for (level, metadata) in fields.elevation.levels.iter().enumerate() {
         let level = level as u8;
@@ -288,7 +290,10 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
             vegetation.potential_biome_class,
             vec![7; usize::from(vegetation.width) * usize::from(vegetation.height)]
         );
-
+    }
+    for (level, metadata) in fields.historical_land_use.levels.iter().enumerate() {
+        let level = level as u8;
+        let edge = metadata.samples_per_axis.div_ceil(PAGE) - 1;
         let historical: HistoricalLandUsePage = serde_json::from_slice(
             &stage
                 .read(PageLayer::HistoricalLandUse, level, edge, edge)
@@ -356,61 +361,6 @@ fn write_tile(path: &std::path::Path, transform: [f64; 6], value: f64, nodata: O
     band.write((0, 0), (200, 320), &mut values)
         .expect("tile values");
     dataset.flush_cache().expect("flush tile");
-}
-
-fn overview_fixture() -> PreparedOverview {
-    let water_pages = [(0, 0), (1, 0), (0, 1), (1, 1)]
-        .into_iter()
-        .map(|(x, y)| WaterPage {
-            level: 0,
-            x,
-            y,
-            width: 64,
-            height: 64,
-            ocean_coverage_percent: vec![100; 64 * 64],
-            inland_coverage_percent: vec![0; 64 * 64],
-        })
-        .collect();
-    let vegetation_pages = [(0, 0), (1, 0), (0, 1), (1, 1)]
-        .into_iter()
-        .map(|(x, y)| PotentialBiomePage {
-            level: 0,
-            x,
-            y,
-            width: 64,
-            height: 64,
-            potential_biome_class: vec![7; 64 * 64],
-        })
-        .collect();
-    let historical_land_use_pages = [(0, 0), (1, 0), (0, 1), (1, 1)]
-        .into_iter()
-        .map(|(x, y)| HistoricalLandUsePage {
-            level: 0,
-            x,
-            y,
-            width: 64,
-            height: 64,
-            crop_percent: vec![1; 64 * 64],
-            grazing_percent: vec![2; 64 * 64],
-            population_pressure_per_square_kilometer: vec![3; 64 * 64],
-        })
-        .collect();
-    PreparedOverview {
-        source_lock: fixture_source_lock("overview"),
-        water_source_lock: fixture_source_lock("water"),
-        vegetation_source_lock: fixture_source_lock("vegetation"),
-        vegetation_classes_source_lock: fixture_source_lock("classes"),
-        hyde_baseline_source_lock: fixture_source_lock("baseline"),
-        hyde_supplementary_source_lock: fixture_source_lock("supplementary"),
-        hyde_readme_source_lock: fixture_source_lock("readme"),
-        projection: ProjectionMetadata::default(),
-        provenance: EnvironmentalProvenance::default(),
-        environment: PreparedEnvironment::default(),
-        pages: Vec::new(),
-        water_pages,
-        vegetation_pages,
-        historical_land_use_pages,
-    }
 }
 
 #[test]

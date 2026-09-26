@@ -100,16 +100,16 @@ fn polar_archive_request_fails_before_opening_sources() {
 }
 
 #[test]
-fn archive_reader_rejects_1024_until_incremental_reduction_is_available() {
+fn archive_reader_rejects_above_the_independent_historical_limit() {
     assert!(matches!(
         prepare_hyde_area_600(
             std::path::Path::new("missing-baseline.zip"),
             std::path::Path::new("missing-mask.zip"),
             MapRequest::default(),
-            1_024
+            1_025
         ),
         Err(GeodataError::Preparation(
-            "area-aware HYDE grid is outside overview bounds"
+            "area-aware HYDE grid is outside historical bounds"
         ))
     ));
 }

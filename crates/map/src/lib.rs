@@ -26,7 +26,7 @@ pub use environment::{
     ordered_biome_page_root, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
     ordered_page_root, ordered_water_page_root,
 };
-pub use land_use::{HistoricalLandUsePage, ordered_land_use_page_root};
+pub use land_use::{HistoricalCoverage, HistoricalLandUsePage, ordered_land_use_page_root};
 pub use navigation::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES,
     MovementOutcome, Path, RoutePlanner, RoutePlannerPoll, find_path,

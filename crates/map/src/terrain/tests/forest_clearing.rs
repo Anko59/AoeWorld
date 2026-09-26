@@ -384,6 +384,7 @@ fn dense_and_provider_clearings_match_with_partial_historical_land_use_exactly()
             crop_percent: vec![42],
             grazing_percent: vec![17],
             population_pressure_per_square_kilometer: vec![123],
+            coverage: Vec::new(),
         };
         environment.historical_land_use = Some(FieldPyramid {
             levels: vec![PyramidLevel {

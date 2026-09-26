@@ -15,6 +15,31 @@ pub struct HistoricalLandUsePage {
     pub crop_percent: Vec<u8>,
     pub grazing_percent: Vec<u8>,
     pub population_pressure_per_square_kilometer: Vec<u16>,
+    /// Empty only in legacy packages. New pages publish source coverage for
+    /// every cell, including areas with no valid historical land quantity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coverage: Vec<HistoricalCoverage>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct HistoricalCoverage {
+    pub land_percent: u8,
+    pub valid_land_percent: u8,
+    pub lake_percent: u8,
+    pub ocean_percent: u8,
+    pub nodata_percent: u8,
+    pub outside_percent: u8,
+}
+
+impl HistoricalCoverage {
+    fn valid(self) -> bool {
+        let total = u16::from(self.land_percent)
+            + u16::from(self.lake_percent)
+            + u16::from(self.ocean_percent)
+            + u16::from(self.nodata_percent)
+            + u16::from(self.outside_percent);
+        (98..=104).contains(&total) && self.valid_land_percent <= self.land_percent
+    }
 }
 
 impl HistoricalLandUsePage {
@@ -27,6 +52,15 @@ impl HistoricalLandUsePage {
             || self.crop_percent.len() != samples
             || self.grazing_percent.len() != samples
             || self.population_pressure_per_square_kilometer.len() != samples
+            || (!self.coverage.is_empty()
+                && (self.coverage.len() != samples
+                    || self.coverage.iter().any(|coverage| !coverage.valid())
+                    || self.coverage.iter().enumerate().any(|(index, coverage)| {
+                        coverage.valid_land_percent == 0
+                            && (self.crop_percent[index] > 0
+                                || self.grazing_percent[index] > 0
+                                || self.population_pressure_per_square_kilometer[index] > 0)
+                    })))
             || self
                 .crop_percent
                 .iter()
@@ -41,7 +75,11 @@ impl HistoricalLandUsePage {
     pub fn content_hash(&self) -> Result<[u8; 32], EnvironmentError> {
         self.validate()?;
         let mut hash = blake3::Hasher::new();
-        hash.update(b"aoe-historical-land-use-page-v1\0");
+        hash.update(if self.coverage.is_empty() {
+            b"aoe-historical-land-use-page-v1\0".as_slice()
+        } else {
+            b"aoe-historical-land-use-page-v2\0".as_slice()
+        });
         hash.update(&[self.level]);
         hash.update(&self.x.to_le_bytes());
         hash.update(&self.y.to_le_bytes());
@@ -50,6 +88,16 @@ impl HistoricalLandUsePage {
         hash.update(&self.grazing_percent);
         for population in &self.population_pressure_per_square_kilometer {
             hash.update(&population.to_le_bytes());
+        }
+        for coverage in &self.coverage {
+            hash.update(&[
+                coverage.land_percent,
+                coverage.valid_land_percent,
+                coverage.lake_percent,
+                coverage.ocean_percent,
+                coverage.nodata_percent,
+                coverage.outside_percent,
+            ]);
         }
         Ok(*hash.finalize().as_bytes())
     }
@@ -156,14 +204,80 @@ impl HistoricalLandUse {
         let page = self.pages.get(&(x / page_size, y / page_size))?;
         let local_x = usize::from(x % page_size);
         let local_y = usize::from(y % page_size);
-        (local_x < usize::from(page.width) && local_y < usize::from(page.height)).then(|| {
-            let index = local_y * usize::from(page.width) + local_x;
-            LandUseSample {
-                crop_percent: page.crop_percent[index],
-                grazing_percent: page.grazing_percent[index],
-                population_pressure_per_square_kilometer: page
-                    .population_pressure_per_square_kilometer[index],
-            }
+        if local_x >= usize::from(page.width) || local_y >= usize::from(page.height) {
+            return None;
+        }
+        let index = local_y * usize::from(page.width) + local_x;
+        if !page.coverage.is_empty() && page.coverage[index].valid_land_percent == 0 {
+            return None;
+        }
+        Some(LandUseSample {
+            crop_percent: page.crop_percent[index],
+            grazing_percent: page.grazing_percent[index],
+            population_pressure_per_square_kilometer: page.population_pressure_per_square_kilometer
+                [index],
         })
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_nodata_and_valid_zero_remain_distinct_from_legacy_pages() {
+        let mut page = HistoricalLandUsePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 1,
+            crop_percent: vec![0, 0],
+            grazing_percent: vec![0, 0],
+            population_pressure_per_square_kilometer: vec![0, 0],
+            coverage: Vec::new(),
+        };
+        let legacy_hash = page.content_hash().unwrap();
+        assert!(!serde_json::to_string(&page).unwrap().contains("coverage"));
+        page.coverage = vec![
+            HistoricalCoverage {
+                nodata_percent: 100,
+                ..HistoricalCoverage::default()
+            },
+            HistoricalCoverage {
+                land_percent: 100,
+                valid_land_percent: 100,
+                ..HistoricalCoverage::default()
+            },
+        ];
+        page.validate().unwrap();
+        assert_ne!(page.content_hash().unwrap(), legacy_hash);
+        let encoded = serde_json::to_vec(&page).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<HistoricalLandUsePage>(&encoded).unwrap(),
+            page
+        );
+        let history = HistoricalLandUse::new(2, [((0, 0), page)].into());
+        assert!(history.at(TileCoord::new(0, 0), 3).is_none());
+        assert_eq!(history.at(TileCoord::new(2, 0), 3).unwrap().crop_percent, 0);
+    }
+
+    #[test]
+    fn claimed_historical_quantities_require_valid_land_coverage() {
+        let page = HistoricalLandUsePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            crop_percent: vec![10],
+            grazing_percent: vec![0],
+            population_pressure_per_square_kilometer: vec![0],
+            coverage: vec![HistoricalCoverage {
+                lake_percent: 100,
+                ..HistoricalCoverage::default()
+            }],
+        };
+        assert_eq!(page.validate(), Err(EnvironmentError::InvalidPage));
     }
 }
