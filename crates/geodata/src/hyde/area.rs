@@ -1,7 +1,9 @@
 use super::PreparedHistoricalLandUse;
-use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS};
+use crate::GeodataError;
 use aoe_map::{FieldPyramid, PyramidLevel, ordered_land_use_page_root};
-use geometry::{Polygon, equal_area_transform, intersection_area, point_order, project_polygon};
+use geometry::{
+    Polygon, equal_area_transform, intersection_area, point_order, project_polygon, unwrap_polygon,
+};
 use std::cmp::Ordering;
 
 mod geometry;
@@ -26,9 +28,10 @@ pub struct HydeGeographicPoint {
 
 /// One source cell and its extensive HYDE quantities. Land cells require all
 /// three values. Crop and grazing areas are square kilometers; population is a
-/// count. Crop and grazing cannot exceed the projected source-cell land area,
-/// separately or together. Other coverage states must not carry land
-/// quantities.
+/// count. A supplied valid-land area is the denominator for percentages and
+/// density and cannot exceed the projected cell land area. Crop and grazing
+/// cannot exceed valid land area, separately or together. Other coverage
+/// states must not carry land quantities.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HydeSourceAreaCell {
     pub polygon: Vec<HydeGeographicPoint>,
@@ -36,6 +39,9 @@ pub struct HydeSourceAreaCell {
     pub crop_area_square_kilometers: Option<f64>,
     pub grazing_area_square_kilometers: Option<f64>,
     pub population: Option<f64>,
+    /// HYDE's valid-land denominator. `None` means the whole land polygon is
+    /// valid, useful for callers whose quantities already cover that polygon.
+    pub valid_land_area_square_kilometers: Option<f64>,
 }
 
 /// One target cell polygon in WGS84. Call allocation with a complete bounded
@@ -50,6 +56,7 @@ pub struct HydeTargetAreaCell {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct HydeAreaAllocation {
     pub land_area_square_meters: f64,
+    pub valid_land_area_square_meters: f64,
     pub lake_area_square_meters: f64,
     pub ocean_area_square_meters: f64,
     pub nodata_area_square_meters: f64,
@@ -71,6 +78,7 @@ struct SourceCell {
     crop_km2: f64,
     grazing_km2: f64,
     population: f64,
+    valid_land_km2: f64,
 }
 
 /// Allocates a bounded source window onto target cells in a request-centered
@@ -78,9 +86,10 @@ struct SourceCell {
 /// source-cell area as its denominator; no quantity is redistributed into a
 /// partial selection. Source and target polygons are simple, with at most 16
 /// input vertices; deterministic 0.1-degree densification makes curved shared
-/// boundaries conserve area before triangulated overlap. Polygons that touch
-/// or cross a pole or the antimeridian are rejected because this bounded API
-/// does not implement wrap-safe spherical geometry. A call accepts at most
+/// boundaries conserve area before triangulated overlap. Longitudes are
+/// unwrapped around the request center so ordinary dateline-crossing cells
+/// remain local; polygons touching a pole or retaining a 180-degree longitude
+/// jump are rejected. A call accepts at most
 /// 1,000,000 source cells and one 64×64 target page; callers should process
 /// target pages independently.
 pub fn allocate_hyde_area_window(
@@ -103,28 +112,33 @@ pub fn allocate_hyde_area_window(
     }
 
     let transform = equal_area_transform(center_latitude_e7, center_longitude_e7)?;
+    let center_longitude = f64::from(center_longitude_e7) / 10_000_000.0;
     let mut source_polygons = Vec::with_capacity(source_cells.len());
     let mut target_polygons = Vec::with_capacity(target_cells.len());
     let mut densified_vertices = 0_usize;
     for source in source_cells {
-        let polygon = project_polygon(&source.polygon, &transform)?;
+        let geographic = unwrap_polygon(&source.polygon, center_longitude);
+        let polygon = project_polygon(&geographic, &transform)?;
         densified_vertices = densified_vertices.saturating_add(polygon.points.len());
         if densified_vertices > MAX_HYDE_AREA_VERTICES {
             return Err(GeodataError::Preparation(
                 "HYDE allocation densified vertex limit exceeded",
             ));
         }
-        let (crop_km2, grazing_km2, population) = source_quantities(source, polygon.area)?;
+        let (crop_km2, grazing_km2, population, valid_land_km2) =
+            source_quantities(source, polygon.area)?;
         source_polygons.push(SourceCell {
             polygon,
             state: source.state,
             crop_km2,
             grazing_km2,
             population,
+            valid_land_km2,
         });
     }
     for target in target_cells {
-        let polygon = project_polygon(&target.polygon, &transform)?;
+        let geographic = unwrap_polygon(&target.polygon, center_longitude);
+        let polygon = project_polygon(&geographic, &transform)?;
         densified_vertices = densified_vertices.saturating_add(polygon.points.len());
         if densified_vertices > MAX_HYDE_AREA_VERTICES {
             return Err(GeodataError::Preparation(
@@ -189,7 +203,10 @@ pub fn allocate_hyde_area_window(
                 "HYDE source cells overlap within a target cell",
             ));
         }
-        allocation.outside_area_square_meters += (target.area - covered).max(0.0);
+        let outside = (target.area - covered).max(0.0);
+        if outside > tolerance {
+            allocation.outside_area_square_meters += outside;
+        }
     }
     if allocations.iter().any(|allocation| !allocation.is_valid()) {
         return Err(GeodataError::Preparation(
@@ -206,7 +223,7 @@ pub fn prepare_hyde_area_pyramid(
     samples_per_axis: u16,
     allocations: Vec<HydeAreaAllocation>,
 ) -> Result<PreparedHistoricalLandUse, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS.min(1024)).contains(&samples_per_axis) {
+    if !(2..=super::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "area-aware HYDE grid is outside direct bounds",
         ));
@@ -250,7 +267,7 @@ pub fn prepare_hyde_area_pyramid(
 }
 
 impl HydeAreaAllocation {
-    fn covered_area_square_meters(&self) -> f64 {
+    pub(super) fn covered_area_square_meters(&self) -> f64 {
         self.land_area_square_meters
             + self.lake_area_square_meters
             + self.ocean_area_square_meters
@@ -269,7 +286,7 @@ impl HydeAreaAllocation {
     }
 
     fn to_land_use(self) -> super::LandUseValue {
-        let land_km2 = self.land_area_square_meters / 1_000_000.0;
+        let land_km2 = self.valid_land_area_square_meters / 1_000_000.0;
         if land_km2 <= 0.0 {
             return super::LandUseValue {
                 crop_percent: 0,
@@ -293,6 +310,7 @@ impl HydeAreaAllocation {
     pub(super) fn is_valid(&self) -> bool {
         [
             self.land_area_square_meters,
+            self.valid_land_area_square_meters,
             self.lake_area_square_meters,
             self.ocean_area_square_meters,
             self.nodata_area_square_meters,
@@ -343,6 +361,7 @@ fn reduce_area_grid(
 
 fn add_allocation(target: &mut HydeAreaAllocation, source: HydeAreaAllocation) {
     target.land_area_square_meters += source.land_area_square_meters;
+    target.valid_land_area_square_meters += source.valid_land_area_square_meters;
     target.lake_area_square_meters += source.lake_area_square_meters;
     target.ocean_area_square_meters += source.ocean_area_square_meters;
     target.nodata_area_square_meters += source.nodata_area_square_meters;
@@ -356,6 +375,7 @@ fn add_overlap(target: &mut HydeAreaAllocation, source: &SourceCell, overlap_m2:
     target.add_state_area(source.state, overlap_m2);
     if source.state == HydeAreaState::Land {
         let share = overlap_m2 / source.polygon.area;
+        target.valid_land_area_square_meters += source.valid_land_km2 * 1_000_000.0 * share;
         target.crop_area_square_kilometers += source.crop_km2 * share;
         target.grazing_area_square_kilometers += source.grazing_km2 * share;
         target.population += source.population * share;
@@ -365,17 +385,18 @@ fn add_overlap(target: &mut HydeAreaAllocation, source: &SourceCell, overlap_m2:
 fn source_quantities(
     source: &HydeSourceAreaCell,
     land_area_square_meters: f64,
-) -> Result<(f64, f64, f64), GeodataError> {
+) -> Result<(f64, f64, f64, f64), GeodataError> {
     if source.state != HydeAreaState::Land {
         if source.crop_area_square_kilometers.is_some()
             || source.grazing_area_square_kilometers.is_some()
             || source.population.is_some()
+            || source.valid_land_area_square_kilometers.is_some()
         {
             return Err(GeodataError::Preparation(
                 "non-land HYDE cell carries land quantities",
             ));
         }
-        return Ok((0.0, 0.0, 0.0));
+        return Ok((0.0, 0.0, 0.0, 0.0));
     }
     let (Some(crop), Some(grazing), Some(population)) = (
         source.crop_area_square_kilometers,
@@ -386,8 +407,12 @@ fn source_quantities(
             "HYDE land cell lacks a required value",
         ));
     };
+    let valid_land_km2 = source
+        .valid_land_area_square_kilometers
+        .unwrap_or(land_area_square_meters / 1_000_000.0);
     if [crop, grazing, population]
         .into_iter()
+        .chain([valid_land_km2])
         .any(|value| !value.is_finite() || value < 0.0)
     {
         return Err(GeodataError::Preparation(
@@ -395,17 +420,22 @@ fn source_quantities(
         ));
     }
     let land_area_square_kilometers = land_area_square_meters / 1_000_000.0;
-    if crop > land_area_square_kilometers || grazing > land_area_square_kilometers {
+    if valid_land_km2 > land_area_square_kilometers * (1.0 + 1.0e-9) {
         return Err(GeodataError::Preparation(
-            "HYDE land quantity exceeds source-cell land area",
+            "HYDE valid land area exceeds source-cell land area",
         ));
     }
-    if crop + grazing > land_area_square_kilometers {
+    if crop > valid_land_km2 || grazing > valid_land_km2 {
+        return Err(GeodataError::Preparation(
+            "HYDE land quantity exceeds valid land area",
+        ));
+    }
+    if crop + grazing > valid_land_km2 {
         return Err(GeodataError::Preparation(
             "HYDE crop and grazing quantities exceed source-cell capacity",
         ));
     }
-    Ok((crop, grazing, population))
+    Ok((crop, grazing, population, valid_land_km2))
 }
 
 fn validate_limits(sources: usize, targets: usize) -> Result<(), GeodataError> {
@@ -434,6 +464,7 @@ fn source_order(left: &SourceCell, right: &SourceCell) -> Ordering {
         .then_with(|| left.crop_km2.total_cmp(&right.crop_km2))
         .then_with(|| left.grazing_km2.total_cmp(&right.grazing_km2))
         .then_with(|| left.population.total_cmp(&right.population))
+        .then_with(|| left.valid_land_km2.total_cmp(&right.valid_land_km2))
 }
 
 fn polygon_order(left: &Polygon, right: &Polygon) -> Ordering {

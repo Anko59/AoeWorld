@@ -72,32 +72,49 @@ allocations, and modern WorldCover classes are not treated as year-600 land
 cover. Reservoir and regulated-lake observations therefore remain explicit
 modern evidence rather than automatic historical water.
 
-The callable `prepare_hyde_600` path retains recipe-3 nearest-cell behavior for
-existing packages. New recipe callers can use `allocate_hyde_area_window` and
-`prepare_hyde_area_pyramid`: source and target polygons are projected into a
-request-centered Lambert azimuthal equal-area plane using deterministic
-0.1-degree edge densification, then crop area, grazing area, population, and
-coverage area are allocated by polygon overlap divided by full source-cell
-area. Each call accepts one target page (at most 64 by 64 cells), up to
-1,000,000 source cells, and 4,194,304 input polygon vertices; densified vertex
-totals use the same explicit bound. The
-weighted pyramid accepts up to 1,024 samples per axis and combines unrounded
-quantities and land areas before producing the existing rounded land-use
-pages. Land cells with missing crop, grazing, or population values fail;
-zero-valued land cells remain valid. Crop and grazing areas must fit within
-the projected source-cell land area individually and together; exceeding
-either bound fails instead of being clamped. Source or target polygon edges
-that touch or cross a pole or the antimeridian also fail closed because this
-bounded API does not implement wrap-safe spherical geometry. Lakes, ocean,
-nodata, and uncovered area are retained as separate allocation totals.
+Ordinary overview preparation now calls `prepare_hyde_area_600`. It extracts
+the five allowlisted year-600 HYDE grids, checks that they share a grid, and
+reads only each target page's intersecting source window. The area allocator
+receives the complete source window for one target page of up to 64 by 64
+cells. Crop area, grazing area, population, valid-land area, and coverage
+totals remain unrounded until the historical pyramid is reduced. Detailed
+preparation consumes this same area-allocated overview field; its larger
+elevation grid does not imply finer historical source detail.
 
-This API is the bounded allocation core. It accepts WGS84 source/target cell
-polygons from its caller; it does not extract or read the HYDE archives. The
-overview worker still uses `prepare_hyde_600`, so normal generation remains on
-recipe 3 until archive-window enumeration, page assembly, and recipe identity
-are wired by the generation orchestrator. Those preprocessing changes must be
-included in the new recipe/package identity before it is used for published
-maps.
+Source and target polygons are projected into a request-centered Lambert
+azimuthal equal-area plane using deterministic 0.1-degree edge densification.
+Each allocation call accepts up to 1,000,000 source cells and 4,194,304 input
+polygon vertices; densified vertex totals use the same explicit bound. The
+weighted historical-pyramid helper has its own 1,024-sample-per-axis cap,
+independent of the overview and detailed elevation caps. Archive-backed ordinary
+preparation currently remains at the 128-sample overview limit because it
+retains the unrounded target allocation grid before pyramid reduction; the
+1024-axis archive reader and reduction path must become page-incremental before
+that production limit can be raised. Detailed elevation still uses the same
+128-axis historical overview and does not imply finer history. HYDE lake
+coverage now comes from polygon overlap between its 5-minute mask cells and
+target cells, rather than assigning a full lake cell from a centre sample.
+The weighted pyramid combines unrounded extensive quantities before writing
+rounded land-use pages. Land cells missing crop, grazing, population, or the
+valid-land denominator fail with a typed preparation error; numeric zero is
+valid. Crop and grazing areas must fit within valid land area individually
+and together. Target polygons touching or crossing a pole fail closed. The
+allocator unwraps dateline polygons around the request center and preserves
+their local geometry across split source windows. Lakes, ocean, nodata, and
+uncovered area remain separate allocation totals. HYDE documents the mask's
+declared nodata sentinel as ocean; unexpected non-finite mask values fail
+instead. Target space outside the source raster is rejected rather than
+published as source-derived zero. The current historical page schema does not
+persist per-cell unknown or uncovered provenance; missing land quantities and
+outside coverage fail preparation, and explicit unknown-page publication
+remains follow-up work.
+
+The public `prepare_hyde_600` function remains available for recipe-3 package
+reproduction and keeps its nearest-cell semantics. Production source locks
+identify the new preparation as `hyde-600ad-area-pages-v1`, so its package
+identity changes through preprocessing identity and historical page roots.
+Terrain generation semantics did not change, so the generation recipe remains
+unchanged.
 
 `HistoricalCorrectionDocument` is the versioned JSON contract for sparse
 whole-cell corrections. Schema 1 targets 600 CE, accepts grids from 2 through
@@ -131,9 +148,13 @@ live cancellation callback. A partial source download remains under its stable
 cache key; the next attempt resumes from its verified byte offset with a
 bounded ranged request, using 15-second connect/read/write timeouts.
 
-The first slice rejects footprints that touch or cross a pole or the antimeridian;
-wrapped geocell selection is reserved for a later regional scheduling slice.
-This fail-closed boundary keeps tile counts and source coverage explicit.
+The HYDE archive reader rejects target pages that touch or cross a pole before
+calculating source windows. It unwraps target and source longitudes around the
+request center and splits windows at a global raster's longitude seam, so a
+dateline page reads only the cells on both sides of ±180°. The geocell detailed
+preparation path still rejects footprints that touch or cross the antimeridian;
+wrapped geocell acquisition is reserved for a later regional scheduling slice.
+These bounds keep source-window sizes and coverage explicit.
 An authoritative 404 for a catalogued Copernicus geocell supplies zero only
 when the source-derived overview classifies the corresponding cell as 100%
 ocean. Land, unknown, and partial-coast cells fail instead of being flattened
