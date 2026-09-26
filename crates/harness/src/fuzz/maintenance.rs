@@ -10,6 +10,7 @@ const TOTAL_FILE_TRIGGER: u64 = 8_192;
 pub(super) struct Action {
     pub target: &'static str,
     pub after_target: Option<&'static str>,
+    pub after_segment: Option<u8>,
     pub archived_files: u64,
     pub active_before: storage::Usage,
     pub active_after: storage::Usage,
@@ -150,6 +151,7 @@ where
     Ok(Action {
         target,
         after_target,
+        after_segment: None,
         archived_files,
         active_before: before,
         active_after: after,
