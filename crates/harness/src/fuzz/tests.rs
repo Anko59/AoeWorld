@@ -20,6 +20,7 @@ fn all_parser_targets_are_bounded_and_successfully_enforced() {
                 assert_eq!(deadline, mode.deadline());
                 Ok(())
             },
+            |_, _, _| Ok(Vec::new()),
         );
         assert_eq!(targets, TARGETS);
         assert_eq!(execution.attempted_targets, TARGETS.len());
@@ -64,6 +65,7 @@ fn quotas_are_enforced_after_each_target_without_deleting_inputs() {
             fs::write(directory.join("preserved-input"), b"keep me").expect("corpus input");
             Ok(())
         },
+        |_, _, _| Ok(Vec::new()),
     );
     assert_eq!(calls, 1);
     assert_eq!(execution.attempted_targets, 1);
@@ -97,6 +99,7 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
             fs::write(directory.join("crash-input"), b"preserve crash").expect("artifact");
             Err("injected libFuzzer crash".into())
         },
+        |_, _, _| Ok(Vec::new()),
     );
     assert_eq!(execution.attempted_targets, 1);
     assert_eq!(execution.successful_targets, 0);
@@ -113,7 +116,7 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
     write_report(
         root.path(),
         Report {
-            version: 5,
+            version: 6,
             revision: "revision".into(),
             dirty: true,
             mode: Mode::Smoke.label(),
@@ -159,6 +162,30 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
 }
 
 #[test]
+fn failed_inter_target_maintenance_keeps_completed_target_distinct() {
+    let root = tempfile::tempdir().expect("directory");
+    let policy = storage::Policy::default();
+    let before = policy.inspect(root.path()).expect("storage usage");
+    let execution = execute(
+        Mode::Nightly,
+        root.path(),
+        policy,
+        before,
+        |_, _| Ok(()),
+        |target, _, _| Err(format!("injected maintenance failure after {target}").into()),
+    );
+    assert_eq!(execution.attempted_targets, 1);
+    assert_eq!(execution.successful_targets, 1);
+    assert!(execution.target_results[0].completed);
+    assert!(
+        execution
+            .failure
+            .as_deref()
+            .is_some_and(|message| message.contains("corpus maintenance"))
+    );
+}
+
+#[test]
 fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
     let temp = tempfile::tempdir().expect("directory");
     const KNOWN_SEED_BYTES: &[u8] = b"";
@@ -193,7 +220,7 @@ fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
         write_report(
             temp.path(),
             Report {
-                version: 5,
+                version: 6,
                 revision: "revision".into(),
                 dirty: true,
                 mode: mode.label(),
@@ -228,7 +255,7 @@ fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
             value["targets"].as_array().expect("targets").len(),
             TARGETS.len()
         );
-        assert_eq!(value["version"], 5);
+        assert_eq!(value["version"], 6);
         assert_eq!(value["corpus_directory"], "fuzz/corpus");
         assert_eq!(value["artifact_directory"], "fuzz/artifacts");
         assert_eq!(

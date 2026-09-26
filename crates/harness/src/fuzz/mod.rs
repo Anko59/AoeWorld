@@ -92,17 +92,24 @@ struct Execution {
     successful_targets: usize,
     failure: Option<String>,
     target_results: Vec<TargetResult>,
+    maintenance_actions: Vec<maintenance::Action>,
 }
 
-fn execute<F>(
+fn execute<F, M>(
     mode: Mode,
     root: &Path,
     storage_policy: storage::Policy,
     storage_before: storage::Snapshot,
     mut command: F,
+    mut maintain: M,
 ) -> Execution
 where
     F: FnMut(&[&str], Duration) -> Result<()>,
+    M: FnMut(
+        &'static str,
+        storage::Snapshot,
+        storage::Snapshot,
+    ) -> Result<Vec<maintenance::Action>>,
 {
     let mut execution = Execution {
         storage_after: storage_before,
@@ -110,8 +117,10 @@ where
         successful_targets: 0,
         failure: None,
         target_results: Vec::new(),
+        maintenance_actions: Vec::new(),
     };
     for target in TARGETS {
+        let before_target = execution.storage_after;
         execution.attempted_targets += 1;
         let started = Instant::now();
         let command_result = command(
@@ -157,6 +166,33 @@ where
         if !failures.is_empty() {
             execution.failure = Some(failures.join("; "));
             break;
+        }
+        let Some(after_target) = snapshot_after else {
+            execution.failure = Some(format!(
+                "after target {target}: storage snapshot is missing"
+            ));
+            break;
+        };
+        match maintain(target, before_target, after_target) {
+            Ok(actions) => execution.maintenance_actions.extend(actions),
+            Err(error) => {
+                if let Ok(snapshot) = storage_policy.inspect(root) {
+                    execution.storage_after = snapshot;
+                }
+                execution.failure = Some(format!(
+                    "after target {target}: corpus maintenance: {error}"
+                ));
+                break;
+            }
+        }
+        match storage_policy.inspect(root) {
+            Ok(snapshot) => execution.storage_after = snapshot,
+            Err(error) => {
+                execution.failure = Some(format!(
+                    "after target {target}: cannot snapshot maintained storage: {error}"
+                ));
+                break;
+            }
         }
     }
     execution
@@ -263,9 +299,21 @@ pub fn run(mode: Mode) -> Result<()> {
                 mode,
                 &root,
                 storage_policy,
-                storage_before,
+                storage_policy.inspect(&root)?,
                 |args, deadline| run_monitored("cargo", args, deadline, &root, storage_policy),
+                |target, before, after| {
+                    maintenance::after_target(
+                        &root,
+                        storage_policy,
+                        target,
+                        before,
+                        after,
+                        |args, deadline| process::run("cargo", args, deadline).map_err(Into::into),
+                    )
+                },
             );
+            let mut actions = actions;
+            actions.extend(execution.maintenance_actions.iter().cloned());
             (actions, execution)
         }
         Err(error) => (
@@ -276,6 +324,7 @@ pub fn run(mode: Mode) -> Result<()> {
                 successful_targets: 0,
                 failure: Some(format!("corpus maintenance: {error}")),
                 target_results: Vec::new(),
+                maintenance_actions: Vec::new(),
             },
         ),
     };
@@ -287,7 +336,7 @@ pub fn run(mode: Mode) -> Result<()> {
     write_report(
         &root,
         Report {
-            version: 5,
+            version: 6,
             revision: git(&["rev-parse", "HEAD"])?,
             dirty: !git(&["status", "--porcelain"])?.is_empty(),
             mode: mode.label(),
