@@ -298,7 +298,9 @@ impl MapChunkGenerator {
             water: self.water,
             biome: self.biome,
             historical_land_use: Some(Arc::new(HistoricalLandUse::new(
-                environment.samples_per_axis,
+                environment
+                    .historical_samples_per_axis()
+                    .ok_or(EnvironmentError::InvalidPyramid)?,
                 level_zero,
             ))),
             provider: self.provider,

@@ -94,6 +94,7 @@ fn historical_page(x: u16, y: u16) -> HistoricalLandUsePage {
         crop_percent: crop,
         grazing_percent: grazing,
         population_pressure_per_square_kilometer: population,
+        coverage: Vec::new(),
     }
 }
 

@@ -13,7 +13,7 @@ mod evidence;
 #[path = "pyramid/overview.rs"]
 mod overview;
 pub(super) use overview::coarse_coordinate;
-use overview::{coarse_historical, coarse_vegetation};
+use overview::coarse_vegetation;
 
 pub(super) fn store_hydrology_evidence(
     stage: &Stage,
@@ -189,6 +189,7 @@ impl PageOps for HistoricalLandUsePage {
             crop_percent: crop,
             grazing_percent: grazing,
             population_pressure_per_square_kilometer: population,
+            coverage: Vec::new(),
         }
     }
     fn value(&self, index: usize) -> Self::Value {
@@ -217,13 +218,13 @@ pub(super) fn build_pyramids(
     hydrology: &crate::PreparedHydrology,
 ) -> Result<DetailedFields, GeodataError> {
     use crate::preparation_progress::{self as progress, Phase, Unit};
-    let total_pages = progress::pyramid_page_count(samples_per_axis) * 4;
+    let total_pages = progress::pyramid_page_count(samples_per_axis) * 3;
     let mut completed = 0;
     progress::count(Phase::BuildingPyramids, None, 0, total_pages, Unit::Pages);
     let mut elevation = Vec::new();
     let mut water = Vec::new();
     let mut vegetation = Vec::new();
-    let mut historical_land_use = Vec::new();
+    let historical_land_use = stage_historical_overview(stage, overview)?;
     let mut axis = samples_per_axis;
     let mut previous_axis = axis;
     let mut level = 0_u8;
@@ -232,8 +233,6 @@ pub(super) fn build_pyramids(
         let mut elevation_root = PageRootBuilder::new(PageLayer::Elevation, count * count)?;
         let mut water_root = PageRootBuilder::new(PageLayer::Water, count * count)?;
         let mut vegetation_root = PageRootBuilder::new(PageLayer::Vegetation, count * count)?;
-        let mut historical_root =
-            PageRootBuilder::new(PageLayer::HistoricalLandUse, count * count)?;
         for y in 0..count {
             for x in 0..count {
                 let elevation_page = if level == 0 {
@@ -268,23 +267,7 @@ pub(super) fn build_pyramids(
                 let vegetation_hash =
                     store_page(stage, &vegetation_page, level, x as u16, y as u16)?;
                 vegetation_root.push(vegetation_hash)?;
-                let historical_page: HistoricalLandUsePage = if level == 0 {
-                    coarse_page(axis, level, x as u16, y as u16, |gx, gy| {
-                        coarse_historical(overview, axis, gx, gy)
-                    })?
-                } else {
-                    nearest_page::<HistoricalLandUsePage>(
-                        stage,
-                        previous_axis,
-                        level,
-                        x as u16,
-                        y as u16,
-                    )?
-                };
-                let historical_hash =
-                    store_page(stage, &historical_page, level, x as u16, y as u16)?;
-                historical_root.push(historical_hash)?;
-                completed += 4;
+                completed += 3;
                 progress::count(
                     Phase::BuildingPyramids,
                     None,
@@ -306,10 +289,6 @@ pub(super) fn build_pyramids(
             samples_per_axis: axis,
             ordered_page_root: vegetation_root.finish()?,
         });
-        historical_land_use.push(PyramidLevel {
-            samples_per_axis: axis,
-            ordered_page_root: historical_root.finish()?,
-        });
         if axis == 1 {
             break;
         }
@@ -321,10 +300,43 @@ pub(super) fn build_pyramids(
         elevation: FieldPyramid { levels: elevation },
         water: FieldPyramid { levels: water },
         vegetation: FieldPyramid { levels: vegetation },
-        historical_land_use: FieldPyramid {
-            levels: historical_land_use,
-        },
+        historical_land_use,
     })
+}
+
+fn stage_historical_overview(
+    stage: &Stage,
+    overview: &crate::PreparedOverview,
+) -> Result<FieldPyramid, GeodataError> {
+    overview.environment.validate()?;
+    let field =
+        overview
+            .environment
+            .historical_land_use
+            .as_ref()
+            .ok_or(GeodataError::Preparation(
+                "overview historical field is missing",
+            ))?;
+    for (level, metadata) in field.levels.iter().enumerate() {
+        let pages = overview
+            .historical_land_use_pages
+            .iter()
+            .filter(|page| usize::from(page.level) == level)
+            .cloned()
+            .collect::<Vec<_>>();
+        let page_count = usize::from(metadata.samples_per_axis.div_ceil(PAGE));
+        if pages.len() != page_count * page_count
+            || aoe_map::ordered_land_use_page_root(&pages)? != metadata.ordered_page_root
+        {
+            return Err(GeodataError::Preparation(
+                "overview historical pages do not match their field root",
+            ));
+        }
+    }
+    for page in &overview.historical_land_use_pages {
+        store_page(stage, page, page.level, page.x, page.y)?;
+    }
+    Ok(field.clone())
 }
 
 fn store_page<P: PageOps>(

@@ -85,13 +85,14 @@ Source and target polygons are projected into a request-centered Lambert
 azimuthal equal-area plane using deterministic 0.1-degree edge densification.
 Each allocation call accepts up to 1,000,000 source cells and 4,194,304 input
 polygon vertices; densified vertex totals use the same explicit bound. The
-weighted historical-pyramid helper has its own 1,024-sample-per-axis cap,
-independent of the overview and detailed elevation caps. Archive-backed ordinary
-preparation currently remains at the 128-sample overview limit because it
-retains the unrounded target allocation grid before pyramid reduction; the
-1024-axis archive reader and reduction path must become page-incremental before
-that production limit can be raised. Detailed elevation still uses the same
-128-axis historical overview and does not imply finer history. HYDE lake
+weighted historical-pyramid helper and archive reader share a dedicated
+1,024-sample-per-axis cap, independent of the overview and detailed elevation
+caps. The archive reader publishes and reduces each 64 by 64 target page
+incrementally; an offline 1,024-axis archive fixture exercises this path.
+Ordinary overview selection still uses 128 samples because its elevation and
+other overview fields use that axis. Detailed packages retain the independently
+declared 128-axis historical field instead of expanding it to the detailed
+elevation axis; terrain lookup uses the historical field's actual axis. HYDE lake
 coverage now comes from polygon overlap between its 5-minute mask cells and
 target cells, rather than assigning a full lake cell from a centre sample.
 The weighted pyramid combines unrounded extensive quantities before writing
@@ -104,14 +105,15 @@ their local geometry across split source windows. Lakes, ocean, nodata, and
 uncovered area remain separate allocation totals. HYDE documents the mask's
 declared nodata sentinel as ocean; unexpected non-finite mask values fail
 instead. Target space outside the source raster is rejected rather than
-published as source-derived zero. The current historical page schema does not
-persist per-cell unknown or uncovered provenance; missing land quantities and
-outside coverage fail preparation, and explicit unknown-page publication
-remains follow-up work.
+published as source-derived zero. New historical pages publish six distinct
+per-cell coverage percentages: land, valid land, lake, ocean, nodata, and outside. An
+unknown or water-only cell therefore differs from valid historical zero in
+the verified page and terrain sampling. Missing land quantities and outside
+coverage still fail production preparation.
 
 The public `prepare_hyde_600` function remains available for recipe-3 package
 reproduction and keeps its nearest-cell semantics. Production source locks
-identify the new preparation as `hyde-600ad-area-pages-v1`, so its package
+identify this coverage-aware preparation as `hyde-600ad-area-pages-v2`, so its package
 identity changes through preprocessing identity and historical page roots.
 Terrain generation semantics did not change, so the generation recipe remains
 unchanged.
