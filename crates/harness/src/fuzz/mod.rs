@@ -1,9 +1,16 @@
 //! Bounded parser fuzz campaigns with exact target and toolchain selection.
 use crate::process;
 use serde::Serialize;
-use std::{error::Error, fs, path::Path, process::Command, time::Duration};
+use std::{
+    error::Error,
+    fs,
+    path::Path,
+    process::Command,
+    time::{Duration, Instant},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+mod maintenance;
 mod seeds;
 mod storage;
 const TARGETS: [&str; 7] = [
@@ -43,6 +50,20 @@ impl Mode {
             Self::Nightly => Duration::from_secs(900),
         }
     }
+
+    fn segments(self) -> u8 {
+        match self {
+            Self::Smoke => 1,
+            Self::Nightly => 5,
+        }
+    }
+
+    fn segment_limit(self) -> &'static str {
+        match self {
+            Self::Smoke => self.limit(),
+            Self::Nightly => "-max_total_time=60",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -55,6 +76,8 @@ struct Report {
     cargo_fuzz: &'static str,
     targets: [&'static str; 7],
     limit: &'static str,
+    planned_segments_per_target: u8,
+    segment_limit: &'static str,
     prepared_seeds: Vec<seeds::Seed>,
     verified_legacy_seeds: Vec<seeds::Seed>,
     corpus_directory: &'static str,
@@ -62,9 +85,23 @@ struct Report {
     storage_policy: storage::Policy,
     storage_before: storage::Snapshot,
     storage_after: storage::Snapshot,
+    maintenance_actions: Vec<maintenance::Action>,
+    target_results: Vec<TargetResult>,
     attempted_targets: usize,
     successful_targets: usize,
     result: &'static str,
+    failure: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TargetResult {
+    target: &'static str,
+    duration_millis: u128,
+    completed: bool,
+    completed_segments: u8,
+    planned_segments: u8,
+    completed_fuzz_seconds: u16,
+    storage_after: Option<storage::Snapshot>,
     failure: Option<String>,
 }
 
@@ -73,63 +110,237 @@ struct Execution {
     attempted_targets: usize,
     successful_targets: usize,
     failure: Option<String>,
+    target_results: Vec<TargetResult>,
+    maintenance_actions: Vec<maintenance::Action>,
 }
 
-fn execute<F>(
+fn execute<F, M>(
     mode: Mode,
     root: &Path,
     storage_policy: storage::Policy,
     storage_before: storage::Snapshot,
     mut command: F,
+    mut maintain: M,
 ) -> Execution
 where
     F: FnMut(&[&str], Duration) -> Result<()>,
+    M: FnMut(
+        &'static str,
+        storage::Snapshot,
+        storage::Snapshot,
+    ) -> Result<Vec<maintenance::Action>>,
 {
     let mut execution = Execution {
         storage_after: storage_before,
         attempted_targets: 0,
         successful_targets: 0,
         failure: None,
+        target_results: Vec::new(),
+        maintenance_actions: Vec::new(),
     };
     for target in TARGETS {
+        let before_target = execution.storage_after;
         execution.attempted_targets += 1;
-        let command_result = command(
-            &[
-                "+nightly-2026-09-01",
-                "fuzz",
-                "run",
-                target,
-                "--",
-                mode.limit(),
-                "-max_len=1048576",
-                "-timeout=5",
-            ],
-            mode.deadline(),
-        );
-        if command_result.is_ok() {
-            execution.successful_targets += 1;
-        }
+        let started = Instant::now();
         let mut failures = Vec::new();
-        match storage_policy.inspect(root) {
-            Ok(snapshot) => {
-                execution.storage_after = snapshot;
-                if let Err(error) = storage_policy.validate(snapshot) {
-                    failures.push(format!("after target {target}: {error}"));
+        let mut snapshot_after = None;
+        let mut completed_segments = 0;
+        for segment in 0..mode.segments() {
+            let before_segment = execution.storage_after;
+            let command_result = command(
+                &[
+                    "+nightly-2026-09-01",
+                    "fuzz",
+                    "run",
+                    target,
+                    "--",
+                    mode.segment_limit(),
+                    "-max_len=1048576",
+                    "-timeout=5",
+                ],
+                mode.deadline(),
+            );
+            match storage_policy.inspect(root) {
+                Ok(snapshot) => {
+                    execution.storage_after = snapshot;
+                    snapshot_after = Some(snapshot);
+                    if let Err(error) = storage_policy.validate(snapshot) {
+                        failures.push(format!(
+                            "after target {target} segment {}: {error}",
+                            segment + 1
+                        ));
+                    }
+                }
+                Err(error) => failures.push(format!(
+                    "after target {target} segment {}: cannot snapshot storage: {error}",
+                    segment + 1
+                )),
+            }
+            if let Err(error) = command_result {
+                failures.push(format!("target {target} segment {}: {error}", segment + 1));
+            }
+            if !failures.is_empty() {
+                break;
+            }
+            completed_segments += 1;
+            if segment + 1 < mode.segments() {
+                let Some(after_segment) = snapshot_after else {
+                    failures.push(format!(
+                        "target {target} segment {} has no storage snapshot",
+                        segment + 1
+                    ));
+                    break;
+                };
+                match maintain(target, before_segment, after_segment) {
+                    Ok(mut actions) => {
+                        for action in &mut actions {
+                            action.after_segment = Some(segment + 1);
+                        }
+                        execution.maintenance_actions.extend(actions);
+                    }
+                    Err(error) => {
+                        failures.push(format!(
+                            "target {target} segment {}: corpus maintenance: {error}",
+                            segment + 1
+                        ));
+                        break;
+                    }
+                }
+                match storage_policy.inspect(root) {
+                    Ok(snapshot) => execution.storage_after = snapshot,
+                    Err(error) => {
+                        failures.push(format!("target {target} segment {}: cannot snapshot maintained storage: {error}", segment + 1));
+                        break;
+                    }
                 }
             }
-            Err(error) => failures.push(format!(
-                "after target {target}: cannot snapshot storage: {error}"
-            )),
         }
-        if let Err(error) = command_result {
-            failures.push(format!("target {target}: {error}"));
+        if failures.is_empty() {
+            execution.successful_targets += 1;
         }
+        execution.target_results.push(TargetResult {
+            target,
+            duration_millis: started.elapsed().as_millis(),
+            completed: failures.is_empty(),
+            completed_segments,
+            planned_segments: mode.segments(),
+            completed_fuzz_seconds: if matches!(mode, Mode::Nightly) {
+                u16::from(completed_segments) * 60
+            } else {
+                0
+            },
+            storage_after: snapshot_after,
+            failure: (!failures.is_empty()).then(|| failures.join("; ")),
+        });
         if !failures.is_empty() {
             execution.failure = Some(failures.join("; "));
             break;
         }
+        let Some(after_target) = snapshot_after else {
+            execution.failure = Some(format!(
+                "after target {target}: storage snapshot is missing"
+            ));
+            break;
+        };
+        match maintain(target, before_target, after_target) {
+            Ok(actions) => execution.maintenance_actions.extend(actions),
+            Err(error) => {
+                if let Ok(snapshot) = storage_policy.inspect(root) {
+                    execution.storage_after = snapshot;
+                }
+                execution.failure = Some(format!(
+                    "after target {target}: corpus maintenance: {error}"
+                ));
+                break;
+            }
+        }
+        match storage_policy.inspect(root) {
+            Ok(snapshot) => execution.storage_after = snapshot,
+            Err(error) => {
+                execution.failure = Some(format!(
+                    "after target {target}: cannot snapshot maintained storage: {error}"
+                ));
+                break;
+            }
+        }
     }
     execution
+}
+
+fn run_monitored(
+    program: &str,
+    args: &[&str],
+    deadline: Duration,
+    root: &Path,
+    policy: storage::Policy,
+) -> Result<()> {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::thread;
+    let cancellation = process::Cancellation::default();
+    let stop = Arc::new(AtomicBool::new(false));
+    let failure = Arc::new(Mutex::new(None::<String>));
+    let watcher = {
+        let stop = stop.clone();
+        let failure = failure.clone();
+        let cancellation = cancellation.clone();
+        let root = root.to_owned();
+        thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                match policy.inspect(&root) {
+                    Ok(snapshot) if storage::near_limit(policy, snapshot) => {
+                        if let Ok(mut reason) = failure.lock() {
+                            *reason = Some(format!(
+                                "working storage reached the 95% quota guard: {snapshot:?}"
+                            ));
+                        }
+                        cancellation.cancel();
+                        break;
+                    }
+                    Err(error) => {
+                        if let Ok(mut reason) = failure.lock() {
+                            *reason = Some(format!(
+                                "cannot inspect working storage during campaign: {error}"
+                            ));
+                        }
+                        cancellation.cancel();
+                        break;
+                    }
+                    Ok(_) => {}
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        })
+    };
+    let started = Instant::now();
+    let result = process::run_cancellable(program, args, deadline, &cancellation);
+    let elapsed = started.elapsed();
+    stop.store(true, Ordering::SeqCst);
+    watcher
+        .join()
+        .map_err(|_| "fuzz storage watcher panicked")?;
+    if let Some(message) = failure
+        .lock()
+        .map_err(|_| "fuzz quota lock poisoned")?
+        .take()
+    {
+        return Err(message.into());
+    }
+    result?;
+    if let Some(seconds) = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("-max_total_time="))
+        .and_then(|value| value.parse::<u64>().ok())
+        && elapsed < Duration::from_secs(seconds)
+    {
+        return Err(format!(
+            "libFuzzer exited before its {seconds}-second segment completed: {elapsed:?}"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn git(args: &[&str]) -> Result<String> {
@@ -161,15 +372,45 @@ pub fn run(mode: Mode) -> Result<()> {
     fs::create_dir_all(root.join("fuzz/artifacts"))?;
     let storage_policy = storage::Policy::default();
     let storage_before = storage_policy.inspect(&root)?;
-    storage_policy.validate(storage_before)?;
     let seeds = seeds::prepare(&root)?;
-    let execution = execute(
-        mode,
-        &root,
-        storage_policy,
-        storage_before,
-        |args, deadline| process::run("cargo", args, deadline).map_err(Into::into),
-    );
+    let maintenance = maintenance::run(&root, storage_policy, |args, deadline| {
+        process::run("cargo", args, deadline).map_err(Into::into)
+    });
+    let (maintenance_actions, execution) = match maintenance {
+        Ok(actions) => {
+            let execution = execute(
+                mode,
+                &root,
+                storage_policy,
+                storage_policy.inspect(&root)?,
+                |args, deadline| run_monitored("cargo", args, deadline, &root, storage_policy),
+                |target, before, after| {
+                    maintenance::after_target(
+                        &root,
+                        storage_policy,
+                        target,
+                        before,
+                        after,
+                        |args, deadline| process::run("cargo", args, deadline).map_err(Into::into),
+                    )
+                },
+            );
+            let mut actions = actions;
+            actions.extend(execution.maintenance_actions.iter().cloned());
+            (actions, execution)
+        }
+        Err(error) => (
+            Vec::new(),
+            Execution {
+                storage_after: storage_policy.inspect(&root)?,
+                attempted_targets: 0,
+                successful_targets: 0,
+                failure: Some(format!("corpus maintenance: {error}")),
+                target_results: Vec::new(),
+                maintenance_actions: Vec::new(),
+            },
+        ),
+    };
     let result = if execution.failure.is_some() {
         "FAIL"
     } else {
@@ -178,7 +419,7 @@ pub fn run(mode: Mode) -> Result<()> {
     write_report(
         &root,
         Report {
-            version: 4,
+            version: 7,
             revision: git(&["rev-parse", "HEAD"])?,
             dirty: !git(&["status", "--porcelain"])?.is_empty(),
             mode: mode.label(),
@@ -186,6 +427,8 @@ pub fn run(mode: Mode) -> Result<()> {
             cargo_fuzz: "0.13.2",
             targets: TARGETS,
             limit: mode.limit(),
+            planned_segments_per_target: mode.segments(),
+            segment_limit: mode.segment_limit(),
             prepared_seeds: seeds.prepared_seeds,
             verified_legacy_seeds: seeds.verified_legacy_seeds,
             corpus_directory: "fuzz/corpus",
@@ -193,6 +436,8 @@ pub fn run(mode: Mode) -> Result<()> {
             storage_policy,
             storage_before,
             storage_after: execution.storage_after,
+            maintenance_actions,
+            target_results: execution.target_results,
             attempted_targets: execution.attempted_targets,
             successful_targets: execution.successful_targets,
             result,
@@ -206,285 +451,4 @@ pub fn run(mode: Mode) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn all_parser_targets_are_bounded_and_successfully_enforced() {
-        let root = tempfile::tempdir().expect("directory");
-        let storage_policy = storage::Policy::default();
-        let storage_before = storage_policy.inspect(root.path()).expect("storage usage");
-        for mode in [Mode::Smoke, Mode::Nightly] {
-            let mut targets = Vec::new();
-            let execution = execute(
-                mode,
-                root.path(),
-                storage_policy,
-                storage_before,
-                |args, deadline| {
-                    targets.push(args[3].to_owned());
-                    assert_eq!(args[0], "+nightly-2026-09-01");
-                    assert_eq!(args[5], mode.limit());
-                    assert!(args.contains(&"-max_len=1048576"));
-                    assert_eq!(deadline, mode.deadline());
-                    Ok(())
-                },
-            );
-            assert_eq!(targets, TARGETS);
-            assert_eq!(execution.attempted_targets, TARGETS.len());
-            assert_eq!(execution.successful_targets, TARGETS.len());
-            assert_eq!(execution.storage_after, storage_before);
-            assert!(execution.failure.is_none());
-        }
-    }
-
-    #[test]
-    fn quotas_are_enforced_after_each_target_without_deleting_inputs() {
-        let root = tempfile::tempdir().expect("directory");
-        let storage_before = storage::Snapshot {
-            corpus: storage::Usage { files: 0, bytes: 0 },
-            artifacts: storage::Usage { files: 0, bytes: 0 },
-        };
-        let storage_policy = storage::Policy {
-            corpus_file_limit: 0,
-            corpus_byte_limit: 0,
-            artifact_file_limit: 0,
-            artifact_byte_limit: 0,
-            retention: storage::Policy::default().retention,
-        };
-        let mut calls = 0;
-        let execution = execute(
-            Mode::Nightly,
-            root.path(),
-            storage_policy,
-            storage_before,
-            |args, _| {
-                calls += 1;
-                assert_eq!(args[3], TARGETS[0]);
-                let directory = root.path().join("fuzz/corpus/drs");
-                fs::create_dir_all(&directory).expect("corpus directory");
-                fs::write(directory.join("preserved-input"), b"keep me").expect("corpus input");
-                Ok(())
-            },
-        );
-        assert_eq!(calls, 1);
-        assert_eq!(execution.attempted_targets, 1);
-        assert_eq!(execution.successful_targets, 1);
-        assert_eq!(execution.storage_after.corpus.files, 1);
-        let failure = execution.failure.expect("quota failure");
-        assert!(failure.contains("after target drs"));
-        assert!(failure.contains("corpus files quota exceeded"));
-        assert_eq!(
-            fs::read(root.path().join("fuzz/corpus/drs/preserved-input")).unwrap(),
-            b"keep me"
-        );
-    }
-
-    #[test]
-    fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
-        let root = tempfile::tempdir().expect("directory");
-        let storage_before = storage::Snapshot {
-            corpus: storage::Usage { files: 0, bytes: 0 },
-            artifacts: storage::Usage { files: 0, bytes: 0 },
-        };
-        let execution = execute(
-            Mode::Smoke,
-            root.path(),
-            storage::Policy::default(),
-            storage_before,
-            |args, _| {
-                assert_eq!(args[3], TARGETS[0]);
-                let directory = root.path().join("fuzz/artifacts/drs");
-                fs::create_dir_all(&directory).expect("artifact directory");
-                fs::write(directory.join("crash-input"), b"preserve crash").expect("artifact");
-                Err("injected libFuzzer crash".into())
-            },
-        );
-        assert_eq!(execution.attempted_targets, 1);
-        assert_eq!(execution.successful_targets, 0);
-        assert_eq!(execution.storage_after.artifacts.files, 1);
-        assert_eq!(execution.storage_after.artifacts.bytes, 14);
-        assert!(
-            execution
-                .failure
-                .as_deref()
-                .expect("failure accounting")
-                .contains("target drs: injected libFuzzer crash")
-        );
-
-        write_report(
-            root.path(),
-            Report {
-                version: 4,
-                revision: "revision".into(),
-                dirty: true,
-                mode: Mode::Smoke.label(),
-                toolchain: "nightly-2026-09-01",
-                cargo_fuzz: "0.13.2",
-                targets: TARGETS,
-                limit: Mode::Smoke.limit(),
-                prepared_seeds: Vec::new(),
-                verified_legacy_seeds: Vec::new(),
-                corpus_directory: "fuzz/corpus",
-                artifact_directory: "fuzz/artifacts",
-                storage_policy: storage::Policy::default(),
-                storage_before,
-                storage_after: execution.storage_after,
-                attempted_targets: execution.attempted_targets,
-                successful_targets: execution.successful_targets,
-                result: "FAIL",
-                failure: execution.failure,
-            },
-        )
-        .expect("failure report");
-        let value: serde_json::Value = serde_json::from_slice(
-            &fs::read(root.path().join("reports/fuzz/smoke.json")).expect("report"),
-        )
-        .expect("JSON");
-        assert_eq!(value["result"], "FAIL");
-        assert_eq!(value["attempted_targets"], 1);
-        assert_eq!(value["successful_targets"], 0);
-        assert_ne!(value["storage_before"], value["storage_after"]);
-        assert_eq!(value["storage_after"]["artifacts"]["files"], 1);
-        assert!(
-            value["failure"]
-                .as_str()
-                .expect("failure")
-                .contains("injected libFuzzer crash")
-        );
-        assert_eq!(
-            fs::read(root.path().join("fuzz/artifacts/drs/crash-input")).unwrap(),
-            b"preserve crash"
-        );
-    }
-
-    #[test]
-    fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
-        let temp = tempfile::tempdir().expect("directory");
-        const KNOWN_SEED_BYTES: &[u8] = b"";
-        const KNOWN_SEED_BLAKE3_HEX: &str =
-            "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
-        let seed = seeds::Seed::new(
-            "map_chunk",
-            "known-seed".into(),
-            "fuzz/corpus/map_chunk/known-seed".into(),
-            KNOWN_SEED_BYTES,
-        );
-        assert_eq!(seed.bytes, KNOWN_SEED_BYTES.len());
-        assert_eq!(seed.blake3_hex, KNOWN_SEED_BLAKE3_HEX);
-        let mut inventory = seeds::prepare(temp.path()).expect("seed inventory");
-        inventory.prepared_seeds = vec![seed];
-        let storage_policy = storage::Policy::default();
-        let storage_before = storage::Snapshot {
-            corpus: storage::Usage {
-                files: 1,
-                bytes: 10,
-            },
-            artifacts: storage::Usage { files: 0, bytes: 0 },
-        };
-        let storage_after = storage::Snapshot {
-            corpus: storage::Usage {
-                files: 2,
-                bytes: 25,
-            },
-            artifacts: storage::Usage { files: 1, bytes: 8 },
-        };
-        for mode in [Mode::Smoke, Mode::Nightly] {
-            write_report(
-                temp.path(),
-                Report {
-                    version: 4,
-                    revision: "revision".into(),
-                    dirty: true,
-                    mode: mode.label(),
-                    toolchain: "nightly-2026-09-01",
-                    cargo_fuzz: "0.13.2",
-                    targets: TARGETS,
-                    limit: mode.limit(),
-                    prepared_seeds: inventory.prepared_seeds.clone(),
-                    verified_legacy_seeds: inventory.verified_legacy_seeds.clone(),
-                    corpus_directory: "fuzz/corpus",
-                    artifact_directory: "fuzz/artifacts",
-                    storage_policy,
-                    storage_before,
-                    storage_after,
-                    attempted_targets: TARGETS.len(),
-                    successful_targets: TARGETS.len(),
-                    result: "PASS",
-                    failure: None,
-                },
-            )
-            .expect("report");
-            let path = temp
-                .path()
-                .join(format!("reports/fuzz/{}.json", mode.label()));
-            let value: serde_json::Value =
-                serde_json::from_slice(&fs::read(path).expect("report")).expect("JSON");
-            assert_eq!(value["result"], "PASS");
-            assert_eq!(value["dirty"], true);
-            assert_eq!(
-                value["targets"].as_array().expect("targets").len(),
-                TARGETS.len()
-            );
-            assert_eq!(value["version"], 4);
-            assert_eq!(value["corpus_directory"], "fuzz/corpus");
-            assert_eq!(value["artifact_directory"], "fuzz/artifacts");
-            assert_eq!(
-                value["prepared_seeds"][0]["blake3_hex"],
-                KNOWN_SEED_BLAKE3_HEX
-            );
-            let legacy = value["verified_legacy_seeds"]
-                .as_array()
-                .expect("verified legacy seeds");
-            assert_eq!(legacy.len(), 4);
-            for (entry, expected) in legacy.iter().zip([
-                (
-                    "fuzz/corpus/drs/one-entry.drs",
-                    "bdab473e663ab54eb10feb602b7cdc49360155889bdaebbcb50c113ad80308ef",
-                    include_bytes!("../../../../fuzz/corpus/drs/one-entry.drs").as_slice(),
-                ),
-                (
-                    "fuzz/corpus/manifest/minimal.json",
-                    "f904f26ecd0c86b2022e697bcad3ea3a3f4bd34c0494c06ba51d4123579b4400",
-                    include_bytes!("../../../../fuzz/corpus/manifest/minimal.json").as_slice(),
-                ),
-                (
-                    "fuzz/corpus/palette/jasc.pal",
-                    "bc31db7bdd8c5091d614bc0f8cb1396c4c05085c0ead9355953d1a4489ecfb5f",
-                    include_bytes!("../../../../fuzz/corpus/palette/jasc.pal").as_slice(),
-                ),
-                (
-                    "fuzz/corpus/slp/two-pixels.slp",
-                    "ab8a0a54eba7a0263293d72d6ac7862ae099e452bd88fcb06d934d9f33953ee3",
-                    include_bytes!("../../../../fuzz/corpus/slp/two-pixels.slp").as_slice(),
-                ),
-            ]) {
-                let (path, digest, expected_bytes) = expected;
-                assert_eq!(entry["path"], path);
-                assert_eq!(entry["blake3_hex"], digest);
-                let bytes = fs::read(temp.path().join(path)).expect("legacy bytes");
-                assert_eq!(bytes, expected_bytes);
-                assert_eq!(blake3::hash(&bytes).to_hex().to_string(), digest);
-            }
-            assert_eq!(
-                value["storage_policy"]["retention"],
-                "never-delete; archive or explicitly remove excess storage outside fuzzing"
-            );
-            assert_eq!(value["storage_before"]["corpus"]["files"], 1);
-            assert_eq!(value["storage_before"]["corpus"]["bytes"], 10);
-            assert_eq!(value["storage_after"]["corpus"]["files"], 2);
-            assert_eq!(value["storage_after"]["corpus"]["bytes"], 25);
-            assert_eq!(value["storage_after"]["artifacts"]["files"], 1);
-            assert_ne!(value["storage_before"], value["storage_after"]);
-            assert_eq!(value["attempted_targets"], TARGETS.len());
-            assert_eq!(value["successful_targets"], TARGETS.len());
-            assert!(value["failure"].is_null());
-        }
-    }
-
-    #[test]
-    fn fuzz_report_revision_comes_from_git_and_rejects_unknown_refs() {
-        assert_eq!(git(&["rev-parse", "HEAD"]).expect("revision").len(), 40);
-        assert!(git(&["rev-parse", "this-ref-does-not-exist"]).is_err());
-    }
-}
+mod tests;
