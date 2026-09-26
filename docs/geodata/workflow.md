@@ -148,6 +148,33 @@ runner records each case and any typed failure in ignored
 so an uninhabitable selection can still pass generation. Matrix generation alone does not establish activation,
 visual fidelity, or memory qualification for all regions.
 
+After matrix generation, `make test-geographic-visuals` requires source-backed
+Southern Finland lake, Nile Delta coast, and Central Alps packages. It verifies
+nonzero inland/ocean page coverage and at least 1,500 m of Alps relief before
+launching the ordinary client on both WebGPU and Canvas. Captures and metadata
+are written under ignored `reports/geographic-visuals/`; metadata binds each
+image to its package hash, request, generation recipe, source locks, asset
+manifest identity, backend, loaded chunks, and camera. The small fixed maps
+contain fewer than the 512 chunks needed to exercise eviction. Chromium uses
+SwiftShader, so the capture does not qualify dedicated GPU performance. The
+runner records each case's page count, page bytes, and chunk-grid upper bound;
+it rejects packages above 64 pages, 1 MiB, or 512 chunks. It samples the server's
+resident memory across the full browser run and rejects peaks above 1 GiB; that
+aggregate does not isolate per-case server memory or the browser container.
+`AOE_MAP_PACKAGE_DIRECTORY` can point the server at a verified package
+directory without copying packages into the normal creator store.
+Historical land-use metadata counts known coverage samples separately from
+legacy pages that omit coverage; omitted values are not treated as land or zero.
+
+The original `coast_estuary` request was centered on Cairo and produced zero
+water coverage, so it was rejected as a coast capture. The corrected request
+uses 31.4 N, 31.5 E; `coast-correction.json` records both package hashes,
+requests, water-page evidence, and source-lock identities. The corrected package
+has nonzero ocean coverage but no inland-water samples, so this capture
+qualifies a Nile Delta coast case (renamed `nile_delta_coast`) and does not show
+an estuary channel. The `river_lake` case remains the separate inland-water
+qualification.
+
 The creation service runs one job at a time and queues at most two more. It
 retains at most 128 job records in memory, evicting the oldest terminal record
 when new work is accepted; running, cancelling, and queued jobs are preserved.
