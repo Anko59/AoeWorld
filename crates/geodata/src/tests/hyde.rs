@@ -16,14 +16,15 @@ fn sampler_preserves_land_lake_nodata_nan_and_outside_as_distinct_results() {
         .expect("sampled HYDE fixture");
 
     assert_eq!(&values[..5], [Some(1.0), Some(0.0), None, None, None]);
-    assert_eq!(
-        values[..5]
-            .iter()
-            .copied()
-            .map(lake_coverage_percent)
-            .collect::<Vec<_>>(),
-        vec![0, 100, 0, 0, 0]
-    );
+}
+
+#[test]
+fn lake_coverage_reads_and_allocates_the_source_mask_geometry() {
+    let archive = test_lake_boundary_archive();
+    let coverage = prepare_hyde_lake_coverage(&archive, MapRequest::default(), 2)
+        .expect("prepared area-based HYDE lake coverage");
+
+    assert_eq!(coverage, [0, 51, 0, 51]);
 }
 
 #[test]
@@ -63,6 +64,191 @@ fn prepares_hyde_600_from_bounded_ascii_zip_members() {
 }
 
 #[test]
+fn production_area_path_prepares_the_offline_archive_fixture_deterministically() {
+    let archives = test_hyde_archives();
+    let prepared = prepare_hyde_area_600(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        2,
+    )
+    .expect("prepared area-aware HYDE fixture");
+
+    assert_eq!(prepared.field.levels[0].samples_per_axis, 2);
+    let page = prepared
+        .pages
+        .iter()
+        .find(|page| page.level == 0)
+        .expect("base page");
+    assert_eq!(page.crop_percent, [40; 4]);
+    assert_eq!(page.grazing_percent, [30; 4]);
+    assert_eq!(page.population_pressure_per_square_kilometer, [2; 4]);
+
+    let repeated = prepare_hyde_area_600(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        2,
+    )
+    .expect("repeated area-aware HYDE fixture");
+    assert_eq!(repeated.field, prepared.field);
+    assert_eq!(repeated.pages, prepared.pages);
+}
+
+#[test]
+fn production_archive_path_applies_cited_history_and_unknown_before_page_publication() {
+    let archives = test_hyde_archives();
+    let request = MapRequest::default();
+    let mut document =
+        GeographicHistoricalCorrectionDocument::empty(request, 2, HYDE_AREA_PREPROCESSING_IDENTITY)
+            .unwrap();
+    document.sources = vec![HistoricalSourceCitation {
+        id: "offline-fixture".into(),
+        citation: "Synthetic archive regression fixture".into(),
+    }];
+    document.corrections = vec![
+        GeographicHistoricalCorrection {
+            cell_x: 0,
+            cell_y: 0,
+            source_id: "offline-fixture".into(),
+            evidence: GeographicHistoricalEvidence::HistoricalModel {
+                quantities: HistoricalQuantityPatch {
+                    valid_land_area_square_meters: 100_000.0,
+                    crop_area_square_kilometers: 0.05,
+                    grazing_area_square_kilometers: 0.0,
+                    population: 1.0,
+                },
+            },
+        },
+        GeographicHistoricalCorrection {
+            cell_x: 1,
+            cell_y: 0,
+            source_id: "offline-fixture".into(),
+            evidence: GeographicHistoricalEvidence::Unknown,
+        },
+    ];
+    let corrected = prepare_hyde_area_600_with_corrections(
+        &archives.baseline,
+        &archives.supplementary,
+        request,
+        2,
+        &document,
+    )
+    .unwrap();
+    let ordinary =
+        prepare_hyde_area_600(&archives.baseline, &archives.supplementary, request, 2).unwrap();
+    let corrected_page = &corrected.pages[0];
+    assert_eq!(corrected_page.crop_percent[0], 50);
+    assert_eq!(corrected_page.coverage[1].valid_land_percent, 0);
+    assert_ne!(
+        corrected.field.levels[0].ordered_page_root,
+        ordinary.field.levels[0].ordered_page_root
+    );
+}
+
+#[test]
+fn production_area_path_prepares_a_full_overview_axis() {
+    let archives = test_hyde_archives();
+    let prepared = prepare_hyde_area_600(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        128,
+    )
+    .expect("prepared full overview historical grid");
+
+    assert_eq!(prepared.field.levels[0].samples_per_axis, 128);
+    assert_eq!(prepared.field.levels.last().unwrap().samples_per_axis, 1);
+}
+
+#[test]
+fn production_archive_stream_prepares_the_independent_1024_axis() {
+    let archives = test_hyde_archives();
+    let prepared = prepare_hyde_area_600(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        1_024,
+    )
+    .expect("streamed full historical grid from bounded archive windows");
+    assert_eq!(prepared.field.levels[0].samples_per_axis, 1_024);
+    assert_eq!(prepared.field.levels.last().unwrap().samples_per_axis, 1);
+    assert_eq!(prepared.pages.len(), 347);
+    assert!(
+        prepared.pages[0]
+            .crop_percent
+            .iter()
+            .all(|value| *value == 40)
+    );
+}
+
+#[test]
+fn production_area_path_fails_closed_when_land_quantities_are_missing() {
+    let archives = test_hyde_archives_with_crop("-9999");
+    assert!(matches!(
+        prepare_hyde_area_600(
+            &archives.baseline,
+            &archives.supplementary,
+            MapRequest::default(),
+            2,
+        ),
+        Err(GeodataError::Preparation(
+            "HYDE land cell is missing a required quantity"
+        ))
+    ));
+}
+
+#[test]
+fn archive_page_conserves_partial_source_quantities_across_target_cells() {
+    let archives = test_hyde_archives();
+    let (sources, targets, allocations) = super::area_reader::allocate_archive_page_for_test(
+        &archives.baseline,
+        &archives.supplementary,
+        MapRequest::default(),
+        2,
+    )
+    .expect("allocated offline archive page");
+    let total_crop: f64 = allocations
+        .iter()
+        .map(|allocation| allocation.crop_area_square_kilometers)
+        .sum();
+    let total_valid_area: f64 = allocations
+        .iter()
+        .map(|allocation| allocation.valid_land_area_square_meters)
+        .sum();
+    let source_crop: f64 = sources
+        .iter()
+        .filter_map(|cell| cell.crop_area_square_kilometers)
+        .sum();
+    assert!(total_crop > 0.0 && total_crop < source_crop);
+    assert!(total_valid_area > 0.0);
+
+    // Preserve the piecewise-linear outer edges produced by the same target
+    // page transform; replacing them with four corners would change the
+    // geographic polygon and its area slightly.
+    let union = vec![
+        targets[0].polygon[0],
+        targets[0].polygon[1],
+        targets[1].polygon[1],
+        targets[1].polygon[2],
+        targets[3].polygon[2],
+        targets[3].polygon[3],
+        targets[2].polygon[3],
+        targets[2].polygon[0],
+    ];
+    let whole = allocate_hyde_area_window(
+        &sources,
+        &[HydeTargetAreaCell { polygon: union }],
+        MapRequest::default().center_latitude_e7,
+        MapRequest::default().center_longitude_e7,
+    )
+    .expect("allocated whole request footprint");
+    let whole = &whole[0];
+    assert!((total_crop - whole.crop_area_square_kilometers).abs() < 1.0e-6);
+    assert!((total_valid_area - whole.valid_land_area_square_meters).abs() < 1.0);
+}
+
+#[test]
 fn rejects_invalid_hyde_archives_and_member_paths() {
     let archives = test_hyde_archives();
     assert!(extract_member(&archives.baseline, "../../outside.asc").is_err());
@@ -75,6 +261,10 @@ fn rejects_invalid_hyde_archives_and_member_paths() {
 }
 
 fn test_hyde_archives() -> TestArchives {
+    test_hyde_archives_with_crop("4")
+}
+
+fn test_hyde_archives_with_crop(crop_value: &str) -> TestArchives {
     static NEXT_ARCHIVE: AtomicU64 = AtomicU64::new(0);
     let serial = NEXT_ARCHIVE.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!(
@@ -87,7 +277,7 @@ fn test_hyde_archives() -> TestArchives {
     write_zip(
         &baseline,
         &[
-            (HYDE_600_MEMBERS[0], "4"),
+            (HYDE_600_MEMBERS[0], crop_value),
             (HYDE_600_MEMBERS[1], "3"),
             (HYDE_600_MEMBERS[2], "20"),
         ],
@@ -176,6 +366,34 @@ fn test_landlake_archive() -> TestArchive {
     zip.start_file(HYDE_600_MEMBERS[3], SimpleFileOptions::default())
         .expect("landlake member");
     zip.write_all(&bytes).expect("landlake raster");
+    zip.finish().expect("finish test archive");
+    TestArchive { root, archive }
+}
+
+fn test_lake_boundary_archive() -> TestArchive {
+    static NEXT_TEST_ARCHIVE: AtomicU64 = AtomicU64::new(0);
+    let serial = NEXT_TEST_ARCHIVE.fetch_add(1, Ordering::Relaxed);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "aoe-hyde-lake-test-{}-{timestamp}-{serial}",
+        std::process::id()
+    ));
+    fs::create_dir(&root).expect("test directory");
+    let archive = root.join("supplementary.zip");
+    let output = File::create(&archive).expect("test archive");
+    let mut zip = ZipWriter::new(output);
+    zip.start_file(HYDE_600_MEMBERS[3], SimpleFileOptions::default())
+        .expect("landlake member");
+    let mut grid = String::from(
+        "ncols 8\nnrows 8\nxllcorner 1.95\nyllcorner 48.45\ncellsize 0.1\nNODATA_value -9999\n",
+    );
+    for _ in 0..8 {
+        grid.push_str("1 1 1 1 1 0 0 0\n");
+    }
+    zip.write_all(grid.as_bytes()).expect("landlake grid");
     zip.finish().expect("finish test archive");
     TestArchive { root, archive }
 }

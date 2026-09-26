@@ -8,6 +8,8 @@
 /.cache/
 /fuzz/target/
 /fuzz/artifacts/
+/fuzz/archive/
 /fuzz/coverage/
+/fuzz/reports/
 /fuzz/corpus/*/*
 .env

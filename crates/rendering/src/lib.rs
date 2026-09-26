@@ -10,8 +10,6 @@ mod playground;
 pub use playground::{GAME_ATLAS_SIDE, GameArt, GameFrame};
 
 #[cfg(target_arch = "wasm32")]
-mod canvas_scene;
-#[cfg(target_arch = "wasm32")]
 mod game_grid;
 #[cfg(target_arch = "wasm32")]
 mod game_renderer;

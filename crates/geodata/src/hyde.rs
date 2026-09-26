@@ -16,16 +16,26 @@ use std::{
 use zip::ZipArchive;
 
 mod area;
+mod area_reader;
+pub(super) mod area_stream;
 mod correction;
+mod geographic_correction;
 pub use area::{
     HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
     allocate_hyde_area_window, prepare_hyde_area_pyramid,
 };
+pub use area_reader::prepare_hyde_area_600;
+pub use area_reader::prepare_hyde_area_600_with_corrections;
 pub use correction::{
     HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
     HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
     HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
     MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS,
+};
+pub use geographic_correction::{
+    GEOGRAPHIC_HISTORICAL_CORRECTION_SCHEMA_VERSION, GeographicHistoricalCorrection,
+    GeographicHistoricalCorrectionDocument, GeographicHistoricalEvidence, HistoricalGridBinding,
+    HistoricalQuantityPatch, HistoricalSourceCitation,
 };
 
 const HYDE_600_MEMBERS: [&str; 5] = [
@@ -36,6 +46,10 @@ const HYDE_600_MEMBERS: [&str; 5] = [
     "general_files/maxln_cr.asc",
 ];
 const MAX_HYDE_MEMBER_BYTES: u64 = 128 * 1024 * 1024;
+/// Historical land-use fields may be prepared more finely than overview
+/// elevation. This is an independent field limit, not an elevation limit.
+pub const MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS: u16 = 1_024;
+pub const HYDE_AREA_PREPROCESSING_IDENTITY: &str = "hyde-600ad-area-pages-v3";
 
 #[derive(Clone, Debug)]
 pub struct PreparedHistoricalLandUse {
@@ -50,21 +64,7 @@ pub fn prepare_hyde_lake_coverage(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<Vec<u8>, GeodataError> {
-    let request = request
-        .normalized()
-        .map_err(|_| GeodataError::Preparation("invalid request"))?;
-    let coordinates = projected_coordinates(request, samples_per_axis)?;
-    sample_member(
-        supplementary_archive,
-        HYDE_600_MEMBERS[3],
-        &coordinates,
-        samples_per_axis,
-    )
-    .map(|values| values.into_iter().map(lake_coverage_percent).collect())
-}
-
-fn lake_coverage_percent(value: Option<f64>) -> u8 {
-    u8::from(value == Some(0.0)) * 100
+    area_reader::prepare_hyde_lake_coverage(supplementary_archive, request, samples_per_axis)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -394,6 +394,7 @@ fn pages_for(
                 crop_percent,
                 grazing_percent,
                 population_pressure_per_square_kilometer,
+                coverage: Vec::new(),
             });
         }
     }
@@ -465,16 +466,12 @@ mod tests {
         assert!(HYDE_600_MEMBERS.contains(&"baseline/asc/600AD_lu/cropland600AD.asc"));
         assert!(!HYDE_600_MEMBERS.contains(&"../../outside.asc"));
     }
-
-    #[test]
-    fn fixed_hyde_landlake_values_only_mark_lakes_as_water() {
-        assert_eq!(lake_coverage_percent(Some(1.0)), 0);
-        assert_eq!(lake_coverage_percent(Some(0.0)), 100);
-        assert_eq!(lake_coverage_percent(Some(-9_999.0)), 0);
-        assert_eq!(lake_coverage_percent(None), 0);
-    }
 }
 
 #[cfg(test)]
 #[path = "tests/hyde.rs"]
 mod hyde_tests;
+
+#[cfg(test)]
+#[path = "tests/hyde_area_reader.rs"]
+mod area_reader_tests;

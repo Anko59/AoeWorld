@@ -1,9 +1,9 @@
 # Geographic map completion ledger
 
-Implementation starts at `04464752609a4bcd74a7d4d4c5943f20233dac65`.
-Preserve existing work; complete the following acceptance-driven milestones.
-Use isolated worktrees for independent edits and an independent review before
-integration. All compilation and validation uses Dockerized Make targets.
+This ledger began at `04464752609a4bcd74a7d4d4c5943f20233dac65`.
+The table below tracks the September 26 completion work. Earlier handoffs
+remain below as revision-bound history. All compilation and validation uses
+Dockerized Make targets.
 
 ## Product contract
 
@@ -16,18 +16,25 @@ through 262,144 tiles per side without dense fine-tile allocation.
 Keep modern evidence, historical models, procedural detail, and fallback data
 distinguishable. No economy, buildings, combat, or naval units in this scope.
 
-## Milestones
+## Current status
 
-| ID | Deliverable | Status | Acceptance |
-| --- | --- | --- | --- |
-| M1 | Correctness repairs | Verified; PR #9 | Asymmetric routes; no endless budget retry; valid HYDE missing masks; correct extent/edge chunks; bounded starts; native tests pass |
-| M2 | Detailed streaming preparation | Regional prep/residency/creator verified; large extents pending | Regional Copernicus inputs; directory package; bounded page preparation/residency; offline unseen chunks; integrity/cancellation |
-| M3 | Water and historical reconstruction | Units/dry cells repaired; reconstruction pending | WorldCover/HydroLAKES/HydroRIVERS; coherent water/barriers; whole-cell HYDE allocation; correction format; representative regions |
-| M4 | Physical movement and long routes | Physical speed and bounded detours implemented; 100 km qualification pending | Fractional/waypoint distance carry; resumable fair search; lazy connectivity and detours; slope consistency; 100 km travel/replay |
-| M5 | Resource lifecycle | Persistence and synchronization verified; source-session qualification pending | Independent ore streams; obstruction-aware access; bounded resource deltas; persisted overlays; eviction/reconnect/reload |
-| M6 | Terrain and resource rendering | Art/stale-frame fixes verified; geometry pending | Reviewed missing art; ramp/cliff/water meshes; transitions; surface picking/occlusion; covering LOD; bounded requests; both backends |
-| M7 | Creation experience | Creator, recovery and measured progress verified; final integrated source-backed reopen pending | Accurate estimates/detail; useful preview; create/cancel/retry/open; atomic activation; bounded job retention/recovery |
-| M8 | Qualification | Pending | Source-backed workloads at 512, 16384, 50000 tiles and sparse maximum; parser fuzz/coverage/CI; final revision evidence |
+The status is intentionally narrower than a release claim. A branch result
+does not qualify the final combined revision until its evidence is rerun there.
+
+| Area | Implemented and integrated | Production connected | Qualified evidence | Remaining acceptance |
+| --- | --- | --- | --- | --- |
+| Regional detailed preparation | Yes | Yes | Directory verification and offline unseen-chunk fixtures | Final revision creator and visual journey |
+| Historical area allocation | Yes, [PR #66](https://github.com/Anko59/AoeWorld/pull/66) | Ordinary overview and detailed preparation | Offline conservation, partial cells, 1024-axis streaming | Fixed-region regeneration and final revision gates |
+| Water evidence | Yes, typed pages | Modern observed extent | Synthetic typed-evidence fixtures | Connected modelled surfaces, correction policy, source-backed lake/river/coast inspection |
+| Movement and resource lifecycle | Yes | Yes | Local endurance, persistence, reconnect, replay | Geographic long orders and movement-driven page residency |
+| Rendering | Yes, textured Canvas and WebGPU | Yes | Constructed terrain and private-art fixtures; [PR #64](https://github.com/Anko59/AoeWorld/pull/64) overlap fixes | Source-backed captures and high-relief journey on the final map |
+| Creator | Yes | Yes | Older Paris creation/reopen; [PR #65](https://github.com/Anko59/AoeWorld/pull/65) current journey | Final combined revision journey and representative visual matrix |
+| Fuzz and coverage | Lifecycle work in [PR #63](https://github.com/Anko59/AoeWorld/pull/63); prior coverage passed 85.21% | Parser targets connected | Smoke on feature branch; earlier nightly failed quota | Two clean-revision nightly passes and final coverage report |
+| Scale and CI | Sparse package contracts | Regional and overview paths | Source-backed scale qualification is in progress | Final revision 512/16384/50000/max matrix, required gates, and CI |
+
+The HYDE allocation PR and stream continuation [PR #67](https://github.com/Anko59/AoeWorld/pull/67)
+are open for review. This table will be updated with exact integrated package
+hashes, gate reports, and limitations before the final PR is marked ready.
 
 M7 completion publication is reviewed in
 [PR #24](https://github.com/Anko59/AoeWorld/pull/24), revision

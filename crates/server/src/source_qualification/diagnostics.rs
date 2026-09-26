@@ -8,7 +8,17 @@ use aoe_simulation::Terrain;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 mod components;
+mod connectivity;
 use components::start_component_diagnostic;
+
+pub(super) fn bounded_connectivity_diagnostic(
+    terrain: &Terrain,
+    config: WorldConfig,
+    origin: TileCoord,
+    destination: TileCoord,
+) -> Result<super::navigation_report::BoundedConnectivityDiagnostic, EnvironmentPageError> {
+    connectivity::bounded_connectivity_diagnostic(terrain, config, origin, destination)
+}
 
 #[cfg(test)]
 mod tests;

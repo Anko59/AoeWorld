@@ -1,3 +1,4 @@
+pub(super) use super::navigation_report::*;
 use crate::MapStoreError;
 use aoe_simulation::GameWorldError;
 use serde::Serialize;
@@ -104,12 +105,13 @@ pub enum WorkloadDatasetEvidence {
     UnavailableNotClaimed,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SourceWorkloadContract {
     pub tiles_per_side: u64,
     pub physical_side_meters: u64,
     pub evidence_class: WorkloadEvidenceClass,
     pub dataset_evidence: WorkloadDatasetEvidence,
+    pub source_evidence: Option<super::navigation_report::SourceScaleEvidence>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -129,6 +131,9 @@ pub struct SourceQualificationReport {
     pub activation_component_diagnostic: String,
     pub route_waypoints: Vec<[i32; 2]>,
     pub route_evidence: RouteEvidence,
+    pub qualification_sections: QualificationSections,
+    pub route_planning_diagnostics: Vec<RoutePlanningDiagnostic>,
+    pub geographic_navigation: Option<GeographicNavigationEvidence>,
     pub movement_ticks: u64,
     pub simulated_seconds: f64,
     pub moved_meters: f64,
@@ -158,6 +163,32 @@ pub(super) fn ensure_report_agreement(
         "route_evidence.movement_ticks",
         report.route_evidence.movement_ticks,
         report.movement_ticks,
+    )?;
+    ensure_equal(
+        "qualification_sections.local_movement_endurance",
+        report.qualification_sections.local_movement_endurance,
+        QualificationVerdict::Passed,
+    )?;
+    ensure_equal(
+        "qualification_sections.page_residency_churn",
+        report.qualification_sections.page_residency_churn,
+        QualificationVerdict::Passed,
+    )?;
+    ensure_equal(
+        "qualification_sections.resource_lifecycle",
+        report.qualification_sections.resource_lifecycle,
+        QualificationVerdict::Passed,
+    )?;
+    ensure_equal(
+        "qualification_sections.geographic_long_distance_navigation",
+        report
+            .qualification_sections
+            .geographic_long_distance_navigation,
+        if report.geographic_navigation.is_some() {
+            QualificationVerdict::Passed
+        } else {
+            QualificationVerdict::NotRun
+        },
     )?;
     ensure_equal(
         "simulation_work.movement_ticks",
@@ -267,10 +298,15 @@ pub(super) fn ensure_report_agreement(
         "simulation_work.simulated_seconds",
         report.simulation_work.simulated_seconds,
         expected_seconds,
-    )
+    )?;
+    if let Some(geographic) = &report.geographic_navigation {
+        ensure_geographic_navigation_agreement(geographic, tick_hz)?;
+    }
+    super::navigation_report::ensure_scale_workload_agreement(&report.source_workload_contracts)?;
+    Ok(())
 }
 
-fn ensure_equal<T: PartialEq + std::fmt::Debug>(
+pub(super) fn ensure_equal<T: PartialEq + std::fmt::Debug>(
     field: &'static str,
     left: T,
     right: T,
@@ -292,7 +328,7 @@ fn ensure_exact_distance(
     ensure_exact_float(field, observed, super::route::REQUIRED_TRAVEL_METERS)
 }
 
-fn ensure_exact_float(
+pub(super) fn ensure_exact_float(
     field: &'static str,
     left: f64,
     right: f64,
@@ -322,7 +358,7 @@ pub enum SourceQualificationError {
         "source qualification supports only a source-backed 50,000-tile square at 1:1 compression (100 km physical side)"
     )]
     UnsupportedPackage,
-    #[error("source qualification requires generation recipe 5, found recipe {0}")]
+    #[error("source qualification requires generation recipe 5 or 6, found recipe {0}")]
     UnsupportedGenerationRecipe(u16),
     #[error(
         "source package indexes {server_pages} server pages but the qualification walker enumerates {walked_pages}"
@@ -405,6 +441,34 @@ pub enum SourceQualificationError {
         outcome: &'static str,
         diagnostic: String,
     },
+    #[error("geographic reference package directory and content hash must be supplied together")]
+    GeographicReferenceConfiguration,
+    #[error(transparent)]
+    Scale(#[from] super::workload::ScaleQualificationError),
+    #[error("geographic activation start search exceeded the existing bounded search")]
+    GeographicStartSearchLimit,
+    #[error("geographic long-route workload was cancelled")]
+    GeographicCancelled,
+    #[error("geographic route waypoint ({x}, {y}) is outside the source-backed package")]
+    GeographicWaypointOutsideMap { x: i32, y: i32 },
+    #[error(
+        "geographic route package center {latitude_e7},{longitude_e7} does not match the fixed reference"
+    )]
+    GeographicReferenceLocationMismatch { latitude_e7: i32, longitude_e7: i32 },
+    #[error(
+        "geographic route order {origin:?} -> {destination:?} ended as {outcome:?} after {work} work units and {expansions} expansions"
+    )]
+    GeographicRoutePlanningFailed {
+        origin: [i32; 2],
+        destination: [i32; 2],
+        outcome: RoutePlanningOutcome,
+        work: u32,
+        expansions: u32,
+    },
+    #[error(
+        "geographic route speed was {observed:.4} m/s; configured speed is {configured:.4} m/s"
+    )]
+    PhysicalSpeedMismatch { configured: f64, observed: f64 },
     #[error("movement command failed: {0}")]
     Movement(#[from] GameWorldError),
     #[error("coordinate conversion failed: {0}")]

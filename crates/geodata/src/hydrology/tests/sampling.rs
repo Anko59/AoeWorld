@@ -1,6 +1,88 @@
 use super::*;
 
 #[test]
+fn file_geodatabase_lake_cursor_is_rewound_after_iterator_count() {
+    use gdal::vector::{Feature, Geometry, LayerOptions, OGRFieldType, OGRwkbGeometryType};
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!(
+        "aoe-lake-cursor-{}-{nonce}.gdb",
+        std::process::id()
+    ));
+    let driver = gdal::DriverManager::get_driver_by_name("OpenFileGDB").unwrap();
+    let mut database = driver.create_vector_only(&path).unwrap();
+    let mut reference = SpatialRef::from_epsg(4326).unwrap();
+    reference.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
+    {
+        let layer = database
+            .create_layer(LayerOptions {
+                name: "lakes",
+                srs: Some(&reference),
+                ty: OGRwkbGeometryType::wkbPolygon,
+                ..Default::default()
+            })
+            .unwrap();
+        layer
+            .create_defn_fields(&[("Lake_type", OGRFieldType::OFTInteger)])
+            .unwrap();
+        for (west, kind) in [(25.0, 1), (27.0, 2)] {
+            let east = west + 1.0;
+            let mut feature = Feature::new(layer.defn()).unwrap();
+            feature.set_field_integer(0, kind).unwrap();
+            feature
+                .set_geometry(
+                    Geometry::from_wkt(&format!(
+                        "POLYGON (({west} 61, {east} 61, {east} 62, {west} 62, {west} 61))"
+                    ))
+                    .unwrap(),
+                )
+                .unwrap();
+            feature.create(&layer).unwrap();
+        }
+    }
+    drop(database);
+    let mut database = Dataset::open_ex(
+        &path,
+        DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for (longitude, expected) in [
+        (25.5, HydrologyKind::Lake),
+        (27.5, HydrologyKind::Reservoir),
+        (25.5, HydrologyKind::Lake),
+    ] {
+        let definition =
+            crate::local_aeqd_definition(615_000_000, (longitude * 10_000_000.0) as i32);
+        let features = vector_features(
+            &mut database,
+            (longitude - 0.1, 61.4, longitude + 0.1, 61.6),
+            &definition,
+            false,
+        )
+        .unwrap();
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0].kind, expected);
+        assert!(
+            features[0]
+                .geometry
+                .contains(&Geometry::from_wkt("POINT (0 0)").unwrap())
+        );
+    }
+    drop(database);
+    fs::remove_dir_all(path).unwrap();
+}
+
+#[test]
 fn worldcover_window_bound_rejects_large_allocation_before_read() {
     assert!(check_window_bound(2_048, 2_048).is_ok());
     assert!(check_window_bound(2_049, 2_048).is_err());
@@ -239,4 +321,17 @@ fn worldcover_sampling_validates_shape_crs_transform_coverage_and_class() {
         ))
     ));
     std::fs::remove_dir_all(directory).expect("remove WorldCover fixture");
+}
+
+#[test]
+fn river_line_projection_returns_stable_distance_and_station() {
+    let line = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)];
+    let (distance, station) = super::line_position(&line, 7.0, 3.0).expect("line projection");
+    assert_eq!(distance, 3.0);
+    assert_eq!(station, 7.0);
+
+    let (distance, station) = super::line_position(&line, 10.0, 8.0).expect("line projection");
+    assert_eq!(distance, 0.0);
+    assert_eq!(station, 18.0);
+    assert!(super::line_position(&line, f64::NAN, 0.0).is_none());
 }

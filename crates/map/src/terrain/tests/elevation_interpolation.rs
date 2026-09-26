@@ -6,6 +6,9 @@ use crate::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
+#[path = "elevation_interpolation/modeled_water.rs"]
+mod modeled_water;
+
 #[derive(Debug)]
 struct Pages(BTreeMap<EnvironmentPageKey, Arc<EnvironmentPage>>);
 

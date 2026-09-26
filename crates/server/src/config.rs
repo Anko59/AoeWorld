@@ -48,6 +48,11 @@ impl Config {
             }
             config.map_worker = Some(worker);
         }
+        if let Some(directory) = configured_map_package_directory(
+            env::var_os("AOE_MAP_PACKAGE_DIRECTORY").filter(|value| !value.is_empty()),
+        )? {
+            config.map_package_directory = Some(directory);
+        }
         if let Some(cache) = configured_geodata_cache(env::var_os("AOE_GEODATA_CACHE"))? {
             config.geodata_cache_directory = cache;
         }
@@ -91,6 +96,21 @@ fn configured_geodata_cache(path: Option<std::ffi::OsString>) -> Result<Option<P
     Ok(Some(cache))
 }
 
+fn configured_map_package_directory(
+    path: Option<std::ffi::OsString>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let directory = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|error| format!("invalid AOE_MAP_PACKAGE_DIRECTORY: {error}"))?;
+    if !directory.is_dir() {
+        return Err("AOE_MAP_PACKAGE_DIRECTORY must name a directory".to_owned());
+    }
+    Ok(Some(directory))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,6 +127,7 @@ mod tests {
                 "AOE_TICK_HZ",
                 "AOE_ASSET_PACK",
                 "AOE_MAP_WORKER",
+                "AOE_MAP_PACKAGE_DIRECTORY",
                 "AOE_GEODATA_CACHE",
             ];
             Self(
@@ -178,6 +199,7 @@ mod tests {
         guard.set("AOE_SCENARIO", None::<&str>);
         guard.set("AOE_TICK_HZ", None::<&str>);
         guard.set("AOE_ASSET_PACK", None::<&str>);
+        guard.set("AOE_MAP_PACKAGE_DIRECTORY", None::<&str>);
         guard.set("AOE_GEODATA_CACHE", None::<&str>);
 
         let worker = tempfile::tempdir().expect("worker directory");
@@ -192,11 +214,49 @@ mod tests {
         assert_eq!(config.map_worker.as_deref(), Some(worker_file.as_path()));
 
         guard.set("AOE_MAP_WORKER", None::<&str>);
+        guard.set("AOE_MAP_PACKAGE_DIRECTORY", Some(worker.path()));
+        let config = Config::from_env().expect("configured map package directory");
+        assert_eq!(
+            config.map_package_directory.as_deref(),
+            Some(
+                worker
+                    .path()
+                    .canonicalize()
+                    .expect("canonical package dir")
+                    .as_path()
+            )
+        );
+
+        guard.set("AOE_MAP_PACKAGE_DIRECTORY", None::<&str>);
         guard.set(
             "AOE_ASSET_PACK",
             Some(worker.path().join("missing-pack").as_os_str()),
         );
         let error = Config::from_env().expect_err("missing asset pack");
         assert!(error.contains("invalid AOE_ASSET_PACK"), "{error}");
+    }
+
+    #[test]
+    fn explicit_map_package_directory_is_canonical_and_must_be_a_directory() {
+        let directory = tempfile::tempdir().expect("package directory");
+        assert_eq!(
+            configured_map_package_directory(Some(directory.path().as_os_str().to_owned()))
+                .expect("configured package directory"),
+            Some(
+                directory
+                    .path()
+                    .canonicalize()
+                    .expect("canonical directory")
+            )
+        );
+        assert_eq!(
+            configured_map_package_directory(None).expect("default package directory"),
+            None
+        );
+        let file = directory.path().join("manifest.json");
+        std::fs::write(&file, b"{}").expect("file");
+        let error = configured_map_package_directory(Some(file.into_os_string()))
+            .expect_err("file is not a package directory");
+        assert!(error.contains("must name a directory"), "{error}");
     }
 }

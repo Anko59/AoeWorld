@@ -2,19 +2,26 @@
 
 mod activation;
 mod diagnostics;
+mod geographic;
 mod lifecycle;
 mod metrics;
 mod movement;
+mod navigation_report;
 mod network;
 mod pages;
 mod report;
 mod route;
 mod workload;
 
-use report::{LogicalMemoryEvidence, SimulationWork, ensure_report_agreement};
+pub use navigation_report::SourceScaleEvidence;
+use report::{
+    LogicalMemoryEvidence, QualificationSections, QualificationVerdict, RoutePlanningDiagnostic,
+    SimulationWork, ensure_report_agreement,
+};
 pub use report::{
     SourceQualificationError, SourceQualificationProgress, SourceQualificationReport,
 };
+pub use workload::ScaleQualificationError;
 
 use crate::{GameplayService, PageResidency, load_map_packages};
 use aoe_core::TileCoord;
@@ -46,8 +53,24 @@ const ORDINARY_ACTIVATION_SEARCH_CHUNKS: usize = 64;
 const MAX_RESOURCE_SCAN_SIDE: i32 = 64;
 const MAX_RESIDENT_PAGES: usize = 128;
 const QUALIFICATION_CASE: &str = "source-backed-100km-50k-tiles-1-to-1";
+const PARIS_DIAGNOSTIC_CENTER: (i32, i32) = (488_500_000, 20_000_000);
+const PARIS_DIAGNOSTIC_CHAIN_X: [i32; 6] = [5_000, 7_000, 9_000, 11_000, 13_000, 15_000];
 const NAVIGATION_CACHE_BYTE_SCOPE: &str =
     "logical payload only; excludes allocator and map container overhead";
+
+#[derive(Clone, Debug)]
+pub struct SourceScalePackageReference {
+    pub tiles_per_side: u64,
+    pub directory: PathBuf,
+    pub content_hash: String,
+}
+
+pub fn run_source_scale_qualification(
+    references: &[SourceScalePackageReference],
+) -> Result<Vec<SourceScaleEvidence>, ScaleQualificationError> {
+    let mut rss = metrics::ProcessRssSampler::start();
+    workload::qualify_scale_packages(references, &mut rss)
+}
 
 /// Exercises overlay durability, verified page eviction, and physical
 /// movement on one source-backed package. Movement follows deterministic
@@ -56,6 +79,29 @@ const NAVIGATION_CACHE_BYTE_SCOPE: &str =
 pub async fn run_source_qualification(
     package_directory: &Path,
     content_hash: &str,
+    max_ticks: u64,
+    progress: impl FnMut(SourceQualificationProgress),
+) -> Result<SourceQualificationReport, SourceQualificationError> {
+    run_source_qualification_with_geographic_reference(
+        package_directory,
+        content_hash,
+        None,
+        None,
+        &[],
+        max_ticks,
+        progress,
+    )
+    .await
+}
+
+/// Runs the local movement, page residency, and lifecycle sections against
+/// the primary package, with an optional separately sourced geographic route.
+pub async fn run_source_qualification_with_geographic_reference(
+    package_directory: &Path,
+    content_hash: &str,
+    geographic_package: Option<&Path>,
+    geographic_content_hash: Option<&str>,
+    scale_packages: &[SourceScalePackageReference],
     max_ticks: u64,
     mut progress: impl FnMut(SourceQualificationProgress),
 ) -> Result<SourceQualificationReport, SourceQualificationError> {
@@ -73,7 +119,7 @@ pub async fn run_source_qualification(
     package
         .validate()
         .map_err(|_| SourceQualificationError::UnsupportedPackage)?;
-    if package.generation_recipe_version != aoe_map::GENERATION_RECIPE_VERSION {
+    if !supported_recipe(package.generation_recipe_version) {
         return Err(SourceQualificationError::UnsupportedGenerationRecipe(
             package.generation_recipe_version,
         ));
@@ -155,6 +201,8 @@ pub async fn run_source_qualification(
         activation_config,
         standard_start,
     )?;
+    let route_planning_diagnostics =
+        paris_route_planning_diagnostics(&package, activation_probe.terrain())?;
     route.ensure_tick_bound(activation_config, max_ticks)?;
     let scratch = QualificationDirectory::new()?;
     let gameplay = GameplayService::from_stored_map(
@@ -224,8 +272,29 @@ pub async fn run_source_qualification(
         .iter()
         .map(|source| source.id.clone())
         .collect::<Vec<_>>();
-    let process_rss_bytes = rss.finish();
     let replay_hash = hex(&movement.replay_hash);
+    if geographic_package.is_some() != geographic_content_hash.is_some() {
+        return Err(SourceQualificationError::GeographicReferenceConfiguration);
+    }
+    let geographic_navigation = match (geographic_package, geographic_content_hash) {
+        (Some(directory), Some(hash)) => Some(geographic::qualify(
+            directory,
+            hash,
+            max_ticks,
+            &mut progress,
+            &mut rss,
+        )?),
+        (None, None) => None,
+        _ => unreachable!("geographic package inputs checked above"),
+    };
+    let mut scale_packages = scale_packages.to_vec();
+    scale_packages.push(SourceScalePackageReference {
+        tiles_per_side: package.estimate.tiles_per_side,
+        directory: package_directory.to_path_buf(),
+        content_hash: content_hash.to_owned(),
+    });
+    let scale_evidence = workload::qualify_scale_packages(&scale_packages, &mut rss)?;
+    let process_rss_bytes = rss.finish();
     let report = SourceQualificationReport {
         qualification_case: QUALIFICATION_CASE,
         package_hash: package.content_hash_hex(),
@@ -262,6 +331,18 @@ pub async fn run_source_qualification(
             replay_hash: replay_hash.clone(),
             replay_matches: true,
         },
+        qualification_sections: QualificationSections {
+            local_movement_endurance: QualificationVerdict::Passed,
+            page_residency_churn: QualificationVerdict::Passed,
+            resource_lifecycle: QualificationVerdict::Passed,
+            geographic_long_distance_navigation: if geographic_navigation.is_some() {
+                QualificationVerdict::Passed
+            } else {
+                QualificationVerdict::NotRun
+            },
+        },
+        route_planning_diagnostics,
+        geographic_navigation,
         movement_ticks: movement.movement_ticks,
         simulated_seconds: movement.movement_ticks as f64 / f64::from(activation_config.tick_hz),
         moved_meters: movement.route_moved_meters,
@@ -312,10 +393,48 @@ pub async fn run_source_qualification(
             movement_replay_comparison_count: movement.movement_replay_comparison_count,
             resource_lifecycle: lifecycle_evidence,
         },
-        source_workload_contracts: workload::source_workload_contracts(),
+        source_workload_contracts: workload::source_workload_contracts(&scale_evidence),
     };
     ensure_report_agreement(&report, activation_config.tick_hz)?;
     Ok(report)
+}
+
+fn paris_route_planning_diagnostics(
+    package: &aoe_map::MapPackage,
+    terrain: &aoe_simulation::Terrain,
+) -> Result<Vec<RoutePlanningDiagnostic>, SourceQualificationError> {
+    if !is_paris_diagnostic_reference(package) {
+        return Ok(Vec::new());
+    }
+    let chain_y = 25_000;
+    let mut diagnostics = PARIS_DIAGNOSTIC_CHAIN_X
+        .windows(2)
+        .enumerate()
+        .map(|(index, pair)| {
+            geographic::plan_order(
+                terrain,
+                TileCoord::new(pair[0], chain_y),
+                TileCoord::new(pair[1], chain_y),
+                "paris_non_spawn_20km_waypoint_chain_diagnostic_v1",
+                Some(index as u8 + 1),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    diagnostics.push(geographic::plan_order(
+        terrain,
+        TileCoord::new(PARIS_DIAGNOSTIC_CHAIN_X[0], chain_y),
+        TileCoord::new(*PARIS_DIAGNOSTIC_CHAIN_X.last().unwrap_or(&15_000), chain_y),
+        "paris_non_spawn_direct_20km_order_diagnostic_v1",
+        None,
+    )?);
+    Ok(diagnostics)
+}
+
+fn is_paris_diagnostic_reference(package: &aoe_map::MapPackage) -> bool {
+    (
+        package.request.center_latitude_e7,
+        package.request.center_longitude_e7,
+    ) == PARIS_DIAGNOSTIC_CENTER
 }
 
 fn find_center_resource(
@@ -368,4 +487,11 @@ impl Drop for QualificationDirectory {
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn supported_recipe(recipe: u16) -> bool {
+    matches!(
+        recipe,
+        aoe_map::GENERATION_RECIPE_VERSION | aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
+    )
 }

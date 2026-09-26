@@ -29,8 +29,20 @@ pack-manifest, map-package/request, environmental-page, and compact-chunk parser
 The map campaigns begin with generated valid seeds; accepted package/page/chunk
 values must retain their meaning and identity through serialization roundtrips. It uses a separately pinned nightly toolchain and keeps
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
-each target a 300-second campaign. Both write versioned reports under
+each target a 300-second campaign in five completed 60-second segments. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
+When active corpus pressure warrants maintenance, the harness copies all active
+inputs into ignored, content-addressed `fuzz/archive/` storage before running
+coverage-guided `cargo fuzz cmin`. It restores canonical seeds afterward and
+keeps crash artifacts untouched. Between nightly segments and after a completed
+target, material corpus growth triggers archive and minimization before fuzzing
+continues. If storage is still above 85% it tries other large corpora
+and fails if headroom cannot be restored. During each target it watches the fixed active
+corpus and artifact quotas and cancels the target at a 95% guard; cancellation
+or fewer than five completed nightly segments is a failure. Reports record
+segment counts, completed fuzz seconds, maintenance, each target's elapsed time
+and outcome, and the storage snapshots. Archived inputs
+are outside the active quota and must be retained separately.
 `make mutation-nightly` runs pinned cargo-mutants against the impact
 classifier, CI selection check, and 5% performance comparator. It requires a
 completed, nonempty campaign with no missed or timed-out mutations and writes

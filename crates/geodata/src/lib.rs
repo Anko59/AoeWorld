@@ -25,6 +25,7 @@ mod copernicus;
 pub use copernicus::{
     DemResolution, MAX_DETAILED_INPUT_BYTES, MAX_DETAILED_SAMPLES_PER_AXIS,
     MAX_DETAILED_STAGING_BYTES, MAX_DETAILED_TILES, prepare_detailed_directory,
+    prepare_detailed_directory_with_water_corrections,
 };
 mod footprint;
 pub use footprint::{
@@ -33,13 +34,16 @@ pub use footprint::{
 };
 mod hyde;
 pub use hyde::{
+    GEOGRAPHIC_HISTORICAL_CORRECTION_SCHEMA_VERSION, GeographicHistoricalCorrection,
+    GeographicHistoricalCorrectionDocument, GeographicHistoricalEvidence,
     HISTORICAL_CORRECTION_SCHEMA_VERSION, HISTORICAL_CORRECTION_TARGET_YEAR_CE,
     HistoricalCorrection, HistoricalCorrectionDocument, HistoricalCorrectionEvidence,
-    HydeAreaAllocation, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
+    HistoricalGridBinding, HistoricalQuantityPatch, HistoricalSourceCitation, HydeAreaAllocation,
+    HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
     HydeWholeCellQuantities, MAX_HISTORICAL_CORRECTION_JSON_BYTES,
-    MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS, PreparedHistoricalLandUse,
-    allocate_hyde_area_window, prepare_hyde_600, prepare_hyde_area_pyramid,
-    prepare_hyde_lake_coverage,
+    MAX_HISTORICAL_CORRECTION_SAMPLES_PER_AXIS, MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS,
+    PreparedHistoricalLandUse, allocate_hyde_area_window, prepare_hyde_600, prepare_hyde_area_600,
+    prepare_hyde_area_600_with_corrections, prepare_hyde_area_pyramid, prepare_hyde_lake_coverage,
 };
 mod hydrology;
 pub use hydrology::{
@@ -56,7 +60,12 @@ mod source_manifest;
 mod water;
 pub use water::{PreparedWater, prepare_ocean_coverage};
 mod vegetation;
-pub use vegetation::{PreparedVegetation, prepare_potential_biomes, verify_potential_biome_legend};
+pub use vegetation::{
+    PreparedVegetation, VEGETATION_PATCH_PREPROCESSING_IDENTITY, VegetationPatch,
+    VegetationPatchBinding, VegetationPatchDocument, VegetationPatchOperation,
+    VegetationPatchSource, prepare_potential_biomes, prepare_potential_biomes_with_corrections,
+    verify_potential_biome_legend,
+};
 mod source_catalog;
 pub(crate) use source_catalog::worldcover_sources_for_bounds_cached;
 pub use source_catalog::{
@@ -128,131 +137,12 @@ pub use map_result::{GeneratedMap, PreparedOverview, WorkerRequest, WorkerRespon
 mod worker;
 pub use worker::execute;
 
-pub fn prepare_overview(
-    cache_root: PathBuf,
-    request: MapRequest,
-    samples_per_axis: u16,
-) -> Result<PreparedOverview, GeodataError> {
-    let source = etopo_2022_60s_surface();
-    let lock = source
-        .cache_lock()
-        .ok_or(GeodataError::Preparation("overview source lacks SHA-256"))?;
-    let water_source = natural_earth_10m_land();
-    let water_lock = water_source
-        .cache_lock()
-        .ok_or(GeodataError::Preparation("coastline source lacks SHA-256"))?;
-    let cache = SourceCache::new(
-        cache_root,
-        DownloadPolicy {
-            cache_quota_bytes: DEFAULT_CACHE_QUOTA_BYTES,
-            job_acquisition_budget_bytes: MAX_OVERVIEW_INPUT_BYTES,
-        },
-    )?;
-    let potential_sources = potential_biome_sources().ok();
-    let hyde_sources = hyde_sources().ok();
-    preflight_overview_acquisition(
-        &cache,
-        potential_sources.as_deref(),
-        hyde_sources.as_deref(),
-    )?;
-    let cancelled = std::sync::atomic::AtomicBool::new(false);
-    let path = cache.acquire(&lock, &cancelled)?;
-    let water_path = cache.acquire(&water_lock, &cancelled)?;
-    let vegetation_lock = acquire_or_cached(
-        &cache,
-        potential_sources.as_deref(),
-        POTENTIAL_BIOME_RASTER_ID,
-        &cancelled,
-    )?;
-    let vegetation_classes_lock = acquire_or_cached(
-        &cache,
-        potential_sources.as_deref(),
-        POTENTIAL_BIOME_CLASSES_ID,
-        &cancelled,
-    )?;
-    let vegetation_path = cache.object_path(&vegetation_lock)?;
-    let vegetation_classes_path = cache.object_path(&vegetation_classes_lock)?;
-    let hyde_baseline_lock = acquire_or_cached(
-        &cache,
-        hyde_sources.as_deref(),
-        HYDE_BASELINE_ID,
-        &cancelled,
-    )?;
-    let hyde_supplementary_lock = acquire_or_cached(
-        &cache,
-        hyde_sources.as_deref(),
-        HYDE_SUPPLEMENTARY_ID,
-        &cancelled,
-    )?;
-    let hyde_readme_lock =
-        acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
-    let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
-    let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
-    preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
-    let lake_coverage =
-        prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;
-    let water = prepare_ocean_coverage(&water_path, request, samples_per_axis, lake_coverage)?;
-    let vegetation = prepare_potential_biomes(&vegetation_path, request, samples_per_axis)?;
-    let historical_land_use = prepare_hyde_600(
-        &hyde_baseline_path,
-        &hyde_supplementary_path,
-        request,
-        samples_per_axis,
-    )?;
-    verify_potential_biome_legend(&vegetation_classes_path)?;
-    prepared.environment.water = Some(water.field);
-    prepared.environment.vegetation = Some(vegetation.field);
-    prepared.environment.historical_land_use = Some(historical_land_use.field);
-    prepared.environment.validate()?;
-    Ok(PreparedOverview {
-        source_lock: lock
-            .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
-        water_source_lock: water_lock.to_map_source_lock(
-            acquisition_marker(),
-            "natural-earth-coastline-gdal-0.19".to_owned(),
-        )?,
-        vegetation_source_lock: vegetation_lock.to_map_source_lock(
-            acquisition_marker(),
-            "potential-biome-nearest-gdal-0.19".to_owned(),
-        )?,
-        vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
-            acquisition_marker(),
-            "potential-biome-class-legend-v0.2".to_owned(),
-        )?,
-        hyde_baseline_source_lock: hyde_baseline_lock.to_map_source_lock(
-            acquisition_marker(),
-            "hyde-600ad-readonly-zip-v1".to_owned(),
-        )?,
-        hyde_supplementary_source_lock: hyde_supplementary_lock.to_map_source_lock(
-            acquisition_marker(),
-            "hyde-600ad-readonly-zip-v1".to_owned(),
-        )?,
-        hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
-            acquisition_marker(),
-            "hyde-3.2.1-release-notes-v1".to_owned(),
-        )?,
-        projection: ProjectionMetadata {
-            horizontal_crs: local_aeqd_definition(
-                request.center_latitude_e7,
-                request.center_longitude_e7,
-            ),
-            vertical_datum: VerticalDatum::Egm2008Orthometric,
-            tool_version: "GDAL Rust bindings 0.19 / PROJ native".to_owned(),
-        },
-        provenance: EnvironmentalProvenance {
-            elevation: LayerProvenance::SourceDerived,
-            water: LayerProvenance::SourceDerived,
-            vegetation: LayerProvenance::SourceDerived,
-            historical_land_use: LayerProvenance::SourceDerived,
-        },
-        environment: prepared.environment,
-        pages: prepared.pages,
-        water_pages: water.pages,
-        vegetation_pages: vegetation.pages,
-        historical_land_use_pages: historical_land_use.pages,
-    })
-}
+#[path = "lib/overview.rs"]
+mod overview;
+pub use overview::{
+    prepare_overview, prepare_overview_with_all_corrections, prepare_overview_with_corrections,
+    prepare_overview_with_historical_axis, prepare_overview_with_vegetation_corrections,
+};
 
 const POTENTIAL_BIOME_RASTER_ID: &str =
     "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif";

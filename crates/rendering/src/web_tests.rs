@@ -95,6 +95,7 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         radius: [1.0; 2],
         color: [1.0; 4],
         uv: [0.1, 0.2, 0.3, 0.4],
+        depths: [0.0; 4],
     };
     let horizontally_flipped_atlas_frame = Sprite {
         uv: [0.4, 0.2, -0.3, 0.4],
@@ -116,7 +117,7 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         pickable: true,
         order: 0,
     };
-    let terrain = surface_instance(&triangle, [256.0, 128.0]);
+    let terrain = surface_instance(&triangle, [256.0, 128.0], 0.0);
 
     assert!(regular_atlas_frame.color[3] >= 0.0);
     assert!(horizontally_flipped_atlas_frame.color[3] >= 0.0);
@@ -125,6 +126,73 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
     assert_eq!(terrain.position, [-1.0, 1.0]);
     assert_eq!(terrain.radius, [0.0, 1.0]);
     assert_eq!(terrain.color[..2], [-0.5, 0.0]);
+}
+
+#[wasm_bindgen_test]
+fn depth_buffer_encoding_places_the_nearest_world_surface_first() {
+    let mut background = solid_sprite();
+    background.depths = [-2.0; 4];
+    let mut foreground = solid_sprite();
+    foreground.depths = [2.0; 4];
+    let mut instances = [background, foreground];
+
+    normalize_depths(&mut instances);
+
+    assert_eq!(instances[0].depths[0], 1.0);
+    assert_eq!(instances[1].depths[0], 0.0);
+}
+
+#[wasm_bindgen_test]
+fn surface_instances_preserve_each_projected_vertex_depth() {
+    let mut triangle = capacity_surface();
+    triangle.points[0].world = [0.0, 0.0, 0.0];
+    triangle.points[1].world = [0.0, 0.0, 1.0];
+    triangle.points[2].world = [0.0, 0.0, 2.0];
+
+    let instance = surface_instance(&triangle, [64.0, 64.0], 0.0);
+
+    assert_eq!(instance.depths, [0.0, 2.0, 4.0, 0.0]);
+}
+
+#[wasm_bindgen_test]
+fn cliff_skirts_depth_behind_walkable_surface_at_an_exact_tie() {
+    let mut skirt = capacity_surface();
+    skirt.skirt = true;
+    for point in &mut skirt.points {
+        point.world = [4.0, 8.0, 0.0];
+    }
+
+    let instance = surface_instance(&skirt, [64.0, 64.0], 12.0);
+
+    assert_eq!(instance.depths, [-0.01, -0.01, -0.01, 0.0]);
+}
+
+#[wasm_bindgen_test]
+fn overlay_only_depths_remain_finite_without_world_geometry() {
+    let mut overlay = solid_sprite();
+    overlay.depths = [f32::INFINITY; 4];
+    let mut instances = [overlay];
+
+    normalize_depths(&mut instances);
+
+    assert_eq!(instances[0].depths, [0.0; 4]);
+}
+
+#[wasm_bindgen_test]
+fn flat_background_remains_behind_units_and_overlay_with_or_without_geometry() {
+    let mut background = solid_sprite();
+    background.depths = [f32::NEG_INFINITY; 4];
+    let mut overlay = solid_sprite();
+    overlay.depths = [f32::INFINITY; 4];
+    let mut instances = [background, solid_sprite(), overlay];
+    normalize_depths(&mut instances);
+    assert_eq!(instances[0].depths, [1.0; 4]);
+    assert_eq!(instances[1].depths, [0.5; 4]);
+    assert_eq!(instances[2].depths, [0.0; 4]);
+    let mut backgrounds = [background, overlay];
+    normalize_depths(&mut backgrounds);
+    assert_eq!(backgrounds[0].depths, [1.0; 4]);
+    assert_eq!(backgrounds[1].depths, [0.0; 4]);
 }
 
 fn surface_point(screen: [f64; 2]) -> crate::surface_mesh::SurfacePoint {
@@ -162,5 +230,6 @@ fn solid_sprite() -> Sprite {
         radius: [0.01, 0.01],
         color: [1.0; 4],
         uv: [0.0, 0.0, 0.1, 0.1],
+        depths: [0.0; 4],
     }
 }

@@ -87,6 +87,7 @@ pub(super) fn prepared() -> (
             crop_percent: vec![20, 0, 10, 0],
             grazing_percent: vec![30, 15, 0, 0],
             population_pressure_per_square_kilometer: vec![5, 2, 1, 0],
+            coverage: Vec::new(),
         },
         HistoricalLandUsePage {
             level: 1,
@@ -97,6 +98,7 @@ pub(super) fn prepared() -> (
             crop_percent: vec![8],
             grazing_percent: vec![11],
             population_pressure_per_square_kilometer: vec![2],
+            coverage: Vec::new(),
         },
     ];
     let field = |roots: [[u8; 32]; 2]| FieldPyramid {

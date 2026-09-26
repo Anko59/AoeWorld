@@ -29,6 +29,30 @@ pub(super) struct Polygon {
     pub(super) area: f64,
 }
 
+pub(super) fn unwrap_polygon(
+    polygon: &[HydeGeographicPoint],
+    center_longitude_degrees: f64,
+) -> Vec<HydeGeographicPoint> {
+    polygon
+        .iter()
+        .map(|point| HydeGeographicPoint {
+            longitude_degrees: unwrap_longitude(point.longitude_degrees, center_longitude_degrees),
+            latitude_degrees: point.latitude_degrees,
+        })
+        .collect()
+}
+
+fn unwrap_longitude(longitude: f64, center_longitude_degrees: f64) -> f64 {
+    let difference = longitude - center_longitude_degrees;
+    if difference > 180.0 {
+        longitude - 360.0
+    } else if difference < -180.0 {
+        longitude + 360.0
+    } else {
+        longitude
+    }
+}
+
 pub(super) fn equal_area_transform(
     latitude_e7: i32,
     longitude_e7: i32,
@@ -54,12 +78,24 @@ pub(super) fn project_polygon(
         || geographic.iter().any(|point| {
             !point.longitude_degrees.is_finite()
                 || !point.latitude_degrees.is_finite()
-                || !(-180.0..=180.0).contains(&point.longitude_degrees)
+                || !(-540.0..=540.0).contains(&point.longitude_degrees)
                 || !(-90.0..=90.0).contains(&point.latitude_degrees)
         })
     {
         return Err(GeodataError::Preparation(
             "HYDE allocation polygon coordinates are invalid",
+        ));
+    }
+    if geographic
+        .iter()
+        .zip(geographic.iter().cycle().skip(1))
+        .take(geographic.len())
+        .any(|(a, b)| {
+            a.longitude_degrees == b.longitude_degrees && a.latitude_degrees == b.latitude_degrees
+        })
+    {
+        return Err(GeodataError::Preparation(
+            "HYDE allocation polygon has a repeated vertex",
         ));
     }
     validate_boundary_edges(geographic)?;
@@ -86,6 +122,12 @@ pub(super) fn project_polygon(
     {
         return Err(GeodataError::Coordinate);
     }
+    // Densification can add a crossing within one rounding unit of an
+    // existing vertex. PROJ may map both to exactly the same point.
+    points.dedup();
+    if points.len() > 1 && points.first() == points.last() {
+        points.pop();
+    }
     normalize_polygon(&mut points)?;
     let area = signed_area(&points).abs();
     if !area.is_finite() || area <= 0.0 {
@@ -107,10 +149,7 @@ fn validate_boundary_edges(geographic: &[HydeGeographicPoint]) -> Result<(), Geo
     for index in 0..geographic.len() {
         let start = geographic[index];
         let end = geographic[(index + 1) % geographic.len()];
-        if start.longitude_degrees.abs() >= 180.0
-            || end.longitude_degrees.abs() >= 180.0
-            || (start.longitude_degrees - end.longitude_degrees).abs() > 180.0
-        {
+        if (start.longitude_degrees - end.longitude_degrees).abs() >= 180.0 {
             return Err(GeodataError::Preparation(
                 "HYDE allocation polygon touches or crosses the antimeridian",
             ));
@@ -124,7 +163,7 @@ fn validate_boundary_edges(geographic: &[HydeGeographicPoint]) -> Result<(), Geo
     Ok(())
 }
 
-fn normalize_polygon(points: &mut [Point]) -> Result<(), GeodataError> {
+fn normalize_polygon(points: &mut Vec<Point>) -> Result<(), GeodataError> {
     if points.len() < 3 {
         return Err(GeodataError::Preparation(
             "HYDE allocation polygon has no area",
@@ -140,6 +179,12 @@ fn normalize_polygon(points: &mut [Point]) -> Result<(), GeodataError> {
             "HYDE allocation polygon has a repeated vertex",
         ));
     }
+    remove_collinear_vertices(points);
+    if points.len() < 3 {
+        return Err(GeodataError::Preparation(
+            "HYDE allocation polygon has no area",
+        ));
+    }
     if signed_area(points) < 0.0 {
         points.reverse();
     }
@@ -151,6 +196,26 @@ fn normalize_polygon(points: &mut [Point]) -> Result<(), GeodataError> {
         .unwrap_or(0);
     points.rotate_left(start);
     Ok(())
+}
+
+fn remove_collinear_vertices(points: &mut Vec<Point>) {
+    let mut index = 0;
+    while points.len() > 3 && index < points.len() {
+        let previous = points[(index + points.len() - 1) % points.len()];
+        let current = points[index];
+        let next = points[(index + 1) % points.len()];
+        let between = (current.x - previous.x) * (current.x - next.x)
+            + (current.y - previous.y) * (current.y - next.y)
+            <= AREA_EPSILON;
+        if cross(previous, current, next).abs() <= AREA_EPSILON && between {
+            points.remove(index);
+            if index == points.len() {
+                index = 0;
+            }
+        } else {
+            index += 1;
+        }
+    }
 }
 
 fn densify_geographic(geographic: &[HydeGeographicPoint]) -> Vec<HydeGeographicPoint> {
@@ -374,4 +439,51 @@ fn line_intersection(
 
 fn cross(a: Point, b: Point, c: Point) -> f64 {
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raster_grid_crossings_near_vertices_project_without_duplicate_edges() {
+        let transform = equal_area_transform(615_000_000, 255_000_000).unwrap();
+        // Real five-minute raster coordinates accumulate rounding from the
+        // global raster origin. Exercise both orientations near 0.1° lines.
+        for row in 335..350 {
+            for column in 2455..2475 {
+                let at = |x: usize, y: usize| HydeGeographicPoint {
+                    longitude_degrees: -180.0 + x as f64 / 12.0,
+                    latitude_degrees: 90.0 - y as f64 / 12.0,
+                };
+                let polygon = [
+                    at(column, row),
+                    at(column + 1, row),
+                    at(column + 1, row + 1),
+                    at(column, row + 1),
+                ];
+                let result = project_polygon(&polygon, &transform).unwrap();
+                assert!(result.area > 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_input_vertex_is_still_rejected() {
+        let transform = equal_area_transform(0, 0).unwrap();
+        let a = HydeGeographicPoint {
+            longitude_degrees: 1.0,
+            latitude_degrees: 1.0,
+        };
+        let b = HydeGeographicPoint {
+            longitude_degrees: 2.0,
+            latitude_degrees: 2.0,
+        };
+        assert!(matches!(
+            project_polygon(&[a, a, b], &transform),
+            Err(GeodataError::Preparation(
+                "HYDE allocation polygon has a repeated vertex"
+            ))
+        ));
+    }
 }
