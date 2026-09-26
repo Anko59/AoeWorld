@@ -243,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_five() {
+    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_six() {
         let expected = [
             145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195, 208,
             205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
@@ -252,6 +252,7 @@ mod tests {
             crate::LEGACY_GENERATION_RECIPE_VERSION,
             crate::PRIOR_GENERATION_RECIPE_VERSION,
             crate::GENERATION_RECIPE_VERSION,
+            crate::WATER_MODEL_GENERATION_RECIPE_VERSION,
         ] {
             let generator =
                 MapChunkGenerator::new([7; 32], 3, 64).with_elevation_sampling_recipe(recipe);

@@ -19,6 +19,7 @@ fn typed_evidence_pages_evict_and_reload_with_bounded_residency() {
                 height: ENVIRONMENT_PAGE_SAMPLES,
                 kind: vec![HydrologyKind::Land as u8; len],
                 method: vec![HydrologyEvidenceMethod::WorldCoverClass as u8; len],
+                water_model: None,
             });
             land_cover.push(ModernLandCoverPage {
                 level: 0,
@@ -39,6 +40,7 @@ fn typed_evidence_pages_evict_and_reload_with_bounded_residency() {
         hydrology_page_root: ordered_hydrology_page_root(&hydrology).expect("hydrology root"),
         modern_land_cover_page_root: ordered_modern_land_cover_page_root(&land_cover)
             .expect("land-cover root"),
+        water_model: None,
     });
     let package = MapPackage::with_prepared_environment(
         base.generator_version,

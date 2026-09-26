@@ -3,7 +3,8 @@
 use super::*;
 use aoe_map::{
     ElevationPage, HistoricalLandUsePage, HydrologyEvidencePage, MAP_SCHEMA_VERSION, MapPackage,
-    ModernLandCoverPage, PotentialBiomePage, PreparedEnvironment, WaterPage,
+    ModernLandCoverPage, PotentialBiomePage, PreparedEnvironment, WaterCorrectionDocument,
+    WaterPage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +31,8 @@ pub enum WorkerRequest {
         resolution: DemResolution,
         #[serde(default)]
         staging_root: Option<PathBuf>,
+        #[serde(default)]
+        water_corrections: Option<WaterCorrectionDocument>,
     },
     ListOverviewSources,
     ListPotentialBiomeSources,
@@ -248,6 +251,7 @@ mod tests {
             height: 1,
             kind: vec![0],
             method: vec![0],
+            water_model: None,
         });
         assert!(matches!(
             result.validate(),

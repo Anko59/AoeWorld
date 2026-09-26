@@ -35,6 +35,7 @@ fn environment_with_typed_evidence() -> PreparedEnvironment {
             policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
             hydrology_page_root: [3; 32],
             modern_land_cover_page_root: [4; 32],
+            water_model: None,
         }),
     }
 }

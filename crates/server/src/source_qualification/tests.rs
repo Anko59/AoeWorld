@@ -51,6 +51,7 @@ fn typed_evidence_pages_are_included_in_eviction_walk() {
         policy: aoe_map::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
         hydrology_page_root: [1; 32],
         modern_land_cover_page_root: [2; 32],
+        water_model: None,
     });
     let keys = page_keys(&package);
     assert_eq!(keys.len(), base_pages + 8);

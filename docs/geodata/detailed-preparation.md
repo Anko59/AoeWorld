@@ -56,8 +56,8 @@ Europe/Middle East release and is only evidence within the pilot bounds above;
 outside them, the package does not claim river coverage. Coarse Natural Earth
 coastline sampling and classified natural lakes/rivers may update the existing
 prepared water layer. Wetlands, reservoirs, regulated lakes, and otherwise
-unknown water remain evidence-only until a historical reconstruction can
-classify them.
+unknown water remain evidence-only unless an explicit cited correction changes
+the modeled cells.
 
 Schema-9 packages persist `HydrologyEvidencePage` and `ModernLandCoverPage` as
 separate level-zero evidence grids. Hydrology records the supported kind and
@@ -65,12 +65,51 @@ its acquisition method; modern land cover retains the raw WorldCover class.
 Both grids participate in package roots, verification, and bounded residency,
 and terrain reads them through the package provider. Legacy `WaterPage`
 coverage remains present for schema-8 compatibility and overview fallback.
-The package does not invent flow, barrier, confidence, water-level, or
-historical-date values that the sources do not supply. HYDE remains the source
-of the year-600 land-use layer: this slice does not correct HYDE cell
-allocations, and modern WorldCover classes are not treated as year-600 land
-cover. Reservoir and regulated-lake observations therefore remain explicit
-modern evidence rather than automatic historical water.
+Detailed preparation adds a separately versioned water-model page to each
+typed evidence page. It joins four-neighbor natural-lake cells across page
+boundaries and assigns a common level from the lower quartile of adjacent
+overview DEM heights. This is a coarse modeled level derived from ETOPO, not a
+measured lake surface; the supporting elevation grid is capped at 128 samples
+per axis even when hydrology detail is 1024. Lake tiles and uniquely adjacent
+river-junction tiles expose that same level to terrain, rendering, picking, and
+collision. An enclosed all-lake selection without shoreline samples falls back
+to a consistent lower-quartile level from that component's overview DEM cells.
+The junction value is a local tie only and does not imply a river direction or
+longitudinal profile. HydroRIVERS v1 supplies reach IDs, downstream IDs, and
+downstream distances, but the current reader retains only line geometry and its
+discharge-based buffer width; it drops those topology fields before rasterizing
+the buffered corridor. Flow therefore stays unknown and no downstream profile
+is inferred. River cells without a lake or ocean junction use their resampled
+overview DEM height as an explicitly modeled, directionless surface; this is
+not a measured channel level. River membership is determined by center samples
+at the declared hydrology-grid resolution. A cell classified as river is not a
+claim that 100% of its sub-grid area is water; corridor width is represented at
+that prepared resolution, with no finer bank or water fraction asserted. See
+the [HydroRIVERS v1 technical documentation](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf)
+for the source topology fields that a directed follow-up must preserve.
+
+`WaterCorrectionDocument` is an optional inline worker input for detailed
+preparation. It binds patches to the normalized request, actual hydrology axis
+(`min(detailed axis, 1024)`), local AEQD WGS84 projection, and target year 600.
+It accepts at most 64 simple geographic polygons, each with a unique stable ID,
+year interval containing 600, citation, operation, and precedence. Patches are
+applied in ascending precedence then ID, so the final matching patch wins;
+cell centers determine inclusion. `SetNaturalLake` and `SetLand` change only the
+modeled field; raw modern evidence remains intact. The canonical document digest
+participates in package identity. The document is limited to 24 KiB so it fits
+in the 64 KiB worker request alongside optional historical corrections.
+Omitted or empty corrections are valid; they apply no manual geographic
+changes, while the documented natural-water model is still prepared.
+
+Modeled-water packages use generation recipe 6; model-free overview packages
+and older recipe-5 packages retain recipe-5 behavior and identity. Source-lock
+preprocessing records `lake-surface-model-v1`. Modern lake/river extents remain
+modern evidence used by the existing water policy; the model does not establish
+that those extents existed in year 600. HYDE remains the source of the year-600
+land-use layer, and modern WorldCover classes are not treated as year-600 land
+cover. Reservoir, regulated-lake, wetland, and unknown observations remain
+evidence-only unless an explicit cited water correction changes selected
+cells.
 
 Ordinary overview preparation now calls `prepare_hyde_area_600`. It extracts
 the five allowlisted year-600 HYDE grids, checks that they share a grid, and
@@ -132,9 +171,10 @@ The standalone allocation helpers keep `HydrologyPage` and
 `ModernLandCoverPage` as preparation intermediates. Schema-9 publication
 upgrades those inputs to the typed persisted evidence pages described above, so
 supported lake/river kinds and raw WorldCover classes remain distinguishable to
-terrain consumers. Flow, barrier, confidence, and invented historical-date
-values remain absent. HYDE stays the source of the year-600 land-use layer, and
-modern WorldCover classes are not treated as year-600 land cover.
+terrain consumers. Separate modeled-water pages carry derived levels and
+correction provenance without rewriting observations. Flow direction and
+downstream profiles remain unknown where directed evidence is absent; no
+barrier or confidence values are produced.
 Hydrology planning is capped at 32 WorldCover tiles. A job may download at
 most 2 GiB of missing hydrology sources; verified cache hits do not count
 toward that transfer budget. Cache storage has its separate 100 GiB quota.

@@ -208,6 +208,7 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
         height: 2,
         kind: vec![HydrologyKind::NoEvidence as u8; 4],
         method: vec![HydrologyEvidenceMethod::None as u8; 4],
+        water_model: None,
     }];
     let modern_land_cover_pages = vec![ModernLandCoverPage {
         level: 0,
@@ -230,6 +231,7 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
                 &modern_land_cover_pages,
             )
             .expect("cover root"),
+            water_model: None,
         },
         source_locks: vec![],
         hydrology_pages,
