@@ -114,6 +114,14 @@ fn valid_report() -> SourceQualificationReport {
         activation_component_diagnostic: "fixture".to_owned(),
         route_waypoints: vec![[10, 10], [12, 10]],
         route_evidence,
+        qualification_sections: QualificationSections {
+            local_movement_endurance: QualificationVerdict::Passed,
+            page_residency_churn: QualificationVerdict::Passed,
+            resource_lifecycle: QualificationVerdict::Passed,
+            geographic_long_distance_navigation: QualificationVerdict::NotRun,
+        },
+        route_planning_diagnostics: Vec::new(),
+        geographic_navigation: None,
         movement_ticks: 666_667,
         simulated_seconds: 33_333.35,
         moved_meters: 100_000.0,
@@ -159,6 +167,6 @@ fn valid_report() -> SourceQualificationReport {
             movement_replay_comparison_count: 83,
             resource_lifecycle,
         },
-        source_workload_contracts: Vec::new(),
+        source_workload_contracts: super::super::workload::source_workload_contracts(&[]),
     }
 }

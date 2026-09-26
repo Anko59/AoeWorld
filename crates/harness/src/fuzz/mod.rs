@@ -50,6 +50,20 @@ impl Mode {
             Self::Nightly => Duration::from_secs(900),
         }
     }
+
+    fn segments(self) -> u8 {
+        match self {
+            Self::Smoke => 1,
+            Self::Nightly => 5,
+        }
+    }
+
+    fn segment_limit(self) -> &'static str {
+        match self {
+            Self::Smoke => self.limit(),
+            Self::Nightly => "-max_total_time=60",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -62,6 +76,8 @@ struct Report {
     cargo_fuzz: &'static str,
     targets: [&'static str; 7],
     limit: &'static str,
+    planned_segments_per_target: u8,
+    segment_limit: &'static str,
     prepared_seeds: Vec<seeds::Seed>,
     verified_legacy_seeds: Vec<seeds::Seed>,
     corpus_directory: &'static str,
@@ -82,6 +98,9 @@ struct TargetResult {
     target: &'static str,
     duration_millis: u128,
     completed: bool,
+    completed_segments: u8,
+    planned_segments: u8,
+    completed_fuzz_seconds: u16,
     storage_after: Option<storage::Snapshot>,
     failure: Option<String>,
 }
@@ -123,35 +142,78 @@ where
         let before_target = execution.storage_after;
         execution.attempted_targets += 1;
         let started = Instant::now();
-        let command_result = command(
-            &[
-                "+nightly-2026-09-01",
-                "fuzz",
-                "run",
-                target,
-                "--",
-                mode.limit(),
-                "-max_len=1048576",
-                "-timeout=5",
-            ],
-            mode.deadline(),
-        );
         let mut failures = Vec::new();
         let mut snapshot_after = None;
-        match storage_policy.inspect(root) {
-            Ok(snapshot) => {
-                execution.storage_after = snapshot;
-                snapshot_after = Some(snapshot);
-                if let Err(error) = storage_policy.validate(snapshot) {
-                    failures.push(format!("after target {target}: {error}"));
+        let mut completed_segments = 0;
+        for segment in 0..mode.segments() {
+            let before_segment = execution.storage_after;
+            let command_result = command(
+                &[
+                    "+nightly-2026-09-01",
+                    "fuzz",
+                    "run",
+                    target,
+                    "--",
+                    mode.segment_limit(),
+                    "-max_len=1048576",
+                    "-timeout=5",
+                ],
+                mode.deadline(),
+            );
+            match storage_policy.inspect(root) {
+                Ok(snapshot) => {
+                    execution.storage_after = snapshot;
+                    snapshot_after = Some(snapshot);
+                    if let Err(error) = storage_policy.validate(snapshot) {
+                        failures.push(format!(
+                            "after target {target} segment {}: {error}",
+                            segment + 1
+                        ));
+                    }
+                }
+                Err(error) => failures.push(format!(
+                    "after target {target} segment {}: cannot snapshot storage: {error}",
+                    segment + 1
+                )),
+            }
+            if let Err(error) = command_result {
+                failures.push(format!("target {target} segment {}: {error}", segment + 1));
+            }
+            if !failures.is_empty() {
+                break;
+            }
+            completed_segments += 1;
+            if segment + 1 < mode.segments() {
+                let Some(after_segment) = snapshot_after else {
+                    failures.push(format!(
+                        "target {target} segment {} has no storage snapshot",
+                        segment + 1
+                    ));
+                    break;
+                };
+                match maintain(target, before_segment, after_segment) {
+                    Ok(mut actions) => {
+                        for action in &mut actions {
+                            action.after_segment = Some(segment + 1);
+                        }
+                        execution.maintenance_actions.extend(actions);
+                    }
+                    Err(error) => {
+                        failures.push(format!(
+                            "target {target} segment {}: corpus maintenance: {error}",
+                            segment + 1
+                        ));
+                        break;
+                    }
+                }
+                match storage_policy.inspect(root) {
+                    Ok(snapshot) => execution.storage_after = snapshot,
+                    Err(error) => {
+                        failures.push(format!("target {target} segment {}: cannot snapshot maintained storage: {error}", segment + 1));
+                        break;
+                    }
                 }
             }
-            Err(error) => failures.push(format!(
-                "after target {target}: cannot snapshot storage: {error}"
-            )),
-        }
-        if let Err(error) = command_result {
-            failures.push(format!("target {target}: {error}"));
         }
         if failures.is_empty() {
             execution.successful_targets += 1;
@@ -160,6 +222,13 @@ where
             target,
             duration_millis: started.elapsed().as_millis(),
             completed: failures.is_empty(),
+            completed_segments,
+            planned_segments: mode.segments(),
+            completed_fuzz_seconds: if matches!(mode, Mode::Nightly) {
+                u16::from(completed_segments) * 60
+            } else {
+                0
+            },
             storage_after: snapshot_after,
             failure: (!failures.is_empty()).then(|| failures.join("; ")),
         });
@@ -245,7 +314,9 @@ fn run_monitored(
             }
         })
     };
+    let started = Instant::now();
     let result = process::run_cancellable(program, args, deadline, &cancellation);
+    let elapsed = started.elapsed();
     stop.store(true, Ordering::SeqCst);
     watcher
         .join()
@@ -257,7 +328,19 @@ fn run_monitored(
     {
         return Err(message.into());
     }
-    result.map_err(Into::into)
+    result?;
+    if let Some(seconds) = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("-max_total_time="))
+        .and_then(|value| value.parse::<u64>().ok())
+        && elapsed < Duration::from_secs(seconds)
+    {
+        return Err(format!(
+            "libFuzzer exited before its {seconds}-second segment completed: {elapsed:?}"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn git(args: &[&str]) -> Result<String> {
@@ -336,7 +419,7 @@ pub fn run(mode: Mode) -> Result<()> {
     write_report(
         &root,
         Report {
-            version: 6,
+            version: 7,
             revision: git(&["rev-parse", "HEAD"])?,
             dirty: !git(&["status", "--porcelain"])?.is_empty(),
             mode: mode.label(),
@@ -344,6 +427,8 @@ pub fn run(mode: Mode) -> Result<()> {
             cargo_fuzz: "0.13.2",
             targets: TARGETS,
             limit: mode.limit(),
+            planned_segments_per_target: mode.segments(),
+            segment_limit: mode.segment_limit(),
             prepared_seeds: seeds.prepared_seeds,
             verified_legacy_seeds: seeds.verified_legacy_seeds,
             corpus_directory: "fuzz/corpus",

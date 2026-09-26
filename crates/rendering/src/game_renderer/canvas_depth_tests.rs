@@ -197,6 +197,59 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
     assert_eq!(pixel(&color, 74, 64), [255, 0, 0, 255]);
 }
 
+#[wasm_bindgen_test]
+fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
+    let Some((canvas, context)) = target_canvas() else {
+        assert!(false, "browser canvas is unavailable");
+        return;
+    };
+    let background = crate::web::Sprite {
+        position: [0.0; 2],
+        radius: [0.25; 2],
+        color: [1.0; 4],
+        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        depths: [0.0; 4],
+    };
+    let frame = crate::GameFrame {
+        uv: background.uv,
+        size: [32.0; 2],
+        anchor: [16.0; 2],
+    };
+    let unit = crate::web::Sprite {
+        radius: [0.125; 2],
+        uv: [1.0 / 2048.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        ..background
+    };
+    let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
+    atlas[..4].copy_from_slice(&[70, 120, 55, 255]);
+    atlas[4..8].copy_from_slice(&[0, 0, 255, 255]);
+    let layers = [
+        WorldLayer::Sprite(
+            unit,
+            crate::GameFrame {
+                size: [16.0; 2],
+                ..frame
+            },
+            0.0,
+        ),
+        WorldLayer::Sprite(background, frame, f64::NEG_INFINITY),
+    ];
+    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let result = canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &atlas,
+        &mut color,
+        &mut depth,
+        &layers,
+        test_camera(),
+        false,
+    );
+    assert!(result.is_ok(), "Canvas render failed: {result:?}");
+    assert_eq!(pixel(&color, 54, 64), [70, 120, 55, 255]);
+    assert_eq!(pixel(&color, 64, 64), [0, 0, 255, 255]);
+}
+
 fn target_canvas() -> Option<(
     web_sys::HtmlCanvasElement,
     web_sys::CanvasRenderingContext2d,

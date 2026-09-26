@@ -30,8 +30,10 @@ pub struct HydeGeographicPoint {
 
 /// One source cell and its extensive HYDE quantities. Land cells require all
 /// three values. Crop and grazing areas are square kilometers; population is a
-/// count. A supplied valid-land area is the denominator for percentages and
-/// density and cannot exceed the projected cell land area. Crop and grazing
+/// count. A supplied valid-land area is the source-model denominator for
+/// percentages and density, validated by the source reader. HYDE's spherical
+/// area can exceed the WGS84 projected cell area; those units must not be
+/// compared as a capacity check. Crop and grazing
 /// cannot exceed valid land area, separately or together. Other coverage
 /// states must not carry land quantities.
 #[derive(Clone, Debug, PartialEq)]
@@ -434,18 +436,16 @@ fn source_quantities(
             "HYDE land cell has an invalid quantity",
         ));
     }
-    let land_area_square_kilometers = land_area_square_meters / 1_000_000.0;
-    if valid_land_km2 > land_area_square_kilometers * (1.0 + 1.0e-9) {
-        return Err(GeodataError::Preparation(
-            "HYDE valid land area exceeds source-cell land area",
-        ));
-    }
-    if crop > valid_land_km2 || grazing > valid_land_km2 {
+    // Decimal source quantities can sum one or two binary ULPs above their
+    // equally rounded denominator. Preserve quantities; tolerate arithmetic
+    // roundoff only, never source-area or material land-use inconsistencies.
+    let capacity = valid_land_km2 + valid_land_km2.max(1.0) * f64::EPSILON * 4.0;
+    if crop > capacity || grazing > capacity {
         return Err(GeodataError::Preparation(
             "HYDE land quantity exceeds valid land area",
         ));
     }
-    if crop + grazing > valid_land_km2 {
+    if crop + grazing > capacity {
         return Err(GeodataError::Preparation(
             "HYDE crop and grazing quantities exceed source-cell capacity",
         ));

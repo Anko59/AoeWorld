@@ -274,6 +274,7 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
             HydrologyEvidenceMethod::None as u8,
             HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
         ],
+        water_model: None,
     }];
     let cover = vec![ModernLandCoverPage {
         level: 0,
@@ -294,6 +295,7 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
         hydrology_page_root: ordered_hydrology_page_root(&hydrology).expect("hydrology root"),
         modern_land_cover_page_root: ordered_modern_land_cover_page_root(&cover)
             .expect("cover root"),
+        water_model: None,
     });
     let package = MapPackage::with_prepared_environment(
         base.generator_version,

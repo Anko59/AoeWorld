@@ -1,5 +1,7 @@
 use super::*;
 mod overview_fixture;
+#[path = "tests/water_surface.rs"]
+mod water_surface;
 use crate::PreparedOverview;
 use aoe_map::Ratio;
 use aoe_map::{
@@ -16,17 +18,8 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-#[test]
-fn public_tile_names_match_the_aws_one_degree_catalog() {
-    assert_eq!(
-        tile_prefix(48, 2, "30"),
-        "Copernicus_DSM_COG_30_N48_00_E002_00_DEM"
-    );
-    assert_eq!(
-        tile_prefix(-1, -7, "10"),
-        "Copernicus_DSM_COG_10_S01_00_W007_00_DEM"
-    );
-}
+#[path = "tests/catalog.rs"]
+mod catalog;
 
 #[test]
 fn detailed_sample_cap_is_rejected_before_any_source_access() {
@@ -38,6 +31,30 @@ fn detailed_sample_cap_is_rejected_before_any_source_access() {
         DemResolution::Glo90,
     );
     assert!(matches!(result, Err(GeodataError::Preparation(_))));
+}
+
+#[test]
+fn detailed_historical_correction_binds_to_its_independent_grid_before_acquisition() {
+    let request = MapRequest::default();
+    let correction = crate::GeographicHistoricalCorrectionDocument::empty(
+        request,
+        128,
+        crate::hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )
+    .unwrap();
+    let result = prepare_with_staging_and_corrections(
+        std::env::temp_dir().join("aoe-detailed-history-axis-cache"),
+        std::env::temp_dir().join("aoe-detailed-history-axis-output"),
+        request,
+        512,
+        DemResolution::Glo90,
+        None,
+        DetailedCorrections {
+            historical: Some(&correction),
+            ..Default::default()
+        },
+    );
+    assert!(matches!(result, Err(GeodataError::HistoricalCorrection(_))));
 }
 
 #[test]
@@ -210,6 +227,7 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
         height: 2,
         kind: vec![HydrologyKind::NoEvidence as u8; 4],
         method: vec![HydrologyEvidenceMethod::None as u8; 4],
+        water_model: None,
     }];
     let modern_land_cover_pages = vec![ModernLandCoverPage {
         level: 0,
@@ -232,10 +250,12 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
                 &modern_land_cover_pages,
             )
             .expect("cover root"),
+            water_model: None,
         },
         source_locks: vec![],
         hydrology_pages,
         modern_land_cover_pages,
+        river_topology: None,
     };
     let progress_path = root.join("progress.json");
     let _progress = crate::preparation_progress::Scope::new(Some(progress_path.clone()));

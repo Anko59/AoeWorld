@@ -17,8 +17,98 @@ pub struct HistoricalLandUsePage {
     pub population_pressure_per_square_kilometer: Vec<u16>,
     /// Empty only in legacy packages. New pages publish source coverage for
     /// every cell, including areas with no valid historical land quantity.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "coverage_wire")]
     pub coverage: Vec<HistoricalCoverage>,
+}
+
+/// Six raw coverage bytes per cell are encoded as hex. A full 64x64 page
+/// then fits the existing 128 KiB directory-page bound. Object-form coverage
+/// from earlier schema-9 preparation remains readable.
+mod coverage_wire {
+    use super::HistoricalCoverage;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error, ser::Error as _};
+
+    const MAX_CELLS: usize = 64 * 64;
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    pub fn serialize<S>(
+        coverage: &Vec<HistoricalCoverage>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if coverage.len() > MAX_CELLS {
+            return Err(S::Error::custom("historical coverage exceeds one page"));
+        }
+        let mut encoded = String::with_capacity(coverage.len() * 12);
+        for cell in coverage {
+            for byte in [
+                cell.land_percent,
+                cell.valid_land_percent,
+                cell.lake_percent,
+                cell.ocean_percent,
+                cell.nodata_percent,
+                cell.outside_percent,
+            ] {
+                encoded.push(HEX[usize::from(byte >> 4)] as char);
+                encoded.push(HEX[usize::from(byte & 0x0f)] as char);
+            }
+        }
+        serializer.serialize_str(&encoded)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<HistoricalCoverage>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Wire {
+            Compact(String),
+            Legacy(Vec<HistoricalCoverage>),
+        }
+        match Wire::deserialize(deserializer)? {
+            Wire::Legacy(cells) if cells.len() <= MAX_CELLS => Ok(cells),
+            Wire::Legacy(_) => Err(D::Error::custom("historical coverage exceeds one page")),
+            Wire::Compact(hex) => {
+                let bytes = hex.as_bytes();
+                if bytes.len() > MAX_CELLS * 12 || bytes.len() % 12 != 0 {
+                    return Err(D::Error::custom("historical coverage length is invalid"));
+                }
+                let mut cells = Vec::with_capacity(bytes.len() / 12);
+                for cell in bytes.chunks_exact(12) {
+                    let mut values = [0; 6];
+                    for (index, pair) in cell.chunks_exact(2).enumerate() {
+                        let high = digit(pair[0]).ok_or_else(|| {
+                            D::Error::custom("historical coverage hex is invalid")
+                        })?;
+                        let low = digit(pair[1]).ok_or_else(|| {
+                            D::Error::custom("historical coverage hex is invalid")
+                        })?;
+                        values[index] = (high << 4) | low;
+                    }
+                    cells.push(HistoricalCoverage {
+                        land_percent: values[0],
+                        valid_land_percent: values[1],
+                        lake_percent: values[2],
+                        ocean_percent: values[3],
+                        nodata_percent: values[4],
+                        outside_percent: values[5],
+                    });
+                }
+                Ok(cells)
+            }
+        }
+    }
+
+    fn digit(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -238,7 +328,12 @@ mod coverage_tests {
             coverage: Vec::new(),
         };
         let legacy_hash = page.content_hash().unwrap();
-        assert!(!serde_json::to_string(&page).unwrap().contains("coverage"));
+        let legacy_bytes = serde_json::to_vec(&page).unwrap();
+        assert!(!String::from_utf8_lossy(&legacy_bytes).contains("coverage"));
+        let decoded_legacy =
+            serde_json::from_slice::<HistoricalLandUsePage>(&legacy_bytes).unwrap();
+        assert_eq!(decoded_legacy, page);
+        assert_eq!(decoded_legacy.content_hash().unwrap(), legacy_hash);
         page.coverage = vec![
             HistoricalCoverage {
                 nodata_percent: 100,
@@ -260,6 +355,105 @@ mod coverage_tests {
         let history = HistoricalLandUse::new(2, [((0, 0), page)].into());
         assert!(history.at(TileCoord::new(0, 0), 3).is_none());
         assert_eq!(history.at(TileCoord::new(2, 0), 3).unwrap().crop_percent, 0);
+    }
+
+    #[test]
+    fn full_coverage_page_fits_the_directory_bound_and_legacy_objects_keep_the_same_hash() {
+        #[derive(Serialize)]
+        struct LegacyCoveragePage<'a> {
+            level: u8,
+            x: u16,
+            y: u16,
+            width: u8,
+            height: u8,
+            crop_percent: &'a [u8],
+            grazing_percent: &'a [u8],
+            population_pressure_per_square_kilometer: &'a [u16],
+            coverage: &'a [HistoricalCoverage],
+        }
+
+        let cells = usize::from(ENVIRONMENT_PAGE_SAMPLES).pow(2);
+        let page = HistoricalLandUsePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: ENVIRONMENT_PAGE_SAMPLES,
+            height: ENVIRONMENT_PAGE_SAMPLES,
+            crop_percent: vec![100; cells],
+            grazing_percent: vec![0; cells],
+            population_pressure_per_square_kilometer: vec![u16::MAX; cells],
+            coverage: vec![
+                HistoricalCoverage {
+                    land_percent: 100,
+                    valid_land_percent: 100,
+                    ..HistoricalCoverage::default()
+                };
+                cells
+            ],
+        };
+        page.validate().unwrap();
+
+        let compact_bytes = serde_json::to_vec(&page).unwrap();
+        assert!(
+            compact_bytes.len() <= 128 * 1024,
+            "full compact page is {} bytes",
+            compact_bytes.len()
+        );
+        let compact_value: serde_json::Value = serde_json::from_slice(&compact_bytes).unwrap();
+        assert_eq!(
+            compact_value["coverage"].as_str().unwrap().len(),
+            cells * 12
+        );
+        let compact_page = serde_json::from_slice::<HistoricalLandUsePage>(&compact_bytes).unwrap();
+        assert_eq!(compact_page, page);
+
+        let legacy_bytes = serde_json::to_vec(&LegacyCoveragePage {
+            level: page.level,
+            x: page.x,
+            y: page.y,
+            width: page.width,
+            height: page.height,
+            crop_percent: &page.crop_percent,
+            grazing_percent: &page.grazing_percent,
+            population_pressure_per_square_kilometer: &page
+                .population_pressure_per_square_kilometer,
+            coverage: &page.coverage,
+        })
+        .unwrap();
+        let legacy_page = serde_json::from_slice::<HistoricalLandUsePage>(&legacy_bytes).unwrap();
+        assert_eq!(legacy_page, page);
+        assert_eq!(
+            legacy_page.content_hash().unwrap(),
+            page.content_hash().unwrap()
+        );
+    }
+
+    #[test]
+    fn compact_coverage_serializer_rejects_more_than_one_page() {
+        let mut page = HistoricalLandUsePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: ENVIRONMENT_PAGE_SAMPLES,
+            height: ENVIRONMENT_PAGE_SAMPLES,
+            crop_percent: vec![0; usize::from(ENVIRONMENT_PAGE_SAMPLES).pow(2)],
+            grazing_percent: vec![0; usize::from(ENVIRONMENT_PAGE_SAMPLES).pow(2)],
+            population_pressure_per_square_kilometer: vec![
+                0;
+                usize::from(ENVIRONMENT_PAGE_SAMPLES,)
+                    .pow(2)
+            ],
+            coverage: vec![
+                HistoricalCoverage::default();
+                usize::from(ENVIRONMENT_PAGE_SAMPLES).pow(2) + 1
+            ],
+        };
+        page.coverage[0] = HistoricalCoverage {
+            land_percent: 100,
+            valid_land_percent: 100,
+            ..HistoricalCoverage::default()
+        };
+        assert!(serde_json::to_vec(&page).is_err());
     }
 
     #[test]

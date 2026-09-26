@@ -19,6 +19,21 @@ fn ordinary_activation_search_is_unchanged_and_route_extent_is_local() {
 }
 
 #[test]
+fn paris_failure_diagnostic_matches_the_verified_reference_package_center() {
+    let paris = aoe_map::MapRequest {
+        center_longitude_e7: 20_000_000,
+        ..aoe_map::MapRequest::default()
+    };
+    let package = aoe_map::MapPackage::new(9, paris, Vec::new()).expect("Paris package");
+    assert!(is_paris_diagnostic_reference(&package));
+
+    let default_request = aoe_map::MapRequest::default();
+    let different_center =
+        aoe_map::MapPackage::new(9, default_request, Vec::new()).expect("other package");
+    assert!(!is_paris_diagnostic_reference(&different_center));
+}
+
+#[test]
 fn provider_page_key_enumeration_is_bounded_by_supported_pyramids() {
     // Bound the walker from the largest supported prepared pyramid and typed
     // evidence grids, rather than one fixture's 1,024-sample fields.
@@ -51,6 +66,7 @@ fn typed_evidence_pages_are_included_in_eviction_walk() {
         policy: aoe_map::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
         hydrology_page_root: [1; 32],
         modern_land_cover_page_root: [2; 32],
+        water_model: None,
     });
     let keys = page_keys(&package);
     assert_eq!(keys.len(), base_pages + 8);
@@ -102,5 +118,16 @@ async fn qualification_rejects_unbounded_tick_requests_before_source_access() {
             run_source_qualification(Path::new("missing"), "missing", max_ticks, |_| {}).await,
             Err(SourceQualificationError::TickLimit)
         ));
+    }
+}
+
+#[test]
+fn qualification_accepts_current_elevation_and_water_recipes_only() {
+    assert!(supported_recipe(aoe_map::GENERATION_RECIPE_VERSION));
+    assert!(supported_recipe(
+        aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
+    ));
+    for recipe in [0, 3, 4, 7, u16::MAX] {
+        assert!(!supported_recipe(recipe));
     }
 }

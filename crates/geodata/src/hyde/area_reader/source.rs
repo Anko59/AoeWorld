@@ -6,11 +6,22 @@ use super::{
     HYDE_600_MEMBERS, HydeAreaState, HydeGeographicPoint, HydeSourceAreaCell, HydeTargetAreaCell,
 };
 use crate::GeodataError;
+use gdal::config::{
+    clear_thread_local_config_option, get_thread_local_config_option,
+    set_thread_local_config_option,
+};
 use gdal::{Dataset, GeoTransformEx, raster::ResampleAlg};
 use std::path::Path;
 
 const MAX_SOURCE_WINDOW_CELLS: usize = 1_000_000;
 const LONGITUDE_PERIOD_DEGREES: f64 = 360.0;
+const HYDE_600_WIDTH: usize = 4_320;
+const HYDE_600_HEIGHT: usize = 2_160;
+const HYDE_600_ROUNDED_CELL_DEGREES: f64 = 0.083_333_3;
+const HYDE_600_CELL_DEGREES: f64 = 1.0 / 12.0;
+const SPHERICAL_EARTH_RADIUS_KILOMETERS: f64 = 6_371.0;
+const VALID_AREA_ROUNDING_TOLERANCE_SQUARE_KILOMETERS: f64 = 0.0001;
+const AAI_GRID_DATATYPE_OPTION: &str = "AAIGRID_DATATYPE";
 
 #[derive(Clone, Copy)]
 pub(super) struct PixelWindow {
@@ -46,9 +57,9 @@ pub(super) struct ArchiveReader {
 impl RasterSource {
     pub(super) fn open(archive: &Path, member: &str) -> Result<Self, GeodataError> {
         let path = super::super::extract_member(archive, member)?;
-        let dataset = Dataset::open(path)?;
+        let dataset = open_aai_grid_float64(&path)?;
         let (width, height) = dataset.raster_size();
-        let transform = dataset.geo_transform()?;
+        let transform = canonical_hyde_600_transform(width, height, dataset.geo_transform()?);
         let inverse = transform.invert()?;
         let nodata = dataset.rasterband(1)?.no_data_value();
         Ok(Self {
@@ -101,6 +112,14 @@ impl RasterSource {
     pub(super) fn windows_for_targets(
         &self,
         targets: &[HydeTargetAreaCell],
+    ) -> Result<Vec<SourceWindow>, GeodataError> {
+        self.windows_for_targets_with_limit(targets, MAX_SOURCE_WINDOW_CELLS)
+    }
+
+    fn windows_for_targets_with_limit(
+        &self,
+        targets: &[HydeTargetAreaCell],
+        max_source_cells: usize,
     ) -> Result<Vec<SourceWindow>, GeodataError> {
         validate_target_geography(targets)?;
         let mut min_longitude = f64::INFINITY;
@@ -163,7 +182,7 @@ impl RasterSource {
             let height = bottom - top;
             let cells = width.saturating_mul(height);
             total_cells = total_cells.saturating_add(cells);
-            if total_cells > MAX_SOURCE_WINDOW_CELLS {
+            if total_cells > max_source_cells {
                 return Err(GeodataError::Preparation(
                     "HYDE archive windows exceed the source-cell limit",
                 ));
@@ -181,6 +200,44 @@ impl RasterSource {
         Ok(windows)
     }
 
+    pub(super) fn source_cell_count(
+        &self,
+        targets: &[HydeTargetAreaCell],
+    ) -> Result<usize, GeodataError> {
+        Ok(self
+            .windows_for_targets_with_limit(targets, usize::MAX)?
+            .iter()
+            .map(|window| window.pixels.width.saturating_mul(window.pixels.height))
+            .fold(0_usize, usize::saturating_add))
+    }
+
+    fn spherical_cell_area_square_kilometers(&self, row: usize) -> Result<f64, GeodataError> {
+        if row >= self.height
+            || self.transform[2].abs() > 1.0e-12
+            || self.transform[4].abs() > 1.0e-12
+            || self.transform[1].abs() <= 0.0
+            || self.transform[5].abs() <= 0.0
+        {
+            return Err(GeodataError::Preparation(
+                "HYDE valid-land grid has invalid geographic cell bounds",
+            ));
+        }
+        let north = self.transform[3] + row as f64 * self.transform[5];
+        let south = north + self.transform[5];
+        if north.abs().max(south.abs()) > 90.0 + 1.0e-8 {
+            return Err(GeodataError::Preparation(
+                "HYDE valid-land grid has invalid geographic cell bounds",
+            ));
+        }
+        let area = spherical_cell_area_square_kilometers(self.transform[1].abs(), north, south);
+        if !area.is_finite() || area <= 0.0 {
+            return Err(GeodataError::Preparation(
+                "HYDE valid-land grid has invalid geographic cell bounds",
+            ));
+        }
+        Ok(area)
+    }
+
     fn has_global_longitude_period(&self) -> bool {
         self.transform[2].abs() <= 1.0e-12
             && self.transform[4].abs() <= 1.0e-12
@@ -194,6 +251,27 @@ impl RasterSource {
             self.transform[0].min(opposite),
             self.transform[0].max(opposite),
         )
+    }
+}
+
+fn open_aai_grid_float64(path: &Path) -> Result<Dataset, GeodataError> {
+    let previous = get_thread_local_config_option(AAI_GRID_DATATYPE_OPTION, "")?;
+    set_thread_local_config_option(AAI_GRID_DATATYPE_OPTION, "Float64")?;
+    let opened = Dataset::open(path);
+    let restored = if previous.is_empty() {
+        clear_thread_local_config_option(AAI_GRID_DATATYPE_OPTION)
+    } else {
+        set_thread_local_config_option(AAI_GRID_DATATYPE_OPTION, &previous)
+    };
+    match opened {
+        Ok(dataset) => {
+            restored?;
+            Ok(dataset)
+        }
+        Err(error) => {
+            restored?;
+            Err(error.into())
+        }
     }
 }
 
@@ -263,6 +341,14 @@ impl ArchiveReader {
                                 "HYDE land cell is missing a required quantity",
                             ));
                         };
+                        let max_valid_area = self
+                            .valid_land
+                            .spherical_cell_area_square_kilometers(window.top + row)?;
+                        if valid_area_exceeds_capacity(valid_area, max_valid_area) {
+                            return Err(GeodataError::Preparation(
+                                "HYDE valid-land area exceeds spherical source-cell area",
+                            ));
+                        }
                         (
                             Some(crop),
                             Some(grazing),
@@ -289,123 +375,54 @@ impl ArchiveReader {
         }
         Ok(cells)
     }
+
+    pub(super) fn source_cell_count(
+        &self,
+        targets: &[HydeTargetAreaCell],
+    ) -> Result<usize, GeodataError> {
+        self.land_lake.source_cell_count(targets)
+    }
+}
+
+fn canonical_hyde_600_transform(width: usize, height: usize, transform: [f64; 6]) -> [f64; 6] {
+    let rounded_north = -90.0 + HYDE_600_HEIGHT as f64 * HYDE_600_ROUNDED_CELL_DEGREES;
+    let header_matches = width == HYDE_600_WIDTH
+        && height == HYDE_600_HEIGHT
+        && (transform[0] + 180.0).abs() <= 1.0e-6
+        && (transform[1] - HYDE_600_ROUNDED_CELL_DEGREES).abs() <= 5.0e-8
+        && transform[2].abs() <= 1.0e-12
+        && (transform[3] - rounded_north).abs() <= 1.0e-6
+        && transform[4].abs() <= 1.0e-12
+        && (transform[5] + HYDE_600_ROUNDED_CELL_DEGREES).abs() <= 5.0e-8;
+    if header_matches {
+        [
+            -180.0,
+            HYDE_600_CELL_DEGREES,
+            0.0,
+            90.0,
+            0.0,
+            -HYDE_600_CELL_DEGREES,
+        ]
+    } else {
+        transform
+    }
+}
+
+fn spherical_cell_area_square_kilometers(
+    longitude_width_degrees: f64,
+    north_latitude_degrees: f64,
+    south_latitude_degrees: f64,
+) -> f64 {
+    SPHERICAL_EARTH_RADIUS_KILOMETERS.powi(2)
+        * longitude_width_degrees.to_radians()
+        * (north_latitude_degrees.to_radians().sin() - south_latitude_degrees.to_radians().sin())
+            .abs()
+}
+
+fn valid_area_exceeds_capacity(valid_area: f64, spherical_cell_area: f64) -> bool {
+    valid_area > spherical_cell_area + VALID_AREA_ROUNDING_TOLERANCE_SQUARE_KILOMETERS
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_map::{MapRequest, Ratio};
-    use std::{
-        fs::{self, File},
-        io::Write,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
-    use zip::{ZipWriter, write::SimpleFileOptions};
-
-    #[test]
-    fn fixed_fiji_page_uses_two_bounded_source_windows_across_the_dateline() {
-        let archive = global_mask_fixture();
-        let request = MapRequest {
-            center_latitude_e7: -178_000_000,
-            center_longitude_e7: 1_798_000_000,
-            requested_side_meters: 80_000,
-            compression: Ratio::new(80, 1).expect("valid compression"),
-            ..MapRequest::default()
-        };
-        let transform = super::super::target_to_wgs84(request).expect("projection transform");
-        let side = request
-            .estimate()
-            .expect("valid Fiji footprint")
-            .effective_side_meters;
-        let (targets, _) = super::super::target_page(
-            &transform,
-            side,
-            80,
-            super::super::PageBounds {
-                x: 0,
-                y: 0,
-                width: 64,
-                height: 64,
-            },
-            179.8,
-        )
-        .expect("transformed Fiji target page");
-        let longitudes = targets
-            .iter()
-            .flat_map(|target| &target.polygon)
-            .map(|point| point.longitude_degrees)
-            .collect::<Vec<_>>();
-        assert!(longitudes.iter().any(|longitude| *longitude > 180.0));
-        assert!(
-            longitudes
-                .iter()
-                .all(|longitude| (179.0..181.0).contains(longitude))
-        );
-
-        let raster = RasterSource::open(&archive.path, HYDE_600_MEMBERS[3])
-            .expect("open global mask fixture");
-        let windows = raster
-            .windows_for_targets(&targets)
-            .expect("split Fiji target page");
-        assert_eq!(windows.len(), 2);
-        assert!(
-            windows
-                .iter()
-                .map(|window| window.pixels.width)
-                .sum::<usize>()
-                < 10
-        );
-        assert!(
-            windows
-                .iter()
-                .map(|window| window.pixels.width * window.pixels.height)
-                .sum::<usize>()
-                < 100
-        );
-        assert_ne!(
-            windows[0].longitude_offset_degrees,
-            windows[1].longitude_offset_degrees
-        );
-    }
-
-    struct ArchiveFixture {
-        root: std::path::PathBuf,
-        path: std::path::PathBuf,
-    }
-
-    impl Drop for ArchiveFixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn global_mask_fixture() -> ArchiveFixture {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-        let serial = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "aoe-hyde-global-mask-{}-{timestamp}-{serial}",
-            std::process::id()
-        ));
-        fs::create_dir(&root).expect("fixture directory");
-        let path = root.join("supplementary.zip");
-        let mut output = ZipWriter::new(File::create(&path).expect("fixture archive"));
-        output
-            .start_file(HYDE_600_MEMBERS[3], SimpleFileOptions::default())
-            .expect("mask member");
-        let mut grid = String::from(
-            "ncols 360\nnrows 180\nxllcorner -180\nyllcorner -90\ncellsize 1\nNODATA_value -9999\n",
-        );
-        let row = format!("{}\n", "1 ".repeat(360));
-        for _ in 0..180 {
-            grid.push_str(&row);
-        }
-        output.write_all(grid.as_bytes()).expect("mask grid");
-        output.finish().expect("finish mask archive");
-        ArchiveFixture { root, path }
-    }
-}
+#[path = "tests/source.rs"]
+mod tests;

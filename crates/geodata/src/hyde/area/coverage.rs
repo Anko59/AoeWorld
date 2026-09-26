@@ -18,9 +18,13 @@ impl HydeAreaAllocation {
                 0
             }
         };
+        let land_percent = percent(self.land_area_square_meters);
         HistoricalCoverage {
-            land_percent: percent(self.land_area_square_meters),
-            valid_land_percent: percent(self.valid_land_area_square_meters),
+            land_percent,
+            // HYDE's spherical denominator can slightly exceed ellipsoidal
+            // land area. Coverage cannot exceed observed land; preserve the
+            // unrounded source denominator for historical ratios separately.
+            valid_land_percent: percent(self.valid_land_area_square_meters).min(land_percent),
             lake_percent: percent(self.lake_area_square_meters),
             ocean_percent: percent(self.ocean_area_square_meters),
             nodata_percent: percent(self.nodata_area_square_meters),

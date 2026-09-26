@@ -148,9 +148,19 @@ impl MapPackage {
         provenance: EnvironmentalProvenance,
         environment: PreparedEnvironment,
     ) -> Result<Self, MapPackageError> {
+        let generation_recipe_version = if environment
+            .hydrology_evidence
+            .as_ref()
+            .and_then(|index| index.water_model.as_ref())
+            .is_some()
+        {
+            crate::WATER_MODEL_GENERATION_RECIPE_VERSION
+        } else {
+            GENERATION_RECIPE_VERSION
+        };
         Self::with_generation_recipe(
             generator_version,
-            GENERATION_RECIPE_VERSION,
+            generation_recipe_version,
             request,
             source_locks,
             projection,
@@ -173,7 +183,18 @@ impl MapPackage {
             LEGACY_GENERATION_RECIPE_VERSION
                 | PRIOR_GENERATION_RECIPE_VERSION
                 | GENERATION_RECIPE_VERSION
+                | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
         ) {
+            return Err(MapPackageError::InvalidGenerationRecipeVersion);
+        }
+        let has_modeled_water = environment
+            .hydrology_evidence
+            .as_ref()
+            .and_then(|index| index.water_model.as_ref())
+            .is_some();
+        if has_modeled_water
+            != (generation_recipe_version == crate::WATER_MODEL_GENERATION_RECIPE_VERSION)
+        {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
         }
         let request = request.normalized()?;
@@ -202,6 +223,17 @@ impl MapPackage {
         environment
             .validate()
             .map_err(|_| MapPackageError::InvalidEnvironment)?;
+        if let Some(model) = environment
+            .hydrology_evidence
+            .as_ref()
+            .and_then(|index| index.water_model.as_ref())
+            && model
+                .correction_document
+                .validate_for(request, model.samples_per_axis)
+                .is_err()
+        {
+            return Err(MapPackageError::InvalidEnvironment);
+        }
         let content_hash = hash_package(
             generator_version,
             request,

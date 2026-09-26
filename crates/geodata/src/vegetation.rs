@@ -10,6 +10,12 @@ use gdal::{
 };
 use std::{fs, path::Path};
 
+mod correction;
+pub use correction::{
+    VEGETATION_PATCH_PREPROCESSING_IDENTITY, VegetationPatch, VegetationPatchBinding,
+    VegetationPatchDocument, VegetationPatchOperation, VegetationPatchSource,
+};
+
 #[derive(Clone, Debug)]
 pub struct PreparedVegetation {
     pub field: FieldPyramid,
@@ -50,6 +56,16 @@ pub fn prepare_potential_biomes(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedVegetation, GeodataError> {
+    let corrections = VegetationPatchDocument::empty(request, samples_per_axis)?;
+    prepare_potential_biomes_with_corrections(path, request, samples_per_axis, &corrections)
+}
+
+pub fn prepare_potential_biomes_with_corrections(
+    path: &Path,
+    request: MapRequest,
+    samples_per_axis: u16,
+    corrections: &VegetationPatchDocument,
+) -> Result<PreparedVegetation, GeodataError> {
     if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "working vegetation grid is outside direct bounds",
@@ -58,6 +74,7 @@ pub fn prepare_potential_biomes(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid request"))?;
+    corrections.validate_for(request, samples_per_axis)?;
     let estimate = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid request estimate"))?;
@@ -114,6 +131,7 @@ pub fn prepare_potential_biomes(
             classes.push(value.round() as u8);
         }
     }
+    corrections.apply(samples_per_axis, &mut classes)?;
     let mut pages = Vec::new();
     let mut levels = Vec::new();
     let mut axis = samples_per_axis;
@@ -246,6 +264,33 @@ mod tests {
                 .potential_biome_class
                 .iter()
                 .all(|class| *class == 7)
+        );
+
+        let mut correction = VegetationPatchDocument::empty(MapRequest::default(), 2).unwrap();
+        correction.sources.push(VegetationPatchSource {
+            id: "fixture".into(),
+            citation: "Offline historical biome fixture".into(),
+        });
+        correction.patches.push(VegetationPatch {
+            id: "override".into(),
+            source_id: "fixture".into(),
+            priority: 0,
+            rectangle_east_north_meters: [-10_000, -10_000, 10_000, 10_000],
+            applicable_year_start_ce: 500,
+            applicable_year_end_ce: 700,
+            operation: VegetationPatchOperation::HistoricalBiome { class: 27 },
+        });
+        let corrected = prepare_potential_biomes_with_corrections(
+            &valid,
+            MapRequest::default(),
+            2,
+            &correction,
+        )
+        .expect("corrected vegetation raster");
+        assert_eq!(corrected.pages[0].potential_biome_class, [27; 4]);
+        assert_ne!(
+            corrected.field.levels[0].ordered_page_root,
+            prepared.field.levels[0].ordered_page_root
         );
 
         let invalid = root.join("invalid.tif");

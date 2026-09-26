@@ -4,10 +4,14 @@ mod hydrology;
 mod pages;
 mod provider;
 pub use hydrology::{
-    HydrologyEvidenceIndex, HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind,
-    HydrologyObservation, HydrologyWaterPolicy, MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS,
-    ModernLandCoverPage, WORLD_COVER_OBSERVATION_YEAR, ordered_hydrology_page_root,
-    ordered_modern_land_cover_page_root,
+    GeographicWaterPatch, HYDROLOGY_WATER_MODEL_VERSION, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyObservation,
+    HydrologyWaterModelIndex, HydrologyWaterModelPage, HydrologyWaterPolicy,
+    MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS, MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS,
+    MODELLING_GRID_LIMIT, ModernLandCoverPage, WATER_CORRECTION_SCHEMA_VERSION,
+    WATER_CORRECTION_TARGET_YEAR_CE, WORLD_COVER_OBSERVATION_YEAR, WaterCorrectionDocument,
+    WaterCorrectionOperation, WaterCorrectionProjection, WaterCorrectionVertex, WaterFlowDirection,
+    WaterModelProvenance, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
 pub(crate) use pages::level_zero_pages;
 pub use pages::{ordered_biome_page_root, ordered_page_root, ordered_water_page_root};

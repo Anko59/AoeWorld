@@ -1,6 +1,6 @@
 use super::{
-    GeodataError, HydrologyPage, MapRequest, ModernLandCoverPage, OpenTile, PAGE, Tile,
-    WORLD_COVER_NODATA, WORLD_COVER_PERMANENT_WATER, WORLD_COVER_WETLAND,
+    GeodataError, HydrologyPage, MapRequest, ModernLandCoverPage, OpenTile, PAGE,
+    RiverTopologyGrid, Tile, WORLD_COVER_NODATA, WORLD_COVER_PERMANENT_WATER, WORLD_COVER_WETLAND,
     hydrology_sampling::{
         open_vector_source, page_bounds, sample_worldcover_page, vector_features,
     },
@@ -11,7 +11,13 @@ use gdal::{
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
     vector::Geometry,
 };
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
+
+#[path = "sampler/topology.rs"]
+mod topology;
+use topology::{
+    RiverCellProjection, RiverReachMetadata, meters_to_centimeters, nearest_river_reach,
+};
 
 pub(super) struct Sampler {
     request: MapRequest,
@@ -20,6 +26,9 @@ pub(super) struct Sampler {
     ocean: Vec<u8>,
     lakes: Dataset,
     rivers: Option<Dataset>,
+    river_reaches: BTreeMap<u32, RiverReachMetadata>,
+    river_cells: Vec<Option<RiverCellProjection>>,
+    river_topology: Option<RiverTopologyGrid>,
 }
 
 impl Sampler {
@@ -62,6 +71,9 @@ impl Sampler {
             ocean,
             lakes,
             rivers,
+            river_reaches: BTreeMap::new(),
+            river_cells: vec![None; usize::from(axis).pow(2)],
+            river_topology: None,
         })
     }
 
@@ -77,7 +89,14 @@ impl Sampler {
                 land_cover.push(modern);
             }
         }
+        self.river_topology = self.resolve_river_topology()?;
         Ok((hydrology, land_cover))
+    }
+
+    pub(super) fn take_river_topology(
+        &mut self,
+    ) -> Result<Option<RiverTopologyGrid>, GeodataError> {
+        Ok(self.river_topology.take())
     }
 
     fn page(
@@ -124,6 +143,11 @@ impl Sampler {
         } else {
             Vec::new()
         };
+        for feature in &river_features {
+            if let Some(reach) = &feature.river_reach {
+                self.record_reach(reach)?;
+            }
+        }
         let classes = sample_worldcover_page(&self.tiles, &longitude, &latitude)?;
         let mut kinds = Vec::with_capacity(east.len());
         let mut methods = Vec::with_capacity(east.len());
@@ -143,6 +167,19 @@ impl Sampler {
                 && river_features
                     .iter()
                     .any(|feature| feature.geometry.contains(&point));
+            if river
+                && let Some((feature, station)) =
+                    nearest_river_reach(&river_features, &point, local_east, local_north)
+                && let Some(reach) = feature.river_reach.as_ref()
+            {
+                let offset = meters_to_centimeters(station).ok_or(GeodataError::Preparation(
+                    "HydroRIVERS line distance is invalid",
+                ))?;
+                self.river_cells[global_index] = Some(RiverCellProjection {
+                    reach_id: reach.id,
+                    distance_from_start_centimeters: offset,
+                });
+            }
             let (kind, method) =
                 classify_evidence(ocean, lake.map(|feature| feature.kind), river, class);
             kinds.push(kind as u8);
@@ -157,6 +194,7 @@ impl Sampler {
                 height,
                 kind: kinds,
                 method: methods,
+                water_model: None,
             },
             ModernLandCoverPage {
                 level: 0,

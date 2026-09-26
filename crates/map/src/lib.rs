@@ -19,12 +19,16 @@ pub use biome_rules::Biome;
 pub use environment::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentError, EnvironmentPage,
     EnvironmentPageError, EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid,
-    HydrologyEvidenceIndex, HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind,
-    HydrologyObservation, HydrologyWaterPolicy, MAX_ENVIRONMENT_SAMPLES_PER_AXIS,
-    MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS, ModernLandCoverPage, PotentialBiomePage,
-    PreparedEnvironment, PyramidLevel, WORLD_COVER_OBSERVATION_YEAR, WaterPage,
-    ordered_biome_page_root, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
-    ordered_page_root, ordered_water_page_root,
+    GeographicWaterPatch, HYDROLOGY_WATER_MODEL_VERSION, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyObservation,
+    HydrologyWaterModelIndex, HydrologyWaterModelPage, HydrologyWaterPolicy,
+    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS,
+    MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS, MODELLING_GRID_LIMIT, ModernLandCoverPage,
+    PotentialBiomePage, PreparedEnvironment, PyramidLevel, WATER_CORRECTION_SCHEMA_VERSION,
+    WATER_CORRECTION_TARGET_YEAR_CE, WORLD_COVER_OBSERVATION_YEAR, WaterCorrectionDocument,
+    WaterCorrectionOperation, WaterCorrectionProjection, WaterCorrectionVertex, WaterFlowDirection,
+    WaterModelProvenance, WaterPage, ordered_biome_page_root, ordered_hydrology_page_root,
+    ordered_modern_land_cover_page_root, ordered_page_root, ordered_water_page_root,
 };
 pub use land_use::{HistoricalCoverage, HistoricalLandUsePage, ordered_land_use_page_root};
 pub use navigation::{
@@ -62,6 +66,9 @@ pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// Increment when deterministic generation behavior changes. This version is
 /// part of the canonical package identity but does not reseed geography.
 pub const GENERATION_RECIPE_VERSION: u16 = 5;
+/// Recipe 6 consumes the verified modeled-water index. Packages without that
+/// index retain recipe 5 semantics and identity.
+pub const WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 6;
 /// Recipe 4 retains bilinear elevation and the published recipe-2 resources.
 pub const PRIOR_GENERATION_RECIPE_VERSION: u16 = 4;
 pub const LEGACY_GENERATION_RECIPE_VERSION: u16 = 3;

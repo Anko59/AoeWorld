@@ -27,7 +27,6 @@ mod wasm_test;
 use clap::{Parser, Subcommand};
 use std::{
     path::{Path, PathBuf},
-    process::Command as OsCommand,
     time::Duration,
 };
 
@@ -70,6 +69,7 @@ enum Command {
     TestE2e,
     TestCreatorSource,
     TestGeographicMatrix,
+    TestGeographicVisuals,
     FuzzSmoke,
     FuzzNightly,
     MutationNightly,
@@ -123,6 +123,24 @@ enum Command {
         package_directory: PathBuf,
         #[arg(long)]
         content_hash: String,
+        #[arg(long)]
+        geographic_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        geographic_content_hash: Option<String>,
+        #[arg(long)]
+        scale_512_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_512_content_hash: Option<String>,
+        #[arg(long)]
+        scale_16384_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_16384_content_hash: Option<String>,
+        #[arg(long)]
+        scale_262144_package_directory: Option<PathBuf>,
+        #[arg(long)]
+        scale_262144_content_hash: Option<String>,
+        #[arg(long)]
+        scale_only: bool,
         #[arg(long, default_value_t = 1_200_000)]
         max_ticks: u64,
     },
@@ -244,6 +262,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,
         Command::TestGeographicMatrix => e2e::run_matrix()?,
+        Command::TestGeographicVisuals => e2e::run_visuals()?,
         Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
         Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
         Command::MutationNightly => mutation::run()?,
@@ -282,7 +301,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::HooksInstall => {
             for (hook, command) in [("pre-commit", "pre-commit"), ("pre-push", "preflight")] {
-                let path = hook_path(hook)?;
+                let path = gates::hook_path(hook)?;
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -299,7 +318,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 ("pre-commit", "exec make pre-commit"),
                 ("pre-push", "exec make preflight"),
             ] {
-                let path = hook_path(hook)?;
+                let path = gates::hook_path(hook)?;
                 let content = std::fs::read_to_string(&path)?;
                 if !content.contains(expected) {
                     return Err(format!("{hook} hook differs from expected dispatcher").into());
@@ -342,22 +361,86 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::SourceQualify {
             package_directory,
             content_hash,
+            geographic_package_directory,
+            geographic_content_hash,
+            scale_512_package_directory,
+            scale_512_content_hash,
+            scale_16384_package_directory,
+            scale_16384_content_hash,
+            scale_262144_package_directory,
+            scale_262144_content_hash,
+            scale_only,
             max_ticks,
         } => {
+            let scale_packages = [
+                (
+                    512,
+                    scale_512_package_directory,
+                    scale_512_content_hash,
+                ),
+                (
+                    16_384,
+                    scale_16384_package_directory,
+                    scale_16384_content_hash,
+                ),
+                (
+                    262_144,
+                    scale_262144_package_directory,
+                    scale_262144_content_hash,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(tiles_per_side, directory, content_hash)| {
+                match (directory, content_hash) {
+                    (Some(directory), Some(content_hash)) => Some(Ok(
+                        aoe_server::SourceScalePackageReference {
+                            tiles_per_side,
+                            directory,
+                            content_hash,
+                        },
+                    )),
+                    (None, None) => None,
+                    _ => Some(Err(format!(
+                        "scale {tiles_per_side} package directory and content hash must be supplied together"
+                    ))),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+            if scale_only {
+                if geographic_package_directory.is_some() || geographic_content_hash.is_some() {
+                    return Err(
+                        "--scale-only cannot be combined with geographic route inputs".into(),
+                    );
+                }
+                let mut references = scale_packages;
+                references.push(aoe_server::SourceScalePackageReference {
+                    tiles_per_side: 50_000,
+                    directory: package_directory,
+                    content_hash,
+                });
+                let evidence = aoe_server::run_source_scale_qualification(&references)?;
+                println!("{}", serde_json::to_string_pretty(&evidence)?);
+                return Ok(());
+            }
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            let report = runtime.block_on(aoe_server::run_source_qualification(
-                &package_directory,
-                &content_hash,
-                max_ticks,
-                |progress| {
-                    eprintln!(
-                        "source qualification: tick={} leg={} moved_m={:.1}",
-                        progress.tick, progress.leg, progress.moved_meters
-                    );
-                },
-            ))?;
+            let report = runtime.block_on(
+                aoe_server::run_source_qualification_with_geographic_reference(
+                    &package_directory,
+                    &content_hash,
+                    geographic_package_directory.as_deref(),
+                    geographic_content_hash.as_deref(),
+                    &scale_packages,
+                    max_ticks,
+                    |progress| {
+                        eprintln!(
+                            "source qualification: tick={} leg={} moved_m={:.1}",
+                            progress.tick, progress.leg, progress.moved_meters
+                        );
+                    },
+                ),
+            )?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
@@ -379,16 +462,6 @@ fn format_invocations(check: bool) -> [Vec<&'static str>; 2] {
         fuzz.extend(["--", "--check"]);
     }
     [root, fuzz]
-}
-
-fn hook_path(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let result = OsCommand::new("git")
-        .args(["rev-parse", "--git-path", &format!("hooks/{name}")])
-        .output()?;
-    if !result.status.success() {
-        return Err("cannot locate Git hooks directory".into());
-    }
-    Ok(PathBuf::from(String::from_utf8(result.stdout)?.trim()))
 }
 
 fn main() {

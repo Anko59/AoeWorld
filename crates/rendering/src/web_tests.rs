@@ -178,6 +178,23 @@ fn overlay_only_depths_remain_finite_without_world_geometry() {
     assert_eq!(instances[0].depths, [0.0; 4]);
 }
 
+#[wasm_bindgen_test]
+fn flat_background_remains_behind_units_and_overlay_with_or_without_geometry() {
+    let mut background = solid_sprite();
+    background.depths = [f32::NEG_INFINITY; 4];
+    let mut overlay = solid_sprite();
+    overlay.depths = [f32::INFINITY; 4];
+    let mut instances = [background, solid_sprite(), overlay];
+    normalize_depths(&mut instances);
+    assert_eq!(instances[0].depths, [1.0; 4]);
+    assert_eq!(instances[1].depths, [0.5; 4]);
+    assert_eq!(instances[2].depths, [0.0; 4]);
+    let mut backgrounds = [background, overlay];
+    normalize_depths(&mut backgrounds);
+    assert_eq!(backgrounds[0].depths, [1.0; 4]);
+    assert_eq!(backgrounds[1].depths, [0.0; 4]);
+}
+
 fn surface_point(screen: [f64; 2]) -> crate::surface_mesh::SurfacePoint {
     crate::surface_mesh::SurfacePoint {
         world: [0.0, 0.0, 0.0],

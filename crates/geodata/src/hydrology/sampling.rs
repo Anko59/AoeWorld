@@ -11,6 +11,10 @@ use gdal::{
 use std::collections::BTreeMap;
 use std::path::Path;
 
+#[path = "sampling/river_geometry.rs"]
+mod river_geometry;
+pub(super) use river_geometry::{RiverReachGeometry, line_position, river_reach_geometry};
+
 const MAX_WORLD_COVER_WINDOW_PIXELS: usize = 4 * 1024 * 1024;
 const WORLD_COVER_BLOCK_PIXELS: usize = 2_048;
 type PixelGroups = BTreeMap<(usize, usize), Vec<(usize, usize, usize)>>;
@@ -67,6 +71,7 @@ fn check_window_bound(width: usize, height: usize) -> Result<(), GeodataError> {
 pub(super) struct VectorFeature {
     pub(super) geometry: gdal::vector::Geometry,
     pub(super) kind: HydrologyKind,
+    pub(super) river_reach: Option<RiverReachGeometry>,
 }
 
 pub(super) fn page_bounds(
@@ -312,7 +317,12 @@ pub(super) fn vector_features(
     let transform = local_transform(definition)?;
     let mut features = Vec::new();
     let mut geometry_bytes = 0_usize;
-    for feature in layer.features() {
+    // gdal-rs queries the feature count while constructing this iterator.
+    // OpenFileGDB can consume the filtered cursor during that query, even
+    // with force=false. Rewind afterward through another handle to this layer.
+    let iterator = layer.features();
+    dataset.layer(0)?.reset_feature_reading();
+    for feature in iterator {
         if features.len() >= MAX_PAGE_FEATURES {
             return Err(GeodataError::Preparation(
                 "hydrology page has too many vector features",
@@ -334,18 +344,46 @@ pub(super) fn vector_features(
                 _ => HydrologyKind::UnknownWater,
             }
         };
+        let river_reach = if rivers {
+            river_reach_geometry(&feature, &transformed)
+        } else {
+            None
+        };
+        let line_bytes = river_reach
+            .as_ref()
+            .map(|reach| {
+                reach
+                    .line_points
+                    .len()
+                    .checked_mul(std::mem::size_of::<(f64, f64)>())
+                    .ok_or(GeodataError::Preparation(
+                        "HydroRIVERS line geometry size overflows",
+                    ))
+            })
+            .transpose()?
+            .unwrap_or(0);
         let geometry = if rivers {
             transformed.buffer(river_width(&feature)?, 4)?
         } else {
             transformed
         };
         let retained_bytes = geometry.wkb()?.len();
+        let retained_and_line_bytes =
+            retained_bytes
+                .checked_add(line_bytes)
+                .ok_or(GeodataError::Preparation(
+                    "hydrology page geometry exceeds its memory bound",
+                ))?;
         geometry_bytes = checked_geometry_bytes(
             geometry_bytes,
             if rivers { source_bytes } else { 0 },
-            retained_bytes,
+            retained_and_line_bytes,
         )?;
-        features.push(VectorFeature { geometry, kind });
+        features.push(VectorFeature {
+            geometry,
+            kind,
+            river_reach,
+        });
     }
     Ok(features)
 }

@@ -291,7 +291,9 @@ fn write_fragment(
     color: &mut [u8],
     depth: &mut [f64],
 ) {
-    if source[3] == 0 || !fragment_depth.is_finite() {
+    // Negative infinity is the explicit flat-background layer, which must
+    // paint into an empty buffer while remaining behind every world object.
+    if source[3] == 0 || fragment_depth.is_nan() || fragment_depth == f64::INFINITY {
         return;
     }
     let pixel = y as usize * width as usize + x as usize;

@@ -94,6 +94,7 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
         height: 2,
         kind: vec![HydrologyKind::Lake as u8; 4],
         method: vec![HydrologyEvidenceMethod::HydroLakesExtent as u8; 4],
+        water_model: None,
     };
     let land_cover = ModernLandCoverPage {
         level: 0,
@@ -131,6 +132,7 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
             modern_land_cover_page_root: ordered_modern_land_cover_page_root(
                 std::slice::from_ref(&land_cover),
             )?,
+            water_model: None,
         }),
     };
     let typed = MapPackage::with_prepared_environment(

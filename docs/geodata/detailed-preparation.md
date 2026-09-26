@@ -55,9 +55,12 @@ checksum. It is checked on every cache reuse. The HydroRIVERS input is the
 Europe/Middle East release and is only evidence within the pilot bounds above;
 outside them, the package does not claim river coverage. Coarse Natural Earth
 coastline sampling and classified natural lakes/rivers may update the existing
-prepared water layer. Wetlands, reservoirs, regulated lakes, and otherwise
-unknown water remain evidence-only until a historical reconstruction can
-classify them.
+prepared water layer, including where a narrow mapped river is absent from the
+coarse overview water sample. Modern WorldCover land and missing evidence do
+not clear historical overview water. Only a cited `SetLand` correction clears
+that fallback, including where modern evidence already says land. Wetlands,
+reservoirs, regulated lakes, and otherwise unknown water remain evidence-only
+unless an explicit cited correction changes the modeled cells.
 
 Schema-9 packages persist `HydrologyEvidencePage` and `ModernLandCoverPage` as
 separate level-zero evidence grids. Hydrology records the supported kind and
@@ -65,12 +68,60 @@ its acquisition method; modern land cover retains the raw WorldCover class.
 Both grids participate in package roots, verification, and bounded residency,
 and terrain reads them through the package provider. Legacy `WaterPage`
 coverage remains present for schema-8 compatibility and overview fallback.
-The package does not invent flow, barrier, confidence, water-level, or
-historical-date values that the sources do not supply. HYDE remains the source
-of the year-600 land-use layer: this slice does not correct HYDE cell
-allocations, and modern WorldCover classes are not treated as year-600 land
-cover. Reservoir and regulated-lake observations therefore remain explicit
-modern evidence rather than automatic historical water.
+Detailed preparation adds a separately versioned water-model page to each
+typed evidence page. It joins four-neighbor natural-lake cells across page
+boundaries and assigns a common level from the lower quartile of adjacent
+Copernicus DEM heights sampled onto the hydrology grid. This is a modeled level
+from a modern surface model, not a measured lake surface. The sampled height
+grid is capped at 1,024 by 1,024 cells (4 MiB of signed centimeter values).
+Lake tiles and uniquely adjacent river-junction tiles expose that same level
+to terrain, rendering, picking, and collision. An enclosed all-lake selection without shoreline samples falls back
+to a consistent lower-quartile level from that component's sampled Copernicus
+DEM cells.
+The junction value is a local tie only. It does not infer a river direction
+through a lake or ocean. For supported reaches, preparation retains HydroRIVERS
+v1 reach IDs, `NEXT_DOWN`, `DIST_DN_KM`, and the sampled station along each line
+in a bounded transient index (at most 100,000 reaches). A downstream connection
+is accepted only when a unique downstream endpoint is within 1 km. Neighboring
+corridor cells then follow same-reach or `NEXT_DOWN` topology only when distance
+to the terminal decreases; ambiguous, terminal, missing, or unsupported
+topology keeps flow unknown. The source distance orders the flow graph, not
+channel elevation: river surfaces still start from Copernicus DEM values sampled
+onto the hydrology grid, with upstream cells raised as needed to prevent an uphill step along a
+supported edge. These are modeled surfaces, not measured channel levels. River
+membership is determined by center samples at the declared hydrology-grid
+resolution. A cell classified as river is not a claim that 100% of its sub-grid
+area is water; corridor width is represented at that prepared resolution, with
+no finer bank or water fraction asserted. See the [HydroRIVERS v1 technical
+documentation](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf)
+for the source topology fields and distance semantics.
+
+`WaterCorrectionDocument` is an optional inline worker input for detailed
+preparation. It binds patches to the normalized request, actual hydrology axis
+(`min(detailed axis, 1024)`), local AEQD WGS84 projection, and target year 600.
+It accepts at most 64 simple geographic polygons, each with a unique stable ID,
+year interval containing 600, citation, operation, and precedence. Patches are
+applied in ascending precedence then ID, so the final matching patch wins;
+cell centers determine inclusion. `SetNaturalLake` and `SetLand` change only the
+modeled field; raw modern evidence remains intact. The canonical document digest
+participates in package identity. The document is limited to 24 KiB so it fits
+in the 64 KiB worker request alongside optional historical corrections.
+Omitted or empty corrections are valid; they apply no manual geographic
+changes, while the documented natural-water model is still prepared.
+
+Modeled-water packages use generation recipe 6; model-free overview packages
+and older recipe-5 packages retain recipe-5 behavior and identity. Source-lock
+preprocessing records `hydrology-gdal-page-v3`, `lake-surface-model-v2`, and
+`river-topology-profile-v1`. The vector adapter rewinds the OpenFileGDB cursor
+after the GDAL iterator's feature-count query, which otherwise can consume all
+filtered lake features before sampling.
+Modern lake/river extents remain
+modern evidence used by the existing water policy; the model does not establish
+that those extents existed in year 600. HYDE remains the source of the year-600
+land-use layer, and modern WorldCover classes are not treated as year-600 land
+cover. Reservoir, regulated-lake, wetland, and unknown observations remain
+evidence-only unless an explicit cited water correction changes selected
+cells.
 
 Ordinary overview preparation now calls `prepare_hyde_area_600`. It extracts
 the five allowlisted year-600 HYDE grids, checks that they share a grid, and
@@ -90,9 +141,9 @@ weighted historical-pyramid helper and archive reader share a dedicated
 caps. The archive reader publishes and reduces each 64 by 64 target page
 incrementally; an offline 1,024-axis archive fixture exercises this path.
 Ordinary overview selection still uses 128 samples because its elevation and
-other overview fields use that axis. Detailed packages retain the independently
-declared 128-axis historical field instead of expanding it to the detailed
-elevation axis; terrain lookup uses the historical field's actual axis. HYDE lake
+other overview fields use that axis. Detailed preparation samples HYDE directly
+on an independent grid capped at 1024; terrain lookup uses that historical
+field's declared axis. HYDE lake
 coverage now comes from polygon overlap between its 5-minute mask cells and
 target cells, rather than assigning a full lake cell from a centre sample.
 The weighted pyramid combines unrounded extensive quantities before writing
@@ -113,8 +164,33 @@ coverage still fail production preparation.
 
 The public `prepare_hyde_600` function remains available for recipe-3 package
 reproduction and keeps its nearest-cell semantics. Production source locks
-identify this coverage-aware preparation as `hyde-600ad-area-pages-v2`, so its package
-identity changes through preprocessing identity and historical page roots.
+identify this coverage-aware preparation as `hyde-600ad-area-pages-v3`, so its package
+identity changes through preprocessing identity and historical page roots. The
+source valid-land denominator retains HYDE's spherical square kilometers;
+WGS84 equal-area overlap fractions distribute those quantities without changing
+their units or clamping them to ellipsoidal cell areas. The archive reader
+validates source capacity in the source area model. The canonical global
+4320-by-2160 grid uses exact five-minute boundaries instead of the rounded
+ASCII cell-size header, preserving the date-line seam. ASCII quantities are
+opened as Float64 using a restored thread-local GDAL setting. Allocation
+subdivides large target pages before exceeding source-window or densified
+vertex limits, while published pages remain 64 by 64. The
+ordinary worker binds an empty schema-2 geographic historical correction set
+to the normalized footprint, projection, history grid, year 600, and HYDE
+preprocessing identity. Its canonical SHA-256 digest is part of both HYDE source
+locks, so any future cited correction changes package identity. A correction
+bound to another location, projection, grid, year, or preprocessing identity
+fails before the archive page stream runs. Historical-model corrections replace
+only valid-land and historical quantity totals; modern observations and
+fallback records stay cited evidence, and explicit unknown clears valid-land
+history. The geographic document is capped at 24 KiB so it can share the
+worker's 64 KiB request with bounded water and vegetation patches. Overview
+history uses the requested overview axis (normally 128). Detailed generation
+prepares history directly from the HYDE archive on an independent
+`min(detailed elevation axis, 1024)` grid; its 128-axis elevation overview
+does not become a claim of 1024-axis source detail. The package records the
+actual historical field axis and provider lookup uses that axis. The older schema-1
+quantity document remains an intermediate format.
 Terrain generation semantics did not change, so the generation recipe remains
 unchanged.
 
@@ -134,9 +210,10 @@ The standalone allocation helpers keep `HydrologyPage` and
 `ModernLandCoverPage` as preparation intermediates. Schema-9 publication
 upgrades those inputs to the typed persisted evidence pages described above, so
 supported lake/river kinds and raw WorldCover classes remain distinguishable to
-terrain consumers. Flow, barrier, confidence, and invented historical-date
-values remain absent. HYDE stays the source of the year-600 land-use layer, and
-modern WorldCover classes are not treated as year-600 land cover.
+terrain consumers. Separate modeled-water pages carry derived levels and
+correction provenance without rewriting observations. Flow direction and
+downstream profiles remain unknown where directed evidence is absent; no
+barrier or confidence values are produced.
 Hydrology planning is capped at 32 WorldCover tiles. A job may download at
 most 2 GiB of missing hydrology sources; verified cache hits do not count
 toward that transfer budget. Cache storage has its separate 100 GiB quota.

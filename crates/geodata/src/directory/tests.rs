@@ -298,6 +298,7 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
             HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8,
             HydrologyEvidenceMethod::None as u8,
         ],
+        water_model: None,
     }];
     let land_cover = vec![ModernLandCoverPage {
         level: 0,
@@ -316,6 +317,7 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
         hydrology_page_root: ordered_hydrology_page_root(&hydrology).expect("hydrology root"),
         modern_land_cover_page_root: ordered_modern_land_cover_page_root(&land_cover)
             .expect("land-cover root"),
+        water_model: None,
     });
     let package = MapPackage::with_prepared_environment(
         base.package.generator_version,

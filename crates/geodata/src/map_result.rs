@@ -3,7 +3,8 @@
 use super::*;
 use aoe_map::{
     ElevationPage, HistoricalLandUsePage, HydrologyEvidencePage, MAP_SCHEMA_VERSION, MapPackage,
-    ModernLandCoverPage, PotentialBiomePage, PreparedEnvironment, WaterPage,
+    ModernLandCoverPage, PotentialBiomePage, PreparedEnvironment, WaterCorrectionDocument,
+    WaterPage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,10 @@ pub enum WorkerRequest {
         output_directory: PathBuf,
         request: MapRequest,
         samples_per_axis: u16,
+        #[serde(default)]
+        historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
+        #[serde(default)]
+        vegetation_corrections: Option<VegetationPatchDocument>,
     },
     PrepareDetailedDirectory {
         cache_root: PathBuf,
@@ -30,6 +35,12 @@ pub enum WorkerRequest {
         resolution: DemResolution,
         #[serde(default)]
         staging_root: Option<PathBuf>,
+        #[serde(default)]
+        historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
+        #[serde(default)]
+        water_corrections: Option<WaterCorrectionDocument>,
+        #[serde(default)]
+        vegetation_corrections: Option<VegetationPatchDocument>,
     },
     ListOverviewSources,
     ListPotentialBiomeSources,
@@ -233,8 +244,46 @@ mod tests {
     }
 
     #[test]
+    fn overview_worker_request_accepts_absent_historical_corrections() {
+        let request: WorkerRequest = serde_json::from_value(serde_json::json!({
+            "operation": "prepare_overview_directory",
+            "cache_root": "/cache",
+            "output_directory": "/maps",
+            "request": MapRequest::default(),
+            "samples_per_axis": 128
+        }))
+        .unwrap();
+        assert!(matches!(
+            request,
+            WorkerRequest::PrepareOverviewDirectory {
+                historical_corrections: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn complete_prepared_result_validates_without_provider_or_filesystem_access() {
         generated().validate().expect("complete empty prepared map");
+    }
+
+    #[test]
+    fn overview_worker_request_accepts_absent_vegetation_corrections() {
+        let request: WorkerRequest = serde_json::from_value(serde_json::json!({
+            "operation": "prepare_overview_directory",
+            "cache_root": "/cache",
+            "output_directory": "/maps",
+            "request": MapRequest::default(),
+            "samples_per_axis": 128
+        }))
+        .expect("existing overview request");
+        assert!(matches!(
+            request,
+            WorkerRequest::PrepareOverviewDirectory {
+                vegetation_corrections: None,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -248,6 +297,7 @@ mod tests {
             height: 1,
             kind: vec![0],
             method: vec![0],
+            water_model: None,
         });
         assert!(matches!(
             result.validate(),

@@ -2,6 +2,7 @@
 use crate::process;
 mod matrix;
 mod source;
+mod visual;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
@@ -76,6 +77,10 @@ pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn run_matrix() -> Result<(), Box<dyn std::error::Error>> {
     matrix::run()
+}
+
+pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
+    visual::run()
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {

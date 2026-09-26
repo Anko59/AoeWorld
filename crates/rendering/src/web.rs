@@ -453,7 +453,7 @@ pub(crate) fn surface_instance(
 }
 
 fn normalize_depths(instances: &mut [Sprite]) {
-    let Some((minimum, maximum)) = instances
+    let (minimum, maximum) = instances
         .iter()
         .flat_map(|sprite| sprite.depths[..3].iter().copied())
         .filter(|depth| depth.is_finite())
@@ -462,16 +462,13 @@ fn normalize_depths(instances: &mut [Sprite]) {
                 (minimum.min(depth), maximum.max(depth))
             }))
         })
-    else {
-        for sprite in instances {
-            sprite.depths = [0.0; 4];
-        }
-        return;
-    };
+        .unwrap_or((0.0, 0.0));
     let span = maximum - minimum;
     for sprite in instances {
         for depth in &mut sprite.depths {
-            *depth = if !depth.is_finite() {
+            *depth = if *depth == f32::NEG_INFINITY {
+                1.0
+            } else if !depth.is_finite() {
                 0.0
             } else if span <= f32::EPSILON {
                 0.5

@@ -15,14 +15,20 @@ fn all_parser_targets_are_bounded_and_successfully_enforced() {
             |args, deadline| {
                 targets.push(args[3].to_owned());
                 assert_eq!(args[0], "+nightly-2026-09-01");
-                assert_eq!(args[5], mode.limit());
+                assert_eq!(args[5], mode.segment_limit());
                 assert!(args.contains(&"-max_len=1048576"));
                 assert_eq!(deadline, mode.deadline());
                 Ok(())
             },
             |_, _, _| Ok(Vec::new()),
         );
-        assert_eq!(targets, TARGETS);
+        assert_eq!(
+            targets,
+            TARGETS
+                .iter()
+                .flat_map(|target| std::iter::repeat_n(*target, usize::from(mode.segments())))
+                .collect::<Vec<_>>()
+        );
         assert_eq!(execution.attempted_targets, TARGETS.len());
         assert_eq!(execution.successful_targets, TARGETS.len());
         assert_eq!(execution.target_results.len(), TARGETS.len());
@@ -30,7 +36,14 @@ fn all_parser_targets_are_bounded_and_successfully_enforced() {
             execution
                 .target_results
                 .iter()
-                .all(|result| result.completed)
+                .all(|result| result.completed
+                    && result.completed_segments == mode.segments()
+                    && result.completed_fuzz_seconds
+                        == if matches!(mode, Mode::Nightly) {
+                            300
+                        } else {
+                            0
+                        })
         );
         assert_eq!(execution.storage_after, storage_before);
         assert!(execution.failure.is_none());
@@ -110,13 +123,13 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
             .failure
             .as_deref()
             .expect("failure accounting")
-            .contains("target drs: injected libFuzzer crash")
+            .contains("target drs segment 1: injected libFuzzer crash")
     );
 
     write_report(
         root.path(),
         Report {
-            version: 6,
+            version: 7,
             revision: "revision".into(),
             dirty: true,
             mode: Mode::Smoke.label(),
@@ -124,6 +137,8 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
             cargo_fuzz: "0.13.2",
             targets: TARGETS,
             limit: Mode::Smoke.limit(),
+            planned_segments_per_target: Mode::Smoke.segments(),
+            segment_limit: Mode::Smoke.segment_limit(),
             prepared_seeds: Vec::new(),
             verified_legacy_seeds: Vec::new(),
             corpus_directory: "fuzz/corpus",
@@ -162,7 +177,7 @@ fn failure_reports_retain_the_after_snapshot_for_crash_inputs() {
 }
 
 #[test]
-fn failed_inter_target_maintenance_keeps_completed_target_distinct() {
+fn failed_segment_maintenance_does_not_claim_a_completed_target() {
     let root = tempfile::tempdir().expect("directory");
     let policy = storage::Policy::default();
     let before = policy.inspect(root.path()).expect("storage usage");
@@ -175,13 +190,63 @@ fn failed_inter_target_maintenance_keeps_completed_target_distinct() {
         |target, _, _| Err(format!("injected maintenance failure after {target}").into()),
     );
     assert_eq!(execution.attempted_targets, 1);
-    assert_eq!(execution.successful_targets, 1);
-    assert!(execution.target_results[0].completed);
+    assert_eq!(execution.successful_targets, 0);
+    assert!(!execution.target_results[0].completed);
+    assert_eq!(execution.target_results[0].completed_segments, 1);
     assert!(
         execution
             .failure
             .as_deref()
             .is_some_and(|message| message.contains("corpus maintenance"))
+    );
+}
+
+#[test]
+fn nightly_maintenance_runs_between_segments_before_storage_pressure_accumulates() {
+    let root = tempfile::tempdir().unwrap();
+    let policy = storage::Policy {
+        corpus_file_limit: 100,
+        ..storage::Policy::default()
+    };
+    let before = policy.inspect(root.path()).unwrap();
+    let mut runs = 0;
+    let mut checkpoints = 0;
+    let execution = execute(
+        Mode::Nightly,
+        root.path(),
+        policy,
+        before,
+        |args, _| {
+            runs += 1;
+            let directory = root.path().join("fuzz/corpus").join(args[3]);
+            fs::create_dir_all(&directory).unwrap();
+            for index in 0..20 {
+                fs::write(
+                    directory.join(format!("input-{runs}-{index}")),
+                    b"preserved",
+                )
+                .unwrap();
+            }
+            Ok(())
+        },
+        |target, _, _| {
+            checkpoints += 1;
+            let directory = root.path().join("fuzz/corpus").join(target);
+            for entry in fs::read_dir(directory).unwrap() {
+                fs::remove_file(entry.unwrap().path()).unwrap();
+            }
+            Ok(Vec::new())
+        },
+    );
+    assert!(execution.failure.is_none());
+    assert_eq!(runs, 35);
+    assert_eq!(checkpoints, 35);
+    assert_eq!(execution.successful_targets, 7);
+    assert!(
+        execution
+            .target_results
+            .iter()
+            .all(|result| result.completed_fuzz_seconds == 300)
     );
 }
 
@@ -220,7 +285,7 @@ fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
         write_report(
             temp.path(),
             Report {
-                version: 6,
+                version: 7,
                 revision: "revision".into(),
                 dirty: true,
                 mode: mode.label(),
@@ -228,6 +293,8 @@ fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
                 cargo_fuzz: "0.13.2",
                 targets: TARGETS,
                 limit: mode.limit(),
+                planned_segments_per_target: mode.segments(),
+                segment_limit: mode.segment_limit(),
                 prepared_seeds: inventory.prepared_seeds.clone(),
                 verified_legacy_seeds: inventory.verified_legacy_seeds.clone(),
                 corpus_directory: "fuzz/corpus",
@@ -255,7 +322,7 @@ fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
             value["targets"].as_array().expect("targets").len(),
             TARGETS.len()
         );
-        assert_eq!(value["version"], 6);
+        assert_eq!(value["version"], 7);
         assert_eq!(value["corpus_directory"], "fuzz/corpus");
         assert_eq!(value["artifact_directory"], "fuzz/artifacts");
         assert_eq!(
@@ -339,4 +406,17 @@ fn live_quota_pressure_cancels_without_discarding_inputs() {
     );
     assert!(result.unwrap_err().to_string().contains("95% quota guard"));
     assert_eq!(fs::read_dir(&directory).unwrap().count(), 10);
+}
+
+#[test]
+fn early_libfuzzer_exit_cannot_count_as_a_completed_timed_segment() {
+    let root = tempfile::tempdir().unwrap();
+    let result = run_monitored(
+        "sh",
+        &["-c", "true", "-max_total_time=1"],
+        Duration::from_secs(2),
+        root.path(),
+        storage::Policy::default(),
+    );
+    assert!(result.unwrap_err().to_string().contains("exited before"));
 }

@@ -62,40 +62,20 @@ struct TileCoverage {
     absent_tiles: BTreeSet<(i32, i32)>,
 }
 
-fn tool_version() -> String {
-    let gdal = gdal::version::VersionInfo::release_name();
-    let proj = gdal::version::VersionInfo::build_info()
-        .get("PROJ_RUNTIME_VERSION")
-        .cloned()
-        .unwrap_or_else(|| "unknown".to_owned());
-    format!("GDAL {gdal} / PROJ {proj}")
-}
-
-pub fn prepare_detailed_directory(
-    cache_root: PathBuf,
-    output_directory: PathBuf,
-    request: MapRequest,
-    samples_per_axis: u16,
-    resolution: DemResolution,
-) -> Result<MapPackage, GeodataError> {
-    prepare_with_staging(
-        cache_root,
-        output_directory,
-        request,
-        samples_per_axis,
-        resolution,
-        None,
-    )
-}
-
-pub(crate) fn prepare_with_staging(
+pub(crate) fn prepare_with_staging_and_corrections(
     cache_root: PathBuf,
     output_directory: PathBuf,
     request: MapRequest,
     samples_per_axis: u16,
     resolution: DemResolution,
     staging_root: Option<PathBuf>,
+    corrections: DetailedCorrections<'_>,
 ) -> Result<MapPackage, GeodataError> {
+    let DetailedCorrections {
+        historical: historical_corrections,
+        water: water_corrections,
+        vegetation: vegetation_corrections,
+    } = corrections;
     let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     if !(2..=MAX_DETAILED_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
@@ -105,17 +85,40 @@ pub(crate) fn prepare_with_staging(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let historical_axis = samples_per_axis.min(crate::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS);
+    if let Some(document) = historical_corrections {
+        document.validate_for(
+            request,
+            historical_axis,
+            crate::hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+        )?;
+    }
+    let hydrology_axis = samples_per_axis.min(crate::MAX_HYDROLOGY_SAMPLES_PER_AXIS);
+    let water_corrections = water_corrections
+        .map(Ok)
+        .unwrap_or_else(|| aoe_map::WaterCorrectionDocument::empty(request, hydrology_axis))
+        .map_err(|_| GeodataError::Preparation("invalid water correction document"))?;
+    water_corrections
+        .validate_for(request, hydrology_axis)
+        .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     let estimate = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid map request estimate"))?;
     let bounds = geographic_bounds(request, estimate.effective_side_meters)?;
     validate_tile_budget(bounds)?;
     let hydrology_plan = crate::hydrology::preflight_hydrology(&cache_root, request)?;
-    let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
-    let hydrology = crate::hydrology::prepare_hydrology_with_plan(
+    let overview = crate::prepare_overview_with_all_corrections(
         cache_root.clone(),
         request,
-        samples_per_axis.min(crate::MAX_HYDROLOGY_SAMPLES_PER_AXIS),
+        128,
+        historical_axis,
+        historical_corrections,
+        vegetation_corrections,
+    )?;
+    let mut hydrology = crate::hydrology::prepare_hydrology_with_plan(
+        cache_root.clone(),
+        request,
+        hydrology_axis,
         hydrology_plan,
         &overview.water_pages,
     )?;
@@ -129,7 +132,6 @@ pub(crate) fn prepare_with_staging(
     let cancelled = AtomicBool::new(false);
     let coverage = acquire_tiles(&cache, bounds, resolution, &cancelled)?;
     let stage = Stage::new(staging_root.as_deref().unwrap_or(&cache_root))?;
-    pyramid::store_hydrology_evidence(&stage, &hydrology)?;
     let overview_ocean = source_backed_overview_ocean(&overview)?;
     let mut sampler = Sampler::new(
         request,
@@ -139,6 +141,8 @@ pub(crate) fn prepare_with_staging(
         coverage.tiles,
         overview_ocean,
     )?;
+    entry::apply_detailed_water_model(&mut sampler, &mut hydrology, request, water_corrections)?;
+    pyramid::store_hydrology_evidence(&stage, &hydrology)?;
     let fields = build_pyramids(
         &mut sampler,
         &stage,
@@ -468,6 +472,11 @@ fn tile_prefix(latitude: i32, longitude: i32, suffix: &str) -> String {
     };
     format!("Copernicus_DSM_COG_{suffix}_{lat}_{lon}_DEM")
 }
+
+mod entry;
+pub(crate) use entry::DetailedCorrections;
+use entry::tool_version;
+pub use entry::{prepare_detailed_directory, prepare_detailed_directory_with_water_corrections};
 
 mod sampler;
 use sampler::Sampler;

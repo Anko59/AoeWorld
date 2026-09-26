@@ -19,6 +19,26 @@ struct ComponentSummary {
     biomes: BTreeMap<String, usize>,
     boundary_edges: BTreeMap<&'static str, usize>,
     blocker_tiles: BTreeMap<&'static str, usize>,
+    boundary_terrain: BoundaryTerrainEvidence,
+    forest_pattern: ForestPatternEvidence,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct BoundaryTerrainEvidence {
+    pub(super) cliff_surface_edges: usize,
+    pub(super) cliff_edges_supported_by_geographic_rise: usize,
+    pub(super) cliff_geographic_rise_sum_cm: u64,
+    pub(super) cliff_geographic_rise_max_cm: u32,
+    pub(super) grade_discontinuity_edges: usize,
+    pub(super) grade_geographic_rise_max_cm: u32,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct ForestPatternEvidence {
+    pub(super) tree_blocker_tiles: usize,
+    pub(super) eight_connected_clumps: usize,
+    pub(super) largest_clump_tiles: usize,
+    pub(super) isolated_tree_tiles: usize,
 }
 
 pub(super) fn start_component_diagnostic(
@@ -99,7 +119,7 @@ pub(super) fn start_component_diagnostic(
             "no"
         };
         let biomes = biome_counts(generator, &visited)?;
-        let (boundary_edges, blocker_tiles) =
+        let (boundary_edges, blocker_tiles, boundary_terrain, forest_pattern) =
             boundary_counts(terrain, generator, &visited, config)?;
         let component_index = components.len();
         for tile in &visited {
@@ -116,6 +136,8 @@ pub(super) fn start_component_diagnostic(
             biomes,
             boundary_edges,
             blocker_tiles,
+            boundary_terrain,
+            forest_pattern,
         });
     }
     let total = candidates.len();
@@ -152,8 +174,16 @@ pub(super) fn start_component_diagnostic(
                 },
                 if component.selected_start == "yes" {
                     format!(
-                        ",biomes={:?},blocked_frontier_edges={:?},distinct_blocker_tiles={:?}",
-                        component.biomes, component.boundary_edges, component.blocker_tiles
+                        ",biomes={:?},blocked_frontier_edges={:?},distinct_blocker_tiles={:?},geographic_cliff_gradient={:?},forest_pattern={:?},diagnostic_conclusion={}",
+                        component.biomes,
+                        component.boundary_edges,
+                        component.blocker_tiles,
+                        component.boundary_terrain,
+                        component.forest_pattern,
+                        diagnostic_conclusion(
+                            &component.boundary_terrain,
+                            &component.forest_pattern
+                        )
                     )
                 } else {
                     String::new()
@@ -173,9 +203,11 @@ pub(super) fn component_blocker_diagnostic(
     tiles: &BTreeSet<TileCoord>,
     config: WorldConfig,
 ) -> Result<String, EnvironmentPageError> {
-    let (edge_counts, blocker_tiles) = boundary_counts(terrain, generator, tiles, config)?;
+    let (edge_counts, blocker_tiles, boundary_terrain, forest_pattern) =
+        boundary_counts(terrain, generator, tiles, config)?;
     Ok(format!(
-        "blocked_frontier_edges={edge_counts:?},distinct_blocker_tiles={blocker_tiles:?}"
+        "blocked_frontier_edges={edge_counts:?},distinct_blocker_tiles={blocker_tiles:?},geographic_cliff_gradient={boundary_terrain:?},forest_pattern={forest_pattern:?},diagnostic_conclusion={}",
+        diagnostic_conclusion(&boundary_terrain, &forest_pattern)
     ))
 }
 
@@ -199,9 +231,18 @@ fn boundary_counts(
     generator: &MapChunkGenerator,
     tiles: &BTreeSet<TileCoord>,
     config: WorldConfig,
-) -> Result<(BlockerCounts, BlockerCounts), EnvironmentPageError> {
+) -> Result<
+    (
+        BlockerCounts,
+        BlockerCounts,
+        BoundaryTerrainEvidence,
+        ForestPatternEvidence,
+    ),
+    EnvironmentPageError,
+> {
     let mut edge_counts = BTreeMap::new();
     let mut blocker_cells = BTreeMap::<TileCoord, &'static str>::new();
+    let mut boundary_terrain = BoundaryTerrainEvidence::default();
     for tile in tiles {
         for dy in -1..=1 {
             for dx in -1..=1 {
@@ -212,17 +253,25 @@ fn boundary_counts(
                 if tiles.contains(&next) {
                     continue;
                 }
-                let reason = blocker_reason(terrain, generator, *tile, next, config)?;
+                let reason = blocker_reason(
+                    terrain,
+                    generator,
+                    *tile,
+                    next,
+                    config,
+                    &mut boundary_terrain,
+                )?;
                 *edge_counts.entry(reason).or_insert(0) += 1;
                 blocker_cells.entry(next).or_insert(reason);
             }
         }
     }
     let mut tile_counts = BTreeMap::new();
-    for reason in blocker_cells.into_values() {
-        *tile_counts.entry(reason).or_insert(0) += 1;
+    for reason in blocker_cells.values() {
+        *tile_counts.entry(*reason).or_insert(0) += 1;
     }
-    Ok((edge_counts, tile_counts))
+    let forest_pattern = forest_pattern(&blocker_cells);
+    Ok((edge_counts, tile_counts, boundary_terrain, forest_pattern))
 }
 
 fn blocker_reason(
@@ -231,6 +280,7 @@ fn blocker_reason(
     from: TileCoord,
     to: TileCoord,
     config: WorldConfig,
+    boundary_terrain: &mut BoundaryTerrainEvidence,
 ) -> Result<&'static str, EnvironmentPageError> {
     if to.x < 0 || to.y < 0 || to.x >= config.width_tiles || to.y >= config.height_tiles {
         return Ok("outside");
@@ -253,18 +303,94 @@ fn blocker_reason(
     let source = generator
         .tile_at_with_cancel(from, &|| false)?
         .ok_or(EnvironmentPageError::Invalid)?;
-    if source.surface.kind == SurfaceKind::Cliff
-        || destination.surface.kind == SurfaceKind::Cliff
-        || (i32::from(source.game_height_level) - i32::from(destination.game_height_level)).abs()
-            > 1
-        || !terrain.crossable_with_cancel(from, to, config, &|| false)?
-    {
-        return Ok("cliff_or_grade");
+    let geographic_rise_cm = source
+        .geographic_height_centimeters
+        .abs_diff(destination.geographic_height_centimeters);
+    if source.surface.kind == SurfaceKind::Cliff || destination.surface.kind == SurfaceKind::Cliff {
+        boundary_terrain.cliff_surface_edges += 1;
+        boundary_terrain.cliff_geographic_rise_sum_cm = boundary_terrain
+            .cliff_geographic_rise_sum_cm
+            .saturating_add(u64::from(geographic_rise_cm));
+        boundary_terrain.cliff_geographic_rise_max_cm = boundary_terrain
+            .cliff_geographic_rise_max_cm
+            .max(geographic_rise_cm);
+        boundary_terrain.cliff_edges_supported_by_geographic_rise +=
+            usize::from(geographic_rise_cm >= aoe_map::ELEVATION_LEVEL_CENTIMETERS as u32);
+        return Ok("cliff_surface");
+    }
+    let game_level_rise =
+        (i32::from(source.game_height_level) - i32::from(destination.game_height_level)).abs();
+    if game_level_rise > 1 {
+        boundary_terrain.grade_discontinuity_edges += 1;
+        boundary_terrain.grade_geographic_rise_max_cm = boundary_terrain
+            .grade_geographic_rise_max_cm
+            .max(geographic_rise_cm);
+        return Ok("grade_discontinuity");
+    }
+    if !terrain.crossable_with_cancel(from, to, config, &|| false)? {
+        return Ok("other_edge_rule");
     }
     if !terrain.passable_with_cancel(to, config, &|| false)? {
         return Ok("other_impassable_terrain");
     }
     Ok("other_edge_rule")
+}
+
+pub(super) fn forest_pattern(
+    blocker_cells: &BTreeMap<TileCoord, &'static str>,
+) -> ForestPatternEvidence {
+    let mut remaining = blocker_cells
+        .iter()
+        .filter_map(|(tile, reason)| (*reason == "tree_object").then_some(*tile))
+        .collect::<BTreeSet<_>>();
+    let tree_blocker_tiles = remaining.len();
+    let mut evidence = ForestPatternEvidence {
+        tree_blocker_tiles,
+        ..ForestPatternEvidence::default()
+    };
+    while let Some(root) = remaining.pop_first() {
+        evidence.eight_connected_clumps += 1;
+        let mut pending = VecDeque::from([root]);
+        let mut clump_tiles = 1_usize;
+        while let Some(tile) = pending.pop_front() {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let next = TileCoord::new(tile.x + dx, tile.y + dy);
+                    if remaining.remove(&next) {
+                        clump_tiles += 1;
+                        pending.push_back(next);
+                    }
+                }
+            }
+        }
+        evidence.largest_clump_tiles = evidence.largest_clump_tiles.max(clump_tiles);
+        evidence.isolated_tree_tiles += usize::from(clump_tiles == 1);
+    }
+    evidence
+}
+
+pub(super) fn diagnostic_conclusion(
+    boundary: &BoundaryTerrainEvidence,
+    forest: &ForestPatternEvidence,
+) -> &'static str {
+    if boundary.cliff_surface_edges > 0
+        && boundary.cliff_edges_supported_by_geographic_rise * 2 >= boundary.cliff_surface_edges
+    {
+        "geographic_elevation_supports_most_cliff_frontier_edges"
+    } else if boundary.cliff_surface_edges > 0 {
+        "most_cliff_frontier_edges_have_sub_meter_source_rise;review_raster_or_quantization_fragmentation"
+    } else if forest.tree_blocker_tiles > 0
+        && forest.isolated_tree_tiles * 2 > forest.tree_blocker_tiles
+    {
+        "most_tree_blockers_are_isolated;review_procedural_forest_fragmentation"
+    } else if forest.largest_clump_tiles >= 4 {
+        "tree_blockers_form_clumps_consistent_with_forest_edges"
+    } else {
+        "mixed_or_non_geographic_blockers_dominate;inspect_reported_categories"
+    }
 }
 
 fn worldcover_status(package: &MapPackage) -> String {
