@@ -104,29 +104,47 @@ fn collect(directory: &Path, usage: &mut Usage) -> Result<()> {
         Err(error) => return Err(error.into()),
     };
     for entry in entries {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        let path = entry.path();
-        if kind.is_dir() {
-            collect(&path, usage)?;
-        } else if kind.is_file() {
-            usage.files = usage
-                .files
-                .checked_add(1)
-                .ok_or("fuzz file count overflow")?;
-            usage.bytes = usage
-                .bytes
-                .checked_add(entry.metadata()?.len())
-                .ok_or("fuzz byte count overflow")?;
-        } else {
-            return Err(format!(
-                "fuzz storage contains a non-regular path: {}",
-                path.display()
-            )
-            .into());
-        }
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        collect_entry(entry, usage)?;
     }
     Ok(())
+}
+
+fn collect_entry(entry: fs::DirEntry, usage: &mut Usage) -> Result<()> {
+    let kind = match entry.file_type() {
+        Ok(kind) => kind,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    let path = entry.path();
+    if kind.is_dir() {
+        collect(&path, usage)
+    } else if kind.is_file() {
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        usage.files = usage
+            .files
+            .checked_add(1)
+            .ok_or("fuzz file count overflow")?;
+        usage.bytes = usage
+            .bytes
+            .checked_add(metadata.len())
+            .ok_or("fuzz byte count overflow")?;
+        Ok(())
+    } else {
+        Err(format!(
+            "fuzz storage contains a non-regular path: {}",
+            path.display()
+        )
+        .into())
+    }
 }
 
 #[cfg(test)]
@@ -213,5 +231,17 @@ mod tests {
         snapshot.corpus.files = 15_565;
         assert!(near_limit(policy, snapshot));
         assert!(policy.validate(snapshot).is_ok());
+    }
+
+    #[test]
+    fn disappearing_corpus_entry_is_transient_during_live_snapshot() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("temporary");
+        fs::write(&path, b"input").unwrap();
+        let entry = fs::read_dir(root.path()).unwrap().next().unwrap().unwrap();
+        fs::remove_file(path).unwrap();
+        let mut usage = Usage { files: 0, bytes: 0 };
+        collect_entry(entry, &mut usage).unwrap();
+        assert_eq!(usage, Usage { files: 0, bytes: 0 });
     }
 }
