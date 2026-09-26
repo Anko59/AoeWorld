@@ -13,8 +13,11 @@ use gdal::{
 };
 use std::{collections::BTreeMap, path::Path};
 
+#[path = "sampler/lakes.rs"]
+mod lakes;
 #[path = "sampler/topology.rs"]
 mod topology;
+use lakes::rasterize_lakes;
 use topology::{
     RiverCellProjection, RiverReachMetadata, meters_to_centimeters, nearest_river_reach,
 };
@@ -148,40 +151,49 @@ impl Sampler {
                 self.record_reach(reach)?;
             }
         }
+        let lake_kinds = rasterize_lakes(
+            lake_features,
+            usize::from(width),
+            usize::from(height),
+            east[0] - spacing / 2.0,
+            north[0] + spacing / 2.0,
+            spacing,
+        )?;
         let classes = sample_worldcover_page(&self.tiles, &longitude, &latitude)?;
         let mut kinds = Vec::with_capacity(east.len());
         let mut methods = Vec::with_capacity(east.len());
         for (index, (&local_east, &local_north)) in east.iter().zip(&north).enumerate() {
             let class = classes[index];
-            let point = Geometry::from_wkt(&format!("POINT ({local_east} {local_north})"))
-                .map_err(|_| GeodataError::Preparation("could not construct sample point"))?;
             let global_index = (usize::from(y) + index / usize::from(width))
                 * usize::from(self.axis)
                 + usize::from(x)
                 + index % usize::from(width);
             let ocean = self.ocean[global_index] >= 50;
-            let lake = lake_features
-                .iter()
-                .find(|feature| feature.geometry.contains(&point));
-            let river = lake.is_none()
-                && river_features
+            let lake = lake_kinds[index];
+            let river = if lake.is_none() && !river_features.is_empty() {
+                let point = Geometry::from_wkt(&format!("POINT ({local_east} {local_north})"))
+                    .map_err(|_| GeodataError::Preparation("could not construct sample point"))?;
+                let river = river_features
                     .iter()
                     .any(|feature| feature.geometry.contains(&point));
-            if river
-                && let Some((feature, station)) =
-                    nearest_river_reach(&river_features, &point, local_east, local_north)
-                && let Some(reach) = feature.river_reach.as_ref()
-            {
-                let offset = meters_to_centimeters(station).ok_or(GeodataError::Preparation(
-                    "HydroRIVERS line distance is invalid",
-                ))?;
-                self.river_cells[global_index] = Some(RiverCellProjection {
-                    reach_id: reach.id,
-                    distance_from_start_centimeters: offset,
-                });
-            }
-            let (kind, method) =
-                classify_evidence(ocean, lake.map(|feature| feature.kind), river, class);
+                if river
+                    && let Some((feature, station)) =
+                        nearest_river_reach(&river_features, &point, local_east, local_north)
+                    && let Some(reach) = feature.river_reach.as_ref()
+                {
+                    let offset = meters_to_centimeters(station).ok_or(
+                        GeodataError::Preparation("HydroRIVERS line distance is invalid"),
+                    )?;
+                    self.river_cells[global_index] = Some(RiverCellProjection {
+                        reach_id: reach.id,
+                        distance_from_start_centimeters: offset,
+                    });
+                }
+                river
+            } else {
+                false
+            };
+            let (kind, method) = classify_evidence(ocean, lake, river, class);
             kinds.push(kind as u8);
             methods.push(method as u8);
         }

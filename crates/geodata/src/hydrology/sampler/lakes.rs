@@ -1,5 +1,5 @@
-use super::super::{GeodataError, HydrologyKind, MAX_PAGE_FEATURES, PAGE};
 use super::super::hydrology_sampling::VectorFeature;
+use super::super::{GeodataError, HydrologyKind, MAX_PAGE_FEATURES, PAGE};
 use gdal::{
     DriverManager,
     raster::{RasterizeOptions, rasterize},
@@ -7,7 +7,9 @@ use gdal::{
 
 const MAX_LAKE_RASTER_CELLS: usize = 64 * 64;
 
-/// Rasterizes one bounded hydrology page at its sample centers. Features are
+/// Rasterizes one bounded hydrology page at its sample centers. `all_touched`
+/// stays disabled; centers exactly on polygon boundaries follow GDAL's raster
+/// edge rule, which need not match strict GEOS `contains`. Features are
 /// consumed so the geometry buffers are moved into GDAL without cloning.
 pub(super) fn rasterize_lakes(
     features: Vec<VectorFeature>,
@@ -64,9 +66,10 @@ pub(super) fn rasterize_lakes(
             ..RasterizeOptions::default()
         }),
     )?;
-    let values = raster
-        .rasterband(1)?
-        .read_as::<u8>((0, 0), (width, height), (width, height), None)?;
+    let values =
+        raster
+            .rasterband(1)?
+            .read_as::<u8>((0, 0), (width, height), (width, height), None)?;
     values
         .data()
         .iter()
@@ -95,7 +98,9 @@ fn lake_kind_from_burn(value: u8) -> Result<Option<HydrologyKind>, GeodataError>
         value if value == HydrologyKind::RegulatedLake as u8 => {
             Ok(Some(HydrologyKind::RegulatedLake))
         }
-        value if value == HydrologyKind::UnknownWater as u8 => Ok(Some(HydrologyKind::UnknownWater)),
+        value if value == HydrologyKind::UnknownWater as u8 => {
+            Ok(Some(HydrologyKind::UnknownWater))
+        }
         _ => Err(GeodataError::Preparation(
             "HydroLAKES raster contains an unknown kind",
         )),
@@ -110,6 +115,7 @@ mod tests {
     const MULTIPOLYGON: &str = "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 3 1, 3 3, 1 3, 1 1)), ((5 0, 7 0, 7 2, 5 2, 5 0)))";
     const RESERVOIR_OVERLAP: &str = "POLYGON ((2 0, 6 0, 6 4, 2 4, 2 0))";
     const REGULATED_OVERLAP: &str = "POLYGON ((3 0, 5 0, 5 4, 3 4, 3 0))";
+    const UNKNOWN_WATER: &str = "POLYGON ((6 4, 7 4, 7 6, 6 6, 6 4))";
 
     fn features(definitions: &[(&str, HydrologyKind)]) -> Vec<VectorFeature> {
         definitions
@@ -128,6 +134,7 @@ mod tests {
             (MULTIPOLYGON, HydrologyKind::Lake),
             (RESERVOIR_OVERLAP, HydrologyKind::Reservoir),
             (REGULATED_OVERLAP, HydrologyKind::RegulatedLake),
+            (UNKNOWN_WATER, HydrologyKind::UnknownWater),
         ];
         let width = 7;
         let height = 6;
@@ -145,7 +152,10 @@ mod tests {
                 .expect("sample point");
                 // Boundaries have their own regression below. For other
                 // centers, the fast raster result must match the old query.
-                if source.iter().any(|feature| feature.geometry.touches(&point)) {
+                if source
+                    .iter()
+                    .any(|feature| feature.geometry.touches(&point))
+                {
                     continue;
                 }
                 let expected = source
@@ -162,10 +172,11 @@ mod tests {
         assert_eq!(at(3, 3), Some(HydrologyKind::Lake));
         assert_eq!(at(5, 4), Some(HydrologyKind::Lake), "second polygon burns");
         assert_eq!(at(4, 4), Some(HydrologyKind::Reservoir));
+        assert_eq!(at(6, 0), Some(HydrologyKind::UnknownWater));
     }
 
     #[test]
-    fn center_on_a_polygon_boundary_is_not_expanded_as_all_touched() {
+    fn center_on_a_polygon_boundary_uses_gdal_half_open_center_coverage() {
         let polygon = "POLYGON ((0.5 0.5, 2.5 0.5, 2.5 3.5, 0.5 3.5, 0.5 0.5))";
         let sampled = rasterize_lakes(
             features(&[(polygon, HydrologyKind::Lake)]),
@@ -176,10 +187,40 @@ mod tests {
             1.0,
         )
         .expect("bounded lake raster");
-        assert_eq!(sampled[1], None, "left-edge centers are excluded");
-        assert_eq!(sampled[3], None, "right-edge centers are excluded");
-        assert_eq!(sampled[4], None, "outside cells are not expanded");
-        assert_eq!(sampled[5], Some(HydrologyKind::Lake));
+        let at = |x: usize, y: usize| sampled[y * 4 + x];
+        assert_eq!(at(1, 0), Some(HydrologyKind::Lake), "top edge is included");
+        assert_eq!(at(0, 1), None, "left edge is excluded");
+        assert_eq!(
+            at(2, 1),
+            Some(HydrologyKind::Lake),
+            "right edge is included"
+        );
+        assert_eq!(
+            at(1, 3),
+            Some(HydrologyKind::Lake),
+            "bottom edge is included"
+        );
+        assert_eq!(at(1, 1), Some(HydrologyKind::Lake), "interior is burned");
+        assert_eq!(at(3, 1), None, "untouched outside cells stay empty");
+    }
+
+    #[test]
+    fn empty_pages_and_unsupported_feature_kinds_fail_closed() {
+        assert_eq!(
+            rasterize_lakes(Vec::new(), 2, 2, 0.0, 2.0, 1.0).expect("empty page"),
+            vec![None; 4]
+        );
+        assert!(
+            rasterize_lakes(
+                features(&[("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))", HydrologyKind::Land)]),
+                1,
+                1,
+                0.0,
+                1.0,
+                1.0
+            )
+            .is_err()
+        );
     }
 
     #[test]
