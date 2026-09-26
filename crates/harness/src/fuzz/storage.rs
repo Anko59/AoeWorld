@@ -24,7 +24,7 @@ impl Default for Policy {
             corpus_byte_limit: CORPUS_BYTE_LIMIT,
             artifact_file_limit: ARTIFACT_FILE_LIMIT,
             artifact_byte_limit: ARTIFACT_BYTE_LIMIT,
-            retention: "never-delete; archive or explicitly remove excess storage outside fuzzing",
+            retention: "archive before coverage-guided active minimization; retain seeds and crashes",
         }
     }
 }
@@ -80,7 +80,18 @@ impl Policy {
     }
 }
 
-fn usage(directory: &Path) -> Result<Usage> {
+pub(super) fn near_limit(policy: Policy, snapshot: Snapshot) -> bool {
+    [
+        (snapshot.corpus.files, policy.corpus_file_limit),
+        (snapshot.corpus.bytes, policy.corpus_byte_limit),
+        (snapshot.artifacts.files, policy.artifact_file_limit),
+        (snapshot.artifacts.bytes, policy.artifact_byte_limit),
+    ]
+    .into_iter()
+    .any(|(actual, limit)| actual >= limit.saturating_sub(limit / 20))
+}
+
+pub(super) fn usage(directory: &Path) -> Result<Usage> {
     let mut usage = Usage { files: 0, bytes: 0 };
     collect(directory, &mut usage)?;
     Ok(usage)
@@ -186,5 +197,21 @@ mod tests {
         fs::create_dir_all(&corpus).expect("corpus directory");
         std::os::unix::fs::symlink(root.path(), corpus.join("outside")).expect("symlink");
         assert!(Policy::default().inspect(root.path()).is_err());
+    }
+
+    #[test]
+    fn working_storage_guard_trips_before_the_fixed_quota() {
+        let policy = Policy::default();
+        let mut snapshot = Snapshot {
+            corpus: Usage {
+                files: 15_000,
+                bytes: 0,
+            },
+            artifacts: Usage { files: 0, bytes: 0 },
+        };
+        assert!(!near_limit(policy, snapshot));
+        snapshot.corpus.files = 15_565;
+        assert!(near_limit(policy, snapshot));
+        assert!(policy.validate(snapshot).is_ok());
     }
 }

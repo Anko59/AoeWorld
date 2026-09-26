@@ -31,6 +31,14 @@ values must retain their meaning and identity through serialization roundtrips. 
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
 each target a 300-second campaign. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
+When active corpus pressure warrants maintenance, the harness copies all active
+inputs into ignored, content-addressed `fuzz/archive/` storage before running
+coverage-guided `cargo fuzz cmin`. It restores canonical seeds afterward and
+keeps crash artifacts untouched. During each target it watches the fixed active
+corpus and artifact quotas and cancels the target at a 95% guard; cancellation
+or incomplete target coverage is a failure. Reports record maintenance, each
+target's elapsed time and outcome, and the storage snapshots. Archived inputs
+are outside the active quota and must be retained separately.
 `make mutation-nightly` runs pinned cargo-mutants against the impact
 classifier, CI selection check, and 5% performance comparator. It requires a
 completed, nonempty campaign with no missed or timed-out mutations and writes
