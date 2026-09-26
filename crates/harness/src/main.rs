@@ -68,6 +68,8 @@ enum Command {
     TestUnit,
     TestWasm,
     TestE2e,
+    TestCreatorSource,
+    TestGeographicMatrix,
     FuzzSmoke,
     FuzzNightly,
     MutationNightly,
@@ -240,6 +242,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
+        Command::TestCreatorSource => e2e::run_source()?,
+        Command::TestGeographicMatrix => e2e::run_matrix()?,
         Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
         Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
         Command::MutationNightly => mutation::run()?,

@@ -255,7 +255,7 @@
       }
       context.putImageData(image, 0, 0);
       const source = preview.source_backed ? 'Source-backed' : 'Fallback';
-      terrainPreviewSummary.textContent = `${source} ${preview.samples_per_axis} × ${preview.samples_per_axis} terrain sample · elevation ${(preview.minimum_height_centimeters / 100).toLocaleString()}–${(preview.maximum_height_centimeters / 100).toLocaleString()} m. Passable ground is a terrain diagnostic, not a selected start.`;
+      terrainPreviewSummary.textContent = `${source} coarse ${preview.samples_per_axis} × ${preview.samples_per_axis} generated terrain sample · elevation ${(preview.minimum_height_centimeters / 100).toLocaleString()}–${(preview.maximum_height_centimeters / 100).toLocaleString()} m. Passable ground is a terrain diagnostic, not a selected start.`;
       terrainPreview.hidden = false;
     };
     const mapRequest = () => {

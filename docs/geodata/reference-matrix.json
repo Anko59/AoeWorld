@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "year_ce": 600,
+  "cases": [
+    {"id":"temperate_inland","location":"Paris Basin","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":488566000,"center_longitude_e7":23522000,"requested_side_meters":30000,"compression":{"numerator":30,"denominator":1},"year_ce":600,"seed":1}},
+    {"id":"river_lake","location":"Southern Finland lakes","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":615000000,"center_longitude_e7":255000000,"requested_side_meters":50000,"compression":{"numerator":50,"denominator":1},"year_ce":600,"seed":2}},
+    {"id":"coast_estuary","location":"Nile Delta","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":300444000,"center_longitude_e7":312357000,"requested_side_meters":50000,"compression":{"numerator":50,"denominator":1},"year_ce":600,"seed":3}},
+    {"id":"island","location":"Corsica","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":422000000,"center_longitude_e7":91000000,"requested_side_meters":80000,"compression":{"numerator":80,"denominator":1},"year_ce":600,"seed":4}},
+    {"id":"desert","location":"Sahara","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":240000000,"center_longitude_e7":100000000,"requested_side_meters":100000,"compression":{"numerator":100,"denominator":1},"year_ce":600,"seed":5}},
+    {"id":"boreal_forest","location":"Northern Finland","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":640000000,"center_longitude_e7":260000000,"requested_side_meters":60000,"compression":{"numerator":60,"denominator":1},"year_ce":600,"seed":6}},
+    {"id":"alpine_relief","location":"Central Alps","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":466000000,"center_longitude_e7":105000000,"requested_side_meters":30000,"compression":{"numerator":30,"denominator":1},"year_ce":600,"seed":7}},
+    {"id":"dateline","location":"Fiji","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":-178000000,"center_longitude_e7":1798000000,"requested_side_meters":80000,"compression":{"numerator":80,"denominator":1},"year_ce":600,"seed":8}},
+    {"id":"polar","location":"Antarctic interior","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":-800000000,"center_longitude_e7":0,"requested_side_meters":100000,"compression":{"numerator":100,"denominator":1},"year_ce":600,"seed":9}},
+    {"id":"minimum_extent","location":"Paris 250 m","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":488566000,"center_longitude_e7":23522000,"requested_side_meters":250,"compression":{"numerator":1,"denominator":1},"year_ce":600,"seed":10}},
+    {"id":"maximum_extent","location":"Europe/Africa 10000 km","preparation":"overview","request":{"schema_version":1,"center_latitude_e7":350000000,"center_longitude_e7":150000000,"requested_side_meters":10000000,"compression":{"numerator":10000,"denominator":1},"year_ce":600,"seed":11}}
+  ]
+}

@@ -1,5 +1,7 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+mod matrix;
+mod source;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
@@ -66,6 +68,14 @@ fn ready(address: SocketAddr) -> bool {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
     let mut prefix = [0u8; 12];
     stream.read_exact(&mut prefix).is_ok() && &prefix == b"HTTP/1.1 200"
+}
+
+pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {
+    source::run()
+}
+
+pub fn run_matrix() -> Result<(), Box<dyn std::error::Error>> {
+    matrix::run()
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {

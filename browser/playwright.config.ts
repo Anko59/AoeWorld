@@ -39,7 +39,8 @@ export default defineConfig({
     },
     {
       name: "browser-defaults",
-      testMatch: /play\.spec\.ts|shared-surfaces\.spec\.ts/,
+      testMatch:
+        /play\.spec\.ts|shared-surfaces\.spec\.ts|source-creator\.spec\.ts/,
       use: { launchOptions: { args: [] } },
     },
   ],
