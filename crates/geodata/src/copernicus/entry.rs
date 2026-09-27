@@ -1,14 +1,126 @@
 //! Detailed-preparation entry points and correction inputs.
-use super::{DemResolution, prepare_with_staging_and_corrections};
+use super::{
+    Bounds, DemResolution, TileCoverage, prepare_with_staging_and_corrections,
+    source_backed_overview_ocean,
+};
 use crate::GeodataError;
-use aoe_map::{MapPackage, MapRequest, WaterCorrectionDocument};
-use std::path::PathBuf;
+use aoe_map::{
+    ENVIRONMENT_PAGE_SAMPLES, EnvironmentalProvenance, LayerProvenance, MAP_SCHEMA_VERSION,
+    MapPackage, MapRequest, PreparedEnvironment, ProjectionMetadata, VerticalDatum,
+    WaterCorrectionDocument,
+};
+use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub(crate) struct DetailedCorrections<'a> {
     pub historical: Option<&'a crate::GeographicHistoricalCorrectionDocument>,
     pub water: Option<WaterCorrectionDocument>,
     pub vegetation: Option<&'a crate::VegetationPatchDocument>,
+}
+
+pub(super) struct AcquiredDetailedInputs {
+    pub(super) bounds: Bounds,
+    pub(super) overview: crate::PreparedOverview,
+    pub(super) hydrology: crate::PreparedHydrology,
+    pub(super) coverage: TileCoverage,
+}
+
+/// Completes detailed package assembly from inputs whose acquisition and
+/// source-policy checks have already succeeded.
+pub(super) fn assemble_acquired_package(
+    request: MapRequest,
+    effective_side_meters: u64,
+    samples_per_axis: u16,
+    output_directory: &Path,
+    staging_root: &Path,
+    water_corrections: WaterCorrectionDocument,
+    inputs: AcquiredDetailedInputs,
+) -> Result<MapPackage, GeodataError> {
+    let AcquiredDetailedInputs {
+        bounds,
+        overview,
+        mut hydrology,
+        coverage,
+    } = inputs;
+    let stage = super::Stage::new(staging_root)?;
+    let overview_ocean = source_backed_overview_ocean(&overview)?;
+    let mut sampler = super::sampler::Sampler::new(
+        request,
+        effective_side_meters,
+        bounds,
+        coverage.absent_tiles,
+        coverage.tiles,
+        overview_ocean,
+    )?;
+    apply_detailed_water_model(&mut sampler, &mut hydrology, request, water_corrections)?;
+    super::pyramid::store_hydrology_evidence(&stage, &hydrology)?;
+    let fields = super::pyramid::build_pyramids(
+        &mut sampler,
+        &stage,
+        samples_per_axis,
+        &overview,
+        &hydrology,
+    )?;
+    let mut sources = vec![
+        overview.source_lock,
+        overview.water_source_lock,
+        overview.vegetation_source_lock,
+        overview.vegetation_classes_source_lock,
+        overview.hyde_baseline_source_lock,
+        overview.hyde_supplementary_source_lock,
+        overview.hyde_readme_source_lock,
+    ];
+    sources.extend(
+        sampler
+            .tiles
+            .iter()
+            .map(|tile| {
+                tile.lock.to_map_source_lock(
+                    crate::acquisition_marker(),
+                    "copernicus-cog-page-v1".to_owned(),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    sources.extend(hydrology.source_locks.iter().cloned());
+    let environment = PreparedEnvironment {
+        samples_per_axis,
+        geographic_millimeters_per_sample: effective_side_meters
+            .checked_mul(1_000)
+            .ok_or(GeodataError::Preparation("sample spacing overflows"))?
+            .div_ceil(u64::from(samples_per_axis)),
+        page_samples: ENVIRONMENT_PAGE_SAMPLES,
+        elevation: fields.elevation,
+        water: Some(fields.water),
+        vegetation: Some(fields.vegetation),
+        historical_land_use: Some(fields.historical_land_use),
+        hydrology_evidence: Some(hydrology.evidence_index.clone()),
+    };
+    let package = MapPackage::with_prepared_environment(
+        MAP_SCHEMA_VERSION,
+        request,
+        sources,
+        ProjectionMetadata {
+            horizontal_crs: crate::local_aeqd_definition(
+                request.center_latitude_e7,
+                request.center_longitude_e7,
+            ),
+            vertical_datum: VerticalDatum::Egm2008Orthometric,
+            tool_version: tool_version(),
+        },
+        EnvironmentalProvenance {
+            elevation: LayerProvenance::SourceDerived,
+            water: overview.provenance.water,
+            vegetation: overview.provenance.vegetation,
+            historical_land_use: overview.provenance.historical_land_use,
+        },
+        environment,
+    )?;
+    package.validate()?;
+    super::stage::publish_staged_pages(&stage, output_directory, &package, samples_per_axis)?;
+    crate::directory::publish_streaming_manifest(output_directory, &package)?;
+    crate::GeneratedMap::verify_directory(output_directory, &package.content_hash_hex())?;
+    Ok(package)
 }
 
 pub fn prepare_detailed_directory(
@@ -64,7 +176,7 @@ pub(super) fn tool_version() -> String {
 /// level-zero pages costs at most 1024² i32 heights (4 MiB), independent of
 /// the larger detailed terrain pyramid which is streamed separately.
 pub(super) fn apply_detailed_water_model(
-    sampler: &mut super::Sampler,
+    sampler: &mut super::sampler::Sampler,
     hydrology: &mut crate::PreparedHydrology,
     request: MapRequest,
     corrections: WaterCorrectionDocument,

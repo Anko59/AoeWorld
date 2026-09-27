@@ -308,3 +308,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "tests/sampler.rs"]
+mod pipeline_tests;

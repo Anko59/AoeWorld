@@ -1,6 +1,6 @@
 //! Ordinary source-backed creator journey across a full server restart.
 use super::{BrowserContainer, Server, process, ready};
-use aoe_map::MapPackage;
+use aoe_map::{MapPackage, MapRequest};
 use std::{
     env, fs,
     net::{SocketAddr, TcpListener},
@@ -11,6 +11,9 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const BROWSER_DEADLINE: Duration = Duration::from_secs(1_800);
+mod evidence;
+
+const CREATOR_PROFILES: [&str; 2] = ["overview", "detailed"];
 
 pub(super) fn run() -> Result<()> {
     let root = env::current_dir()?.canonicalize()?;
@@ -31,12 +34,23 @@ pub(super) fn run() -> Result<()> {
     }
     let evidence_dir = root.join("reports/creator");
     fs::create_dir_all(&evidence_dir)?;
-    for name in ["created.json", "reopened.json", "source.json"] {
+    for name in [
+        "created.json",
+        "created-detailed.json",
+        "reopened.json",
+        "reopened-detailed.json",
+        "overview.json",
+        "detailed.json",
+        "locator-overview.json",
+        "source.json",
+    ] {
         let path = evidence_dir.join(name);
         if path.exists() {
             fs::remove_file(path)?;
         }
     }
+
+    let paris_request = fixed_paris_request(&root)?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
     drop(listener);
@@ -45,64 +59,88 @@ pub(super) fn run() -> Result<()> {
     run_browser(&root, address, "create", "webgpu")?;
     server.shutdown()?;
 
-    let created = read_evidence(&root.join("reports/creator/created.json"))?;
-    let hash = evidence_hash(&created)?;
-    let manifest = root
-        .join("local-assets/maps-v8")
-        .join(format!("{hash}.json"));
-    let package: MapPackage = serde_json::from_slice(&fs::read(&manifest)?)?;
-    package.validate()?;
-    if package.content_hash_hex() != hash || package.source_locks.is_empty() {
-        return Err("creator did not publish a verified source-backed package".into());
+    let mut created = Vec::with_capacity(CREATOR_PROFILES.len());
+    for profile in CREATOR_PROFILES {
+        let created_evidence = read_evidence(&evidence_path(&evidence_dir, "created", profile))?;
+        let hash = evidence_hash(&created_evidence)?.to_owned();
+        let manifest = root
+            .join("local-assets/maps-v8")
+            .join(format!("{hash}.json"));
+        let package: MapPackage = serde_json::from_slice(&fs::read(&manifest)?)?;
+        let record = evidence::created_record(profile, &package, &created_evidence, paris_request)?;
+        process::run_with_env(
+            worker.to_str().ok_or("worker path is not UTF-8")?,
+            &["map-verify"],
+            &[(
+                "AOE_MAP_PACKAGE",
+                manifest.to_str().ok_or("manifest path is not UTF-8")?,
+            )],
+            Duration::from_secs(120),
+        )?;
+        created.push(record);
     }
-    process::run_with_env(
-        worker.to_str().ok_or("worker path is not UTF-8")?,
-        &["map-verify"],
-        &[(
-            "AOE_MAP_PACKAGE",
-            manifest.to_str().ok_or("manifest path is not UTF-8")?,
-        )],
-        Duration::from_secs(120),
-    )?;
 
     // The second server has no worker and an empty cache. Its successful
     // unseen-chunk request can therefore only use the published pages.
     let offline_cache = root.join(".cache/creator-offline");
+    if offline_cache.exists() {
+        fs::remove_dir_all(&offline_cache)?;
+    }
     fs::create_dir_all(&offline_cache)?;
     let mut server = start_server(&root, address, &offline_cache, None)?;
     run_browser(&root, address, "reopen", "browser-defaults")?;
     server.shutdown()?;
-    let reopened = read_evidence(&root.join("reports/creator/reopened.json"))?;
-    if evidence_hash(&reopened)? != hash
-        || reopened
-            .get("offline_unseen_chunk")
-            .and_then(serde_json::Value::as_bool)
-            != Some(true)
-    {
-        return Err("source-backed reopen did not load the same offline package".into());
+
+    let mut reports = Vec::with_capacity(CREATOR_PROFILES.len());
+    for (profile, created_case) in CREATOR_PROFILES.into_iter().zip(created) {
+        let reopened = read_evidence(&evidence_path(&evidence_dir, "reopened", profile))?;
+        let report = evidence::reopen_record(profile, &created_case, &reopened)?;
+        fs::write(
+            evidence_dir.join(format!("{profile}.json")),
+            serde_json::to_vec_pretty(&report)?,
+        )?;
+        reports.push(report);
     }
+
     let revision = git(&["rev-parse", "HEAD"])?;
     let dirty = !git(&["status", "--porcelain"])?.is_empty();
     let report = serde_json::json!({
-        "version": 1,
+        "version": 2,
         "revision": revision,
         "dirty": dirty,
         "result": "PASS",
-        "content_hash": hash,
-        "generation_recipe_version": package.generation_recipe_version,
-        "source_locks": package.source_locks,
-        "projection": package.projection,
-        "provenance": package.provenance,
-        "environment": package.environment,
-        "created": created,
-        "reopened": reopened,
-        "offline_policy": "server restarted without a map worker and with an empty source cache"
+        "profiles": reports,
     });
     fs::write(
-        root.join("reports/creator/source.json"),
+        evidence_dir.join("source.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
     Ok(())
+}
+
+fn fixed_paris_request(root: &Path) -> Result<MapRequest> {
+    let matrix: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("docs/geodata/reference-matrix.json"))?)?;
+    let request = matrix
+        .get("cases")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("id").and_then(serde_json::Value::as_str) == Some("temperate_inland")
+            })
+        })
+        .and_then(|case| case.get("request"))
+        .ok_or("reference matrix lacks the fixed Paris request")?;
+    Ok(serde_json::from_value(request.clone())?)
+}
+
+fn evidence_path(directory: &Path, phase: &str, profile: &str) -> PathBuf {
+    let name = if profile == "overview" {
+        format!("{phase}.json")
+    } else {
+        format!("{phase}-{profile}.json")
+    };
+    directory.join(name)
 }
 
 fn start_server(

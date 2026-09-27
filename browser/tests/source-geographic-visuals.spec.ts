@@ -56,43 +56,52 @@ test("source-backed water and high-relief maps render and remain navigable", asy
     "nile_delta_coast",
     "alpine_relief",
   ]);
-  for (const item of inputs.cases) {
-    const activation = activations.find((value) => value.case_id === item.id);
-    if (!activation?.start_available) {
-      continue;
-    }
-    await test.step(`${item.location} WebGPU`, async () => {
-      await captureCase(page, item, "webgpu");
-    });
-    const canvasPage = await browser.newPage();
-    try {
-      await canvasPage.addInitScript(() => {
-        Object.defineProperty(navigator, "gpu", { value: undefined });
-      });
-      await test.step(`${item.location} Canvas`, async () => {
-        await captureCase(canvasPage, item, "canvas2d");
-      });
-    } finally {
-      await canvasPage.close();
-    }
-  }
+  const playableCases = inputs.cases.filter((item) =>
+    activations.some(
+      (value) => value.case_id === item.id && value.start_available,
+    ),
+  );
   const alpine = activations.find((value) => value.case_id === "alpine_relief");
   expect(alpine?.start_available).toBe(true);
   expect(inputs.eviction_case.id).toBe("alpine_eviction");
   expect(inputs.eviction_case.tiles_per_side).toBe(750);
   expect(inputs.eviction_case.package_chunk_count_bound).toBe(576);
-  await test.step("Alpine cache eviction WebGPU", async () => {
-    await captureCase(page, inputs.eviction_case, "webgpu");
-  });
-  const evictionCanvasPage = await browser.newPage();
+  for (const item of [...playableCases, inputs.eviction_case]) {
+    await test.step(`${item.location} WebGPU`, async () => {
+      await captureCase(page, item, "webgpu");
+    });
+  }
+
+  // A second anonymous context is a spectator while the controller lease is
+  // held. Hand this test's controller session to the Canvas context, using
+  // the same resume mechanism as an ordinary reconnect.
+  const origin = new URL(page.url()).origin;
+  const resumeToken = await page.evaluate(() =>
+    sessionStorage.getItem("aoeworld.resume-token"),
+  );
+  if (!resumeToken)
+    throw new Error("visual controller has no resumable session");
+  await page.goto("about:blank");
+  const canvasPage = await browser.newPage();
   try {
-    await evictionCanvasPage.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
-    await test.step("Alpine cache eviction Canvas", async () => {
-      await captureCase(evictionCanvasPage, inputs.eviction_case, "canvas2d");
-    });
+    await canvasPage.addInitScript(
+      ({ origin, resumeToken }) => {
+        Object.defineProperty(navigator, "gpu", { value: undefined });
+        if (
+          location.origin === origin &&
+          !sessionStorage.getItem("aoeworld.resume-token")
+        ) {
+          sessionStorage.setItem("aoeworld.resume-token", resumeToken);
+        }
+      },
+      { origin, resumeToken },
+    );
+    for (const item of [...playableCases, inputs.eviction_case]) {
+      await test.step(`${item.location} Canvas`, async () => {
+        await captureCase(canvasPage, item, "canvas2d");
+      });
+    }
   } finally {
-    await evictionCanvasPage.close();
+    await canvasPage.close();
   }
 });

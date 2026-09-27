@@ -34,3 +34,27 @@ inherits = "release"
 opt-level = "z"
 lto = "fat"
 codegen-units = 1
+
+# Full-distance movement/replay regressions exercise millions of terrain
+# queries. Optimize their hot crates while retaining test safety checks.
+[profile.test.package.aoe-map]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.test.package.aoe-simulation]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.test.package.aoe-server]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+# Procedural terrain/resource sampling hashes every queried tile. Leaving the
+# hash dependency unoptimized dominates full-distance source-backed tests.
+[profile.test.package.blake3]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true

@@ -71,7 +71,7 @@ help:
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
-	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Create and reopen a source-backed map'
+	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Qualify overview and detailed source maps across restart'
 	@echo '  AOE_GEODATA_CACHE=... make test-geographic-matrix  Prepare and verify fixed overview regions'
 	@echo '  make test-geographic-visuals  Capture water and Alpine packages on WebGPU and Canvas'
 	@echo '  make test-geographic-visuals-unit  Test page evidence and package-directory config'

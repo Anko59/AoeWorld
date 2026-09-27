@@ -41,30 +41,32 @@ export async function traverseAndReturnAlpineTarget(
 
   // The active map opens at its center. At minimum zoom, this moves the same
   // camera to the southeast relief chunk without reloading or changing maps.
-  await repeatCameraKey(page, "ArrowLeft", 220);
+  await repeatCameraKey(page, "ArrowUp", 450);
+  await page.waitForLoadState("networkidle");
   await expect
     .poll(() => responses.get(targetPath) ?? 0, { timeout: 45_000 })
     .toBeGreaterThan(0);
   const initialTargetImage = await canvas.screenshot();
 
-  // Sweep parallel diagonal rows across the package. The camera stays on this
-  // package, so exceeding capacity forces normal client LRU eviction.
-  await repeatCameraKey(page, "ArrowRight", 450);
-  let direction: "ArrowUp" | "ArrowDown" = "ArrowUp";
-  for (
-    let row = 0;
-    row < 24 && uniqueChunkCount(responses, contentHash) <= 512;
-    row++
-  ) {
-    await repeatCameraKey(page, direction, 400);
-    await page.waitForTimeout(150);
-    if (uniqueChunkCount(responses, contentHash) > 512) break;
-    if (direction === "ArrowUp") {
-      await repeatCameraKey(page, "ArrowLeft", 16);
-      direction = "ArrowDown";
-    } else {
-      await repeatCameraKey(page, "ArrowRight", 16);
-      direction = "ArrowUp";
+  // Read the camera limits through the normal controls, then visit a regular
+  // world-coordinate grid. Screen-horizontal keys move along an isometric
+  // diagonal, so simply alternating arrows does not cover the square map.
+  const southeast = await cameraCenter(page);
+  await repeatCameraKey(page, "ArrowDown", 450);
+  await page.waitForLoadState("networkidle");
+  const northwest = await cameraCenter(page);
+  // Finish the whole tour. Crossing 512 once only evicts a few chunks;
+  // the southeast target need not be among them under spatial retention.
+  for (let row = 0; row < 13; row++) {
+    for (let column = 0; column < 13; column++) {
+      const xIndex = row % 2 === 0 ? column : 12 - column;
+      await panToWorld(page, [
+        northwest[0] + ((southeast[0] - northwest[0]) * xIndex) / 12,
+        northwest[1] + ((southeast[1] - northwest[1]) * row) / 12,
+      ]);
+      // Let the renderer request and install the visible chunks at each
+      // stop; racing hundreds of keys only renders the final camera position.
+      await page.waitForLoadState("networkidle", { timeout: 30_000 });
     }
   }
   await expect
@@ -74,18 +76,21 @@ export async function traverseAndReturnAlpineTarget(
     .poll(() => residentChunkCount(page), { timeout: 30_000 })
     .toBe(512);
   const cacheResidentChunksAfterScan = await residentChunkCount(page);
+  // The tour ends in the southeast. Reload the distant northwest views,
+  // including the height-shifted interior band, so spatial eviction must
+  // displace the southeast target rather than an unrelated corner.
+  await repeatCameraKey(page, "ArrowDown", 450);
+  for (const offset of [0, 32, 64, 96]) {
+    await panToWorld(page, [northwest[0] + offset, northwest[1] + offset]);
+    await page.waitForLoadState("networkidle");
+  }
   const evictedImage = await canvas.screenshot();
-
-  // Settle at the northwest edge before recording the pre-return request
-  // count, then traverse back to the southeast target on the same session.
-  await repeatCameraKey(page, "ArrowRight", 450);
-  await page.waitForTimeout(750);
   const targetRequestCountBeforeReturn = responses.get(targetPath) ?? 0;
-  await repeatCameraKey(page, "ArrowLeft", 450);
+  await repeatCameraKey(page, "ArrowUp", 450);
   await expect
     .poll(() => responses.get(targetPath) ?? 0, { timeout: 45_000 })
     .toBeGreaterThan(targetRequestCountBeforeReturn);
-  await page.waitForTimeout(300);
+  await page.waitForLoadState("networkidle");
   const returnedImage = await canvas.screenshot();
   const cacheResidentChunksAfterReturn = await residentChunkCount(page);
   const visualSimilarityPercent = screenshotSimilarityPercent(
@@ -128,8 +133,58 @@ async function repeatCameraKey(
           await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         }
       }
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
     },
     { key, count },
+  );
+}
+
+async function cameraCenter(page: Page): Promise<[number, number]> {
+  const text = await page.locator("#world-position").textContent();
+  const coordinates = (text ?? "").split(",").map(Number);
+  const [x, y] = coordinates;
+  if (
+    coordinates.length !== 2 ||
+    x === undefined ||
+    y === undefined ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    throw new Error("camera readout is not a coordinate pair");
+  }
+  return [x, y];
+}
+
+async function panToWorld(page: Page, target: [number, number]) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const current = await cameraCenter(page);
+    const dx = target[0] - current[0];
+    const dy = target[1] - current[1];
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 3) return;
+    const scale = Math.min(1, 24 / Math.max(Math.abs(dx), Math.abs(dy)));
+    // At minimum zoom (0.25), one vertical key moves both world axes by
+    // 3.75 tiles; one horizontal key moves them oppositely by 1.875 tiles.
+    const vertical = Math.round(((dx + dy) * scale) / 7.5);
+    const horizontal = Math.round(((dx - dy) * scale) / 3.75);
+    await repeatCameraKey(
+      page,
+      vertical >= 0 ? "ArrowUp" : "ArrowDown",
+      Math.abs(vertical),
+    );
+    await repeatCameraKey(
+      page,
+      horizontal >= 0 ? "ArrowLeft" : "ArrowRight",
+      Math.abs(horizontal),
+    );
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+  }
+  throw new Error(
+    `camera did not reach source traversal stop ${target.join(",")}`,
   );
 }
 

@@ -143,11 +143,71 @@ pub fn prepare_overview_with_all_corrections(
         acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
+    prepare_overview_from_verified_sources(
+        request,
+        samples_per_axis,
+        historical_samples_per_axis,
+        &historical_corrections,
+        &vegetation_corrections,
+        VerifiedOverviewSources {
+            elevation: VerifiedOverviewSource { lock, path },
+            water: VerifiedOverviewSource {
+                lock: water_lock,
+                path: water_path,
+            },
+            vegetation: VerifiedOverviewSource {
+                lock: vegetation_lock,
+                path: vegetation_path,
+            },
+            vegetation_classes: VerifiedOverviewSource {
+                lock: vegetation_classes_lock,
+                path: vegetation_classes_path,
+            },
+            hyde_baseline: VerifiedOverviewSource {
+                lock: hyde_baseline_lock,
+                path: hyde_baseline_path,
+            },
+            hyde_supplementary: VerifiedOverviewSource {
+                lock: hyde_supplementary_lock,
+                path: hyde_supplementary_path,
+            },
+            hyde_readme: hyde_readme_lock,
+        },
+    )
+}
+
+#[derive(Clone)]
+struct VerifiedOverviewSource {
+    lock: SourceLock,
+    path: PathBuf,
+}
+
+#[derive(Clone)]
+struct VerifiedOverviewSources {
+    elevation: VerifiedOverviewSource,
+    water: VerifiedOverviewSource,
+    vegetation: VerifiedOverviewSource,
+    vegetation_classes: VerifiedOverviewSource,
+    hyde_baseline: VerifiedOverviewSource,
+    hyde_supplementary: VerifiedOverviewSource,
+    hyde_readme: SourceLock,
+}
+
+/// Samples cache-verified overview inputs without performing source discovery
+/// or acquisition. The public entry point owns those verification steps.
+fn prepare_overview_from_verified_sources(
+    request: MapRequest,
+    samples_per_axis: u16,
+    historical_samples_per_axis: u16,
+    historical_corrections: &GeographicHistoricalCorrectionDocument,
+    vegetation_corrections: &VegetationPatchDocument,
+    sources: VerifiedOverviewSources,
+) -> Result<PreparedOverview, GeodataError> {
     let total_pages = preparation_progress::pyramid_page_count(samples_per_axis) * 3
         + preparation_progress::pyramid_page_count(historical_samples_per_axis);
     let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = prepare_elevation(&path, request, samples_per_axis)?;
+    let mut prepared = prepare_elevation(&sources.elevation.path, request, samples_per_axis)?;
     completed_pages += prepared.pages.len() as u64;
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
@@ -157,8 +217,13 @@ pub fn prepare_overview_with_all_corrections(
         preparation_progress::Unit::Pages,
     );
     let lake_coverage =
-        prepare_hyde_lake_coverage(&hyde_supplementary_path, request, samples_per_axis)?;
-    let water = prepare_ocean_coverage(&water_path, request, samples_per_axis, lake_coverage)?;
+        prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, samples_per_axis)?;
+    let water = prepare_ocean_coverage(
+        &sources.water.path,
+        request,
+        samples_per_axis,
+        lake_coverage,
+    )?;
     completed_pages += water.pages.len() as u64;
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
@@ -168,10 +233,10 @@ pub fn prepare_overview_with_all_corrections(
         preparation_progress::Unit::Pages,
     );
     let vegetation = prepare_potential_biomes_with_corrections(
-        &vegetation_path,
+        &sources.vegetation.path,
         request,
         samples_per_axis,
-        &vegetation_corrections,
+        vegetation_corrections,
     )?;
     completed_pages += vegetation.pages.len() as u64;
     preparation_progress::count(
@@ -187,11 +252,11 @@ pub fn prepare_overview_with_all_corrections(
         historical_corrections.canonical_digest_hex(request)?
     );
     let historical_land_use = prepare_hyde_area_600_with_corrections(
-        &hyde_baseline_path,
-        &hyde_supplementary_path,
+        &sources.hyde_baseline.path,
+        &sources.hyde_supplementary.path,
         request,
         historical_samples_per_axis,
-        &historical_corrections,
+        historical_corrections,
     )?;
     completed_pages += historical_land_use.pages.len() as u64;
     preparation_progress::count(
@@ -201,19 +266,21 @@ pub fn prepare_overview_with_all_corrections(
         total_pages,
         preparation_progress::Unit::Pages,
     );
-    verify_potential_biome_legend(&vegetation_classes_path)?;
+    verify_potential_biome_legend(&sources.vegetation_classes.path)?;
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);
     prepared.environment.historical_land_use = Some(historical_land_use.field);
     prepared.environment.validate()?;
     Ok(PreparedOverview {
-        source_lock: lock
+        source_lock: sources
+            .elevation
+            .lock
             .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
-        water_source_lock: water_lock.to_map_source_lock(
+        water_source_lock: sources.water.lock.to_map_source_lock(
             acquisition_marker(),
             "natural-earth-coastline-gdal-0.19".to_owned(),
         )?,
-        vegetation_source_lock: vegetation_lock.to_map_source_lock(
+        vegetation_source_lock: sources.vegetation.lock.to_map_source_lock(
             acquisition_marker(),
             format!(
                 "{};corrections-sha256={}",
@@ -221,15 +288,19 @@ pub fn prepare_overview_with_all_corrections(
                 vegetation_corrections.digest_hex(request)?
             ),
         )?,
-        vegetation_classes_source_lock: vegetation_classes_lock.to_map_source_lock(
+        vegetation_classes_source_lock: sources.vegetation_classes.lock.to_map_source_lock(
             acquisition_marker(),
             "potential-biome-class-legend-v0.2".to_owned(),
         )?,
-        hyde_baseline_source_lock: hyde_baseline_lock
+        hyde_baseline_source_lock: sources
+            .hyde_baseline
+            .lock
             .to_map_source_lock(acquisition_marker(), historical_preprocessing.clone())?,
-        hyde_supplementary_source_lock: hyde_supplementary_lock
+        hyde_supplementary_source_lock: sources
+            .hyde_supplementary
+            .lock
             .to_map_source_lock(acquisition_marker(), historical_preprocessing)?,
-        hyde_readme_source_lock: hyde_readme_lock.to_map_source_lock(
+        hyde_readme_source_lock: sources.hyde_readme.to_map_source_lock(
             acquisition_marker(),
             "hyde-3.2.1-release-notes-v1".to_owned(),
         )?,
@@ -262,3 +333,7 @@ pub fn prepare_overview_with_all_corrections(
         historical_land_use_pages: historical_land_use.pages,
     })
 }
+
+#[path = "overview/tests.rs"]
+#[cfg(test)]
+mod tests;

@@ -167,8 +167,8 @@ pub(crate) fn triangle_texture_coordinates(mode: u8) -> [[f64; 2]; 3] {
         1 => [[0.5, 0.0], [0.5, 1.0], [0.0, 0.5]],
         2 => [[0.5, 0.0], [1.0, 0.5], [0.0, 0.5]],
         3 => [[1.0, 0.5], [0.5, 1.0], [0.0, 0.5]],
-        4 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-        5 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        4 => [[0.3, 0.3], [0.7, 0.3], [0.7, 0.7]],
+        5 => [[0.3, 0.3], [0.7, 0.7], [0.3, 0.7]],
         _ => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
     }
 }
@@ -311,10 +311,12 @@ fn append_edge_skirt(
     let Some(neighbor) = neighbor else {
         return;
     };
-    if sample.surface.water != 0 || neighbor.surface.water != 0 {
-        return;
-    }
-    if sample.surface.kind != SceneTerrainSurface::CLIFF
+    // Modeled water has an independent level from the terrain underneath it.
+    // Its banks (and downstream level changes) need the same closed vertical
+    // seam as cliffs, even when both adjacent top surfaces are plateaus.
+    if sample.surface.water == 0
+        && neighbor.surface.water == 0
+        && sample.surface.kind != SceneTerrainSurface::CLIFF
         && neighbor.surface.kind != SceneTerrainSurface::CLIFF
     {
         return;
@@ -356,15 +358,21 @@ fn append_edge_skirt(
         project_world(projection, world_xy[1], bottom[1]),
         project_world(projection, world_xy[0], bottom[0]),
     ];
-    let color = darken(surface_color(sample), 0.62);
+    let bank = if sample.surface.water != 0 && neighbor.surface.water == 0 {
+        *neighbor
+    } else {
+        sample
+    };
+    let water_step = sample.surface.water != 0 && neighbor.surface.water != 0;
+    let color = darken(surface_color(bank), 0.62);
     result.push(ProjectedSurfaceTriangle {
         points: [points[0], points[1], points[2]],
         color,
         tile,
         skirt: true,
-        material: 4,
+        material: if water_step { 5 } else { 4 },
         texture_mode: 4,
-        tint: 3,
+        tint: if water_step { 0 } else { 3 },
         texture_uv: None,
         pickable: false,
         order: skirt_order(edge),
@@ -374,9 +382,9 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
-        material: 4,
+        material: if water_step { 5 } else { 4 },
         texture_mode: 5,
-        tint: 3,
+        tint: if water_step { 0 } else { 3 },
         texture_uv: None,
         pickable: false,
         order: skirt_order(edge) + 1,

@@ -109,7 +109,7 @@ fn initial_terrain_requests_cover_an_unseen_forty_level_plateau() {
 }
 
 #[wasm_bindgen_test]
-fn frontier_discovers_unseen_high_relief_that_expands_the_authoritative_bound() {
+fn authoritative_bounds_request_unseen_high_relief_before_residency() {
     let Ok(config) = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1)) else {
         assert!(false, "valid visibility world");
         return;
@@ -143,8 +143,7 @@ fn frontier_discovers_unseen_high_relief_that_expands_the_authoritative_bound() 
     evidence.surface.corner_game_height_levels = [52; 4];
     assert_eq!(heights::chunk_height_bounds(&chunk), Some((0, 52)));
 
-    let budget = 1 + heights::discovery_ring([8, 8], [16, 16], 1).len();
-    let discovered = heights::frontier_chunks([8, 8], [16, 16], budget, |_| false);
+    let discovered = heights::candidate_chunks(camera, config, (0, 52), MAX_CACHED_CHUNKS);
     assert!(discovered.contains(&(9, 8)));
     let expanded = visible_tiles_for_height_bounds(camera, config, 0.0, Some((0, 52)));
     assert!(
@@ -157,23 +156,58 @@ fn frontier_discovers_unseen_high_relief_that_expands_the_authoritative_bound() 
 }
 
 #[wasm_bindgen_test]
-fn rectangular_frontier_converges_over_every_chunk_without_a_height_margin() {
-    let center = [8, 5];
-    let extent = [17, 11];
-    let expected = usize::try_from(extent[0] * extent[1]).unwrap_or(0);
-    let mut discovered = std::collections::BTreeSet::new();
-    let mut rounds = 0_usize;
-    while discovered.len() < expected {
-        let batch = heights::frontier_chunks(center, extent, 23, |coordinate| {
-            discovered.contains(&coordinate)
-        });
-        assert!(!batch.is_empty(), "frontier stalled after {rounds} rounds");
-        discovered.extend(batch);
-        rounds += 1;
-        assert!(rounds <= expected, "frontier revisited chunks");
+fn bounded_height_discovery_is_independent_of_map_area() {
+    let Ok(small) = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1)) else {
+        assert!(false, "valid test configuration");
+        return;
+    };
+    let Ok(large) = aoe_core::WorldConfig::new(262_144, 262_144, aoe_core::Seed(1)) else {
+        assert!(false, "valid test configuration");
+        return;
+    };
+    let camera = Camera::new([256.0, 256.0], [1280.0, 720.0]);
+    let near = heights::candidate_chunks(camera, small, (0, 10), MAX_CACHED_CHUNKS);
+    let far = heights::candidate_chunks(camera, large, (0, 10), MAX_CACHED_CHUNKS);
+    assert_eq!(near, far);
+    assert!(near.len() < 32);
+    assert!(!near.contains(&(0, 0)));
+    assert!(!near.contains(&(15, 15)));
+    let extreme = heights::candidate_chunks(camera, large, (i16::MIN, i16::MAX), MAX_CACHED_CHUNKS);
+    assert_eq!(extreme.len(), MAX_CACHED_CHUNKS);
+    assert!(heights::candidate_chunks(camera, large, (0, 0), 0).is_empty());
+}
+
+#[wasm_bindgen_test]
+fn height_sweep_contains_projected_visible_chunks_at_every_tested_height() {
+    let Ok(config) = aoe_core::WorldConfig::new(4096, 4096, aoe_core::Seed(1)) else {
+        assert!(false, "valid test configuration");
+        return;
+    };
+    for zoom in [0.25, 1.0, 3.0] {
+        let camera = Camera {
+            center: [2048.0, 2048.0],
+            zoom,
+            viewport: [1280.0, 720.0],
+            focus_elevation_meters: 20.0,
+        };
+        let chunks = heights::candidate_chunks(camera, config, (-100, 300), MAX_CACHED_CHUNKS);
+        assert!(chunks.len() < MAX_CACHED_CHUNKS);
+        for height in [-100.0, 0.0, 52.0, 300.0] {
+            for x in (0..=32).map(|index| f64::from(index) * 40.0) {
+                for y in (0..=24).map(|index| f64::from(index) * 30.0) {
+                    let point = camera.screen_to_world_at_height(ScreenPoint { x, y }, height);
+                    let chunk = (
+                        (point[0].floor() as i32).div_euclid(CHUNK_TILES),
+                        (point[1].floor() as i32).div_euclid(CHUNK_TILES),
+                    );
+                    assert!(
+                        chunks.contains(&chunk),
+                        "height {height}, zoom {zoom}: missing {chunk:?}"
+                    );
+                }
+            }
+        }
     }
-    assert_eq!(discovered.len(), expected);
-    assert!(discovered.contains(&(0, 0)) && discovered.contains(&(extent[0] - 1, extent[1] - 1)));
 }
 
 #[wasm_bindgen_test]
@@ -243,6 +277,7 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         config,
         1,
         MAX_CACHED_CHUNK_BYTES,
+        &[],
     );
     assert!(removed);
     assert!(!discovered.contains(&(9, 8)));
@@ -256,12 +291,22 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
             && high_tile.1 >= requested.min.y
             && high_tile.1 < requested.max.y
     );
-    let re_request = heights::frontier_chunks([8, 8], [16, 16], 64, |coordinate| {
-        chunks.contains_key(&coordinate) || discovered.contains(&coordinate)
-    });
+    let re_request = heights::candidate_chunks(camera, config, (0, 52), MAX_CACHED_CHUNKS);
     assert!(re_request.contains(&(9, 8)));
 
     chunks.insert((9, 8), high);
+    // A visible high chunk can be farther in world coordinates than an
+    // off-screen low chunk. Eviction must retain requested relief.
+    evict_distant_chunks_with_limits(
+        &mut chunks,
+        &mut discovered,
+        camera,
+        config,
+        1,
+        MAX_CACHED_CHUNK_BYTES,
+        &[(9, 8)],
+    );
+    assert!(!chunks.contains_key(&(8, 8)));
     discovered.insert((9, 8));
     let Some(resident) = chunks.get(&(9, 8)) else {
         assert!(false, "high-relief chunk is resident");
@@ -302,4 +347,58 @@ fn nonconverging_height_pick_returns_unavailable() {
         }
     });
     assert!(result.is_none());
+}
+
+#[wasm_bindgen_test]
+fn remote_high_relief_is_probed_beyond_the_decoded_cache_and_low_probes_are_skipped() {
+    let Ok(config) = aoe_core::WorldConfig::new(262_144, 262_144, aoe_core::Seed(1)) else {
+        assert!(false, "valid large map");
+        return;
+    };
+    let camera = Camera {
+        zoom: 0.25,
+        ..Camera::new([65_536.0, 65_536.0], [1280.0, 720.0])
+    };
+    let world = camera.screen_to_world_at_height(ScreenPoint { x: 640.0, y: 360.0 }, 9_000.0);
+    let high = (
+        (world[0] as i32).div_euclid(CHUNK_TILES),
+        (world[1] as i32).div_euclid(CHUNK_TILES),
+    );
+    let truncated = heights::candidate_chunks(camera, config, (0, 9_000), MAX_CACHED_CHUNKS);
+    assert!(
+        !truncated.contains(&high),
+        "fixture must exceed decoded cache radius"
+    );
+    let discovery = heights::candidate_chunks(camera, config, (0, 9_000), 65_536);
+    assert!(discovery.len() < 65_536);
+    assert!(discovery.contains(&high));
+    assert!(heights::chunk_may_be_visible(
+        camera,
+        config,
+        high,
+        (9_000, 9_000)
+    ));
+    assert!(!heights::chunk_may_be_visible(camera, config, high, (0, 0)));
+    let moved = Camera::new(world, [1280.0, 720.0]);
+    assert!(heights::chunk_may_be_visible(moved, config, high, (0, 0)));
+}
+
+#[wasm_bindgen_test]
+fn height_probe_eviction_keeps_new_low_coordinates_and_bounds_duplicate_metadata() {
+    let mut probes = std::collections::BTreeMap::new();
+    let mut order = std::collections::VecDeque::new();
+    for coordinate in [(100, 100), (200, 200), (0, 0)] {
+        heights::remember_probe(&mut probes, &mut order, coordinate, (0, 10), 2);
+    }
+    assert_eq!(probes.len(), 2);
+    assert_eq!(order.len(), 2);
+    assert!(probes.contains_key(&(0, 0)));
+    assert!(!probes.contains_key(&(100, 100)));
+    for _ in 0..100 {
+        heights::remember_probe(&mut probes, &mut order, (0, 0), (-1, 20), 2);
+    }
+    assert_eq!(order.len(), 2);
+    assert_eq!(probes[&(0, 0)], (-1, 20));
+    heights::remember_probe(&mut probes, &mut order, (0, 0), (0, 0), 0);
+    assert!(probes.is_empty() && order.is_empty());
 }

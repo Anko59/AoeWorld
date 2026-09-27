@@ -132,13 +132,18 @@ passable-ground layer is not a spawn claim: the authoritative activation search
 still decides whether a valid starting position exists.
 
 `AOE_GEODATA_CACHE=/absolute/cache make test-creator-source` runs the ordinary
-Paris overview creator in Chromium, checks the visible footprint and estimate,
-measured page progress, source-backed activation and layer preview, then restarts
-the server without a worker or source cache. The second browser session opens
-the same saved map and requests a previously unseen chunk from published pages.
-The revision-bound result, source locks, package identity, and captures are
-written under ignored `reports/creator/`. This journey uses the fixed Paris
-request in `reference-matrix.json`.
+Paris creator in overview and detailed modes in Chromium, using the same fixed
+request from `reference-matrix.json`. It checks the world locator, selected
+footprint, mode-specific estimate, measured page progress, source-backed
+activation, and layer preview. The detailed package must retain recipe 6 and
+its modeled-water source index; overview remains recipe 5. After restarting the
+server without a worker and with a freshly emptied source cache, the second
+browser session opens both packages and checks that each joins its own world
+chunks before requesting a previously unseen chunk from published pages.
+Mode-specific evidence is written to `reports/creator/overview.json` and
+`reports/creator/detailed.json`, with `source.json` binding both results to the
+revision. Browser captures and intermediate evidence remain under ignored
+`reports/creator/`.
 
 `AOE_GEODATA_CACHE=/absolute/cache make test-geographic-matrix` prepares the
 fixed 600 CE overview requests in `reference-matrix.json` with the ordinary

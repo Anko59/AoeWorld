@@ -1,7 +1,7 @@
 use super::{
-    CHUNK_CACHE_CAPACITY, CHUNK_TILES, CaptureCase, ElevationPage, EvictionTarget,
-    MAX_PACKAGE_PAGE_BYTES, MAX_PACKAGE_PAGES, Result, StagedPackages, copy_tree, measure_tree,
-    read_elevation_range, read_historical_coverage, read_water_evidence,
+    CHUNK_CACHE_CAPACITY, CHUNK_TILES, CaptureCase, ElevationPage, EvictionTarget, Result,
+    StagedPackages, copy_tree, measure_tree, read_elevation_range, read_historical_coverage,
+    read_water_evidence, validate_page_budget,
 };
 use aoe_map::{MapPackage, MapRequest, Ratio};
 use std::{
@@ -97,22 +97,14 @@ pub(super) fn prepare(
 
     let source = generated.0.join("pages").join(&content_hash);
     let (page_count, page_bytes) = measure_tree(&source)?;
-    if page_count > MAX_PACKAGE_PAGES || page_bytes > MAX_PACKAGE_PAGE_BYTES {
-        return Err(format!(
-            "generated Alpine eviction pages exceed the fixed budget: pages={page_count}/{MAX_PACKAGE_PAGES}, bytes={page_bytes}/{MAX_PACKAGE_PAGE_BYTES}"
-        )
-        .into());
-    }
+    validate_page_budget("generated Alpine eviction", page_count, page_bytes)?;
     let elevation = read_elevation_range(&generated.0, &content_hash)?;
-    if elevation
-        .maximum_centimeters
-        .saturating_sub(elevation.minimum_centimeters)
-        < MIN_PACKAGE_RELIEF_CENTIMETERS
-    {
-        return Err(
-            "generated Alpine eviction package lacks 1.5 km of source elevation relief".into(),
-        );
-    }
+    require_source_relief(
+        "generated Alpine eviction package",
+        elevation.minimum_centimeters,
+        elevation.maximum_centimeters,
+        MIN_PACKAGE_RELIEF_CENTIMETERS,
+    )?;
     let water = package
         .environment
         .water
@@ -122,16 +114,12 @@ pub(super) fn prepare(
     let historical_land_use = read_historical_coverage(&generated.0, &content_hash)?;
     let (minimum_elevation_centimeters, maximum_elevation_centimeters) =
         read_chunk_elevation_range(&source, chunk_axis - 1, chunk_axis - 1)?;
-    if maximum_elevation_centimeters.saturating_sub(minimum_elevation_centimeters)
-        < MIN_CHUNK_SOURCE_RELIEF_CENTIMETERS
-    {
-        return Err(format!(
-            "Alpine eviction southeast chunk source relief is only {} cm; expected at least {} cm",
-            maximum_elevation_centimeters.saturating_sub(minimum_elevation_centimeters),
-            MIN_CHUNK_SOURCE_RELIEF_CENTIMETERS
-        )
-        .into());
-    }
+    require_source_relief(
+        "Alpine eviction southeast chunk",
+        minimum_elevation_centimeters,
+        maximum_elevation_centimeters,
+        MIN_CHUNK_SOURCE_RELIEF_CENTIMETERS,
+    )?;
 
     fs::copy(&manifest, staged.0.join(format!("{content_hash}.json")))?;
     copy_tree(&source, &staged.0.join("pages").join(&content_hash))?;
@@ -294,5 +282,98 @@ impl RequestFile {
 impl Drop for RequestFile {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn require_source_relief(label: &str, minimum: i32, maximum: i32, floor: i32) -> Result<()> {
+    let range = maximum.saturating_sub(minimum);
+    if range < floor {
+        return Err(format!(
+            "{label} source elevation relief is {range} cm; expected at least {floor} cm"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_relief_requires_the_exact_package_and_return_chunk_floors() {
+        require_source_relief("package", -20_000, 130_000, MIN_PACKAGE_RELIEF_CENTIMETERS)
+            .expect("exact 1.5 km package range");
+        assert!(
+            require_source_relief("package", -20_000, 129_999, MIN_PACKAGE_RELIEF_CENTIMETERS)
+                .is_err()
+        );
+        require_source_relief(
+            "southeast chunk",
+            3_000,
+            18_000,
+            MIN_CHUNK_SOURCE_RELIEF_CENTIMETERS,
+        )
+        .expect("exact 150 m local range");
+        assert!(
+            require_source_relief(
+                "southeast chunk",
+                3_000,
+                17_999,
+                MIN_CHUNK_SOURCE_RELIEF_CENTIMETERS
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn southeast_chunk_bounds_read_only_the_matching_level_zero_source_samples() {
+        let temporary = tempfile::tempdir().expect("temporary page tree");
+        let pages = temporary.path().join("pages/hash");
+        fs::create_dir_all(pages.join("elevation")).expect("elevation pages");
+        for page_y in 0..2_u16 {
+            for page_x in 0..2_u16 {
+                let mut heights = Vec::with_capacity(64 * 64);
+                for local_y in 0..64_u32 {
+                    for local_x in 0..64_u32 {
+                        let x = u32::from(page_x) * 64 + local_x;
+                        let y = u32::from(page_y) * 64 + local_y;
+                        heights.push((x + y * 128) as i32);
+                    }
+                }
+                let page = ElevationPage {
+                    level: 0,
+                    x: page_x,
+                    y: page_y,
+                    width: 64,
+                    height: 64,
+                    geographic_height_centimeters: heights,
+                };
+                fs::write(
+                    pages.join(format!("elevation/0-{page_x}-{page_y}.json")),
+                    serde_json::to_vec(&page).expect("encode elevation page"),
+                )
+                .expect("write elevation page");
+            }
+        }
+        assert_eq!(
+            read_chunk_elevation_range(&pages, 23, 23).unwrap(),
+            (16_125, 16_383)
+        );
+
+        let wrong_coordinate = ElevationPage {
+            level: 0,
+            x: 1,
+            y: 0,
+            width: 64,
+            height: 64,
+            geographic_height_centimeters: vec![1; 64 * 64],
+        };
+        fs::write(
+            pages.join("elevation/0-0-0.json"),
+            serde_json::to_vec(&wrong_coordinate).expect("encode misplaced page"),
+        )
+        .expect("write misplaced page");
+        assert!(read_chunk_elevation_range(&pages, 23, 23).is_err());
     }
 }

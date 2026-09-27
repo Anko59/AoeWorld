@@ -51,6 +51,7 @@ pub(super) struct Client {
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
+    pub terrain_bounds: map::heights::MapHeightBounds,
     pub terrain_resident_height_bounds: Option<(i16, i16)>,
     pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
@@ -378,7 +379,7 @@ pub(super) fn reconnect(shared: Rc<RefCell<Client>>) {
 
 pub(super) fn center_on_primary(client: &mut Client) {
     if let Some(primary) = client.primary {
-        client.camera.center = position_at(client, primary);
+        map::center_on_world(client, position_at(client, primary));
     }
     client.camera = client.camera.clamp_center(client.config);
 }

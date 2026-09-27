@@ -167,15 +167,7 @@ pub(super) fn prepare(
         let manifest = source.join(format!("{hash}.json"));
         let package: MapPackage = serde_json::from_slice(&fs::read(&manifest)?)?;
         package.validate()?;
-        if package.content_hash_hex() != hash
-            || package.request != prepared.request
-            || package.source_locks.is_empty()
-        {
-            return Err(format!(
-                "fixed geographic case {id} is not a matching source-locked package"
-            )
-            .into());
-        }
+        validate_source_locked_package(id, &package, hash, &prepared.request)?;
         let water = package
             .environment
             .water
@@ -188,15 +180,8 @@ pub(super) fn prepare(
         let tiles_per_side = u32::try_from(package.estimate.tiles_per_side)?;
         let chunk_axis = tiles_per_side.div_ceil(CHUNK_TILES);
         let package_chunk_count_bound = chunk_axis.saturating_mul(chunk_axis);
-        if page_count > MAX_PACKAGE_PAGES
-            || page_bytes > MAX_PACKAGE_PAGE_BYTES
-            || package_chunk_count_bound > CHUNK_CACHE_CAPACITY
-        {
-            return Err(format!(
-                "fixed package {id} exceeds its page/work budget: pages={page_count}/{MAX_PACKAGE_PAGES}, bytes={page_bytes}/{MAX_PACKAGE_PAGE_BYTES}, chunks={package_chunk_count_bound}/{CHUNK_CACHE_CAPACITY}"
-            )
-            .into());
-        }
+        validate_page_budget(id, page_count, page_bytes)?;
+        validate_chunk_cache_bound(id, package_chunk_count_bound)?;
         fs::copy(&manifest, packages.0.join(format!("{hash}.json")))?;
         copy_tree(
             &source.join("pages").join(hash),
@@ -432,4 +417,41 @@ fn valid_hash(hash: &str) -> bool {
         && hash
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn validate_source_locked_package(
+    id: &str,
+    package: &MapPackage,
+    expected_hash: &str,
+    expected_request: &aoe_map::MapRequest,
+) -> Result<()> {
+    if package.content_hash_hex() != expected_hash
+        || &package.request != expected_request
+        || package.source_locks.is_empty()
+    {
+        return Err(
+            format!("fixed geographic case {id} is not a matching source-locked package").into(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_page_budget(id: &str, page_count: usize, page_bytes: u64) -> Result<()> {
+    if page_count > MAX_PACKAGE_PAGES || page_bytes > MAX_PACKAGE_PAGE_BYTES {
+        return Err(format!(
+            "package {id} exceeds its page budget: pages={page_count}/{MAX_PACKAGE_PAGES}, bytes={page_bytes}/{MAX_PACKAGE_PAGE_BYTES}"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn validate_chunk_cache_bound(id: &str, package_chunk_count_bound: u32) -> Result<()> {
+    if package_chunk_count_bound > CHUNK_CACHE_CAPACITY {
+        return Err(format!(
+            "fixed package {id} exceeds its chunk-cache bound: chunks={package_chunk_count_bound}/{CHUNK_CACHE_CAPACITY}"
+        )
+        .into());
+    }
+    Ok(())
 }

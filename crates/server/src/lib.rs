@@ -307,6 +307,10 @@ pub fn app(state: AppState) -> Router {
         .route("/maps/activate", post(maps::activate))
         .route("/maps/reset", post(maps::reset))
         .route("/maps", get(maps::list))
+        .route(
+            "/maps/{content_hash}/height-bounds",
+            get(maps::height_bounds),
+        )
         .route("/maps/{content_hash}/preview", get(maps::preview))
         .route(
             "/maps/{content_hash}",

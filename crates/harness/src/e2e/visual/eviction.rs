@@ -3,6 +3,17 @@ use std::{fs, path::Path};
 
 pub(super) fn verify_capture(evidence: &Path, inputs: &CaptureInputs) -> Result<()> {
     let case = &inputs.eviction_case;
+    let target = validate_case(case)?;
+    for backend in ["webgpu", "canvas2d"] {
+        let directory = evidence.join(&case.id);
+        let metadata = directory.join(format!("{backend}.json"));
+        let record: serde_json::Value = serde_json::from_slice(&fs::read(&metadata)?)?;
+        verify_backend(&directory, &record, inputs, case, target, backend)?;
+    }
+    Ok(())
+}
+
+fn validate_case(case: &super::packages::CaptureCase) -> Result<&super::packages::EvictionTarget> {
     let target = case
         .eviction_target
         .as_ref()
@@ -30,13 +41,7 @@ pub(super) fn verify_capture(evidence: &Path, inputs: &CaptureInputs) -> Result<
     {
         return Err("generated Alpine eviction package or southeast source relief did not meet its fixed bounds".into());
     }
-    for backend in ["webgpu", "canvas2d"] {
-        let directory = evidence.join(&case.id);
-        let metadata = directory.join(format!("{backend}.json"));
-        let record: serde_json::Value = serde_json::from_slice(&fs::read(&metadata)?)?;
-        verify_backend(&directory, &record, inputs, case, target, backend)?;
-    }
-    Ok(())
+    Ok(target)
 }
 
 fn verify_backend(
@@ -58,6 +63,16 @@ fn verify_backend(
             return Err(format!("Alpine eviction {backend} screenshot {name} is missing").into());
         }
     }
+    validate_backend_record(record, inputs, case, target, backend)
+}
+
+fn validate_backend_record(
+    record: &serde_json::Value,
+    inputs: &CaptureInputs,
+    case: &super::packages::CaptureCase,
+    target: &super::packages::EvictionTarget,
+    backend: &str,
+) -> Result<()> {
     let unique_requests = record
         .get("unique_chunk_request_count")
         .and_then(serde_json::Value::as_u64)
@@ -149,4 +164,140 @@ fn verify_backend(
         .into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::e2e::visual::packages::{
+        CaptureCase, ElevationRange, EvictionTarget, HistoricalLandUseEvidence,
+    };
+
+    fn case() -> CaptureCase {
+        CaptureCase {
+            id: "alpine_eviction".to_owned(),
+            geometry: "relief".to_owned(),
+            content_hash: "b".repeat(64),
+            manifest_path: "fixture-only".to_owned(),
+            location: "fixture-only".to_owned(),
+            request: aoe_map::MapRequest {
+                compression: aoe_map::Ratio {
+                    numerator: 20,
+                    denominator: 1,
+                },
+                ..aoe_map::MapRequest::default()
+            },
+            tiles_per_side: 750,
+            package_chunk_count_bound: 576,
+            schema_version: 9,
+            generator_version: 1,
+            generation_recipe_version: 1,
+            source_locks: vec![aoe_map::SourceLock {
+                id: "fixture".to_owned(),
+                provider: "test-only".to_owned(),
+                release: "fixture".to_owned(),
+                url: "https://example.invalid/fixture".to_owned(),
+                sha256: [1; 32],
+                acquired_at: "2026-09-26T00:00:00Z".to_owned(),
+                native_resolution: "test".to_owned(),
+                crs: "EPSG:4326".to_owned(),
+                vertical_datum: "test".to_owned(),
+                license: "test-only".to_owned(),
+                preprocessing_version: "fixture-v1".to_owned(),
+            }],
+            preparation_elapsed_milliseconds: 0,
+            page_count: 64,
+            page_bytes: 1_048_576,
+            water_pages: None,
+            historical_land_use: HistoricalLandUseEvidence::default(),
+            elevation_range_centimeters: ElevationRange {
+                minimum_centimeters: -100_000,
+                maximum_centimeters: 100_000,
+                level_zero_samples: 4,
+            },
+            eviction_target: Some(EvictionTarget {
+                chunk_x: 23,
+                chunk_y: 23,
+                minimum_elevation_centimeters: 0,
+                maximum_elevation_centimeters: 15_000,
+            }),
+        }
+    }
+
+    fn inputs(case: CaptureCase) -> CaptureInputs {
+        CaptureInputs {
+            version: 2,
+            prepared_revision: "prepared-test-revision".to_owned(),
+            capture_revision: "capture-test-revision".to_owned(),
+            case_corrections: serde_json::Value::Null,
+            activation_cases: Vec::new(),
+            cases: Vec::new(),
+            eviction_case: case,
+        }
+    }
+
+    fn record(inputs: &CaptureInputs, case: &CaptureCase, backend: &str) -> serde_json::Value {
+        let target = case.eviction_target.as_ref().unwrap();
+        serde_json::json!({
+            "case_id": case.id,
+            "content_hash": case.content_hash,
+            "renderer": backend,
+            "prepared_revision": inputs.prepared_revision,
+            "capture_revision": inputs.capture_revision,
+            "source_locks": [{"fixture": true}],
+            "eviction_target": {"chunk_x": target.chunk_x, "chunk_y": target.chunk_y},
+            "unique_chunk_request_count": 513,
+            "cache_resident_chunks_after_scan": 512,
+            "cache_resident_chunks_after_return": 512,
+            "target_request_count_before_return": 1,
+            "target_request_count_after_return": 2,
+            "loaded_chunks": vec!["fixture"; 513],
+            "target_chunk_path": format!("/maps/{}/chunks/{}/{}", case.content_hash, target.chunk_x, target.chunk_y),
+            "page_evidence": {"southeast_chunk_elevation_centimeters": {
+                "minimum": target.minimum_elevation_centimeters,
+                "maximum": target.maximum_elevation_centimeters
+            }},
+            "interactions": {
+                "eviction_exercised": true,
+                "visual_restored": true,
+                "visual_similarity_percent": 60
+            }
+        })
+    }
+
+    // These fixtures call only the evidence contract validators. They do not
+    // claim to be source-backed browser captures or qualify the renderer.
+    #[test]
+    fn eviction_contract_accepts_fixed_package_and_backend_bounds() {
+        let case = case();
+        let inputs = inputs(case.clone());
+        let target = validate_case(&case).expect("fixed eviction package contract");
+        let evidence = record(&inputs, &case, "webgpu");
+        validate_backend_record(&evidence, &inputs, &case, target, "webgpu")
+            .expect("well-formed bounded eviction record");
+    }
+
+    #[test]
+    fn eviction_contract_rejects_cap_and_refetch_evidence_regressions() {
+        let case = case();
+        let inputs = inputs(case.clone());
+        let target = validate_case(&case).unwrap();
+        let mut malformed = record(&inputs, &case, "webgpu");
+        malformed["cache_resident_chunks_after_scan"] = serde_json::json!(511);
+        assert!(validate_backend_record(&malformed, &inputs, &case, target, "webgpu").is_err());
+        let mut malformed = record(&inputs, &case, "webgpu");
+        malformed["cache_resident_chunks_after_return"] = serde_json::json!(513);
+        assert!(validate_backend_record(&malformed, &inputs, &case, target, "webgpu").is_err());
+        let mut malformed = record(&inputs, &case, "webgpu");
+        malformed["target_request_count_after_return"] = serde_json::json!(1);
+        assert!(validate_backend_record(&malformed, &inputs, &case, target, "webgpu").is_err());
+        let mut malformed = record(&inputs, &case, "webgpu");
+        malformed["loaded_chunks"] = serde_json::json!([]);
+        assert!(validate_backend_record(&malformed, &inputs, &case, target, "webgpu").is_err());
+        let malformed_case = CaptureCase {
+            page_bytes: 1_048_577,
+            ..case
+        };
+        assert!(validate_case(&malformed_case).is_err());
+    }
 }

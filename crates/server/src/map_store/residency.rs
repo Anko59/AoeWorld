@@ -50,6 +50,7 @@ pub(crate) struct PageResidency {
     root: PathBuf,
     entries: BTreeMap<EnvironmentPageKey, PageEntry>,
     cache: Mutex<PageCache>,
+    height_bounds: Mutex<Option<(i16, i16)>>,
     verified_page_loads: AtomicU64,
 }
 
@@ -108,8 +109,19 @@ impl PageResidency {
             root,
             entries,
             cache: Mutex::new(PageCache::default()),
+            height_bounds: Mutex::new(None),
             verified_page_loads: AtomicU64::new(0),
         }))
+    }
+
+    pub(crate) fn cached_height_bounds(&self) -> Option<(i16, i16)> {
+        self.height_bounds.lock().ok().and_then(|bounds| *bounds)
+    }
+
+    pub(crate) fn cache_height_bounds(&self, minimum: i16, maximum: i16) {
+        if let Ok(mut bounds) = self.height_bounds.lock() {
+            *bounds = Some((minimum, maximum));
+        }
     }
 
     pub(crate) fn resident_pages(&self) -> usize {

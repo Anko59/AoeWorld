@@ -26,6 +26,18 @@ sand, rock, and water terrain groups from immutable map chunks. The server's
 environment reads are isolated in
 `crates/server/src/config.rs`.
 
+Before fetching geographic terrain, the client requests the package's verified
+minimum and maximum game heights. The server scans source elevation and modeled
+water pages through bounded residency off the async runtime, then caches the
+result with that immutable package. Bilinear interpolation stays inside those
+source bounds. The client projects the resulting height interval into a narrow
+viewport strip instead of exploring the world square. Compact height probes
+let it discard off-screen candidates without repeatedly downloading them, and
+visible relief takes priority during eviction. Decoded terrain remains capped
+at 512 chunks and 128 MiB, with at most 64 concurrent requests. Height metadata
+and candidate coordinates each have a separate 65,536-entry ceiling; very large
+views remain bounded rather than allocating in proportion to map area.
+
 `aoe-map` is the environment-independent boundary for frozen geographic map
 identity. It validates the 600 CE request, physical compression and bounded
 virtual dimensions, canonicalizes equivalent ratios and longitudes, and

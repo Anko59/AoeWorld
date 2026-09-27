@@ -13,7 +13,7 @@ use web_sys::Response;
 #[path = "playground_map/eviction.rs"]
 mod eviction;
 #[path = "playground_map/heights.rs"]
-mod heights;
+pub(crate) mod heights;
 #[path = "playground_map/state.rs"]
 pub(crate) mod state;
 #[path = "playground_map/ui.rs"]
@@ -44,6 +44,7 @@ pub(super) fn cache_status(client: &Client) -> String {
 pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_chunks.clear();
     client.terrain_discovered.clear();
+    client.terrain_bounds = Default::default();
     client.terrain_height_bounds = None;
     client.terrain_resident_height_bounds = None;
     client.terrain_inflight.clear();
@@ -87,18 +88,10 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let Some(content_hash) = client.map_content_hash else {
             return;
         };
-        let mut requests = visible_chunks(&client);
-        if requests.len() < MAX_REQUESTED_CHUNKS {
-            requests.extend(heights::discovery_chunks(
-                &client,
-                MAX_REQUESTED_CHUNKS - requests.len(),
-            ));
+        if !heights::ensure_bounds(shared.clone(), &mut client, content_hash) {
+            return;
         }
-        requests.truncate(MAX_REQUESTED_CHUNKS);
-        requests.retain(|coordinate| {
-            !client.terrain_chunks.contains_key(coordinate)
-                && client.terrain_inflight.insert(*coordinate)
-        });
+        let requests = visible_chunks(&mut client);
         (client.connection_id, content_hash, requests)
     };
     let content_hash = map_hash
@@ -111,10 +104,10 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         spawn_local(async move {
             let result = fetch_chunk(&content_hash, x, y).await;
             let mut client = shared.borrow_mut();
-            client.terrain_inflight.remove(&(x, y));
             if client.connection_id != connection_id || client.map_content_hash != Some(map_hash) {
                 return;
             }
+            client.terrain_inflight.remove(&(x, y));
             match result {
                 Ok(chunk) => {
                     include_chunk_height_bounds(&mut client, &chunk);
@@ -123,7 +116,10 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                     initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
                 }
-                Err(error) => client.status = format!("map chunk request failed: {error:?}"),
+                Err(error) => {
+                    client.status = format!("map chunk request failed: {error:?}");
+                    heights::defer_failed_chunks(&mut client);
+                }
             }
         });
     }
@@ -134,7 +130,10 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
     let mut terrain = Vec::new();
     for chunk in client.terrain_chunks.values() {
         let (chunk_width, chunk_height) = chunk_dimensions(client, chunk.x, chunk.y);
-        if chunk_width == 0 || chunk_height == 0 {
+        if chunk_width == 0
+            || chunk_height == 0
+            || !heights::resident_may_be_visible(client, (chunk.x, chunk.y))
+        {
             continue;
         }
         let chunk_min_x = chunk.x * CHUNK_TILES;
@@ -180,6 +179,7 @@ pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
     let mut resources = client
         .terrain_chunks
         .values()
+        .filter(|chunk| heights::resident_may_be_visible(client, (chunk.x, chunk.y)))
         .flat_map(|chunk| chunk.resources.iter())
         .filter(|resource| {
             client.resources.visible(resource.id)
@@ -322,6 +322,13 @@ pub(super) fn resident_visible_tiles(client: &Client) -> TileRect {
     )
 }
 
+pub(super) fn center_on_world(client: &mut Client, position: [f64; 2]) {
+    client.camera.center = position;
+    // If the destination has not loaded, its first chunk finishes centering.
+    client.focus_map_hash = None;
+    initialize_altitude_focus(client);
+}
+
 fn initialize_altitude_focus(client: &mut Client) {
     let Some(map_hash) = client.map_content_hash else {
         return;
@@ -334,7 +341,11 @@ fn initialize_altitude_focus(client: &mut Client) {
     let Some(tile) = terrain_tile(client, x, y) else {
         return;
     };
-    client.camera.focus_elevation_meters = tile_center_elevation(tile);
+    client.camera.focus_elevation_meters = surface_elevation(
+        tile,
+        client.camera.center[0] - f64::from(x),
+        client.camera.center[1] - f64::from(y),
+    );
     client.focus_map_hash = Some(map_hash);
 }
 
@@ -386,26 +397,11 @@ fn terrain_material(material: GroundMaterial) -> u8 {
     }
 }
 
-fn visible_chunks(client: &Client) -> Vec<(i32, i32)> {
-    let visible = terrain_visible_tiles(client);
-    let min_x = visible.min.x.div_euclid(CHUNK_TILES);
-    let min_y = visible.min.y.div_euclid(CHUNK_TILES);
-    let max_x = visible.max.x.saturating_sub(1).div_euclid(CHUNK_TILES);
-    let max_y = visible.max.y.saturating_sub(1).div_euclid(CHUNK_TILES);
-    let mut chunks = (min_y..=max_y)
-        .flat_map(|y| (min_x..=max_x).map(move |x| (x, y)))
-        .collect::<Vec<_>>();
-    chunks.sort_by(|left, right| {
-        chunk_distance(*left, client)
-            .total_cmp(&chunk_distance(*right, client))
-            .then(left.cmp(right))
-    });
-    chunks.truncate(MAX_REQUESTED_CHUNKS);
-    chunks
-}
-
-fn chunk_distance((x, y): (i32, i32), client: &Client) -> f64 {
-    chunk_distance_for((x, y), client.camera, client.config)
+fn visible_chunks(client: &mut Client) -> Vec<(i32, i32)> {
+    let available = MAX_REQUESTED_CHUNKS.saturating_sub(client.terrain_inflight.len());
+    let requests = heights::request_candidates(client, available);
+    client.terrain_inflight.extend(requests.iter().copied());
+    requests
 }
 
 fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::WorldConfig) -> f64 {
@@ -415,6 +411,7 @@ fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::Wor
 }
 
 fn evict_distant_chunks(client: &mut Client) {
+    let preferred = heights::visible_residents(client);
     let (removed, _) = evict_distant_chunks_with_limits(
         &mut client.terrain_chunks,
         &mut client.terrain_discovered,
@@ -422,6 +419,7 @@ fn evict_distant_chunks(client: &mut Client) {
         client.config,
         MAX_CACHED_CHUNKS,
         MAX_CACHED_CHUNK_BYTES,
+        &preferred,
     );
     if removed {
         refresh_chunk_height_bounds(client);

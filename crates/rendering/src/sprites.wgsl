@@ -40,14 +40,14 @@ fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
             return vec2<f32>(0.0, 0.5);
         }
         case 4u: {
-            if corner == 0u { return vec2<f32>(0.0, 0.0); }
-            if corner == 1u { return vec2<f32>(1.0, 0.0); }
-            return vec2<f32>(1.0, 1.0);
+            if corner == 0u { return vec2<f32>(0.3, 0.3); }
+            if corner == 1u { return vec2<f32>(0.7, 0.3); }
+            return vec2<f32>(0.7, 0.7);
         }
         case 5u: {
-            if corner == 0u { return vec2<f32>(0.0, 0.0); }
-            if corner == 1u { return vec2<f32>(1.0, 1.0); }
-            return vec2<f32>(0.0, 1.0);
+            if corner == 0u { return vec2<f32>(0.3, 0.3); }
+            if corner == 1u { return vec2<f32>(0.7, 0.7); }
+            return vec2<f32>(0.3, 0.7);
         }
         default: { return vec2<f32>(0.0, 0.0); }
     }

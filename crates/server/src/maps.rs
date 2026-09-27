@@ -15,6 +15,10 @@ use std::sync::{
 
 mod creation;
 pub(super) use creation::{cancel_job, create_job, estimate, job_status, list_jobs};
+mod height_bounds;
+pub(crate) use height_bounds::height_bounds;
+#[cfg(test)]
+use height_bounds::{HeightBoundsError, package_height_bounds};
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;

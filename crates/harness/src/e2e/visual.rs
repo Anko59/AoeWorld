@@ -206,80 +206,14 @@ fn verify_captures(root: &Path, inputs: &CaptureInputs) -> Result<()> {
         if !seen.insert(case.id.as_str()) {
             return Err(format!("browser activation evidence duplicates {}", case.id).into());
         }
-        if outcome
-            .get("content_hash")
-            .and_then(serde_json::Value::as_str)
-            != Some(case.content_hash.as_str())
-        {
-            return Err(format!("browser activation hash mismatch for {}", case.id).into());
-        }
-        for (field, expected) in [
-            (
-                "preparation_elapsed_milliseconds",
-                case.preparation_elapsed_milliseconds,
-            ),
-            ("page_count", u64::try_from(case.page_count)?),
-            ("page_bytes", case.page_bytes),
-            (
-                "package_chunk_count_bound",
-                u64::from(case.package_chunk_count_bound),
-            ),
-        ] {
-            if outcome.get(field).and_then(serde_json::Value::as_u64) != Some(expected) {
-                return Err(
-                    format!("activation work metric {field} mismatches for {}", case.id).into(),
-                );
-            }
-        }
-        let active = outcome
-            .get("start_available")
-            .and_then(serde_json::Value::as_bool)
-            .ok_or_else(|| format!("activation outcome for {} has no verdict", case.id))?;
+        let active = validate_activation_outcome(case, outcome)?;
         if active {
-            let loaded_chunks = outcome
-                .get("loaded_chunks")
-                .and_then(serde_json::Value::as_array)
-                .ok_or_else(|| format!("activation for {} has no loaded chunk list", case.id))?;
-            if outcome
-                .get("loaded_chunk_count")
-                .and_then(serde_json::Value::as_u64)
-                .is_none_or(|count| {
-                    count == 0
-                        || count > u64::from(case.package_chunk_count_bound)
-                        || usize::try_from(count).ok() != Some(loaded_chunks.len())
-                })
-            {
-                return Err(format!(
-                    "activation for {} lacks bounded nonzero chunk work",
-                    case.id
-                )
-                .into());
-            }
             let image = evidence.join(&case.id).join("webgpu-overview.png");
             let metadata = evidence.join(&case.id).join("webgpu-overview.json");
             if !image.is_file() || fs::metadata(image)?.len() == 0 || !metadata.is_file() {
                 return Err(
                     format!("activated map {} lacks a representative capture", case.id).into(),
                 );
-            }
-        } else {
-            if outcome.get("result").and_then(serde_json::Value::as_str)
-                != Some("uninhabitable_preview_only")
-            {
-                return Err(
-                    format!("preview-only verdict for {} is not classified", case.id).into(),
-                );
-            }
-            if outcome
-                .get("no_capture_reason")
-                .and_then(serde_json::Value::as_str)
-                .is_none_or(str::is_empty)
-            {
-                return Err(format!(
-                    "uninhabitable map {} lacks an explicit no-capture reason",
-                    case.id
-                )
-                .into());
             }
         }
     }
@@ -319,59 +253,149 @@ fn verify_captures(root: &Path, inputs: &CaptureInputs) -> Result<()> {
                 }
             }
             let record: serde_json::Value = serde_json::from_slice(&fs::read(metadata)?)?;
-            let loaded_chunks = record
-                .get("loaded_chunks")
-                .and_then(serde_json::Value::as_array);
-            if record
-                .get("content_hash")
-                .and_then(serde_json::Value::as_str)
-                != Some(case.content_hash.as_str())
-                || record.get("renderer").and_then(serde_json::Value::as_str) != Some(backend)
-                || record
-                    .get("prepared_revision")
-                    .and_then(serde_json::Value::as_str)
-                    != Some(inputs.prepared_revision.as_str())
-                || record
-                    .get("capture_revision")
-                    .and_then(serde_json::Value::as_str)
-                    != Some(inputs.capture_revision.as_str())
-                || record
-                    .get("source_locks")
-                    .and_then(serde_json::Value::as_array)
-                    .is_none_or(Vec::is_empty)
-                || loaded_chunks.is_none_or(|chunks| {
-                    chunks.is_empty()
-                        || chunks.len()
-                            > usize::try_from(case.package_chunk_count_bound).unwrap_or(usize::MAX)
-                })
-                || record
-                    .pointer("/interactions/panned")
-                    .and_then(serde_json::Value::as_bool)
-                    != Some(true)
-                || record
-                    .pointer("/interactions/zoomed")
-                    .and_then(serde_json::Value::as_bool)
-                    != Some(true)
-                || record
-                    .pointer("/interactions/reconnected")
-                    .and_then(serde_json::Value::as_bool)
-                    != Some(true)
-                || record
-                    .pointer("/interactions/reloaded")
-                    .and_then(serde_json::Value::as_bool)
-                    != Some(true)
-            {
-                return Err(format!(
-                    "source-backed {backend} identity, interaction or work evidence did not verify for {}",
-                    case.id
-                )
-                .into());
-            }
+            validate_capture_record(case, inputs, &record, backend)?;
         }
     }
     eviction::verify_capture(&evidence, inputs)?;
     Ok(())
 }
+
+fn validate_activation_outcome(
+    case: &packages::CaptureCase,
+    outcome: &serde_json::Value,
+) -> Result<bool> {
+    if outcome.get("case_id").and_then(serde_json::Value::as_str) != Some(case.id.as_str()) {
+        return Err(format!("browser activation identity mismatch for {}", case.id).into());
+    }
+    if outcome
+        .get("content_hash")
+        .and_then(serde_json::Value::as_str)
+        != Some(case.content_hash.as_str())
+    {
+        return Err(format!("browser activation hash mismatch for {}", case.id).into());
+    }
+    for (field, expected) in [
+        (
+            "preparation_elapsed_milliseconds",
+            case.preparation_elapsed_milliseconds,
+        ),
+        ("page_count", u64::try_from(case.page_count)?),
+        ("page_bytes", case.page_bytes),
+        (
+            "package_chunk_count_bound",
+            u64::from(case.package_chunk_count_bound),
+        ),
+    ] {
+        if outcome.get(field).and_then(serde_json::Value::as_u64) != Some(expected) {
+            return Err(
+                format!("activation work metric {field} mismatches for {}", case.id).into(),
+            );
+        }
+    }
+    let active = outcome
+        .get("start_available")
+        .and_then(serde_json::Value::as_bool)
+        .ok_or_else(|| format!("activation outcome for {} has no verdict", case.id))?;
+    if active {
+        let loaded_chunks = outcome
+            .get("loaded_chunks")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("activation for {} has no loaded chunk list", case.id))?;
+        if outcome
+            .get("loaded_chunk_count")
+            .and_then(serde_json::Value::as_u64)
+            .is_none_or(|count| {
+                count == 0
+                    || count > u64::from(case.package_chunk_count_bound)
+                    || usize::try_from(count).ok() != Some(loaded_chunks.len())
+            })
+        {
+            return Err(format!(
+                "activation for {} lacks bounded nonzero chunk work",
+                case.id
+            )
+            .into());
+        }
+    } else {
+        if outcome.get("result").and_then(serde_json::Value::as_str)
+            != Some("uninhabitable_preview_only")
+        {
+            return Err(format!("preview-only verdict for {} is not classified", case.id).into());
+        }
+        if outcome
+            .get("no_capture_reason")
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(str::is_empty)
+        {
+            return Err(format!(
+                "uninhabitable map {} lacks an explicit no-capture reason",
+                case.id
+            )
+            .into());
+        }
+    }
+    Ok(active)
+}
+
+fn validate_capture_record(
+    case: &packages::CaptureCase,
+    inputs: &CaptureInputs,
+    record: &serde_json::Value,
+    backend: &str,
+) -> Result<()> {
+    let loaded_chunks = record
+        .get("loaded_chunks")
+        .and_then(serde_json::Value::as_array);
+    if record
+        .get("content_hash")
+        .and_then(serde_json::Value::as_str)
+        != Some(case.content_hash.as_str())
+        || record.get("renderer").and_then(serde_json::Value::as_str) != Some(backend)
+        || record
+            .get("prepared_revision")
+            .and_then(serde_json::Value::as_str)
+            != Some(inputs.prepared_revision.as_str())
+        || record
+            .get("capture_revision")
+            .and_then(serde_json::Value::as_str)
+            != Some(inputs.capture_revision.as_str())
+        || record
+            .get("source_locks")
+            .and_then(serde_json::Value::as_array)
+            .is_none_or(Vec::is_empty)
+        || loaded_chunks.is_none_or(|chunks| {
+            chunks.is_empty()
+                || chunks.len()
+                    > usize::try_from(case.package_chunk_count_bound).unwrap_or(usize::MAX)
+        })
+        || record
+            .pointer("/interactions/panned")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || record
+            .pointer("/interactions/zoomed")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || record
+            .pointer("/interactions/reconnected")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || record
+            .pointer("/interactions/reloaded")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+    {
+        return Err(format!(
+            "source-backed {backend} identity, interaction or work evidence did not verify for {}",
+            case.id
+        )
+        .into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
 
 fn git(args: &[&str]) -> Result<String> {
     let output = Command::new("git").args(args).output()?;

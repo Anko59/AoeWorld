@@ -3,7 +3,11 @@
 Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
 for focused checks. `make pre-commit` runs static gates; `make preflight` adds
 native tests through pinned cargo-nextest, followed by separate doctests and a
-WASM build. `make test-wasm` runs the client browser integration tests and the
+WASM build. The test profile optimizes map, simulation, server, and procedural
+hashing (BLAKE3) code for the
+full-distance offline movement/replay regressions; debug assertions and integer
+overflow checks remain enabled. Distances, tick limits, and gate floors are
+unchanged. `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. Browser-only regressions
 must use `#[wasm_bindgen_test]`; native `#[test]` cases in WASM-only modules do
@@ -24,6 +28,11 @@ requires graceful shutdown so its execution counters are written. These are
 native coverage records, not instrumentation of JavaScript or browser WASM.
 Browser, WASM, asset, performance, QA, and artifact gates need
 separate evidence.
+The offline geographic regression runs all five 20 km orders and replay through
+the same movement executor as source qualification, using persisted synthetic
+pages. Source-specific northbound and connectivity diagnostics remain in
+`make map-source-qualify` and focused diagnostic tests; the synthetic movement
+fixture does not claim those real-source results.
 `make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette,
 pack-manifest, map-package/request, environmental-page, and compact-chunk parser.
 The map campaigns begin with generated valid seeds; accepted package/page/chunk

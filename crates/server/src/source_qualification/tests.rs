@@ -2,6 +2,9 @@ use super::*;
 use aoe_core::WorldConfig;
 use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, PageLayer};
 
+#[path = "tests/orchestration.rs"]
+mod orchestration;
+
 #[test]
 fn ordinary_activation_search_is_unchanged_and_route_extent_is_local() {
     assert_eq!(ORDINARY_ACTIVATION_SEARCH_CHUNKS, 64);

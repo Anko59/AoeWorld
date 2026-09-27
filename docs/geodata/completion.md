@@ -16,25 +16,38 @@ through 262,144 tiles per side without dense fine-tile allocation.
 Keep modern evidence, historical models, procedural detail, and fallback data
 distinguishable. No economy, buildings, combat, or naval units in this scope.
 
-## Current status
+## Integrated feature and acceptance
 
-The status is intentionally narrower than a release claim. A branch result
-does not qualify the final combined revision until its evidence is rerun there.
+[PR #72](https://github.com/Anko59/AoeWorld/pull/72), targeting `dev`, combines the
+previous feature branches. Its description records the latest exact revision,
+commands, pass/fail results, CI, and remaining qualification. Earlier PRs and
+handoffs below are historical evidence, not instructions to reapply their code.
+A result from an earlier or dirty revision does not qualify the final revision.
 
-| Area | Implemented and integrated | Production connected | Qualified evidence | Remaining acceptance |
-| --- | --- | --- | --- | --- |
-| Regional detailed preparation | Yes | Yes | Directory verification and offline unseen-chunk fixtures | Final revision creator and visual journey |
-| Historical area allocation | Yes, [PR #66](https://github.com/Anko59/AoeWorld/pull/66) | Ordinary overview and detailed preparation | Offline conservation, partial cells, 1024-axis streaming | Fixed-region regeneration and final revision gates |
-| Water evidence | Yes, typed pages | Modern observed extent | Synthetic typed-evidence fixtures | Connected modelled surfaces, correction policy, source-backed lake/river/coast inspection |
-| Movement and resource lifecycle | Yes | Yes | Local endurance, persistence, reconnect, replay | Geographic long orders and movement-driven page residency |
-| Rendering | Yes, textured Canvas and WebGPU | Yes | Constructed terrain and private-art fixtures; [PR #64](https://github.com/Anko59/AoeWorld/pull/64) overlap fixes | Source-backed captures and high-relief journey on the final map |
-| Creator | Yes | Yes | Older Paris creation/reopen; [PR #65](https://github.com/Anko59/AoeWorld/pull/65) current journey | Final combined revision journey and representative visual matrix |
-| Fuzz and coverage | Lifecycle work in [PR #63](https://github.com/Anko59/AoeWorld/pull/63); prior coverage passed 85.21% | Parser targets connected | Smoke on feature branch; earlier nightly failed quota | Two clean-revision nightly passes and final coverage report |
-| Scale and CI | Sparse package contracts | Regional and overview paths | Source-backed scale qualification is in progress | Final revision 512/16384/50000/max matrix, required gates, and CI |
+| Area | Integrated behavior | Acceptance gate |
+| --- | --- | --- |
+| Regional preparation | Overview and detailed source acquisition, independent bounded history grid, verified persisted pages | `geodata-test`, `test-creator-source`, `test-geographic-matrix` |
+| Circa-600 reconstruction | Conservative HYDE area allocation, compact coverage, corrections and explicit modern/model/fallback provenance | Offline conservation fixtures and fixed-region regeneration |
+| Water | Model-v2 connected lake surfaces and directed river topology, correction policy, bounded lake rasterization, recipe-6 activation | Source-backed Finland/Paris verification and water captures |
+| Movement/resources | Ordinary bounded starts, long orders, deterministic replay, durable depletion and reconnect | `map-source-qualify`, source-scale cases and browser resource tests |
+| Rendering | Textured WebGPU/Canvas, shared elevation geometry, verified height bounds and bounded viewport discovery | `test-wasm`, `test-e2e`, `test-geographic-visuals` including >512-chunk return journey |
+| Creator | Geographic land locator, projected footprint, overview/detailed generation and offline reopening | Both profiles through `test-creator-source` |
+| Robustness | Valid model-v1/v2 and compact/legacy-history fuzz seeds, adversarial metadata and source fixtures | `coverage`, `fuzz-smoke`, two clean-revision `fuzz-nightly` campaigns |
+| Integration | Sparse maximum dimensions, unchanged cache/planner budgets and repository policies | `preflight`, `perf-ci`, `map-perf`, required CI |
 
-The HYDE allocation PR and stream continuation [PR #67](https://github.com/Anko59/AoeWorld/pull/67)
-are open for review. This table will be updated with exact integrated package
-hashes, gate reports, and limitations before the final PR is marked ready.
+The September 26 resumed source qualification used the server/map implementation
+at `37afc0d` with concurrent client/test work in the working tree. Its report is
+`reports/geodata/source-qualification-resume.json` (local, ignored). Paris
+completed 100 km of local endurance and replay; a separate fixed Sahara corridor
+completed five ordinary 20 km orders with deterministic replay. All four
+qualification sections passed in 638.73 seconds. The page walk covered 1,900
+indexed pages, retained at most 128 pages per provider, and sampled 46,161,920
+bytes peak process RSS. This is functional evidence, not hardware-qualified RTS
+performance. The maximum-size case remains a sparse contract; the Sahara route
+repeats one corridor, and its separate northbound search-limit diagnostic remains
+visible. The final PR must bind its own qualification to its exact revision.
+
+## Earlier revision-bound evidence
 
 M7 completion publication is reviewed in
 [PR #24](https://github.com/Anko59/AoeWorld/pull/24), revision

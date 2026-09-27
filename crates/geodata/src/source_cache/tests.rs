@@ -252,3 +252,140 @@ fn cache_transport_honors_cancellation_before_copying() {
     drop(server);
     fs::remove_dir_all(root).expect("remove temporary cache");
 }
+
+#[test]
+fn acquire_verifies_and_publishes_a_completed_partial_then_reuses_the_object() {
+    let root = temporary_directory();
+    let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
+    let source = lock();
+    let partial = root.join("partial").join(format!("{}.part", source.sha256));
+    fs::write(&partial, b"abc").expect("complete partial");
+
+    let object = cache
+        .acquire(&source, &AtomicBool::new(false))
+        .expect("publish verified partial");
+    assert_eq!(object, cache.object_path(&source).expect("object path"));
+    assert_eq!(fs::read(&object).expect("published source"), b"abc");
+    assert!(!partial.exists());
+    assert!(cache.is_verified(&source).expect("verified object"));
+
+    let restricted = SourceCache::new(
+        root.clone(),
+        DownloadPolicy {
+            cache_quota_bytes: 1,
+            job_acquisition_budget_bytes: 1,
+        },
+    )
+    .expect("restricted cache");
+    assert_eq!(
+        restricted
+            .acquire(&source, &AtomicBool::new(true))
+            .expect("verified reuse precedes budget and cancellation"),
+        object
+    );
+    fs::remove_dir_all(root).expect("remove temporary cache");
+}
+
+#[test]
+fn acquire_rejects_corrupt_partials_and_existing_tampered_objects() {
+    let root = temporary_directory();
+    let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
+    let source = lock();
+    let partial = root.join("partial").join(format!("{}.part", source.sha256));
+    let object = cache.object_path(&source).expect("object path");
+    fs::write(&object, b"bad").expect("tampered object");
+    fs::write(&partial, b"bad").expect("corrupt partial");
+    assert!(matches!(
+        cache.acquire(&source, &AtomicBool::new(false)),
+        Err(CacheError::Integrity("SHA-256 differs from source lock"))
+    ));
+    assert!(!cache.is_verified(&source).expect("tampered object check"));
+
+    fs::write(&partial, b"abc").expect("verified partial");
+    assert!(matches!(
+        cache.acquire(&source, &AtomicBool::new(false)),
+        Err(CacheError::Io(error)) if error.kind() == io::ErrorKind::AlreadyExists
+    ));
+    assert!(
+        !cache
+            .is_verified(&source)
+            .expect("tampered object remains invalid")
+    );
+    fs::remove_dir_all(root).expect("remove temporary cache");
+}
+
+#[test]
+fn acquire_enforces_transfer_cache_budgets_and_cancellation() {
+    let root = temporary_directory();
+    let source = lock();
+    let transfer_limited = SourceCache::new(
+        root.clone(),
+        DownloadPolicy {
+            cache_quota_bytes: 16,
+            job_acquisition_budget_bytes: 2,
+        },
+    )
+    .expect("transfer-limited cache");
+    assert!(matches!(
+        transfer_limited.acquire(&source, &AtomicBool::new(false)),
+        Err(CacheError::Budget(
+            "source exceeds the per-job acquisition budget"
+        ))
+    ));
+
+    let quota_root = temporary_directory();
+    let quota_limited = SourceCache::new(
+        quota_root.clone(),
+        DownloadPolicy {
+            cache_quota_bytes: 4,
+            job_acquisition_budget_bytes: 16,
+        },
+    )
+    .expect("quota-limited cache");
+    fs::write(quota_root.join("objects/occupied"), b"xx").expect("occupied cache");
+    assert!(matches!(
+        quota_limited.acquire(&source, &AtomicBool::new(false)),
+        Err(CacheError::Budget(
+            "source exceeds the remaining cache quota"
+        ))
+    ));
+
+    let cancelled_root = temporary_directory();
+    let cancelled_cache =
+        SourceCache::new(cancelled_root.clone(), DownloadPolicy::default()).expect("cache");
+    assert!(matches!(
+        cancelled_cache.acquire(&source, &AtomicBool::new(true)),
+        Err(CacheError::Cancelled)
+    ));
+    fs::remove_dir_all(root).expect("remove transfer cache");
+    fs::remove_dir_all(quota_root).expect("remove quota cache");
+    fs::remove_dir_all(cancelled_root).expect("remove cancelled cache");
+}
+
+#[test]
+fn acquire_retries_an_invalid_partial_without_starting_a_network_request_after_cancel() {
+    let root = temporary_directory();
+    let cache = SourceCache::new(root.clone(), DownloadPolicy::default()).expect("cache");
+    let source = lock();
+    let partial = root.join("partial").join(format!("{}.part", source.sha256));
+    fs::write(&partial, b"long").expect("oversized partial");
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let signal = Arc::clone(&cancelled);
+    let watched_partial = partial.clone();
+    let canceller = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while watched_partial.exists() && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        signal.store(true, Ordering::SeqCst);
+    });
+
+    assert!(matches!(
+        cache.acquire(&source, &cancelled),
+        Err(CacheError::Cancelled)
+    ));
+    canceller.join().expect("cancellation observer");
+    assert!(!partial.exists());
+    assert!(!cache.object_path(&source).expect("object path").exists());
+    fs::remove_dir_all(root).expect("remove temporary cache");
+}

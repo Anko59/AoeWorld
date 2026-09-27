@@ -2,6 +2,9 @@ use super::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "tests/shore.rs"]
+mod shore_tests;
+
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn test_art(frame: GameFrame) -> GameArt {
@@ -65,11 +68,11 @@ fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
     );
     assert_eq!(
         triangle_texture_coordinates(4),
-        [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]
+        [[0.3, 0.3], [0.7, 0.3], [0.7, 0.7]]
     );
     assert_eq!(
         triangle_texture_coordinates(5),
-        [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+        [[0.3, 0.3], [0.7, 0.7], [0.3, 0.7]]
     );
 }
 
@@ -186,7 +189,7 @@ fn uv_at_world(triangle: &ProjectedSurfaceTriangle, world: [f64; 2]) -> Option<[
 #[wasm_bindgen_test]
 fn webgpu_terrain_shader_contains_the_native_diamond_uv_vertices() {
     let shader = include_str!("../sprites.wgsl");
-    for mode in 0..=3 {
+    for mode in 0..=5 {
         for [u, v] in triangle_texture_coordinates(mode) {
             let coordinate = format!("vec2<f32>({u:.1}, {v:.1})");
             assert!(

@@ -112,6 +112,19 @@ export async function ready(page: Page) {
   );
 }
 
+async function joinActivatedWorld(page: Page) {
+  await page.getByRole("button", { name: "Reconnect to server" }).click();
+  await ready(page);
+}
+
+async function closeMapCreator(page: Page) {
+  const creator = page.locator("#map-creator");
+  if (await creator.isVisible()) {
+    await page.getByRole("button", { name: "Open map creator" }).click();
+    await expect(creator).toBeHidden();
+  }
+}
+
 async function loadedChunkCount(page: Page) {
   const text = (await page.locator("#terrain-cache").textContent()) ?? "";
   return Number(/\((\d+) \/ 512 chunks\)/.exec(text)?.[1] ?? 0);
@@ -178,6 +191,8 @@ export async function activateMatrixCase(
   let capture: string | null = null;
   let noCaptureReason: string | null = null;
   if (startAvailable) {
+    await joinActivatedWorld(page);
+    await closeMapCreator(page);
     await expect
       .poll(() => loadedChunkCount(page), { timeout: 30_000 })
       .toBeGreaterThan(0);
@@ -307,6 +322,8 @@ export async function captureCase(
       timeout: 30_000,
     },
   );
+  await joinActivatedWorld(page);
+  await closeMapCreator(page);
   await expect
     .poll(() => loadedChunkCount(page), { timeout: 30_000 })
     .toBeGreaterThan(0);
@@ -334,7 +351,11 @@ export async function captureCase(
   await page.getByRole("button", { name: "Center on primary unit" }).click();
   const box = await canvas.boundingBox();
   if (!box) throw new Error(`${item.id} ${backend} canvas is missing`);
-  await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  // The center is the unit's ground anchor. Select the visible body above
+  // it: terrain immediately in front can correctly occlude the foot point.
+  await canvas.click({
+    position: { x: box.width / 2, y: box.height / 2 - 24 },
+  });
   await expect(page.locator("#unit-state")).toHaveText(
     /^unit (idle|moving|planning)$/,
     {
@@ -352,7 +373,7 @@ export async function captureCase(
     box.x + box.width / 2 + 75,
     box.y + box.height / 2 + 35,
   );
-  await page.mouse.up();
+  await page.mouse.up({ button: "middle" });
   const afterPanCamera = await page.locator("#world-position").textContent();
   expect(afterPanCamera).not.toBe(beforePanCamera);
   const pannedImage = await canvas.screenshot();
@@ -378,6 +399,8 @@ export async function captureCase(
       timeout: 30_000,
     },
   );
+  await joinActivatedWorld(page);
+  await closeMapCreator(page);
   await expect
     .poll(() => loadedChunkCount(page), { timeout: 30_000 })
     .toBeGreaterThan(0);

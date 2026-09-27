@@ -1,10 +1,10 @@
 use crate::{
     DownloadPolicy, ExpectedChecksum, GeodataError, KnownSource, Provider, SourceCache, SourceLock,
-    acquisition_marker, directory::publish_streaming_manifest,
 };
+use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, LayerProvenance, MapPackage, MapRequest};
+#[cfg(test)]
 use aoe_map::{
-    ENVIRONMENT_PAGE_SAMPLES, EnvironmentalProvenance, LayerProvenance, MAP_SCHEMA_VERSION,
-    MapPackage, MapRequest, PreparedEnvironment, ProjectionMetadata, VerticalDatum,
+    EnvironmentalProvenance, MAP_SCHEMA_VERSION, PreparedEnvironment, ProjectionMetadata,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -115,7 +115,7 @@ pub(crate) fn prepare_with_staging_and_corrections(
         historical_corrections,
         vegetation_corrections,
     )?;
-    let mut hydrology = crate::hydrology::prepare_hydrology_with_plan(
+    let hydrology = crate::hydrology::prepare_hydrology_with_plan(
         cache_root.clone(),
         request,
         hydrology_axis,
@@ -131,84 +131,20 @@ pub(crate) fn prepare_with_staging_and_corrections(
     )?;
     let cancelled = AtomicBool::new(false);
     let coverage = acquire_tiles(&cache, bounds, resolution, &cancelled)?;
-    let stage = Stage::new(staging_root.as_deref().unwrap_or(&cache_root))?;
-    let overview_ocean = source_backed_overview_ocean(&overview)?;
-    let mut sampler = Sampler::new(
+    entry::assemble_acquired_package(
         request,
         estimate.effective_side_meters,
-        bounds,
-        coverage.absent_tiles,
-        coverage.tiles,
-        overview_ocean,
-    )?;
-    entry::apply_detailed_water_model(&mut sampler, &mut hydrology, request, water_corrections)?;
-    pyramid::store_hydrology_evidence(&stage, &hydrology)?;
-    let fields = build_pyramids(
-        &mut sampler,
-        &stage,
         samples_per_axis,
-        &overview,
-        &hydrology,
-    )?;
-    let mut sources = vec![
-        overview.source_lock,
-        overview.water_source_lock,
-        overview.vegetation_source_lock,
-        overview.vegetation_classes_source_lock,
-        overview.hyde_baseline_source_lock,
-        overview.hyde_supplementary_source_lock,
-        overview.hyde_readme_source_lock,
-    ];
-    sources.extend(
-        sampler
-            .tiles
-            .iter()
-            .map(|tile| {
-                tile.lock
-                    .to_map_source_lock(acquisition_marker(), "copernicus-cog-page-v1".to_owned())
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-    );
-    sources.extend(hydrology.source_locks.iter().cloned());
-    let environment = PreparedEnvironment {
-        samples_per_axis,
-        geographic_millimeters_per_sample: estimate
-            .effective_side_meters
-            .checked_mul(1_000)
-            .ok_or(GeodataError::Preparation("sample spacing overflows"))?
-            .div_ceil(u64::from(samples_per_axis)),
-        page_samples: ENVIRONMENT_PAGE_SAMPLES,
-        elevation: fields.elevation,
-        water: Some(fields.water),
-        vegetation: Some(fields.vegetation),
-        historical_land_use: Some(fields.historical_land_use),
-        hydrology_evidence: Some(hydrology.evidence_index.clone()),
-    };
-    let package = MapPackage::with_prepared_environment(
-        MAP_SCHEMA_VERSION,
-        request,
-        sources,
-        ProjectionMetadata {
-            horizontal_crs: crate::local_aeqd_definition(
-                request.center_latitude_e7,
-                request.center_longitude_e7,
-            ),
-            vertical_datum: VerticalDatum::Egm2008Orthometric,
-            tool_version: tool_version(),
+        &output_directory,
+        staging_root.as_deref().unwrap_or(&cache_root),
+        water_corrections,
+        entry::AcquiredDetailedInputs {
+            bounds,
+            overview,
+            hydrology,
+            coverage,
         },
-        EnvironmentalProvenance {
-            elevation: LayerProvenance::SourceDerived,
-            water: overview.provenance.water,
-            vegetation: overview.provenance.vegetation,
-            historical_land_use: overview.provenance.historical_land_use,
-        },
-        environment,
-    )?;
-    package.validate()?;
-    publish_staged_pages(&stage, &output_directory, &package, samples_per_axis)?;
-    publish_streaming_manifest(&output_directory, &package)?;
-    crate::GeneratedMap::verify_directory(&output_directory, &package.content_hash_hex())?;
-    Ok(package)
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -475,19 +411,22 @@ fn tile_prefix(latitude: i32, longitude: i32, suffix: &str) -> String {
 
 mod entry;
 pub(crate) use entry::DetailedCorrections;
-use entry::tool_version;
 pub use entry::{prepare_detailed_directory, prepare_detailed_directory_with_water_corrections};
 
 mod sampler;
 use sampler::Sampler;
 
 mod pyramid;
-use pyramid::build_pyramids;
 
+#[cfg(test)]
+#[path = "tests/offline_detailed_pipeline.rs"]
+mod offline_detailed_pipeline_tests;
 mod stage;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 #[path = "tests/stage.rs"]
 mod tests_stage;
-use stage::{Stage, publish_staged_pages};
+use stage::Stage;
+#[cfg(test)]
+use stage::publish_staged_pages;

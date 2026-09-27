@@ -9,17 +9,21 @@ pub(crate) fn evict_distant_chunks_with_limits(
     config: WorldConfig,
     maximum_chunks: usize,
     maximum_bytes: usize,
+    preferred: &[(i32, i32)],
 ) -> (bool, Option<(i16, i16)>) {
     let mut cached_bytes = chunks.values().map(chunk_resident_bytes).sum::<usize>();
     if chunks.len() <= maximum_chunks && cached_bytes <= maximum_bytes {
         return (false, None);
     }
+    let preferred = preferred.iter().copied().collect::<BTreeSet<_>>();
     let mut coordinates = chunks.keys().copied().collect::<Vec<_>>();
     coordinates.sort_by(|left, right| {
         let left_distance = chunk_distance_for(*left, camera, config);
         let right_distance = chunk_distance_for(*right, camera, config);
-        right_distance
-            .total_cmp(&left_distance)
+        preferred
+            .contains(left)
+            .cmp(&preferred.contains(right))
+            .then_with(|| right_distance.total_cmp(&left_distance))
             .then(right.cmp(left))
     });
     let mut removed = false;

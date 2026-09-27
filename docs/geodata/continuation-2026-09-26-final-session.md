@@ -1,5 +1,8 @@
 # Geographic maps: continuation after the final-session checkpoint
 
+Superseded by [the September 27 preservation handover](handover-2026-09-27.md).
+The blockers below describe this earlier checkpoint, not the current PR head.
+
 This checkpoint was requested by the user to stop spending quota and transfer
 implementation to another agent. **The feature is not ready to merge.** Stop
 instructions superseded the remaining implementation and qualification work.
