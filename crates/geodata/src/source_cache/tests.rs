@@ -389,3 +389,5 @@ fn acquire_retries_an_invalid_partial_without_starting_a_network_request_after_c
     assert!(!cache.object_path(&source).expect("object path").exists());
     fs::remove_dir_all(root).expect("remove temporary cache");
 }
+
+mod acquisition_edges;
