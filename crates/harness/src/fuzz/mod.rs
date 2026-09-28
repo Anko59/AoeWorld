@@ -1,10 +1,27 @@
 //! Bounded parser fuzz campaigns with exact target and toolchain selection.
 use crate::process;
 use serde::Serialize;
-use std::{error::Error, fs, path::Path, process::Command, time::Duration};
+use std::{
+    error::Error,
+    fs,
+    path::Path,
+    process::Command,
+    time::{Duration, Instant},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-const TARGETS: [&str; 4] = ["drs", "slp", "palette", "manifest"];
+mod maintenance;
+mod seeds;
+mod storage;
+const TARGETS: [&str; 7] = [
+    "drs",
+    "slp",
+    "palette",
+    "manifest",
+    "map_package",
+    "environment_page",
+    "map_chunk",
+];
 
 #[derive(Clone, Copy)]
 pub enum Mode {
@@ -33,6 +50,20 @@ impl Mode {
             Self::Nightly => Duration::from_secs(900),
         }
     }
+
+    fn segments(self) -> u8 {
+        match self {
+            Self::Smoke => 1,
+            Self::Nightly => 5,
+        }
+    }
+
+    fn segment_limit(self) -> &'static str {
+        match self {
+            Self::Smoke => self.limit(),
+            Self::Nightly => "-max_total_time=60",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -43,29 +74,271 @@ struct Report {
     mode: &'static str,
     toolchain: &'static str,
     cargo_fuzz: &'static str,
-    targets: [&'static str; 4],
+    targets: [&'static str; 7],
     limit: &'static str,
+    planned_segments_per_target: u8,
+    segment_limit: &'static str,
+    prepared_seeds: Vec<seeds::Seed>,
+    verified_legacy_seeds: Vec<seeds::Seed>,
+    corpus_directory: &'static str,
+    artifact_directory: &'static str,
+    storage_policy: storage::Policy,
+    storage_before: storage::Snapshot,
+    storage_after: storage::Snapshot,
+    maintenance_actions: Vec<maintenance::Action>,
+    target_results: Vec<TargetResult>,
+    attempted_targets: usize,
+    successful_targets: usize,
     result: &'static str,
+    failure: Option<String>,
 }
 
-fn execute<F>(mode: Mode, mut command: F) -> Result<()>
+#[derive(Serialize)]
+struct TargetResult {
+    target: &'static str,
+    duration_millis: u128,
+    completed: bool,
+    completed_segments: u8,
+    planned_segments: u8,
+    completed_fuzz_seconds: u16,
+    storage_after: Option<storage::Snapshot>,
+    failure: Option<String>,
+}
+
+struct Execution {
+    storage_after: storage::Snapshot,
+    attempted_targets: usize,
+    successful_targets: usize,
+    failure: Option<String>,
+    target_results: Vec<TargetResult>,
+    maintenance_actions: Vec<maintenance::Action>,
+}
+
+fn execute<F, M>(
+    mode: Mode,
+    root: &Path,
+    storage_policy: storage::Policy,
+    storage_before: storage::Snapshot,
+    mut command: F,
+    mut maintain: M,
+) -> Execution
 where
     F: FnMut(&[&str], Duration) -> Result<()>,
+    M: FnMut(
+        &'static str,
+        storage::Snapshot,
+        storage::Snapshot,
+    ) -> Result<Vec<maintenance::Action>>,
 {
+    let mut execution = Execution {
+        storage_after: storage_before,
+        attempted_targets: 0,
+        successful_targets: 0,
+        failure: None,
+        target_results: Vec::new(),
+        maintenance_actions: Vec::new(),
+    };
     for target in TARGETS {
-        command(
-            &[
-                "+nightly-2026-09-01",
-                "fuzz",
-                "run",
-                target,
-                "--",
-                mode.limit(),
-                "-max_len=1048576",
-                "-timeout=5",
-            ],
-            mode.deadline(),
-        )?;
+        let before_target = execution.storage_after;
+        execution.attempted_targets += 1;
+        let started = Instant::now();
+        let mut failures = Vec::new();
+        let mut snapshot_after = None;
+        let mut completed_segments = 0;
+        for segment in 0..mode.segments() {
+            let before_segment = execution.storage_after;
+            let command_result = command(
+                &[
+                    "+nightly-2026-09-01",
+                    "fuzz",
+                    "run",
+                    target,
+                    "--",
+                    mode.segment_limit(),
+                    "-max_len=1048576",
+                    "-timeout=5",
+                ],
+                mode.deadline(),
+            );
+            match storage_policy.inspect(root) {
+                Ok(snapshot) => {
+                    execution.storage_after = snapshot;
+                    snapshot_after = Some(snapshot);
+                    if let Err(error) = storage_policy.validate(snapshot) {
+                        failures.push(format!(
+                            "after target {target} segment {}: {error}",
+                            segment + 1
+                        ));
+                    }
+                }
+                Err(error) => failures.push(format!(
+                    "after target {target} segment {}: cannot snapshot storage: {error}",
+                    segment + 1
+                )),
+            }
+            if let Err(error) = command_result {
+                failures.push(format!("target {target} segment {}: {error}", segment + 1));
+            }
+            if !failures.is_empty() {
+                break;
+            }
+            completed_segments += 1;
+            if segment + 1 < mode.segments() {
+                let Some(after_segment) = snapshot_after else {
+                    failures.push(format!(
+                        "target {target} segment {} has no storage snapshot",
+                        segment + 1
+                    ));
+                    break;
+                };
+                match maintain(target, before_segment, after_segment) {
+                    Ok(mut actions) => {
+                        for action in &mut actions {
+                            action.after_segment = Some(segment + 1);
+                        }
+                        execution.maintenance_actions.extend(actions);
+                    }
+                    Err(error) => {
+                        failures.push(format!(
+                            "target {target} segment {}: corpus maintenance: {error}",
+                            segment + 1
+                        ));
+                        break;
+                    }
+                }
+                match storage_policy.inspect(root) {
+                    Ok(snapshot) => execution.storage_after = snapshot,
+                    Err(error) => {
+                        failures.push(format!("target {target} segment {}: cannot snapshot maintained storage: {error}", segment + 1));
+                        break;
+                    }
+                }
+            }
+        }
+        if failures.is_empty() {
+            execution.successful_targets += 1;
+        }
+        execution.target_results.push(TargetResult {
+            target,
+            duration_millis: started.elapsed().as_millis(),
+            completed: failures.is_empty(),
+            completed_segments,
+            planned_segments: mode.segments(),
+            completed_fuzz_seconds: if matches!(mode, Mode::Nightly) {
+                u16::from(completed_segments) * 60
+            } else {
+                0
+            },
+            storage_after: snapshot_after,
+            failure: (!failures.is_empty()).then(|| failures.join("; ")),
+        });
+        if !failures.is_empty() {
+            execution.failure = Some(failures.join("; "));
+            break;
+        }
+        let Some(after_target) = snapshot_after else {
+            execution.failure = Some(format!(
+                "after target {target}: storage snapshot is missing"
+            ));
+            break;
+        };
+        match maintain(target, before_target, after_target) {
+            Ok(actions) => execution.maintenance_actions.extend(actions),
+            Err(error) => {
+                if let Ok(snapshot) = storage_policy.inspect(root) {
+                    execution.storage_after = snapshot;
+                }
+                execution.failure = Some(format!(
+                    "after target {target}: corpus maintenance: {error}"
+                ));
+                break;
+            }
+        }
+        match storage_policy.inspect(root) {
+            Ok(snapshot) => execution.storage_after = snapshot,
+            Err(error) => {
+                execution.failure = Some(format!(
+                    "after target {target}: cannot snapshot maintained storage: {error}"
+                ));
+                break;
+            }
+        }
+    }
+    execution
+}
+
+fn run_monitored(
+    program: &str,
+    args: &[&str],
+    deadline: Duration,
+    root: &Path,
+    policy: storage::Policy,
+) -> Result<()> {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::thread;
+    let cancellation = process::Cancellation::default();
+    let stop = Arc::new(AtomicBool::new(false));
+    let failure = Arc::new(Mutex::new(None::<String>));
+    let watcher = {
+        let stop = stop.clone();
+        let failure = failure.clone();
+        let cancellation = cancellation.clone();
+        let root = root.to_owned();
+        thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                match policy.inspect(&root) {
+                    Ok(snapshot) if storage::near_limit(policy, snapshot) => {
+                        if let Ok(mut reason) = failure.lock() {
+                            *reason = Some(format!(
+                                "working storage reached the 95% quota guard: {snapshot:?}"
+                            ));
+                        }
+                        cancellation.cancel();
+                        break;
+                    }
+                    Err(error) => {
+                        if let Ok(mut reason) = failure.lock() {
+                            *reason = Some(format!(
+                                "cannot inspect working storage during campaign: {error}"
+                            ));
+                        }
+                        cancellation.cancel();
+                        break;
+                    }
+                    Ok(_) => {}
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        })
+    };
+    let started = Instant::now();
+    let result = process::run_cancellable(program, args, deadline, &cancellation);
+    let elapsed = started.elapsed();
+    stop.store(true, Ordering::SeqCst);
+    watcher
+        .join()
+        .map_err(|_| "fuzz storage watcher panicked")?;
+    if let Some(message) = failure
+        .lock()
+        .map_err(|_| "fuzz quota lock poisoned")?
+        .take()
+    {
+        return Err(message.into());
+    }
+    result?;
+    if let Some(seconds) = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("-max_total_time="))
+        .and_then(|value| value.parse::<u64>().ok())
+        && elapsed < Duration::from_secs(seconds)
+    {
+        return Err(format!(
+            "libFuzzer exited before its {seconds}-second segment completed: {elapsed:?}"
+        )
+        .into());
     }
     Ok(())
 }
@@ -78,22 +351,11 @@ fn git(args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn write_report(root: &Path, mode: Mode, revision: String, dirty: bool) -> Result<()> {
-    let report = Report {
-        version: 1,
-        revision,
-        dirty,
-        mode: mode.label(),
-        toolchain: "nightly-2026-09-01",
-        cargo_fuzz: "0.13.2",
-        targets: TARGETS,
-        limit: mode.limit(),
-        result: "PASS",
-    };
+fn write_report(root: &Path, report: Report) -> Result<()> {
     let directory = root.join("reports/fuzz");
     fs::create_dir_all(&directory)?;
     fs::write(
-        directory.join(format!("{}.json", mode.label())),
+        directory.join(format!("{}.json", report.mode)),
         serde_json::to_vec_pretty(&report)?,
     )?;
     Ok(())
@@ -107,66 +369,86 @@ pub fn run(mode: Mode) -> Result<()> {
     if !Path::new("Cargo.toml").is_file() || !root.join("fuzz/fuzz_targets").is_dir() {
         return Err("fuzz command must run in fuzz directory".into());
     }
-    execute(mode, |args, deadline| {
+    fs::create_dir_all(root.join("fuzz/artifacts"))?;
+    let storage_policy = storage::Policy::default();
+    let storage_before = storage_policy.inspect(&root)?;
+    let seeds = seeds::prepare(&root)?;
+    let maintenance = maintenance::run(&root, storage_policy, |args, deadline| {
         process::run("cargo", args, deadline).map_err(Into::into)
-    })?;
+    });
+    let (maintenance_actions, execution) = match maintenance {
+        Ok(actions) => {
+            let execution = execute(
+                mode,
+                &root,
+                storage_policy,
+                storage_policy.inspect(&root)?,
+                |args, deadline| run_monitored("cargo", args, deadline, &root, storage_policy),
+                |target, before, after| {
+                    maintenance::after_target(
+                        &root,
+                        storage_policy,
+                        target,
+                        before,
+                        after,
+                        |args, deadline| process::run("cargo", args, deadline).map_err(Into::into),
+                    )
+                },
+            );
+            let mut actions = actions;
+            actions.extend(execution.maintenance_actions.iter().cloned());
+            (actions, execution)
+        }
+        Err(error) => (
+            Vec::new(),
+            Execution {
+                storage_after: storage_policy.inspect(&root)?,
+                attempted_targets: 0,
+                successful_targets: 0,
+                failure: Some(format!("corpus maintenance: {error}")),
+                target_results: Vec::new(),
+                maintenance_actions: Vec::new(),
+            },
+        ),
+    };
+    let result = if execution.failure.is_some() {
+        "FAIL"
+    } else {
+        "PASS"
+    };
     write_report(
         &root,
-        mode,
-        git(&["rev-parse", "HEAD"])?,
-        !git(&["status", "--porcelain"])?.is_empty(),
-    )
+        Report {
+            version: 7,
+            revision: git(&["rev-parse", "HEAD"])?,
+            dirty: !git(&["status", "--porcelain"])?.is_empty(),
+            mode: mode.label(),
+            toolchain: "nightly-2026-09-01",
+            cargo_fuzz: "0.13.2",
+            targets: TARGETS,
+            limit: mode.limit(),
+            planned_segments_per_target: mode.segments(),
+            segment_limit: mode.segment_limit(),
+            prepared_seeds: seeds.prepared_seeds,
+            verified_legacy_seeds: seeds.verified_legacy_seeds,
+            corpus_directory: "fuzz/corpus",
+            artifact_directory: "fuzz/artifacts",
+            storage_policy,
+            storage_before,
+            storage_after: execution.storage_after,
+            maintenance_actions,
+            target_results: execution.target_results,
+            attempted_targets: execution.attempted_targets,
+            successful_targets: execution.successful_targets,
+            result,
+            failure: execution.failure.clone(),
+        },
+    )?;
+    match execution.failure {
+        Some(failure) => Err(failure.into()),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn all_parser_targets_are_bounded_and_failures_stop_the_campaign() {
-        for mode in [Mode::Smoke, Mode::Nightly] {
-            let mut targets = Vec::new();
-            execute(mode, |args, deadline| {
-                targets.push(args[3].to_owned());
-                assert_eq!(args[0], "+nightly-2026-09-01");
-                assert_eq!(args[5], mode.limit());
-                assert!(args.contains(&"-max_len=1048576"));
-                assert_eq!(deadline, mode.deadline());
-                Ok(())
-            })
-            .expect("campaign");
-            assert_eq!(targets, TARGETS);
-        }
-        let mut calls = 0;
-        assert!(
-            execute(Mode::Smoke, |_, _| {
-                calls += 1;
-                Err("injected parser crash".into())
-            })
-            .is_err()
-        );
-        assert_eq!(calls, 1);
-    }
-
-    #[test]
-    fn reports_distinguish_bounded_smoke_and_nightly_campaigns() {
-        let temp = tempfile::tempdir().expect("directory");
-        for mode in [Mode::Smoke, Mode::Nightly] {
-            write_report(temp.path(), mode, "revision".into(), true).expect("report");
-            let path = temp
-                .path()
-                .join(format!("reports/fuzz/{}.json", mode.label()));
-            let value: serde_json::Value =
-                serde_json::from_slice(&fs::read(path).expect("report")).expect("JSON");
-            assert_eq!(value["result"], "PASS");
-            assert_eq!(value["dirty"], true);
-            assert_eq!(value["targets"].as_array().expect("targets").len(), 4);
-        }
-    }
-
-    #[test]
-    fn fuzz_report_revision_comes_from_git_and_rejects_unknown_refs() {
-        assert_eq!(git(&["rev-parse", "HEAD"]).expect("revision").len(), 40);
-        assert!(git(&["rev-parse", "this-ref-does-not-exist"]).is_err());
-    }
-}
+mod tests;

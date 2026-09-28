@@ -1,4 +1,4 @@
-use super::{Client, animate, connect, controls, resize, stored_token};
+use super::{Client, animate, connect, controls, resize};
 use crate::game_assets::load;
 use aoe_core::{Camera, WorldConfig};
 use aoe_rendering::GameRenderer;
@@ -37,11 +37,22 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
             ],
             zoom: 1.0,
             viewport: [1.0, 1.0],
+            focus_elevation_meters: 0.0,
         },
         config,
         primary: None,
         role: None,
-        token: stored_token(),
+        map_content_hash: None,
+        surface_fixture: false,
+        focus_map_hash: None,
+        resources: crate::resource_state::ResourceStateCache::default(),
+        terrain_chunks: BTreeMap::new(),
+        terrain_discovered: Default::default(),
+        terrain_height_bounds: None,
+        terrain_bounds: Default::default(),
+        terrain_resident_height_bounds: None,
+        terrain_inflight: Default::default(),
+        token: super::storage::stored_token(),
         revision: 0,
         sent_region: None,
         last_subscribe: 0.0,
@@ -57,6 +68,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         status: "loading".to_owned(),
     }));
     resize(&mut shared.borrow_mut());
+    super::fixture::set_active(&shared);
     controls::install(shared.clone())?;
     connect(shared.clone())?;
     animate(shared)?;

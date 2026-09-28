@@ -10,6 +10,10 @@ pub const SPATIAL_CHUNK_TILES: i32 = 32;
 pub const DEFAULT_SIMULATION_HZ: u32 = 20;
 pub const DEFAULT_MOVE_SPEED_SUBUNITS_PER_TICK: i32 = 128;
 
+fn default_move_speed_subunits_per_tick_denominator() -> u64 {
+    1
+}
+
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize,
 )]
@@ -182,6 +186,8 @@ pub struct WorldConfig {
     pub seed: Seed,
     pub tick_hz: u32,
     pub move_speed_subunits_per_tick: i32,
+    #[serde(default = "default_move_speed_subunits_per_tick_denominator")]
+    pub move_speed_subunits_per_tick_denominator: u64,
 }
 
 impl Default for WorldConfig {
@@ -192,6 +198,7 @@ impl Default for WorldConfig {
             seed: Seed(1),
             tick_hz: DEFAULT_SIMULATION_HZ,
             move_speed_subunits_per_tick: DEFAULT_MOVE_SPEED_SUBUNITS_PER_TICK,
+            move_speed_subunits_per_tick_denominator: 1,
         }
     }
 }
@@ -214,7 +221,10 @@ impl WorldConfig {
         {
             return Err(CoordinateError::InvalidDimensions);
         }
-        if self.tick_hz == 0 || self.move_speed_subunits_per_tick <= 0 {
+        if self.tick_hz == 0
+            || self.move_speed_subunits_per_tick <= 0
+            || self.move_speed_subunits_per_tick_denominator == 0
+        {
             return Err(CoordinateError::InvalidSimulationConfig);
         }
         self.world_width_subunits()?;
@@ -331,6 +341,26 @@ mod tests {
             WorldPosition::new(8_389_120, 8_389_120)
         );
         assert!(config.valid_map_position(WorldPosition::new(0, 0)));
+    }
+
+    #[test]
+    fn world_config_reads_legacy_json_and_rejects_zero_speed_denominator() {
+        let legacy = r#"{
+            "width_tiles": 64,
+            "height_tiles": 64,
+            "seed": 7,
+            "tick_hz": 20,
+            "move_speed_subunits_per_tick": 128
+        }"#;
+        let config: WorldConfig = serde_json::from_str(legacy).expect("legacy config");
+        assert_eq!(config.move_speed_subunits_per_tick_denominator, 1);
+
+        let mut invalid = config;
+        invalid.move_speed_subunits_per_tick_denominator = 0;
+        assert_eq!(
+            invalid.validate(),
+            Err(CoordinateError::InvalidSimulationConfig)
+        );
     }
 
     #[test]

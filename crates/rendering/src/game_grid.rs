@@ -1,28 +1,36 @@
-use crate::{GAME_ATLAS_SIDE, SceneCamera, web::Sprite};
+use crate::{GAME_ATLAS_SIDE, SceneCamera, surface_mesh::surface_depth, web::Sprite};
 use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use web_sys::CanvasRenderingContext2d;
 
 const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
+pub(crate) const SELECTION_RING_SPRITES: usize = 32;
 
-pub(crate) fn selection_ring(camera: SceneCamera, position: [f64; 2]) -> Vec<Sprite> {
-    let screen = camera_projection(camera).world_to_screen(position);
+pub(crate) fn selection_ring(
+    camera: SceneCamera,
+    position: [f64; 2],
+    elevation_meters: f64,
+) -> Vec<(Sprite, f64)> {
+    let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
     let radius_x = 24.0 * camera.zoom;
     let radius_y = 8.0 * camera.zoom;
-    let mut sprites = Vec::with_capacity(32);
-    for index in 0..32 {
-        let angle = f64::from(index) * std::f64::consts::TAU / 32.0;
-        sprites.push(Sprite {
-            position: to_clip(
-                ScreenPoint {
-                    x: screen.x + angle.cos() * radius_x,
-                    y: screen.y + angle.sin() * radius_y,
-                },
-                camera.viewport,
-            ),
-            radius: pixel_radius(camera.viewport, 1.5),
-            color: [0.95, 0.85, 0.35, 1.0],
-            uv: solid_uv(),
-        });
+    let mut sprites = Vec::with_capacity(SELECTION_RING_SPRITES);
+    for index in 0..SELECTION_RING_SPRITES {
+        let angle = index as f64 * std::f64::consts::TAU / SELECTION_RING_SPRITES as f64;
+        let point = ScreenPoint {
+            x: screen.x + angle.cos() * radius_x,
+            y: screen.y + angle.sin() * radius_y,
+        };
+        let world = camera_projection(camera).screen_to_world_at_height(point, elevation_meters);
+        sprites.push((
+            Sprite {
+                position: to_clip(point, camera.viewport),
+                radius: pixel_radius(camera.viewport, 1.5),
+                color: [0.95, 0.85, 0.35, 1.0],
+                uv: solid_uv(),
+                depths: [0.0; 4],
+            },
+            surface_depth([world[0], world[1], elevation_meters]),
+        ));
     }
     sprites
 }
@@ -51,6 +59,7 @@ fn camera_projection(camera: SceneCamera) -> Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
     }
 }
 
@@ -152,6 +161,7 @@ fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, vie
             radius: pixel_radius(viewport, 2.0),
             color: GRID_COLOR,
             uv: solid_uv(),
+            depths: [f32::INFINITY; 4],
         });
     }
 }

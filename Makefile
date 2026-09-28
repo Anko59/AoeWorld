@@ -16,10 +16,21 @@ GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
 ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT)
 DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
+GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
+GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
+GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+SOURCE_QUAL_PATHS := $(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)
+SOURCE_QUAL_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(SOURCE_QUAL_PATHS)),$(patsubst %/,%,$(dir $(path))))))
+SOURCE_QUAL_MOUNTS := $(foreach directory,$(SOURCE_QUAL_EXTERNAL_DIRS),-v $(directory):$(directory))
+SOURCE_QUAL_CARGO_HOME ?= $(ROOT)/.cache/cargo
+SOURCE_QUAL_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(SOURCE_QUAL_CARGO_HOME) $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
+SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
 DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse-published release-smoke-published release-verify release-rehearse repo-policy-check
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
 help:
 	@echo 'AoeWorld'
@@ -33,6 +44,17 @@ help:
 	@echo '  make lint            Run strict Clippy'
 	@echo '  make deny            Audit Cargo advisories, licenses, bans, and sources'
 	@echo '  make test-unit       Run native tests'
+	@echo '  make geodata-bootstrap Acquire the configured overview source stack'
+	@echo '  make geodata-verify  Verify cached overview inputs without network access'
+	@echo '  AOE_MAP_REQUEST=... make map-estimate  Estimate a map request'
+	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate  Create a self-contained package'
+	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate-detailed  Create a bounded public DEM package'
+	@echo '  AOE_MAP_PACKAGE=... make map-verify  Verify a generated package'
+	@echo '  AOE_SOURCE_QUAL_PACKAGE_DIRECTORY=... AOE_SOURCE_QUAL_CONTENT_HASH=... make map-source-qualify  Qualify the 50,000-tile, 1:1 source-backed 100km case'
+	@echo '  Optional scale references: AOE_SOURCE_QUAL_512_*, AOE_SOURCE_QUAL_16384_*, AOE_SOURCE_QUAL_262144_*'
+	@echo '  make map-source-scale-qualify  Sample verified source packages at the configured scale axes without running movement'
+	@echo '  make map-test        Run deterministic map-model tests'
+	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
 	@echo '  make coverage        Check native production-line coverage floors'
 	@echo '  make pre-commit      Local static gate'
 	@echo '  make preflight       Static gate plus native tests'
@@ -49,6 +71,10 @@ help:
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
+	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Qualify overview and detailed source maps across restart'
+	@echo '  AOE_GEODATA_CACHE=... make test-geographic-matrix  Prepare and verify fixed overview regions'
+	@echo '  make test-geographic-visuals  Capture water and Alpine packages on WebGPU and Canvas'
+	@echo '  make test-geographic-visuals-unit  Test page evidence and package-directory config'
 	@echo '  make test-wasm       Execute wasm-bindgen tests in pinned Chromium'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
@@ -144,6 +170,40 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
+geodata-bootstrap:
+	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap
+
+geodata-verify:
+	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- verify
+
+map-estimate:
+	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-estimate
+
+map-generate:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
+
+map-generate-detailed:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
+
+map-verify:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
+
+map-source-qualify:
+	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_GEOGRAPHIC_ARGS) $(SOURCE_QUAL_SCALE_ARGS)
+
+map-source-scale-qualify:
+	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)
+
+map-test:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map
+
+.PHONY: geodata-test
+geodata-test:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-geodata
+
+map-perf:
+	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
+
 test-wasm: browser-tools orchestrator-tools
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
 
@@ -160,8 +220,7 @@ mutation-nightly: mutation-tools
 coverage: coverage-tools browser-deps orchestrator-tools build-wasm
 	@mkdir -p reports/coverage
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked --workspace --lcov --output-path reports/coverage/native.lcov
-	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-e2e-%p.profraw -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/llvm-cov-target/debug/aoe-harness test-e2e
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e AOE_E2E_COVERAGE=1 -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-e2e-%p.profraw -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/llvm-cov-target/debug/aoe-harness test-e2e
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-wasm-%p.profraw -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/llvm-cov-target/debug/aoe-harness test-wasm
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/coverage/native.lcov
 	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --json --output-path reports/coverage/native.json
@@ -237,15 +296,34 @@ build:
 	@$(DOCKER_RUN) cargo build --workspace --locked
 
 build-wasm:
-	@$(DOCKER_RUN) cargo build --locked --release --target wasm32-unknown-unknown -p aoe-client
-	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/release/aoe_client.wasm
+	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
+	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 
 test-e2e: build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
+test-creator-source: build-wasm browser-deps orchestrator-tools
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-creator-source
+
+test-geographic-matrix: orchestrator-tools
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@docker run --rm --init --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-matrix
+
+test-geographic-visuals: build-wasm browser-deps orchestrator-tools
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-visuals
+
+test-geographic-visuals-unit: orchestrator-tools
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness e2e::visual::packages
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server explicit_map_package_directory_is_canonical_and_must_be_a_directory
+
 dev: build-wasm orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
 
 down: orchestrator-tools

@@ -3,8 +3,15 @@
 Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
 for focused checks. `make pre-commit` runs static gates; `make preflight` adds
 native tests through pinned cargo-nextest, followed by separate doctests and a
-WASM build. `make test-wasm` runs Rust `wasm-bindgen-test` cases in pinned
-headless Chromium through a disposable ChromeDriver container. It writes
+WASM build. The test profile optimizes map, simulation, server, and procedural
+hashing (BLAKE3) code for the
+full-distance offline movement/replay regressions; debug assertions and integer
+overflow checks remain enabled. Distances, tick limits, and gate floors are
+unchanged. `make test-wasm` runs the client browser integration tests and the
+client and rendering library `wasm-bindgen-test` cases in pinned headless
+Chromium through a disposable ChromeDriver container. Browser-only regressions
+must use `#[wasm_bindgen_test]`; native `#[test]` cases in WASM-only modules do
+not run in this gate. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
 this gate. `make test-e2e` runs both an explicit WebGPU project under Xvfb with Vulkan
 SwiftShader and a game-only project with default browser launch settings.
@@ -15,14 +22,36 @@ screenshot, along with reconnect and independent subscriptions.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
 production-line denominator, and rejects less than 85% overall or 90% in
 protocol, asset parsers, and policy/report logic. A missing group fails.
-The coverage run includes both instrumented Playwright E2E and the browser
-WASM runner. Browser, WASM, asset, performance, QA, and artifact gates need
+The coverage run instruments the native Playwright harness and server, and the
+native browser WASM runner. It selects the server built by cargo-llvm-cov and
+requires graceful shutdown so its execution counters are written. These are
+native coverage records, not instrumentation of JavaScript or browser WASM.
+Browser, WASM, asset, performance, QA, and artifact gates need
 separate evidence.
-`make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette, and
-pack-manifest parser. It uses a separately pinned nightly toolchain and keeps
+The offline geographic regression runs all five 20 km orders and replay through
+the same movement executor as source qualification, using persisted synthetic
+pages. Source-specific northbound and connectivity diagnostics remain in
+`make map-source-qualify` and focused diagnostic tests; the synthetic movement
+fixture does not claim those real-source results.
+`make fuzz-smoke` runs 512 libFuzzer cases against each DRS, SLP, palette,
+pack-manifest, map-package/request, environmental-page, and compact-chunk parser.
+The map campaigns begin with generated valid seeds; accepted package/page/chunk
+values must retain their meaning and identity through serialization roundtrips. It uses a separately pinned nightly toolchain and keeps
 new corpus inputs and crash artifacts outside Git. `make fuzz-nightly` gives
-each target a 300-second campaign. Both write versioned reports under
+each target a 300-second campaign in five completed 60-second segments. Both write versioned reports under
 `reports/fuzz/`; a discovered crash fails the gate.
+When active corpus pressure warrants maintenance, the harness copies all active
+inputs into ignored, content-addressed `fuzz/archive/` storage before running
+coverage-guided `cargo fuzz cmin`. It restores canonical seeds afterward and
+keeps crash artifacts untouched. Between nightly segments and after a completed
+target, material corpus growth triggers archive and minimization before fuzzing
+continues. If storage is still above 85% it tries other large corpora
+and fails if headroom cannot be restored. During each target it watches the fixed active
+corpus and artifact quotas and cancels the target at a 95% guard; cancellation
+or fewer than five completed nightly segments is a failure. Reports record
+segment counts, completed fuzz seconds, maintenance, each target's elapsed time
+and outcome, and the storage snapshots. Archived inputs
+are outside the active quota and must be retained separately.
 `make mutation-nightly` runs pinned cargo-mutants against the impact
 classifier, CI selection check, and 5% performance comparator. It requires a
 completed, nonempty campaign with no missed or timed-out mutations and writes

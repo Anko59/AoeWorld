@@ -1,4 +1,7 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
+mod hooks;
+pub(crate) use hooks::hook_path;
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},

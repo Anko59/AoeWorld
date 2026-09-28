@@ -1,6 +1,18 @@
 {
   "goog:chromeOptions": {
     "binary": "/ms-playwright/chromium-1243/chrome-linux64/chrome",
-    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+    "args": [
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+      "--enable-unsafe-webgpu",
+      "--ignore-gpu-blocklist",
+      "--enable-gpu",
+      "--enable-features=Vulkan",
+      "--use-vulkan=swiftshader",
+      "--use-webgpu-adapter=swiftshader",
+      "--disable-vulkan-surface"
+    ]
   }
 }

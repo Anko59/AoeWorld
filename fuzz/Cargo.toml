@@ -9,6 +9,8 @@ cargo-fuzz = true
 
 [dependencies]
 aoe-assets = { path = "../crates/assets" }
+aoe-map = { path = "../crates/map" }
+serde_json = "1.0"
 libfuzzer-sys = "=0.4.10"
 
 [workspace]
@@ -37,6 +39,27 @@ bench = false
 [[bin]]
 name = "manifest"
 path = "fuzz_targets/manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "map_package"
+path = "fuzz_targets/map_package.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "environment_page"
+path = "fuzz_targets/environment_page.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "map_chunk"
+path = "fuzz_targets/map_chunk.rs"
 test = false
 doc = false
 bench = false

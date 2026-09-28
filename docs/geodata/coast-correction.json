@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "case_id": "nile_delta_coast",
+  "supersedes_case_id": "coast_estuary",
+  "failed_package": {
+    "location": "Nile Delta",
+    "request": {
+      "center_latitude_e7": 300444000,
+      "center_longitude_e7": 312357000,
+      "compression": {
+        "denominator": 1,
+        "numerator": 50
+      },
+      "detail_profile": "standard_v1",
+      "reconstruction_profile": "circa600_v1",
+      "requested_side_meters": 50000,
+      "schema_version": 1,
+      "seed": 3,
+      "year_ce": 600
+    },
+    "content_hash": "00d8edf5841ee4561c6dd9b9d314449e684b37b001545c7ba18c1dd7c3b7b07f",
+    "reason": "The original Nile Delta request center (30.0444 N, 31.2357 E) is Cairo; its verified package has zero ocean and inland water coverage, so it cannot support a coast capture.",
+    "water_page_evidence": {
+      "sample_count": 16384,
+      "ocean_nonzero_samples": 0,
+      "inland_nonzero_samples": 0,
+      "ocean_coverage_percent_sum": 0,
+      "inland_coverage_percent_sum": 0
+    },
+    "source_locks": [
+      {
+        "id": "etopo-2022-v1-60s-surface",
+        "provider": "NOAA",
+        "release": "ETOPO 2022 v1",
+        "sha256": "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
+      },
+      {
+        "id": "hyde-3.2.1:HYDE3_2_1-baseline.zip",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "5a847086cb199c75b739a7b099a8c48840e52fe5a4937882bd8fb26f86288714"
+      },
+      {
+        "id": "hyde-3.2.1:HYDE3_2_1-general_supplementary.zip",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "04011ed530557f13e80a4caf20c08ab9473546106efab385a3e428078b6d97e0"
+      },
+      {
+        "id": "hyde-3.2.1:readme_release_HYDE3.2.1.txt",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "6513bb386e29c76096a4db6102e121832cf76fe3b2f36425dff333c11a4c514d"
+      },
+      {
+        "id": "natural-earth-10m-land-v5.1.1",
+        "provider": "Natural Earth",
+        "release": "Natural Earth 5.1.1, 1:10m land",
+        "sha256": "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
+      },
+      {
+        "id": "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif",
+        "provider": "Zenodo",
+        "release": "Zenodo record 3526620, potential biome v0.2",
+        "sha256": "8a422b90873cffd750c4e33bf43ea82c32191e3166816af3210652532da6510d"
+      },
+      {
+        "id": "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv",
+        "provider": "Zenodo",
+        "release": "Zenodo record 3526620, potential biome v0.2",
+        "sha256": "bd95b5d365c2b1abc2a4797e365e61a6fe3f7814a64596cc2ee734cc35fc1eae"
+      }
+    ]
+  },
+  "corrected_package": {
+    "location": "Nile Delta coast",
+    "request": {
+      "center_latitude_e7": 314000000,
+      "center_longitude_e7": 315000000,
+      "compression": {
+        "denominator": 1,
+        "numerator": 50
+      },
+      "detail_profile": "standard_v1",
+      "reconstruction_profile": "circa600_v1",
+      "requested_side_meters": 50000,
+      "schema_version": 1,
+      "seed": 3,
+      "year_ce": 600
+    },
+    "rationale": "Move from Cairo to the Mediterranean coast of the Nile Delta so the fixed footprint exposes open water; the verified package has no nonzero inland-water samples.",
+    "content_hash": "de8b08b364d3c26e21c6ed7b7688c231002ba64d2fc62b3cd9f700da1bbe69a9",
+    "verified_by": "aoe-map-worker map-verify",
+    "water_page_evidence": {
+      "sample_count": 16384,
+      "ocean_nonzero_samples": 5051,
+      "inland_nonzero_samples": 0,
+      "ocean_coverage_percent_sum": 498300,
+      "inland_coverage_percent_sum": 0
+    },
+    "source_locks": [
+      {
+        "id": "etopo-2022-v1-60s-surface",
+        "provider": "NOAA",
+        "release": "ETOPO 2022 v1",
+        "sha256": "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e"
+      },
+      {
+        "id": "hyde-3.2.1:HYDE3_2_1-baseline.zip",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "5a847086cb199c75b739a7b099a8c48840e52fe5a4937882bd8fb26f86288714"
+      },
+      {
+        "id": "hyde-3.2.1:HYDE3_2_1-general_supplementary.zip",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "04011ed530557f13e80a4caf20c08ab9473546106efab385a3e428078b6d97e0"
+      },
+      {
+        "id": "hyde-3.2.1:readme_release_HYDE3.2.1.txt",
+        "provider": "DANS",
+        "release": "HYDE 3.2.1, DANS-25G-GEZ3",
+        "sha256": "6513bb386e29c76096a4db6102e121832cf76fe3b2f36425dff333c11a4c514d"
+      },
+      {
+        "id": "natural-earth-10m-land-v5.1.1",
+        "provider": "Natural Earth",
+        "release": "Natural Earth 5.1.1, 1:10m land",
+        "sha256": "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc"
+      },
+      {
+        "id": "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif",
+        "provider": "Zenodo",
+        "release": "Zenodo record 3526620, potential biome v0.2",
+        "sha256": "8a422b90873cffd750c4e33bf43ea82c32191e3166816af3210652532da6510d"
+      },
+      {
+        "id": "potential-biome-v0.2:pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv",
+        "provider": "Zenodo",
+        "release": "Zenodo record 3526620, potential biome v0.2",
+        "sha256": "bd95b5d365c2b1abc2a4797e365e61a6fe3f7814a64596cc2ee734cc35fc1eae"
+      }
+    ]
+  }
+}

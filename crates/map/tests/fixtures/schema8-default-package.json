@@ -1,0 +1,83 @@
+{
+  "schema_version": 8,
+  "generator_version": 8,
+  "request": {
+    "schema_version": 1,
+    "center_latitude_e7": 488500000,
+    "center_longitude_e7": 23500000,
+    "requested_side_meters": 30000,
+    "compression": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "year_ce": 600,
+    "seed": 1,
+    "reconstruction_profile": "circa600_v1",
+    "detail_profile": "standard_v1"
+  },
+  "estimate": {
+    "effective_side_meters": 30000,
+    "tiles_per_side": 500,
+    "game_side_meters": 1000,
+    "geographic_millimeters_per_tile": 60000,
+    "walking_crossing_seconds": 857,
+    "cavalry_crossing_seconds": 333
+  },
+  "source_locks": [],
+  "projection": {
+    "horizontal_crs": "fallback-local-grid-v1",
+    "vertical_datum": "unspecified_fallback",
+    "tool_version": "unavailable-fallback"
+  },
+  "provenance": {
+    "elevation": "fallback",
+    "water": "fallback",
+    "vegetation": "procedural",
+    "historical_land_use": "fallback"
+  },
+  "environment": {
+    "samples_per_axis": 0,
+    "geographic_millimeters_per_sample": 0,
+    "page_samples": 0,
+    "elevation": {
+      "levels": []
+    },
+    "water": null,
+    "vegetation": null,
+    "historical_land_use": null
+  },
+  "content_hash": [
+    28,
+    130,
+    150,
+    46,
+    98,
+    189,
+    250,
+    208,
+    45,
+    62,
+    12,
+    181,
+    245,
+    10,
+    168,
+    95,
+    29,
+    114,
+    160,
+    231,
+    120,
+    67,
+    124,
+    137,
+    146,
+    132,
+    245,
+    223,
+    166,
+    233,
+    91,
+    24
+  ]
+}

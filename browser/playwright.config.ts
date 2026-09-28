@@ -33,8 +33,14 @@ export default defineConfig({
       },
     },
     {
+      name: "canvas",
+      testMatch: /shared-surfaces\.spec\.ts/,
+      use: { launchOptions: { args: [] } },
+    },
+    {
       name: "browser-defaults",
-      testMatch: /play\.spec\.ts/,
+      testMatch:
+        /play\.spec\.ts|shared-surfaces\.spec\.ts|source-creator\.spec\.ts/,
       use: { launchOptions: { args: [] } },
     },
   ],

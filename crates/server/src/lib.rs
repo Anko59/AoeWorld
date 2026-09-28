@@ -1,11 +1,29 @@
 //! HTTP and bounded WebSocket adapter for the synthetic world.
 mod config;
 mod gameplay;
+mod gameplay_map;
+mod gameplay_sessions;
 mod gameplay_transport;
+mod map_jobs;
+mod map_store;
+mod map_worker;
+mod maps;
+mod page_residency;
+mod source_qualification;
+mod terrain_cache;
 pub use config::Config;
-pub use gameplay::GameplayService;
+pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
+pub use map_store::MapStoreError;
+pub use source_qualification::{
+    ScaleQualificationError, SourceQualificationProgress, SourceQualificationReport,
+    SourceScaleEvidence, SourceScalePackageReference, run_source_qualification,
+    run_source_qualification_with_geographic_reference, run_source_scale_qualification,
+};
+
+pub(crate) use map_store::{PageResidency, load as load_map_packages};
 
 use aoe_core::{EntityId, Region, Tick};
+use aoe_map::MapPackage;
 use aoe_protocol::{
     ClientMessage, EntityState, MAX_ENTITIES, ServerMessage, VERSION, decode_client, encode_server,
 };
@@ -33,7 +51,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::RwLock,
+    sync::{Mutex, RwLock},
     time::{MissedTickBehavior, timeout},
 };
 use tower_http::services::ServeDir;
@@ -47,12 +65,27 @@ pub struct AppState {
     build: Arc<str>,
     tick_period: Duration,
     asset_pack: Option<PathBuf>,
-    gameplay: GameplayService,
+    map_package_directory: Option<PathBuf>,
+    map_worker: Option<PathBuf>,
+    geodata_cache_directory: PathBuf,
+    map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
+    page_residencies: Arc<RwLock<page_residency::Registry>>,
+    terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
+    map_jobs: Arc<Mutex<map_jobs::Manager>>,
+    gameplay: Arc<RwLock<GameplayService>>,
 }
 
 impl AppState {
-    pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Self {
-        Self {
+    pub fn new(config: &Config, build: impl Into<Arc<str>>) -> Result<Self, AppStateError> {
+        if config.map_worker.is_some() {
+            map_worker::recover_scratch(&config.geodata_cache_directory)
+                .map_err(AppStateError::MapJobs)?;
+        }
+        let map_packages = map_store::load(config.map_package_directory.as_deref())?;
+        let map_jobs =
+            map_jobs::Manager::load(config.map_package_directory.as_deref(), &map_packages)
+                .map_err(AppStateError::MapJobs)?;
+        Ok(Self {
             world: Arc::new(RwLock::new(None)),
             diagnostic_scenario: config.scenario,
             generation: Arc::new(AtomicU64::new(0)),
@@ -60,28 +93,35 @@ impl AppState {
             build: build.into(),
             tick_period: Duration::from_secs_f64(1.0 / f64::from(config.tick_hz)),
             asset_pack: config.asset_pack.clone(),
-            gameplay: GameplayService::new(config.scenario.seed),
-        }
+            map_package_directory: config.map_package_directory.clone(),
+            map_worker: config.map_worker.clone(),
+            geodata_cache_directory: config.geodata_cache_directory.clone(),
+            map_packages: Arc::new(RwLock::new(map_packages)),
+            page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
+            terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
+            map_jobs: Arc::new(Mutex::new(map_jobs)),
+            gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
+        })
     }
 
     pub fn with_gameplay_population(
         config: &Config,
         build: impl Into<Arc<str>>,
-    ) -> Result<Self, GameWorldError> {
-        let mut state = Self::new(config, build);
+    ) -> Result<Self, AppStateError> {
+        let mut state = Self::new(config, build)?;
         let gameplay_config = aoe_core::WorldConfig {
             width_tiles: config.scenario.world_size,
             height_tiles: config.scenario.world_size,
             seed: config.scenario.seed,
             ..aoe_core::WorldConfig::default()
         };
-        state.gameplay = GameplayService::with_population(
+        state.gameplay = Arc::new(RwLock::new(GameplayService::with_population(
             gameplay_config,
             config.scenario.entities,
             config.scenario.hotspot_entities,
             config.scenario.players,
             config.scenario.active_extent,
-        )?;
+        )?));
         Ok(state)
     }
 
@@ -101,7 +141,7 @@ impl AppState {
             if let Some(world) = self.world.write().await.as_mut() {
                 world.advance();
             }
-            self.gameplay.tick().await;
+            self.gameplay.read().await.clone().tick().await;
             if started.duration_since(scheduled) > self.tick_period
                 || started.elapsed() > self.tick_period
             {
@@ -115,6 +155,16 @@ impl AppState {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum AppStateError {
+    #[error("map job history error: {0}")]
+    MapJobs(String),
+    #[error(transparent)]
+    MapStore(#[from] MapStoreError),
+    #[error(transparent)]
+    GameWorld(#[from] GameWorldError),
+}
+
 #[derive(Serialize)]
 struct Health {
     status: &'static str,
@@ -124,9 +174,34 @@ struct Health {
     entities: usize,
     loaded_chunks: usize,
     tick_deadline_misses: u64,
+    terrain_cache: terrain_cache::Usage,
+    navigation_cache: NavigationCacheHealth,
+}
+
+#[derive(Serialize)]
+struct NavigationCacheHealth {
+    entries: usize,
+    /// Logical cached-outcome bytes; allocator and BTreeMap overhead is not
+    /// included, so this is an accounting budget rather than an RSS cap.
+    retained_bytes: usize,
+    /// Logical cached-outcome budget rather than a hard process-memory cap.
+    limit_bytes: usize,
+}
+
+impl From<aoe_simulation::NavigationCacheUsage> for NavigationCacheHealth {
+    fn from(value: aoe_simulation::NavigationCacheUsage) -> Self {
+        Self {
+            entries: value.entries,
+            retained_bytes: value.retained_bytes,
+            limit_bytes: value.limit_bytes,
+        }
+    }
 }
 
 async fn health(State(state): State<AppState>) -> Json<Health> {
+    let terrain_cache = state.terrain_cache.lock().await.usage();
+    let gameplay = state.gameplay.read().await.clone();
+    let navigation_cache = gameplay.navigation_cache_usage().await.into();
     state.ensure_diagnostic_world().await;
     let world_guard = state.world.read().await;
     let Some(world) = world_guard.as_ref() else {
@@ -138,6 +213,8 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
             entities: 0,
             loaded_chunks: 0,
             tick_deadline_misses: state.tick_deadline_misses(),
+            terrain_cache,
+            navigation_cache,
         });
     };
     Json(Health {
@@ -148,6 +225,8 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
         entities: world.entities().len(),
         loaded_chunks: world.loaded_chunks(),
         tick_deadline_misses: state.tick_deadline_misses(),
+        terrain_cache,
+        navigation_cache,
     })
 }
 
@@ -209,7 +288,7 @@ async fn gameplay_websocket(
     State(state): State<AppState>,
     upgrade: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    let gameplay = state.gameplay.clone();
+    let gameplay = state.gameplay.read().await.clone();
     upgrade
         .max_message_size(aoe_protocol::GAMEPLAY_MAX_MESSAGE)
         .on_upgrade(move |socket| gameplay_transport::handle_socket(gameplay, socket))
@@ -220,6 +299,24 @@ pub fn app(state: AppState) -> Router {
     let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
+        .route("/maps/estimate", post(maps::estimate))
+        .route("/maps/footprint", post(maps::footprint))
+        .route("/maps/jobs", get(maps::list_jobs).post(maps::create_job))
+        .route("/maps/jobs/{job_id}", get(maps::job_status))
+        .route("/maps/jobs/{job_id}/cancel", post(maps::cancel_job))
+        .route("/maps/activate", post(maps::activate))
+        .route("/maps/reset", post(maps::reset))
+        .route("/maps", get(maps::list))
+        .route(
+            "/maps/{content_hash}/height-bounds",
+            get(maps::height_bounds),
+        )
+        .route("/maps/{content_hash}/preview", get(maps::preview))
+        .route(
+            "/maps/{content_hash}",
+            get(maps::package).post(maps::activate_package),
+        )
+        .route("/maps/{content_hash}/chunks/{x}/{y}", get(maps::chunk))
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
@@ -398,3 +495,6 @@ async fn client(mut socket: WebSocket, state: AppState) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

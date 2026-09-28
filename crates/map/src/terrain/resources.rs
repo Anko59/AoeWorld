@@ -1,0 +1,288 @@
+use super::{MapChunkGenerator, ObjectKind, ResourceKind, ResourceNode, Tile, resource_id};
+use crate::Biome;
+use aoe_core::TileCoord;
+
+const FORAGE_COLUMNS: i32 = 64;
+const FORAGE_ROWS: i32 = 64;
+const GOLD_COLUMNS: i32 = 192;
+const GOLD_ROWS: i32 = 96;
+const STONE_COLUMNS: i32 = 96;
+const STONE_ROWS: i32 = 48;
+const PATCH_OFFSETS: [(i32, i32); 8] = [
+    (0, 0),
+    (1, 0),
+    (0, 1),
+    (-1, 0),
+    (0, -1),
+    (1, 1),
+    (-1, -1),
+    (1, -1),
+];
+
+pub(super) fn at(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    sample: Tile,
+) -> Option<ResourceNode> {
+    at_with_access(generator, tile, sample, |neighbor| {
+        Ok::<_, std::convert::Infallible>(generator.tile_at(neighbor).is_some_and(|sample| {
+            sample.passable && !generator.occupied_without_access(neighbor, sample)
+        }))
+    })
+    .ok()
+    .flatten()
+}
+
+pub(super) fn at_with_access<E>(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    sample: Tile,
+    access: impl Fn(TileCoord) -> Result<bool, E>,
+) -> Result<Option<ResourceNode>, E> {
+    let Some(candidate) = candidate(generator, tile, sample) else {
+        return Ok(None);
+    };
+    Ok(adjacent_access(tile, access)?.then_some(candidate))
+}
+
+pub(super) fn candidate(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    sample: Tile,
+) -> Option<ResourceNode> {
+    if !sample.passable || super::clearing::contains(generator, tile) {
+        return None;
+    }
+    let key = detail_key(generator);
+    if suitable_forage(sample.biome)
+        && let Some((slot, key)) =
+            patch_node(key, b"forage-patch", tile, FORAGE_COLUMNS, FORAGE_ROWS)
+    {
+        return Some(node(
+            tile,
+            ResourceKind::Food,
+            ObjectKind::ForageBush,
+            125,
+            slot,
+            key,
+        ));
+    }
+    if !suitable_ore(sample.biome) {
+        return None;
+    }
+    if let Some((slot, key)) = patch_node(key, b"gold-patch-v2", tile, GOLD_COLUMNS, GOLD_ROWS) {
+        return Some(node(
+            tile,
+            ResourceKind::Gold,
+            ObjectKind::GoldDeposit,
+            800,
+            slot,
+            key,
+        ));
+    }
+    let (slot, key) = patch_node(key, b"stone-patch-v2", tile, STONE_COLUMNS, STONE_ROWS)?;
+    Some(node(
+        tile,
+        ResourceKind::Stone,
+        ObjectKind::StoneDeposit,
+        350,
+        slot,
+        key,
+    ))
+}
+
+pub(super) fn detail_key(generator: &MapChunkGenerator) -> [u8; 32] {
+    let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
+    hash.update(b"resource-detail-v2");
+    hash.update(&crate::RESOURCE_PLACEMENT_RECIPE_VERSION.to_le_bytes());
+    hash.update(&generator.procedural_seed.to_le_bytes());
+    *hash.finalize().as_bytes()
+}
+
+fn node(
+    tile: TileCoord,
+    kind: ResourceKind,
+    object: ObjectKind,
+    initial_amount: u16,
+    slot: u8,
+    key: u64,
+) -> ResourceNode {
+    ResourceNode {
+        id: resource_id(tile, 0),
+        tile,
+        kind,
+        object,
+        initial_amount,
+        visual_variant: (key.rotate_right(u32::from(slot)) >> 8) as u8,
+    }
+}
+
+fn patch_node(
+    key: [u8; 32],
+    domain: &[u8],
+    tile: TileCoord,
+    columns: i32,
+    rows: i32,
+) -> Option<(u8, u64)> {
+    let cell_x = tile.x.div_euclid(columns);
+    let cell_y = tile.y.div_euclid(rows);
+    for y in cell_y.saturating_sub(1)..=cell_y.saturating_add(1) {
+        for x in cell_x.saturating_sub(1)..=cell_x.saturating_add(1) {
+            let (root, value, count) = patch_origin(key, domain, x, y, columns, rows);
+            for (slot, &(offset_x, offset_y)) in PATCH_OFFSETS[..count].iter().enumerate() {
+                if tile
+                    == TileCoord::new(
+                        root.x.saturating_add(offset_x),
+                        root.y.saturating_add(offset_y),
+                    )
+                {
+                    return Some((slot as u8, value));
+                }
+            }
+        }
+    }
+    None
+}
+
+pub(super) fn patch_origin(
+    key: [u8; 32],
+    domain: &[u8],
+    x: i32,
+    y: i32,
+    columns: i32,
+    rows: i32,
+) -> (TileCoord, u64, usize) {
+    let value = super::unsigned_noise(key, domain, x, y);
+    let root = TileCoord::new(
+        x.saturating_mul(columns) + (value % columns as u64) as i32,
+        y.saturating_mul(rows) + (value.rotate_left(13) % rows as u64) as i32,
+    );
+    (root, value, patch_count(value.rotate_left(29)))
+}
+
+fn patch_count(value: u64) -> usize {
+    4 + (value % 5) as usize
+}
+
+fn adjacent_access<E>(
+    tile: TileCoord,
+    access: impl Fn(TileCoord) -> Result<bool, E>,
+) -> Result<bool, E> {
+    [
+        TileCoord::new(tile.x - 1, tile.y),
+        TileCoord::new(tile.x + 1, tile.y),
+        TileCoord::new(tile.x, tile.y - 1),
+        TileCoord::new(tile.x, tile.y + 1),
+    ]
+    .into_iter()
+    .try_fold(
+        false,
+        |found, neighbor| {
+            if found { Ok(true) } else { access(neighbor) }
+        },
+    )
+}
+
+fn suitable_forage(biome: Biome) -> bool {
+    matches!(
+        biome,
+        Biome::Tropical | Biome::Temperate | Biome::Boreal | Biome::Woodland | Biome::Savanna
+    )
+}
+
+fn suitable_ore(biome: Biome) -> bool {
+    !matches!(biome, Biome::Tundra | Biome::Alpine | Biome::Polar)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patches_are_bounded_and_identical_from_every_query_direction() {
+        let key = [7; 32];
+        let nodes = (-256..256)
+            .flat_map(|y| {
+                (-256..256).filter_map(move |x| {
+                    patch_node(
+                        key,
+                        b"stone-patch-v2",
+                        TileCoord::new(x, y),
+                        STONE_COLUMNS,
+                        STONE_ROWS,
+                    )
+                    .map(|(slot, _)| (x, y, slot))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(nodes.windows(2).all(|pair| pair[0] != pair[1]));
+        assert!(nodes.iter().all(|(_, _, slot)| *slot < 8));
+    }
+
+    #[test]
+    fn forage_patch_candidates_are_always_between_four_and_eight() {
+        let counts = (0u64..256)
+            .map(|value| patch_count(value.rotate_left(29)))
+            .collect::<Vec<_>>();
+        assert_eq!(counts.iter().copied().min(), Some(4));
+        assert_eq!(counts.iter().copied().max(), Some(8));
+    }
+
+    #[test]
+    fn gold_and_stone_use_independent_streams_with_distinct_spacing() {
+        let key = [11; 32];
+        let gold_domain = b"gold-patch-v2";
+        let stone_domain = b"stone-patch-v2";
+        assert_ne!(
+            super::super::unsigned_noise(key, gold_domain, 3, 5),
+            super::super::unsigned_noise(key, stone_domain, 3, 5)
+        );
+        let (gold_root, _, _) = patch_origin(key, gold_domain, 3, 5, GOLD_COLUMNS, GOLD_ROWS);
+        let (stone_root, _, _) = patch_origin(key, stone_domain, 3, 5, STONE_COLUMNS, STONE_ROWS);
+        assert_ne!(gold_root, stone_root);
+    }
+
+    #[test]
+    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_six() {
+        let expected = [
+            145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195, 208,
+            205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
+        ];
+        for recipe in [
+            crate::LEGACY_GENERATION_RECIPE_VERSION,
+            crate::PRIOR_GENERATION_RECIPE_VERSION,
+            crate::GENERATION_RECIPE_VERSION,
+            crate::WATER_MODEL_GENERATION_RECIPE_VERSION,
+        ] {
+            let generator =
+                MapChunkGenerator::new([7; 32], 3, 64).with_elevation_sampling_recipe(recipe);
+            assert_eq!(detail_key(&generator), expected);
+        }
+    }
+
+    #[test]
+    fn recipe_five_only_suppresses_resource_candidates_inside_clearings() {
+        let prior = MapChunkGenerator::new([71; 32], 5, 512)
+            .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
+        let current = MapChunkGenerator::new([71; 32], 5, 512)
+            .with_elevation_sampling_recipe(crate::GENERATION_RECIPE_VERSION);
+        let mut retained = 0;
+        let mut suppressed = 0;
+        for y in 0..96 {
+            for x in 0..96 {
+                let tile = TileCoord::new(x, y);
+                let sample = current.tile_at(tile).expect("current tile");
+                let prior_candidate = candidate(&prior, tile, sample);
+                let current_candidate = candidate(&current, tile, sample);
+                if super::super::clearing::contains(&current, tile) {
+                    assert!(current_candidate.is_none());
+                    suppressed += usize::from(prior_candidate.is_some());
+                } else {
+                    assert_eq!(current_candidate, prior_candidate);
+                    retained += usize::from(prior_candidate.is_some());
+                }
+            }
+        }
+        assert_eq!((retained, suppressed), (27, 8));
+    }
+}

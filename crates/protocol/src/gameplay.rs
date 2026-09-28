@@ -5,7 +5,10 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
-pub const VERSION: u16 = 1;
+mod resources;
+pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
+
+pub const VERSION: u16 = 8;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -28,6 +31,7 @@ pub struct UnitState {
     pub player: PlayerId,
     pub position: WorldPosition,
     pub moving: bool,
+    pub planning: bool,
     pub facing: u8,
 }
 
@@ -60,6 +64,18 @@ pub enum CommandResult {
     RejectedRateLimited,
     RejectedQueueFull,
     RejectedInvalidDestination,
+    RejectedUnreachable,
+    RejectedPathBudgetExceeded,
+}
+
+/// Immutable physical properties of the active geographic map. The package
+/// itself remains available through bounded HTTP chunk requests.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MapMetadata {
+    pub tile_size_meters: u8,
+    pub compression_numerator: u32,
+    pub compression_denominator: u32,
+    pub terrain_schema_version: u16,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +83,8 @@ pub enum ServerMessage {
     Welcome {
         version: u16,
         world_id: u64,
+        map_content_hash: Option<[u8; 32]>,
+        map_metadata: Option<MapMetadata>,
         width_tiles: i32,
         height_tiles: i32,
         coordinate_precision: u16,
@@ -99,6 +117,10 @@ pub enum ServerMessage {
         primary_unit_id: EntityId,
         resume_token: Option<ResumeToken>,
     },
+    WorldReset {
+        world_id: u64,
+    },
+    ResourceState(ResourceState),
     Error {
         code: u16,
         message: String,
@@ -111,6 +133,8 @@ pub enum Error {
     TooLarge,
     #[error("collection exceeds {MAX_SUBSCRIBED_UNITS} units")]
     TooManyUnits,
+    #[error("invalid bounded resource state")]
+    InvalidResourceState,
     #[error("invalid postcard message: {0}")]
     Invalid(#[from] postcard::Error),
 }
@@ -161,6 +185,7 @@ where
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     match message {
+        ServerMessage::ResourceState(state) if !state.valid() => Err(Error::InvalidResourceState),
         ServerMessage::Snapshot { units, .. } if units.len() > MAX_SUBSCRIBED_UNITS => {
             Err(Error::TooManyUnits)
         }
@@ -197,7 +222,9 @@ pub fn encode_server(message: &ServerMessage) -> Result<Vec<u8>, Error> {
 
 pub fn decode_server(bytes: &[u8]) -> Result<ServerMessage, Error> {
     check_size(bytes)?;
-    Ok(postcard::from_bytes(bytes)?)
+    let message = postcard::from_bytes(bytes)?;
+    validate_server(&message)?;
+    Ok(message)
 }
 
 #[cfg(test)]
@@ -223,6 +250,8 @@ mod tests {
         let welcome = ServerMessage::Welcome {
             version: VERSION,
             world_id: 11,
+            map_content_hash: None,
+            map_metadata: None,
             width_tiles: WorldConfig::new(16_384, 16_384, Seed(1))
                 .unwrap()
                 .width_tiles,
@@ -237,6 +266,20 @@ mod tests {
             decode_server(&encode_server(&welcome).unwrap()).unwrap(),
             welcome
         );
+        let reset = ServerMessage::WorldReset { world_id: 12 };
+        assert_eq!(
+            decode_server(&encode_server(&reset).unwrap()).unwrap(),
+            reset
+        );
+        let acknowledgment = ServerMessage::CommandAck {
+            sequence: 7,
+            result: CommandResult::RejectedPathBudgetExceeded,
+            applied_tick: Tick(3),
+        };
+        assert_eq!(
+            decode_server(&encode_server(&acknowledgment).unwrap()).unwrap(),
+            acknowledgment
+        );
     }
 
     #[test]
@@ -247,6 +290,7 @@ mod tests {
                 player: PlayerId(0),
                 position: WorldPosition::new(0, 0),
                 moving: false,
+                planning: false,
                 facing: 0
             };
             MAX_SUBSCRIBED_UNITS + 1

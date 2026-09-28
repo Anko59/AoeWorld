@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 aoe-assets = { path = "../assets" }
 aoe-core.workspace = true
+aoe-map.workspace = true
 aoe-scenario.workspace = true
 aoe-simulation.workspace = true
 aoe-protocol.workspace = true
@@ -23,6 +24,8 @@ futures-util = "0.3"
 axum = "0.8"
 url = "2.5"
 blake3 = "1.8"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+syn = { version = "2.0", features = ["full"] }
 
 [dev-dependencies]
 tempfile = "3.27"

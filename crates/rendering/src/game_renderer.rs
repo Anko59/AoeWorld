@@ -1,10 +1,31 @@
 //! WebGPU-first game rendering with a Canvas 2D compatibility path.
 use crate::{
-    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid, playground::game_sprites, web::Sprite,
+    GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid,
+    playground::game_sprites,
+    surface_mesh::{
+        ProjectedSurfaceTriangle, apply_terrain_textures, projected_surface_triangles,
+        surface_depth, surface_render_depth,
+    },
+    web::Sprite,
 };
 use aoe_core::{Camera, EntityId};
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
+
+#[path = "game_renderer/world_sprites.rs"]
+mod world_sprites;
+use world_sprites::world_sprite_frames;
+
+#[path = "game_renderer/canvas_depth.rs"]
+mod canvas_depth;
+use canvas_depth::render_canvas_world;
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+#[path = "game_renderer/canvas_depth_tests.rs"]
+mod canvas_depth_tests;
 
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
@@ -12,14 +33,17 @@ pub enum GameRenderer {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
         atlas: HtmlCanvasElement,
+        source_atlas: Vec<u8>,
+        color_buffer: Vec<u8>,
+        depth_buffer: Vec<f64>,
     },
 }
-
 #[derive(Clone, Copy)]
 pub struct SceneCamera {
     pub center: [f64; 2],
     pub zoom: f64,
     pub viewport: [f64; 2],
+    pub focus_elevation_meters: f64,
 }
 
 #[derive(Clone, Copy)]
@@ -29,8 +53,54 @@ pub struct SceneUnit {
     pub moving: bool,
     pub facing: u8,
     pub selected: bool,
+    pub elevation_meters: f64,
 }
 
+#[derive(Clone, Copy)]
+pub struct SceneTerrain {
+    pub position: [f64; 2],
+    /// One of the six `GameArt::terrain` groups.
+    pub material: u8,
+    pub elevation_meters: f64,
+    pub surface: SceneTerrainSurface,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SceneTerrainSurface {
+    /// Shared corners ordered northwest, northeast, southeast, southwest.
+    pub corner_game_height_levels: [i16; 4],
+    /// aoe-map `SurfaceKind` discriminant: plateau, ramp, cliff.
+    pub kind: u8,
+    /// aoe-map `SurfaceDiagonal` discriminant.
+    pub triangulation: u8,
+    /// aoe-map `WaterKind` discriminant; zero means no water.
+    pub water: u8,
+}
+
+impl SceneTerrainSurface {
+    pub const PLATEAU: u8 = 0;
+    pub const RAMP: u8 = 1;
+    pub const CLIFF: u8 = 2;
+
+    pub const fn flat(elevation_meters: f64) -> Self {
+        Self {
+            corner_game_height_levels: [elevation_meters as i16; 4],
+            kind: Self::PLATEAU,
+            triangulation: 0,
+            water: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct SceneResource {
+    pub id: u64,
+    pub position: [f64; 2],
+    /// Resource kind in the versioned map wire order.
+    pub kind: u8,
+    pub visual_variant: u8,
+    pub elevation_meters: f64,
+}
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }
@@ -61,21 +131,15 @@ impl GameRenderer {
             .ok_or("Canvas is detached")?
             .replace_child(&replacement, &canvas)
             .map_err(error)?;
-        let context = context(&replacement)?;
-        let atlas: HtmlCanvasElement = replacement
-            .owner_document()
-            .ok_or("No document")?
-            .create_element("canvas")
-            .map_err(error)?
-            .dyn_into()
-            .map_err(error)?;
-        atlas.set_width(GAME_ATLAS_SIDE);
-        atlas.set_height(GAME_ATLAS_SIDE);
+        let main_context = context(&replacement)?;
         Ok((
             Self::Canvas {
                 canvas: replacement.clone(),
-                context,
-                atlas,
+                context: main_context,
+                atlas: new_atlas(&replacement)?,
+                source_atlas: Vec::new(),
+                color_buffer: Vec::new(),
+                depth_buffer: Vec::new(),
             },
             replacement,
         ))
@@ -91,7 +155,14 @@ impl GameRenderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(pixels),
-            Self::Canvas { atlas, .. } => {
+            Self::Canvas {
+                atlas,
+                source_atlas,
+                ..
+            } => {
+                if pixels.len() != (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize {
+                    return Err("Invalid game atlas size".into());
+                }
                 let data = ImageData::new_with_u8_clamped_array_and_sh(
                     Clamped(pixels),
                     GAME_ATLAS_SIDE,
@@ -100,14 +171,17 @@ impl GameRenderer {
                 .map_err(error)?;
                 context(atlas)?
                     .put_image_data(&data, 0.0, 0.0)
-                    .map_err(error)
+                    .map_err(error)?;
+                *source_atlas = pixels.to_vec();
+                Ok(())
             }
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        if let Self::WebGpu(renderer) = self {
-            renderer.resize(width, height);
+        match self {
+            Self::WebGpu(renderer) => renderer.resize(width, height),
+            Self::Canvas { .. } => {}
         }
     }
 
@@ -128,6 +202,7 @@ impl GameRenderer {
                 canvas,
                 context,
                 atlas,
+                ..
             } => {
                 let width = f64::from(canvas.width());
                 let height = f64::from(canvas.height());
@@ -171,208 +246,142 @@ impl GameRenderer {
     pub fn render_world(
         &mut self,
         art: &GameArt,
+        terrain: &[SceneTerrain],
+        resources: &[SceneResource],
         units: &[SceneUnit],
         camera: SceneCamera,
         animation: usize,
         grid: bool,
     ) -> Result<(), String> {
-        let sprites = world_sprites(art, units, camera, animation, grid);
+        let mut surfaces = projected_surface_triangles(terrain, camera);
+        apply_terrain_textures(&mut surfaces, art);
+        let object_sprites = world_sprite_frames(art, terrain, resources, units, camera, animation);
+        let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
         match self {
-            Self::WebGpu(renderer) => renderer
-                .render_sprites_with_clear(&sprites, [0.16, 0.29, 0.14, 1.0])
-                .map(|_| ()),
+            Self::WebGpu(renderer) => {
+                let depth_origin = surface_depth([
+                    camera.center[0],
+                    camera.center[1],
+                    camera.focus_elevation_meters,
+                ]);
+                let mut instances = layers
+                    .iter()
+                    .map(|layer| match layer {
+                        WorldLayer::Surface(triangle) => {
+                            crate::web::surface_instance(triangle, camera.viewport, depth_origin)
+                        }
+                        WorldLayer::Selection(sprite, depth)
+                        | WorldLayer::Sprite(sprite, _, depth) => {
+                            let mut sprite = *sprite;
+                            sprite.depths = [(*depth - depth_origin) as f32; 4];
+                            sprite
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if grid {
+                    instances.extend(game_grid::grid_sprites(camera));
+                }
+                renderer
+                    .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
+                    .map(|_| ())
+            }
             Self::Canvas {
                 canvas,
                 context,
-                atlas,
-            } => {
-                let width = f64::from(canvas.width());
-                let height = f64::from(canvas.height());
-                context.set_fill_style_str("#294a26");
-                context.fill_rect(0.0, 0.0, width, height);
-                context.set_image_smoothing_enabled(false);
-                if grid {
-                    game_grid::draw_grid(context, camera);
-                }
-                for (sprite, frame, selected) in world_sprite_frames(art, units, camera, animation)
-                {
-                    draw_scene_sprite(context, atlas, canvas, (sprite, frame), selected)?;
-                }
-                Ok(())
-            }
+                source_atlas,
+                color_buffer,
+                depth_buffer,
+                ..
+            } => render_canvas_world(
+                canvas,
+                context,
+                source_atlas,
+                color_buffer,
+                depth_buffer,
+                &layers,
+                camera,
+                grid,
+            ),
         }
     }
 }
 
-fn world_sprites(
-    art: &GameArt,
+fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
+    let atlas: HtmlCanvasElement = canvas
+        .owner_document()
+        .ok_or("No document")?
+        .create_element("canvas")
+        .map_err(error)?
+        .dyn_into()
+        .map_err(error)?;
+    atlas.set_width(GAME_ATLAS_SIDE);
+    atlas.set_height(GAME_ATLAS_SIDE);
+    Ok(atlas)
+}
+
+fn ordered_world_layers(
+    surfaces: Vec<ProjectedSurfaceTriangle>,
+    objects: Vec<(Sprite, GameFrame, f64)>,
     units: &[SceneUnit],
     camera: SceneCamera,
-    animation: usize,
-    grid: bool,
-) -> Vec<Sprite> {
-    let mut sprites = if grid {
-        game_grid::grid_sprites(camera)
-    } else {
-        Vec::new()
-    };
-    let frames = world_sprite_frames(art, units, camera, animation);
-    sprites.extend(frames.iter().map(|(sprite, _, _)| *sprite));
+) -> Vec<WorldLayer> {
+    let selected_count = units.iter().filter(|unit| unit.selected).count();
+    let mut entries = Vec::with_capacity(
+        surfaces
+            .len()
+            .saturating_add(objects.len())
+            .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
+    );
+    let mut sequence = 0;
+    for triangle in surfaces {
+        entries.push((
+            triangle_depth(&triangle),
+            0_u8,
+            sequence,
+            WorldLayer::Surface(triangle),
+        ));
+        sequence += 1;
+    }
     for unit in units.iter().filter(|unit| unit.selected) {
-        sprites.extend(game_grid::selection_ring(camera, unit.position));
-    }
-    sprites
-}
-
-fn world_sprite_frames(
-    art: &GameArt,
-    units: &[SceneUnit],
-    camera: SceneCamera,
-    animation: usize,
-) -> Vec<(Sprite, GameFrame, bool)> {
-    let mut result = Vec::with_capacity(units.len());
-    let projection = Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-    };
-    let mut ordered = units.to_vec();
-    ordered.sort_by(|a, b| {
-        let a_screen = projection.world_to_screen(a.position);
-        let b_screen = projection.world_to_screen(b.position);
-        a_screen
-            .y
-            .total_cmp(&b_screen.y)
-            .then_with(|| a_screen.x.total_cmp(&b_screen.x))
-            .then_with(|| a.id.cmp(&b.id))
-    });
-    for unit in &ordered {
-        let screen = projection.world_to_screen(unit.position);
-        let frames = if unit.moving {
-            &art.walking
-        } else {
-            &art.standing
-        };
-        if frames.is_empty() {
-            continue;
-        }
-        let (direction, flipped) = sprite_direction(unit.facing);
-        let frame = frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }];
-        let scale = camera.zoom as f32;
-        let width = f64::from(frame.size[0]) * camera.zoom;
-        let height = f64::from(frame.size[1]) * camera.zoom;
-        if screen.x + width < 0.0
-            || screen.y + height < 0.0
-            || screen.x - width > camera.viewport[0]
-            || screen.y - height > camera.viewport[1]
+        for (sprite, depth) in
+            game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
         {
-            continue;
+            entries.push((depth, 1_u8, sequence, WorldLayer::Selection(sprite, depth)));
+            sequence += 1;
         }
-        let mut uv = frame.uv;
-        if flipped {
-            uv[0] += uv[2];
-            uv[2] = -uv[2];
-        }
-        let x = screen.x
-            - if flipped {
-                width - f64::from(frame.anchor[0]) * camera.zoom
-            } else {
-                f64::from(frame.anchor[0]) * camera.zoom
-            };
-        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
-        let sprite = Sprite {
-            position: [
-                ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-                (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
-            ],
-            radius: [
-                (width / camera.viewport[0]) as f32,
-                (height / camera.viewport[1]) as f32,
-            ],
-            color: [1.0; 4],
-            uv,
-        };
-        let mut scaled_frame = frame;
-        scaled_frame.size = scaled_frame.size.map(|value| value * scale);
-        scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-        result.push((sprite, scaled_frame, unit.selected));
     }
-    result
+    for (sprite, frame, depth) in objects {
+        entries.push((
+            depth,
+            2_u8,
+            sequence,
+            WorldLayer::Sprite(sprite, frame, depth),
+        ));
+        sequence += 1;
+    }
+    // Canvas 2D consumes a deterministic average-depth order. WebGPU also
+    // receives camera-relative per-vertex depths and resolves each fragment in
+    // its depth buffer, including terrain/sprite intersections.
+    entries.sort_by(|left, right| {
+        left.0
+            .total_cmp(&right.0)
+            .then(left.1.cmp(&right.1))
+            .then(left.2.cmp(&right.2))
+    });
+    entries.into_iter().map(|(_, _, _, layer)| layer).collect()
 }
 
-fn sprite_direction(facing: u8) -> (usize, bool) {
-    let facing = facing % 8;
-    let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
-    (row, matches!(facing, 1..=3))
+fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
+    triangle
+        .points
+        .iter()
+        .map(|point| surface_render_depth(point.world, triangle.skirt))
+        .sum::<f64>()
+        / 3.0
 }
 
-fn draw_scene_sprite(
-    context: &CanvasRenderingContext2d,
-    atlas: &HtmlCanvasElement,
-    canvas: &HtmlCanvasElement,
-    sprite: (Sprite, GameFrame),
-    selected: bool,
-) -> Result<(), String> {
-    let (sprite, frame) = sprite;
-    let width = f64::from(canvas.width());
-    let height = f64::from(canvas.height());
-    let x = (f64::from(sprite.position[0]) + 1.0) * width / 2.0 - f64::from(frame.size[0]) / 2.0;
-    let y = (1.0 - f64::from(sprite.position[1])) * height / 2.0 - f64::from(frame.anchor[1]);
-    let [mut sx, sy, sw, sh] = sprite
-        .uv
-        .map(|value| f64::from(value) * f64::from(GAME_ATLAS_SIDE));
-    context.save();
-    let result = if sw < 0.0 {
-        sx += sw;
-        context
-            .translate(x + f64::from(frame.size[0]), y)
-            .map_err(error)?;
-        context.scale(-1.0, 1.0).map_err(error)?;
-        context
-            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                atlas,
-                sx,
-                sy,
-                sw.abs(),
-                sh,
-                0.0,
-                0.0,
-                f64::from(frame.size[0]),
-                f64::from(frame.size[1]),
-            )
-            .map_err(error)
-    } else {
-        context
-            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-                atlas,
-                sx,
-                sy,
-                sw,
-                sh,
-                x,
-                y,
-                f64::from(frame.size[0]),
-                f64::from(frame.size[1]),
-            )
-            .map_err(error)
-    };
-    context.restore();
-    result?;
-    if selected {
-        context.begin_path();
-        context.set_stroke_style_str("#f2dc78");
-        context
-            .ellipse(
-                x + f64::from(frame.size[0]) / 2.0,
-                y + f64::from(frame.size[1]),
-                f64::from(frame.size[0]) * 0.55,
-                f64::from(frame.size[1]) * 0.105,
-                0.0,
-                0.0,
-                std::f64::consts::TAU,
-            )
-            .map_err(error)?;
-        context.stroke();
-    }
-    Ok(())
+enum WorldLayer {
+    Surface(ProjectedSurfaceTriangle),
+    Selection(Sprite, f64),
+    Sprite(Sprite, GameFrame, f64),
 }

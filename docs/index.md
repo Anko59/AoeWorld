@@ -7,6 +7,7 @@
 - [Gate registry](gates.md)
 - [Performance](performance.md)
 - [Assets](assets.md)
+- [Geographic map workflow](geodata/workflow.md)
 - [Release](release.md)
 - [QA](qa.md)
 - [Troubleshooting](troubleshooting.md)

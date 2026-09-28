@@ -2,6 +2,7 @@ use crate::{TileCoord, TileRect, WorldConfig};
 
 pub const ISO_TILE_WIDTH: f64 = 128.0;
 pub const ISO_TILE_HEIGHT: f64 = 64.0;
+pub const ISO_ELEVATION_METER_HEIGHT: f64 = ISO_TILE_HEIGHT / 2.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ScreenPoint {
@@ -14,6 +15,11 @@ pub struct Camera {
     pub center: [f64; 2],
     pub zoom: f64,
     pub viewport: [f64; 2],
+    /// The game-height plane held at the camera's vertical focus.
+    ///
+    /// World positions remain two-dimensional; this offset makes every
+    /// height-aware projection relative to the same camera plane.
+    pub focus_elevation_meters: f64,
 }
 
 impl Camera {
@@ -22,19 +28,38 @@ impl Camera {
             center,
             zoom: 1.0,
             viewport,
+            focus_elevation_meters: 0.0,
         }
     }
 
     pub fn world_to_screen(self, world: [f64; 2]) -> ScreenPoint {
+        self.world_to_screen_at_height(world, 0.0)
+    }
+
+    pub fn world_to_screen_at_height(self, world: [f64; 2], elevation_meters: f64) -> ScreenPoint {
         let projected = project(world);
         let camera = project(self.center);
         ScreenPoint {
             x: (self.viewport[0] * 0.5) + (projected.x - camera.x) * self.zoom,
-            y: (self.viewport[1] * 0.5) + (projected.y - camera.y) * self.zoom,
+            y: (self.viewport[1] * 0.5) + (projected.y - camera.y) * self.zoom
+                - (elevation_meters - self.focus_elevation_meters)
+                    * ISO_ELEVATION_METER_HEIGHT
+                    * self.zoom,
         }
     }
 
     pub fn screen_to_world(self, screen: ScreenPoint) -> [f64; 2] {
+        self.screen_to_world_at_height(screen, 0.0)
+    }
+
+    pub fn screen_to_world_at_height(
+        self,
+        mut screen: ScreenPoint,
+        elevation_meters: f64,
+    ) -> [f64; 2] {
+        screen.y += (elevation_meters - self.focus_elevation_meters)
+            * ISO_ELEVATION_METER_HEIGHT
+            * self.zoom;
         let camera = project(self.center);
         let projected = ScreenPoint {
             x: camera.x + (screen.x - self.viewport[0] * 0.5) / self.zoom,
@@ -44,9 +69,9 @@ impl Camera {
     }
 
     pub fn zoom_around(mut self, pointer: ScreenPoint, zoom: f64) -> Self {
-        let before = self.screen_to_world(pointer);
+        let before = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
         self.zoom = zoom.clamp(0.25, 3.0);
-        let after = self.screen_to_world(pointer);
+        let after = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
         self.center[0] += before[0] - after[0];
         self.center[1] += before[1] - after[1];
         self
@@ -54,11 +79,17 @@ impl Camera {
 
     pub fn clamp_center(mut self, config: WorldConfig) -> Self {
         let corners = [
-            self.screen_to_world(ScreenPoint { x: 0.0, y: 0.0 }),
-            self.screen_to_world(ScreenPoint {
-                x: self.viewport[0],
-                y: self.viewport[1],
-            }),
+            self.screen_to_world_at_height(
+                ScreenPoint { x: 0.0, y: 0.0 },
+                self.focus_elevation_meters,
+            ),
+            self.screen_to_world_at_height(
+                ScreenPoint {
+                    x: self.viewport[0],
+                    y: self.viewport[1],
+                },
+                self.focus_elevation_meters,
+            ),
         ];
         let min_x = corners
             .iter()
@@ -96,6 +127,15 @@ impl Camera {
     }
 
     pub fn visible_tiles(self, config: WorldConfig, prefetch_tiles: f64) -> TileRect {
+        self.visible_tiles_at_height(config, prefetch_tiles, 0.0)
+    }
+
+    pub fn visible_tiles_at_height(
+        self,
+        config: WorldConfig,
+        prefetch_tiles: f64,
+        elevation_meters: f64,
+    ) -> TileRect {
         let points = [
             ScreenPoint { x: 0.0, y: 0.0 },
             ScreenPoint {
@@ -111,7 +151,7 @@ impl Camera {
                 y: self.viewport[1],
             },
         ];
-        let worlds = points.map(|point| self.screen_to_world(point));
+        let worlds = points.map(|point| self.screen_to_world_at_height(point, elevation_meters));
         let min_x = worlds
             .iter()
             .map(|point| point[0])
@@ -179,6 +219,7 @@ mod tests {
             center: [500.0, 700.0],
             zoom: 1.0,
             viewport: [1280.0, 720.0],
+            focus_elevation_meters: 0.0,
         };
         let pointer = ScreenPoint { x: 897.0, y: 251.0 };
         let world = camera.screen_to_world(pointer);
@@ -189,15 +230,82 @@ mod tests {
     }
 
     #[test]
+    fn elevated_projection_and_picking_round_trip() {
+        let camera = Camera {
+            center: [500.0, 700.0],
+            zoom: 1.75,
+            viewport: [1280.0, 720.0],
+            focus_elevation_meters: 6.0,
+        };
+        let world = [537.25, 681.5];
+        let screen = camera.world_to_screen_at_height(world, 12.0);
+        let actual = camera.screen_to_world_at_height(screen, 12.0);
+        assert!((actual[0] - world[0]).abs() < 1e-9);
+        assert!((actual[1] - world[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn focus_elevation_keeps_the_focus_plane_fixed_and_shifts_ground() {
+        let camera = Camera {
+            center: [500.0, 700.0],
+            zoom: 1.0,
+            viewport: [1280.0, 720.0],
+            focus_elevation_meters: 6.0,
+        };
+        let focus = camera.world_to_screen_at_height(camera.center, 6.0);
+        let ground = camera.world_to_screen_at_height(camera.center, 0.0);
+        assert_eq!(focus, ScreenPoint { x: 640.0, y: 360.0 });
+        assert_eq!(ground, ScreenPoint { x: 640.0, y: 552.0 });
+        assert_eq!(camera.screen_to_world_at_height(focus, 6.0), camera.center);
+    }
+
+    #[test]
     fn visible_tiles_are_outward_rounded_and_clamped() {
         let config = WorldConfig::new(100, 80, Seed(1)).unwrap();
         let camera = Camera {
             center: [0.0, 0.0],
             zoom: 1.0,
             viewport: [256.0, 128.0],
+            focus_elevation_meters: 0.0,
         };
         let rect = camera.visible_tiles(config, 2.0);
         assert_eq!(rect.min, TileCoord::new(0, 0));
         assert!(rect.max.x <= 100 && rect.max.y <= 80);
+    }
+
+    #[test]
+    fn camera_center_is_clamped_inside_virtual_world_bounds() {
+        let config = WorldConfig::new(10, 8, Seed(1)).unwrap();
+        let camera = Camera {
+            center: [0.0, 0.0],
+            zoom: 1.0,
+            viewport: [512.0, 256.0],
+            focus_elevation_meters: 0.0,
+        }
+        .clamp_center(config);
+        assert_eq!(camera.center, [4.0, 0.0]);
+
+        let far = Camera {
+            center: [1_000.0, 1_000.0],
+            zoom: 1.0,
+            viewport: [512.0, 256.0],
+            focus_elevation_meters: 0.0,
+        }
+        .clamp_center(config);
+        assert_eq!(far.center, [6.0, 8.0]);
+    }
+
+    #[test]
+    fn ground_screen_round_trip_uses_the_shared_isometric_plane() {
+        let camera = Camera::new([12.0, 7.0], [800.0, 600.0]);
+        let world = [18.25, 4.5];
+        let screen = camera.world_to_screen(world);
+        let picked = camera.screen_to_world(screen);
+        assert!((picked[0] - world[0]).abs() < 1e-9);
+        assert!((picked[1] - world[1]).abs() < 1e-9);
+        assert_eq!(
+            camera.world_to_screen(camera.center),
+            ScreenPoint { x: 400.0, y: 300.0 }
+        );
     }
 }

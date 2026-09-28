@@ -21,6 +21,36 @@ fixed-point positions, keeps a bounded two-tick interpolation history, and
 contains only camera, selection, connection, and rendering state. Shared Rust
 projection math provides the 2:1 isometric camera and inverse picking. Rendering
 prefers WebGPU and falls back to Canvas 2D; both paths use native-scale local
-AoE II sprite frames, viewport culling, and a constant-size uniform grass
-representation. The server's environment reads are isolated in
+AoE II sprite frames, viewport culling, and semantic temperate, dry, dirt,
+sand, rock, and water terrain groups from immutable map chunks. The server's
+environment reads are isolated in
 `crates/server/src/config.rs`.
+
+Before fetching geographic terrain, the client requests the package's verified
+minimum and maximum game heights. The server scans source elevation and modeled
+water pages through bounded residency off the async runtime, then caches the
+result with that immutable package. Bilinear interpolation stays inside those
+source bounds. The client projects the resulting height interval into a narrow
+viewport strip instead of exploring the world square. Compact height probes
+let it discard off-screen candidates without repeatedly downloading them, and
+visible relief takes priority during eviction. Decoded terrain remains capped
+at 512 chunks and 128 MiB, with at most 64 concurrent requests. Height metadata
+and candidate coordinates each have a separate 65,536-entry ceiling; very large
+views remain bounded rather than allocating in proportion to map area.
+
+`aoe-map` is the environment-independent boundary for frozen geographic map
+identity. It validates the 600 CE request, physical compression and bounded
+virtual dimensions, canonicalizes equivalent ratios and longitudes, and
+generates deterministic 32×32 terrain/resource chunks from package inputs.
+It deliberately has no filesystem, networking, browser, GDAL, or PROJ
+dependency. The configured native preparation worker owns those capabilities,
+executes source-backed preparation out of process, and has a separate bounded
+request for projected creator-map footprints.
+
+Mutable resource amounts are separate from immutable geographic chunks. The
+server restores map-bound snapshots before spawning and commits depletion only
+after persistence accepts it. Gameplay protocol 7 sends bounded sparse resets
+and exact-revision deltas; lagging consumers reset from the authoritative overlay.
+The client retains that state independently of chunk residency and removes
+exhausted sprites on both render backends. This supplies resource lifecycle
+infrastructure; gathering commands and an economy are outside this change.

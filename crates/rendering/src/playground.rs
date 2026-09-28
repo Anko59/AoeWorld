@@ -14,6 +14,13 @@ pub struct GameArt {
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
+    /// Local terrain groups in this order: temperate grass, dry grass, dirt,
+    /// sand, rock, and water. Map material binding stays in the client so the
+    /// renderer remains independent from geographic map contracts.
+    pub terrain: [Vec<GameFrame>; 6],
+    /// Resource groups in map wire order: food, wood, gold, then stone.
+    /// Empty groups deliberately mean that no reviewed real-pack art exists.
+    pub resources: [Vec<GameFrame>; 4],
 }
 
 impl Renderer {
@@ -56,24 +63,12 @@ impl Renderer {
             min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-        self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("local game sprites"),
-            layout: &self.pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
+        self.instances.rebind_resources(
+            &self.device,
+            &self.pipeline.get_bind_group_layout(0),
+            &view,
+            &sampler,
+        );
         self._atlas = texture;
         Ok(())
     }
@@ -150,6 +145,7 @@ fn push(
         radius: [w / 960.0, h / 640.0],
         color: [1.0; 4],
         uv,
+        depths: [0.0; 4],
     });
 }
 
@@ -168,6 +164,7 @@ fn ring(sprites: &mut Vec<Sprite>, p: [f32; 2], color: [f32; 4], radius: f32) {
                 1.0 / GAME_ATLAS_SIDE as f32,
                 1.0 / GAME_ATLAS_SIDE as f32,
             ],
+            depths: [0.0; 4],
         });
     }
 }

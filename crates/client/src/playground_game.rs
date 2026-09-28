@@ -1,6 +1,7 @@
 use aoe_core::{
     Camera, EntityId, FIXED_SUBUNITS_PER_TILE, ScreenPoint, TileRect, WorldConfig, WorldPosition,
 };
+use aoe_map::Chunk;
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     GameplayUnitState, ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -9,7 +10,7 @@ use aoe_rendering::{GameArt, GameRenderer, SceneCamera, SceneUnit};
 use js_sys::Uint8Array;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     rc::Rc,
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -17,21 +18,20 @@ use web_sys::{Document, Event, HtmlCanvasElement, MessageEvent, WebSocket};
 
 #[path = "playground_controls.rs"]
 mod controls;
+#[path = "playground_fixture.rs"]
+mod fixture;
 #[path = "playground_init.rs"]
 mod init;
-
-#[derive(Clone, Copy)]
-pub(super) struct Sample {
-    pub tick: u64,
-    pub position: WorldPosition,
-}
-
-pub(super) struct Drag {
-    pub start: ScreenPoint,
-    pub current: ScreenPoint,
-    pub middle: bool,
-    pub center: [f64; 2],
-}
+#[path = "playground_map.rs"]
+mod map;
+use map::{
+    state::{Drag, Sample},
+    ui::set_text,
+};
+#[path = "playground_status.rs"]
+mod status;
+#[path = "playground_storage.rs"]
+mod storage;
 
 pub(super) struct Client {
     pub document: Document,
@@ -44,6 +44,16 @@ pub(super) struct Client {
     pub config: WorldConfig,
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
+    pub map_content_hash: Option<[u8; 32]>,
+    pub surface_fixture: bool,
+    pub focus_map_hash: Option<[u8; 32]>,
+    pub resources: crate::resource_state::ResourceStateCache,
+    pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
+    pub terrain_discovered: BTreeSet<(i32, i32)>,
+    pub terrain_height_bounds: Option<(i16, i16)>,
+    pub terrain_bounds: map::heights::MapHeightBounds,
+    pub terrain_resident_height_bounds: Option<(i16, i16)>,
+    pub terrain_inflight: BTreeSet<(i32, i32)>,
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
@@ -60,50 +70,10 @@ pub(super) struct Client {
     pub status: String,
 }
 
-pub(super) fn set_text(document: &Document, id: &str, value: &str) {
-    if let Some(element) = document.get_element_by_id(id) {
-        element.set_text_content(Some(value));
-    }
-}
-
 pub(super) fn now() -> f64 {
     web_sys::window()
         .and_then(|window| window.performance())
         .map_or(0.0, |performance| performance.now())
-}
-
-fn token_hex(token: ResumeToken) -> String {
-    token.0.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn parse_token(value: String) -> Option<ResumeToken> {
-    if value.len() != 48 {
-        return None;
-    }
-    let mut result = [0_u8; 24];
-    for (index, byte) in result.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
-    }
-    Some(ResumeToken(result))
-}
-
-fn stored_token() -> Option<ResumeToken> {
-    let storage = web_sys::window()?.session_storage().ok()??;
-    parse_token(storage.get_item("aoeworld.resume-token").ok()??)
-}
-
-pub(super) fn save_token(token: Option<ResumeToken>) {
-    let Some(storage) = web_sys::window().and_then(|window| window.session_storage().ok()?) else {
-        return;
-    };
-    match token {
-        Some(token) => {
-            let _ = storage.set_item("aoeworld.resume-token", &token_hex(token));
-        }
-        None => {
-            let _ = storage.remove_item("aoeworld.resume-token");
-        }
-    }
 }
 
 pub(super) fn dpr() -> f64 {
@@ -130,7 +100,7 @@ pub(super) fn resize(client: &mut Client) {
 }
 
 fn requested_region(client: &Client) -> TileRect {
-    let visible = client.camera.visible_tiles(client.config, 8.0);
+    let visible = map::terrain_visible_tiles(client);
     let width = visible.width().clamp(1, 512);
     let height = visible.height().clamp(1, 512);
     TileRect::from_xywh(
@@ -267,17 +237,32 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
                 height_tiles,
+                map_content_hash,
                 role,
                 primary_unit_id,
                 resume_token,
                 ..
             }) => {
+                let map_changed = client.map_content_hash != map_content_hash;
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
                 client.role = Some(role);
+                if !client.surface_fixture {
+                    client.map_content_hash = map_content_hash;
+                }
+                if map_changed && !client.surface_fixture {
+                    client.camera.center =
+                        [f64::from(width_tiles) / 2.0, f64::from(height_tiles) / 2.0];
+                    client.camera.focus_elevation_meters = 0.0;
+                    client.focus_map_hash = None;
+                }
+                client.resources.clear();
+                if !client.surface_fixture {
+                    map::clear_terrain_cache(&mut client);
+                }
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
-                save_token(resume_token);
+                storage::save_token(resume_token);
                 client.units.clear();
                 client.history.clear();
                 client.status = "connected".to_owned();
@@ -297,6 +282,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     remember(&mut client, unit, tick.0);
                 }
             }
+            Ok(GameplayServerMessage::Snapshot { .. }) => {}
             Ok(GameplayServerMessage::Tick {
                 revision,
                 tick,
@@ -312,25 +298,63 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     remember(&mut client, unit, tick.0);
                 }
             }
+            Ok(GameplayServerMessage::Tick { .. }) => {}
+            Ok(GameplayServerMessage::ResourceState(state)) => {
+                if state.subscription_revision == client.revision && !client.resources.apply(state)
+                {
+                    client.status = "resource state out of sync; reconnect required".to_owned();
+                    client.resources.clear();
+                    if let Some(socket) = &client.socket {
+                        let _ = socket.close();
+                    }
+                }
+            }
             Ok(GameplayServerMessage::RoleChange {
                 role, resume_token, ..
             }) => {
                 client.role = Some(role);
                 client.token = resume_token;
-                save_token(resume_token);
+                storage::save_token(resume_token);
+            }
+            Ok(GameplayServerMessage::WorldReset { .. }) => {
+                client.units.clear();
+                client.history.clear();
+                client.role = None;
+                client.primary = None;
+                if !client.surface_fixture {
+                    client.map_content_hash = None;
+                    client.focus_map_hash = None;
+                }
+                client.camera.focus_elevation_meters = 0.0;
+                client.resources.clear();
+                if !client.surface_fixture {
+                    map::clear_terrain_cache(&mut client);
+                }
+                client.token = None;
+                storage::save_token(None);
+                client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck { result, .. }) => {
-                client.status = if matches!(result, aoe_protocol::CommandResult::Accepted) {
-                    "connected"
-                } else {
-                    "order rejected"
+                client.status = match result {
+                    aoe_protocol::CommandResult::Accepted => "connected",
+                    aoe_protocol::CommandResult::RejectedUnreachable => "order unreachable",
+                    aoe_protocol::CommandResult::RejectedPathBudgetExceeded => {
+                        "path planning limit reached"
+                    }
+                    _ => "order rejected",
                 }
                 .to_owned();
             }
             Ok(GameplayServerMessage::Error { message, .. }) => {
                 client.status = format!("server error: {message}")
             }
-            _ => client.status = "protocol error".to_owned(),
+            _ => {
+                client.status = "protocol error; reconnect required".to_owned();
+                client.resources.clear();
+                if let Some(socket) = &client.socket {
+                    let _ = socket.close();
+                }
+            }
         }
     });
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -355,7 +379,7 @@ pub(super) fn reconnect(shared: Rc<RefCell<Client>>) {
 
 pub(super) fn center_on_primary(client: &mut Client) {
     if let Some(primary) = client.primary {
-        client.camera.center = position_at(client, primary);
+        map::center_on_world(client, position_at(client, primary));
     }
     client.camera = client.camera.clamp_center(client.config);
 }
@@ -364,7 +388,10 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) || client.selected != client.primary {
         return;
     }
-    let world = client.camera.screen_to_world(point);
+    let Some(world) = map::world_at_screen(client, point) else {
+        client.status = "terrain unavailable at pointer".to_owned();
+        return;
+    };
     if world[0] < 0.0
         || world[1] < 0.0
         || world[0] >= f64::from(client.config.width_tiles)
@@ -415,20 +442,26 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 moving: unit.moving,
                 facing: unit.facing,
                 selected: client.selected == Some(unit.id),
+                elevation_meters: map::elevation_at_world(&client, position_at(&client, unit.id)),
             })
             .collect::<Vec<_>>();
         let camera = SceneCamera {
             center: client.camera.center,
             zoom: client.camera.zoom,
             viewport: client.camera.viewport,
+            focus_elevation_meters: client.camera.focus_elevation_meters,
         };
+        let terrain = map::scene_terrain(&client);
+        let resources = map::scene_resources(&client);
         let grid = client.grid;
         let animation = (time / 100.0) as usize;
         let Client { renderer, art, .. } = &mut *client;
-        if let Err(error) = renderer.render_world(art, &units, camera, animation, grid) {
+        if let Err(error) =
+            renderer.render_world(art, &terrain, &resources, &units, camera, animation, grid)
+        {
             client.status = error;
         }
-        set_text(&client.document, "connection", &client.status);
+        status::update(&client);
         set_text(
             &client.document,
             "world-position",
@@ -437,7 +470,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.camera.center[0], client.camera.center[1]
             ),
         );
+        let surface_fixture = client.surface_fixture;
         drop(client);
+        if !surface_fixture {
+            map::request_visible(shared.clone());
+        }
         if let Some(window) = web_sys::window()
             && let Some(cb) = next.borrow().as_ref()
         {

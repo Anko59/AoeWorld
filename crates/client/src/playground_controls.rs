@@ -1,4 +1,6 @@
-use super::{Client, Drag, center_on_primary, dpr, position_at, reconnect, send_order, subscribe};
+use super::{
+    Client, Drag, center_on_primary, dpr, map, position_at, reconnect, send_order, subscribe,
+};
 use aoe_core::ScreenPoint;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -13,16 +15,26 @@ fn point(client: &Client, event: &PointerEvent) -> ScreenPoint {
 }
 
 fn pick(client: &Client, target: ScreenPoint) -> Option<aoe_core::EntityId> {
+    let terrain_depth = map::surface_depth_at_screen(client, target);
     client
         .units
         .keys()
-        .rev()
-        .find(|id| {
-            let screen = client.camera.world_to_screen(position_at(client, **id));
-            (screen.x - target.x).abs() < 32.0 * client.camera.zoom
-                && (screen.y - target.y).abs() < 48.0 * client.camera.zoom
+        .filter_map(|id| {
+            let position = position_at(client, *id);
+            let screen = map::screen_position(client, position);
+            if (screen.x - target.x).abs() >= 32.0 * client.camera.zoom
+                || (screen.y - target.y).abs() >= 48.0 * client.camera.zoom
+            {
+                return None;
+            }
+            let depth = position[0] + position[1] + 2.0 * map::elevation_at_world(client, position);
+            if terrain_depth.is_some_and(|surface| surface > depth + 1e-6) {
+                return None;
+            }
+            Some((depth, *id))
         })
-        .copied()
+        .max_by(|left, right| left.0.total_cmp(&right.0).then(left.1.cmp(&right.1)))
+        .map(|(_, id)| id)
 }
 
 fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe_core::EntityId> {
@@ -32,7 +44,7 @@ fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe
         .units
         .keys()
         .find(|id| {
-            let screen = client.camera.world_to_screen(position_at(client, **id));
+            let screen = map::screen_position(client, position_at(client, **id));
             screen.x >= min_x && screen.x <= max_x && screen.y >= min_y && screen.y <= max_y
         })
         .copied()
@@ -43,11 +55,16 @@ fn pan(client: &mut Client, delta: [f64; 2]) {
         x: client.camera.viewport[0] / 2.0,
         y: client.camera.viewport[1] / 2.0,
     };
-    let before = client.camera.screen_to_world(center);
-    let after = client.camera.screen_to_world(ScreenPoint {
-        x: center.x + delta[0],
-        y: center.y + delta[1],
-    });
+    let before = client
+        .camera
+        .screen_to_world_at_height(center, client.camera.focus_elevation_meters);
+    let after = client.camera.screen_to_world_at_height(
+        ScreenPoint {
+            x: center.x + delta[0],
+            y: center.y + delta[1],
+        },
+        client.camera.focus_elevation_meters,
+    );
     client.camera.center = [
         client.camera.center[0] + before[0] - after[0],
         client.camera.center[1] + before[1] - after[1],
@@ -128,8 +145,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             (drag.start, drag.center, drag.middle)
         };
         if middle {
-            let before = client.camera.screen_to_world(start);
-            let after = client.camera.screen_to_world(target);
+            let before = client
+                .camera
+                .screen_to_world_at_height(start, client.camera.focus_elevation_meters);
+            let after = client
+                .camera
+                .screen_to_world_at_height(target, client.camera.focus_elevation_meters);
             client.camera.center = [
                 center[0] + before[0] - after[0],
                 center[1] + before[1] - after[1],

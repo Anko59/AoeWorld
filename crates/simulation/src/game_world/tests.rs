@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
+use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
 
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()
@@ -189,3 +190,284 @@ fn deterministic_population_supports_hotspots_and_sparse_extents() {
     assert!(units.len() >= 1_000);
     assert!(stats.candidate_units >= stats.returned_units);
 }
+
+#[test]
+fn map_world_rejects_blocked_ground_before_spawning_or_ordering() {
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let mut world = GameWorld::from_map(package).expect("map world");
+    let config = world.config();
+    let mut passable = None;
+    let mut blocked = None;
+    for y in 0..config.height_tiles {
+        for x in 0..config.width_tiles {
+            let tile = TileCoord::new(x, y);
+            if world.terrain().passable(tile, config) {
+                passable.get_or_insert(tile);
+            } else {
+                blocked.get_or_insert(tile);
+            }
+            if passable.is_some() && blocked.is_some() {
+                break;
+            }
+        }
+        if passable.is_some() && blocked.is_some() {
+            break;
+        }
+    }
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(passable.expect("land")).expect("position"),
+        )
+        .expect("spawn on land");
+    let blocked =
+        WorldPosition::from_tile_center(blocked.expect("blocked tile")).expect("position");
+    assert_eq!(
+        world.issue_move(unit, blocked),
+        Err(GameWorldError::InvalidPosition)
+    );
+}
+
+#[test]
+fn exhausting_a_resource_releases_its_blocking_tile() {
+    let config = WorldConfig::new(128, 128, Seed(3)).expect("config");
+    let generator = MapChunkGenerator::new([3; 32], 1, config.width_tiles);
+    let resource = (0..4)
+        .flat_map(|y| {
+            let generator = generator.clone();
+            (0..4).flat_map(move |x| generator.chunk(x, y).expect("fixture chunk").resources)
+        })
+        .next()
+        .expect("resource");
+    let mut world = GameWorld::new(config).expect("world");
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(10, 10)).expect("unit position"),
+        )
+        .expect("spawn unit");
+    let unit_index = world.lookup[&unit];
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    world.store_planner(
+        unit_index,
+        Some(RoutePlanner::new(
+            TileCoord::new(10, 10),
+            resource.tile,
+            4_096,
+        )),
+    );
+    assert_eq!(world.active_planner_count, 1);
+    assert_eq!(world.active_route_searches, 1);
+    assert!(!world.terrain().passable(resource.tile, config));
+    assert!(
+        world
+            .next_map_route(TileCoord::new(0, 0), TileCoord::new(0, 0))
+            .is_some()
+    );
+    assert_eq!(world.navigation_cache.entry_count(), 1);
+    let initial_hash = world.canonical_hash();
+    let first = world
+        .deplete_resource(resource.id, resource.initial_amount - 1)
+        .expect("partial depletion");
+    assert!(first.remaining > 0);
+    assert!(!first.became_nonblocking);
+    assert_eq!(world.navigation_cache.entry_count(), 1);
+    let partial_hash = world.canonical_hash();
+    assert_ne!(partial_hash, initial_hash);
+    let final_depletion = world
+        .deplete_resource(resource.id, resource.initial_amount)
+        .expect("final depletion");
+    assert_eq!(final_depletion.remaining, 0);
+    assert!(final_depletion.became_nonblocking);
+    assert_eq!(world.navigation_cache.entry_count(), 0);
+    assert_eq!(world.active_planner_count, 0);
+    assert_eq!(world.active_route_searches, 0);
+    assert_ne!(world.canonical_hash(), partial_hash);
+    assert!(world.terrain().passable(resource.tile, config));
+}
+
+#[test]
+fn map_world_follows_a_passable_route_to_its_destination() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let terrain = Terrain::Map {
+        generator: generator.clone(),
+        overlay: ResourceOverlay::default(),
+    };
+    let mut route_fixture = None;
+    'origins: for y in 1..config.height_tiles - 1 {
+        for x in 1..config.width_tiles - 2 {
+            let origin = TileCoord::new(x, y);
+            let destination = TileCoord::new(x + 1, y);
+            if let Some(path) = terrain.route(origin, destination) {
+                route_fixture = Some((origin, destination, path));
+                break 'origins;
+            }
+        }
+    }
+    let (origin, destination, path) = route_fixture.expect("generated terrain has a route");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let unit = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let target = WorldPosition::from_tile_center(destination).expect("destination");
+    assert!(world.issue_move(unit, target).expect("route"));
+    assert_eq!(
+        world.movement_order(unit).expect("order").waypoint,
+        WorldPosition::from_tile_center(path[1]).expect("first route waypoint")
+    );
+    for _ in 0..512 {
+        for changed in world.advance() {
+            assert!(
+                world
+                    .terrain()
+                    .passable(changed.position.tile_floor(), config)
+            );
+        }
+        if !world.unit(unit).expect("unit").moving {
+            break;
+        }
+    }
+    let arrived = world.unit(unit).expect("unit");
+    assert_eq!(arrived.position, target);
+    assert!(!arrived.moving);
+}
+
+#[test]
+fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let terrain = Terrain::Map {
+        generator: generator.clone(),
+        overlay: ResourceOverlay::default(),
+    };
+    let mut fixture = None;
+    'origins: for y in 1..config.height_tiles - 1 {
+        for x in 1..config.width_tiles - 3 {
+            let origin = TileCoord::new(x, y);
+            let destination = TileCoord::new(x + 2, y);
+            if let Some(MovementOutcome::Path(path)) = terrain.route_outcome(origin, destination)
+                && path.tiles.len() >= 3
+            {
+                fixture = Some((origin, destination, path.tiles[1]));
+                break 'origins;
+            }
+        }
+    }
+    let (origin, destination, waypoint) = fixture.expect("generated map route");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let id = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let index = world.lookup[&id];
+    let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
+    let waypoint_position = WorldPosition::from_tile_center(waypoint).expect("waypoint position");
+    let destination_position =
+        WorldPosition::from_tile_center(destination).expect("destination position");
+    world.units[index].state.moving = true;
+    world.units[index].order = Some(MovementOrder {
+        origin: origin_position,
+        destination: destination_position,
+        waypoint: waypoint_position,
+        target_tile: destination,
+        segment_length: 1,
+        travelled: 1,
+        speed_carry: 0,
+    });
+    world.active_movers.push(id);
+    world.planning_budget = 0;
+
+    world.advance();
+
+    let unit = world.unit(id).expect("unit");
+    assert_eq!(unit.position, waypoint_position);
+    assert!(!unit.moving);
+    assert!(unit.planning);
+    assert!(world.movement_order(id).is_some());
+    assert_eq!(world.active_mover_count(), 1);
+
+    // A zero shared budget defers only this tick. Once the tick resets the
+    // budget, planning resumes and the unit receives its next segment.
+    world.advance();
+    let unit = world.unit(id).expect("unit");
+    assert!(unit.moving);
+    assert!(!unit.planning);
+    assert!(world.movement_order(id).is_some());
+}
+
+#[test]
+fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let generator = MapChunkGenerator::new([0; 32], 0, config.width_tiles);
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = Terrain::Map {
+        generator,
+        overlay: ResourceOverlay::default(),
+    };
+    let origin = TileCoord::new(1, 1);
+    let destination = TileCoord::new(2, 1);
+    let id = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(origin).expect("origin"),
+        )
+        .expect("spawn");
+    let index = world.lookup[&id];
+    let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
+    let destination_position =
+        WorldPosition::from_tile_center(destination).expect("destination position");
+    world.units[index].state.moving = true;
+    world.store_planner(index, Some(RoutePlanner::new(origin, destination, 1)));
+    world.units[index].order = Some(MovementOrder {
+        origin: origin_position,
+        destination: destination_position,
+        waypoint: origin_position,
+        target_tile: destination,
+        segment_length: 1,
+        travelled: 1,
+        speed_carry: 0,
+    });
+    world.active_movers.push(id);
+    world.planning_budget = 1;
+
+    world.advance();
+
+    let unit = world.unit(id).expect("unit");
+    assert!(!unit.moving);
+    assert!(unit.planning);
+    assert!(world.movement_order(id).is_some());
+
+    world.advance();
+    let unit = world.unit(id).expect("unit");
+    assert!(!unit.moving);
+    assert!(!unit.planning);
+    assert!(world.movement_order(id).is_none());
+    assert_eq!(
+        world.movement_failure(id),
+        Some(GameWorldError::PathBudgetExceeded)
+    );
+    let failed_hash = world.canonical_hash();
+    world.units[index].last_movement_error = None;
+    assert_ne!(world.canonical_hash(), failed_hash);
+    assert_eq!(world.active_mover_count(), 0);
+}
+
+mod physical_movement;
+mod routes;

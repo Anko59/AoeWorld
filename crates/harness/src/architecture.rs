@@ -28,7 +28,7 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
                 violations.push(format!("{name} may not depend on {dep}"));
             }
         }
-        if name == "aoe-core" || name == "aoe-simulation" || name == "aoe-scenario" {
+        if ["aoe-core", "aoe-map", "aoe-simulation", "aoe-scenario"].contains(&name) {
             let path = root
                 .join("crates")
                 .join(name.trim_start_matches("aoe-"))
@@ -105,7 +105,7 @@ fn test_only(source: &Path) -> Result<bool, Box<dyn Error>> {
 }
 
 fn forbidden(package: &str, dependency: &str) -> bool {
-    if ["aoe-core", "aoe-scenario", "aoe-simulation"].contains(&package) {
+    if ["aoe-core", "aoe-map", "aoe-scenario", "aoe-simulation"].contains(&package) {
         return [
             "tokio",
             "axum",
@@ -118,6 +118,8 @@ fn forbidden(package: &str, dependency: &str) -> bool {
             "aoe-harness",
             "aoe-rendering",
             "aoe-protocol",
+            "gdal",
+            "proj",
         ]
         .contains(&dependency);
     }
@@ -155,6 +157,7 @@ mod tests {
     #[test]
     fn dependency_direction_is_explicit() {
         assert!(forbidden("aoe-simulation", "tokio"));
+        assert!(forbidden("aoe-map", "gdal"));
         assert!(forbidden("aoe-protocol", "aoe-simulation"));
         assert!(forbidden("aoe-server", "aoe-harness"));
         assert!(!forbidden("aoe-server", "aoe-simulation"));
