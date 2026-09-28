@@ -122,9 +122,11 @@ async function repeatCameraKey(
   page: Page,
   key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
   count: number,
+  settle = true,
 ) {
+  if (count <= 0) return;
   await page.evaluate(
-    async ({ key, count }) => {
+    async ({ key, count, settle }) => {
       for (let index = 0; index < count; index++) {
         document.dispatchEvent(
           new KeyboardEvent("keydown", { key, bubbles: true }),
@@ -133,11 +135,13 @@ async function repeatCameraKey(
           await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         }
       }
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
+      if (settle) {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+      }
     },
-    { key, count },
+    { key, count, settle },
   );
 }
 
@@ -172,15 +176,19 @@ async function panToWorld(page: Page, target: [number, number]) {
       page,
       vertical >= 0 ? "ArrowUp" : "ArrowDown",
       Math.abs(vertical),
+      false,
     );
     await repeatCameraKey(
       page,
       horizontal >= 0 ? "ArrowLeft" : "ArrowRight",
       Math.abs(horizontal),
+      false,
     );
     await page.evaluate(
       () =>
-        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
     );
   }
   throw new Error(
