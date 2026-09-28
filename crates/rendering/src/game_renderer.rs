@@ -16,6 +16,14 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 mod world_sprites;
 use world_sprites::world_sprite_frames;
 
+pub fn resource_sprite_bounds(
+    resource: SceneResource,
+    frame: GameFrame,
+    camera: SceneCamera,
+) -> Option<[f64; 4]> {
+    world_sprites::resource_sprite_bounds(resource, frame, camera)
+}
+
 #[path = "game_renderer/canvas_depth.rs"]
 mod canvas_depth;
 use canvas_depth::render_canvas_world;

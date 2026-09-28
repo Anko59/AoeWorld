@@ -9,6 +9,49 @@ import {
 
 const colors = syntheticSurfaceColors;
 
+test("dense resources cover the viewport after zoom and pan", async ({
+  page,
+}, testInfo) => {
+  await gameAssets(page, true);
+  if (testInfo.project.name === "canvas") {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "gpu", { value: undefined });
+    });
+  }
+  await page.goto("/");
+  await waitForRenderer(page, testInfo.project.name);
+  await activateSyntheticMap(page, true);
+  const canvas = page.locator("#scene");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("game canvas is missing");
+  await page.mouse.move(box.width / 2, box.height / 2);
+  const quadrantCounts = async () => {
+    const image = PNG.sync.read(await canvas.screenshot());
+    const counts = [0, 0, 0, 0];
+    for (let y = 80; y < image.height - 100; y++) {
+      for (let x = 32; x < image.width - 32; x++) {
+        const offset = (y * image.width + x) * 4;
+        const r = image.data[offset] ?? 0;
+        const g = image.data[offset + 1] ?? 0;
+        const b = image.data[offset + 2] ?? 0;
+        if (r > 190 && g < 80 && b > 160) {
+          const index =
+            (x >= image.width / 2 ? 1 : 0) + (y >= image.height / 2 ? 2 : 0);
+          counts[index] = (counts[index] ?? 0) + 1;
+        }
+      }
+    }
+    return Math.min(...counts);
+  };
+  await expect.poll(quadrantCounts).toBeGreaterThan(100);
+  await page.mouse.wheel(0, 5_000);
+  await expect.poll(quadrantCounts).toBeGreaterThan(100);
+  for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) {
+    await page.keyboard.press(key);
+    await expect.poll(quadrantCounts).toBeGreaterThan(100);
+  }
+});
+
 test.beforeEach(async ({ request }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
 });

@@ -22,6 +22,9 @@ pub(super) use eviction::evict_distant_chunks_with_limits;
 use heights::{
     include_chunk_height_bounds, refresh_chunk_height_bounds, visible_tiles_for_height_bounds,
 };
+#[path = "playground_map/resources.rs"]
+mod resources;
+pub(super) use resources::scene_resources;
 
 pub(super) fn install_fixture_chunk(client: &mut Client, chunk: &Chunk) {
     include_chunk_height_bounds(client, chunk);
@@ -172,36 +175,6 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
         }
     }
     terrain
-}
-
-pub(super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
-    let visible = resident_visible_tiles(client);
-    let mut resources = client
-        .terrain_chunks
-        .values()
-        .filter(|chunk| heights::resident_may_be_visible(client, (chunk.x, chunk.y)))
-        .flat_map(|chunk| chunk.resources.iter())
-        .filter(|resource| {
-            client.resources.visible(resource.id)
-                && resource.tile.x >= visible.min.x
-                && resource.tile.x < visible.max.x
-                && resource.tile.y >= visible.min.y
-                && resource.tile.y < visible.max.y
-        })
-        .map(|resource| SceneResource {
-            id: resource.id,
-            position: [
-                f64::from(resource.tile.x) + 0.5,
-                f64::from(resource.tile.y) + 0.5,
-            ],
-            kind: resource.kind as u8,
-            visual_variant: resource.visual_variant,
-            elevation_meters: elevation_at_tile(client, resource.tile.x, resource.tile.y),
-        })
-        .collect::<Vec<_>>();
-    resources.sort_by_key(|resource| resource.id);
-    resources.truncate(MAX_VISIBLE_RESOURCE_SPRITES);
-    resources
 }
 
 pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {

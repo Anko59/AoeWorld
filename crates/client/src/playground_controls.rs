@@ -1,7 +1,7 @@
 use super::{
     Client, Drag, center_on_primary, dpr, map, position_at, reconnect, send_order, subscribe,
 };
-use aoe_core::ScreenPoint;
+use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, KeyboardEvent, PointerEvent, WheelEvent};
@@ -50,26 +50,28 @@ fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe
         .copied()
 }
 
-fn pan(client: &mut Client, delta: [f64; 2]) {
+fn pan_camera(mut camera: Camera, config: WorldConfig, delta: [f64; 2]) -> Camera {
     let center = ScreenPoint {
-        x: client.camera.viewport[0] / 2.0,
-        y: client.camera.viewport[1] / 2.0,
+        x: camera.viewport[0] / 2.0,
+        y: camera.viewport[1] / 2.0,
     };
-    let before = client
-        .camera
-        .screen_to_world_at_height(center, client.camera.focus_elevation_meters);
-    let after = client.camera.screen_to_world_at_height(
+    let before = camera.screen_to_world_at_height(center, camera.focus_elevation_meters);
+    let after = camera.screen_to_world_at_height(
         ScreenPoint {
             x: center.x + delta[0],
             y: center.y + delta[1],
         },
-        client.camera.focus_elevation_meters,
+        camera.focus_elevation_meters,
     );
-    client.camera.center = [
-        client.camera.center[0] + before[0] - after[0],
-        client.camera.center[1] + before[1] - after[1],
+    camera.center = [
+        camera.center[0] + after[0] - before[0],
+        camera.center[1] + after[1] - before[1],
     ];
-    client.camera = client.camera.clamp_center(client.config);
+    camera.clamp_center(config)
+}
+
+fn pan(client: &mut Client, delta: [f64; 2]) {
+    client.camera = pan_camera(client.camera, client.config, delta);
 }
 
 pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
@@ -266,4 +268,35 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aoe_core::{Seed, project};
+    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn camera_pan_moves_in_the_requested_screen_direction() {
+        let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
+        let camera = Camera {
+            center: [256.0, 256.0],
+            zoom: 1.0,
+            viewport: [1280.0, 720.0],
+            focus_elevation_meters: 0.0,
+        };
+        let initial = project(camera.center);
+
+        let left = pan_camera(camera, config, [-60.0, 0.0]);
+        let right = pan_camera(camera, config, [60.0, 0.0]);
+        let up = pan_camera(camera, config, [0.0, -60.0]);
+        let down = pan_camera(camera, config, [0.0, 60.0]);
+
+        assert!(project(left.center).x < initial.x);
+        assert!(project(right.center).x > initial.x);
+        assert!(project(up.center).y < initial.y);
+        assert!(project(down.center).y > initial.y);
+    }
 }

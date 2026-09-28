@@ -149,6 +149,8 @@ export async function gameAssets(
   }
   for (let y = 80; y < 125; y += 1)
     for (let x = 160; x < 185; x += 1) pixel(x, y, [65, 145, 245]);
+  for (let y = 80; y < 125; y += 1)
+    for (let x = 200; x < 225; x += 1) pixel(x, y, [235, 40, 200]);
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
@@ -158,6 +160,7 @@ export async function gameAssets(
       10,
     ]),
     ["graphics", 435, 4],
+    ["graphics", 4652, 14],
   ].flatMap(([archive, id, count]) => {
     const source = terrainSources.get(Number(id));
     return Array.from({ length: Number(count) }, (_, frame) => ({
@@ -165,7 +168,11 @@ export async function gameAssets(
       source_hash: "fixture",
       frame,
       page: 0,
-      x: source ? source.x + frame * source.width : 160,
+      x: source
+        ? source.x + frame * source.width
+        : Number(id) === 4652
+          ? 200
+          : 160,
       y: source?.y ?? 80,
       width: source?.width ?? 25,
       height: source?.height ?? 45,

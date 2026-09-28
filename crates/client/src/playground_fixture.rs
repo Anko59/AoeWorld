@@ -48,6 +48,16 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
             client.map_content_hash = Some(bytes);
             client.focus_map_hash = None;
             map::clear_terrain_cache(&mut client);
+            // Fixture resources start undepleted; the diagnostic server does
+            // not send a geographic resource overlay for this client-only map.
+            client.resources.clear();
+            let subscription_revision = client.revision.max(1);
+            client.resources.apply(aoe_protocol::ResourceState {
+                subscription_revision,
+                from_revision: None,
+                revision: 0,
+                changes: Vec::new(),
+            });
             for chunk in chunks {
                 map::install_fixture_chunk(&mut client, &chunk);
                 let coordinate = (chunk.x, chunk.y);

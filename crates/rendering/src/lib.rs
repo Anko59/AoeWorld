@@ -20,6 +20,7 @@ mod terrain;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
     GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneTerrainSurface, SceneUnit,
+    resource_sprite_bounds,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

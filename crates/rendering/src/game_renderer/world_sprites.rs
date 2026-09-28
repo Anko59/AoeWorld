@@ -152,28 +152,14 @@ fn scene_sprite(
     elevation_meters: f64,
     camera: SceneCamera,
 ) -> Option<Sprite> {
-    let projection = Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-        focus_elevation_meters: camera.focus_elevation_meters,
-    };
-    let screen = projection.world_to_screen_at_height(position, elevation_meters);
-    let width = f64::from(frame.size[0]) * camera.zoom;
-    let height = f64::from(frame.size[1]) * camera.zoom;
-    if screen.x + width < 0.0
-        || screen.y + height < 0.0
-        || screen.x - width > camera.viewport[0]
-        || screen.y - height > camera.viewport[1]
-    {
-        return None;
-    }
-    let x = screen.x - f64::from(frame.anchor[0]) * camera.zoom;
-    let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+    let bounds = sprite_screen_bounds(frame, position, elevation_meters, camera)?;
+    let [left, top, right, bottom] = bounds;
+    let width = right - left;
+    let height = bottom - top;
     Some(Sprite {
         position: [
-            ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-            (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+            ((left + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+            (1.0 - (top + height / 2.0) / camera.viewport[1] * 2.0) as f32,
         ],
         radius: [
             (width / camera.viewport[0]) as f32,
@@ -183,6 +169,42 @@ fn scene_sprite(
         uv: frame.uv,
         depths: [0.0; 4],
     })
+}
+
+pub(super) fn resource_sprite_bounds(
+    resource: SceneResource,
+    frame: GameFrame,
+    camera: SceneCamera,
+) -> Option<[f64; 4]> {
+    sprite_screen_bounds(frame, resource.position, resource.elevation_meters, camera)
+}
+
+fn sprite_screen_bounds(
+    frame: GameFrame,
+    position: [f64; 2],
+    elevation_meters: f64,
+    camera: SceneCamera,
+) -> Option<[f64; 4]> {
+    if camera.viewport[0] <= 0.0 || camera.viewport[1] <= 0.0 {
+        return None;
+    }
+    let projection = Camera {
+        center: camera.center,
+        zoom: camera.zoom,
+        viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
+    };
+    let screen = projection.world_to_screen_at_height(position, elevation_meters);
+    let width = f64::from(frame.size[0]) * camera.zoom;
+    let height = f64::from(frame.size[1]) * camera.zoom;
+    let left = screen.x - f64::from(frame.anchor[0]) * camera.zoom;
+    let top = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+    let right = left + width;
+    let bottom = top + height;
+    if right < 0.0 || bottom < 0.0 || left > camera.viewport[0] || top > camera.viewport[1] {
+        return None;
+    }
+    Some([left, top, right, bottom])
 }
 
 fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
