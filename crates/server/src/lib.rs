@@ -495,3 +495,6 @@ async fn client(mut socket: WebSocket, state: AppState) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
