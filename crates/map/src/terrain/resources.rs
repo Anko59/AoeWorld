@@ -50,7 +50,7 @@ pub(super) fn candidate(
     tile: TileCoord,
     sample: Tile,
 ) -> Option<ResourceNode> {
-    if !sample.passable || super::clearing::contains(generator, tile) {
+    if !sample.passable || super::clearing::suppresses_objects(generator, tile, sample.biome) {
         return None;
     }
     let key = detail_key(generator);
@@ -243,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_six() {
+    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_seven() {
         let expected = [
             145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195, 208,
             205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
@@ -251,8 +251,9 @@ mod tests {
         for recipe in [
             crate::LEGACY_GENERATION_RECIPE_VERSION,
             crate::PRIOR_GENERATION_RECIPE_VERSION,
+            crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION,
+            crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION,
             crate::GENERATION_RECIPE_VERSION,
-            crate::WATER_MODEL_GENERATION_RECIPE_VERSION,
         ] {
             let generator =
                 MapChunkGenerator::new([7; 32], 3, 64).with_elevation_sampling_recipe(recipe);
@@ -265,7 +266,7 @@ mod tests {
         let prior = MapChunkGenerator::new([71; 32], 5, 512)
             .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
         let current = MapChunkGenerator::new([71; 32], 5, 512)
-            .with_elevation_sampling_recipe(crate::GENERATION_RECIPE_VERSION);
+            .with_elevation_sampling_recipe(crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION);
         let mut retained = 0;
         let mut suppressed = 0;
         for y in 0..96 {

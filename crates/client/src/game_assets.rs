@@ -171,6 +171,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
                 group(AssetRole::GoldDeposit),
                 group(AssetRole::StoneDeposit),
             ],
+            tree_shadows: group(AssetRole::WoodTreeShadow),
         },
         pixels,
     ))

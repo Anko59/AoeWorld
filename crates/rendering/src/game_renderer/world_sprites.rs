@@ -1,4 +1,5 @@
 use super::*;
+use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
 pub(super) fn world_sprite_frames(
@@ -31,10 +32,18 @@ pub(super) fn world_sprite_frames(
         if frames.is_empty() {
             continue;
         }
-        let Some(frame) = frames.get(usize::from(resource.visual_variant) % frames.len()) else {
+        let Some(frame_index) =
+            resource_frame_index(resource.kind, resource.visual_variant, frames.len())
+        else {
             continue;
         };
-        objects.push(WorldObject::Resource(*resource, *frame));
+        let Some(frame) = frames.get(frame_index) else {
+            continue;
+        };
+        let shadow = (resource.kind == 1)
+            .then(|| art.tree_shadows.get(frame_index).copied())
+            .flatten();
+        objects.push(WorldObject::Resource(*resource, *frame, shadow));
     }
     objects.extend(units.iter().copied().map(WorldObject::Unit));
     objects.sort_by(|a, b| {
@@ -44,17 +53,32 @@ pub(super) fn world_sprite_frames(
     });
     for object in objects {
         let WorldObject::Unit(unit) = object else {
-            let WorldObject::Resource(resource, frame) = object else {
+            let WorldObject::Resource(resource, frame, paired_shadow) = object else {
                 continue;
             };
+            let depth = object_depth(object);
+            if let Some(shadow_frame) = paired_shadow {
+                if let Some(sprite) = scene_sprite(
+                    shadow_frame,
+                    resource.position,
+                    resource.elevation_meters,
+                    camera,
+                ) {
+                    result.push((sprite, scaled(shadow_frame, camera.zoom as f32), depth));
+                }
+            } else if let Some((sprite, shadow_frame)) = alpha_shadow(
+                frame,
+                resource.position,
+                resource.elevation_meters,
+                camera,
+                0.2,
+            ) {
+                result.push((sprite, shadow_frame, depth));
+            }
             if let Some(sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
-                result.push((
-                    sprite,
-                    scaled(frame, camera.zoom as f32),
-                    object_depth(object),
-                ));
+                result.push((sprite, scaled(frame, camera.zoom as f32), depth));
             }
             continue;
         };
@@ -107,7 +131,13 @@ pub(super) fn world_sprite_frames(
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
         scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-        result.push((sprite, scaled_frame, object_depth(object)));
+        let depth = object_depth(object);
+        if let Some((shadow, shadow_frame)) =
+            alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+        {
+            result.push((shadow, shadow_frame, depth));
+        }
+        result.push((sprite, scaled_frame, depth));
     }
     result
 }
@@ -119,28 +149,28 @@ fn object_depth(object: WorldObject) -> f64 {
 
 #[derive(Clone, Copy)]
 enum WorldObject {
-    Resource(SceneResource, GameFrame),
+    Resource(SceneResource, GameFrame, Option<GameFrame>),
     Unit(SceneUnit),
 }
 
 impl WorldObject {
     fn position(self) -> [f64; 2] {
         match self {
-            Self::Resource(resource, _) => resource.position,
+            Self::Resource(resource, _, _) => resource.position,
             Self::Unit(unit) => unit.position,
         }
     }
 
     fn stable_id(self) -> u64 {
         match self {
-            Self::Resource(resource, _) => resource.id,
+            Self::Resource(resource, _, _) => resource.id,
             Self::Unit(unit) => u64::from(unit.id.0),
         }
     }
 
     fn elevation_meters(self) -> f64 {
         match self {
-            Self::Resource(resource, _) => resource.elevation_meters,
+            Self::Resource(resource, _, _) => resource.elevation_meters,
             Self::Unit(unit) => unit.elevation_meters,
         }
     }
@@ -169,6 +199,26 @@ fn scene_sprite(
         uv: frame.uv,
         depths: [0.0; 4],
     })
+}
+
+fn alpha_shadow(
+    frame: GameFrame,
+    position: [f64; 2],
+    elevation_meters: f64,
+    camera: SceneCamera,
+    opacity: f32,
+) -> Option<(Sprite, GameFrame)> {
+    let mut shadow_frame = frame;
+    shadow_frame.size[0] *= 0.88;
+    shadow_frame.size[1] *= 0.2;
+    shadow_frame.anchor[0] *= 0.88;
+    shadow_frame.anchor[1] *= 0.2;
+    let mut sprite = scene_sprite(shadow_frame, position, elevation_meters, camera)?;
+    // Fixed sun: six screen pixels right and four down at unit zoom (NDC × 2).
+    sprite.position[0] += (12.0 * camera.zoom / camera.viewport[0]) as f32;
+    sprite.position[1] -= (8.0 * camera.zoom / camera.viewport[1]) as f32;
+    sprite.color = [0.0, 0.0, 0.0, opacity];
+    Some((sprite, scaled(shadow_frame, camera.zoom as f32)))
 }
 
 pub(super) fn resource_sprite_bounds(

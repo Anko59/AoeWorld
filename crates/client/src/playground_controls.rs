@@ -1,16 +1,37 @@
-use super::{
-    Client, Drag, center_on_primary, dpr, map, position_at, reconnect, send_order, subscribe,
-};
+use super::{Client, Drag, center_on_primary, map, position_at, reconnect, send_order, subscribe};
 use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, KeyboardEvent, PointerEvent, WheelEvent};
 
+// Bound color, depth, browser canvas and temporary presentation storage together.
+// Retina density must not silently square memory on large/fullscreen windows.
+const MAX_BACKING_PIXELS: f64 = 4_194_304.0;
+const MAX_BACKING_AXIS: f64 = 4_096.0;
+
+pub(super) fn backing_size(width: f64, height: f64, ratio: f64) -> [u32; 2] {
+    let width = width.max(1.0);
+    let height = height.max(1.0);
+    let scale = ratio
+        .clamp(0.25, 2.0)
+        .min((MAX_BACKING_PIXELS / (width * height)).sqrt())
+        .min(MAX_BACKING_AXIS / width.max(height));
+    [
+        (width * scale).floor().max(1.0) as u32,
+        (height * scale).floor().max(1.0) as u32,
+    ]
+}
+
+fn pixel_scale(client: &Client) -> f64 {
+    f64::from(client.canvas.width()) / f64::from(client.canvas.client_width().max(1))
+}
+
 fn point(client: &Client, event: &PointerEvent) -> ScreenPoint {
     let bounds = client.canvas.get_bounding_client_rect();
     ScreenPoint {
-        x: (f64::from(event.client_x()) - bounds.left()) * dpr(),
-        y: (f64::from(event.client_y()) - bounds.top()) * dpr(),
+        x: (f64::from(event.client_x()) - bounds.left()) * pixel_scale(client),
+        y: (f64::from(event.client_y()) - bounds.top()) * f64::from(client.canvas.height())
+            / bounds.height().max(1.0),
     }
 }
 
@@ -27,7 +48,12 @@ fn pick(client: &Client, target: ScreenPoint) -> Option<aoe_core::EntityId> {
             {
                 return None;
             }
-            let depth = position[0] + position[1] + 2.0 * map::elevation_at_world(client, position);
+            let depth = position[0]
+                + position[1]
+                + 2.0
+                    * map::scene::prepare(client)
+                        .height(position)
+                        .unwrap_or_else(|| map::elevation_at_world(client, position));
             if terrain_depth.is_some_and(|surface| surface > depth + 1e-6) {
                 return None;
             }
@@ -81,7 +107,7 @@ pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
     let Some(pointer) = client.pointer else {
         return;
     };
-    let band = 16.0 * dpr();
+    let band = 16.0 * pixel_scale(client);
     let width = client.camera.viewport[0];
     let height = client.camera.viewport[1];
     let edge = [
@@ -104,7 +130,7 @@ pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
     if length == 0.0 {
         return;
     }
-    let scale = 900.0 * dpr() * delta_ms / 1_000.0 / length;
+    let scale = 900.0 * pixel_scale(client) * delta_ms / 1_000.0 / length;
     pan(client, [edge[0] * scale, edge[1] * scale]);
 }
 
@@ -200,8 +226,9 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = zoomed.borrow_mut();
         let bounds = client.canvas.get_bounding_client_rect();
         let target = ScreenPoint {
-            x: (f64::from(event.client_x()) - bounds.left()) * dpr(),
-            y: (f64::from(event.client_y()) - bounds.top()) * dpr(),
+            x: (f64::from(event.client_x()) - bounds.left()) * pixel_scale(&client),
+            y: (f64::from(event.client_y()) - bounds.top()) * f64::from(client.canvas.height())
+                / bounds.height().max(1.0),
         };
         let delta = match event.delta_mode() {
             1 => event.delta_y() * 16.0,
@@ -277,6 +304,21 @@ mod tests {
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
     wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn backing_resolution_stays_bounded_on_large_high_dpi_screens() {
+        for (width, height, ratio) in [
+            (3840.0, 2160.0, 2.0),
+            (8000.0, 1000.0, 3.0),
+            (1280.0, 720.0, 1.0),
+        ] {
+            let [w, h] = backing_size(width, height, ratio);
+            assert!(u64::from(w) * u64::from(h) <= MAX_BACKING_PIXELS as u64);
+            assert!(w <= MAX_BACKING_AXIS as u32 && h <= MAX_BACKING_AXIS as u32);
+            assert!((f64::from(w) / width - f64::from(h) / height).abs() < 0.002);
+        }
+        assert_eq!(backing_size(1280.0, 720.0, 1.0), [1280, 720]);
+    }
 
     #[wasm_bindgen_test]
     fn camera_pan_moves_in_the_requested_screen_direction() {

@@ -10,6 +10,7 @@ const START_CACHE_CHUNKS: usize = 256;
 const LEGACY_START_RECIPE: u16 = 3;
 const RECIPE_4_START_RECIPE: u16 = 4;
 const RECIPE_5_START_RECIPE: u16 = 5;
+const PRIOR_WATER_MODEL_START_RECIPE: u16 = aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION;
 const WATER_MODEL_START_RECIPE: u16 = aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,6 +66,7 @@ impl Terrain {
             LEGACY_START_RECIPE
             | RECIPE_4_START_RECIPE
             | RECIPE_5_START_RECIPE
+            | PRIOR_WATER_MODEL_START_RECIPE
             | WATER_MODEL_START_RECIPE => {}
             _ => return Err(EnvironmentPageError::Invalid),
         }

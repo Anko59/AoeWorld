@@ -2,8 +2,7 @@ use super::Client;
 use aoe_core::{Camera, ScreenPoint, TileRect};
 use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, Tile};
 use aoe_rendering::{
-    SceneResource, SceneTerrain, SceneTerrainSurface, pick_surface_point,
-    projected_surface_triangles, sample_surface_height,
+    SceneResource, SceneTerrain, SceneTerrainSurface, pick_surface_point, sample_surface_height,
 };
 use std::{cell::RefCell, mem::size_of, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
@@ -24,16 +23,18 @@ use heights::{
 };
 #[path = "playground_map/resources.rs"]
 mod resources;
+#[path = "playground_map/scene.rs"]
+pub(crate) mod scene;
 pub(super) use resources::scene_resources;
 
 pub(super) fn install_fixture_chunk(client: &mut Client, chunk: &Chunk) {
+    client.terrain_scene.borrow_mut().take();
     include_chunk_height_bounds(client, chunk);
 }
 
 const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 512;
 const MAX_CACHED_CHUNK_BYTES: usize = 128 * 1024 * 1024;
-const MAX_VISIBLE_RESOURCE_SPRITES: usize = 1_024;
 const MAX_PICK_ITERATIONS: usize = 4;
 
 pub(super) fn cache_status(client: &Client) -> String {
@@ -45,6 +46,7 @@ pub(super) fn cache_status(client: &Client) -> String {
 }
 
 pub(super) fn clear_terrain_cache(client: &mut Client) {
+    client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
     client.terrain_discovered.clear();
     client.terrain_bounds = Default::default();
@@ -116,6 +118,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                     include_chunk_height_bounds(&mut client, &chunk);
                     client.terrain_discovered.insert((x, y));
                     client.terrain_chunks.insert((x, y), chunk);
+                    client.terrain_scene.borrow_mut().take();
                     initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
                 }
@@ -186,37 +189,28 @@ pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
 }
 
 pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
-    client
-        .camera
-        .world_to_screen_at_height(world, elevation_at_world(client, world))
+    client.camera.world_to_screen_at_height(
+        world,
+        scene::prepare(client)
+            .height(world)
+            .unwrap_or_else(|| elevation_at_world(client, world)),
+    )
 }
 
 pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
     if client.map_content_hash.is_none() {
         return world_at_screen_with_height(client.camera, screen, |_, _| Some(0.0));
     }
-    let triangles = projected_terrain_mesh(client);
-    pick_surface_point(&triangles, screen)
+    let scene = scene::prepare(client);
+    pick_surface_point(&scene.triangles, screen)
 }
 
 pub(super) fn surface_depth_at_screen(client: &Client, screen: ScreenPoint) -> Option<f64> {
     if client.map_content_hash.is_none() {
         return None;
     }
-    let triangles = projected_terrain_mesh(client);
-    aoe_rendering::surface_depth_at(&triangles, screen)
-}
-
-fn projected_terrain_mesh(client: &Client) -> Vec<aoe_rendering::ProjectedSurfaceTriangle> {
-    projected_surface_triangles(
-        &scene_terrain(client),
-        aoe_rendering::SceneCamera {
-            center: client.camera.center,
-            zoom: client.camera.zoom,
-            viewport: client.camera.viewport,
-            focus_elevation_meters: client.camera.focus_elevation_meters,
-        },
-    )
+    let scene = scene::prepare(client);
+    aoe_rendering::surface_depth_at(&scene.triangles, screen)
 }
 
 fn world_at_screen_with_height(
@@ -356,14 +350,12 @@ fn chunk_tile_index(
 
 fn terrain_material(material: GroundMaterial) -> u8 {
     match material {
-        GroundMaterial::TemperateGrass
-        | GroundMaterial::LushGrass
-        | GroundMaterial::ForestFloor => 0,
+        GroundMaterial::TemperateGrass | GroundMaterial::LushGrass => 0,
         GroundMaterial::DryGrass
         | GroundMaterial::Mud
         | GroundMaterial::Snow
         | GroundMaterial::Ice => 1,
-        GroundMaterial::Dirt => 2,
+        GroundMaterial::Dirt | GroundMaterial::ForestFloor => 2,
         GroundMaterial::Sand | GroundMaterial::Shore => 3,
         GroundMaterial::Rock => 4,
         GroundMaterial::Water => 5,
@@ -395,6 +387,7 @@ fn evict_distant_chunks(client: &mut Client) {
         &preferred,
     );
     if removed {
+        client.terrain_scene.borrow_mut().take();
         refresh_chunk_height_bounds(client);
     }
 }

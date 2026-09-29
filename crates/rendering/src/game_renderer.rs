@@ -26,13 +26,13 @@ pub fn resource_sprite_bounds(
 
 #[path = "game_renderer/canvas_depth.rs"]
 mod canvas_depth;
-use canvas_depth::render_canvas_world;
+use canvas_depth::{CanvasPresentation, render_canvas_world};
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
-#[path = "game_renderer/canvas_depth_tests.rs"]
+#[path = "game_renderer/tests/canvas_depth.rs"]
 mod canvas_depth_tests;
 
 pub enum GameRenderer {
@@ -42,8 +42,7 @@ pub enum GameRenderer {
         context: CanvasRenderingContext2d,
         atlas: HtmlCanvasElement,
         source_atlas: Vec<u8>,
-        color_buffer: Vec<u8>,
-        depth_buffer: Vec<f64>,
+        presentation: CanvasPresentation,
     },
 }
 #[derive(Clone, Copy)]
@@ -146,8 +145,7 @@ impl GameRenderer {
                 context: main_context,
                 atlas: new_atlas(&replacement)?,
                 source_atlas: Vec::new(),
-                color_buffer: Vec::new(),
-                depth_buffer: Vec::new(),
+                presentation: CanvasPresentation::new(replacement.width(), replacement.height()),
             },
             replacement,
         ))
@@ -189,7 +187,7 @@ impl GameRenderer {
     pub fn resize(&mut self, width: u32, height: u32) {
         match self {
             Self::WebGpu(renderer) => renderer.resize(width, height),
-            Self::Canvas { .. } => {}
+            Self::Canvas { presentation, .. } => presentation.resize(width, height),
         }
     }
 
@@ -261,8 +259,27 @@ impl GameRenderer {
         animation: usize,
         grid: bool,
     ) -> Result<(), String> {
-        let mut surfaces = projected_surface_triangles(terrain, camera);
-        apply_terrain_textures(&mut surfaces, art);
+        let surfaces = projected_surface_triangles(terrain, camera);
+        self.render_prepared_world(
+            art, terrain, &surfaces, resources, units, camera, animation, grid,
+        )
+    }
+
+    pub fn render_prepared_world(
+        &mut self,
+        art: &GameArt,
+        terrain: &[SceneTerrain],
+        surfaces: &[ProjectedSurfaceTriangle],
+        resources: &[SceneResource],
+        units: &[SceneUnit],
+        camera: SceneCamera,
+        animation: usize,
+        grid: bool,
+    ) -> Result<(), String> {
+        let surfaces = surfaces.iter().copied().map(|mut triangle| {
+            apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
+            triangle
+        });
         let object_sprites = world_sprite_frames(art, terrain, resources, units, camera, animation);
         let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
         match self {
@@ -297,15 +314,13 @@ impl GameRenderer {
                 canvas,
                 context,
                 source_atlas,
-                color_buffer,
-                depth_buffer,
+                presentation,
                 ..
             } => render_canvas_world(
                 canvas,
                 context,
                 source_atlas,
-                color_buffer,
-                depth_buffer,
+                presentation,
                 &layers,
                 camera,
                 grid,
@@ -328,55 +343,49 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
 }
 
 fn ordered_world_layers(
-    surfaces: Vec<ProjectedSurfaceTriangle>,
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
     objects: Vec<(Sprite, GameFrame, f64)>,
     units: &[SceneUnit],
     camera: SceneCamera,
 ) -> Vec<WorldLayer> {
+    let surfaces = surfaces.into_iter();
     let selected_count = units.iter().filter(|unit| unit.selected).count();
     let mut entries = Vec::with_capacity(
         surfaces
-            .len()
+            .size_hint()
+            .0
             .saturating_add(objects.len())
             .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
     );
-    let mut sequence = 0;
-    for triangle in surfaces {
-        entries.push((
-            triangle_depth(&triangle),
-            0_u8,
-            sequence,
-            WorldLayer::Surface(triangle),
-        ));
-        sequence += 1;
-    }
+    entries.extend(surfaces.map(WorldLayer::Surface));
     for unit in units.iter().filter(|unit| unit.selected) {
-        for (sprite, depth) in
+        entries.extend(
             game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
-        {
-            entries.push((depth, 1_u8, sequence, WorldLayer::Selection(sprite, depth)));
-            sequence += 1;
-        }
+                .into_iter()
+                .map(|(sprite, depth)| WorldLayer::Selection(sprite, depth)),
+        );
     }
-    for (sprite, frame, depth) in objects {
-        entries.push((
-            depth,
-            2_u8,
-            sequence,
-            WorldLayer::Sprite(sprite, frame, depth),
-        ));
-        sequence += 1;
-    }
-    // Canvas 2D consumes a deterministic average-depth order. WebGPU also
-    // receives camera-relative per-vertex depths and resolves each fragment in
-    // its depth buffer, including terrain/sprite intersections.
+    entries.extend(
+        objects
+            .into_iter()
+            .map(|(sprite, frame, depth)| WorldLayer::Sprite(sprite, frame, depth)),
+    );
+    // Stable sorting retains input order on exact ties, without allocating a
+    // second full scene just to discard depth/kind/sequence tuple wrappers.
     entries.sort_by(|left, right| {
-        left.0
-            .total_cmp(&right.0)
-            .then(left.1.cmp(&right.1))
-            .then(left.2.cmp(&right.2))
+        let left = layer_order(left);
+        let right = layer_order(right);
+        left.0.total_cmp(&right.0).then(left.1.cmp(&right.1))
     });
-    entries.into_iter().map(|(_, _, _, layer)| layer).collect()
+    entries
+}
+
+fn layer_order(layer: &WorldLayer) -> (f64, u8) {
+    match layer {
+        WorldLayer::Surface(triangle) => (triangle_depth(triangle), 0),
+        WorldLayer::Selection(_, depth) => (*depth, 1),
+        WorldLayer::Sprite(_, _, depth) => (*depth, 2),
+    }
 }
 
 fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {

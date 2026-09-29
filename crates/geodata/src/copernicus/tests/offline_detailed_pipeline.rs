@@ -55,7 +55,7 @@ fn acquired_inputs_build_and_verify_a_corrected_recipe_six_package_offline() {
 
     assert_eq!(
         package.generation_recipe_version,
-        aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
+        aoe_map::GENERATION_RECIPE_VERSION
     );
     let model = package
         .environment

@@ -109,8 +109,9 @@ in the 64 KiB worker request alongside optional historical corrections.
 Omitted or empty corrections are valid; they apply no manual geographic
 changes, while the documented natural-water model is still prepared.
 
-Modeled-water packages use generation recipe 6; model-free overview packages
-and older recipe-5 packages retain recipe-5 behavior and identity. Source-lock
+New overview and modeled-water packages use generation recipe 7, which adds
+the deterministic forest and ground landscape. Recipes 5 and 6 remain readable
+with their original terrain output and package identities. Source-lock
 preprocessing records `hydrology-gdal-page-v3`, `lake-surface-model-v2`, and
 `river-topology-profile-v1`. The vector adapter rewinds the OpenFileGDB cursor
 after the GDAL iterator's feature-count query, which otherwise can consume all

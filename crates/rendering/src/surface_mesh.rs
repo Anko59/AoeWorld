@@ -144,7 +144,11 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
     }
 }
 
-fn terrain_texture_frame(art: &GameArt, material: u8, tile: [i32; 2]) -> Option<GameFrame> {
+pub(crate) fn terrain_texture_frame(
+    art: &GameArt,
+    material: u8,
+    tile: [i32; 2],
+) -> Option<GameFrame> {
     let frames = art
         .terrain
         .get(usize::from(material))
@@ -153,11 +157,16 @@ fn terrain_texture_frame(art: &GameArt, material: u8, tile: [i32; 2]) -> Option<
     if frames.is_empty() {
         return None;
     }
-    let index = (tile[0]
-        .wrapping_mul(7)
-        .wrapping_add(tile[1].wrapping_mul(13))
-        .unsigned_abs() as usize)
-        % frames.len();
+    let index = if frames.len() == 100 {
+        let y = (10 - tile[1].rem_euclid(10)).rem_euclid(10) as usize;
+        tile[0].rem_euclid(10) as usize * 10 + y
+    } else {
+        tile[0]
+            .wrapping_mul(7)
+            .wrapping_add(tile[1].wrapping_mul(13))
+            .unsigned_abs() as usize
+            % frames.len()
+    };
     frames.get(index).copied()
 }
 

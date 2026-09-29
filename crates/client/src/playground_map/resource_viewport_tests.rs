@@ -8,6 +8,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
         resources: std::array::from_fn(|index| if index == 0 { vec![frame] } else { Vec::new() }),
+        tree_shadows: Vec::new(),
     }
 }
 
@@ -90,7 +91,11 @@ fn dense_zoomed_out_resources_cover_all_viewport_quadrants() {
     }
 
     let selected = super::super::resources::select_visible_resources(resources, &art, scene);
-    assert_eq!(selected.len(), MAX_VISIBLE_RESOURCE_SPRITES);
+    assert_eq!(
+        selected.len(),
+        36 * 64,
+        "zoom must preserve every visible tree"
+    );
     let mut quadrants = [0; 4];
     for resource in selected {
         let [x, y] = clipped_sprite_center(resource, frame(), scene);

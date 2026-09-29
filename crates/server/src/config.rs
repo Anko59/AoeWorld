@@ -73,7 +73,7 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Generation recipe 5 changes source-elevation sampling identity.
+            // Generation recipe 7 changes forest and ground generation identity.
             // Keep prior package directories intact and regenerate compatible
             // packages separately.
             map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),

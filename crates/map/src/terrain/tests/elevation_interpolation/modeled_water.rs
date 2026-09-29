@@ -180,6 +180,7 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
         ),
     ]));
     let generator = MapChunkGenerator::new([8; 32], 3, 128)
+        .with_elevation_sampling_recipe(crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION)
         .with_page_provider(
             Ratio::new(1, 1).expect("ratio"),
             environment,

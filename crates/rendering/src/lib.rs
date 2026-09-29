@@ -7,7 +7,7 @@ pub use web::*;
 mod playground;
 
 #[cfg(target_arch = "wasm32")]
-pub use playground::{GAME_ATLAS_SIDE, GameArt, GameFrame};
+pub use playground::{GAME_ATLAS_SIDE, GameArt, GameFrame, resource_frame_index};
 
 #[cfg(target_arch = "wasm32")]
 mod game_grid;

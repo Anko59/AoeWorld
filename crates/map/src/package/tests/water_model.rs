@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn modeled_water_uses_recipe_six_while_model_free_recipe_five_identity_is_unchanged() {
+fn recipe_seven_adds_landscape_and_keeps_recipe_five_and_six_packages_valid() {
     let request = MapRequest::default();
     let legacy_current = MapPackage::with_generation_recipe(
         crate::MAP_SCHEMA_VERSION,
@@ -12,7 +12,7 @@ fn modeled_water_uses_recipe_six_while_model_free_recipe_five_identity_is_unchan
         EnvironmentalProvenance::default(),
         PreparedEnvironment::default(),
     )
-    .expect("recipe-five package");
+    .expect("recipe-seven package");
     let ordinary =
         MapPackage::new(crate::MAP_SCHEMA_VERSION, request, Vec::new()).expect("ordinary package");
     assert_eq!(
@@ -26,7 +26,7 @@ fn modeled_water_uses_recipe_six_while_model_free_recipe_five_identity_is_unchan
             &legacy_current
                 .generator()
                 .chunk(0, 0)
-                .expect("recipe-five chunk")
+                .expect("matching recipe-seven chunk")
         )
     );
 
@@ -73,10 +73,22 @@ fn modeled_water_uses_recipe_six_while_model_free_recipe_five_identity_is_unchan
     );
     assert!(modeled.validate().is_ok());
     assert_ne!(modeled.content_hash, ordinary.content_hash);
+    let prior_modeled = MapPackage::with_generation_recipe(
+        crate::MAP_SCHEMA_VERSION,
+        crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION,
+        request,
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        environment.clone(),
+    )
+    .expect("prior modeled-water package");
+    assert!(prior_modeled.validate().is_ok());
+    assert_ne!(prior_modeled.content_hash, modeled.content_hash);
     assert_eq!(
         MapPackage::with_generation_recipe(
             crate::MAP_SCHEMA_VERSION,
-            crate::GENERATION_RECIPE_VERSION,
+            crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION,
             request,
             Vec::new(),
             ProjectionMetadata::default(),
@@ -88,7 +100,7 @@ fn modeled_water_uses_recipe_six_while_model_free_recipe_five_identity_is_unchan
     assert_eq!(
         MapPackage::with_generation_recipe(
             crate::MAP_SCHEMA_VERSION,
-            crate::WATER_MODEL_GENERATION_RECIPE_VERSION,
+            crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION,
             request,
             Vec::new(),
             ProjectionMetadata::default(),

@@ -201,6 +201,7 @@ dependencies = [
  "aoe-core",
  "aoe-protocol",
  "bytemuck",
+ "js-sys",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",

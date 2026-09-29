@@ -108,6 +108,10 @@ package artifacts outside Git. When the generation recipe changes, retain the
 old package directory for inspection and regenerate compatible packages from
 the cached source inputs into the new versioned directory.
 
+Recipe 7 adds correlated woodland canopy, irregular clearings, procedural
+trails, and local temperate-ground variation. Recipes 5 and 6 remain readable
+with their original generated terrain and package identities.
+
 The local asset mapping is equally deliberate: the client maps semantic terrain
 to six imported AoE II terrain groups (temperate grass, dry grass, dirt, sand,
 rock, water) and four optional resource roles (berry bushes, broadleaf trees,
@@ -135,8 +139,8 @@ still decides whether a valid starting position exists.
 Paris creator in overview and detailed modes in Chromium, using the same fixed
 request from `reference-matrix.json`. It checks the world locator, selected
 footprint, mode-specific estimate, measured page progress, source-backed
-activation, and layer preview. The detailed package must retain recipe 6 and
-its modeled-water source index; overview remains recipe 5. After restarting the
+activation, and layer preview. Both new packages use recipe 7; the detailed
+package must retain its modeled-water source index. After restarting the
 server without a worker and with a freshly emptied source cache, the second
 browser session opens both packages and checks that each joins its own world
 chunks before requesting a previously unseen chunk from published pages.

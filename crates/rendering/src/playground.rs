@@ -3,6 +3,23 @@ use crate::{Counters, Renderer, web::Sprite};
 
 pub const GAME_ATLAS_SIDE: u32 = 2048;
 
+const TREE_VISUAL_VARIANTS: [usize; 40] = [
+    0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9,
+    10, 11, 12, 13, 0, 1, 2, 4, 3, 5, 8,
+];
+
+/// Selects the reviewed resource frame shared by rendering and viewport culling.
+pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option<usize> {
+    if frame_count == 0 {
+        return None;
+    }
+    Some(if kind == 1 && frame_count >= 14 {
+        TREE_VISUAL_VARIANTS[usize::from(variant) % TREE_VISUAL_VARIANTS.len()]
+    } else {
+        usize::from(variant) % frame_count
+    })
+}
+
 #[derive(Clone, Copy)]
 pub struct GameFrame {
     pub uv: [f32; 4],
@@ -21,6 +38,8 @@ pub struct GameArt {
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
+    /// Frame-for-frame shadow masks paired with the broadleaf tree group.
+    pub tree_shadows: Vec<GameFrame>,
 }
 
 impl Renderer {

@@ -182,8 +182,9 @@ impl MapPackage {
             generation_recipe_version,
             LEGACY_GENERATION_RECIPE_VERSION
                 | PRIOR_GENERATION_RECIPE_VERSION
+                | crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
+                | crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
                 | GENERATION_RECIPE_VERSION
-                | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
         ) {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
         }
@@ -192,8 +193,14 @@ impl MapPackage {
             .as_ref()
             .and_then(|index| index.water_model.as_ref())
             .is_some();
-        if has_modeled_water
-            != (generation_recipe_version == crate::WATER_MODEL_GENERATION_RECIPE_VERSION)
+        if (generation_recipe_version == crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
+            && !has_modeled_water)
+            || (has_modeled_water
+                && !matches!(
+                    generation_recipe_version,
+                    crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
+                        | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
+                ))
         {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
         }

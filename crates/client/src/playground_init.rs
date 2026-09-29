@@ -46,6 +46,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         surface_fixture: false,
         focus_map_hash: None,
         resources: crate::resource_state::ResourceStateCache::default(),
+        terrain_scene: RefCell::new(None),
         terrain_chunks: BTreeMap::new(),
         terrain_discovered: Default::default(),
         terrain_height_bounds: None,

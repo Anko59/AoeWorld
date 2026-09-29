@@ -213,7 +213,9 @@ fn supported_generation_recipes_preserve_serialization_and_identity() {
     );
     assert_ne!(current.content_hash, legacy.content_hash);
     assert_ne!(current.content_hash, prior.content_hash);
-    for package in [&prior, &current] {
+    let overview = schema_nine_package_for_recipe(crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION);
+    assert_ne!(overview.content_hash, current.content_hash);
+    for package in [&prior, &overview, &current] {
         let serialized = serde_json::to_value(package).expect("versioned package JSON");
         assert_eq!(
             serialized["generation_recipe_version"],
