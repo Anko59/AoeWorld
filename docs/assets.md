@@ -30,10 +30,10 @@ version 1, including arbitrary partial alpha in externally produced packs.
 To inspect a pack in the local app, start `make dev` with
 `AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game imports cavalry walking/standing resources
 3008/3004 and six terrain groups: temperate grass 15008, dry grass 15007,
-dirt 15000, sand 15010, rock 15018, and water 15002. Grass and dirt each use
-their reviewed 10×10 periodic texture set, indexed x-major with reversed y so
-neighboring source edges meet. Other terrain groups retain their ten selected
-frames. The map client selects those groups from semantic terrain chunks. It
+dirt 15000, sand 15010, rock 15018, and water 15002. All six terrain groups
+use their reviewed 10×10 periodic texture sets, indexed x-major with reversed
+y so neighboring source edges meet. The map client selects those groups from
+semantic terrain chunks. It
 preserves frame anchors, player color, and imported shadow masks; tree frames
 4652 use the paired shadow-only frames from 2296. Cavalry and non-tree resource
 frames without imported shadows use a fixed-direction fallback silhouette

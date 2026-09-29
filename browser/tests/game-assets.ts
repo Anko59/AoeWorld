@@ -68,13 +68,14 @@ const terrainSources = new Map<number, TerrainSource>([
   [
     15007,
     {
-      x: 0,
-      y: 160,
+      x: 1_000,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.ramp,
       accent: terrainSourceAccents.ramp,
-      frameCount: 10,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
@@ -93,37 +94,40 @@ const terrainSources = new Map<number, TerrainSource>([
   [
     15010,
     {
-      x: 1_000,
-      y: 60,
+      x: 1_300,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.shore,
       accent: terrainSourceAccents.shore,
-      frameCount: 10,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15018,
     {
-      x: 1_000,
-      y: 120,
+      x: 1_600,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.cliff,
       accent: terrainSourceAccents.cliff,
-      frameCount: 10,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15002,
     {
       x: 1_000,
-      y: 180,
+      y: 600,
       width: 25,
       height: 45,
       base: terrainSourceColors.water,
       accent: terrainSourceAccents.water,
-      frameCount: 10,
+      frameCount: 100,
+      tiled: true,
     },
   ],
 ]);
@@ -160,14 +164,14 @@ export async function gameAssets(
       }
     }
   }
-  for (let y = 80; y < 125; y += 1)
+  for (let y = 1_200; y < 1_245; y += 1)
     for (let x = 1_300; x < 1_325; x += 1) pixel(x, y, [65, 145, 245]);
-  for (let y = 80; y < 125; y += 1)
+  for (let y = 1_200; y < 1_245; y += 1)
     for (let x = 1_340; x < 1_365; x += 1) pixel(x, y, [235, 40, 200]);
-  for (let y = 116; y < 123; y += 1)
+  for (let y = 1_236; y < 1_243; y += 1)
     for (let x = 1_500; x < 1_519; x += 1) {
       const dx = (x - 1_509) / 9;
-      const dy = (y - 119.5) / 3.5;
+      const dy = (y - 1_239.5) / 3.5;
       if (dx * dx + dy * dy <= 1) shadow.data[(y * 2048 + x) * 4 + 3] = 128;
     }
   const frames = [
@@ -176,7 +180,7 @@ export async function gameAssets(
     ...[15008, 15007, 15000, 15010, 15018, 15002].map((id) => [
       "terrain",
       id,
-      id === 15008 || id === 15000 ? 100 : 10,
+      100,
     ]),
     ["graphics", 435, 4],
     ["graphics", 4652, 14],
@@ -197,7 +201,7 @@ export async function gameAssets(
             : 1_300,
       y: source
         ? source.y + (source.tiled ? Math.floor(frame / 10) : 0) * source.height
-        : 80,
+        : 1_200,
       width: source?.width ?? 25,
       height: source?.height ?? 45,
       anchor_x: source ? 0 : 12,

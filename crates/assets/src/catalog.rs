@@ -68,8 +68,8 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         role: AssetRole::DryGrass,
         archive: "terrain.drs",
         id: 15007,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic dry-grass texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Dirt,
@@ -82,22 +82,22 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         role: AssetRole::Sand,
         archive: "terrain.drs",
         id: 15010,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic sand texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Rock,
         archive: "terrain.drs",
         id: 15018,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic rock texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Water,
         archive: "terrain.drs",
         id: 15002,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic water texture atlas in x-major, reversed-y order",
     },
 ];
 
@@ -198,6 +198,25 @@ mod tests {
                 (AssetRole::GoldDeposit, 4479, 7),
                 (AssetRole::StoneDeposit, 4482, 7),
             ]
+        );
+    }
+
+    #[test]
+    fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
+        assert!(
+            REQUIRED_RENDER_SOURCES
+                .iter()
+                .filter(|source| matches!(
+                    source.role,
+                    AssetRole::TemperateGrass
+                        | AssetRole::DryGrass
+                        | AssetRole::Dirt
+                        | AssetRole::Sand
+                        | AssetRole::Rock
+                        | AssetRole::Water
+                ))
+                .all(|source| source.frames == 100
+                    && source.interpretation.contains("x-major, reversed-y order"))
         );
     }
 }

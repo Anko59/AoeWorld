@@ -77,10 +77,26 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
     let mut pixels = vec![0; side * side * 4];
     pixels[..4].copy_from_slice(&[255; 4]);
-    let mut records = Vec::new();
+    // Pack tall sprites first to avoid wasting a row's height on short terrain.
+    // Keep semantic frame indices independent from physical atlas placement.
+    let mut records = vec![
+        GameFrame {
+            uv: [0.0; 4],
+            size: [0.0; 2],
+            anchor: [0.0; 2],
+        };
+        selected.len()
+    ];
+    let mut selected: Vec<_> = selected.into_iter().enumerate().collect();
+    selected.sort_by_key(|(_, frame)| {
+        (
+            std::cmp::Reverse(frame.height),
+            std::cmp::Reverse(frame.width),
+        )
+    });
     let mut placements = BTreeMap::<u16, Vec<(FrameRecord, usize, usize)>>::new();
     let (mut x, mut y, mut row_height) = (2, 2, 0);
-    for f in selected {
+    for (index, f) in selected {
         let (w, h) = (f.width as usize, f.height as usize);
         if w == 0
             || h == 0
@@ -99,7 +115,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         if y + h + 1 >= side {
             return Err(JsValue::from_str("Game atlas is full"));
         }
-        records.push(GameFrame {
+        records[index] = GameFrame {
             uv: [
                 x as f32 / side as f32,
                 y as f32 / side as f32,
@@ -108,7 +124,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             ],
             size: [w as f32, h as f32],
             anchor: [f.anchor_x as f32, f.anchor_y as f32],
-        });
+        };
         placements.entry(f.page).or_default().push((f, x, y));
         x += w + 1;
         row_height = row_height.max(h);

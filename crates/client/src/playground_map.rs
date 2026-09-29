@@ -21,6 +21,8 @@ pub(super) use eviction::evict_distant_chunks_with_limits;
 use heights::{
     include_chunk_height_bounds, refresh_chunk_height_bounds, visible_tiles_for_height_bounds,
 };
+#[path = "playground_map/render_cache.rs"]
+pub(super) mod render_cache;
 #[path = "playground_map/resources.rs"]
 mod resources;
 #[path = "playground_map/scene.rs"]

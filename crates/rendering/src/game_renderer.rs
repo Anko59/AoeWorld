@@ -53,7 +53,7 @@ pub struct SceneCamera {
     pub focus_elevation_meters: f64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct SceneUnit {
     pub id: EntityId,
     pub position: [f64; 2],
@@ -99,7 +99,7 @@ impl SceneTerrainSurface {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct SceneResource {
     pub id: u64,
     pub position: [f64; 2],

@@ -20,7 +20,8 @@ surface. Simulation and geographic elevation remain unchanged.
 
 ## Terrain art and forest layout
 
-Grass and dirt load all 100 flat frames from their original terrain sources.
+All six terrain materials load all 100 flat frames from their original sources.
+Atlas packing sorts physical placements by height while retaining role/frame indices.
 World coordinates select the reviewed 10×10 sheet order: `x * 10 + (-y)` modulo
 10 per axis. Partial ten-frame material groups retain two-axis variation.
 Forest-floor ground uses dirt art instead of grass. The largest terrain LOD
@@ -49,7 +50,9 @@ surface to 16 MiB. These are individual allocation bounds, not a total browser
 RSS guarantee. Atlas, mesh, chunk, browser and GPU allocations are additional.
 
 A projected mesh is reused while the camera and loaded terrain are unchanged,
-including hover inspection. World-layer ordering avoids constructing a second
+including hover inspection. Unchanged static frames reuse the last successful
+presentation; selection, movement, resources, grid and terrain changes redraw it.
+World-layer ordering avoids constructing a second
 full scene solely to remove sorting metadata.
 
 ## Validation scope

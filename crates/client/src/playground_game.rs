@@ -49,6 +49,7 @@ pub(super) struct Client {
     pub focus_map_hash: Option<[u8; 32]>,
     pub resources: crate::resource_state::ResourceStateCache,
     pub terrain_scene: RefCell<Option<Rc<map::scene::PreparedScene>>>,
+    pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
@@ -438,13 +439,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let resources = map::scene_resources(&client);
         let grid = client.grid;
         let animation = (time / 100.0) as usize;
-        let Client { renderer, art, .. } = &mut *client;
-        if let Err(error) = renderer.render_prepared_world(
-            art,
-            &scene.terrain,
-            &scene.triangles,
-            &resources,
+        if let Err(error) = map::render_cache::render_if_changed(
+            &mut client,
+            &scene,
             &units,
+            &resources,
             camera,
             animation,
             grid,
