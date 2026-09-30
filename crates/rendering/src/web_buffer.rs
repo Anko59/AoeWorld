@@ -51,6 +51,7 @@ impl InstanceBuffer {
         let buffer = create_buffer(device, required);
         let bind_group =
             create_bind_group(device, layout, &buffer, &self._atlas_view, &self._sampler);
+        self.buffer.destroy();
         self.buffer = buffer;
         self.bind_group = bind_group;
         self.capacity = required;
@@ -154,4 +155,59 @@ fn create_bind_group(
             },
         ],
     })
+}
+
+fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
+    [
+        (x / width * 2.0 - 1.0) as f32,
+        (1.0 - y / height * 2.0) as f32,
+    ]
+}
+
+pub(crate) fn surface_instance(
+    triangle: &ProjectedSurfaceTriangle,
+    viewport: [f64; 2],
+    depth_origin: f64,
+) -> Sprite {
+    let points = triangle.points.map(|point| {
+        screen_to_clip(
+            point.screen.x,
+            point.screen.y,
+            viewport[0].max(1.0),
+            viewport[1].max(1.0),
+        )
+    });
+    let depths = triangle.points.map(|point| {
+        (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt) - depth_origin)
+            as f32
+    });
+    let second = points[1];
+    let third = points[2];
+    match triangle.texture_uv {
+        Some(uv) => Sprite {
+            position: points[0],
+            radius: second,
+            color: [
+                third[0],
+                third[1],
+                f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
+                if triangle.texture_blend.is_some() {
+                    -3.0
+                } else {
+                    -1.0
+                },
+            ],
+            uv,
+            depths: [depths[0], depths[1], depths[2], 0.0],
+            terrain_blend: triangle.texture_blend.unwrap_or([[0.0; 4]; 2]),
+        },
+        None => Sprite {
+            position: points[0],
+            radius: second,
+            color: [third[0], third[1], 0.0, -2.0],
+            uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
+            depths: [depths[0], depths[1], depths[2], 0.0],
+            terrain_blend: [[0.0; 4]; 2],
+        },
+    }
 }

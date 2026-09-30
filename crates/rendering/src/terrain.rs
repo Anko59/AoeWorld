@@ -267,6 +267,7 @@ fn terrain_sprite(
             color: [1.0; 4],
             uv: frame.uv,
             depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
         },
         frame,
     ))

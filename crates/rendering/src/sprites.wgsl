@@ -4,6 +4,7 @@ struct Sprite {
     color: vec4<f32>,
     uv: vec4<f32>,
     depths: vec4<f32>,
+    terrain_blend: array<vec4<f32>, 2>,
 };
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d<f32>;
@@ -15,6 +16,9 @@ struct VertexOutput {
     @location(1) uv: vec2<f32>,
     @location(2) @interpolate(flat) solid: u32,
     @location(3) @interpolate(flat) tint_kind: u32,
+    @location(4) uv2: vec2<f32>,
+    @location(5) uv3: vec2<f32>,
+    @location(6) weights: vec3<f32>,
 };
 
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
@@ -53,6 +57,13 @@ fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
     }
 }
 
+fn terrain_atlas_uv(rect: vec4<f32>, local: vec2<f32>) -> vec2<f32> {
+    // A 97×49 frame describes 96×48 intervals: endpoints are texel centres,
+    // never the next packed rectangle or the transparent atlas gutter.
+    let pixel = vec2<f32>(1.0) / vec2<f32>(textureDimensions(sprite_atlas));
+    return rect.xy + pixel * 0.5 + local * max(rect.zw - pixel, vec2<f32>(0.0));
+}
+
 fn terrain_tint(kind: u32) -> vec3<f32> {
     switch kind {
         case 1u: { return vec3<f32>(0.92, 0.92, 0.92); }
@@ -69,12 +80,15 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
+    out.uv2 = vec2<f32>(0.0);
+    out.uv3 = vec2<f32>(0.0);
+    out.weights = vec3<f32>(1.0, 0.0, 0.0);
     let is_surface = sprite.color.w < 0.0;
     if is_surface {
         let surface_points = array<vec2<f32>, 3>(sprite.position, sprite.radius, sprite.color.xy);
         let corner = min(vertex, 2u);
         out.clip = vec4<f32>(surface_points[corner], sprite.depths[corner], 1.0);
-        if sprite.color.w < -1.5 {
+        if sprite.color.w == -2.0 {
             out.color = vec4<f32>(sprite.uv.xyz, 1.0);
             out.uv = vec2<f32>(0.0);
             out.solid = 2u;
@@ -82,10 +96,18 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         } else {
             let code = u32(sprite.color.z);
             let atlas_uv = terrain_uv(code % 8u, corner);
-            out.uv = sprite.uv.xy + atlas_uv * sprite.uv.zw;
+            out.uv = terrain_atlas_uv(sprite.uv, atlas_uv);
             out.color = vec4<f32>(terrain_tint(code / 8u), 1.0);
             out.solid = 0u;
             out.tint_kind = code / 8u;
+            if sprite.color.w == -3.0 {
+                out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
+                out.uv3 = terrain_atlas_uv(sprite.terrain_blend[1], atlas_uv);
+                let weights = array<vec3<f32>, 3>(
+                    vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
+                out.weights = weights[corner];
+                out.solid = 3u;
+            }
         }
     } else {
         out.clip = vec4<f32>(
@@ -106,7 +128,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.solid == 2u {
         return in.color;
     }
-    let texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0);
+    var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0);
+    if in.solid == 3u {
+        texel = texel * in.weights.x
+            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, 0.0) * in.weights.y
+            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, 0.0) * in.weights.z;
+    }
     if texel.a <= 0.0 {
         discard;
     }

@@ -9,11 +9,11 @@ pub(super) fn world_sprite_frames(
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
-) -> Vec<(Sprite, GameFrame, f64)> {
+) -> Vec<(Sprite, GameFrame, f64, u64)> {
     let mut result = if terrain.is_empty() {
         visible_terrain_frames(art, terrain, camera)
             .into_iter()
-            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY))
+            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY, 0))
             .collect::<Vec<_>>()
     } else {
         Vec::new()
@@ -46,11 +46,7 @@ pub(super) fn world_sprite_frames(
         objects.push(WorldObject::Resource(*resource, *frame, shadow));
     }
     objects.extend(units.iter().copied().map(WorldObject::Unit));
-    objects.sort_by(|a, b| {
-        object_depth(*a)
-            .total_cmp(&object_depth(*b))
-            .then_with(|| a.stable_id().cmp(&b.stable_id()))
-    });
+
     for object in objects {
         let WorldObject::Unit(unit) = object else {
             let WorldObject::Resource(resource, frame, paired_shadow) = object else {
@@ -64,7 +60,12 @@ pub(super) fn world_sprite_frames(
                     resource.elevation_meters,
                     camera,
                 ) {
-                    result.push((sprite, scaled(shadow_frame, camera.zoom as f32), depth));
+                    result.push((
+                        sprite,
+                        scaled(shadow_frame, camera.zoom as f32),
+                        depth,
+                        object.stable_id(),
+                    ));
                 }
             } else if let Some((sprite, shadow_frame)) = alpha_shadow(
                 frame,
@@ -73,12 +74,17 @@ pub(super) fn world_sprite_frames(
                 camera,
                 0.2,
             ) {
-                result.push((sprite, shadow_frame, depth));
+                result.push((sprite, shadow_frame, depth, object.stable_id()));
             }
             if let Some(sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
-                result.push((sprite, scaled(frame, camera.zoom as f32), depth));
+                result.push((
+                    sprite,
+                    scaled(frame, camera.zoom as f32),
+                    depth,
+                    object.stable_id(),
+                ));
             }
             continue;
         };
@@ -127,6 +133,7 @@ pub(super) fn world_sprite_frames(
             color: [1.0; 4],
             uv,
             depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
         };
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
@@ -135,9 +142,9 @@ pub(super) fn world_sprite_frames(
         if let Some((shadow, shadow_frame)) =
             alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
         {
-            result.push((shadow, shadow_frame, depth));
+            result.push((shadow, shadow_frame, depth, object.stable_id()));
         }
-        result.push((sprite, scaled_frame, depth));
+        result.push((sprite, scaled_frame, depth, object.stable_id()));
     }
     result
 }
@@ -198,6 +205,7 @@ fn scene_sprite(
         color: [1.0; 4],
         uv: frame.uv,
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     })
 }
 
@@ -261,6 +269,52 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
     frame.size = frame.size.map(|value| value * scale);
     frame.anchor = frame.anchor.map(|value| value * scale);
     frame
+}
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
+    use bytemuck::Zeroable;
+    let frame = GameFrame {
+        uv: [0.0; 4],
+        size: [1.0; 2],
+        anchor: [0.0; 2],
+    };
+    let camera = SceneCamera {
+        center: [0.0; 2],
+        zoom: 1.0,
+        viewport: [128.0; 2],
+        focus_elevation_meters: 0.0,
+    };
+    let objects = (0..96)
+        .map(|index| {
+            let mut sprite = Sprite::zeroed();
+            sprite.color[0] = index as f32;
+            let depth = [0.0, -0.0, 4.0, -1.0, f64::INFINITY, f64::NEG_INFINITY][index % 6];
+            (sprite, frame, depth, (index % 4) as u64)
+        })
+        .collect::<Vec<_>>();
+    // Original object pre-sort, followed by the old stable layer depth sort.
+    let mut expected = objects.clone();
+    expected.sort_by(|left, right| left.2.total_cmp(&right.2).then(left.3.cmp(&right.3)));
+    expected.sort_by(|left, right| left.2.total_cmp(&right.2));
+    let actual = ordered_world_layers([], objects, &[], camera);
+    let actual = actual
+        .iter()
+        .map(|layer| {
+            let WorldLayer::Sprite(sprite, _, _, _) = layer else {
+                panic!("unexpected layer")
+            };
+            sprite.color[0]
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actual,
+        expected
+            .iter()
+            .map(|entry| entry.0.color[0])
+            .collect::<Vec<_>>()
+    );
 }
 
 fn sprite_direction(facing: u8) -> (usize, bool) {

@@ -18,6 +18,8 @@ mod surface_mesh;
 #[cfg(target_arch = "wasm32")]
 mod terrain;
 #[cfg(target_arch = "wasm32")]
+mod world_key_index;
+#[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
     GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneTerrainSurface, SceneUnit,
     resource_sprite_bounds,
@@ -27,3 +29,5 @@ pub use surface_mesh::{
     ProjectedSurfaceTriangle, pick_surface_point, projected_surface_triangles,
     sample_surface_height, surface_depth_at,
 };
+#[cfg(target_arch = "wasm32")]
+pub use world_key_index::WorldKeyIndex;

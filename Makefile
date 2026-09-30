@@ -71,6 +71,7 @@ help:
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
+	@echo '  AOE_POLISH_SOURCE_URL=... AOE_POLISH_SOURCE_HASH=... make test-memory-source  Qualify an activated real-pack source map route'
 	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Qualify overview and detailed source maps across restart'
 	@echo '  AOE_GEODATA_CACHE=... make test-geographic-matrix  Prepare and verify fixed overview regions'
 	@echo '  make test-geographic-visuals  Capture water and Alpine packages on WebGPU and Canvas'
@@ -298,6 +299,10 @@ build:
 build-wasm:
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
+
+.PHONY: test-memory-source
+test-memory-source: build-wasm browser-deps
+	@docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e AOE_POLISH_SOURCE_REQUIRED=1 $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) xvfb-run -a npx playwright test tests/memory/source-route.shared-surfaces.spec.ts
 
 test-e2e: build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server

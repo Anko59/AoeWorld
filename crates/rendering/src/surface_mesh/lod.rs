@@ -76,6 +76,8 @@ pub fn projected_surface_triangles(
 
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
+    let divisions = appearance::texture_subdivisions(size, cells.len());
+    let texture_step = size / divisions;
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
             continue;
@@ -86,40 +88,67 @@ pub fn projected_surface_triangles(
             corner_heights(sample.surface.corner_game_height_levels),
             |heights| coarse_corner_heights(heights, grid, tile),
         );
-        let corners = projected_corners(&camera, tile, size, heights);
         let color = surface_color(sample);
         let indices = if sample.surface.triangulation == 1 {
             [[0, 1, 3], [1, 2, 3]]
         } else {
             [[0, 1, 2], [0, 2, 3]]
         };
-        for (order, indices) in indices.into_iter().enumerate() {
-            result.push(ProjectedSurfaceTriangle {
-                points: [
-                    corners[indices[0]],
-                    corners[indices[1]],
-                    corners[indices[2]],
-                ],
-                color,
-                tile,
-                skirt: false,
-                material: sample.material,
-                texture_mode: texture_mode(sample.surface.triangulation, order as u8),
-                tint: if sample.surface.water == 1 {
-                    4
-                } else if sample.surface.water != 0 {
-                    0
-                } else {
-                    match sample.surface.kind {
-                        SceneTerrainSurface::RAMP => 1,
-                        SceneTerrainSurface::CLIFF => 2,
-                        _ => 0,
-                    }
-                },
-                texture_uv: None,
-                pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
-                order: order as u8,
-            });
+        for patch_y in 0..divisions {
+            for patch_x in 0..divisions {
+                let texture_tile = [
+                    tile[0] + patch_x * texture_step,
+                    tile[1] + patch_y * texture_step,
+                ];
+                let local_corners = [
+                    [patch_x, patch_y],
+                    [patch_x + 1, patch_y],
+                    [patch_x + 1, patch_y + 1],
+                    [patch_x, patch_y + 1],
+                ];
+                let patch_heights = local_corners.map(|[x, y]| {
+                    sample_float_surface_height(
+                        heights,
+                        sample.surface.triangulation,
+                        f64::from(x) / f64::from(divisions),
+                        f64::from(y) / f64::from(divisions),
+                    )
+                });
+                let corners = projected_corners(&camera, texture_tile, texture_step, patch_heights);
+                for (order, indices) in indices.into_iter().enumerate() {
+                    result.push(ProjectedSurfaceTriangle {
+                        points: [
+                            corners[indices[0]],
+                            corners[indices[1]],
+                            corners[indices[2]],
+                        ],
+                        color,
+                        tile,
+                        skirt: false,
+                        material: sample.material,
+                        texture_mode: texture_mode(sample.surface.triangulation, order as u8),
+                        tint: if sample.surface.water == 1 {
+                            4
+                        } else if sample.surface.water != 0 {
+                            0
+                        } else {
+                            match sample.surface.kind {
+                                SceneTerrainSurface::RAMP => 1,
+                                SceneTerrainSurface::CLIFF => 2,
+                                _ => 0,
+                            }
+                        },
+                        texture_uv: None,
+                        texture_blend: None,
+                        texture_tile,
+                        texture_materials: (sample.surface.water == 0
+                            && sample.surface.kind != SceneTerrainSurface::CLIFF)
+                            .then_some([sample.material; 3]),
+                        pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
+                        order: order as u8,
+                    });
+                }
+            }
         }
         if size == 1 {
             append_edge_skirt(
@@ -140,6 +169,8 @@ pub fn projected_surface_triangles(
             );
         }
     }
+    debug_assert!(result.len() <= MAX_SURFACE_TRIANGLES);
+    appearance::assign_materials(&mut result, terrain);
     // Painter order is an average-depth approximation. Picking below uses the
     // depth at the hit point, so exact terrain-to-terrain occlusion is still
     // limited until the shared depth-buffer path lands.
@@ -197,6 +228,11 @@ fn visible_grid(
         return Ok(None);
     }
     let area = grid_area(min, max, size).ok_or(())?;
+    // Reserve room for at least 2×2 art patches on coarse cells without raising
+    // the existing triangle allocation bound. Heights still use one coarse cell.
+    if size > 1 && area > MAX_SURFACE_TRIANGLES / 8 {
+        return Err(());
+    }
     let width = ((i64::from(max[0]) - i64::from(min[0])) / i64::from(size) + 1) as usize;
     let height = ((i64::from(max[1]) - i64::from(min[1])) / i64::from(size) + 1) as usize;
     debug_assert_eq!(width * height, area);

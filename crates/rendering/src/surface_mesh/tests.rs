@@ -2,6 +2,8 @@ use super::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "tests/appearance.rs"]
+mod appearance_tests;
 #[path = "tests/shore.rs"]
 mod shore_tests;
 #[path = "tests/terrain_texture.rs"]

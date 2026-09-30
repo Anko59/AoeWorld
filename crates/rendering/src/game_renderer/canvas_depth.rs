@@ -151,7 +151,7 @@ pub(super) fn render_canvas_world(
                     depth,
                 );
             }
-            WorldLayer::Sprite(sprite, frame, layer_depth) => {
+            WorldLayer::Sprite(sprite, frame, layer_depth, _) => {
                 raster_sprite(
                     *sprite,
                     *frame,
@@ -212,13 +212,20 @@ fn raster_surface(
                         + local_uv[1][axis] * weights[1]
                         + local_uv[2][axis] * weights[2]
                 });
-                let sample = sample_atlas(
-                    atlas,
-                    (f64::from(rect[0]) + local[0] * f64::from(rect[2]))
-                        * f64::from(GAME_ATLAS_SIDE),
-                    (f64::from(rect[1]) + local[1] * f64::from(rect[3]))
-                        * f64::from(GAME_ATLAS_SIDE),
-                );
+                let mut sample = sample_terrain_atlas(atlas, rect, local);
+                if let Some([second, third]) = triangle.texture_blend {
+                    let samples = [
+                        sample,
+                        sample_terrain_atlas(atlas, second, local),
+                        sample_terrain_atlas(atlas, third, local),
+                    ];
+                    sample = std::array::from_fn(|channel| {
+                        (f64::from(samples[0][channel]) * first
+                            + f64::from(samples[1][channel]) * weights[1]
+                            + f64::from(samples[2][channel]) * weights[2])
+                            .round() as u8
+                    });
+                }
                 tint_sample(sample, triangle.tint)
             } else {
                 [
@@ -233,6 +240,16 @@ fn raster_surface(
             second += plane.x[1];
         }
     }
+}
+
+fn sample_terrain_atlas(atlas: &[u8], rect: [f32; 4], local: [f64; 2]) -> [u8; 4] {
+    let side = f64::from(GAME_ATLAS_SIDE);
+    let point = [0, 1].map(|axis| {
+        f64::from(rect[axis]) * side
+            + 0.5
+            + local[axis] * (f64::from(rect[axis + 2]) * side - 1.0).max(0.0)
+    });
+    sample_atlas(atlas, point[0], point[1])
 }
 
 struct RasterPlane {
@@ -433,7 +450,7 @@ fn canvas_layer_bounds(
                 center_y + radius_y,
             )
         }
-        WorldLayer::Sprite(sprite, frame, _) => {
+        WorldLayer::Sprite(sprite, frame, _, _) => {
             let center_x = (f64::from(sprite.position[0]) + 1.0) * viewport[0] * 0.5;
             let center_y = (1.0 - f64::from(sprite.position[1])) * viewport[1] * 0.5;
             let half_width = f64::from(frame.size[0]) * 0.5;

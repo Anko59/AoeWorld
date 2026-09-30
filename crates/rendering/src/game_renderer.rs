@@ -296,7 +296,7 @@ impl GameRenderer {
                             crate::web::surface_instance(triangle, camera.viewport, depth_origin)
                         }
                         WorldLayer::Selection(sprite, depth)
-                        | WorldLayer::Sprite(sprite, _, depth) => {
+                        | WorldLayer::Sprite(sprite, _, depth, _) => {
                             let mut sprite = *sprite;
                             sprite.depths = [(*depth - depth_origin) as f32; 4];
                             sprite
@@ -344,7 +344,7 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
 
 fn ordered_world_layers(
     surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
-    objects: Vec<(Sprite, GameFrame, f64)>,
+    objects: Vec<(Sprite, GameFrame, f64, u64)>,
     units: &[SceneUnit],
     camera: SceneCamera,
 ) -> Vec<WorldLayer> {
@@ -368,23 +368,27 @@ fn ordered_world_layers(
     entries.extend(
         objects
             .into_iter()
-            .map(|(sprite, frame, depth)| WorldLayer::Sprite(sprite, frame, depth)),
+            .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
     );
-    // Stable sorting retains input order on exact ties, without allocating a
-    // second full scene just to discard depth/kind/sequence tuple wrappers.
+    // Compose the former object (depth, id) pre-sort with layer (depth, kind)
+    // ordering in one stable sort. Exact id ties keep shadow/body and source
+    // input order, without a second scene or a second object sort buffer.
     entries.sort_by(|left, right| {
         let left = layer_order(left);
         let right = layer_order(right);
-        left.0.total_cmp(&right.0).then(left.1.cmp(&right.1))
+        left.0
+            .total_cmp(&right.0)
+            .then(left.1.cmp(&right.1))
+            .then(left.2.cmp(&right.2))
     });
     entries
 }
 
-fn layer_order(layer: &WorldLayer) -> (f64, u8) {
+fn layer_order(layer: &WorldLayer) -> (f64, u8, u64) {
     match layer {
-        WorldLayer::Surface(triangle) => (triangle_depth(triangle), 0),
-        WorldLayer::Selection(_, depth) => (*depth, 1),
-        WorldLayer::Sprite(_, _, depth) => (*depth, 2),
+        WorldLayer::Surface(triangle) => (triangle_depth(triangle), 0, 0),
+        WorldLayer::Selection(_, depth) => (*depth, 1, 0),
+        WorldLayer::Sprite(_, _, depth, id) => (*depth, 2, *id),
     }
 }
 
@@ -400,5 +404,5 @@ fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
     Selection(Sprite, f64),
-    Sprite(Sprite, GameFrame, f64),
+    Sprite(Sprite, GameFrame, f64, u64),
 }

@@ -1,4 +1,6 @@
 #![cfg(test)]
+#[path = "terrain_blend.rs"]
+mod terrain_blend;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};
@@ -99,6 +101,7 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
         color: [1.0; 4],
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: sprite.uv,
@@ -111,7 +114,7 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
             [0.0; 3],
             [1.0, 0.0, 0.0],
         )),
-        WorldLayer::Sprite(sprite, frame, 100.0),
+        WorldLayer::Sprite(sprite, frame, 100.0, 0),
     ];
     let atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
@@ -178,6 +181,7 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
         color: [1.0; 4],
         uv: [2.0 / 2048.0, 0.0, -2.0 / 2048.0, 1.0 / 2048.0],
         depths: [1.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: sprite.uv,
@@ -188,7 +192,7 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
     let mut atlas = vec![0; atlas_len];
     atlas[..4].copy_from_slice(&[255, 0, 0, 255]);
     atlas[4..8].copy_from_slice(&[0, 0, 255, 255]);
-    let layers = [WorldLayer::Sprite(sprite, frame, 1.0)];
+    let layers = [WorldLayer::Sprite(sprite, frame, 1.0, 0)];
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
@@ -218,6 +222,7 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         color: [1.0; 4],
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: background.uv,
@@ -240,8 +245,9 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
                 ..frame
             },
             0.0,
+            0,
         ),
-        WorldLayer::Sprite(background, frame, f64::NEG_INFINITY),
+        WorldLayer::Sprite(background, frame, f64::NEG_INFINITY, 0),
     ];
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
     let result = canvas_depth::render_canvas_world(
@@ -428,6 +434,9 @@ fn triangle(
         texture_mode: 4,
         tint: 0,
         texture_uv: None,
+        texture_blend: None,
+        texture_tile: [0; 2],
+        texture_materials: None,
         pickable: true,
         order: 0,
     }
@@ -455,13 +464,14 @@ fn canvas_multiplies_shadow_sprite_tint_and_alpha_like_webgpu() {
         color: [0.0, 0.0, 0.0, 0.5],
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [1.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: sprite.uv,
         size: [32.0; 2],
         anchor: [16.0; 2],
     };
-    let layer = WorldLayer::Sprite(sprite, frame, 1.0);
+    let layer = WorldLayer::Sprite(sprite, frame, 1.0, 0);
     let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
     atlas[..4].copy_from_slice(&[255; 4]);
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());

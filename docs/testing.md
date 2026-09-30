@@ -19,6 +19,11 @@ Game checks cover rendered pixels, movement, resize, and compatibility startup
 after a missing WebGPU API, null WebGPU context, or unavailable adapter.
 The WebGPU project also checks actual canvas background and four sprite colors in a full-page
 screenshot, along with reconnect and independent subscriptions.
+`make test-memory-source` requires an already activated real-pack source map,
+`AOE_POLISH_SOURCE_URL`, and `AOE_POLISH_SOURCE_HASH`. It checks a bounded camera
+route on WebGPU, forced Canvas and default Chromium; missing inputs fail this
+focused target. Ordinary E2E skips that external qualification when inputs are
+absent. See [render polish](geodata/render-polish.md) for RSS bounds and limits.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
 production-line denominator, and rejects less than 85% overall or 90% in
 protocol, asset parsers, and policy/report logic. A missing group fails.
