@@ -1,8 +1,8 @@
 # Map polish handoff — 2026-09-30
 
-The user explicitly requested that all changes be pushed, a handoff written,
-and work stopped. The persisted session goal is paused. **Do not resume unless
-asked.** Do not merge PR #74 without authorization.
+At this checkpoint the user explicitly requested a push, handoff and stop.
+The user subsequently authorized resuming; see the resume verification below.
+Do not merge PR #74 without authorization.
 
 ## Revision and location
 
@@ -131,6 +131,38 @@ writers. Do not weaken assertions or deadlines to accommodate contention.
 When explicitly asked to resume: inspect the pushed tip and CI, run the missing
 coverage/fuzz gates, perform remaining visual qualification, and keep the tree
 clean. Do not start a new implementation or change performance baselines first.
+
+## Resume verification
+
+The user subsequently asked to resume. Remote head and the local clean tree
+were `bc4385b5dea46c100ef61a6918d0c4c090ea36e1` before the follow-up.
+[CI run 36787393805](https://github.com/Anko59/AoeWorld/actions/runs/36787393805)
+confirmed successful native coverage, fuzz, browser and performance jobs.
+GitHub executed the clean PR test merge
+`01b43db0cb2796383726f3319131de50bf0c0435` (head `bc4385b...` into base
+`029fa2cec8f024430ab9fb491f33f139e0429653`), not the literal branch head.
+
+- Coverage: 26,897 / 31,584 production lines = **85.1602%**; policy/report
+  logic **92.6910%**, protocol **100%**, asset parsers **94.3787%**. No missing
+  sources; unchanged floors 85% overall / 90% for required groups.
+- Fuzz: all seven parser targets completed 512 runs each, with no crashes.
+- Browser: 2 integration, 33 client, 67 rendering, and 44 E2E tests passed;
+  the same eight external-input checks were skipped.
+- Optimized gzip: **227,368 bytes**, below unchanged 228,102-byte cap, with
+  baseline still 217,240 bytes. All native performance comparisons passed.
+
+The run's only underlying failure was static `cargo-deny`: registry package
+`yoke-derive 0.8.3` was yanked. The required aggregate correctly failed too.
+The follow-up updates **only that transitive package to compatible 0.8.4** and
+its checksum; policy, gates, toolchain and baselines are unchanged. Dockerized
+`make hooks-install hooks-check preflight perf-ci` passed after the update;
+local optimized gzip remains **227,504 bytes**. This local result names the
+prior head with `dirty=true`, not future clean-commit CI evidence.
+
+Ignored detailed artifacts and merge provenance are retained locally under
+`reports/qa/ci-evidence-36787393805/`. Required CI on the dependency follow-up
+and the remaining fresh broader visual qualification must still be verified
+before claiming the whole objective complete.
 
 ## Private playable source state
 
