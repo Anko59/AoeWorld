@@ -4,6 +4,9 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[path = "playground_map/resource_viewport_tests.rs"]
+mod resource_viewport;
+
 #[wasm_bindgen_test]
 fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
     let Ok(chunk) = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0) else {

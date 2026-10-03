@@ -6,7 +6,7 @@ use super::{
 use crate::{
     ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
     HydrologyEvidenceMethod, PageLayer,
-    biome_rules::{biome_from_potential_class, material_for, tree_present},
+    biome_rules::{biome_from_potential_class, material_for, tree_present_for_recipe},
 };
 use aoe_core::TileCoord;
 
@@ -115,6 +115,11 @@ pub(super) fn sample_tile(
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
         WaterKind::Shallow => GroundMaterial::Shore,
     };
+    let material = if water == WaterKind::None && surface_kind.walkable() {
+        super::landscape::material_for_tile(generator, tile, biome.0, material)
+    } else {
+        material
+    };
     Ok(Tile {
         geographic_height_centimeters,
         game_height_level,
@@ -142,7 +147,7 @@ pub(super) fn resource_at(
     if !sample.passable {
         return Ok(None);
     }
-    if super::clearing::contains(generator, tile) {
+    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
         return Ok(None);
     }
     let value = super::unsigned_noise(generator.geography_key, b"objects", tile.x, tile.y)
@@ -170,7 +175,14 @@ pub(super) fn resource_at(
             generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
         })
         .unwrap_or(false);
-    if !historically_cleared && tree_present(generator.geography_key, tile.x, tile.y, sample.biome)
+    if !historically_cleared
+        && tree_present_for_recipe(
+            generator.geography_key,
+            tile.x,
+            tile.y,
+            sample.biome,
+            generator.generation_recipe_version(),
+        )
     {
         return Ok(Some(ResourceNode {
             id: super::resource_id(tile, 0),
@@ -205,7 +217,7 @@ fn occupied_without_access(
     if !sample.passable {
         return Ok(true);
     }
-    if super::clearing::contains(generator, tile) {
+    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
         return Ok(false);
     }
     let land_use = if generator
@@ -231,7 +243,14 @@ fn occupied_without_access(
             generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
         })
         .unwrap_or(false);
-    if !historically_cleared && tree_present(generator.geography_key, tile.x, tile.y, sample.biome)
+    if !historically_cleared
+        && tree_present_for_recipe(
+            generator.geography_key,
+            tile.x,
+            tile.y,
+            sample.biome,
+            generator.generation_recipe_version(),
+        )
     {
         return Ok(true);
     }

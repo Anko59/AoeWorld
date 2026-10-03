@@ -2,14 +2,23 @@ import type { Page } from "@playwright/test";
 
 const CHUNK_TILES = 32;
 
-export async function activateSyntheticMap(page: Page): Promise<string> {
+export async function activateSyntheticMap(
+  page: Page,
+  denseResources = false,
+): Promise<string> {
   const contentHash = "01".repeat(32);
-  const chunk = JSON.stringify([
-    syntheticChunk(255, 255),
-    syntheticChunk(256, 255),
-    syntheticChunk(255, 256),
-    syntheticChunk(256, 256),
-  ]);
+  const chunk = JSON.stringify(
+    denseResources
+      ? Array.from({ length: 81 }, (_, index) =>
+          syntheticChunk(252 + (index % 9), 252 + Math.floor(index / 9), true),
+        )
+      : [
+          syntheticChunk(255, 255),
+          syntheticChunk(256, 255),
+          syntheticChunk(255, 256),
+          syntheticChunk(256, 256),
+        ],
+  );
   await page.evaluate(
     async ([hash, chunkJson]) => {
       const module = (await import(
@@ -27,23 +36,40 @@ export async function activateSyntheticMap(page: Page): Promise<string> {
 function syntheticChunk(
   x: number,
   y: number,
+  denseResources = false,
 ): {
   x: number;
   y: number;
   payload_hex: string;
 } {
-  const bytes = [1, ...u16(CHUNK_TILES * CHUNK_TILES), ...u16(0)];
+  const bytes = [
+    1,
+    ...u16(CHUNK_TILES * CHUNK_TILES),
+    ...u16(denseResources ? 1024 : 0),
+  ];
   for (let localY = 0; localY < CHUNK_TILES; localY += 1) {
     for (let localX = 0; localX < CHUNK_TILES; localX += 1) {
       const tileX = x * CHUNK_TILES + localX;
       const tileY = y * CHUNK_TILES + localY;
-      const corners = tileCorners(tileX, tileY);
+      const corners = denseResources ? [0, 0, 0, 0] : tileCorners(tileX, tileY);
       const level = Math.round(
         corners.reduce((sum, value) => sum + value, 0) / corners.length,
       );
       bytes.push(...i32(level * 100), ...i16(level));
       for (const height of corners) bytes.push(...i16(height));
-      bytes.push(...u32(properties(tileX, tileY)));
+      bytes.push(...u32(denseResources ? 1 << 20 : properties(tileX, tileY)));
+    }
+  }
+  if (denseResources) {
+    for (let localY = 0; localY < 32; localY++) {
+      for (let localX = 0; localX < 32; localX++) {
+        const tx = x * 32 + localX;
+        const ty = y * 32 + localY;
+        const id = BigInt(ty) * 524288n + BigInt(tx) * 2n;
+        for (let b = 0n; b < 8n; b++)
+          bytes.push(Number((id >> (8n * b)) & 255n));
+        bytes.push(...i32(tx), ...i32(ty), 1, 0, ...u16(100), 0);
+      }
     }
   }
   return { x, y, payload_hex: bytes.map(hexByte).join("") };

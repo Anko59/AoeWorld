@@ -7,10 +7,11 @@ use crate::{
 use aoe_core::TileCoord;
 use std::{collections::BTreeMap, sync::Arc};
 
+const RECIPE_FIVE: u16 = crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION;
 const PARITY_RECIPES: [u16; 3] = [
     crate::LEGACY_GENERATION_RECIPE_VERSION,
     crate::PRIOR_GENERATION_RECIPE_VERSION,
-    crate::GENERATION_RECIPE_VERSION,
+    RECIPE_FIVE,
 ];
 const SAMPLED_KEYS: [[u8; 32]; 16] = [
     [0; 32], [1; 32], [2; 32], [3; 32], [7; 32], [11; 32], [17; 32], [18; 32], [23; 32], [29; 32],
@@ -157,9 +158,9 @@ fn provider_generator(
 #[test]
 fn clearing_hash_is_deterministic_per_geography_and_independent_of_object_seed() {
     let tile = TileCoord::new(143, 211);
-    let first = recipe_generator([17; 32], 9, crate::GENERATION_RECIPE_VERSION);
-    let repeated = recipe_generator([17; 32], 99, crate::GENERATION_RECIPE_VERSION);
-    let other_geography = recipe_generator([18; 32], 9, crate::GENERATION_RECIPE_VERSION);
+    let first = recipe_generator([17; 32], 9, RECIPE_FIVE);
+    let repeated = recipe_generator([17; 32], 99, RECIPE_FIVE);
+    let other_geography = recipe_generator([18; 32], 9, RECIPE_FIVE);
     let first_shape = clearing::geometry(&first, tile).expect("recipe-five clearing");
     assert_eq!(
         first_shape,
@@ -180,7 +181,7 @@ fn clearing_hash_is_deterministic_per_geography_and_independent_of_object_seed()
 
 #[test]
 fn fixed_key_golden_geometry_count_area_and_boundary_membership_are_pinned() {
-    let terrain = recipe_generator([17; 32], 9, crate::GENERATION_RECIPE_VERSION);
+    let terrain = recipe_generator([17; 32], 9, RECIPE_FIVE);
     let shape = clearing::geometry(&terrain, TileCoord::new(143, 211)).expect("shape");
     assert_eq!(
         shape,
@@ -253,7 +254,7 @@ fn fixed_key_golden_geometry_count_area_and_boundary_membership_are_pinned() {
 #[test]
 fn fixed_key_cell_zero_frequency_is_pinned_separately() {
     let frequencies = SAMPLED_KEYS.map(|key| {
-        let terrain = recipe_generator(key, 1, crate::GENERATION_RECIPE_VERSION);
+        let terrain = recipe_generator(key, 1, RECIPE_FIVE);
         (0..CELL_TILES)
             .flat_map(|y| (0..CELL_TILES).map(move |x| TileCoord::new(x, y)))
             .filter(|tile| clearing::contains(&terrain, *tile))
@@ -271,7 +272,7 @@ fn fixed_key_cell_zero_frequency_is_pinned_separately() {
 #[test]
 fn every_recipe_five_cell_is_bounded_irregular_and_has_a_clear_17_tile_core() {
     for key in [[3; 32], [29; 32]] {
-        let terrain = recipe_generator(key, 1, crate::GENERATION_RECIPE_VERSION);
+        let terrain = recipe_generator(key, 1, RECIPE_FIVE);
         for cell_y in 0..3 {
             let mut previous_max_x = None;
             for cell_x in 0..3 {
@@ -318,7 +319,7 @@ fn every_recipe_five_cell_is_bounded_irregular_and_has_a_clear_17_tile_core() {
 
 #[test]
 fn recipe_five_suppresses_every_object_candidate_including_the_object_free_core() {
-    let terrain = recipe_generator([3; 32], 1, crate::GENERATION_RECIPE_VERSION);
+    let terrain = recipe_generator([3; 32], 1, RECIPE_FIVE);
     let legacy = recipe_generator([3; 32], 1, crate::LEGACY_GENERATION_RECIPE_VERSION);
     let shape = clearing::geometry(&terrain, TileCoord::new(40, 40)).expect("cell clearing");
     let core = (0..CORE_TILES).flat_map(|dy| {
@@ -370,6 +371,19 @@ fn recipes_three_and_four_keep_their_pre_clearing_object_layouts() {
 }
 
 #[test]
+fn recipe_six_preserves_recipe_five_terrain_and_object_layouts() {
+    let overview = recipe_generator([71; 32], 5, RECIPE_FIVE);
+    let recipe = crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION;
+    let modeled = recipe_generator([71; 32], 5, recipe);
+    for (x, y) in [(0, 0), (1, 0), (0, 1)] {
+        assert_eq!(
+            overview.chunk(x, y).expect("recipe-five chunk"),
+            modeled.chunk(x, y).expect("recipe-six chunk")
+        );
+    }
+}
+
+#[test]
 fn dense_and_provider_clearings_match_with_partial_historical_land_use_exactly() {
     let mut exact = [(0, 0, 0); 3];
     for (index, recipe) in PARITY_RECIPES.into_iter().enumerate() {
@@ -409,7 +423,7 @@ fn dense_and_provider_clearings_match_with_partial_historical_land_use_exactly()
         for cell_y in 0..2 {
             for cell_x in 0..2 {
                 let origin = TileCoord::new(cell_x * CELL_TILES, cell_y * CELL_TILES);
-                let bounds = if recipe == crate::GENERATION_RECIPE_VERSION {
+                let bounds = if recipe == RECIPE_FIVE {
                     let shape = clearing::geometry(&dense, origin).expect("recipe-five shape");
                     (
                         shape
@@ -482,3 +496,5 @@ fn dense_and_provider_clearings_match_with_partial_historical_land_use_exactly()
         ]
     );
 }
+
+mod landscape_parity;

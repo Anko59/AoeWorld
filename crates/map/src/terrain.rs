@@ -14,6 +14,7 @@ use std::sync::Arc;
 mod clearing;
 mod elevation;
 mod fallback;
+pub(crate) mod landscape;
 mod provider;
 mod resources;
 mod surface;

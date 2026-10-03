@@ -9,8 +9,8 @@ const CENTER_JITTER: i32 = 12;
 const MIN_RADIUS: i32 = 24;
 const MAX_RADIUS: i32 = 31;
 const VERTICES: usize = 16;
-const DIRECTION_SCALE: i64 = 4_096;
-const DIRECTIONS: [(i32, i32); VERTICES] = [
+pub(super) const DIRECTION_SCALE: i64 = 4_096;
+pub(super) const DIRECTIONS: [(i32, i32); VERTICES] = [
     (4_096, 0),
     (3_783, 1_583),
     (2_896, 2_896),
@@ -38,13 +38,36 @@ pub(super) struct Geometry {
 }
 
 pub(super) fn contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
+    if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION {
+        return super::landscape::opening_contains(generator, tile);
+    }
     geometry(generator, tile).is_some_and(|shape| point_in_polygon(&shape.vertices, tile))
+}
+
+pub(super) fn suppresses_objects(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    biome: crate::Biome,
+) -> bool {
+    if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION
+        && !matches!(
+            biome,
+            crate::Biome::Temperate
+                | crate::Biome::Boreal
+                | crate::Biome::Tropical
+                | crate::Biome::Woodland
+        )
+    {
+        return false;
+    }
+    contains(generator, tile) || super::landscape::procedural_trail_contains(generator, tile)
 }
 
 pub(super) fn geometry(generator: &MapChunkGenerator, tile: TileCoord) -> Option<Geometry> {
     if !matches!(
         generator.generation_recipe_version(),
-        crate::GENERATION_RECIPE_VERSION | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
+        crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
+            | crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
     ) {
         return None;
     }
@@ -103,7 +126,12 @@ fn center(generator: &MapChunkGenerator, cell: (i32, i32)) -> TileCoord {
     )
 }
 
-fn cell_value(generator: &MapChunkGenerator, domain: &[u8], cell: (i32, i32), vertex: u8) -> u64 {
+pub(super) fn cell_value(
+    generator: &MapChunkGenerator,
+    domain: &[u8],
+    cell: (i32, i32),
+    vertex: u8,
+) -> u64 {
     let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
     hash.update(domain);
     hash.update(&cell.0.to_le_bytes());
@@ -112,7 +140,7 @@ fn cell_value(generator: &MapChunkGenerator, domain: &[u8], cell: (i32, i32), ve
     u64::from_le_bytes(hash.finalize().as_bytes()[..8].try_into().unwrap_or([0; 8]))
 }
 
-fn point_in_polygon(vertices: &[TileCoord], point: TileCoord) -> bool {
+pub(super) fn point_in_polygon(vertices: &[TileCoord], point: TileCoord) -> bool {
     let mut inside = false;
     for (index, left) in vertices.iter().enumerate() {
         let right = vertices[(index + 1) % vertices.len()];

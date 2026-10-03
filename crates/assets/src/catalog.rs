@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AssetRole {
@@ -17,6 +17,7 @@ pub enum AssetRole {
     Rock,
     Water,
     WoodTree,
+    WoodTreeShadow,
     ForageBush,
     GoldDeposit,
     StoneDeposit,
@@ -60,50 +61,50 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         role: AssetRole::TemperateGrass,
         archive: "terrain.drs",
         id: 15008,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic grass texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::DryGrass,
         archive: "terrain.drs",
         id: 15007,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic dry-grass texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Dirt,
         archive: "terrain.drs",
         id: 15000,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic dirt texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Sand,
         archive: "terrain.drs",
         id: 15010,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic sand texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Rock,
         archive: "terrain.drs",
         id: 15018,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic rock texture atlas in x-major, reversed-y order",
     },
     SpriteSource {
         role: AssetRole::Water,
         archive: "terrain.drs",
         id: 15002,
-        frames: 10,
-        interpretation: "terrain shape variants",
+        frames: 100,
+        interpretation: "10x10 periodic water texture atlas in x-major, reversed-y order",
     },
 ];
 
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 4] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -112,6 +113,15 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 4] = [
         id: 4652,
         frames: 14,
         interpretation: "individual broadleaf tree variants",
+    },
+    // This shadow-only sequence is paired frame-for-frame with broadleaf art
+    // 4652 and retains its original mask alpha and hotspot.
+    SpriteSource {
+        role: AssetRole::WoodTreeShadow,
+        archive: "graphics.drs",
+        id: 2296,
+        frames: 14,
+        interpretation: "paired broadleaf tree shadows for frames 0 through 13",
     },
     SpriteSource {
         role: AssetRole::ForageBush,
@@ -163,7 +173,7 @@ mod tests {
                 .chain(OPTIONAL_RESOURCE_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 1);
+        assert_eq!(VERSION, 2);
     }
 
     #[test]
@@ -183,10 +193,30 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 (AssetRole::WoodTree, 4652, 14),
+                (AssetRole::WoodTreeShadow, 2296, 14),
                 (AssetRole::ForageBush, 2560, 4),
                 (AssetRole::GoldDeposit, 4479, 7),
                 (AssetRole::StoneDeposit, 4482, 7),
             ]
+        );
+    }
+
+    #[test]
+    fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
+        assert!(
+            REQUIRED_RENDER_SOURCES
+                .iter()
+                .filter(|source| matches!(
+                    source.role,
+                    AssetRole::TemperateGrass
+                        | AssetRole::DryGrass
+                        | AssetRole::Dirt
+                        | AssetRole::Sand
+                        | AssetRole::Rock
+                        | AssetRole::Water
+                ))
+                .all(|source| source.frames == 100
+                    && source.interpretation.contains("x-major, reversed-y order"))
         );
     }
 }

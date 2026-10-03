@@ -83,6 +83,7 @@ fn footprint_boundary_candidates_fail_closed_for_every_supported_recipe() {
         LEGACY_START_RECIPE,
         RECIPE_4_START_RECIPE,
         RECIPE_5_START_RECIPE,
+        PRIOR_WATER_MODEL_START_RECIPE,
         WATER_MODEL_START_RECIPE,
     ] {
         assert_eq!(
@@ -101,6 +102,8 @@ fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
     for recipe in [
         LEGACY_START_RECIPE,
         RECIPE_4_START_RECIPE,
+        RECIPE_5_START_RECIPE,
+        PRIOR_WATER_MODEL_START_RECIPE,
         WATER_MODEL_START_RECIPE,
     ] {
         let selected = terrain
@@ -125,7 +128,11 @@ fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
 #[test]
 fn dense_modern_recipes_preserve_the_fixed_start_contract() {
     let config = WorldConfig::new(512, 512, Seed(1)).expect("config");
-    for recipe in [RECIPE_5_START_RECIPE, WATER_MODEL_START_RECIPE] {
+    for recipe in [
+        RECIPE_5_START_RECIPE,
+        PRIOR_WATER_MODEL_START_RECIPE,
+        WATER_MODEL_START_RECIPE,
+    ] {
         let terrain = Terrain::Map {
             generator: flat_temperate_generator(recipe),
             overlay: ResourceOverlay::default(),
@@ -137,6 +144,10 @@ fn dense_modern_recipes_preserve_the_fixed_start_contract() {
             terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
             Ok(selected),
             "recipe {recipe} selection is deterministic"
+        );
+        assert!(
+            matches!(selected, StartSearchResult::Found(_)),
+            "recipe {recipe}: {selected:?}"
         );
         assert_start_contract(&terrain, config, selected);
     }

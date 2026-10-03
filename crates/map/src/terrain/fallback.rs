@@ -3,7 +3,7 @@ use super::{
     Tile, WaterKind, clearing, compression_fallback, quantize_game_height, resource_id, resources,
     signed_noise, surface, unsigned_noise,
 };
-use crate::biome_rules::{biome_from_potential_class, material_for, tree_present};
+use crate::biome_rules::{biome_from_potential_class, material_for, tree_present_for_recipe};
 use aoe_core::TileCoord;
 
 impl MapChunkGenerator {
@@ -122,6 +122,11 @@ impl MapChunkGenerator {
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
             WaterKind::Shallow => GroundMaterial::Shore,
         };
+        let material = if water == WaterKind::None && surface.walkable() {
+            super::landscape::material_for_tile(self, tile, biome, material)
+        } else {
+            material
+        };
         Tile {
             geographic_height_centimeters,
             game_height_level,
@@ -144,7 +149,7 @@ impl MapChunkGenerator {
         if !sample.passable {
             return None;
         }
-        if clearing::contains(self, tile) {
+        if clearing::suppresses_objects(self, tile, sample.biome) {
             return None;
         }
         if let Some(tree) = self.tree_at(tile, sample) {
@@ -157,7 +162,7 @@ impl MapChunkGenerator {
         if !sample.passable {
             return true;
         }
-        !clearing::contains(self, tile)
+        !clearing::suppresses_objects(self, tile, sample.biome)
             && (self.tree_at(tile, sample).is_some()
                 || resources::candidate(self, tile, sample).is_some())
     }
@@ -177,8 +182,14 @@ impl MapChunkGenerator {
                 )
             });
         (!historically_cleared
-            && !clearing::contains(self, tile)
-            && tree_present(self.geography_key, tile.x, tile.y, sample.biome))
+            && !clearing::suppresses_objects(self, tile, sample.biome)
+            && tree_present_for_recipe(
+                self.geography_key,
+                tile.x,
+                tile.y,
+                sample.biome,
+                self.generation_recipe_version(),
+            ))
         .then_some(ResourceNode {
             id: resource_id(tile, 0),
             tile,

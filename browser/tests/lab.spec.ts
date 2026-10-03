@@ -52,6 +52,8 @@ test("software WebGPU renders a synthetic scene and camera moves", async ({
 
 test("native and browser replay hashes agree", async ({ page }) => {
   await page.goto("/diagnostics.html");
+  // Document load does not await the asynchronous WASM initialization.
+  await expect(page.getByRole("status")).toContainText("connected");
   const response = await page.request.get(
     "/replay-hash?scenario=smoke&ticks=20",
   );

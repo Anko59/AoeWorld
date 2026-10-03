@@ -298,12 +298,12 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     assert_eq!(
         centered_resource,
         ResourceNode {
-            id: 13_109_871_386,
-            tile: TileCoord::new(24_973, 25_005),
-            kind: aoe_map::ResourceKind::Stone,
-            object: aoe_map::ObjectKind::StoneDeposit,
-            initial_amount: 350,
-            visual_variant: 205,
+            id: 13_099_385_686,
+            tile: TileCoord::new(25_003, 24_985),
+            kind: aoe_map::ResourceKind::Gold,
+            object: aoe_map::ObjectKind::GoldDeposit,
+            initial_amount: 800,
+            visual_variant: 143,
         }
     );
     assert_eq!(report.resource_id, centered_resource.id);

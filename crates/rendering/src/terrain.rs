@@ -1,4 +1,7 @@
-use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface, web::Sprite};
+use crate::{
+    GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface,
+    surface_mesh::terrain_texture_frame, web::Sprite,
+};
 use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, TileCoord};
 use std::collections::BTreeMap;
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
@@ -36,11 +39,13 @@ pub(crate) fn visible_terrain_frames(
     for cell_y in min_cell_y..max_cell_y {
         for cell_x in min_cell_x..max_cell_x {
             let position = cell_center((cell_x, cell_y), cell_size);
-            let frame = terrain_frame(
-                art.grass[((cell_x.wrapping_mul(7) + cell_y.wrapping_mul(13)).unsigned_abs()
-                    as usize)
-                    % art.grass.len()],
-            );
+            let source_tile = [
+                cell_x.saturating_mul(cell_size),
+                cell_y.saturating_mul(cell_size),
+            ];
+            let Some(frame) = terrain_texture_frame(art, 0, source_tile).map(terrain_frame) else {
+                continue;
+            };
             if let Some(candidate) = terrain_candidate(
                 &projection,
                 SceneTerrain {
@@ -115,16 +120,13 @@ fn map_candidate(
     if sample.surface.kind != SceneTerrainSurface::PLATEAU || sample.surface.water != 0 {
         return None;
     }
-    let frames = art
-        .terrain
-        .get(usize::from(sample.material))
-        .filter(|frames| !frames.is_empty())
-        .unwrap_or(&art.grass);
-    let frame = terrain_frame(
-        frames[((sample.position[0] as i32 * 7 + sample.position[1] as i32 * 13).unsigned_abs()
-            as usize)
-            % frames.len()],
-    );
+    let tile = [
+        sample.position[0].floor() as i32,
+        sample.position[1].floor() as i32,
+    ];
+    let Some(frame) = terrain_texture_frame(art, sample.material, tile).map(terrain_frame) else {
+        return None;
+    };
     terrain_candidate(projection, sample, frame, camera, 1)
 }
 
@@ -265,6 +267,7 @@ fn terrain_sprite(
             color: [1.0; 4],
             uv: frame.uv,
             depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
         },
         frame,
     ))

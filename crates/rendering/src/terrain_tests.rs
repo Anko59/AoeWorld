@@ -13,6 +13,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
         resources: std::array::from_fn(|_| Vec::new()),
+        tree_shadows: Vec::new(),
     }
 }
 

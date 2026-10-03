@@ -41,7 +41,7 @@ export async function traverseAndReturnAlpineTarget(
 
   // The active map opens at its center. At minimum zoom, this moves the same
   // camera to the southeast relief chunk without reloading or changing maps.
-  await repeatCameraKey(page, "ArrowUp", 450);
+  await repeatCameraKey(page, "ArrowDown", 450);
   await page.waitForLoadState("networkidle");
   await expect
     .poll(() => responses.get(targetPath) ?? 0, { timeout: 45_000 })
@@ -52,7 +52,7 @@ export async function traverseAndReturnAlpineTarget(
   // world-coordinate grid. Screen-horizontal keys move along an isometric
   // diagonal, so simply alternating arrows does not cover the square map.
   const southeast = await cameraCenter(page);
-  await repeatCameraKey(page, "ArrowDown", 450);
+  await repeatCameraKey(page, "ArrowUp", 450);
   await page.waitForLoadState("networkidle");
   const northwest = await cameraCenter(page);
   // Finish the whole tour. Crossing 512 once only evicts a few chunks;
@@ -79,14 +79,14 @@ export async function traverseAndReturnAlpineTarget(
   // The tour ends in the southeast. Reload the distant northwest views,
   // including the height-shifted interior band, so spatial eviction must
   // displace the southeast target rather than an unrelated corner.
-  await repeatCameraKey(page, "ArrowDown", 450);
+  await repeatCameraKey(page, "ArrowUp", 450);
   for (const offset of [0, 32, 64, 96]) {
     await panToWorld(page, [northwest[0] + offset, northwest[1] + offset]);
     await page.waitForLoadState("networkidle");
   }
   const evictedImage = await canvas.screenshot();
   const targetRequestCountBeforeReturn = responses.get(targetPath) ?? 0;
-  await repeatCameraKey(page, "ArrowUp", 450);
+  await repeatCameraKey(page, "ArrowDown", 450);
   await expect
     .poll(() => responses.get(targetPath) ?? 0, { timeout: 45_000 })
     .toBeGreaterThan(targetRequestCountBeforeReturn);
@@ -120,7 +120,7 @@ export async function traverseAndReturnAlpineTarget(
 
 async function repeatCameraKey(
   page: Page,
-  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+  key: "ArrowLeft" | "ArrowRight" | "ArrowDown" | "ArrowUp",
   count: number,
   settle = true,
 ) {
@@ -174,13 +174,13 @@ async function panToWorld(page: Page, target: [number, number]) {
     const horizontal = Math.round(((dx - dy) * scale) / 3.75);
     await repeatCameraKey(
       page,
-      vertical >= 0 ? "ArrowUp" : "ArrowDown",
+      vertical >= 0 ? "ArrowDown" : "ArrowUp",
       Math.abs(vertical),
       false,
     );
     await repeatCameraKey(
       page,
-      horizontal >= 0 ? "ArrowLeft" : "ArrowRight",
+      horizontal >= 0 ? "ArrowRight" : "ArrowLeft",
       Math.abs(horizontal),
       false,
     );

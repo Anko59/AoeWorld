@@ -14,11 +14,10 @@ pub(crate) fn selection_ring(
     let radius_x = 24.0 * camera.zoom;
     let radius_y = 8.0 * camera.zoom;
     let mut sprites = Vec::with_capacity(SELECTION_RING_SPRITES);
-    for index in 0..SELECTION_RING_SPRITES {
-        let angle = index as f64 * std::f64::consts::TAU / SELECTION_RING_SPRITES as f64;
+    for [cos, sin] in RING_POINTS {
         let point = ScreenPoint {
-            x: screen.x + angle.cos() * radius_x,
-            y: screen.y + angle.sin() * radius_y,
+            x: screen.x + cos * radius_x,
+            y: screen.y + sin * radius_y,
         };
         let world = camera_projection(camera).screen_to_world_at_height(point, elevation_meters);
         sprites.push((
@@ -28,6 +27,7 @@ pub(crate) fn selection_ring(
                 color: [0.95, 0.85, 0.35, 1.0],
                 uv: solid_uv(),
                 depths: [0.0; 4],
+                terrain_blend: [[0.0; 4]; 2],
             },
             surface_depth([world[0], world[1], elevation_meters]),
         ));
@@ -162,6 +162,7 @@ fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, vie
             color: GRID_COLOR,
             uv: solid_uv(),
             depths: [f32::INFINITY; 4],
+            terrain_blend: [[0.0; 4]; 2],
         });
     }
 }
@@ -187,4 +188,50 @@ fn solid_uv() -> [f32; 4] {
         1.0 / GAME_ATLAS_SIDE as f32,
         1.0 / GAME_ATLAS_SIDE as f32,
     ]
+}
+
+// Pinned Rust 1.93.1 wasm32 sin/cos at the fixed ring angles.
+const RING_POINTS: [[f64; 2]; 32] = [
+    [1.0, 0.0],
+    [0.9807852804032304, 0.19509032201612825],
+    [0.9238795325112867, 0.3826834323650898],
+    [0.8314696123025452, 0.5555702330196022],
+    [0.7071067811865476, 0.7071067811865475],
+    [0.5555702330196023, 0.8314696123025452],
+    [0.38268343236508984, 0.9238795325112867],
+    [0.19509032201612833, 0.9807852804032304],
+    [6.123233995736766e-17, 1.0],
+    [-0.1950903220161282, 0.9807852804032304],
+    [-0.3826834323650897, 0.9238795325112867],
+    [-0.555570233019602, 0.8314696123025453],
+    [-0.7071067811865475, 0.7071067811865476],
+    [-0.8314696123025453, 0.5555702330196022],
+    [-0.9238795325112867, 0.3826834323650899],
+    [-0.9807852804032304, 0.1950903220161286],
+    [-1.0, 1.2246467991473532e-16],
+    [-0.9807852804032304, -0.19509032201612836],
+    [-0.9238795325112868, -0.38268343236508967],
+    [-0.8314696123025455, -0.555570233019602],
+    [-0.7071067811865477, -0.7071067811865475],
+    [-0.5555702330196022, -0.8314696123025452],
+    [-0.38268343236509034, -0.9238795325112865],
+    [-0.19509032201612866, -0.9807852804032303],
+    [-1.8369701987210297e-16, -1.0],
+    [0.1950903220161283, -0.9807852804032304],
+    [0.38268343236509, -0.9238795325112866],
+    [0.5555702330196018, -0.8314696123025455],
+    [0.7071067811865474, -0.7071067811865477],
+    [0.8314696123025452, -0.5555702330196022],
+    [0.9238795325112865, -0.3826834323650904],
+    [0.9807852804032303, -0.19509032201612872],
+];
+
+#[cfg(test)]
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn fixed_ring_points_match_original_trigonometry_bits() {
+    for (index, [cos, sin]) in RING_POINTS.into_iter().enumerate() {
+        let angle = index as f64 * std::f64::consts::TAU / 32.0;
+        assert_eq!(cos.to_bits(), angle.cos().to_bits());
+        assert_eq!(sin.to_bits(), angle.sin().to_bits());
+    }
 }

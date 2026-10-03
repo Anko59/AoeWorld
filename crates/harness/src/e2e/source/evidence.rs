@@ -40,12 +40,18 @@ pub(super) fn created_record(
             format!("{profile} creator did not retain its requested preparation grid").into(),
         );
     }
-    if profile == "detailed" && (package.generation_recipe_version != 6 || !model_present) {
-        return Err("detailed Paris package lacks recipe 6 modeled-water source pages".into());
+    if profile == "detailed"
+        && (package.generation_recipe_version != aoe_map::GENERATION_RECIPE_VERSION
+            || !model_present)
+    {
+        return Err("detailed Paris package lacks recipe 7 modeled-water source pages".into());
     }
-    if profile == "overview" && (package.generation_recipe_version != 5 || model_present) {
+    if profile == "overview"
+        && (package.generation_recipe_version != aoe_map::GENERATION_RECIPE_VERSION
+            || model_present)
+    {
         return Err(
-            "overview Paris package did not retain its model-free recipe 5 identity".into(),
+            "overview Paris package did not retain its model-free recipe 7 identity".into(),
         );
     }
     Ok(serde_json::json!({

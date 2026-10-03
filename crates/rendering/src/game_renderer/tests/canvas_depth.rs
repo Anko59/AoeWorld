@@ -1,4 +1,6 @@
 #![cfg(test)]
+#[path = "terrain_blend.rs"]
+mod terrain_blend;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};
@@ -25,22 +27,21 @@ fn canvas_depth_resolves_crossing_surfaces_at_each_pixel() {
             [0.0, 0.0, 1.0],
         )),
     ];
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
         &canvas,
         &context,
         &[],
-        &mut color,
-        &mut depth,
+        &mut presentation,
         &layers,
         camera,
         false,
     );
     assert!(result.is_ok(), "Canvas render failed: {result:?}");
 
-    assert_eq!(pixel(&color, 64, 30), [0, 0, 255, 255]);
-    assert_eq!(pixel(&color, 64, 90), [255, 0, 0, 255]);
+    assert_eq!(pixel(&presentation.color_buffer, 64, 30), [0, 0, 255, 255]);
+    assert_eq!(pixel(&presentation.color_buffer, 64, 90), [255, 0, 0, 255]);
 }
 
 #[wasm_bindgen_test]
@@ -63,14 +64,13 @@ fn canvas_continuous_shared_triangle_edges_leave_no_background_cracks() {
             [0.2, 0.5, 0.8],
         )),
     ];
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
         &canvas,
         &context,
         &[],
-        &mut color,
-        &mut depth,
+        &mut presentation,
         &layers,
         camera,
         false,
@@ -79,7 +79,11 @@ fn canvas_continuous_shared_triangle_edges_leave_no_background_cracks() {
 
     for y in 16..112 {
         for x in 16..112 {
-            assert_ne!(pixel(&color, x, y), [41, 74, 36, 255], "crack at {x},{y}");
+            assert_ne!(
+                pixel(&presentation.color_buffer, x, y),
+                [41, 74, 36, 255],
+                "crack at {x},{y}"
+            );
         }
     }
 }
@@ -97,6 +101,7 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
         color: [1.0; 4],
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: sprite.uv,
@@ -109,18 +114,24 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
             [0.0; 3],
             [1.0, 0.0, 0.0],
         )),
-        WorldLayer::Sprite(sprite, frame, 100.0),
+        WorldLayer::Sprite(sprite, frame, 100.0, 0),
     ];
     let atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
-        &canvas, &context, &atlas, &mut color, &mut depth, &layers, camera, false,
+        &canvas,
+        &context,
+        &atlas,
+        &mut presentation,
+        &layers,
+        camera,
+        false,
     );
     assert!(result.is_ok(), "Canvas render failed: {result:?}");
 
-    assert_eq!(pixel(&color, 64, 64), [255, 0, 0, 255]);
-    assert_eq!(depth[64 * 128 + 64], 0.0);
+    assert_eq!(pixel(&presentation.color_buffer, 64, 64), [255, 0, 0, 255]);
+    assert_eq!(presentation.depth_buffer[64 * 128 + 64], 0.0);
 }
 
 #[wasm_bindgen_test]
@@ -139,21 +150,23 @@ fn canvas_terrain_samples_the_native_atlas_and_applies_water_tint() {
     let layers = [WorldLayer::Surface(water)];
     let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
     atlas[..4].copy_from_slice(&[100, 100, 100, 255]);
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
         &canvas,
         &context,
         &atlas,
-        &mut color,
-        &mut depth,
+        &mut presentation,
         &layers,
         test_camera(),
         false,
     );
     assert!(result.is_ok(), "Canvas render failed: {result:?}");
 
-    assert_eq!(pixel(&color, 64, 64), [91, 102, 113, 255]);
+    assert_eq!(
+        pixel(&presentation.color_buffer, 64, 64),
+        [91, 102, 113, 255]
+    );
 }
 
 #[wasm_bindgen_test]
@@ -168,6 +181,7 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
         color: [1.0; 4],
         uv: [2.0 / 2048.0, 0.0, -2.0 / 2048.0, 1.0 / 2048.0],
         depths: [1.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: sprite.uv,
@@ -178,23 +192,22 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
     let mut atlas = vec![0; atlas_len];
     atlas[..4].copy_from_slice(&[255, 0, 0, 255]);
     atlas[4..8].copy_from_slice(&[0, 0, 255, 255]);
-    let layers = [WorldLayer::Sprite(sprite, frame, 1.0)];
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let layers = [WorldLayer::Sprite(sprite, frame, 1.0, 0)];
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
         &canvas,
         &context,
         &atlas,
-        &mut color,
-        &mut depth,
+        &mut presentation,
         &layers,
         test_camera(),
         false,
     );
     assert!(result.is_ok(), "Canvas render failed: {result:?}");
 
-    assert_eq!(pixel(&color, 54, 64), [0, 0, 255, 255]);
-    assert_eq!(pixel(&color, 74, 64), [255, 0, 0, 255]);
+    assert_eq!(pixel(&presentation.color_buffer, 54, 64), [0, 0, 255, 255]);
+    assert_eq!(pixel(&presentation.color_buffer, 74, 64), [255, 0, 0, 255]);
 }
 
 #[wasm_bindgen_test]
@@ -209,6 +222,7 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         color: [1.0; 4],
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let frame = crate::GameFrame {
         uv: background.uv,
@@ -231,23 +245,147 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
                 ..frame
             },
             0.0,
+            0,
         ),
-        WorldLayer::Sprite(background, frame, f64::NEG_INFINITY),
+        WorldLayer::Sprite(background, frame, f64::NEG_INFINITY, 0),
     ];
-    let (mut color, mut depth) = (Vec::new(), Vec::new());
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
     let result = canvas_depth::render_canvas_world(
         &canvas,
         &context,
         &atlas,
-        &mut color,
-        &mut depth,
+        &mut presentation,
         &layers,
         test_camera(),
         false,
     );
     assert!(result.is_ok(), "Canvas render failed: {result:?}");
-    assert_eq!(pixel(&color, 54, 64), [70, 120, 55, 255]);
-    assert_eq!(pixel(&color, 64, 64), [0, 0, 255, 255]);
+    assert_eq!(
+        pixel(&presentation.color_buffer, 54, 64),
+        [70, 120, 55, 255]
+    );
+    assert_eq!(pixel(&presentation.color_buffer, 64, 64), [0, 0, 255, 255]);
+}
+
+#[wasm_bindgen_test]
+fn canvas_reuses_image_data_and_pixels_while_updating_frame_bytes() {
+    let Some((canvas, context)) = target_canvas() else {
+        assert!(false, "browser canvas is unavailable");
+        return;
+    };
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let camera = test_camera();
+    let no_layers = [];
+    canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &[],
+        &mut presentation,
+        &no_layers,
+        camera,
+        false,
+    )
+    .expect("initial Canvas frame should render");
+
+    let first_image: wasm_bindgen::JsValue =
+        presentation.image_data.as_ref().unwrap().clone().into();
+    let first_pixels: wasm_bindgen::JsValue =
+        presentation.image_pixels.as_ref().unwrap().clone().into();
+    let color_address = presentation.color_buffer.as_ptr();
+    let depth_address = presentation.depth_buffer.as_ptr();
+    let color_capacity = presentation.color_buffer.capacity();
+    let depth_capacity = presentation.depth_buffer.capacity();
+    assert_eq!(presentation.image_pixels.as_ref().unwrap().get_index(0), 41);
+
+    let ground = [WorldLayer::Surface(triangle(
+        [[20.0, 20.0], [108.0, 20.0], [64.0, 108.0]],
+        [0.0; 3],
+        [0.2, 0.4, 0.8],
+    ))];
+    canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &[],
+        &mut presentation,
+        &ground,
+        camera,
+        false,
+    )
+    .expect("second Canvas frame should render");
+
+    assert!(js_sys::Object::is(
+        &first_image,
+        &presentation.image_data.as_ref().unwrap().clone().into(),
+    ));
+    assert!(js_sys::Object::is(
+        &first_pixels,
+        &presentation.image_pixels.as_ref().unwrap().clone().into(),
+    ));
+    assert_eq!(presentation.color_buffer.as_ptr(), color_address);
+    assert_eq!(presentation.depth_buffer.as_ptr(), depth_address);
+    assert_eq!(presentation.color_buffer.capacity(), color_capacity);
+    assert_eq!(presentation.depth_buffer.capacity(), depth_capacity);
+
+    let center = (64 * 128 + 64) * 4;
+    assert_eq!(
+        pixel(&presentation.color_buffer, 64, 64),
+        [51, 102, 204, 255]
+    );
+    assert_eq!(
+        presentation
+            .image_pixels
+            .as_ref()
+            .unwrap()
+            .get_index(center as u32),
+        51
+    );
+    assert_eq!(
+        presentation
+            .image_pixels
+            .as_ref()
+            .unwrap()
+            .get_index(center as u32 + 1),
+        102
+    );
+    assert_eq!(
+        presentation
+            .image_pixels
+            .as_ref()
+            .unwrap()
+            .get_index(center as u32 + 2),
+        204
+    );
+    assert_eq!(
+        presentation
+            .image_pixels
+            .as_ref()
+            .unwrap()
+            .get_index(center as u32 + 3),
+        255
+    );
+
+    canvas.set_width(32);
+    canvas.set_height(32);
+    let small_camera = SceneCamera {
+        viewport: [32.0; 2],
+        ..camera
+    };
+    canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &[],
+        &mut presentation,
+        &no_layers,
+        small_camera,
+        false,
+    )
+    .expect("resized Canvas frame should render");
+    assert!(!js_sys::Object::is(
+        &first_image,
+        &presentation.image_data.as_ref().unwrap().clone().into(),
+    ));
+    assert!(presentation.color_buffer.capacity() < color_capacity);
+    assert!(presentation.depth_buffer.capacity() < depth_capacity);
 }
 
 fn target_canvas() -> Option<(
@@ -296,6 +434,9 @@ fn triangle(
         texture_mode: 4,
         tint: 0,
         texture_uv: None,
+        texture_blend: None,
+        texture_tile: [0; 2],
+        texture_materials: None,
         pickable: true,
         order: 0,
     }
@@ -309,4 +450,43 @@ fn pixel(image: &[u8], x: u32, y: u32) -> [u8; 4] {
         image[offset + 2],
         image[offset + 3],
     ]
+}
+
+#[wasm_bindgen_test]
+fn canvas_multiplies_shadow_sprite_tint_and_alpha_like_webgpu() {
+    let Some((canvas, context)) = target_canvas() else {
+        assert!(false, "browser canvas is unavailable");
+        return;
+    };
+    let sprite = crate::web::Sprite {
+        position: [0.0; 2],
+        radius: [0.25; 2],
+        color: [0.0, 0.0, 0.0, 0.5],
+        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        depths: [1.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
+    };
+    let frame = crate::GameFrame {
+        uv: sprite.uv,
+        size: [32.0; 2],
+        anchor: [16.0; 2],
+    };
+    let layer = WorldLayer::Sprite(sprite, frame, 1.0, 0);
+    let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
+    atlas[..4].copy_from_slice(&[255; 4]);
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+
+    let result = canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &atlas,
+        &mut presentation,
+        &[layer],
+        test_camera(),
+        false,
+    );
+    assert!(result.is_ok(), "Canvas render failed: {result:?}");
+
+    assert_eq!(pixel(&presentation.color_buffer, 64, 64), [20, 37, 18, 255]);
+    assert_eq!(presentation.depth_buffer[64 * 128 + 64], 1.0);
 }

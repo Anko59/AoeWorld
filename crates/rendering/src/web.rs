@@ -10,6 +10,7 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 
 #[path = "web_buffer.rs"]
 mod instance_buffer;
+pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
 
 #[cfg(test)]
@@ -25,6 +26,7 @@ pub(crate) struct Sprite {
     /// Camera-relative world depth for the sprite's vertices. Terrain uses
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
+    pub(crate) terrain_blend: [[f32; 4]; 2],
 }
 pub struct Renderer {
     adapter_label: String,
@@ -159,7 +161,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: wgpu::TextureViewDimension::D2,
@@ -242,6 +244,7 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        self.depth.destroy();
         self.depth = create_depth_texture(&self.device, width, height);
     }
 
@@ -274,6 +277,7 @@ impl Renderer {
                 color: palette[entity.player.0 as usize % palette.len()],
                 uv: [0.0, 0.0, 1.0, 1.0],
                 depths: [0.0; 4],
+                terrain_blend: [[0.0; 4]; 2],
             });
         }
         self.render_sprites(&sprites)
@@ -400,55 +404,6 @@ impl Renderer {
             atlas_uploads: 1,
             atlas_bytes: ATLAS_BYTES,
         })
-    }
-}
-
-fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
-    [
-        (x / width * 2.0 - 1.0) as f32,
-        (1.0 - y / height * 2.0) as f32,
-    ]
-}
-
-pub(crate) fn surface_instance(
-    triangle: &ProjectedSurfaceTriangle,
-    viewport: [f64; 2],
-    depth_origin: f64,
-) -> Sprite {
-    let points = triangle.points.map(|point| {
-        screen_to_clip(
-            point.screen.x,
-            point.screen.y,
-            viewport[0].max(1.0),
-            viewport[1].max(1.0),
-        )
-    });
-    let depths = triangle.points.map(|point| {
-        (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt) - depth_origin)
-            as f32
-    });
-    let second = points[1];
-    let third = points[2];
-    match triangle.texture_uv {
-        Some(uv) => Sprite {
-            position: points[0],
-            radius: second,
-            color: [
-                third[0],
-                third[1],
-                f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
-                -1.0,
-            ],
-            uv,
-            depths: [depths[0], depths[1], depths[2], 0.0],
-        },
-        None => Sprite {
-            position: points[0],
-            radius: second,
-            color: [third[0], third[1], 0.0, -2.0],
-            uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
-            depths: [depths[0], depths[1], depths[2], 0.0],
-        },
     }
 }
 

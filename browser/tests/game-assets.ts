@@ -47,6 +47,8 @@ type TerrainSource = {
   height: number;
   base: readonly number[];
   accent: readonly number[];
+  frameCount: number;
+  tiled?: boolean;
 };
 
 const terrainSources = new Map<number, TerrainSource>([
@@ -59,61 +61,73 @@ const terrainSources = new Map<number, TerrainSource>([
       height: 49,
       base: terrainSourceColors.grass,
       accent: terrainSourceAccents.grass,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15007,
     {
-      x: 0,
-      y: 160,
+      x: 1_000,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.ramp,
       accent: terrainSourceAccents.ramp,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15000,
     {
-      x: 300,
-      y: 160,
+      x: 0,
+      y: 600,
       width: 25,
       height: 45,
       base: [166, 92, 48],
       accent: terrainSourceAccents.dirt,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15010,
     {
-      x: 600,
-      y: 160,
+      x: 1_300,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.shore,
       accent: terrainSourceAccents.shore,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15018,
     {
-      x: 900,
-      y: 160,
+      x: 1_600,
+      y: 0,
       width: 25,
       height: 45,
       base: terrainSourceColors.cliff,
       accent: terrainSourceAccents.cliff,
+      frameCount: 100,
+      tiled: true,
     },
   ],
   [
     15002,
     {
-      x: 1200,
-      y: 160,
+      x: 1_000,
+      y: 600,
       width: 25,
       height: 45,
       base: terrainSourceColors.water,
       accent: terrainSourceAccents.water,
+      frameCount: 100,
+      tiled: true,
     },
   ],
 ]);
@@ -128,36 +142,49 @@ export async function gameAssets(
     if (response.ok()) return "local AoE II pack";
   }
   const color = new PNG({ width: 2048, height: 2048 });
+  const shadow = new PNG({ width: 2048, height: 2048 });
   const pixel = (x: number, y: number, rgb: readonly number[]) => {
     const offset = (y * 2048 + x) * 4;
     rgb.forEach((value, i) => (color.data[offset + i] = value));
     color.data[offset + 3] = 255;
   };
   for (const source of terrainSources.values()) {
-    for (let frame = 0; frame < 10; frame += 1) {
+    for (let frame = 0; frame < source.frameCount; frame += 1) {
       for (let y = 0; y < source.height; y += 1) {
         for (let x = 0; x < source.width; x += 1) {
           const accent = (x * 2 + y + frame) % 9 === 0;
+          const frameX = source.tiled ? frame % 10 : frame;
+          const frameY = source.tiled ? Math.floor(frame / 10) : 0;
           pixel(
-            source.x + frame * source.width + x,
-            source.y + y,
+            source.x + frameX * source.width + x,
+            source.y + frameY * source.height + y,
             accent ? source.accent : source.base,
           );
         }
       }
     }
   }
-  for (let y = 80; y < 125; y += 1)
-    for (let x = 160; x < 185; x += 1) pixel(x, y, [65, 145, 245]);
+  for (let y = 1_200; y < 1_245; y += 1)
+    for (let x = 1_300; x < 1_325; x += 1) pixel(x, y, [65, 145, 245]);
+  for (let y = 1_200; y < 1_245; y += 1)
+    for (let x = 1_340; x < 1_365; x += 1) pixel(x, y, [235, 40, 200]);
+  for (let y = 1_236; y < 1_243; y += 1)
+    for (let x = 1_500; x < 1_519; x += 1) {
+      const dx = (x - 1_509) / 9;
+      const dy = (y - 1_239.5) / 3.5;
+      if (dx * dx + dy * dy <= 1) shadow.data[(y * 2048 + x) * 4 + 3] = 128;
+    }
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
     ...[15008, 15007, 15000, 15010, 15018, 15002].map((id) => [
       "terrain",
       id,
-      10,
+      100,
     ]),
     ["graphics", 435, 4],
+    ["graphics", 4652, 14],
+    ["graphics", 2296, 14],
   ].flatMap(([archive, id, count]) => {
     const source = terrainSources.get(Number(id));
     return Array.from({ length: Number(count) }, (_, frame) => ({
@@ -165,8 +192,16 @@ export async function gameAssets(
       source_hash: "fixture",
       frame,
       page: 0,
-      x: source ? source.x + frame * source.width : 160,
-      y: source?.y ?? 80,
+      x: source
+        ? source.x + (source.tiled ? frame % 10 : frame) * source.width
+        : Number(id) === 2296
+          ? 1_500
+          : Number(id) === 4652
+            ? 1_340
+            : 1_300,
+      y: source
+        ? source.y + (source.tiled ? Math.floor(frame / 10) : 0) * source.height
+        : 1_200,
       width: source?.width ?? 25,
       height: source?.height ?? 45,
       anchor_x: source ? 0 : 12,
@@ -182,7 +217,7 @@ export async function gameAssets(
       {
         color: "fixture-color.png",
         player: "fixture-mask.png",
-        shadow: "fixture-mask.png",
+        shadow: "fixture-shadow.png",
         outline: "fixture-mask.png",
         color_hash: "fixture",
         player_hash: "fixture",
@@ -194,6 +229,7 @@ export async function gameAssets(
     ],
   };
   const colored = PNG.sync.write(color);
+  const shadows = PNG.sync.write(shadow);
   const empty = PNG.sync.write(new PNG({ width: 2048, height: 2048 }));
   await page.route("**/asset-pack/*", async (route) => {
     const url = route.request().url();
@@ -202,7 +238,11 @@ export async function gameAssets(
     } else {
       await route.fulfill({
         contentType: "image/png",
-        body: url.endsWith("fixture-color.png") ? colored : empty,
+        body: url.endsWith("fixture-color.png")
+          ? colored
+          : url.endsWith("fixture-shadow.png")
+            ? shadows
+            : empty,
       });
     }
   });

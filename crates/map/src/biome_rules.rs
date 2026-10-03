@@ -72,7 +72,34 @@ pub(crate) fn tree_present(key: [u8; 32], x: i32, y: i32, biome: Biome) -> bool 
     forest_noise(key, b"forest-tree", x, y) % 1_000 < density
 }
 
-fn forest_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> u64 {
+pub(crate) fn tree_present_for_recipe(
+    key: [u8; 32],
+    x: i32,
+    y: i32,
+    biome: Biome,
+    recipe: u16,
+) -> bool {
+    if recipe != crate::GENERATION_RECIPE_VERSION {
+        return tree_present(key, x, y, biome);
+    }
+    let base = tree_density_per_thousand(biome);
+    if base == 0 {
+        return false;
+    }
+    let field = super::terrain::landscape::canopy_strength(key, x, y);
+    let multiplier = match field {
+        0..=219 => 150,
+        220..=359 => 400,
+        360..=499 => 800,
+        500..=619 => 1_250,
+        620..=739 => 1_650,
+        _ => 1_950,
+    };
+    let density = u64::from(base) * multiplier / 1_000;
+    forest_noise(key, b"forest-tree", x, y) % 1_000 < density.min(960)
+}
+
+pub(crate) fn forest_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> u64 {
     let mut hash = blake3::Hasher::new_keyed(&key);
     hash.update(domain);
     hash.update(&x.to_le_bytes());

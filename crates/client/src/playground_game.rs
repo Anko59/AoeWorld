@@ -6,7 +6,7 @@ use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     GameplayUnitState, ResumeToken, decode_gameplay_server, encode_gameplay_client,
 };
-use aoe_rendering::{GameArt, GameRenderer, SceneCamera, SceneUnit};
+use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
 use js_sys::Uint8Array;
 use std::{
     cell::RefCell,
@@ -48,6 +48,8 @@ pub(super) struct Client {
     pub surface_fixture: bool,
     pub focus_map_hash: Option<[u8; 32]>,
     pub resources: crate::resource_state::ResourceStateCache,
+    pub terrain_scene: RefCell<Option<Rc<map::scene::PreparedScene>>>,
+    pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
     pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
     pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
@@ -76,18 +78,11 @@ pub(super) fn now() -> f64 {
         .map_or(0.0, |performance| performance.now())
 }
 
-pub(super) fn dpr() -> f64 {
-    web_sys::window().map_or(1.0, |window| window.device_pixel_ratio().clamp(1.0, 2.0))
-}
-
 pub(super) fn resize(client: &mut Client) {
     let width = client.canvas.client_width().max(1) as f64;
     let height = client.canvas.client_height().max(1) as f64;
-    let scale = dpr();
-    let backing = [
-        (width * scale).round() as u32,
-        (height * scale).round() as u32,
-    ];
+    let ratio = web_sys::window().map_or(1.0, |window| window.device_pixel_ratio());
+    let backing = controls::backing_size(width, height, ratio);
     if client.canvas.width() != backing[0] {
         client.canvas.set_width(backing[0]);
     }
@@ -433,32 +428,26 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.last_frame = time;
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
-        let units = client
-            .units
-            .values()
-            .map(|unit| SceneUnit {
-                id: unit.id,
-                position: position_at(&client, unit.id),
-                moving: unit.moving,
-                facing: unit.facing,
-                selected: client.selected == Some(unit.id),
-                elevation_meters: map::elevation_at_world(&client, position_at(&client, unit.id)),
-            })
-            .collect::<Vec<_>>();
+        let scene = map::scene::prepare(&client);
+        let units = map::scene::units(&client, &scene);
         let camera = SceneCamera {
             center: client.camera.center,
             zoom: client.camera.zoom,
             viewport: client.camera.viewport,
             focus_elevation_meters: client.camera.focus_elevation_meters,
         };
-        let terrain = map::scene_terrain(&client);
         let resources = map::scene_resources(&client);
         let grid = client.grid;
         let animation = (time / 100.0) as usize;
-        let Client { renderer, art, .. } = &mut *client;
-        if let Err(error) =
-            renderer.render_world(art, &terrain, &resources, &units, camera, animation, grid)
-        {
+        if let Err(error) = map::render_cache::render_if_changed(
+            &mut client,
+            &scene,
+            &units,
+            &resources,
+            camera,
+            animation,
+            grid,
+        ) {
             client.status = error;
         }
         status::update(&client);

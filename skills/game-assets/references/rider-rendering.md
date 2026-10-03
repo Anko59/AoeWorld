@@ -12,9 +12,12 @@ Age of Kings trial pack; inspect another pack before copying its numbers.
 The tested trial pack has 20,396 frames across 27 atlas pages. The playable
 client does not upload them all. It selects 50 frames from
 `graphics.drs:[32, 112, 108, 115]:3008` (walking cavalry), 50 from `:3004`
-(standing cavalry), and the first 10 from
-`terrain.drs:[32, 112, 108, 115]:15008` (grass). It confirms the selected
-frame numbers are contiguous, copies their pixel rectangles into a single
+(standing cavalry), 100 from
+`terrain.drs:[32, 112, 108, 115]:15008` (grass), plus 100 from each of the
+other five terrain sources. All six terrain groups are 10×10 periodic texture
+sets indexed x-major with reversed y so source edges match neighboring map
+tiles. The loader confirms selected frame numbers are contiguous, copies their
+pixel rectangles into a single
 2048×2048 runtime RGBA atlas, and keeps a `GameFrame` record per frame:
 
 ```text

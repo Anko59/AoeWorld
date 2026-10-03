@@ -5,6 +5,8 @@ use aoe_core::{Camera, ScreenPoint};
 #[cfg(test)]
 use web_sys::CanvasRenderingContext2d;
 
+mod appearance;
+pub(crate) use appearance::{apply_terrain_textures, terrain_texture_frame};
 mod lod;
 pub use lod::projected_surface_triangles;
 
@@ -32,6 +34,9 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
     pub(crate) texture_uv: Option<[f32; 4]>,
+    pub(crate) texture_blend: Option<[[f32; 4]; 2]>,
+    pub(crate) texture_tile: [i32; 2],
+    pub(crate) texture_materials: Option<[u8; 3]>,
     pub(crate) pickable: bool,
     pub(crate) order: u8,
 }
@@ -42,10 +47,16 @@ pub fn sample_surface_height(
     local_x: f64,
     local_y: f64,
 ) -> f64 {
-    let northwest = f64::from(corners[0]);
-    let northeast = f64::from(corners[1]);
-    let southeast = f64::from(corners[2]);
-    let southwest = f64::from(corners[3]);
+    sample_float_surface_height(corners.map(f64::from), triangulation, local_x, local_y)
+}
+
+fn sample_float_surface_height(
+    corners: [f64; 4],
+    triangulation: u8,
+    local_x: f64,
+    local_y: f64,
+) -> f64 {
+    let [northwest, northeast, southeast, southwest] = corners;
     if triangulation == 0 {
         if local_x >= local_y {
             (1.0 - local_x) * northwest + (local_x - local_y) * northeast + local_y * southeast
@@ -135,30 +146,6 @@ pub(crate) fn surface_depth(world: [f64; 3]) -> f64 {
 /// the walkable top at the depth buffer's equal comparison.
 pub(crate) fn surface_render_depth(world: [f64; 3], skirt: bool) -> f64 {
     surface_depth(world) - if skirt { 0.01 } else { 0.0 }
-}
-
-pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
-    for triangle in triangles {
-        let frame = terrain_texture_frame(art, triangle.material, triangle.tile);
-        triangle.texture_uv = frame.map(|frame| frame.uv);
-    }
-}
-
-fn terrain_texture_frame(art: &GameArt, material: u8, tile: [i32; 2]) -> Option<GameFrame> {
-    let frames = art
-        .terrain
-        .get(usize::from(material))
-        .filter(|frames| !frames.is_empty())
-        .unwrap_or(&art.grass);
-    if frames.is_empty() {
-        return None;
-    }
-    let index = (tile[0]
-        .wrapping_mul(7)
-        .wrapping_add(tile[1].wrapping_mul(13))
-        .unsigned_abs() as usize)
-        % frames.len();
-    frames.get(index).copied()
 }
 
 pub(crate) fn triangle_texture_coordinates(mode: u8) -> [[f64; 2]; 3] {
@@ -374,6 +361,9 @@ fn append_edge_skirt(
         texture_mode: 4,
         tint: if water_step { 0 } else { 3 },
         texture_uv: None,
+        texture_blend: None,
+        texture_tile: tile,
+        texture_materials: None,
         pickable: false,
         order: skirt_order(edge),
     });
@@ -386,6 +376,9 @@ fn append_edge_skirt(
         texture_mode: 5,
         tint: if water_step { 0 } else { 3 },
         texture_uv: None,
+        texture_blend: None,
+        texture_tile: tile,
+        texture_materials: None,
         pickable: false,
         order: skirt_order(edge) + 1,
     });

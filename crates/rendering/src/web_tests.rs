@@ -3,6 +3,9 @@ use aoe_core::ScreenPoint;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "web/tests/terrain_blend.rs"]
+mod terrain_blend;
+
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
@@ -96,6 +99,7 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         color: [1.0; 4],
         uv: [0.1, 0.2, 0.3, 0.4],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     };
     let horizontally_flipped_atlas_frame = Sprite {
         uv: [0.4, 0.2, -0.3, 0.4],
@@ -114,6 +118,9 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         texture_mode: 1,
         tint: 4,
         texture_uv: Some([0.1, 0.2, 0.3, 0.4]),
+        texture_blend: None,
+        texture_tile: [0; 2],
+        texture_materials: None,
         pickable: true,
         order: 0,
     };
@@ -219,6 +226,9 @@ fn capacity_surface() -> ProjectedSurfaceTriangle {
         texture_mode: 4,
         tint: 0,
         texture_uv: Some([0.1, 0.2, 0.3, 0.4]),
+        texture_blend: None,
+        texture_tile: [0; 2],
+        texture_materials: None,
         pickable: true,
         order: 0,
     }
@@ -231,5 +241,6 @@ fn solid_sprite() -> Sprite {
         color: [1.0; 4],
         uv: [0.0, 0.0, 0.1, 0.1],
         depths: [0.0; 4],
+        terrain_blend: [[0.0; 4]; 2],
     }
 }

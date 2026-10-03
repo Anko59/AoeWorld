@@ -2,8 +2,12 @@ use super::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "tests/appearance.rs"]
+mod appearance_tests;
 #[path = "tests/shore.rs"]
 mod shore_tests;
+#[path = "tests/terrain_texture.rs"]
+mod terrain_texture_tests;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -14,6 +18,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
         resources: std::array::from_fn(|_| Vec::new()),
+        tree_shadows: Vec::new(),
     }
 }
 
