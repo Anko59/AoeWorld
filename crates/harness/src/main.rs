@@ -4,6 +4,7 @@ mod dev;
 mod e2e;
 mod fuzz;
 mod gates;
+mod hooks;
 mod mutation;
 mod perf;
 mod perf_hardware;
@@ -299,39 +300,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             run(Command::TestUnit)?;
             run(Command::PerfSmoke)?;
         }
-        Command::HooksInstall => {
-            for (hook, command) in [("pre-commit", "pre-commit"), ("pre-push", "preflight")] {
-                let path = gates::hook_path(hook)?;
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(&path, format!("#!/bin/sh\nexec make {command}\n"))?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
-                }
-            }
-        }
-        Command::HooksCheck => {
-            for (hook, expected) in [
-                ("pre-commit", "exec make pre-commit"),
-                ("pre-push", "exec make preflight"),
-            ] {
-                let path = gates::hook_path(hook)?;
-                let content = std::fs::read_to_string(&path)?;
-                if !content.contains(expected) {
-                    return Err(format!("{hook} hook differs from expected dispatcher").into());
-                }
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if std::fs::metadata(&path)?.permissions().mode() & 0o111 == 0 {
-                        return Err(format!("{hook} is not executable").into());
-                    }
-                }
-            }
-        }
+        Command::HooksInstall => hooks::install(Path::new("."))?,
+        Command::HooksCheck => hooks::check(Path::new("."))?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,

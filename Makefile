@@ -171,6 +171,10 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
+.PHONY: test-harness
+test-harness:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
+
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap
 

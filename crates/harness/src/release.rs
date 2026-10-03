@@ -140,18 +140,34 @@ pub fn build() -> Result<()> {
     build_with(&RealRuntime, Path::new("."))
 }
 
-fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
-    let revision = runtime.output("git", &["rev-parse", "HEAD"])?;
+fn check_source<R: Runtime>(runtime: &R, revision: &str, tree: &str) -> Result<()> {
+    if runtime.output("git", &["rev-parse", "HEAD"])? != revision
+        || runtime.output("git", &["rev-parse", "HEAD^{tree}"])? != tree
+    {
+        return Err("release source revision or tree changed during build".into());
+    }
     if !runtime
-        .output("git", &["status", "--porcelain"])?
+        .output("git", &["status", "--porcelain", "--untracked-files=all"])?
         .is_empty()
     {
         return Err("release build requires a clean source tree".into());
     }
     if runtime.output("git", &["branch", "--show-current"])? != "dev" {
-        return Err("release build must start from dev".into());
+        return Err("release build must remain on dev".into());
     }
-    let tree = runtime.output("git", &["rev-parse", "HEAD^{tree}"])?;
+    // Bracket the status/branch probes with HEAD checks as well.
+    if runtime.output("git", &["rev-parse", "HEAD"])? != revision
+        || runtime.output("git", &["rev-parse", "HEAD^{tree}"])? != tree
+    {
+        return Err("release source revision or tree changed during inspection".into());
+    }
+    Ok(())
+}
+
+fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
+    let revision = runtime.output("git", &["rev-parse", "HEAD"])?;
+    let tree = runtime.output("git", &["rev-parse", &format!("{revision}^{{tree}}")])?;
+    check_source(runtime, &revision, &tree)?;
     let e2e = evidence(&root.join("reports/e2e/pass.json"), &revision, "result")?;
     let perf = evidence(&root.join("reports/perf/ci.json"), &revision, "verdict")?;
     let release_dir = root.join("reports/release");
@@ -171,6 +187,7 @@ fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
     let server_tag = format!("aoeworld/server:{revision}");
     let browser_tag = format!("aoeworld/browser:{revision}");
     let build_arg = format!("SOURCE_SHA={revision}");
+    check_source(runtime, &revision, &tree)?;
     runtime.checked(
         "docker",
         &[
@@ -229,8 +246,8 @@ fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
     remove_result?;
     let manifest = Manifest {
         version: 1,
-        source_commit: revision,
-        source_tree: tree,
+        source_commit: revision.clone(),
+        source_tree: tree.clone(),
         server_image_id: image_id(runtime, &server_tag)?,
         browser_image_id: image_id(runtime, &browser_tag)?,
         bundle_hash: hash_bundle(&staging.path.join("bundle"))?,
@@ -248,6 +265,17 @@ fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
         root.join("reports/perf/ci.json"),
         staging.path.join("perf.json"),
     )?;
+    check_source(runtime, &revision, &tree)?;
+    if evidence(&staging.path.join("e2e.json"), &revision, "result")? != manifest.e2e_report_hash
+        || evidence(&staging.path.join("perf.json"), &revision, "verdict")?
+            != manifest.perf_report_hash
+    {
+        return Err("release report changed while copying evidence".into());
+    }
+    // Rehash after all runtime commands: bind the actual staged artifact bytes.
+    if hash_bundle(&staging.path.join("bundle"))? != manifest.bundle_hash {
+        return Err("release static bundle changed during build".into());
+    }
     fs::write(
         staging.path.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
