@@ -358,7 +358,7 @@ pub enum SourceQualificationError {
         "source qualification supports only a source-backed 50,000-tile square at 1:1 compression (100 km physical side)"
     )]
     UnsupportedPackage,
-    #[error("source qualification requires generation recipe 5, 6, or 7, found recipe {0}")]
+    #[error("source qualification requires generation recipe 5, 6, 7, or 8, found recipe {0}")]
     UnsupportedGenerationRecipe(u16),
     #[error(
         "source package indexes {server_pages} server pages but the qualification walker enumerates {walked_pages}"

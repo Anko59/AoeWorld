@@ -3,6 +3,8 @@ use aoe_core::ScreenPoint;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "web/tests/grid.rs"]
+mod grid;
 #[path = "web/tests/terrain_blend.rs"]
 mod terrain_blend;
 
@@ -44,7 +46,7 @@ async fn instance_buffer_grows_at_capacity_boundaries_with_layer_pressure() {
         .into_iter()
         .map(|(sprite, _)| sprite)
         .collect::<Vec<_>>();
-    let grid = crate::game_grid::grid_sprites(camera);
+    let grid = crate::game_grid::grid_sprites(camera, crate::game_grid::viewport_bounds(camera));
     assert_eq!(ring.len(), crate::game_grid::SELECTION_RING_SPRITES);
     assert!(!grid.is_empty());
     let mut sprites = objects;

@@ -184,6 +184,7 @@ impl MapPackage {
                 | PRIOR_GENERATION_RECIPE_VERSION
                 | crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
                 | crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
+                | crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
                 | GENERATION_RECIPE_VERSION
         ) {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
@@ -199,6 +200,7 @@ impl MapPackage {
                 && !matches!(
                     generation_recipe_version,
                     crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
+                        | crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
                         | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
                 ))
         {

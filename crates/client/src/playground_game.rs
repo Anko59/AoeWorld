@@ -10,7 +10,7 @@ use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
 use js_sys::Uint8Array;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     rc::Rc,
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -24,10 +24,7 @@ mod fixture;
 mod init;
 #[path = "playground_map.rs"]
 mod map;
-use map::{
-    state::{Drag, Sample},
-    ui::set_text,
-};
+use map::{state::Drag, ui::set_text};
 #[path = "playground_status.rs"]
 mod status;
 #[path = "playground_storage.rs"]
@@ -62,8 +59,7 @@ pub(super) struct Client {
     pub last_subscribe: f64,
     pub next_sequence: u64,
     pub units: BTreeMap<EntityId, GameplayUnitState>,
-    pub history: BTreeMap<EntityId, VecDeque<Sample>>,
-    pub server_tick: u64,
+    pub presentation: map::presentation::Presentation,
     pub selected: Option<EntityId>,
     pub grid: bool,
     pub drag: Option<Drag>,
@@ -140,41 +136,20 @@ pub(super) fn position_at(client: &Client, id: EntityId) -> [f64; 2] {
     let Some(state) = client.units.get(&id) else {
         return [0.0, 0.0];
     };
-    let Some(history) = client.history.get(&id) else {
-        return state.position.as_tiles();
-    };
-    let target = client.server_tick.saturating_sub(2);
-    let Some(next) = history.iter().find(|sample| sample.tick >= target).copied() else {
-        return state.position.as_tiles();
-    };
-    let previous = history
-        .iter()
-        .rev()
-        .find(|sample| sample.tick <= target)
-        .copied()
-        .unwrap_or(next);
-    if next.tick == previous.tick {
-        return next.position.as_tiles();
-    }
-    let amount = (target - previous.tick) as f64 / (next.tick - previous.tick) as f64;
-    let start = previous.position.as_tiles();
-    let end = next.position.as_tiles();
-    [
-        start[0] + (end[0] - start[0]) * amount,
-        start[1] + (end[1] - start[1]) * amount,
-    ]
+    client
+        .rendered_frame
+        .position(id)
+        .unwrap_or_else(|| client.presentation.position(*state))
 }
 
-pub(super) fn remember(client: &mut Client, state: GameplayUnitState, tick: u64) {
-    client.units.insert(state.id, state);
-    let history = client.history.entry(state.id).or_default();
-    history.push_back(Sample {
-        tick,
-        position: state.position,
-    });
-    while history.len() > 8 {
-        history.pop_front();
-    }
+pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64) {
+    let Client {
+        units,
+        presentation,
+        ..
+    } = client;
+    presentation.remember(units.get(&state.id), state, tick);
+    units.insert(state.id, *state);
 }
 
 fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
@@ -236,15 +211,18 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 role,
                 primary_unit_id,
                 resume_token,
+                tick_hz,
                 ..
             }) => {
                 let map_changed = client.map_content_hash != map_content_hash;
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
+                client.config.tick_hz = tick_hz;
                 client.role = Some(role);
                 if !client.surface_fixture {
                     client.map_content_hash = map_content_hash;
                 }
+                controls::map_changed(map_content_hash);
                 if map_changed && !client.surface_fixture {
                     client.camera.center =
                         [f64::from(width_tiles) / 2.0, f64::from(height_tiles) / 2.0];
@@ -259,7 +237,9 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.token = resume_token;
                 storage::save_token(resume_token);
                 client.units.clear();
-                client.history.clear();
+                let tick_hz = client.config.tick_hz;
+                client.presentation.reset(tick_hz);
+                client.rendered_frame.clear();
                 client.status = "connected".to_owned();
                 resize(&mut client);
                 subscribe(&mut client);
@@ -269,13 +249,28 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 tick,
                 units,
             }) if revision >= client.revision => {
-                client.revision = revision;
-                client.server_tick = tick.0;
-                client.units.clear();
-                client.history.clear();
-                for unit in units {
-                    remember(&mut client, unit, tick.0);
+                if !client.presentation.receive(tick.0, now()) {
+                    return;
                 }
+                client.revision = revision;
+                let mut resident = BTreeMap::new();
+                for unit in units {
+                    resident.insert(unit.id, unit);
+                }
+                let Client {
+                    units,
+                    presentation,
+                    ..
+                } = &mut *client;
+                for id in units.keys() {
+                    if !resident.contains_key(id) {
+                        presentation.remove(*id);
+                    }
+                }
+                for unit in resident.values() {
+                    presentation.remember(units.get(&unit.id), unit, tick.0);
+                }
+                client.units = resident;
             }
             Ok(GameplayServerMessage::Snapshot { .. }) => {}
             Ok(GameplayServerMessage::Tick {
@@ -284,12 +279,14 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 changed_units,
                 removals,
             }) if revision == client.revision => {
-                client.server_tick = client.server_tick.max(tick.0);
+                if !client.presentation.receive(tick.0, now()) {
+                    return;
+                }
                 for id in removals {
                     client.units.remove(&id);
-                    client.history.remove(&id);
+                    client.presentation.remove(id);
                 }
-                for unit in changed_units {
+                for unit in &changed_units {
                     remember(&mut client, unit, tick.0);
                 }
             }
@@ -313,7 +310,9 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.units.clear();
-                client.history.clear();
+                let tick_hz = client.config.tick_hz;
+                client.presentation.reset(tick_hz);
+                client.rendered_frame.clear();
                 client.role = None;
                 client.primary = None;
                 if !client.surface_fixture {
@@ -327,6 +326,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
                 client.token = None;
                 storage::save_token(None);
+                controls::map_changed(None);
                 client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck { result, .. }) => {
@@ -428,6 +428,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.last_frame = time;
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
+        let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
+        client.presentation.advance(time, canvas);
         let scene = map::scene::prepare(&client);
         let units = map::scene::units(&client, &scene);
         let camera = SceneCamera {
@@ -451,13 +453,10 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.status = error;
         }
         status::update(&client);
-        set_text(
+        crate::web::numeric::set_coordinates(
             &client.document,
-            "world-position",
-            &format!(
-                "{:.1}, {:.1}",
-                client.camera.center[0], client.camera.center[1]
-            ),
+            client.camera.center[0],
+            client.camera.center[1],
         );
         let surface_fixture = client.surface_fixture;
         drop(client);

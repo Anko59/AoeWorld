@@ -41,7 +41,14 @@ test("real-pack source route evicts terrain without continuing process memory gr
     "data-assets",
     "aoe2-local",
   );
+  // Connection acknowledgement can precede the first unit snapshot. Home must
+  // target the actual horse, not the provisional world-center camera.
+  await expect(page.locator("#minimap-primary")).toHaveAttribute(
+    "visibility",
+    "visible",
+  );
   await page.keyboard.press("Home");
+  await page.waitForLoadState("networkidle");
   const origin = await page.locator("#world-position").innerText();
   await page.mouse.move(640, 360);
   await page.mouse.wheel(0, 5_000);

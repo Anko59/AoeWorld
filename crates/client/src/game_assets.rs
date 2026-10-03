@@ -1,5 +1,7 @@
 //! Loads only the local pack pages needed by the first map and compacts them.
-use aoe_assets::catalog::{AssetRole, OPTIONAL_RESOURCE_SOURCES, REQUIRED_RENDER_SOURCES};
+use aoe_assets::catalog::{
+    AssetRole, OPTIONAL_RESOURCE_SOURCES, OPTIONAL_TERRAIN_SOURCES, REQUIRED_RENDER_SOURCES,
+};
 #[path = "game_assets/manifest.rs"]
 mod manifest;
 use aoe_rendering::{GAME_ATLAS_SIDE, GameArt, GameFrame};
@@ -36,7 +38,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (746 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (756 total).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -56,13 +58,12 @@ fn sort_indices(
 }
 
 fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<usize>> {
-    let mut frames = manifest
-        .frames
-        .iter()
-        .enumerate()
-        .filter(|(_, frame)| frame.source == source && frame.frame < count)
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
+    let mut frames = Vec::new();
+    for (index, frame) in manifest.frames.iter().enumerate() {
+        if frame.source == source && frame.frame < count {
+            frames.push(index);
+        }
+    }
     // Reject oversized and incomplete source groups before quadratic sorting.
     if frames.len() != count as usize {
         return None;
@@ -72,12 +73,11 @@ fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<us
             .frame
             .cmp(&manifest.frames[*right].frame)
     });
-    (frames.len() == count as usize
-        && frames
-            .iter()
-            .enumerate()
-            .all(|(i, index)| manifest.frames[*index].frame == i as u32))
-    .then_some(frames)
+    frames
+        .iter()
+        .enumerate()
+        .all(|(i, index)| manifest.frames[*index].frame == i as u32)
+        .then_some(frames)
 }
 
 fn packing_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
@@ -86,11 +86,10 @@ fn packing_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     sort_indices(&mut order, &mut |left, right| {
         let left_frame = &manifest.frames[selected[*left]];
         let right_frame = &manifest.frames[selected[*right]];
-        right_frame
-            .height
-            .cmp(&left_frame.height)
-            .then(right_frame.width.cmp(&left_frame.width))
-            .then(left.cmp(right))
+        // Both dimensions are u16: this key preserves height/width ordering exactly.
+        let left_size = (u32::from(left_frame.height) << 16) | u32::from(left_frame.width);
+        let right_size = (u32::from(right_frame.height) << 16) | u32::from(right_frame.width);
+        right_size.cmp(&left_size).then(left.cmp(right))
     });
     order
 }
@@ -105,28 +104,26 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     }
     let mut selected = Vec::new();
     let mut ranges = BTreeMap::new();
-    for (selection, required) in REQUIRED_RENDER_SOURCES
-        .into_iter()
-        .map(|selection| (selection, true))
-        .chain(
-            OPTIONAL_RESOURCE_SOURCES
-                .into_iter()
-                .map(|selection| (selection, false)),
-        )
-    {
-        let source = selection.manifest_source();
-        let Some(frames) = source_frames(&manifest, &source, selection.frames) else {
-            if required {
-                return Err(JsValue::from_str(&format!(
-                    "Local pack is missing reviewed {:?} art ({})",
-                    selection.role, selection.id
-                )));
-            }
-            continue;
-        };
-        let start = selected.len();
-        selected.extend(frames);
-        ranges.insert(selection.role, start..selected.len());
+    for (sources, required) in [
+        (REQUIRED_RENDER_SOURCES.as_slice(), true),
+        (OPTIONAL_RESOURCE_SOURCES.as_slice(), false),
+        (OPTIONAL_TERRAIN_SOURCES.as_slice(), false),
+    ] {
+        for selection in sources {
+            let source = selection.manifest_source();
+            let Some(frames) = source_frames(&manifest, &source, selection.frames) else {
+                if required {
+                    return Err(JsValue::from_str(&format!(
+                        "Local pack is missing reviewed {:?} art ({})",
+                        selection.role, selection.id
+                    )));
+                }
+                continue;
+            };
+            let start = selected.len();
+            selected.extend(frames);
+            ranges.insert(selection.role, start..selected.len());
+        }
     }
     let side = GAME_ATLAS_SIDE as usize;
     let mut pixels = vec![0; side * side * 4];
@@ -228,6 +225,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         group(AssetRole::Sand),
         group(AssetRole::Rock),
         group(AssetRole::Water),
+        group(AssetRole::ForestFloor),
     ];
     Ok((
         GameArt {
@@ -270,10 +268,29 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
+    fn native_forest_source_loads_only_ten_accents_from_the_full_hundred() {
+        let mut value = manifest::fixture();
+        let frame = value["frames"][0].clone();
+        value["frames"] = serde_json::Value::Array(vec![frame; 100]);
+        let selection = OPTIONAL_TERRAIN_SOURCES[0];
+        let source = selection.manifest_source();
+        for index in 0..100 {
+            value["frames"][index]["frame"] = (index as u32).into();
+            value["frames"][index]["source"] = source.clone().into();
+        }
+        let manifest: Manifest = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            source_frames(&manifest, &source, selection.frames),
+            Some((0..10).collect())
+        );
+    }
+
+    #[wasm_bindgen_test]
     fn startup_index_sort_matches_std_at_catalogue_bound() {
         let bound = REQUIRED_RENDER_SOURCES
             .iter()
             .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+            .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .map(|selection| selection.frames as usize)
             .sum::<usize>();
         for size in [0, 1, bound.saturating_sub(2), bound] {

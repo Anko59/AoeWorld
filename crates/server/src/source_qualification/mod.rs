@@ -494,6 +494,7 @@ fn supported_recipe(recipe: u16) -> bool {
         recipe,
         aoe_map::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
             | aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
+            | aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION
             | aoe_map::GENERATION_RECIPE_VERSION
     )
 }

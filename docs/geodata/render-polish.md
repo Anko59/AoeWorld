@@ -29,7 +29,9 @@ All six terrain materials load all 100 flat frames from their original sources.
 Atlas packing sorts physical placements by height while retaining role/frame indices.
 World coordinates select the reviewed 10×10 sheet order: `x * 10 + (-y)` modulo
 10 per axis. Partial ten-frame material groups retain two-axis variation.
-Forest-floor ground uses dirt art instead of grass. Coarse height cells are
+Forest-floor ground mixes ten optional native Forest/g_for 15011 accents with
+periodic dirt. Missing forest art explicitly retains dirt; all six existing
+terrain groups retain their 100-frame grids and the single 2048² atlas. Coarse height cells are
 split into bounded texture patches, preserving their original surface planes
 and contact heights while reducing stretched grass diamonds at distant zoom.
 World-keyed vertex materials crossfade adjacent grass/dirt/sand/rock art on
@@ -44,7 +46,21 @@ Temperate ground follows the same masks: denser canopy gets forest floor and
 openings get dry grass or dirt. A small irregular central glade preserves the
 existing bounded start search without changing water, elevation, or slope rules.
 These are procedural forest tracks, not historically sourced roads. Recipes
-3–6 retain their generation behavior and remain loadable.
+3–7 retain their generation behavior and remain loadable. Recipe 8 adds small
+opening nodes in formerly empty cells, mandatory bent cardinal tracks, and a
+narrow connection from the central glade to its cell's node. These masks clear
+procedural resources, never water or cliffs. Recipe-8 accepted starts must also
+certify an actual terrain/resource-crossable route at least 64 tiles away on
+large worlds. Small worlds use `min(64, max(1, (max(width, height)-1)/2))`
+tiles so an edge-directed certificate is possible (31 on a 64-tile map, still
+beyond the central glade's 27). The unchanged bounds are 4,096 visited exit
+tiles and 64 exit chunks across the start search.
+Cancellation or an exhausted bound is not proof of absence. Natural barriers
+can split the procedural graph; unqualified starts are rejected, not teleported.
+Existing recipe-7 packages require regeneration into a new content-addressed
+recipe-8 package to use these tracks; their saved identities are not upgraded in
+place. Source locks and prepared page roots remain applicable when geodata is
+unchanged.
 
 Broadleaf trees use their matching original shadow frames and a frame selection
 that favors leafy crowns while retaining some bare trees. Other resources and
