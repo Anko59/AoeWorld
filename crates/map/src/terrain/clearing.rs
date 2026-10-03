@@ -38,7 +38,7 @@ pub(super) struct Geometry {
 }
 
 pub(super) fn contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION {
+    if super::landscape::uses_forest_landscape(generator) {
         return super::landscape::opening_contains(generator, tile);
     }
     geometry(generator, tile).is_some_and(|shape| point_in_polygon(&shape.vertices, tile))
@@ -49,7 +49,7 @@ pub(super) fn suppresses_objects(
     tile: TileCoord,
     biome: crate::Biome,
 ) -> bool {
-    if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION
+    if super::landscape::uses_forest_landscape(generator)
         && !matches!(
             biome,
             crate::Biome::Temperate

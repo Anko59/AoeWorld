@@ -207,11 +207,11 @@ pub(in super::super) fn units(
         .units
         .values()
         .map(|unit| {
-            let position = super::super::position_at(client, unit.id);
+            let position = client.presentation.position(*unit);
             aoe_rendering::SceneUnit {
                 id: unit.id,
                 position,
-                moving: unit.moving,
+                moving: unit.moving || position != unit.position.as_tiles(),
                 facing: unit.facing,
                 selected: client.selected == Some(unit.id),
                 elevation_meters: scene

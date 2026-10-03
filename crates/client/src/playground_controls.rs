@@ -2,7 +2,14 @@ use super::{Client, Drag, center_on_primary, map, position_at, reconnect, send_o
 use aoe_core::{Camera, ScreenPoint, WorldConfig};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
-use web_sys::{Event, KeyboardEvent, PointerEvent, WheelEvent};
+use web_sys::{Event, PointerEvent, WheelEvent};
+
+#[path = "playground_controls/navigation.rs"]
+mod navigation;
+
+pub(super) fn map_changed(hash: Option<[u8; 32]>) {
+    navigation::map_changed(hash);
+}
 
 // Bound color, depth, browser canvas and temporary presentation storage together.
 // Retina density must not silently square memory on large/fullscreen windows.
@@ -107,6 +114,7 @@ fn pan(client: &mut Client, delta: [f64; 2]) {
 }
 
 pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
+    navigation::frame(client, delta_ms);
     if client.drag.as_ref().is_some_and(|drag| drag.middle) {
         return;
     }
@@ -136,7 +144,7 @@ pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
     if length == 0.0 {
         return;
     }
-    let scale = 900.0 * pixel_scale(client) * delta_ms / 1_000.0 / length;
+    let scale = 1_600.0 * pixel_scale(client) * delta_ms / 1_000.0 / length;
     pan(client, [edge[0] * scale, edge[1] * scale]);
 }
 
@@ -252,22 +260,21 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     onwheel.forget();
 
     let keyed = shared.clone();
-    let onkey = Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
+    let onkey = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+        let action = navigation::gameplay_key(&event);
+        if action == 0 {
+            return;
+        }
         let mut client = keyed.borrow_mut();
-        match event.key().as_str() {
-            "Escape" => {
+        match action {
+            1 => {
                 client.selected = None;
                 client.drag = None;
             }
-            "g" | "G" => client.grid = !client.grid,
-            "Home" => center_on_primary(&mut client),
-            "ArrowLeft" | "a" => pan(&mut client, [-60.0, 0.0]),
-            "ArrowRight" | "d" => pan(&mut client, [60.0, 0.0]),
-            "ArrowUp" | "w" => pan(&mut client, [0.0, -60.0]),
-            "ArrowDown" | "s" => pan(&mut client, [0.0, 60.0]),
+            2 => client.grid = !client.grid,
+            3 => center_on_primary(&mut client),
             _ => return,
         }
-        event.prevent_default();
         subscribe(&mut client);
     });
     shared

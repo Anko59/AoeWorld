@@ -5,18 +5,25 @@ const CHUNK_TILES = 32;
 export async function activateSyntheticMap(
   page: Page,
   denseResources = false,
+  center: readonly [number, number] = [8192, 8192],
 ): Promise<string> {
+  const chunkX = Math.round(center[0] / CHUNK_TILES);
+  const chunkY = Math.round(center[1] / CHUNK_TILES);
   const contentHash = "01".repeat(32);
   const chunk = JSON.stringify(
     denseResources
       ? Array.from({ length: 81 }, (_, index) =>
-          syntheticChunk(252 + (index % 9), 252 + Math.floor(index / 9), true),
+          syntheticChunk(
+            chunkX - 4 + (index % 9),
+            chunkY - 4 + Math.floor(index / 9),
+            true,
+          ),
         )
       : [
-          syntheticChunk(255, 255),
-          syntheticChunk(256, 255),
-          syntheticChunk(255, 256),
-          syntheticChunk(256, 256),
+          syntheticChunk(chunkX - 1, chunkY - 1),
+          syntheticChunk(chunkX, chunkY - 1),
+          syntheticChunk(chunkX - 1, chunkY),
+          syntheticChunk(chunkX, chunkY),
         ],
   );
   await page.evaluate(

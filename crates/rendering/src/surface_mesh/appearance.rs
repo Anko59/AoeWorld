@@ -89,6 +89,15 @@ pub(crate) fn terrain_texture_frame(
     material: u8,
     tile: [i32; 2],
 ) -> Option<GameFrame> {
+    // Forest accents are bounded native variants, not a full periodic grid.
+    // Mix with the existing complete dirt texture, identically in both backends.
+    let material = if material == 6
+        && (art.terrain[6].is_empty() || (tile[0].div_euclid(8) ^ tile[1].div_euclid(8)) & 1 == 0)
+    {
+        2
+    } else {
+        material
+    };
     let frames = art
         .terrain
         .get(usize::from(material))

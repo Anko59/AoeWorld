@@ -169,7 +169,7 @@ pub(super) fn render_canvas_world(
 
     presentation.present(context, width, height)?;
     if grid {
-        game_grid::draw_grid(context, camera);
+        game_grid::draw_grid(context, camera, game_grid::viewport_bounds(camera));
     }
     Ok(())
 }

@@ -11,6 +11,9 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[path = "tests/grid.rs"]
+mod grid;
+
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
         uv: [0.0, 0.0, 0.1, 0.1],

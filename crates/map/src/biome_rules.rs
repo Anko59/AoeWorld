@@ -79,7 +79,10 @@ pub(crate) fn tree_present_for_recipe(
     biome: Biome,
     recipe: u16,
 ) -> bool {
-    if recipe != crate::GENERATION_RECIPE_VERSION {
+    if !matches!(
+        recipe,
+        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION | crate::GENERATION_RECIPE_VERSION
+    ) {
         return tree_present(key, x, y, biome);
     }
     let base = tree_density_per_thousand(biome);

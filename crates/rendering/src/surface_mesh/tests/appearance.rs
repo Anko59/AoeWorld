@@ -1,6 +1,48 @@
 use super::*;
 use std::collections::BTreeMap;
 
+#[wasm_bindgen_test]
+fn bounded_forest_accents_mix_with_dirt_and_missing_art_uses_dirt() {
+    let frame = GameFrame {
+        uv: [0.0, 0.0, 0.01, 0.01],
+        size: [97.0, 49.0],
+        anchor: [0.0, 0.0],
+    };
+    let mut art = test_art(frame);
+    art.terrain[2] = vec![
+        GameFrame {
+            uv: [0.2, 0.0, 0.01, 0.01],
+            ..frame
+        };
+        100
+    ];
+    art.terrain[6] = (0..10)
+        .map(|index| GameFrame {
+            uv: [0.5 + index as f32 / 100.0, 0.0, 0.01, 0.01],
+            ..frame
+        })
+        .collect();
+    let mut accents = 0;
+    let mut dirt = 0;
+    for y in -16..16 {
+        for x in -16..16 {
+            let selected = terrain_texture_frame(&art, 6, [x, y]).unwrap();
+            accents += usize::from(selected.uv[0] >= 0.5);
+            dirt += usize::from(selected.uv[0] == 0.2);
+            assert_eq!(
+                selected.uv,
+                terrain_texture_frame(&art, 6, [x, y]).unwrap().uv
+            );
+        }
+    }
+    assert_eq!((accents, dirt), (512, 512));
+    art.terrain[6].clear();
+    assert_eq!(
+        terrain_texture_frame(&art, 6, [8, 0]).unwrap().uv,
+        terrain_texture_frame(&art, 2, [8, 0]).unwrap().uv
+    );
+}
+
 fn map(side: i32) -> Vec<SceneTerrain> {
     (-2..side)
         .flat_map(|y| {

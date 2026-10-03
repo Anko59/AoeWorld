@@ -3,6 +3,8 @@ use crate::{MapChunkGenerator, WaterKind};
 use aoe_core::TileCoord;
 use std::collections::BTreeSet;
 
+mod connected;
+
 fn generator(recipe: u16) -> MapChunkGenerator {
     MapChunkGenerator::new([17; 32], 5, 1_024).with_elevation_sampling_recipe(recipe)
 }
@@ -22,7 +24,7 @@ fn canopy_density_has_open_marginal_and_contiguous_core_ranges() {
                 x,
                 y,
                 Biome::Temperate,
-                crate::GENERATION_RECIPE_VERSION,
+                crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION,
             );
             if field < 260 {
                 low.0 += usize::from(tree);
@@ -50,7 +52,7 @@ fn canopy_density_has_open_marginal_and_contiguous_core_ranges() {
 
 #[test]
 fn openings_are_seeded_irregular_variable_and_confined_to_their_cells() {
-    let terrain = generator(crate::GENERATION_RECIPE_VERSION);
+    let terrain = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
     let mut active = 0;
     let mut widths = BTreeSet::new();
     let mut heights = BTreeSet::new();
@@ -101,7 +103,7 @@ fn shape_center(generator: &MapChunkGenerator, cell: (i32, i32)) -> TileCoord {
 
 #[test]
 fn procedural_paths_bend_between_openings_and_make_dirt_ground() {
-    let terrain = generator(crate::GENERATION_RECIPE_VERSION);
+    let terrain = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
     let mut links = 0;
     for cell_y in -2..12 {
         for cell_x in -2..12 {
@@ -161,7 +163,7 @@ const RECIPE_FIVE: u16 = crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION;
 #[test]
 fn temperate_accents_leave_source_biomes_water_slope_and_passability_intact() {
     let prior = generator(RECIPE_FIVE);
-    let current = generator(crate::GENERATION_RECIPE_VERSION);
+    let current = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
     let mut found_dirt = false;
     let mut found_dry_grass = false;
     let mut found_forest_floor = false;
@@ -218,8 +220,8 @@ fn temperate_accents_leave_source_biomes_water_slope_and_passability_intact() {
 
 #[test]
 fn recipe_seven_chunks_repeat_across_a_chunk_edge() {
-    let first = generator(crate::GENERATION_RECIPE_VERSION);
-    let repeated = generator(crate::GENERATION_RECIPE_VERSION);
+    let first = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
+    let repeated = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
     for chunk_y in [2, 3] {
         let left = first.chunk(0, chunk_y).expect("left chunk");
         let right = first.chunk(1, chunk_y).expect("right chunk");

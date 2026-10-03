@@ -1,5 +1,5 @@
 use crate::{GAME_ATLAS_SIDE, SceneCamera, surface_mesh::surface_depth, web::Sprite};
-use aoe_core::{Camera, ScreenPoint, WorldConfig};
+use aoe_core::{Camera, MAX_WORLD_DIMENSION_TILES, ScreenPoint, TileRect, WorldConfig};
 use web_sys::CanvasRenderingContext2d;
 
 const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
@@ -35,8 +35,17 @@ pub(crate) fn selection_ring(
     sprites
 }
 
-pub(crate) fn grid_sprites(camera: SceneCamera) -> Vec<Sprite> {
-    let lines = grid_lines(camera, WorldConfig::default());
+pub(crate) fn viewport_bounds(camera: SceneCamera) -> TileRect {
+    let config = WorldConfig {
+        width_tiles: MAX_WORLD_DIMENSION_TILES,
+        height_tiles: MAX_WORLD_DIMENSION_TILES,
+        ..WorldConfig::default()
+    };
+    camera_projection(camera).visible_tiles_at_height(config, 1.0, camera.focus_elevation_meters)
+}
+
+pub(crate) fn grid_sprites(camera: SceneCamera, bounds: TileRect) -> Vec<Sprite> {
+    let lines = grid_lines(camera, bounds);
     let mut sprites = Vec::new();
     for (start, end) in lines {
         add_line(&mut sprites, start, end, camera.viewport);
@@ -44,10 +53,10 @@ pub(crate) fn grid_sprites(camera: SceneCamera) -> Vec<Sprite> {
     sprites
 }
 
-pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, camera: SceneCamera) {
+pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, camera: SceneCamera, bounds: TileRect) {
     context.begin_path();
     context.set_stroke_style_str("rgba(220,235,170,.22)");
-    for (start, end) in grid_lines(camera, WorldConfig::default()) {
+    for (start, end) in grid_lines(camera, bounds) {
         context.move_to(start.x, start.y);
         context.line_to(end.x, end.y);
     }
@@ -63,27 +72,54 @@ fn camera_projection(camera: SceneCamera) -> Camera {
     }
 }
 
-fn grid_lines(camera: SceneCamera, config: WorldConfig) -> Vec<(ScreenPoint, ScreenPoint)> {
+fn grid_lines(camera: SceneCamera, visible: TileRect) -> Vec<(ScreenPoint, ScreenPoint)> {
+    if !camera.zoom.is_finite() || camera.zoom <= 0.0 {
+        return Vec::new();
+    }
     let projection = camera_projection(camera);
-    let visible = projection.visible_tiles(config, 1.0);
-    let min_x = visible.min.x.saturating_sub(1);
-    let max_x = visible.max.x.saturating_add(1);
-    let min_y = visible.min.y.saturating_sub(1);
-    let max_y = visible.max.y.saturating_add(1);
+    let min_x = visible.min.x;
+    let max_x = visible.max.x;
+    let min_y = visible.min.y;
+    let max_y = visible.max.y;
+    // At most 128 lines per axis, even if a caller supplies the whole world.
+    let step_x = (i64::from(max_x) - i64::from(min_x)).max(0) / 127 + 1;
+    let step_y = (i64::from(max_y) - i64::from(min_y)).max(0) / 127 + 1;
     let mut lines = Vec::new();
-    for x in min_x..=max_x {
+    for index in 0..128 {
+        let x = i64::from(min_x) + i64::from(index) * step_x;
+        if x > i64::from(max_x) {
+            break;
+        }
+        let x = x as i32;
         add_clipped_line(
             &mut lines,
-            projection.world_to_screen([f64::from(x), f64::from(min_y)]),
-            projection.world_to_screen([f64::from(x), f64::from(max_y)]),
+            projection.world_to_screen_at_height(
+                [f64::from(x), f64::from(min_y)],
+                camera.focus_elevation_meters,
+            ),
+            projection.world_to_screen_at_height(
+                [f64::from(x), f64::from(max_y)],
+                camera.focus_elevation_meters,
+            ),
             camera.viewport,
         );
     }
-    for y in min_y..=max_y {
+    for index in 0..128 {
+        let y = i64::from(min_y) + i64::from(index) * step_y;
+        if y > i64::from(max_y) {
+            break;
+        }
+        let y = y as i32;
         add_clipped_line(
             &mut lines,
-            projection.world_to_screen([f64::from(min_x), f64::from(y)]),
-            projection.world_to_screen([f64::from(max_x), f64::from(y)]),
+            projection.world_to_screen_at_height(
+                [f64::from(min_x), f64::from(y)],
+                camera.focus_elevation_meters,
+            ),
+            projection.world_to_screen_at_height(
+                [f64::from(max_x), f64::from(y)],
+                camera.focus_elevation_meters,
+            ),
             camera.viewport,
         );
     }
@@ -149,7 +185,8 @@ fn clip_line(
 
 fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, viewport: [f64; 2]) {
     let distance = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
-    let steps = (distance / 8.0).ceil().max(1.0) as usize;
+    // 256 lines * 256 dots bounds temporary overlay instances to 65,536.
+    let steps = (distance / 8.0).ceil().clamp(1.0, 255.0) as usize;
     for step in 0..=steps {
         let amount = f64::from(step as u32) / f64::from(steps as u32);
         let point = ScreenPoint {

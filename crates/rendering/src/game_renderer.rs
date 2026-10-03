@@ -261,7 +261,14 @@ impl GameRenderer {
     ) -> Result<(), String> {
         let surfaces = projected_surface_triangles(terrain, camera);
         self.render_prepared_world(
-            art, terrain, &surfaces, resources, units, camera, animation, grid,
+            art,
+            terrain,
+            &surfaces,
+            resources,
+            units,
+            camera,
+            animation,
+            grid.then(|| game_grid::viewport_bounds(camera)),
         )
     }
 
@@ -274,7 +281,7 @@ impl GameRenderer {
         units: &[SceneUnit],
         camera: SceneCamera,
         animation: usize,
-        grid: bool,
+        grid: Option<aoe_core::TileRect>,
     ) -> Result<(), String> {
         let surfaces = surfaces.iter().copied().map(|mut triangle| {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
@@ -303,8 +310,8 @@ impl GameRenderer {
                         }
                     })
                     .collect::<Vec<_>>();
-                if grid {
-                    instances.extend(game_grid::grid_sprites(camera));
+                if let Some(bounds) = grid {
+                    instances.extend(game_grid::grid_sprites(camera, bounds));
                 }
                 renderer
                     .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
@@ -316,15 +323,21 @@ impl GameRenderer {
                 source_atlas,
                 presentation,
                 ..
-            } => render_canvas_world(
-                canvas,
-                context,
-                source_atlas,
-                presentation,
-                &layers,
-                camera,
-                grid,
-            ),
+            } => {
+                render_canvas_world(
+                    canvas,
+                    context,
+                    source_atlas,
+                    presentation,
+                    &layers,
+                    camera,
+                    false,
+                )?;
+                if let Some(bounds) = grid {
+                    game_grid::draw_grid(context, camera, bounds);
+                }
+                Ok(())
+            }
         }
     }
 }
