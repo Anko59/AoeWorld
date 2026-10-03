@@ -5,3 +5,4 @@
 - [Rust harness behind Make](0003-tooling.md)
 - [WebGPU browser rendering](0004-rendering.md)
 - [Performance evidence classes](0005-benchmarks.md)
+- [Provider-neutral development harness](0006-provider-neutral-harness.md)
