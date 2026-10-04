@@ -21,6 +21,14 @@ pub(super) struct Store {
     uid: u32,
 }
 #[cfg(unix)]
+struct Prepared {
+    name: String,
+    file: fs::File,
+    identity: Identity,
+}
+#[cfg(test)]
+mod tests;
+#[cfg(unix)]
 type Identity = (u64, u64, u32, u32, u64, u64, i64, i64, i64, i64);
 #[cfg(unix)]
 fn identity(value: &fs::Metadata) -> Identity {
@@ -195,6 +203,10 @@ impl Store {
         Ok(Some(bytes))
     }
     pub(super) fn replace(&self, expected: Option<&[u8]>, bytes: &[u8]) -> Result<()> {
+        let prepared = self.prepare(expected, bytes)?;
+        self.publish(expected, bytes, prepared)
+    }
+    fn prepare(&self, expected: Option<&[u8]>, bytes: &[u8]) -> Result<Prepared> {
         if bytes.len() > MAX_BYTES {
             return Err("model journal write exceeds32KiB".into());
         }
@@ -209,18 +221,50 @@ impl Store {
         let mut file: fs::File = openat(
             &self.root,
             name.as_str(),
-            OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+            OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::S_IRUSR | Mode::S_IWUSR,
         )?
         .into();
         leaf(&file.metadata()?, self.uid)?;
         file.write_all(bytes)?;
         file.sync_all()?;
+        let observed = file.metadata()?;
+        leaf(&observed, self.uid)?;
+        Ok(Prepared {
+            name,
+            file,
+            identity: identity(&observed),
+        })
+    }
+    fn publish(&self, expected: Option<&[u8]>, bytes: &[u8], mut prepared: Prepared) -> Result<()> {
         self.check()?;
+        prepared.file.seek(SeekFrom::Start(0))?;
+        let mut observed_bytes = Vec::new();
+        Read::by_ref(&mut prepared.file)
+            .take(MAX_BYTES as u64 + 1)
+            .read_to_end(&mut observed_bytes)?;
+        let handle = prepared.file.metadata()?;
+        let path = fs::symlink_metadata(self.directory.join(&prepared.name))?;
+        leaf(&handle, self.uid)?;
+        leaf(&path, self.uid)?;
+        if observed_bytes != bytes
+            || identity(&handle) != prepared.identity
+            || identity(&path) != prepared.identity
+        {
+            return Err(
+                "model journal temporary bytes/path/handle changed; previous history retained"
+                    .into(),
+            );
+        }
         if self.read()?.as_deref() != expected {
             return Err("model journal changed before rename; private temporary retained".into());
         }
-        renameat(&self.root, name.as_str(), &self.root, "journal.json")?;
+        renameat(
+            &self.root,
+            prepared.name.as_str(),
+            &self.root,
+            "journal.json",
+        )?;
         self.root.sync_all()?;
         self.check()?;
         if self.read()?.as_deref() != Some(bytes) {
