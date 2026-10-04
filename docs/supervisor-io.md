@@ -71,8 +71,14 @@ untrusted correlation, not an `OwnedLease`. Corrupt, malformed, linked, oversize
 wrong-owner/mode, exhausted or inconsistent history rejects without resetting it.
 
 Each append creates an exclusive no-follow owner0600 temporary file, writes all
-bytes, syncs the file, rechecks the expected history, atomically renames relative
-to the held directory descriptor, syncs the directory and reopens the endpoint.
+bytes and syncs the file. Before publication it re-reads the bounded temporary
+handle, compares exact bytes and synced handle/path metadata (including inode,
+mode, owner, single-link count and change times), then rechecks the expected history.
+Only a matching prepared temporary is renamed relative to the held directory
+descriptor, synced through the directory and reopened. These pre-publication
+rejections retain the previous history and temporary debt. This is best-effort
+endpoint correlation, not protection against a hostile same-UID swap after the last
+check or an authenticated publication primitive.
 Creation of the journal directory is followed by parent directory sync. Reuse
 appends another model pair or resumes one already-persisted odd intent with the
 same correlation ID. Failed temporary files are retained as debt; no broad cleanup
