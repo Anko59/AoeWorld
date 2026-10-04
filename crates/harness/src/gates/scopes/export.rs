@@ -19,7 +19,7 @@ pub(super) fn import_object(
     Ok(())
 }
 
-fn tree_records(root: &Path, commit: &str) -> Result<Vec<u8>> {
+pub(super) fn tree_records(root: &Path, commit: &str) -> Result<Vec<u8>> {
     // ls-tree output uses MODE TYPE OID<TAB>PATH; normalize to index-info.
     let listing = git(root, &["ls-tree", "-r", "--full-tree", "-z", commit], None)?;
     let mut records = Vec::new();

@@ -112,6 +112,10 @@ enum Command {
         #[arg(long, default_value = "fast")]
         budget: String,
     },
+    GateRun(gates::runner::Options),
+    PolicyPrepare(gates::policy::Options),
+    SupervisorModel(gates::policy::supervisor::Options),
+    TaskPlan(gates::tasks::Options),
     PreCommit,
     Preflight,
     HooksInstall,
@@ -309,6 +313,12 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
         }
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
+        Command::GateRun(options) => gates::runner::execute(Path::new("."), options)?,
+        Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
+        Command::SupervisorModel(options) => {
+            gates::policy::supervisor::execute(Path::new("."), options)?
+        }
+        Command::TaskPlan(options) => gates::tasks::execute(Path::new("."), options)?,
         Command::PreCommit => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }

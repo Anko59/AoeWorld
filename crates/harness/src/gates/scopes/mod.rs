@@ -12,11 +12,14 @@ use std::{
 use tempfile::TempDir;
 
 mod checks;
+mod diff;
 mod git;
 mod index;
 mod metadata;
+mod witness;
 use index::*;
 use metadata::*;
+use witness::*;
 mod entries;
 mod export;
 mod probe;
@@ -47,7 +50,7 @@ pub struct Identity {
     pub isolated_inputs: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct Probe {
     head: String,
     entries: Vec<u8>,
@@ -65,6 +68,7 @@ pub struct Snapshot {
     _temporary: Option<TempDir>,
     probe: Probe,
     metadata: Option<Seal>,
+    objects: Objects,
     pub identity: Identity,
     /// Against source HEAD. Renames contain BOTH names; deletion paths survive.
     pub paths: Vec<String>,
@@ -76,6 +80,11 @@ impl Snapshot {
         Self::prepare_index(root, kind, index.as_deref())
     }
 
+    /// Fresh resolver repositories never inherit the candidate hook's index.
+    pub(crate) fn prepare_independent(root: &Path, kind: Kind) -> Result<Self> {
+        Self::prepare_index(root, kind, None)
+    }
+
     fn prepare_index(root: &Path, kind: Kind, requested_index: Option<&Path>) -> Result<Self> {
         let source = fs::canonicalize(root)?;
         // Reject a subdirectory: all recorded paths are repository-root-relative.
@@ -85,6 +94,7 @@ impl Snapshot {
         }
         let source_index = source_index(&source, requested_index)?;
         let observed = probe(&source, &source_index, kind == Kind::Working)?;
+        let objects = referenced_objects(&source, &kind, &observed)?;
         let (temporary, checkout, tree) = if kind == Kind::Working {
             let tree = if observed.working_clean {
                 Some(resolve(&source, &observed.head, "tree")?)
@@ -144,6 +154,7 @@ impl Snapshot {
             _temporary: temporary,
             probe: observed,
             metadata,
+            objects,
             identity,
             paths,
         })
@@ -187,6 +198,7 @@ impl Snapshot {
             &self.source_index,
             self.identity.kind == Kind::Working,
         )? != self.probe
+            || referenced_objects(&self.source, &self.identity.kind, &self.probe)? != self.objects
         {
             return Err("source identity changed; snapshot result is stale".into());
         }

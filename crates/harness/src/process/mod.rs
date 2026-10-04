@@ -14,6 +14,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod capture;
+pub(crate) use capture::{CaptureExit, Captured, capture_in};
+
 const LOG_LIMIT: usize = 64 * 1024;
 
 #[derive(Clone, Default)]
@@ -23,7 +26,7 @@ impl Cancellation {
     pub fn cancel(&self) {
         self.0.store(true, Ordering::SeqCst);
     }
-    fn cancelled(&self) -> bool {
+    pub(crate) fn cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
 }
@@ -62,22 +65,6 @@ pub enum ProcessError {
 struct ExitState {
     success: bool,
     code: Option<i32>,
-}
-
-trait Clock {
-    fn elapsed(&self) -> Duration;
-    fn sleep(&self, duration: Duration);
-}
-
-struct WallClock(Instant);
-
-impl Clock for WallClock {
-    fn elapsed(&self) -> Duration {
-        self.0.elapsed()
-    }
-    fn sleep(&self, duration: Duration) {
-        thread::sleep(duration);
-    }
 }
 
 trait ProcessHandle {
@@ -122,39 +109,6 @@ impl ProcessHandle for RealChild {
     }
 }
 
-enum Outcome {
-    Success,
-    Failed(Option<i32>),
-    Deadline,
-    Cancelled,
-}
-
-fn wait_loop<C: Clock, P: ProcessHandle>(
-    clock: &C,
-    process: &mut P,
-    deadline: Duration,
-    cancellation: &Cancellation,
-) -> io::Result<Outcome> {
-    loop {
-        if let Some(state) = process.poll()? {
-            return Ok(if state.success {
-                Outcome::Success
-            } else {
-                Outcome::Failed(state.code)
-            });
-        }
-        if cancellation.cancelled() {
-            process.terminate()?;
-            return Ok(Outcome::Cancelled);
-        }
-        if clock.elapsed() >= deadline {
-            process.terminate()?;
-            return Ok(Outcome::Deadline);
-        }
-        clock.sleep(Duration::from_millis(25));
-    }
-}
-
 struct BoundedLog {
     bytes: VecDeque<u8>,
     truncated: bool,
@@ -176,6 +130,7 @@ impl BoundedLog {
             self.bytes.push_back(*byte);
         }
     }
+    #[cfg(test)]
     fn render(self) -> Vec<u8> {
         let mut output = if self.truncated {
             b"[earlier output truncated]\n".to_vec()
@@ -185,24 +140,6 @@ impl BoundedLog {
         output.extend(self.bytes);
         output
     }
-}
-
-fn drain(mut input: impl Read) -> io::Result<Vec<u8>> {
-    let mut log = BoundedLog::new();
-    let mut buffer = [0u8; 4096];
-    loop {
-        let amount = input.read(&mut buffer)?;
-        if amount == 0 {
-            return Ok(log.render());
-        }
-        log.push(&buffer[..amount]);
-    }
-}
-
-fn join(reader: thread::JoinHandle<io::Result<Vec<u8>>>) -> io::Result<Vec<u8>> {
-    reader
-        .join()
-        .map_err(|_| io::Error::other("log reader panicked"))?
 }
 
 fn workspace_root() -> io::Result<PathBuf> {
@@ -217,7 +154,7 @@ fn workspace_root() -> io::Result<PathBuf> {
     Ok(current)
 }
 
-fn retain(program: &str, stdout: &[u8], stderr: &[u8]) -> io::Result<PathBuf> {
+fn retain(program: &str, stdout: &[u8], stderr: &[u8], truncated: bool) -> io::Result<PathBuf> {
     let directory = workspace_root()?.join("reports/process");
     fs::create_dir_all(&directory)?;
     let name = Path::new(program)
@@ -240,6 +177,9 @@ fn retain(program: &str, stdout: &[u8], stderr: &[u8]) -> io::Result<PathBuf> {
         .as_nanos();
     let path = directory.join(format!("{safe}-{}-{nonce}.log", std::process::id()));
     let mut file = fs::File::create(&path)?;
+    if truncated {
+        file.write_all(b"[output capture truncated]\n")?;
+    }
     file.write_all(b"--- stdout ---\n")?;
     file.write_all(stdout)?;
     file.write_all(b"\n--- stderr ---\n")?;
@@ -278,88 +218,64 @@ pub fn run_with_env(
 
 fn supervise(
     program: &str,
-    mut command: Command,
+    command: Command,
     deadline: Duration,
     cancellation: &Cancellation,
 ) -> Result<(), ProcessError> {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    let mut child = RealChild(command.spawn().map_err(|source| ProcessError::Start {
-        program: program.into(),
-        source,
-    })?);
-    let stdout = child.0.stdout.take().ok_or_else(|| ProcessError::Monitor {
-        program: program.into(),
-        source: io::Error::other("stdout pipe missing"),
-    })?;
-    let stderr = child.0.stderr.take().ok_or_else(|| ProcessError::Monitor {
-        program: program.into(),
-        source: io::Error::other("stderr pipe missing"),
-    })?;
-    let stdout_reader = thread::spawn(move || drain(stdout));
-    let stderr_reader = thread::spawn(move || drain(stderr));
-    let result = wait_loop(
-        &WallClock(Instant::now()),
-        &mut child,
-        deadline,
-        cancellation,
-    );
-    if result.is_err() {
-        let _ = child.terminate();
-    }
-    let stdout = join(stdout_reader).map_err(|source| ProcessError::Monitor {
-        program: program.into(),
-        source,
-    })?;
-    let stderr = join(stderr_reader).map_err(|source| ProcessError::Monitor {
-        program: program.into(),
-        source,
-    })?;
-    let outcome = result.map_err(|source| ProcessError::Monitor {
-        program: program.into(),
-        source,
-    })?;
-    if matches!(outcome, Outcome::Success) {
+    let captured = capture::capture_command(command, deadline, cancellation);
+    if matches!(captured.exit, CaptureExit::Success) {
+        if captured.truncated {
+            io::stderr()
+                .write_all(b"[output capture truncated]\n")
+                .map_err(|source| ProcessError::Monitor {
+                    program: program.into(),
+                    source,
+                })?;
+        }
         io::stderr()
-            .write_all(&stdout)
-            .map_err(|source| ProcessError::Monitor {
-                program: program.into(),
-                source,
-            })?;
-        io::stderr()
-            .write_all(&stderr)
+            .write_all(&captured.stdout)
+            .and_then(|()| io::stderr().write_all(&captured.stderr))
             .map_err(|source| ProcessError::Monitor {
                 program: program.into(),
                 source,
             })?;
         return Ok(());
     }
-    let log = retain(program, &stdout, &stderr)
+    let log = match &captured.exit {
+        CaptureExit::Start(_) | CaptureExit::Monitor(_) => String::new(),
+        _ => retain(
+            program,
+            &captured.stdout,
+            &captured.stderr,
+            captured.truncated,
+        )
         .map(|path| path.display().to_string())
-        .unwrap_or_else(|error| format!("unavailable ({error})"));
-    match outcome {
-        Outcome::Failed(code) => Err(ProcessError::Exit {
+        .unwrap_or_else(|error| format!("unavailable ({error})")),
+    };
+    match captured.exit {
+        CaptureExit::Success => Ok(()),
+        CaptureExit::Failed(code) => Err(ProcessError::Exit {
             program: program.into(),
             code,
             log,
         }),
-        Outcome::Deadline => Err(ProcessError::Deadline {
+        CaptureExit::Deadline => Err(ProcessError::Deadline {
             program: program.into(),
             seconds: deadline.as_secs(),
             log,
         }),
-        Outcome::Cancelled => Err(ProcessError::Cancelled {
+        CaptureExit::Cancelled => Err(ProcessError::Cancelled {
             program: program.into(),
             log,
         }),
-        Outcome::Success => Ok(()),
+        CaptureExit::Start(source) => Err(ProcessError::Start {
+            program: program.into(),
+            source,
+        }),
+        CaptureExit::Monitor(source) => Err(ProcessError::Monitor {
+            program: program.into(),
+            source,
+        }),
     }
 }
 
@@ -371,16 +287,7 @@ pub fn run_in(
     environment: &[(&str, &str)],
     deadline: Duration,
 ) -> Result<(), ProcessError> {
-    let mut command = Command::new(program);
-    command.current_dir(root).args(args);
-    for (name, _) in std::env::vars_os() {
-        if name.as_encoded_bytes().starts_with(b"GIT_") {
-            command.env_remove(name);
-        }
-    }
-    for (name, value) in environment {
-        command.env(name, value);
-    }
+    let command = capture::explicit_command(root, program, args, environment);
     supervise(program, command, deadline, &Cancellation::default())
 }
 
