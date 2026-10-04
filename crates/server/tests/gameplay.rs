@@ -61,6 +61,21 @@ async fn receive(socket: &mut Socket) -> GameplayServerMessage {
     decode_gameplay_server(&bytes).unwrap()
 }
 
+// The ticker may queue legal snapshots before a subscription error arrives.
+async fn receive_error(socket: &mut Socket, expected_code: u16) {
+    timeout(Duration::from_secs(2), async {
+        loop {
+            match receive(socket).await {
+                GameplayServerMessage::Snapshot { .. } => (),
+                GameplayServerMessage::Error { code, .. } if code == expected_code => return,
+                other => panic!("expected gameplay error {expected_code}, got {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("gameplay error response timed out");
+}
+
 async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, GameplayServerMessage) {
     let (mut socket, _) = connect_async(format!("ws://{address}/game/ws"))
         .await
@@ -322,10 +337,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut socket).await,
-        GameplayServerMessage::Error { code: 409, .. }
-    ));
+    receive_error(&mut socket, 409).await;
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {
@@ -334,10 +346,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut socket).await,
-        GameplayServerMessage::Error { code: 400, .. }
-    ));
+    receive_error(&mut socket, 400).await;
     server.abort();
     ticker.abort();
 }
