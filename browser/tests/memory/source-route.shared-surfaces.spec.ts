@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { processMemory, type ProcessMemory } from "./process.js";
+import { forceCanvas } from "../rendering/backends.js";
 
 const sourceUrl = process.env["AOE_POLISH_SOURCE_URL"];
 const sourceHash = process.env["AOE_POLISH_SOURCE_HASH"];
@@ -21,9 +22,7 @@ test("real-pack source route evicts terrain without continuing process memory gr
   expect(sourceHash).toMatch(/^[0-9a-f]{64}$/);
   const session = await browser.newBrowserCDPSession();
   if (testInfo.project.name === "canvas") {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
+    await forceCanvas(page);
   }
   const chunks = new Set<string>();
   page.on("response", (response) => {

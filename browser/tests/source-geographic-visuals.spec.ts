@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
+import { forceCanvas } from "./rendering/backends.js";
 import {
   activateMatrixCase,
   assetIdentity,
@@ -84,9 +85,9 @@ test("source-backed water and high-relief maps render and remain navigable", asy
   await page.goto("about:blank");
   const canvasPage = await browser.newPage();
   try {
+    await forceCanvas(canvasPage);
     await canvasPage.addInitScript(
       ({ origin, resumeToken }) => {
-        Object.defineProperty(navigator, "gpu", { value: undefined });
         if (
           location.origin === origin &&
           !sessionStorage.getItem("aoeworld.resume-token")

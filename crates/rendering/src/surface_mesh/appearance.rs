@@ -29,14 +29,15 @@ pub(super) fn assign_materials(
     }
     for triangle in triangles {
         if blendable(triangle) {
-            triangle.texture_materials = Some(triangle.points.map(|point| {
-                keys.get(material_tile(point))
-                    .map(|index| {
-                        let (fallback, source) = materials[index];
-                        source.unwrap_or(fallback)
-                    })
-                    .unwrap_or(triangle.material)
-            }));
+            let mut vertex_materials = [triangle.material; 3];
+            for index in 0..3 {
+                let point = triangle.points[index];
+                if let Some(slot) = keys.get(material_tile(point)) {
+                    let (fallback, source) = materials[slot];
+                    vertex_materials[index] = source.unwrap_or(fallback);
+                }
+            }
+            triangle.texture_materials = Some(vertex_materials);
         }
     }
 }
@@ -70,12 +71,12 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
-        let frames = triangle
-            .texture_materials
-            .unwrap_or([triangle.material; 3])
-            .map(|material| {
-                terrain_texture_frame(art, material, triangle.texture_tile).map(|frame| frame.uv)
-            });
+        let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
+        let mut frames = [None; 3];
+        for index in 0..3 {
+            frames[index] = terrain_texture_frame(art, materials[index], triangle.texture_tile)
+                .map(|frame| frame.uv);
+        }
         triangle.texture_uv = frames[0];
         triangle.texture_blend = match frames {
             [Some(a), Some(b), Some(c)] if a != b || a != c => Some([b, c]),

@@ -49,6 +49,8 @@ pub struct Camera {
 
 #[derive(Clone, Copy, Default)]
 pub struct Counters {
+    /// Distinguishes a submitted clear-only frame from a skipped surface frame.
+    pub did_present: bool,
     pub visible: usize,
     pub draw_calls: usize,
     pub gpu_buffer_bytes: usize,
@@ -321,6 +323,7 @@ impl Renderer {
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 return Ok(Counters {
+                    did_present: false,
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
@@ -333,6 +336,7 @@ impl Renderer {
             wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&self.device, &self.config);
                 return Ok(Counters {
+                    did_present: false,
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
@@ -396,6 +400,7 @@ impl Renderer {
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
         Ok(Counters {
+            did_present: true,
             visible: sprites.len(),
             draw_calls: usize::from(!instances.is_empty()),
             gpu_buffer_bytes: self.instances.bytes(),
@@ -407,17 +412,19 @@ impl Renderer {
     }
 }
 
-fn normalize_depths(instances: &mut [Sprite]) {
-    let (minimum, maximum) = instances
-        .iter()
-        .flat_map(|sprite| sprite.depths[..3].iter().copied())
-        .filter(|depth| depth.is_finite())
-        .fold(None, |range: Option<(f32, f32)>, depth| {
-            Some(range.map_or((depth, depth), |(minimum, maximum)| {
-                (minimum.min(depth), maximum.max(depth))
-            }))
-        })
-        .unwrap_or((0.0, 0.0));
+pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
+    let mut range: Option<(f32, f32)> = None;
+    for sprite in instances.iter() {
+        for depth in sprite.depths[..3].iter().copied() {
+            if depth.is_finite() {
+                range = Some(match range {
+                    Some((minimum, maximum)) => (minimum.min(depth), maximum.max(depth)),
+                    None => (depth, depth),
+                });
+            }
+        }
+    }
+    let (minimum, maximum) = range.unwrap_or((0.0, 0.0));
     let span = maximum - minimum;
     for sprite in instances {
         for depth in &mut sprite.depths {

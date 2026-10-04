@@ -169,18 +169,19 @@ pub(crate) fn surface_instance(
     viewport: [f64; 2],
     depth_origin: f64,
 ) -> Sprite {
-    let points = triangle.points.map(|point| {
-        screen_to_clip(
+    let mut points = [[0.0; 2]; 3];
+    let mut depths = [0.0; 3];
+    for index in 0..3 {
+        let point = triangle.points[index];
+        points[index] = screen_to_clip(
             point.screen.x,
             point.screen.y,
             viewport[0].max(1.0),
             viewport[1].max(1.0),
-        )
-    });
-    let depths = triangle.points.map(|point| {
-        (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt) - depth_origin)
-            as f32
-    });
+        );
+        depths[index] = (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt)
+            - depth_origin) as f32;
+    }
     let second = points[1];
     let third = points[2];
     match triangle.texture_uv {

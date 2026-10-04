@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
+import { forceCanvas } from "../rendering/backends.js";
 
 async function position(page: Page): Promise<[number, number]> {
   return (await page.locator("#world-position").innerText())
@@ -95,12 +96,7 @@ test("grid button draws and removes terrain grid beyond default world bounds", a
   page,
 }, testInfo) => {
   if (testInfo.project.name === "browser-defaults") {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", {
-        value: undefined,
-        configurable: true,
-      });
-    });
+    await forceCanvas(page);
   }
   await gameAssets(page);
   await wideWorld(page);

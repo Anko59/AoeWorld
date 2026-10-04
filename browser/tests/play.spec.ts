@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
+import { denyWebGl } from "./rendering/backends.js";
 import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
 
@@ -320,37 +321,42 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
 });
 
 for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
-  test(`game remains playable after WebGPU ${failure}`, async ({ page }) => {
-    await gameAssets(page);
-    await page.addInitScript((mode) => {
-      if (mode === "missing-api") {
-        Object.defineProperty(navigator, "gpu", { value: undefined });
-      } else if (mode === "no-adapter") {
-        const gpu = (navigator as Navigator & { gpu?: object }).gpu;
-        if (gpu)
-          Object.defineProperty(gpu, "requestAdapter", {
-            value: async () => null,
-          });
-      } else {
-        const original = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function (
-          this: HTMLCanvasElement,
-          type: string,
-          ...args: unknown[]
-        ) {
-          if (type === "webgpu") return null;
-          return Reflect.apply(original, this, [type, ...args]);
-        } as typeof original;
-      }
-    }, failure);
-    await page.goto("/");
-    await waitForGame(page);
-    await expect(page.locator("#playground")).toHaveAttribute(
-      "data-renderer",
-      "canvas2d",
-    );
-    await expect(page.getByRole("alert")).toBeEmpty();
-  });
+  for (const software of [false, true]) {
+    test(`game remains playable after WebGPU ${failure}${software ? " with WebGL2 denied" : ""}`, async ({
+      page,
+    }) => {
+      await gameAssets(page);
+      if (software) await denyWebGl(page);
+      await page.addInitScript((mode) => {
+        if (mode === "missing-api") {
+          Object.defineProperty(navigator, "gpu", { value: undefined });
+        } else if (mode === "no-adapter") {
+          const gpu = (navigator as Navigator & { gpu?: object }).gpu;
+          if (gpu)
+            Object.defineProperty(gpu, "requestAdapter", {
+              value: async () => null,
+            });
+        } else {
+          const original = HTMLCanvasElement.prototype.getContext;
+          HTMLCanvasElement.prototype.getContext = function (
+            this: HTMLCanvasElement,
+            type: string,
+            ...args: unknown[]
+          ) {
+            if (type === "webgpu") return null;
+            return Reflect.apply(original, this, [type, ...args]);
+          } as typeof original;
+        }
+      }, failure);
+      await page.goto("/");
+      await waitForGame(page);
+      await expect(page.locator("#playground")).toHaveAttribute(
+        "data-renderer",
+        software ? "canvas2d" : /^(webgl2|canvas2d)$/,
+      );
+      await expect(page.getByRole("alert")).toBeEmpty();
+    });
+  }
 }
 
 test("missing local assets show an actionable error", async ({ page }) => {

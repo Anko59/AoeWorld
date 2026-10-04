@@ -109,7 +109,9 @@ pub(in super::super) fn render_if_changed(
             grid_bounds,
         )
     };
-    result?;
+    if !result? {
+        return Ok(false);
+    }
     client
         .rendered_frame
         .record_success(scene, units, resources, grid, animation);

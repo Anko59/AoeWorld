@@ -11,9 +11,17 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         .unwrap();
     canvas.set_width(128);
     canvas.set_height(128);
-    let renderer = Renderer::new(canvas)
+    let mut renderer = Renderer::new(canvas)
         .await
         .expect("software WebGPU renderer");
+    let cleared = renderer
+        .render_sprites(&[])
+        .expect("clear-only presentation");
+    assert!(
+        cleared.did_present,
+        "an empty submitted clear is still visible"
+    );
+    assert_eq!(cleared.draw_calls, 0);
     let mut game = GameRenderer::WebGpu(Box::new(renderer));
     game.upload_game_atlas(&vec![
         255;

@@ -7,6 +7,8 @@ import {
   waitForValidSelection,
 } from "./surface-evidence.js";
 
+import { forceCanvas } from "./rendering/backends.js";
+
 const colors = syntheticSurfaceColors;
 
 test("dense resources cover the viewport after zoom and pan", async ({
@@ -14,9 +16,7 @@ test("dense resources cover the viewport after zoom and pan", async ({
 }, testInfo) => {
   await gameAssets(page, true);
   if (testInfo.project.name === "canvas") {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
+    await forceCanvas(page);
   }
   await page.goto("/");
   await waitForRenderer(page, testInfo.project.name);
@@ -65,9 +65,7 @@ test("shared terrain textures, painter transitions, and selection render", async
   });
   const project = testInfo.project.name;
   if (project === "canvas") {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "gpu", { value: undefined });
-    });
+    await forceCanvas(page);
   }
   await page.goto("/");
   const renderer = await waitForRenderer(page, project);
@@ -159,7 +157,7 @@ async function waitForRenderer(page: Page, project: string): Promise<string> {
       ? /^webgpu$/
       : project === "canvas"
         ? /^canvas2d$/
-        : /^(webgpu|canvas2d)$/;
+        : /^(webgpu|webgl2|canvas2d)$/;
   const playground = page.locator("#playground");
   await expect(playground).toHaveAttribute("data-renderer", expected);
   const renderer = await playground.getAttribute("data-renderer");

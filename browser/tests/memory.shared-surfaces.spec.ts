@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { gameAssets } from "./game-assets.js";
 import { activateSyntheticMap } from "./synthetic-map.js";
 import { processMemory, type ProcessMemory } from "./memory/process.js";
+import { forceCanvas } from "./rendering/backends.js";
 
 async function frames(page: Page, count: number) {
   await page.evaluate(async (remaining) => {
@@ -37,9 +38,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     const page = await context.newPage();
     await gameAssets(page, true);
     if (testInfo.project.name === "canvas") {
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, "gpu", { value: undefined });
-      });
+      await forceCanvas(page);
     }
     await page.goto("/");
     await expect(page.locator("#playground")).toHaveAttribute(

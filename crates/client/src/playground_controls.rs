@@ -150,6 +150,15 @@ pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
 
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let canvas = shared.borrow().canvas.clone();
+    let restored = shared.clone();
+    let onrestored = Closure::<dyn FnMut(Event)>::new(move |_| {
+        restored.borrow_mut().rendered_frame.clear();
+    });
+    canvas.add_event_listener_with_callback(
+        "aoe-renderer-restored",
+        onrestored.as_ref().unchecked_ref(),
+    )?;
+    onrestored.forget();
     let down = shared.clone();
     let ondown = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         event.prevent_default();

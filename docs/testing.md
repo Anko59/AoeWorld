@@ -16,7 +16,11 @@ not run in this gate. It writes
 this gate. `make test-e2e` runs both an explicit WebGPU project under Xvfb with Vulkan
 SwiftShader and a game-only project with default browser launch settings.
 Game checks cover rendered pixels, movement, resize, and compatibility startup
-after a missing WebGPU API, null WebGPU context, or unavailable adapter.
+after a missing WebGPU API, null WebGPU context, or unavailable adapter. WebGL2
+checks require real shader pixels, depth/material parity, moving units, bound-
+context startup failure, and idle/interactive context restoration. Explicit
+software compatibility checks deny both WebGPU and WebGL2, keeping Canvas 2D
+coverage rather than silently testing the accelerated tier.
 The WebGPU project also checks actual canvas background and four sprite colors in a full-page
 screenshot, along with reconnect and independent subscriptions.
 `make test-memory-source` requires an already activated real-pack source map,

@@ -5,13 +5,37 @@ renderer. The client remains single threaded.
 
 The first playable feature exposed a compatibility gap: successful tests with
 forced software WebGPU did not establish that ordinary browsers could start the
-game. The game therefore falls back to Canvas 2D when WebGPU initialization
-fails, including a missing adapter or a null canvas context. Both backends
-consume the same sprite layout, imported atlas, and deterministic simulation.
-A failed WebGPU context may bind the original canvas, so replace that element
-before installing input handlers when falling back.
+game. When WebGPU initialization fails (including a missing API, adapter, or
+null context), try WebGL2 instancing before the retained Canvas 2D software
+fallback. Full-world CPU rasterization caused measured camera and scout stalls
+on the real source map; accelerating the same geometry avoids those stalls
+without reducing resolution, terrain detail, or simulation tick precision.
+All three tiers consume the same sprite layout, imported atlas, and deterministic
+simulation. WebGL2 uses the 96-byte Sprite ABI and equivalent shaders for
+per-pixel depth, ordered equal-depth ties, alpha discard/blending, native terrain
+UVs, three-material blending, and water tint. Its thin JavaScript adapter owns
+only graphics API calls; scene construction and depth normalization stay in Rust.
+A failed GPU context may bind the original canvas, so replace that element
+before attempting the next tier and before installing input handlers.
+
+WebGL2 requires a 24-bit depth buffer and preserves the existing 64 MiB instance
+and 4,194,304-pixel backing limits. Instance uploads borrow a bounded WASM memory
+view for a synchronous graphics call; never retain the packet or await while
+using it. WebGL copies it into its instance buffer before the borrow ends,
+without another retained CPU packet. One additional 16 MiB source atlas supports
+context restoration.
+Restore shaders, buffers, texture, and atlas on the original canvas, then
+invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
+skipped GPU frame is not a successful presentation: do not advance picking or
+render-cache positions until pixels have actually been submitted.
 
 Diagnostics continue to require WebGPU. Test their explicit capability error.
 Test the game both with WebGPU and without special GPU launch flags, including
 missing API, null context, and adapter failures. A compatibility test must
 verify rendered pixels and unit movement, not merely an error message.
+Explicit Canvas 2D tests deny both GPU APIs; hiding WebGPU alone now exercises
+WebGL2, not software compatibility. Mandatory WebGL2 tests render crossing
+surfaces, transparent occluders, depth ties, native material blending/tints,
+mirrored units, and real movement, plus bound-context initialization failure and
+context loss/restoration. Synthetic pixel tests do not establish real-source
+frame cadence or dedicated-hardware performance; measure those separately.

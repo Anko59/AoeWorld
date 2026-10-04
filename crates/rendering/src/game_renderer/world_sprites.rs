@@ -266,8 +266,8 @@ fn sprite_screen_bounds(
 }
 
 fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
-    frame.size = frame.size.map(|value| value * scale);
-    frame.anchor = frame.anchor.map(|value| value * scale);
+    frame.size = [frame.size[0] * scale, frame.size[1] * scale];
+    frame.anchor = [frame.anchor[0] * scale, frame.anchor[1] * scale];
     frame
 }
 

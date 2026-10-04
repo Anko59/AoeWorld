@@ -1,4 +1,4 @@
-//! WebGPU-first game rendering with a Canvas 2D compatibility path.
+//! WebGPU-first game rendering with WebGL2 acceleration and Canvas compatibility.
 use crate::{
     GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid,
     playground::game_sprites,
@@ -27,6 +27,9 @@ pub fn resource_sprite_bounds(
 #[path = "game_renderer/canvas_depth.rs"]
 mod canvas_depth;
 use canvas_depth::{CanvasPresentation, render_canvas_world};
+#[path = "game_renderer/webgl.rs"]
+mod webgl;
+use webgl::WebGlRenderer;
 
 #[cfg(test)]
 mod tests;
@@ -35,8 +38,13 @@ mod tests;
 #[path = "game_renderer/tests/canvas_depth.rs"]
 mod canvas_depth_tests;
 
+#[cfg(test)]
+#[path = "game_renderer/tests/webgl.rs"]
+mod webgl_tests;
+
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
+    WebGl(WebGlRenderer),
     Canvas {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
@@ -112,6 +120,20 @@ fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }
 
+fn replace_canvas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
+    let replacement: HtmlCanvasElement = canvas
+        .clone_node()
+        .map_err(error)?
+        .dyn_into()
+        .map_err(error)?;
+    canvas
+        .parent_node()
+        .ok_or("Canvas is detached")?
+        .replace_child(&replacement, canvas)
+        .map_err(error)?;
+    Ok(replacement)
+}
+
 fn context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, String> {
     canvas
         .get_context("2d")
@@ -126,18 +148,12 @@ impl GameRenderer {
         if let Ok(renderer) = Renderer::new(canvas.clone()).await {
             return Ok((Self::WebGpu(Box::new(renderer)), canvas));
         }
-        // A failed WebGPU attempt may still bind the context type. Replace the
-        // element before controls are installed, retaining all attributes.
-        let replacement: HtmlCanvasElement = canvas
-            .clone_node()
-            .map_err(error)?
-            .dyn_into()
-            .map_err(error)?;
-        canvas
-            .parent_node()
-            .ok_or("Canvas is detached")?
-            .replace_child(&replacement, &canvas)
-            .map_err(error)?;
+        let replacement = replace_canvas(&canvas)?;
+        if let Ok(renderer) = WebGlRenderer::new(&replacement) {
+            return Ok((Self::WebGl(renderer), replacement));
+        }
+        // Either failed GPU tier may have bound the element's context type.
+        let replacement = replace_canvas(&replacement)?;
         let main_context = context(&replacement)?;
         Ok((
             Self::Canvas {
@@ -154,6 +170,7 @@ impl GameRenderer {
     pub fn backend(&self) -> &'static str {
         match self {
             Self::WebGpu(_) => "webgpu",
+            Self::WebGl(_) => "webgl2",
             Self::Canvas { .. } => "canvas2d",
         }
     }
@@ -161,6 +178,7 @@ impl GameRenderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(pixels),
+            Self::WebGl(renderer) => renderer.upload(pixels),
             Self::Canvas {
                 atlas,
                 source_atlas,
@@ -187,6 +205,9 @@ impl GameRenderer {
     pub fn resize(&mut self, width: u32, height: u32) {
         match self {
             Self::WebGpu(renderer) => renderer.resize(width, height),
+            Self::WebGl(renderer) => {
+                let _ = renderer.resize(width, height);
+            }
             Self::Canvas { presentation, .. } => presentation.resize(width, height),
         }
     }
@@ -203,6 +224,11 @@ impl GameRenderer {
         match self {
             Self::WebGpu(renderer) => renderer
                 .render_game(art, unit, target, moving, animation, facing)
+                .map(|_| ()),
+            Self::WebGl(renderer) => renderer
+                .render(&mut game_sprites(
+                    art, unit, target, moving, animation, facing,
+                ))
                 .map(|_| ()),
             Self::Canvas {
                 canvas,
@@ -258,7 +284,7 @@ impl GameRenderer {
         camera: SceneCamera,
         animation: usize,
         grid: bool,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         let surfaces = projected_surface_triangles(terrain, camera);
         self.render_prepared_world(
             art,
@@ -282,41 +308,45 @@ impl GameRenderer {
         camera: SceneCamera,
         animation: usize,
         grid: Option<aoe_core::TileRect>,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         let surfaces = surfaces.iter().copied().map(|mut triangle| {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
             triangle
         });
         let object_sprites = world_sprite_frames(art, terrain, resources, units, camera, animation);
         let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
-        match self {
-            Self::WebGpu(renderer) => {
-                let depth_origin = surface_depth([
-                    camera.center[0],
-                    camera.center[1],
-                    camera.focus_elevation_meters,
-                ]);
-                let mut instances = layers
-                    .iter()
-                    .map(|layer| match layer {
-                        WorldLayer::Surface(triangle) => {
-                            crate::web::surface_instance(triangle, camera.viewport, depth_origin)
-                        }
-                        WorldLayer::Selection(sprite, depth)
-                        | WorldLayer::Sprite(sprite, _, depth, _) => {
-                            let mut sprite = *sprite;
-                            sprite.depths = [(*depth - depth_origin) as f32; 4];
-                            sprite
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                if let Some(bounds) = grid {
-                    instances.extend(game_grid::grid_sprites(camera, bounds));
-                }
-                renderer
-                    .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
-                    .map(|_| ())
+        if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
+            let depth_origin = surface_depth([
+                camera.center[0],
+                camera.center[1],
+                camera.focus_elevation_meters,
+            ]);
+            let mut instances = layers
+                .iter()
+                .map(|layer| match layer {
+                    WorldLayer::Surface(triangle) => {
+                        crate::web::surface_instance(triangle, camera.viewport, depth_origin)
+                    }
+                    WorldLayer::Selection(sprite, depth)
+                    | WorldLayer::Sprite(sprite, _, depth, _) => {
+                        let mut sprite = *sprite;
+                        sprite.depths = [(*depth - depth_origin) as f32; 4];
+                        sprite
+                    }
+                })
+                .collect::<Vec<_>>();
+            if let Some(bounds) = grid {
+                instances.extend(game_grid::grid_sprites(camera, bounds));
             }
+            return match self {
+                Self::WebGpu(renderer) => renderer
+                    .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
+                    .map(|counters| counters.did_present),
+                Self::WebGl(renderer) => renderer.render(&mut instances),
+                _ => unreachable!(),
+            };
+        }
+        match self {
             Self::Canvas {
                 canvas,
                 context,
@@ -324,6 +354,9 @@ impl GameRenderer {
                 presentation,
                 ..
             } => {
+                if canvas.width() == 0 || canvas.height() == 0 {
+                    return Ok(false);
+                }
                 render_canvas_world(
                     canvas,
                     context,
@@ -336,8 +369,9 @@ impl GameRenderer {
                 if let Some(bounds) = grid {
                     game_grid::draw_grid(context, camera, bounds);
                 }
-                Ok(())
+                Ok(true)
             }
+            _ => unreachable!(),
         }
     }
 }

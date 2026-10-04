@@ -106,14 +106,16 @@ pub fn projected_surface_triangles(
                     [patch_x + 1, patch_y + 1],
                     [patch_x, patch_y + 1],
                 ];
-                let patch_heights = local_corners.map(|[x, y]| {
-                    sample_float_surface_height(
+                let mut patch_heights = [0.0; 4];
+                for index in 0..4 {
+                    let [x, y] = local_corners[index];
+                    patch_heights[index] = sample_float_surface_height(
                         heights,
                         sample.surface.triangulation,
                         f64::from(x) / f64::from(divisions),
                         f64::from(y) / f64::from(divisions),
-                    )
-                });
+                    );
+                }
                 let corners = projected_corners(&camera, texture_tile, texture_step, patch_heights);
                 for (order, indices) in indices.into_iter().enumerate() {
                     result.push(ProjectedSurfaceTriangle {

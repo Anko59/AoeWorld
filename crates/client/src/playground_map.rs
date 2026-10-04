@@ -103,10 +103,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let requests = visible_chunks(&mut client);
         (client.connection_id, content_hash, requests)
     };
-    let content_hash = map_hash
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let content_hash = super::storage::hex(&map_hash);
     for (x, y) in requests {
         let shared = shared.clone();
         let content_hash = content_hash.clone();

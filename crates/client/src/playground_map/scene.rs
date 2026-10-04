@@ -81,7 +81,8 @@ impl PreparedScene {
             .get(self.bucket_keys.get(key)?)?
             .iter()
             .find_map(|&index| {
-                let [a, b, c] = self.triangles[index].points.map(|p| p.world);
+                let points = &self.triangles[index].points;
+                let [a, b, c] = [points[0].world, points[1].world, points[2].world];
                 let denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
                 if denominator.abs() < f64::EPSILON {
                     return None;
