@@ -51,6 +51,7 @@ pub use hydrology::{
     prepare_hydrology,
 };
 mod source_cache;
+pub(crate) use source_cache::digest_hex;
 pub use source_cache::{
     AcquisitionEstimate, CacheError, DEFAULT_CACHE_QUOTA_BYTES,
     DEFAULT_JOB_ACQUISITION_BUDGET_BYTES, DownloadPolicy, Provider, SourceCache, SourceLock,

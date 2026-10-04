@@ -21,6 +21,10 @@ fn bound_document_has_stable_digest_and_rejects_other_footprints() {
     let doc = VegetationPatchDocument::empty(request(), 2).unwrap();
     doc.validate_for(request(), 2).unwrap();
     let digest = doc.digest_hex(request()).unwrap();
+    assert_eq!(
+        digest,
+        "b1fdd24eb51b9ddeed20cd22fb280f4c4cd5afc4934cb72481f50ce6db4e11f7"
+    );
     assert_eq!(digest.len(), 64);
     assert_eq!(doc.digest_hex(request()).unwrap(), digest);
     let mut elsewhere = request();

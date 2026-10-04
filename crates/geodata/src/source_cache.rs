@@ -9,7 +9,8 @@ use std::{
 };
 
 mod digest;
-use digest::{digest_hex, file_hashes};
+pub(crate) use digest::digest_hex;
+use digest::file_hashes;
 
 mod known;
 
