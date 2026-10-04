@@ -69,3 +69,23 @@ the selection at the checked-out revision and requires success for each selected
 job; only unselected jobs may be skipped. `make ci-check` validates that
 contract locally when supplied the manifest and job results.
 Do not claim a complete gate until they exist and pass at the exact revision.
+
+## Registry and plans
+
+[Registry v2](../gates/registry.json) owns path globs, suite implications,
+prerequisites, cadence metadata, and the validation job map. Use `make gate-plan`
+for a conservative PR plan and `make gates-docs` to regenerate the registry table;
+`make test-harness` exercises the Rust harness and CLI regressions in Docker.
+Unknown/protected paths and unavailable CI comparison bases select every job.
+The manifest retains the requested and resolved base, canonical registry hash,
+and dependency-first gate list; aggregate validation recomputes them all.
+Every CI gate must directly identify an executing job, even when Make also runs
+it as a prerequisite. Code changes now select parser fuzzing as additional work.
+
+Plans do not yet imply automatic edit/stop interception or shared execution.
+Existing Make/CI dispatch remains active; the static CI job and every handoff
+still require the full `make preflight`, including for documentation changes.
+Source/artwork/hardware checks are explicit qualification plans, never silently
+substituted by synthetic tests. Release publication is not a generic cadence.
+Pull requests targeting `harness/**` also receive validation while the upgrade
+is reviewed as a dependent stack; protected branch publication is unchanged.

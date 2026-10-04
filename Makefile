@@ -171,9 +171,15 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
-.PHONY: test-harness
+.PHONY: test-harness gates-docs gate-plan
 test-harness:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
+
+gates-docs:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
+
+gate-plan:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gate-plan pr
 
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap

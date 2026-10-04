@@ -52,6 +52,14 @@ enum Command {
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    GatesDocs,
+    GatePlan {
+        #[arg(value_enum)]
+        cadence: gates::registry::Cadence,
+        #[arg(long)]
+        base: Option<String>,
+        paths: Vec<String>,
+    },
     CoverageCheck {
         file: Option<PathBuf>,
     },
@@ -220,6 +228,12 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::GatesDocs => gates::docs_generate(Path::new("."))?,
+        Command::GatePlan {
+            cadence,
+            base,
+            paths,
+        } => gates::plan(cadence, base.as_deref(), paths)?,
         Command::CoverageCheck { file } => {
             coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
         }

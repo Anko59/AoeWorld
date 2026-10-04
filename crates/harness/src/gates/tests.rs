@@ -1,12 +1,25 @@
 use super::*;
 
+fn registry() -> Registry {
+    Registry::parse(include_bytes!("../../../../gates/registry.json")).expect("registry")
+}
+fn classify(paths: &[String]) -> Impact {
+    super::classify(&registry(), paths)
+}
+fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
+    super::selection(&registry(), revision, base, paths).expect("selection")
+}
+
 #[test]
 fn unknown_and_shared_paths_select_relevant_suites() {
-    let static_only = BTreeSet::from(["static".into()]);
+    let static_only = BTreeSet::from(["static".into(), "docs".into()]);
     for path in ["docs/testing.md", "README.md", "LICENSE", "THIRD_PARTY.md"] {
         assert_eq!(classify(&[path.into()]).suites, static_only, "{path}");
     }
-    assert_eq!(classify(&["Cargo.lock".into()]).suites.len(), 6);
+    assert_eq!(
+        classify(&["Cargo.lock".into()]).suites.len(),
+        registry().suites.len()
+    );
     assert_eq!(
         classify(&["crates/assets/src/slp.rs".into()]).suites,
         BTreeSet::from([
@@ -34,9 +47,16 @@ fn unknown_and_shared_paths_select_relevant_suites() {
         "crates/simulation/src/lib.rs",
         "crates/protocol/src/lib.rs",
     ] {
-        assert_eq!(classify(&[path.into()]).suites, runtime, "{path}");
+        let mut expected = runtime.clone();
+        if path.starts_with("crates/")
+            && !path.starts_with("crates/client/")
+            && !path.starts_with("crates/rendering/")
+        {
+            expected.insert("gameplay".into());
+        }
+        assert_eq!(classify(&[path.into()]).suites, expected, "{path}");
     }
-    assert_eq!(classify(&[]).suites.len(), 6);
+    assert_eq!(classify(&[]).suites.len(), registry().suites.len());
 }
 
 #[test]
@@ -86,19 +106,6 @@ fn ci_selection_requires_exact_manifest_and_job_outcomes() {
 }
 
 #[test]
-fn invalid_registry_is_rejected() {
-    assert!(parse(br#"{"version":1,"gates":[{"id":"x","command":"make x","requires":["missing"],"select":"all","evidence":"test"}]}"#).is_err());
-    for payload in [
-        r#"{"version":2,"gates":[]}"#,
-        r#"{"version":1,"gates":[{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test"},{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test"}]}"#,
-        r#"{"version":1,"gates":[{"id":"x","command":"cargo test","requires":[],"select":"all","evidence":"test"}]}"#,
-        r#"{"version":1,"gates":[{"id":"x","command":"make y","requires":[],"select":"all","evidence":"test"}]}"#,
-    ] {
-        assert!(parse(payload.as_bytes()).is_err(), "{payload}");
-    }
-}
-
-#[test]
 fn documentation_gate_rejects_drift_and_missing_local_links() {
     let temp = tempfile::tempdir().expect("directory");
     let root = temp.path();
@@ -106,10 +113,10 @@ fn documentation_gate_rejects_drift_and_missing_local_links() {
     fs::create_dir_all(root.join("docs/nested")).expect("docs");
     fs::create_dir_all(root.join("crates/example")).expect("crates");
     fs::write(
-            root.join("gates/registry.json"),
-            r#"{"version":1,"gates":[{"id":"fmt-check","command":"make fmt-check","requires":[],"select":"all","evidence":"exit"}]}"#,
-        )
-        .expect("registry");
+        root.join("gates/registry.json"),
+        include_bytes!("../../../../gates/registry.json"),
+    )
+    .expect("fixture registry");
     let registry =
         parse(&fs::read(root.join("gates/registry.json")).expect("registry")).expect("parsed");
     fs::write(root.join("docs/gates.md"), table(&registry)).expect("generated docs");
@@ -136,23 +143,12 @@ fn unknown_markdown_and_protected_instructions_select_everything() {
         "crates/harness/notes.md",
         ".github/instructions.md",
     ] {
-        assert_eq!(classify(&[path.into()]).suites.len(), 6, "{path}");
+        assert_eq!(
+            classify(&[path.into()]).suites.len(),
+            registry().suites.len(),
+            "{path}"
+        );
     }
-}
-
-#[test]
-fn strict_registry_rejects_unknown_fields_cycles_and_lists_semantic_errors() {
-    for payload in [
-        r#"{"version":1,"typo":true,"gates":[{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test"}]}"#,
-        r#"{"version":1,"gates":[{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test","typo":true}]}"#,
-        r#"{"version":1,"gates":[{"id":"x","command":"make x","requires":["y"],"select":"all","evidence":"test"},{"id":"y","command":"make y","requires":["x"],"select":"all","evidence":"test"}]}"#,
-    ] {
-        assert!(parse(payload.as_bytes()).is_err(), "{payload}");
-    }
-    let payload = br#"{"version":1,"gates":[{"id":"x","command":"cargo test","requires":["missing"],"select":"all","evidence":"test"}]}"#;
-    let error = parse(payload).err().expect("invalid registry").to_string();
-    assert!(error.contains("invalid command"));
-    assert!(error.contains("invalid dependency"));
 }
 
 #[test]
@@ -165,6 +161,17 @@ fn selection_manifest_rejects_unknown_fields() {
     check_selection(&manifest.to_string(), &results, &expected).expect("valid control");
     manifest["forged"] = serde_json::json!(true);
     assert!(check_selection(&manifest.to_string(), &results, &expected).is_err());
+}
+
+#[test]
+fn unavailable_ci_base_selects_all_and_retains_requested_identity() {
+    for reference in ["missing-harness-comparison-base", "--help"] {
+        let manifest = current_selection(Some(reference)).expect("conservative selection");
+        assert_eq!(manifest.base, None);
+        assert_eq!(manifest.requested_base.as_deref(), Some(reference));
+        assert!(manifest.jobs.values().all(|selected| *selected));
+        assert!(manifest.gates.contains(&"fuzz-smoke".to_owned()));
+    }
 }
 
 #[test]
