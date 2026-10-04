@@ -69,6 +69,11 @@ endef
 define HARNESS_VALIDATE_SOURCE_PATH
 $(call HARNESS_VALIDATE_EVIDENCE_PATH)$(if $(strip $($(1))),,$(error $(2) must resolve to an existing path))$(if $(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$($(1))),$(error $(2) must not overlap HARNESS_EVIDENCE_DIR))
 endef
+HARNESS_SUPERVISOR_DIR ?= /tmp/aoeworld-supervisor
+HARNESS_SUPERVISOR_REQUIREMENTS ?= $(HARNESS_SUPERVISOR_DIR)/requirements.json
+override HARNESS_SUPERVISOR_DIR_REAL := $(realpath $(HARNESS_SUPERVISOR_DIR))
+override HARNESS_SUPERVISOR_REQUIREMENTS_REAL := $(realpath $(HARNESS_SUPERVISOR_REQUIREMENTS))
+override SUPERVISOR_MODEL_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_SUPERVISOR_DIR_REAL):$(HARNESS_SUPERVISOR_DIR_REAL):ro -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(TOOL_IMAGE)
 
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
@@ -227,7 +232,7 @@ scope-check:
 gate-run: harness-gate-run-path-check
 	@$(HARNESS_LOCAL_RUN) cargo run --locked -p aoe-harness -- gate-run --cadence $(HARNESS_CADENCE) --scope $(HARNESS_SCOPE) --output $(HARNESS_EVIDENCE_REAL)
 
-.PHONY: harness-evidence-path-check harness-gate-run-path-check harness-task-path-check harness-policy-path-check
+.PHONY: harness-evidence-path-check harness-gate-run-path-check harness-task-path-check harness-policy-path-check harness-supervisor-path-check supervisor-model
 harness-evidence-path-check:
 	@$(call HARNESS_VALIDATE_EVIDENCE_PATH) true
 
@@ -240,9 +245,18 @@ harness-task-path-check:
 harness-policy-path-check:
 	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_POLICY_ANCHOR_REAL,policy anchor) true
 
+harness-supervisor-path-check: harness-evidence-path-check
+	@test -d "$(HARNESS_SUPERVISOR_DIR_REAL)"
+	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_SUPERVISOR_REQUIREMENTS_REAL,supervisor requirements) true
+	@$(if $(filter $(HARNESS_SUPERVISOR_DIR_REAL) $(HARNESS_SUPERVISOR_DIR_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_SUPERVISOR_DIR_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from supervisor input directory))
+
 task-plan: harness-task-path-check
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@$(HARNESS_TASK_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness task-plan --task $(HARNESS_TASK_FILE_REAL) --output $(HARNESS_EVIDENCE_REAL)
+
+supervisor-model: harness-supervisor-path-check
+	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
+	@$(SUPERVISOR_MODEL_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS_REAL) --output $(HARNESS_EVIDENCE_REAL)
 
 policy-prepare: harness-policy-path-check
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
