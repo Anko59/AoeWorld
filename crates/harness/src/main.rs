@@ -117,6 +117,7 @@ enum Command {
     PolicyPrepare(gates::policy::Options),
     SupervisorModel(gates::policy::supervisor::Options),
     TaskPlan(gates::tasks::Options),
+    ReviewSubject(gates::review::Options),
     PreCommit,
     Preflight,
     HooksInstall,
@@ -321,6 +322,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             gates::policy::supervisor::execute(Path::new("."), options)?
         }
         Command::TaskPlan(options) => gates::tasks::execute(Path::new("."), options)?,
+        Command::ReviewSubject(options) => gates::review::execute(Path::new("."), options)?,
         Command::PreCommit => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }

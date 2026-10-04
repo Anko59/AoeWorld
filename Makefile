@@ -201,9 +201,17 @@ structure-check:
 architecture-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- architecture-check
 
-.PHONY: contracts-check
+.PHONY: contracts-check review-subject
 contracts-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- contracts-check
+
+REVIEW_QUOTE = '$(subst ','"'"',$(1))'
+REVIEW_COMMA := ,
+REVIEW_RUN = docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
+review-subject: tools
+	@$(if $(filter undefined,$(origin GIT_INDEX_FILE)),:,$(error review-subject Make wrapper does not support defined GIT_INDEX_FILE; use the CLI with an explicitly mounted intentional index))
+	@$(if $(findstring $(REVIEW_COMMA),$(REVIEW_OUTPUT)$(REVIEW_INPUT)),$(error review-subject Docker mount paths must not contain CSV commas),:)
+	@$(REVIEW_RUN) cargo run --locked -p aoe-harness -- review-subject --base $(call REVIEW_QUOTE,$(REVIEW_BASE)) $(if $(REVIEW_INDEX),--index) $(if $(REVIEW_CANDIDATE),--candidate $(call REVIEW_QUOTE,$(REVIEW_CANDIDATE))) --output $(call REVIEW_QUOTE,$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--review $(call REVIEW_QUOTE,$(REVIEW_INPUT)))
 
 docs-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- docs-check
