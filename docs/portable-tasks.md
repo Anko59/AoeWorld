@@ -99,7 +99,10 @@ Atomic0600 outputs include the plan, complete accepted diff, bounded context and
 version-probe receipt. A reused plan first becomes pending `UNAVAILABLE`; input,
 comparison, digest, cancellation or other errors publish nonready evidence rather
 than retaining stale ready output. Task and immutable source endpoints are checked
-before publication. These same-user files are not authenticated supervisor logs.
+before publication. An input overlapping the output directory, including resolved
+symlink aliases, is rejected before any output replacement to avoid destroying
+that input. A nonzero invocation never establishes fresh evidence from a retained
+older plan. These same-user files are not authenticated supervisor logs.
 
 ## Integrity is independent review, never automatic PASS
 

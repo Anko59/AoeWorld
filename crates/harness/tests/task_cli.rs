@@ -1,4 +1,30 @@
 use std::{fs, path::Path, process::Command};
+#[cfg(unix)]
+#[test]
+fn aliased_task_input_inside_output_is_rejected_without_clobbering_input() {
+    let root = tempfile::tempdir().unwrap();
+    let owner = tempfile::tempdir().unwrap();
+    let output = owner.path().join("output");
+    fs::create_dir(&output).unwrap();
+    let alias = owner.path().join("output-alias");
+    std::os::unix::fs::symlink(&output, &alias).unwrap();
+    let original = b"caller-owned task input must remain unchanged\n";
+    fs::write(output.join("task-plan.json"), original).unwrap();
+    let input = alias.join("task-plan.json");
+    let result = cli(
+        root.path(),
+        &[
+            "task-plan",
+            "--task",
+            input.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ],
+    );
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("must not overlap"));
+    assert_eq!(fs::read(output.join("task-plan.json")).unwrap(), original);
+}
 fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .current_dir(root)

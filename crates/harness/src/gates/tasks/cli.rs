@@ -23,7 +23,11 @@ pub(crate) struct Options {
 pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
     let root = fs::canonicalize(root)?;
     let output = PrivateOutput::new(&options.output, std::slice::from_ref(&root))?;
-    if options.task.starts_with(output.directory()) {
+    // Check resolved aliases before replacing reserved outputs: the task input
+    // itself may be reached through a directory symlink into the output directory.
+    if options.task.starts_with(output.directory())
+        || fs::canonicalize(&options.task).is_ok_and(|path| path.starts_with(output.directory()))
+    {
         return Err("task input must not overlap output".into());
     }
     output.atomic(
