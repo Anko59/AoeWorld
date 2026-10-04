@@ -12,6 +12,7 @@ use std::{
 use tempfile::TempDir;
 
 mod checks;
+mod content;
 mod diff;
 mod git;
 mod index;
@@ -218,11 +219,11 @@ pub fn inspect(root: &Path, revision: Option<&str>) -> Result<()> {
         root,
         revision.map_or(Kind::Index, |revision| Kind::Commit(revision.to_owned())),
     )?;
-    snapshot.run_checked(|_| Ok(()))?;
+    let content_witness = snapshot.content_witness()?;
     println!(
         "{}",
         serde_json::to_string_pretty(
-            &serde_json::json!({"identity": snapshot.identity, "paths": snapshot.paths, "authoritative": false})
+            &serde_json::json!({"identity": snapshot.identity, "paths": snapshot.paths, "content_witness": content_witness, "authoritative": false})
         )?
     );
     Ok(())
