@@ -1,6 +1,11 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
-mod hooks;
-pub(crate) use hooks::hook_path;
+mod paths;
+pub(crate) mod policy;
+pub(crate) mod registry;
+pub(crate) mod runner;
+pub(crate) mod scopes;
+pub(crate) mod tasks;
+use registry::{Cadence, Registry};
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,50 +17,13 @@ use std::{
     process::Command,
 };
 
-#[derive(Deserialize)]
-struct Registry {
-    version: u16,
-    gates: Vec<Gate>,
-}
-
-#[derive(Deserialize)]
-struct Gate {
-    id: String,
-    command: String,
-    requires: Vec<String>,
-    select: String,
-    evidence: String,
-}
-
+#[cfg(test)]
 fn parse(bytes: &[u8]) -> Result<Registry, Box<dyn Error>> {
-    let registry: Registry = serde_json::from_slice(bytes)?;
-    if registry.version != 1 || registry.gates.is_empty() {
-        return Err("unsupported or empty gate registry".into());
-    }
-    let mut seen = BTreeSet::new();
-    for gate in &registry.gates {
-        if !seen.insert(&gate.id) {
-            return Err(format!("duplicate gate {}", gate.id).into());
-        }
-        if !gate.command.starts_with("make ") || gate.command.split_whitespace().count() != 2 {
-            return Err(format!("invalid command for {}", gate.id).into());
-        }
-        if gate.command != format!("make {}", gate.id) {
-            return Err(format!("gate command mismatch: {}", gate.id).into());
-        }
-    }
-    for gate in &registry.gates {
-        for prerequisite in &gate.requires {
-            if !seen.contains(prerequisite) || prerequisite == &gate.id {
-                return Err(format!("invalid dependency {prerequisite} for {}", gate.id).into());
-            }
-        }
-    }
-    Ok(registry)
+    Registry::parse(bytes)
 }
 
 fn table(registry: &Registry) -> String {
-    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\n| Gate | Command | Depends on | Selection | Evidence |\n|---|---|---|---|---|\n".to_owned();
+    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.\n\n| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Evidence |\n|---|---|---|---|---|---|---|\n".to_owned();
     for gate in &registry.gates {
         let requires = if gate.requires.is_empty() {
             "—".to_owned()
@@ -63,8 +31,14 @@ fn table(registry: &Registry) -> String {
             gate.requires.join(", ")
         };
         output.push_str(&format!(
-            "| {} | `{}` | {} | {} | {} |\n",
-            gate.id, gate.command, requires, gate.select, gate.evidence
+            "| {} | `{}` | {} | {} | {:?} | {} | {} |\n",
+            gate.id,
+            gate.command,
+            requires,
+            gate.suites.join(", "),
+            gate.cadences,
+            gate.budget_s,
+            gate.evidence
         ));
     }
     output
@@ -131,7 +105,7 @@ fn local_links_exist(path: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn docs_check(root: &Path) -> Result<(), Box<dyn Error>> {
-    let registry = parse(&fs::read(root.join("gates/registry.json"))?)?;
+    let registry = Registry::load(root)?;
     let expected = table(&registry);
     let actual = fs::read_to_string(root.join("docs/gates.md"))?;
     if actual != expected {
@@ -147,87 +121,28 @@ pub fn docs_check(root: &Path) -> Result<(), Box<dyn Error>> {
 pub struct Impact {
     pub suites: BTreeSet<String>,
     pub paths: Vec<String>,
+    pub reasons: BTreeMap<String, BTreeSet<String>>,
 }
 
-fn classify(paths: &[String]) -> Impact {
-    let all: BTreeSet<String> = [
-        "static",
-        "native",
-        "browser",
-        "assets",
-        "performance",
-        "release",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect();
-    let mut suites = BTreeSet::new();
-    suites.insert("static".to_owned());
-    if paths.is_empty() {
-        return Impact {
-            suites: all,
-            paths: Vec::new(),
-        };
-    }
-    for path in paths {
-        if path.starts_with("docs/")
-            || path.ends_with(".md")
-            || path == "LICENSE"
-            || path == "THIRD_PARTY.md"
-        {
-            continue;
-        }
-        if path.starts_with("browser/")
-            || path.starts_with("web/")
-            || path.starts_with("crates/client/")
-            || path.starts_with("crates/rendering/")
-        {
-            suites.insert("browser".to_owned());
-            suites.insert("native".to_owned());
-            suites.insert("performance".to_owned());
-        } else if path.starts_with("crates/assets/") {
-            suites.insert("assets".to_owned());
-            suites.insert("native".to_owned());
-            suites.insert("browser".to_owned());
-            suites.insert("performance".to_owned());
-        } else if path.starts_with("crates/server/")
-            || path.starts_with("crates/core/")
-            || path.starts_with("crates/scenario/")
-            || path.starts_with("crates/simulation/")
-            || path.starts_with("crates/protocol/")
-        {
-            suites.extend(
-                ["native", "browser", "performance"]
-                    .into_iter()
-                    .map(str::to_owned),
-            );
-        } else {
-            return Impact {
-                suites: all,
-                paths: paths.to_owned(),
-            };
-        }
-    }
+fn classify(registry: &Registry, paths: &[String]) -> Impact {
+    let classification = registry.classify(paths);
     Impact {
-        suites,
-        paths: paths.to_owned(),
+        suites: classification.suites,
+        paths: paths.to_vec(),
+        reasons: classification.reasons,
     }
 }
-
-const CI_JOBS: [&str; 5] = [
-    "static",
-    "native-coverage",
-    "browser",
-    "target-performance",
-    "fuzz-smoke",
-];
 
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct Selection {
     version: u16,
     revision: String,
     base: Option<String>,
+    requested_base: Option<String>,
     paths: Vec<String>,
+    registry_hash: String,
+    gates: Vec<String>,
     jobs: BTreeMap<String, bool>,
 }
 
@@ -239,53 +154,60 @@ fn git_output(args: &[&str]) -> Result<String, Box<dyn Error>> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn changed_paths(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
+fn repository_root() -> Result<PathBuf, Box<dyn Error>> {
     let output = Command::new("git")
-        .args(["diff", "--name-only", "-z", base, "HEAD"])
+        .args(["rev-parse", "--show-toplevel"])
         .output()?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
     }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|name| !name.is_empty())
-        .map(|name| String::from_utf8_lossy(name).to_string())
-        .collect())
+    let text = String::from_utf8(output.stdout)?;
+    Ok(PathBuf::from(text.strip_suffix('\n').unwrap_or(&text)))
 }
 
-fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
-    let suites = classify(&paths).suites;
-    let jobs = CI_JOBS
-        .into_iter()
-        .map(|job| {
-            let selected = match job {
-                "static" => true,
-                "native-coverage" => suites.contains("native"),
-                "browser" => suites.contains("browser"),
-                "target-performance" => suites.contains("performance"),
-                "fuzz-smoke" => suites.contains("assets") || suites.contains("release"),
-                _ => false,
-            };
-            (job.to_owned(), selected)
-        })
-        .collect();
-    Selection {
-        version: 1,
+fn changed_paths(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    paths::changed(Path::new("."), base)
+}
+
+fn selection(
+    registry: &Registry,
+    revision: String,
+    base: Option<String>,
+    paths: Vec<String>,
+) -> Result<Selection, Box<dyn Error>> {
+    let suites = classify(registry, &paths).suites;
+    let plan = registry.plan(Cadence::Ci, &suites)?;
+    Ok(Selection {
+        version: 2,
         revision,
+        requested_base: base.clone(),
         base,
         paths,
-        jobs,
-    }
+        registry_hash: registry.fingerprint()?,
+        gates: plan.gates,
+        jobs: plan.jobs,
+    })
 }
 
 fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
+    let registry = Registry::load(&repository_root()?)?;
     let revision = git_output(&["rev-parse", "HEAD"])?;
-    let paths = match base {
-        Some(base) => changed_paths(base)?,
-        None => Vec::new(),
+    let requested_base = base.map(str::to_owned);
+    let (base, paths) = match base {
+        Some(base) => match paths::resolve(Path::new("."), base)
+            .and_then(|base| changed_paths(&base).map(|paths| (Some(base), paths)))
+        {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("comparison unavailable; select all: {error}");
+                (None, Vec::new())
+            }
+        },
+        None => (None, Vec::new()),
     };
-    Ok(selection(revision, base.map(str::to_owned), paths))
+    let mut manifest = selection(&registry, revision, base, paths)?;
+    manifest.requested_base = requested_base;
+    Ok(manifest)
 }
 
 pub fn ci_select() -> Result<(), Box<dyn Error>> {
@@ -320,11 +242,11 @@ fn check_selection(
     }
     let results: BTreeMap<String, String> = serde_json::from_str(results)?;
     if results.get("select").map(String::as_str) != Some("success")
-        || results.len() != CI_JOBS.len() + 1
+        || results.len() != expected.jobs.len() + 1
     {
         return Err("CI selection job failed or result set is incomplete".into());
     }
-    for job in CI_JOBS {
+    for job in expected.jobs.keys() {
         let wanted = if *expected.jobs.get(job).ok_or("missing selected job")? {
             "success"
         } else {
@@ -358,7 +280,33 @@ pub fn impact(base: Option<&str>, paths: Vec<String>) -> Result<(), Box<dyn Erro
     } else {
         paths
     };
-    println!("{}", serde_json::to_string_pretty(&classify(&paths))?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&classify(&Registry::load(&repository_root()?)?, &paths))?
+    );
+    Ok(())
+}
+
+pub fn docs_generate(root: &Path) -> Result<(), Box<dyn Error>> {
+    fs::write(root.join("docs/gates.md"), table(&Registry::load(root)?))?;
+    Ok(())
+}
+
+pub fn plan(
+    cadence: Cadence,
+    base: Option<&str>,
+    input: Vec<String>,
+) -> Result<(), Box<dyn Error>> {
+    let paths = match base {
+        Some(base) => changed_paths(base)?,
+        None => input,
+    };
+    let registry = Registry::load(&repository_root()?)?;
+    let classification = registry.classify(&paths);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&registry.plan(cadence, &classification.suites)?)?
+    );
     Ok(())
 }
 

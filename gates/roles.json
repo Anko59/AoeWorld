@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "roles": [
+    {"role":"coordinator","guides":["AGENTS.md","docs/agent-engineering.md","docs/testing.md","skills/harness-ci/SKILL.md"],"activities":["plan"]},
+    {"role":"tester","guides":["docs/agent-engineering.md","docs/testing.md","skills/harness-ci/SKILL.md","skills/protocol/SKILL.md"],"activities":["test"]},
+    {"role":"implementer","guides":["AGENTS.md","docs/agent-engineering.md","skills/simulation-server/SKILL.md","skills/wasm-rendering/SKILL.md"],"activities":["implement"]},
+    {"role":"reviewer","guides":["docs/agent-engineering.md","docs/testing.md","docs/adr/0006-provider-neutral-harness.md"],"activities":["review"]},
+    {"role":"maintainer","guides":["docs/agent-engineering.md","skills/harness-ci/SKILL.md","skills/release/SKILL.md"],"activities":["maintain"]},
+    {"role":"qa","guides":["docs/agent-engineering.md","docs/testing.md","skills/performance/SKILL.md","skills/game-assets/SKILL.md"],"activities":["observe-qa"]}
+  ]
+}

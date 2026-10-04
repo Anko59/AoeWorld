@@ -4,6 +4,7 @@ mod dev;
 mod e2e;
 mod fuzz;
 mod gates;
+mod hooks;
 mod mutation;
 mod perf;
 mod perf_hardware;
@@ -51,6 +52,18 @@ enum Command {
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    GatesDocs,
+    ScopeCheck {
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    GatePlan {
+        #[arg(value_enum)]
+        cadence: gates::registry::Cadence,
+        #[arg(long)]
+        base: Option<String>,
+        paths: Vec<String>,
+    },
     CoverageCheck {
         file: Option<PathBuf>,
     },
@@ -99,6 +112,10 @@ enum Command {
         #[arg(long, default_value = "fast")]
         budget: String,
     },
+    GateRun(gates::runner::Options),
+    PolicyPrepare(gates::policy::Options),
+    SupervisorModel(gates::policy::supervisor::Options),
+    TaskPlan(gates::tasks::Options),
     PreCommit,
     Preflight,
     HooksInstall,
@@ -219,6 +236,15 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::GatesDocs => gates::docs_generate(Path::new("."))?,
+        Command::ScopeCheck { revision } => {
+            gates::scopes::inspect(Path::new("."), revision.as_deref())?
+        }
+        Command::GatePlan {
+            cadence,
+            base,
+            paths,
+        } => gates::plan(cadence, base.as_deref(), paths)?,
         Command::CoverageCheck { file } => {
             coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
         }
@@ -287,51 +313,22 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
         }
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
+        Command::GateRun(options) => gates::runner::execute(Path::new("."), options)?,
+        Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
+        Command::SupervisorModel(options) => {
+            gates::policy::supervisor::execute(Path::new("."), options)?
+        }
+        Command::TaskPlan(options) => gates::tasks::execute(Path::new("."), options)?,
         Command::PreCommit => {
-            run(Command::FmtCheck)?;
-            run(Command::StructureCheck)?;
-            run(Command::ArchitectureCheck)?;
-            run(Command::DocsCheck)?;
-            run(Command::Lint)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }
         Command::Preflight => {
-            run(Command::PreCommit)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
             run(Command::TestUnit)?;
             run(Command::PerfSmoke)?;
         }
-        Command::HooksInstall => {
-            for (hook, command) in [("pre-commit", "pre-commit"), ("pre-push", "preflight")] {
-                let path = gates::hook_path(hook)?;
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(&path, format!("#!/bin/sh\nexec make {command}\n"))?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
-                }
-            }
-        }
-        Command::HooksCheck => {
-            for (hook, expected) in [
-                ("pre-commit", "exec make pre-commit"),
-                ("pre-push", "exec make preflight"),
-            ] {
-                let path = gates::hook_path(hook)?;
-                let content = std::fs::read_to_string(&path)?;
-                if !content.contains(expected) {
-                    return Err(format!("{hook} hook differs from expected dispatcher").into());
-                }
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if std::fs::metadata(&path)?.permissions().mode() & 0o111 == 0 {
-                        return Err(format!("{hook} is not executable").into());
-                    }
-                }
-            }
-        }
+        Command::HooksInstall => hooks::install(Path::new("."))?,
+        Command::HooksCheck => hooks::check(Path::new("."))?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,
