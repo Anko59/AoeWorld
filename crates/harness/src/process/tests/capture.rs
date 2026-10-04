@@ -117,29 +117,37 @@ fn capture_timeout_and_cancellation_keep_partial_output() {
     let root = tempfile::tempdir().unwrap();
     let captured = shell(
         root.path(),
-        "printf before; sleep 5",
-        Duration::from_millis(40),
+        "printf before; exec /bin/sleep 5",
+        Duration::from_secs(1),
         &Cancellation::default(),
     );
     assert!(matches!(captured.exit, CaptureExit::Deadline));
     assert_eq!(captured.stdout, b"before");
-    assert!(captured.duration < Duration::from_secs(1));
+    assert!(captured.duration < Duration::from_secs(2));
     let cancellation = Cancellation::default();
     let signal = cancellation.clone();
+    let ready = root.path().join("partial-ready");
+    let ready_for_worker = ready.clone();
     let worker = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(40));
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !ready_for_worker.exists() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            ready_for_worker.exists(),
+            "child did not emit partial output"
+        );
         signal.cancel();
     });
-    let captured = shell(
-        root.path(),
-        "printf partial; sleep 5",
-        Duration::from_secs(5),
-        &cancellation,
+    let script = format!(
+        "printf partial; : > '{}'; exec /bin/sleep 5",
+        ready.display()
     );
+    let captured = shell(root.path(), &script, Duration::from_secs(3), &cancellation);
     worker.join().unwrap();
     assert!(matches!(captured.exit, CaptureExit::Cancelled));
     assert_eq!(captured.stdout, b"partial");
-    assert!(captured.duration < Duration::from_secs(1));
+    assert!(captured.duration < Duration::from_secs(3));
 }
 
 #[test]

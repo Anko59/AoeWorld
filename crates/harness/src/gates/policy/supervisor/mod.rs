@@ -2,10 +2,12 @@
 mod artifact;
 mod cli;
 mod identity;
+mod journal;
 mod lease;
 mod requirements;
 #[cfg(test)]
 mod tests;
+mod transport;
 use super::{
     Anchor, Result,
     descriptor::{Abi, Operation},
