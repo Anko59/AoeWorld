@@ -1,5 +1,6 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 mod paths;
+pub(crate) mod policy;
 pub(crate) mod registry;
 pub(crate) mod runner;
 pub(crate) mod scopes;

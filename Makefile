@@ -37,6 +37,9 @@ HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
 HARNESS_SCOPE ?= working
 HARNESS_LOCAL_RUN := $(DEV_ORCH_BASE) -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) $(ORCH_IMAGE)
+HARNESS_POLICY_ANCHOR ?= /tmp/aoeworld-policy-anchor.json
+HARNESS_CANDIDATE ?= $(shell git rev-parse HEAD)
+HARNESS_POLICY_RUN := $(DEV_ORCH_BASE) -e GH_TOKEN -e GITHUB_TOKEN -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) -v $(HARNESS_POLICY_ANCHOR):$(HARNESS_POLICY_ANCHOR):ro $(ORCH_IMAGE)
 
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
@@ -179,7 +182,7 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
-.PHONY: test-harness gates-docs gate-plan scope-check gate-run
+.PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare
 test-harness:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
@@ -194,6 +197,10 @@ scope-check:
 
 gate-run:
 	@$(HARNESS_LOCAL_RUN) cargo run --locked -p aoe-harness -- gate-run --cadence $(HARNESS_CADENCE) --scope $(HARNESS_SCOPE) --output $(HARNESS_EVIDENCE_DIR)
+
+policy-prepare:
+	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
+	@$(HARNESS_POLICY_RUN) $(ROOT)/target/debug/aoe-harness policy-prepare --anchor $(HARNESS_POLICY_ANCHOR) --candidate $(HARNESS_CANDIDATE) --cadence $(HARNESS_CADENCE) --output $(HARNESS_EVIDENCE_DIR)
 
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap

@@ -79,6 +79,11 @@ impl Snapshot {
         Self::prepare_index(root, kind, index.as_deref())
     }
 
+    /// Fresh resolver repositories never inherit the candidate hook's index.
+    pub(crate) fn prepare_independent(root: &Path, kind: Kind) -> Result<Self> {
+        Self::prepare_index(root, kind, None)
+    }
+
     fn prepare_index(root: &Path, kind: Kind, requested_index: Option<&Path>) -> Result<Self> {
         let source = fs::canonicalize(root)?;
         // Reject a subdirectory: all recorded paths are repository-root-relative.

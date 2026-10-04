@@ -152,3 +152,12 @@ local evidence. Post-run immutable Docker ID observations do not prove the
 images a hostile Make used. Source-assets, real-geodata, and hardware capabilities
 remain unavailable without qualified inputs; no environment flag manufactures
 qualification. Existing CI and preflight gates remain unchanged.
+
+## Protected-policy preparation (not judging)
+
+The `policy-prepare` CLI and Make facade resolve the policy from an external
+launcher anchor, never candidate `origin` or local `dev`. See
+[judge preparation](judge-preparation.md) for source verification, setup and limits.
+Preparation executes no gates, never replaces required CI, and always reports
+`authoritative: false`. The protected branch must acquire a human-reviewed judge
+ABI before it can prepare a supported plan; the candidate ABI is not a fallback.

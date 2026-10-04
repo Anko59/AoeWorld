@@ -56,6 +56,21 @@ pub(super) fn referenced_objects(source: &Path, kind: &Kind, observed: &Probe) -
 }
 
 impl Snapshot {
+    /// Complete immutable raw-tree inventory, only after sealed metadata checks.
+    pub(crate) fn inventory(&self) -> Result<Vec<(String, String, String)>> {
+        if self.identity.tree.is_none() {
+            return Err("inventory requires an immutable tree".into());
+        }
+        self.run_checked(|root| {
+            let mut records: Vec<_> = entries(&tree_records(root, "HEAD")?)?
+                .into_iter()
+                .map(|entry| (entry.name, entry.mode, entry.object))
+                .collect();
+            records.sort();
+            Ok(records)
+        })
+    }
+
     pub fn fingerprints(&self) -> Result<(String, String)> {
         self.run_checked(|_| Ok(()))?;
         let source = serde_json::to_vec(&(
