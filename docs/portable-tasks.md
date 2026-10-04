@@ -2,8 +2,10 @@
 
 `aoe-harness task-plan` gives Codex, pi.dev and DeepSeek Harness the same bounded
 contract, canonical guides and mandatory gate recipes. It launches no provider,
-runs no validation, and grants no tool permissions. Its output is always
-`authoritative:false`. No Claude SDK, model, account or API key is required.
+runs no validation, and grants no tool permissions. Provider availability remains
+`UNAVAILABLE`: task planning never resolves or executes a PATH-selected binary.
+Its output is always `authoritative:false`. No Claude SDK, model, account or API
+key is required.
 
 ## Contract
 
@@ -51,14 +53,21 @@ HARNESS_TASK_FILE=/absolute/external/task.json \
 HARNESS_EVIDENCE_DIR=/absolute/external/task-evidence make task-plan
 ```
 
-The Make facade builds in Docker, mounts the task file read-only and delegates to
-Rust. The coordinator is not a restricted trusted supervisor: it retains normal
-local development mounts/capabilities. Do not supply secrets or claim isolation.
-Provider binaries are probed only by their fixed `codex`, `pi` or `dsh` name with
-`--version`; the Docker coordinator may not contain binaries installed on the
-host. Absence or invalid version output is `UNAVAILABLE` capability evidence,
-not a reason to stop provider-neutral planning. Binary presence/version never
-implies SDK pre-tool interception, filesystem enforcement or authenticated roles.
+Before building or mounting, the Make facade resolves host paths and requires
+evidence to be disjoint from checkout/shared Git metadata, separately mounted
+caches, and host runtime trees. It rejects evidence paths containing the default,
+`DOCKER_HOST`, or active-context Docker socket, as well as missing inputs and task
+aliases into evidence. These facades require a local Unix Docker endpoint; remote
+TCP/SSH contexts are rejected because bind sources resolve on the daemon host.
+Custom cache sources must already exist for canonical checks. The canonical task is
+mounted read-only; the planner runs with checkout/Git metadata read-only, networking
+disabled, and only external evidence writable. No Docker socket, provider
+subprocess, or host token is forwarded to this runtime.
+The build step still executes candidate-controlled Cargo build scripts and is not a
+security boundary for malicious source: do not run it on an untrusted candidate in
+a workspace containing secrets. Provider availability therefore remains
+`UNAVAILABLE`; it does not imply SDK pre-tool interception, filesystem enforcement
+or authenticated roles.
 
 ## Evidence and conservative selection
 
@@ -96,7 +105,9 @@ semantic contents or review/test verdict. Namespaces are not filesystem access
 controls or hidden-test confidentiality.
 
 Atomic0600 outputs include the plan, complete accepted diff, bounded context and
-version-probe receipt. A reused plan first becomes pending `UNAVAILABLE`; input,
+provider-unavailability observation. Overlap and unresolved-symlink checks happen
+before output mutation so an input alias cannot create or replace its own target.
+For disjoint paths, a reused plan first becomes pending `UNAVAILABLE`; later input,
 comparison, digest, cancellation or other errors publish nonready evidence rather
 than retaining stale ready output. Task and immutable source endpoints are checked
 before publication. An input overlapping the output directory, including resolved

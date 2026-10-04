@@ -22,10 +22,9 @@ pub(crate) struct Options {
 }
 pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
     let source = fs::canonicalize(root)?;
-    let output = PrivateOutput::new(&options.output, std::slice::from_ref(&source))?;
-    if options.anchor.starts_with(output.directory()) {
-        return Err("anchor must not overlap evidence output".into());
-    }
+    let git_common = crate::hooks::common_directory(&source)?;
+    let output = PrivateOutput::new(&options.output, &[source.clone(), git_common])?;
+    output.reject_input_alias(&options.anchor, "anchor")?;
     // Reused directories cannot retain a stale ready descriptor after ANY error.
     let pending = serde_json::json!({"schema":1,"authoritative":false,"status":"UNAVAILABLE","reasons":["preparation in progress; not execution evidence"]});
     output.atomic("preparation.json", &serde_json::to_vec_pretty(&pending)?)?;

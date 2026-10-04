@@ -73,3 +73,67 @@ fn invalid_inputs_replace_stale_preparation_and_do_not_modify_candidate_git() {
     assert_eq!(fs::read(repo.path().join(".git/index")).unwrap(), index);
     assert_eq!(fs::read(repo.path().join(".git/config")).unwrap(), config);
 }
+
+#[cfg(unix)]
+#[test]
+fn symlinked_anchor_into_evidence_is_rejected_before_stale_descriptor_replacement() {
+    let repo = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--template="]);
+    let reserved = output.path().join("preparation.json");
+    let sentinel = b"{\"status\":\"preserve-me\"}";
+    fs::write(&reserved, sentinel).unwrap();
+    let alias = external.path().join("anchor.json");
+    std::os::unix::fs::symlink(&reserved, &alias).unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        .current_dir(repo.path())
+        .args([
+            "policy-prepare",
+            "--anchor",
+            alias.to_str().unwrap(),
+            "--candidate",
+            &"a".repeat(40),
+            "--output",
+            output.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("must not overlap evidence output"));
+    assert_eq!(fs::read(&reserved).unwrap(), sentinel);
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_anchor_aliases_do_not_create_reserved_output_targets() {
+    let repo = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--template="]);
+    let reserved = output.path().join("preparation.json");
+    let direct_alias = external.path().join("dangling-anchor.json");
+    std::os::unix::fs::symlink(&reserved, &direct_alias).unwrap();
+    let directory_alias = external.path().join("output-alias");
+    std::os::unix::fs::symlink(output.path(), &directory_alias).unwrap();
+    let candidate = "a".repeat(40);
+
+    for alias in [direct_alias, directory_alias.join("preparation.json")] {
+        let result = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+            .current_dir(repo.path())
+            .args([
+                "policy-prepare",
+                "--anchor",
+                alias.to_str().unwrap(),
+                "--candidate",
+                &candidate,
+                "--output",
+                output.path().to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        assert!(!reserved.exists(), "input alias must not create its target");
+    }
+}

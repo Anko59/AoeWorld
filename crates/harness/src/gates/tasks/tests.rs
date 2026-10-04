@@ -1,4 +1,5 @@
 use super::*;
+mod context;
 use task::{Artifact, ArtifactKind, Status};
 fn registry() -> Registry {
     Registry::parse(include_bytes!(concat!(
@@ -274,7 +275,7 @@ fn catalog_hash_normalizes_set_order_but_binds_guidance_and_rejects_widening() {
     assert!(Catalog::parse(&vec![b' '; 16385]).is_err());
 }
 #[test]
-fn adapters_observe_installed_binary_without_manufacturing_hooks_isolation_or_identity() {
+fn adapters_report_unavailable_without_claiming_invocation_isolation_or_identity() {
     for provider in [
         adapters::Provider::Codex,
         adapters::Provider::PiDev,
@@ -282,14 +283,15 @@ fn adapters_observe_installed_binary_without_manufacturing_hooks_isolation_or_id
     ] {
         let descriptor = adapters::describe(
             provider,
-            adapters::Observation::Installed {
-                executable: provider.executable().into(),
-                version: "1.2.3".into(),
-            },
+            adapters::Observation::Unavailable(
+                "task planning never launches provider binaries".into(),
+            ),
         )
         .unwrap();
         let value = serde_json::to_value(descriptor).unwrap();
-        assert_eq!(value["availability"], "OBSERVED_INSTALLED");
+        assert_eq!(value["availability"], "UNAVAILABLE");
+        assert!(value["version"].is_null());
+        assert!(!value.as_object().unwrap().contains_key("invocation"));
         assert_eq!(value["authoritative_role_identity"], false);
         assert!(
             value["pre_tool_interception"]
@@ -303,36 +305,7 @@ fn adapters_observe_installed_binary_without_manufacturing_hooks_isolation_or_id
                 .unwrap()
                 .starts_with("UNAVAILABLE")
         );
-        let unavailable = adapters::describe(
-            provider,
-            adapters::Observation::Unavailable("binary absent".into()),
-        )
-        .unwrap();
-        assert_eq!(
-            serde_json::to_value(unavailable).unwrap()["availability"],
-            "UNAVAILABLE"
-        );
     }
-    assert!(
-        adapters::describe(
-            adapters::Provider::Codex,
-            adapters::Observation::Installed {
-                executable: "dsh".into(),
-                version: "1".into()
-            }
-        )
-        .is_err()
-    );
-    assert!(
-        adapters::describe(
-            adapters::Provider::Codex,
-            adapters::Observation::Installed {
-                executable: "codex".into(),
-                version: String::new()
-            }
-        )
-        .is_err()
-    );
     assert!(
         adapters::describe(
             adapters::Provider::Codex,

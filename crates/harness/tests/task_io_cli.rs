@@ -78,12 +78,18 @@ fn artifact_link_alias_and_size_rejections_replace_stale_ready_without_source_mu
 }
 
 #[test]
-fn declared_artifact_changed_during_provider_observation_is_not_accepted_with_old_digest() {
+fn path_selected_provider_cannot_mutate_declared_artifact() {
     let mut fixture = Fixture::new();
-    let path = fixture.artifact(b"original bytes");
-    // Test-only Python mutation uses one fixed path owned by this TempDir.
+    let bytes = b"original bytes";
+    let path = fixture.artifact(bytes);
+    // Even an executable on PATH is not launched for provider observation.
     fixture.provider(&format!("#!/usr/bin/python3\nfrom pathlib import Path\nPath({}).write_bytes(b'changed bytes')\nprint('fixture-codex 1.0')\n", serde_json::to_string(path.to_str().unwrap()).unwrap()));
-    fixture.unavailable(&fixture.run(), "matching actual full BLAKE3 digest");
+    let result = fixture.success(&fixture.run());
+    assert_eq!(
+        result["artifacts"][0]["blake3"],
+        blake3::hash(bytes).to_hex().to_string()
+    );
+    assert_eq!(fs::read(path).unwrap(), bytes);
 }
 
 #[test]
@@ -130,10 +136,12 @@ fn immutable_guide_bytes_are_required_not_stale_worktree_replacements() {
 }
 
 #[test]
-fn task_contract_endpoint_changes_and_budget_states_do_not_mint_readiness() {
+fn path_selected_provider_cannot_mutate_task_contract_and_budget_states_still_apply() {
     let mut fixture = Fixture::new();
     fixture.provider(&format!("#!/usr/bin/python3\nfrom pathlib import Path\np=Path({})\np.write_bytes(p.read_bytes()+b'\\n')\nprint('fixture-codex 1.0')\n", serde_json::to_string(fixture.input.to_str().unwrap()).unwrap()));
-    fixture.unavailable(&fixture.run(), "task contract changed");
+    let saved = serde_json::to_vec(&fixture.task).unwrap();
+    fixture.success(&fixture.run());
+    assert_eq!(fs::read(&fixture.input).unwrap(), saved);
     fixture.provider("#!/bin/sh\nprintf 'fixture-codex 1.0\\n'\n");
     fixture.task["rounds_remaining"] = json!(0);
     fixture.unavailable(&fixture.run(), "exhausted");

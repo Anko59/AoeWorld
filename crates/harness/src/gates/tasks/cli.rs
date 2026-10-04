@@ -4,12 +4,11 @@ use crate::{
         runner::{evidence::PrivateOutput, signals::Signals},
         scopes::{Kind, Snapshot},
     },
-    process::{self, Cancellation, CaptureExit},
+    process::Cancellation,
 };
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::Duration,
 };
 #[derive(clap::Args)]
 pub(crate) struct Options {
@@ -22,14 +21,10 @@ pub(crate) struct Options {
 }
 pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
     let root = fs::canonicalize(root)?;
-    let output = PrivateOutput::new(&options.output, std::slice::from_ref(&root))?;
-    // Check resolved aliases before replacing reserved outputs: the task input
-    // itself may be reached through a directory symlink into the output directory.
-    if options.task.starts_with(output.directory())
-        || fs::canonicalize(&options.task).is_ok_and(|path| path.starts_with(output.directory()))
-    {
-        return Err("task input must not overlap output".into());
-    }
+    let git_common = crate::hooks::common_directory(&root)?;
+    let output = PrivateOutput::new(&options.output, &[root.clone(), git_common])?;
+    // Check resolved and dangling aliases before replacing reserved outputs.
+    output.reject_input_alias(&options.task, "task input")?;
     output.atomic(
         "task-plan.json",
         b"{\"authoritative\":false,\"status\":\"UNAVAILABLE\",\"reason\":\"planning in progress\"}",
@@ -56,41 +51,9 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
                 added: file.added.clone(),
             })
             .collect::<Vec<_>>();
-        let provider = task.provider;
-        let executable = match provider {
-            adapters::Provider::Codex => "codex",
-            adapters::Provider::PiDev => "pi",
-            adapters::Provider::DeepSeekHarness => "dsh",
-        };
-        let observed = process::capture_in(
-            &root,
-            executable,
-            &["--version"],
-            &[],
-            Duration::from_secs(5),
-            &cancellation,
-        );
-        output.atomic(
-            "provider-probe.log",
-            &[
-                observed.stdout.as_slice(),
-                b"\n--- stderr ---\n",
-                &observed.stderr,
-            ]
-            .concat(),
-        )?;
-        let version = std::str::from_utf8(&observed.stdout)
-            .ok()
-            .map(str::trim)
-            .filter(|version| {
-                !version.is_empty()
-                    && version.len() <= 1024
-                    && !version.chars().any(char::is_control)
-            });
-        let runtime = match (matches!(observed.exit, CaptureExit::Success) && !observed.truncated, version) {
-            (true, Some(version)) => adapters::Observation::Installed { executable:executable.into(), version:version.into() },
-            _ => adapters::Observation::Unavailable("fixed executable/version probe absent or invalid; provider-neutral planning remains available".into()),
-        };
+        let reason = "provider launch intentionally unavailable; task planning never executes PATH-resolved provider binaries";
+        output.atomic("provider-observation.log", reason.as_bytes())?;
+        let runtime = adapters::Observation::Unavailable(reason.into());
         let planned = plan(task, &registry, &catalog, &diff.paths, &hunks, runtime)?;
         let mut guides = Vec::new();
         for path in &planned.context.guides {

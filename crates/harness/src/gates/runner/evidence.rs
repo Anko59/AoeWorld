@@ -64,9 +64,9 @@ pub(crate) fn canonical_registry_hash(registry: &Registry) -> Result<String> {
     registry.fingerprint()
 }
 
-/// Launcher supplies a complete list of gate-writable mount roots, including
-/// external caches. Lexical mode bits do not establish security against gates.
-/// A restricted trusted judge must own this configuration in the next stage.
+/// Caller supplies source and mount roots that evidence must not overlap,
+/// including external caches and linked-worktree Git metadata. Canonical path
+/// checks are hygiene, not same-UID security; a trusted judge must own policy.
 pub(crate) struct PrivateOutput {
     directory: PathBuf,
 }
@@ -89,6 +89,33 @@ impl PrivateOutput {
     }
     pub(crate) fn directory(&self) -> &Path {
         &self.directory
+    }
+    /// Reject aliases into reserved output and dangling symlinks before any
+    /// output publication can create a target that the input path names.
+    pub(crate) fn reject_input_alias(&self, input: &Path, label: &str) -> Result<()> {
+        let canonical = fs::canonicalize(input).ok();
+        let canonical_parent = input
+            .parent()
+            .and_then(|parent| fs::canonicalize(parent).ok());
+        if input.starts_with(&self.directory)
+            || canonical
+                .as_ref()
+                .is_some_and(|path| path.starts_with(&self.directory))
+            || canonical_parent
+                .as_ref()
+                .is_some_and(|path| path.starts_with(&self.directory))
+        {
+            return Err(format!("{label} must not overlap evidence output").into());
+        }
+        let dangling_symlink = canonical.is_none()
+            && fs::symlink_metadata(input).is_ok_and(|metadata| metadata.file_type().is_symlink());
+        if dangling_symlink {
+            return Err(format!(
+                "{label} is an unresolved symlink; evidence output was left untouched"
+            )
+            .into());
+        }
+        Ok(())
     }
     pub(crate) fn ledger(&self, ledger: &Ledger) -> Result<PathBuf> {
         if ledger.authoritative {

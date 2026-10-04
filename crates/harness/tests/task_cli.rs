@@ -3,6 +3,7 @@ use std::{fs, path::Path, process::Command};
 #[test]
 fn aliased_task_input_inside_output_is_rejected_without_clobbering_input() {
     let root = tempfile::tempdir().unwrap();
+    git(root.path(), &["init", "--quiet", "--template="]);
     let owner = tempfile::tempdir().unwrap();
     let output = owner.path().join("output");
     fs::create_dir(&output).unwrap();
@@ -27,7 +28,8 @@ fn aliased_task_input_inside_output_is_rejected_without_clobbering_input() {
 }
 fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
-        .current_dir(root)
+        .arg("-C")
+        .arg(root)
         .args([
             "-c",
             "user.name=Fixture",
@@ -185,39 +187,45 @@ fn task_plan_uses_immutable_diff_keeps_rename_names_and_preserves_required_prefl
         let bin = external.path().join("bin");
         fs::create_dir(&bin).unwrap();
         let executable = bin.join("codex");
-        for body in [
-            "#!/bin/sh\nexit 0\n",
-            "#!/bin/sh\nprintf '\\377'\n",
-            "#!/bin/sh\nprintf 'fake-codex 1.0\\n'\n",
-        ] {
-            fs::write(&executable, body).unwrap();
-            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
-            let observed = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
-                .current_dir(repo.path())
-                .args([
-                    "task-plan",
-                    "--task",
-                    input.to_str().unwrap(),
-                    "--output",
-                    output.path().to_str().unwrap(),
-                ])
-                .env(
-                    "PATH",
-                    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-                )
-                .output()
-                .unwrap();
-            assert!(
-                observed.status.success(),
-                "{}",
-                String::from_utf8_lossy(&observed.stderr)
-            );
-            let descriptor: serde_json::Value = serde_json::from_slice(&observed.stdout).unwrap();
-            assert_eq!(
-                descriptor["plan"]["adapter"]["authoritative_role_identity"],
-                false
-            );
-        }
+        let marker = external.path().join("provider-was-executed");
+        fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s' \"$TASK_PROBE_SENTINEL\" > \"$TASK_PROBE_MARKER\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        let observed = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+            .current_dir(repo.path())
+            .args([
+                "task-plan",
+                "--task",
+                input.to_str().unwrap(),
+                "--output",
+                output.path().to_str().unwrap(),
+            ])
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("TASK_PROBE_MARKER", &marker)
+            .env("TASK_PROBE_SENTINEL", "must-not-reach-provider")
+            .output()
+            .unwrap();
+        assert!(
+            observed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&observed.stderr)
+        );
+        let descriptor: serde_json::Value = serde_json::from_slice(&observed.stdout).unwrap();
+        assert_eq!(descriptor["plan"]["adapter"]["availability"], "UNAVAILABLE");
+        assert_eq!(
+            descriptor["plan"]["adapter"]["authoritative_role_identity"],
+            false
+        );
+        assert!(
+            !marker.exists(),
+            "task JSON must never launch its selected provider"
+        );
     }
     // Unstaged role-policy tampering is not adopted from working files.
     fs::write(repo.path().join("gates/roles.json"), "{\"trusted\":true}").unwrap();
@@ -232,4 +240,65 @@ fn task_plan_uses_immutable_diff_keeps_rename_names_and_preserves_required_prefl
         serde_json::from_slice(&fs::read(output.path().join("task-plan.json")).unwrap()).unwrap();
     assert_eq!(failure["status"], "UNAVAILABLE");
     assert_eq!(failure["authoritative"], false);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_task_input_cannot_overwrite_its_own_reserved_output() {
+    use std::os::unix::fs::symlink;
+
+    let repo = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--template="]);
+    let reserved = output.path().join("task-plan.json");
+    let sentinel = b"{\"status\":\"must-survive\"}";
+    fs::write(&reserved, sentinel).unwrap();
+    let alias = external.path().join("task.json");
+    symlink(&reserved, &alias).unwrap();
+
+    let result = cli(
+        repo.path(),
+        &[
+            "task-plan",
+            "--task",
+            alias.to_str().unwrap(),
+            "--output",
+            output.path().to_str().unwrap(),
+        ],
+    );
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("must not overlap evidence output"));
+    assert_eq!(fs::read(&reserved).unwrap(), sentinel);
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_task_aliases_do_not_create_reserved_output_targets() {
+    use std::os::unix::fs::symlink;
+
+    let repo = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--template="]);
+    let reserved = output.path().join("task-plan.json");
+    let direct_alias = external.path().join("dangling-task.json");
+    symlink(&reserved, &direct_alias).unwrap();
+    let directory_alias = external.path().join("output-alias");
+    symlink(output.path(), &directory_alias).unwrap();
+
+    for alias in [direct_alias, directory_alias.join("task-plan.json")] {
+        let result = cli(
+            repo.path(),
+            &[
+                "task-plan",
+                "--task",
+                alias.to_str().unwrap(),
+                "--output",
+                output.path().to_str().unwrap(),
+            ],
+        );
+        assert!(!result.status.success());
+        assert!(!reserved.exists(), "input alias must not create its target");
+    }
 }

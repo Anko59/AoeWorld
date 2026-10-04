@@ -38,13 +38,23 @@ from semantic identity. Bundle consistency is never source authentication.
 
 ## Setup
 
-Prepare an owned external evidence directory and external anchor. Give GitHub
-API credentials only to the invocation environment, not command arguments or
-tracked files. Do not store tokens in the anchor. The Make facade compiles first
-without forwarding API credentials; then runs the candidate bootstrap binary
-in the coordinator image with `GH_TOKEN`/`GITHUB_TOKEN` forwarded for API observation.
-The coordinator installs Debian bookworm GitHub CLI at an exact package version.
-It is not an authenticated protected judge binary.
+Prepare an owned external evidence directory and external anchor. Never provide
+GitHub credentials to this command or store tokens in the anchor. The Make facade
+canonicalizes host paths and rejects missing inputs, anchor aliases, or evidence
+paths overlapping checkout/shared Git metadata, separately mounted caches, or
+host runtime trees. It rejects evidence paths containing the default, `DOCKER_HOST`,
+or active-context Docker socket before building/mounting. These facades require a
+local Unix Docker endpoint; remote TCP/SSH contexts are refused because bind sources
+resolve on the daemon host. Custom cache sources must already exist for canonical
+checks. The candidate bootstrap runs with checkout/Git metadata read-only and no
+forwarded Docker socket or host tokens.
+API calls are unauthenticated and local image inspection cannot reach a daemon, so
+either may return `UNAVAILABLE`; this is intentional until a protected, separately
+trusted supervisor exists. The candidate build still executes Cargo build scripts and the
+policy container has outbound network access. This is a local developer tool, not
+an isolation boundary: do not invoke it on untrusted code in a secret-bearing
+workspace. The coordinator's GitHub CLI package is pinned, but is not an
+authenticated protected judge binary.
 
 ```sh
 make orchestrator-tools
@@ -54,7 +64,9 @@ HARNESS_CANDIDATE=<full-lowercase-commit-OID> \
 HARNESS_CADENCE=pr make policy-prepare
 ```
 
-CLI equivalent inside a prepared coordinator:
+Direct CLI invocation bypasses the Make facade's read-only mounts and token
+omission. Only run a trusted bootstrap with no sensitive caller environment; an
+executable cannot sandbox itself.
 
 ```sh
 aoe-harness policy-prepare --anchor /absolute/external/anchor.json \
@@ -63,9 +75,10 @@ aoe-harness policy-prepare --anchor /absolute/external/anchor.json \
 ```
 
 No `--trusted`, policy OID, local policy root, executable or observation JSON
-override exists. Reused validated outputs receive pending `UNAVAILABLE` before
-validation, and all preparation errors replace stale ready descriptors. Invalid
-or unsafe output locations cannot receive an error descriptor. Remote process
+override exists. Input/evidence overlap and unresolved-symlink checks happen before
+output mutation; for disjoint paths, reused outputs receive pending `UNAVAILABLE`
+before validation, and later preparation errors replace stale ready descriptors.
+Invalid or unsafe output locations cannot receive an error descriptor. Remote process
 receipts retain bounded stdout/stderr atomically mode0600; truncation fails.
 `closure.json` binds the protected source; `preparation.json` binds candidate OID,
 protected identity, registry fingerprint, complete plan and image pins/reasons.
@@ -91,15 +104,16 @@ including unknown/protected changes. No candidate registry/Make selection is use
 
 ## Remaining boundary
 
-The bootstrap binary, PATH and external same-user anchor/evidence files are not
-an authenticated launcher. Same-UID malicious code can forge them; filesystem
-checks and endpoints cannot detect reverted races. Git raw export/probes remain
-unsupervised in wall time; ordinary network receipts have bounded deadlines.
-Local raw Git helpers may inherit non-Git credential variables, but perform no
-network or hook commands in the fresh repository. Image inspection is an
-observation, not proof an executed workload used that image. Live supported OCI
-images and migrated ABI require separate qualification; parser fixtures do not
-claim that qualification.
+The candidate-built bootstrap and ambient process environment are not an
+authenticated launcher. Directly invoking untrusted code with credentials can
+expose them; the Make facade intentionally forwards none. Same-UID malicious code
+can forge external anchor/evidence files; filesystem checks and endpoints cannot
+detect reverted races. Cargo build scripts still run during compilation.
+Git raw export/probes remain unsupervised in wall time; ordinary network receipts
+have bounded deadlines. Local raw Git helpers in the Make facade have no forwarded
+GitHub tokens or Docker socket. Image inspection is an observation, not proof an
+executed workload used that image. Live supported OCI images and migrated ABI
+require separate qualification; parser fixtures do not claim that qualification.
 
 Next boundary must run a protected-built or externally attested pinned artifact
 under a separate supervisor UID with credential/evidence separation, immutable
