@@ -127,6 +127,47 @@ fn documentation_gate_rejects_drift_and_missing_local_links() {
 }
 
 #[test]
+fn unknown_markdown_and_protected_instructions_select_everything() {
+    for path in [
+        "unknown/notes.md",
+        "AGENTS.md",
+        "crates/map/AGENTS.md",
+        "skills/harness-ci/SKILL.md",
+        "crates/harness/notes.md",
+        ".github/instructions.md",
+    ] {
+        assert_eq!(classify(&[path.into()]).suites.len(), 6, "{path}");
+    }
+}
+
+#[test]
+fn strict_registry_rejects_unknown_fields_cycles_and_lists_semantic_errors() {
+    for payload in [
+        r#"{"version":1,"typo":true,"gates":[{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test"}]}"#,
+        r#"{"version":1,"gates":[{"id":"x","command":"make x","requires":[],"select":"all","evidence":"test","typo":true}]}"#,
+        r#"{"version":1,"gates":[{"id":"x","command":"make x","requires":["y"],"select":"all","evidence":"test"},{"id":"y","command":"make y","requires":["x"],"select":"all","evidence":"test"}]}"#,
+    ] {
+        assert!(parse(payload.as_bytes()).is_err(), "{payload}");
+    }
+    let payload = br#"{"version":1,"gates":[{"id":"x","command":"cargo test","requires":["missing"],"select":"all","evidence":"test"}]}"#;
+    let error = parse(payload).err().expect("invalid registry").to_string();
+    assert!(error.contains("invalid command"));
+    assert!(error.contains("invalid dependency"));
+}
+
+#[test]
+fn selection_manifest_rejects_unknown_fields() {
+    let expected = selection("a".repeat(40), None, Vec::new());
+    let mut manifest = serde_json::to_value(&expected).expect("manifest");
+    let mut results = BTreeMap::from([("select".to_owned(), "success")]);
+    results.extend(expected.jobs.keys().map(|job| (job.clone(), "success")));
+    let results = serde_json::to_string(&results).expect("complete results");
+    check_selection(&manifest.to_string(), &results, &expected).expect("valid control");
+    manifest["forged"] = serde_json::json!(true);
+    assert!(check_selection(&manifest.to_string(), &results, &expected).is_err());
+}
+
+#[test]
 fn impact_accepts_git_base_and_rejects_unknown_ref() {
     impact(Some("HEAD"), Vec::new()).expect("known base");
     assert!(impact(Some("this-ref-does-not-exist"), Vec::new()).is_err());

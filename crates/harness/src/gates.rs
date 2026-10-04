@@ -1,6 +1,5 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
-mod hooks;
-pub(crate) use hooks::hook_path;
+mod paths;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -13,12 +12,14 @@ use std::{
 };
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Registry {
     version: u16,
     gates: Vec<Gate>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Gate {
     id: String,
     command: String,
@@ -32,24 +33,45 @@ fn parse(bytes: &[u8]) -> Result<Registry, Box<dyn Error>> {
     if registry.version != 1 || registry.gates.is_empty() {
         return Err("unsupported or empty gate registry".into());
     }
+    let mut problems = Vec::new();
     let mut seen = BTreeSet::new();
     for gate in &registry.gates {
         if !seen.insert(&gate.id) {
-            return Err(format!("duplicate gate {}", gate.id).into());
+            problems.push(format!("duplicate gate {}", gate.id));
         }
         if !gate.command.starts_with("make ") || gate.command.split_whitespace().count() != 2 {
-            return Err(format!("invalid command for {}", gate.id).into());
+            problems.push(format!("invalid command for {}", gate.id));
         }
         if gate.command != format!("make {}", gate.id) {
-            return Err(format!("gate command mismatch: {}", gate.id).into());
+            problems.push(format!("gate command mismatch: {}", gate.id));
         }
     }
     for gate in &registry.gates {
         for prerequisite in &gate.requires {
             if !seen.contains(prerequisite) || prerequisite == &gate.id {
-                return Err(format!("invalid dependency {prerequisite} for {}", gate.id).into());
+                problems.push(format!("invalid dependency {prerequisite} for {}", gate.id));
             }
         }
+    }
+    let mut resolved = BTreeSet::new();
+    loop {
+        let before = resolved.len();
+        for gate in &registry.gates {
+            if gate.requires.iter().all(|id| resolved.contains(id)) {
+                resolved.insert(gate.id.clone());
+            }
+        }
+        if before == resolved.len() {
+            break;
+        }
+    }
+    for gate in &registry.gates {
+        if !resolved.contains(&gate.id) {
+            problems.push(format!("cyclic or unresolved dependencies for {}", gate.id));
+        }
+    }
+    if !problems.is_empty() {
+        return Err(problems.join("\n").into());
     }
     Ok(registry)
 }
@@ -170,10 +192,20 @@ fn classify(paths: &[String]) -> Impact {
         };
     }
     for path in paths {
+        if path == "AGENTS.md"
+            || path.ends_with("/AGENTS.md")
+            || path.starts_with("skills/")
+            || path.starts_with("crates/harness/")
+            || path.starts_with("gates/")
+            || path.starts_with(".github/")
+        {
+            return Impact {
+                suites: all,
+                paths: paths.to_owned(),
+            };
+        }
         if path.starts_with("docs/")
-            || path.ends_with(".md")
-            || path == "LICENSE"
-            || path == "THIRD_PARTY.md"
+            || ["README.md", "LICENSE", "THIRD_PARTY.md"].contains(&path.as_str())
         {
             continue;
         }
@@ -223,6 +255,7 @@ const CI_JOBS: [&str; 5] = [
 ];
 
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct Selection {
     version: u16,
     revision: String,
@@ -240,18 +273,7 @@ fn git_output(args: &[&str]) -> Result<String, Box<dyn Error>> {
 }
 
 fn changed_paths(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
-    let output = Command::new("git")
-        .args(["diff", "--name-only", "-z", base, "HEAD"])
-        .output()?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
-    }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|name| !name.is_empty())
-        .map(|name| String::from_utf8_lossy(name).to_string())
-        .collect())
+    paths::changed(Path::new("."), base)
 }
 
 fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
