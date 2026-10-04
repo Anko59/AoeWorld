@@ -4,6 +4,7 @@ pub(crate) mod policy;
 pub(crate) mod registry;
 pub(crate) mod runner;
 pub(crate) mod scopes;
+pub(crate) mod tasks;
 use registry::{Cadence, Registry};
 
 use serde::{Deserialize, Serialize};

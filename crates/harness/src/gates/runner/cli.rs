@@ -43,11 +43,15 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
         (Scope::Commit, Some(commit)) => Kind::Commit(commit),
         _ => return Err("--revision must be supplied only with --scope commit".into()),
     };
+    let git_common = crate::hooks::common_directory(&source)?;
     let cargo = source.join(".cache/cargo");
     let target = source.join("target");
     fs::create_dir_all(&cargo)?;
     fs::create_dir_all(&target)?;
-    let output = PrivateOutput::new(&options.output, &[source.clone(), cargo, target])?;
+    let output = PrivateOutput::new(
+        &options.output,
+        &[source.clone(), git_common, cargo, target],
+    )?;
     eprintln!(
         "bootstrap-local evidence directory: {}",
         output.directory().display()

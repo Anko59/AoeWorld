@@ -12,6 +12,7 @@ use std::{
 use tempfile::TempDir;
 
 mod checks;
+mod diff;
 mod git;
 mod index;
 mod metadata;
