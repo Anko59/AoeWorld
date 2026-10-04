@@ -92,7 +92,10 @@ ambiguous recovery, partial replies and removal that lies about absence.
 The optional [signature observer](artifact-signatures.md) implements strict Ed25519,
 but does not authenticate an external trust domain or inspect executable/runtime
 bytes. There is no protected-built executable/runtime admission, qualified deployment,
-real Docker transport, durable lease journal/watchdog or restricted execution.
+worker lifecycle Docker transport, durable owned service journal/watchdog or
+restricted execution. Optional [IO primitives](supervisor-io.md) provide bounded
+read-only probing and actual synced local MODEL_ONLY journal writes, not that
+missing service admission or daemon crash recovery.
 Protected dev's missing ABI still requires human-reviewed migration; no candidate
 fallback or made-up image pins. The coding UID currently controls the host daemon,
 so a second UID, root-owned file, local hash or socket-group adjustment on this
