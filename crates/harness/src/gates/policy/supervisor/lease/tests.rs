@@ -218,9 +218,40 @@ fn killing_only_client_leaves_daemon_object_until_explicit_owned_cleanup() {
         backend: daemon,
         expected: ExpectedIdentity::simulation(),
         events: Vec::new(),
+        last_ms: None,
     };
     restarted.cleanup(&cid, 15000).unwrap();
     assert!(!restarted.backend.object);
+}
+#[test]
+fn clock_rollback_between_actions_cannot_extend_admission_or_cleanup() {
+    let mut controller = ModelDaemon::controller("success");
+    controller
+        .call(Action::PersistIntent(controller.expected.clone()), 15000)
+        .unwrap();
+    let calls = controller.backend.calls.len();
+    controller.backend.time = 0;
+    assert!(matches!(
+        controller.call(Action::Create(controller.expected.clone()), 15000),
+        Err(Fault::Incomplete)
+    ));
+    assert_eq!(controller.backend.calls.len(), calls);
+    assert!(!controller.backend.object);
+
+    let mut controller = ModelDaemon::controller("success");
+    let cid = controller.acquire(15000, false).unwrap().unwrap();
+    let calls = controller.backend.calls.len();
+    controller.backend.time = 0;
+    assert_eq!(controller.cleanup(&cid, 15000), Err(Fault::Incomplete));
+    assert_eq!(controller.backend.calls.len(), calls);
+    assert!(controller.backend.object);
+}
+#[test]
+fn admission_deadline_overflow_does_not_start_an_intent() {
+    let mut controller = ModelDaemon::controller("success");
+    controller.backend.time = u64::MAX - 1;
+    assert_eq!(controller.run(15, 15, false, false).status, "INCOMPLETE");
+    assert!(controller.backend.calls.is_empty());
 }
 struct FaultBackend {
     daemon: ModelDaemon,
@@ -263,6 +294,7 @@ fn bounded_receipts_reject_oversize_invalid_ack_and_late_mutation_success() {
             },
             expected: ExpectedIdentity::simulation(),
             events: Vec::new(),
+            last_ms: None,
         };
         assert_eq!(
             controller.run(15000, 15000, false, false).status,

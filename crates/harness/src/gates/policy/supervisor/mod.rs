@@ -1,4 +1,5 @@
 //! Supervisor requirements and lease models, never trusted execution or admission.
+mod artifact;
 mod cli;
 mod identity;
 mod lease;

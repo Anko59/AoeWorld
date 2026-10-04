@@ -71,6 +71,8 @@ fn well_formed_model_retains_unavailable_admission_and_invalid_input_replaces_st
         report["requirements_blake3"],
         blake3::hash(&bytes).to_hex().to_string()
     );
+    assert_eq!(report["artifact_signature"]["status"], "ABSENT");
+    assert_eq!(report["artifact_signature"]["authoritative"], false);
     assert!(report.get("lease_models").is_some());
     assert_eq!(fs::read(&input).unwrap(), bytes);
     #[cfg(unix)]
@@ -85,6 +87,19 @@ fn well_formed_model_retains_unavailable_admission_and_invalid_input_replaces_st
             0o600
         );
     }
+    let mut signed_claim = value.clone();
+    signed_claim["attestation"] =
+        json!({"schema":1,"key_id":"7".repeat(64),"signature":"not-a-signature"});
+    fs::write(&input, serde_json::to_vec(&signed_claim).unwrap()).unwrap();
+    assert!(cli(root.path(), &input, &output).status.success());
+    let report: Value =
+        serde_json::from_slice(&fs::read(output.join("supervisor-model.json")).unwrap()).unwrap();
+    assert_eq!(report["status"], "UNAVAILABLE");
+    assert_eq!(report["authoritative"], false);
+    assert_eq!(report["artifact_signature"]["status"], "REJECTED");
+    signed_claim["attestation"]["public_key"] = json!("candidate-chosen-key");
+    fs::write(&input, serde_json::to_vec(&signed_claim).unwrap()).unwrap();
+    assert!(!cli(root.path(), &input, &output).status.success());
     for bad in [
         b"not-json".to_vec(),
         vec![b' '; 32769],

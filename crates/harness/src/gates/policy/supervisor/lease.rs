@@ -51,10 +51,19 @@ struct Controller<B> {
     backend: B,
     expected: ExpectedIdentity,
     events: Vec<&'static str>,
+    last_ms: Option<u64>,
 }
 impl<B: Backend> Controller<B> {
+    fn observe_clock(&mut self) -> Result<u64, Fault> {
+        let now = self.backend.now_ms();
+        if self.last_ms.is_some_and(|previous| now < previous) {
+            return Err(Fault::Incomplete);
+        }
+        self.last_ms = Some(now);
+        Ok(now)
+    }
     fn call(&mut self, action: Action, end: u64) -> Result<Reply, Fault> {
-        let start = self.backend.now_ms();
+        let start = self.observe_clock()?;
         let remaining = end
             .checked_sub(start)
             .filter(|n| *n > 0)
@@ -69,8 +78,8 @@ impl<B: Backend> Controller<B> {
             Action::PersistIntent(_) | Action::Stop(_) | Action::Kill(_) | Action::Remove(_)
         );
         let reply = self.backend.call(&action, timeout);
-        let now = self.backend.now_ms();
-        if now < start || now - start >= timeout || reply.truncated || reply.bytes.len() > 4096 {
+        let now = self.observe_clock()?;
+        if now - start >= timeout || reply.truncated || reply.bytes.len() > 4096 {
             return Err(Fault::Incomplete);
         }
         if acknowledgement && reply.success && reply.bytes != b"null" {
@@ -129,8 +138,7 @@ impl<B: Backend> Controller<B> {
     fn cleanup(&mut self, cid: &ContainerId, reserve_ms: u64) -> Result<(), Fault> {
         // No workload cancellation token is consulted: cleanup has its own reserve.
         let end = self
-            .backend
-            .now_ms()
+            .observe_clock()?
             .checked_add(reserve_ms.min(15000))
             .ok_or(Fault::Incomplete)?;
         if !self.inspect(cid, end)? {
@@ -162,13 +170,10 @@ impl<B: Backend> Controller<B> {
         cancelled_before: bool,
         cancelled_after: bool,
     ) -> Receipt {
-        let end = self
-            .backend
-            .now_ms()
-            .checked_add(admission_ms)
-            .unwrap_or(self.backend.now_ms());
         let result = self
-            .acquire(end, cancelled_before)
+            .observe_clock()
+            .and_then(|start| start.checked_add(admission_ms).ok_or(Fault::Incomplete))
+            .and_then(|end| self.acquire(end, cancelled_before))
             .and_then(|cid| match cid {
                 Some(cid) => self.cleanup(&cid, cleanup_ms),
                 None => Ok(()),

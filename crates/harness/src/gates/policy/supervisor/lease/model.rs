@@ -27,6 +27,7 @@ impl ModelDaemon {
             backend: Self::new(mode),
             expected: ExpectedIdentity::simulation(),
             events: Vec::new(),
+            last_ms: None,
         }
     }
 }
