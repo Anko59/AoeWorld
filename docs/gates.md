@@ -2,7 +2,7 @@
 
 Generated from `gates/registry.json`. `make docs-check` detects drift.
 
-Registry v2 drives selection and dependency plans. Cadences and budgets are planned runner metadata until shared execution is wired; existing Make/CI dispatch and minimum preflight remain mandatory. No automatic agent interception is implied.
+Registry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.
 
 | Gate | Command | Depends on | Suites | Cadences | Budget (s) | Evidence |
 |---|---|---|---|---|---|---|

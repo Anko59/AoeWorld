@@ -14,7 +14,10 @@ GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/d
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
-ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT)
+HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
+HARNESS_TARGET_CACHE ?= $(ROOT)/target
+CACHE_MOUNTS := -v $(HARNESS_CARGO_CACHE):$(ROOT)/.cache/cargo -v $(HARNESS_TARGET_CACHE):$(ROOT)/target
+ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT) $(CACHE_MOUNTS)
 DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
@@ -28,7 +31,12 @@ SOURCE_QUAL_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(S
 SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
 SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
 BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
-DEV_ORCH_RUN := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE)
+DEV_ORCH_BASE := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
+DEV_ORCH_RUN := $(DEV_ORCH_BASE) $(ORCH_IMAGE)
+HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
+HARNESS_CADENCE ?= edit
+HARNESS_SCOPE ?= working
+HARNESS_LOCAL_RUN := $(DEV_ORCH_BASE) -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) $(ORCH_IMAGE)
 
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
@@ -171,7 +179,7 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
-.PHONY: test-harness gates-docs gate-plan scope-check
+.PHONY: test-harness gates-docs gate-plan scope-check gate-run
 test-harness:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
@@ -183,6 +191,9 @@ gate-plan:
 
 scope-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- scope-check
+
+gate-run:
+	@$(HARNESS_LOCAL_RUN) cargo run --locked -p aoe-harness -- gate-run --cadence $(HARNESS_CADENCE) --scope $(HARNESS_SCOPE) --output $(HARNESS_EVIDENCE_DIR)
 
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap

@@ -1,4 +1,5 @@
 //! Executable gate policy: strict selection and dependency-first cadence plans.
+mod fingerprint;
 mod glob;
 mod helpers;
 use glob::glob;
@@ -96,6 +97,10 @@ pub(crate) struct Plan {
 }
 
 impl Registry {
+    pub(crate) fn fingerprint(&self) -> Result<String> {
+        fingerprint::fingerprint(self)
+    }
+
     pub(crate) fn load(root: &Path) -> Result<Self> {
         Self::parse(&fs::read(root.join("gates/registry.json"))?)
     }

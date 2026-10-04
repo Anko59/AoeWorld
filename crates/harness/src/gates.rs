@@ -1,6 +1,7 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 mod paths;
 pub(crate) mod registry;
+pub(crate) mod runner;
 pub(crate) mod scopes;
 use registry::{Cadence, Registry};
 
@@ -20,7 +21,7 @@ fn parse(bytes: &[u8]) -> Result<Registry, Box<dyn Error>> {
 }
 
 fn table(registry: &Registry) -> String {
-    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. Cadences and budgets are planned runner metadata until shared execution is wired; existing Make/CI dispatch and minimum preflight remain mandatory. No automatic agent interception is implied.\n\n| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Evidence |\n|---|---|---|---|---|---|---|\n".to_owned();
+    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.\n\n| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Evidence |\n|---|---|---|---|---|---|---|\n".to_owned();
     for gate in &registry.gates {
         let requires = if gate.requires.is_empty() {
             "—".to_owned()
@@ -180,9 +181,7 @@ fn selection(
         requested_base: base.clone(),
         base,
         paths,
-        registry_hash: blake3::hash(&serde_json::to_vec(registry)?)
-            .to_hex()
-            .to_string(),
+        registry_hash: registry.fingerprint()?,
         gates: plan.gates,
         jobs: plan.jobs,
     })

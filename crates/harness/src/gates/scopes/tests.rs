@@ -3,6 +3,7 @@ use super::*;
 mod compiler;
 mod index_context;
 mod metadata;
+mod witness;
 
 fn run(root: &Path, args: &[&str]) -> Vec<u8> {
     git(root, args, None).expect("Git fixture command")

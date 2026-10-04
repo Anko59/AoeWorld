@@ -82,7 +82,8 @@ and dependency-first gate list; aggregate validation recomputes them all.
 Every CI gate must directly identify an executing job, even when Make also runs
 it as a prerequisite. Code changes now select parser fuzzing as additional work.
 
-Plans do not yet imply automatic edit/stop interception or shared execution.
+Plans do not imply automatic edit/stop interception. The opt-in local `gate-run`
+executor is available; protected judging and CI migration remain subsequent work.
 Existing Make/CI dispatch remains active; the static CI job and every handoff
 still require the full `make preflight`, including for documentation changes.
 Source/artwork/hardware checks are explicit qualification plans, never silently
@@ -114,3 +115,40 @@ non-UTF-8 paths, conflicts, intent-to-add, symlink/gitlink input paths, and inde
 outside this checkout's Git metadata fail closed. Shared cadence execution and
 protected-base authority remain subsequent stack work; no provider hook is
 claimed installed.
+
+## Local shared execution and evidence
+
+`make gate-run HARNESS_CADENCE=edit HARNESS_SCOPE=working` runs the selected
+named checks in deterministic prerequisite order. Before first use, build
+`make tools orchestrator-tools` and supply an existing user-owned evidence
+directory outside the repository and all caches via `HARNESS_EVIDENCE_DIR`.
+The default `/tmp/aoeworld-harness-evidence` must also be prepared/owned by the
+caller; Docker auto-created root-owned directories are not a writable substitute.
+The evidence mount is added only to this bootstrap coordinator, not normal gate
+containers. Direct Dockerized `gate-run --job JOB --output DIRECTORY` runs all
+declared validation-job members and prerequisites, including static CI's full
+preflight; `--scope commit --revision FULL_OID` selects a committed input.
+
+Every selected gate gets PASS, FAIL, UNAVAILABLE, or SKIPPED. Missing retained
+success output, missing capabilities, blocked dependencies, and budget exhaustion
+are not PASS; changed input identity makes the entire ledger INVALID. Logs retain
+bounded stdout and stderr even on success, with digests and truncation flags.
+Ledger/log writes are atomic, mode 0600, fsynced, and outside declared writable
+input/cache mounts. The versioned semantic BLAKE3 registry hash is shared with CI
+selection; set-like arrays are sorted and all scheduling policy is bound.
+
+Linux SIGINT/SIGTERM cancel the CLI's owned command group and retain non-PASS
+results. Pipe reads cannot wait indefinitely on escaped descendants: nonblocking
+per-poll quotas and a 200 ms drain grace bound captured output; escaped sessions,
+Docker-daemon work, and uninterruptible kernel waits are separate limits. The
+CLI includes scope preparation/image observations/final verification in elapsed
+time and subtracts preparation from execution budget, but Git endpoint probes
+are not themselves wall-supervised. External Cargo/target caches are projected
+into exported containers rather than copied, and remain mutable inputs.
+
+This ledger always says `authoritative: false`, even when every named command
+passes. Candidate bootstrap/Make and same-user filesystem access can forge
+local evidence. Post-run immutable Docker ID observations do not prove the
+images a hostile Make used. Source-assets, real-geodata, and hardware capabilities
+remain unavailable without qualified inputs; no environment flag manufactures
+qualification. Existing CI and preflight gates remain unchanged.

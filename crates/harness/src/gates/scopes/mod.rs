@@ -15,8 +15,10 @@ mod checks;
 mod git;
 mod index;
 mod metadata;
+mod witness;
 use index::*;
 use metadata::*;
+use witness::*;
 mod entries;
 mod export;
 mod probe;
@@ -47,7 +49,7 @@ pub struct Identity {
     pub isolated_inputs: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct Probe {
     head: String,
     entries: Vec<u8>,
@@ -65,6 +67,7 @@ pub struct Snapshot {
     _temporary: Option<TempDir>,
     probe: Probe,
     metadata: Option<Seal>,
+    objects: Objects,
     pub identity: Identity,
     /// Against source HEAD. Renames contain BOTH names; deletion paths survive.
     pub paths: Vec<String>,
@@ -85,6 +88,7 @@ impl Snapshot {
         }
         let source_index = source_index(&source, requested_index)?;
         let observed = probe(&source, &source_index, kind == Kind::Working)?;
+        let objects = referenced_objects(&source, &kind, &observed)?;
         let (temporary, checkout, tree) = if kind == Kind::Working {
             let tree = if observed.working_clean {
                 Some(resolve(&source, &observed.head, "tree")?)
@@ -144,6 +148,7 @@ impl Snapshot {
             _temporary: temporary,
             probe: observed,
             metadata,
+            objects,
             identity,
             paths,
         })
@@ -187,6 +192,7 @@ impl Snapshot {
             &self.source_index,
             self.identity.kind == Kind::Working,
         )? != self.probe
+            || referenced_objects(&self.source, &self.identity.kind, &self.probe)? != self.objects
         {
             return Err("source identity changed; snapshot result is stale".into());
         }
