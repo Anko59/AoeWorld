@@ -6,6 +6,7 @@ mod fuzz;
 mod gates;
 mod hooks;
 mod mutation;
+mod native;
 mod perf;
 mod perf_hardware;
 mod perf_micro;
@@ -270,17 +271,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             Duration::from_secs(600),
         )?,
         Command::TestUnit => {
-            process::run(
-                "cargo",
-                &[
-                    "nextest",
-                    "run",
-                    "--workspace",
-                    "--locked",
-                    "--no-fail-fast",
-                ],
-                Duration::from_secs(600),
-            )?;
+            native::run_in(Path::new("."), &[])?;
             process::run(
                 "cargo",
                 &["test", "--workspace", "--doc", "--locked"],
