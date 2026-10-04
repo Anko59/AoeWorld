@@ -1,0 +1,200 @@
+use super::*;
+
+fn shell(root: &Path, script: &str, deadline: Duration, cancellation: &Cancellation) -> Captured {
+    capture_in(root, "sh", &["-c", script], &[], deadline, cancellation)
+}
+
+#[test]
+fn pre_cancelled_or_zero_budget_commands_never_spawn_even_fast_success() {
+    let cancelled_root = tempfile::tempdir().unwrap();
+    let cancelled = Cancellation::default();
+    cancelled.cancel();
+    let captured = shell(
+        cancelled_root.path(),
+        "printf executed > marker",
+        Duration::from_secs(2),
+        &cancelled,
+    );
+    assert!(matches!(captured.exit, CaptureExit::Cancelled));
+    assert!(!cancelled_root.path().join("marker").exists());
+    assert!(captured.stdout.is_empty() && captured.stderr.is_empty());
+    let expired_root = tempfile::tempdir().unwrap();
+    let captured = shell(
+        expired_root.path(),
+        "printf executed > marker",
+        Duration::ZERO,
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Deadline));
+    assert!(!expired_root.path().join("marker").exists());
+    let positive_root = tempfile::tempdir().unwrap();
+    let captured = shell(
+        positive_root.path(),
+        "printf executed > marker",
+        Duration::from_secs(2),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Success));
+    assert_eq!(
+        fs::read(positive_root.path().join("marker")).unwrap(),
+        b"executed"
+    );
+}
+
+#[test]
+fn successful_and_failed_captures_preserve_both_streams_and_codes() {
+    let root = tempfile::tempdir().unwrap();
+    let cancellation = Cancellation::default();
+    let captured = shell(
+        root.path(),
+        "printf success; printf diagnostic >&2",
+        Duration::from_secs(2),
+        &cancellation,
+    );
+    assert!(matches!(captured.exit, CaptureExit::Success));
+    assert_eq!(captured.stdout, b"success");
+    assert_eq!(captured.stderr, b"diagnostic");
+    assert!(!captured.truncated);
+    assert!(captured.duration < Duration::from_secs(2));
+    assert_eq!(
+        fs::read_dir(root.path()).unwrap().count(),
+        0,
+        "capture never writes evidence into candidate root"
+    );
+    let captured = shell(
+        root.path(),
+        "printf output; printf failed >&2; exit 7",
+        Duration::from_secs(2),
+        &cancellation,
+    );
+    assert!(matches!(captured.exit, CaptureExit::Failed(Some(7))));
+    assert_eq!(captured.stdout, b"output");
+    assert_eq!(captured.stderr, b"failed");
+    assert!(!captured.truncated);
+}
+
+#[test]
+fn capture_explicit_environment_and_root_have_negative_controls() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("marker"), "context").unwrap();
+    let parent = std::env::current_dir().unwrap();
+    let captured = capture_in(
+        root.path(),
+        "sh",
+        &[
+            "-c",
+            "test -f marker && printf '%s' \"$CAPTURE_TEST_VALUE\"",
+        ],
+        &[("CAPTURE_TEST_VALUE", "expected")],
+        Duration::from_secs(2),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Success));
+    assert_eq!(captured.stdout, b"expected");
+    assert_eq!(std::env::current_dir().unwrap(), parent);
+    let other = tempfile::tempdir().unwrap();
+    let captured = shell(
+        other.path(),
+        "test -f marker",
+        Duration::from_secs(2),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Failed(Some(1))));
+    let captured = capture_in(
+        root.path(),
+        "/nonexistent/aoe-capture-executable",
+        &[],
+        &[],
+        Duration::from_secs(1),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Start(_)));
+    assert!(captured.stdout.is_empty() && captured.stderr.is_empty());
+}
+
+#[test]
+fn capture_timeout_and_cancellation_keep_partial_output() {
+    let root = tempfile::tempdir().unwrap();
+    let captured = shell(
+        root.path(),
+        "printf before; sleep 5",
+        Duration::from_millis(40),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Deadline));
+    assert_eq!(captured.stdout, b"before");
+    assert!(captured.duration < Duration::from_secs(1));
+    let cancellation = Cancellation::default();
+    let signal = cancellation.clone();
+    let worker = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(40));
+        signal.cancel();
+    });
+    let captured = shell(
+        root.path(),
+        "printf partial; sleep 5",
+        Duration::from_secs(5),
+        &cancellation,
+    );
+    worker.join().unwrap();
+    assert!(matches!(captured.exit, CaptureExit::Cancelled));
+    assert_eq!(captured.stdout, b"partial");
+    assert!(captured.duration < Duration::from_secs(1));
+}
+
+#[test]
+fn capture_retains_bounded_raw_tails_and_marks_truncation() {
+    let root = tempfile::tempdir().unwrap();
+    let captured = shell(
+        root.path(),
+        "i=0; while test $i -lt 18000; do printf 12345678; i=$((i+1)); done; printf final",
+        Duration::from_secs(5),
+        &Cancellation::default(),
+    );
+    assert!(matches!(captured.exit, CaptureExit::Success));
+    assert_eq!(captured.stdout.len(), LOG_LIMIT);
+    assert!(captured.stdout.ends_with(b"final"));
+    assert!(captured.truncated);
+    assert!(
+        !captured.stdout.starts_with(b"[earlier output truncated]"),
+        "receipt is raw bytes, not decorated legacy logs"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn escaped_pipe_holder_cannot_block_drain_or_leave_reader_threads() {
+    use nix::{
+        sys::signal::{Signal, killpg},
+        unistd::{Pid, getpgid},
+    };
+    let root = tempfile::tempdir().unwrap();
+    // setsid escapes the supervised process group; its stdout stays inherited.
+    // The fixture PID is printed by the child itself and has a distinct group.
+    let captured = shell(
+        root.path(),
+        "setsid sh -c 'echo $$; sleep 5' & sleep 0.05",
+        Duration::from_secs(2),
+        &Cancellation::default(),
+    );
+    let elapsed = captured.duration;
+    let pid: i32 = String::from_utf8(captured.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .expect("owned fixture session PID");
+    let pid = Pid::from_raw(pid);
+    // Cleanup only our still-live fixture session, never the caller group.
+    if getpgid(Some(pid)).ok() == Some(pid) {
+        let _ = killpg(pid, Signal::SIGKILL);
+    }
+    assert!(matches!(captured.exit, CaptureExit::Success));
+    assert!(
+        captured.truncated,
+        "unfinished inherited pipes must be reported"
+    );
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "reader drain was not bounded: {elapsed:?}"
+    );
+}
