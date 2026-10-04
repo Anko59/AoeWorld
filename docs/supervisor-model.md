@@ -26,7 +26,7 @@ Dockerized Make tools.
 Requirements are strict schema1 JSON, bounded32KiB. Top-level fields are `schema`,
 `anchor` (the existing protected-source anchor contract), `service_uid`,
 `candidate_uid`, three disjoint absolute directories `artifact_root`,
-`evidence_root`, `lease_root`, `subject` and `resources`. Candidate UID must be
+`evidence_root`, `lease_root`, `subject`, optional `attestation`, and `resources`. Candidate UID must be
 nonzero and distinct from the declared service UID. Roots must be normal existing
 nonlinked directories, disjoint and outside the candidate checkout. Local root
 UID/mode observations are reported, not elevated into access-control assurance.
@@ -67,16 +67,17 @@ future durable journal/startup reconciler; the model's intent hook is not fsync.
 
 Cleanup has a separate uncancelled reserve (max15seconds), shared across inspect,
 stop, optional kill, remove and final absence inspection. Each action gets at most
-5seconds and no action starts with zero remaining time. In-command clock rollback, late exit,
+5seconds and no action starts with zero remaining time. In-command and cross-command clock rollback, late exit,
 truncated/oversized output, malformed identity or acknowledgments, and daemon
 unavailability never become successful cleanup. Removal client exit alone is not
 enough: final absence is required. Receipt status is `COMPLETED_MODEL`,
 `INCOMPLETE` or `QUARANTINED`, never a gate PASS. The fixed scenarios are separate
 from the user's requirements: they exercise the common algorithm against an
-in-memory daemon, not a Docker adapter using those declarations. Its production
-model clock is monotonic; the controller does not yet retain a cross-command
-watermark. A future transport must supply a genuinely monotonic clock or add
-cross-command rollback rejection before reuse.
+in-memory daemon, not a Docker adapter using those declarations. A controller
+watermark checks every clock observation before and after calls and before
+admission/cleanup deadline construction. Rollback cannot enlarge a reserve, and
+deadline overflow does not spawn an intent. A future transport still needs actual
+bounded capture and a genuinely monotonic clock; this is not wall supervision.
 
 The model tests explicitly preserve a daemon object after client/controller loss.
 They do not prove actual process-group signals or daemon crash recovery. They
@@ -85,8 +86,9 @@ ambiguous recovery, partial replies and removal that lies about absence.
 
 ## Remaining deployment boundary
 
-There is no approved artifact verifier/signature algorithm, authenticated external
-trust root, protected-built executable/runtime admission, qualified deployment,
+The optional [signature observer](artifact-signatures.md) implements strict Ed25519,
+but does not authenticate an external trust domain or inspect executable/runtime
+bytes. There is no protected-built executable/runtime admission, qualified deployment,
 real Docker transport, durable lease journal/watchdog or restricted execution.
 Protected dev's missing ABI still requires human-reviewed migration; no candidate
 fallback or made-up image pins. The coding UID currently controls the host daemon,

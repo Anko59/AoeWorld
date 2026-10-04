@@ -10,6 +10,8 @@ pub(super) struct Requirements {
     evidence_root: PathBuf,
     lease_root: PathBuf,
     subject: Subject,
+    #[serde(default)]
+    attestation: Option<super::artifact::Envelope>,
     resources: Resources,
 }
 #[derive(Debug, Deserialize, Serialize)]
@@ -148,12 +150,18 @@ impl Requirements {
             #[cfg(not(unix))]
             observations.push(json!({"path":path,"ownership":"UNAVAILABLE"}));
         }
+        let signature = super::artifact::inspect(
+            &serde_json::to_vec(&self.subject)?,
+            self.anchor.repository_id,
+            &self.subject.trust_root_id,
+            self.attestation.as_ref(),
+        );
         let operations: Vec<_> = self.subject.abi.dispatch.iter().map(|item| json!({"operation":item.operation.argument(),"image":item.image,"entrypoint":["/judge/aoe-harness",item.operation.argument()]})).collect();
         Ok(
-            json!({"schema":1,"status":"UNAVAILABLE","authoritative":false,"subject":self.subject,"declared_service_uid":self.service_uid,"declared_candidate_uid":self.candidate_uid,"root_observations":observations,
-            "reasons":["subject fields are unverified assertions, not a signed artifact proof","approved external artifact verifier and trust root unavailable","externally authenticated isolated deployment unavailable; current coding host has daemon control","filesystem UID/mode and local hashes cannot authenticate supervisor authority"],
+            json!({"schema":1,"status":"UNAVAILABLE","authoritative":false,"subject":self.subject,"artifact_signature":signature,"declared_service_uid":self.service_uid,"declared_candidate_uid":self.candidate_uid,"root_observations":observations,
+            "reasons":["subject fields remain unverified assertions about actual executable/runtime/source bytes","signature observation does not establish an approved external trust domain or protected build provenance","externally authenticated isolated deployment unavailable; current coding host has daemon control","filesystem UID/mode and local hashes cannot authenticate supervisor authority"],
             "worker_template":{"execution":"NOT_IMPLEMENTED","uid":self.candidate_uid,"network":"none","cap_drop":["ALL"],"no_new_privileges":true,"read_only":true,"environment":{},"supplementary_groups":[],"docker_socket":false,"host_pid_ipc_network":false,"writable_judge_evidence":false,"shared_trusted_caches":false,"resources":self.resources,"operations":operations},
-            "limits":["no signature verification, protected build/deployment admission or worker execution","root observations do not prove ancestor permissions, ACLs, alternate daemon endpoints or runtime isolation","trusted verdict computation and hidden tests must remain outside the hostile worker namespace","human protected ABI/image/artifact migration remains required"]}),
+            "limits":["signature algorithm observation only; no protected build/deployment admission or worker execution","root observations do not prove ancestor permissions, ACLs, alternate daemon endpoints or runtime isolation","trusted verdict computation and hidden tests must remain outside the hostile worker namespace","human protected ABI/image/artifact migration remains required"]}),
         )
     }
 }
