@@ -52,6 +52,18 @@ enum Command {
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    GatesDocs,
+    ScopeCheck {
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    GatePlan {
+        #[arg(value_enum)]
+        cadence: gates::registry::Cadence,
+        #[arg(long)]
+        base: Option<String>,
+        paths: Vec<String>,
+    },
     CoverageCheck {
         file: Option<PathBuf>,
     },
@@ -100,6 +112,10 @@ enum Command {
         #[arg(long, default_value = "fast")]
         budget: String,
     },
+    GateRun(gates::runner::Options),
+    PolicyPrepare(gates::policy::Options),
+    SupervisorModel(gates::policy::supervisor::Options),
+    TaskPlan(gates::tasks::Options),
     PreCommit,
     Preflight,
     HooksInstall,
@@ -220,6 +236,15 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::GatesDocs => gates::docs_generate(Path::new("."))?,
+        Command::ScopeCheck { revision } => {
+            gates::scopes::inspect(Path::new("."), revision.as_deref())?
+        }
+        Command::GatePlan {
+            cadence,
+            base,
+            paths,
+        } => gates::plan(cadence, base.as_deref(), paths)?,
         Command::CoverageCheck { file } => {
             coverage::check(&file.unwrap_or_else(|| PathBuf::from("reports/coverage/native.lcov")))?
         }
@@ -288,15 +313,17 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
         }
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
+        Command::GateRun(options) => gates::runner::execute(Path::new("."), options)?,
+        Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
+        Command::SupervisorModel(options) => {
+            gates::policy::supervisor::execute(Path::new("."), options)?
+        }
+        Command::TaskPlan(options) => gates::tasks::execute(Path::new("."), options)?,
         Command::PreCommit => {
-            run(Command::FmtCheck)?;
-            run(Command::StructureCheck)?;
-            run(Command::ArchitectureCheck)?;
-            run(Command::DocsCheck)?;
-            run(Command::Lint)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }
         Command::Preflight => {
-            run(Command::PreCommit)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
             run(Command::TestUnit)?;
             run(Command::PerfSmoke)?;
         }

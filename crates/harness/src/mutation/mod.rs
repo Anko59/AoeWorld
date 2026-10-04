@@ -8,7 +8,11 @@ const TOOL_VERSION: &str = "27.1.0";
 const FILTER: &str = "compare|classify|selection";
 const EXCLUDE: &str = " in client$";
 const OUTPUT: &str = "reports/mutation/campaign";
-const FILES: [&str; 2] = ["crates/harness/src/perf.rs", "crates/harness/src/gates.rs"];
+const FILES: [&str; 3] = [
+    "crates/harness/src/perf.rs",
+    "crates/harness/src/gates.rs",
+    "crates/harness/src/gates/registry/mod.rs",
+];
 
 #[derive(Deserialize, Serialize)]
 struct Outcomes {
@@ -29,7 +33,7 @@ struct Report {
     dirty: bool,
     tool: &'static str,
     tool_version: &'static str,
-    files: [&'static str; 2],
+    files: [&'static str; 3],
     filter: &'static str,
     excluded_mutants: &'static str,
     mutant_set_hash: Option<String>,
@@ -142,24 +146,28 @@ fn write_report(root: &Path, command_result: Result<()>) -> Result<Report> {
     Ok(report)
 }
 
-pub fn run() -> Result<()> {
-    fs::create_dir_all("reports/mutation")?;
-    let args = [
+fn scanner_args() -> Vec<&'static str> {
+    let mut args = vec![
         "mutants",
         "--in-place",
         "--timeout",
         "120",
         "--output",
         OUTPUT,
-        "--file",
-        FILES[0],
-        "--file",
-        FILES[1],
         "--re",
         FILTER,
         "--exclude-re",
         EXCLUDE,
     ];
+    for file in FILES {
+        args.extend(["--file", file]);
+    }
+    args
+}
+
+pub fn run() -> Result<()> {
+    fs::create_dir_all("reports/mutation")?;
+    let args = scanner_args();
     let command = process::run("cargo", &args, Duration::from_secs(4_500))
         .map_err(|error| -> Box<dyn Error> { error.into() });
     let report = write_report(Path::new("."), command)?;
@@ -191,6 +199,18 @@ mod tests {
             success: 0,
             end_time: Some("completed".into()),
         }
+    }
+
+    #[test]
+    fn scanner_actually_receives_every_reported_file() {
+        let args = scanner_args();
+        let files: Vec<_> = args
+            .windows(2)
+            .filter(|pair| pair[0] == "--file")
+            .map(|pair| pair[1])
+            .collect();
+        assert_eq!(files, FILES);
+        assert!(files.contains(&"crates/harness/src/gates/registry/mod.rs"));
     }
 
     #[test]

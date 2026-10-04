@@ -3,9 +3,15 @@ use serde_json::Value;
 use std::{collections::BTreeSet, error::Error, fs, path::Path, process::Command};
 
 pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
-    let output = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command.current_dir(root);
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            command.env_remove(name);
+        }
+    }
+    let output = command
         .args(["metadata", "--locked", "--no-deps", "--format-version", "1"])
-        .current_dir(root)
         .output()?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
