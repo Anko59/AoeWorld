@@ -17,6 +17,10 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
+#[cfg(test)]
+#[path = "gameplay/subscription.rs"]
+mod subscription;
+
 async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -59,21 +63,6 @@ async fn receive(socket: &mut Socket) -> GameplayServerMessage {
         panic!("expected binary gameplay frame")
     };
     decode_gameplay_server(&bytes).unwrap()
-}
-
-// The ticker may queue legal snapshots before a subscription error arrives.
-async fn receive_error(socket: &mut Socket, expected_code: u16) {
-    timeout(Duration::from_secs(2), async {
-        loop {
-            match receive(socket).await {
-                GameplayServerMessage::Snapshot { .. } => (),
-                GameplayServerMessage::Error { code, .. } if code == expected_code => return,
-                other => panic!("expected gameplay error {expected_code}, got {other:?}"),
-            }
-        }
-    })
-    .await
-    .expect("gameplay error response timed out");
 }
 
 async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, GameplayServerMessage) {
@@ -337,7 +326,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    receive_error(&mut socket, 409).await;
+    subscription::receive_error(&mut socket, 409).await;
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {
@@ -346,7 +335,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    receive_error(&mut socket, 400).await;
+    subscription::receive_error(&mut socket, 400).await;
     server.abort();
     ticker.abort();
 }
