@@ -51,6 +51,7 @@ enum Command {
     },
     StructureCheck,
     ArchitectureCheck,
+    ContractsCheck,
     DocsCheck,
     GatesDocs,
     ScopeCheck {
@@ -235,6 +236,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         },
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
+        Command::ContractsCheck => println!("{}", gates::contracts::check(Path::new("."))?),
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
         Command::ScopeCheck { revision } => {
