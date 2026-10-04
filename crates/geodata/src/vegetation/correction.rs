@@ -1,5 +1,7 @@
 //! Bounded, cited geographic patches for potential natural vegetation.
-use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
+use crate::{
+    GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, digest_hex, local_aeqd_definition,
+};
 use aoe_map::MapRequest;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -155,7 +157,7 @@ impl VegetationPatchDocument {
         let mut hash = Sha256::new();
         hash.update(b"aoe-vegetation-geographic-patch-v1\0");
         hash.update(self.bytes()?);
-        Ok(format!("{:x}", hash.finalize()))
+        Ok(digest_hex(&hash.finalize()))
     }
 
     pub fn changes_historical_vegetation(&self) -> bool {

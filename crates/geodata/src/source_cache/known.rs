@@ -34,8 +34,8 @@ impl SourceCache {
             ));
         }
         let partial = self.root.join("partial").join(format!(
-            "known-{:x}.part",
-            Sha256::digest(source.id.as_bytes())
+            "known-{}.part",
+            digest_hex(&Sha256::digest(source.id.as_bytes()))
         ));
         let usage = super::directory_bytes(&self.root)?;
         let partial_bytes = fs::metadata(&partial).map(|meta| meta.len()).unwrap_or(0);
@@ -176,9 +176,10 @@ impl SourceCache {
     }
 
     fn known_path_for_id(&self, id: &str) -> std::path::PathBuf {
-        self.root
-            .join("known")
-            .join(format!("{:x}.json", Sha256::digest(id.as_bytes())))
+        self.root.join("known").join(format!(
+            "{}.json",
+            digest_hex(&Sha256::digest(id.as_bytes()))
+        ))
     }
 
     fn recover_known(&self, source: &KnownSource) -> Result<Option<SourceLock>, CacheError> {

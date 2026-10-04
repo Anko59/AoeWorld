@@ -161,7 +161,7 @@ fn cached_worldcover_plan_uses_verified_size_without_provider_head() {
         license_reference: "CC BY 4.0; ESA WorldCover attribution required".to_owned(),
     };
     fs::write(cache.object_path(&lock).expect("object path"), b"abc").expect("object");
-    let known_name = format!("{:x}.json", Sha256::digest(id.as_bytes()));
+    let known_name = format!("{}.json", crate::digest_hex(&Sha256::digest(id.as_bytes())));
     let known_path = root.join("known").join(&known_name);
     fs::write(
         &known_path,

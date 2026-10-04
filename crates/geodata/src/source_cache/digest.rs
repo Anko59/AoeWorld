@@ -124,7 +124,7 @@ fn fingerprint(path: &Path) -> Result<Fingerprint, CacheError> {
     }
 }
 
-pub(super) fn digest_hex(digest: &[u8]) -> String {
+pub(crate) fn digest_hex(digest: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

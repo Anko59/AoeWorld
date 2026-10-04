@@ -52,8 +52,8 @@ fn fixture(name: &str, policy: super::super::DownloadPolicy) -> (SourceCache, Kn
 }
 fn partial(cache: &SourceCache, source: &KnownSource) -> std::path::PathBuf {
     cache.root.join("partial").join(format!(
-        "known-{:x}.part",
-        Sha256::digest(source.id.as_bytes())
+        "known-{}.part",
+        digest_hex(&Sha256::digest(source.id.as_bytes()))
     ))
 }
 
@@ -113,7 +113,7 @@ fn recovery_accepts_only_canonical_objects_and_validates_record_identity() {
     let canonical = cache
         .root
         .join("objects")
-        .join(format!("{:x}", Sha256::digest(b"abc")));
+        .join(digest_hex(&Sha256::digest(b"abc")));
     fs::rename(wrong, &canonical).unwrap();
     let lock = cache
         .acquire_known(&source, &AtomicBool::new(true))

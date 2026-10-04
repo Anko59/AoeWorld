@@ -1,4 +1,4 @@
-use crate::Provider;
+use crate::{Provider, digest_hex};
 use serde::Deserialize;
 use std::{io::Read, sync::Arc};
 
@@ -113,7 +113,7 @@ impl KnownSource {
             provider: self.provider,
             release: self.release.clone(),
             url: self.url.clone(),
-            sha256: sha256.iter().map(|byte| format!("{byte:02x}")).collect(),
+            sha256: digest_hex(&sha256),
             bytes: self.bytes,
             native_resolution: self.native_resolution.clone(),
             crs: self.crs.clone(),
