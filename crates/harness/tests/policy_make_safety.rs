@@ -446,3 +446,28 @@ fn make_path_checks_reject_dangling_host_symlinks_without_creating_targets() {
         assert!(!reserved.exists(), "dangling alias target must stay absent");
     }
 }
+
+#[test]
+fn supervisor_model_path_check_rejects_evidence_inside_readonly_input_directory() {
+    let supervisor = tempfile::tempdir().unwrap();
+    let evidence = supervisor.path().join("evidence");
+    fs::create_dir(&evidence).unwrap();
+    let requirements = supervisor.path().join("requirements.json");
+    fs::write(&requirements, "{}").unwrap();
+    let result = Command::new("make")
+        .arg("--no-print-directory")
+        .arg("harness-supervisor-path-check")
+        .current_dir(workspace())
+        .env("HARNESS_EVIDENCE_DIR", &evidence)
+        .env("HARNESS_SUPERVISOR_DIR", supervisor.path())
+        .env("HARNESS_SUPERVISOR_REQUIREMENTS", requirements)
+        .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
+        .env("HARNESS_TARGET_CACHE", workspace().join("target"))
+        .output()
+        .expect("run supervisor-model path check");
+    assert!(!result.status.success());
+    assert!(
+        String::from_utf8_lossy(&result.stderr)
+            .contains("disjoint from supervisor input directory")
+    );
+}

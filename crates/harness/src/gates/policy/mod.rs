@@ -5,6 +5,7 @@ pub(crate) use cli::{Options, execute};
 mod closure;
 mod descriptor;
 mod source;
+pub(crate) mod supervisor;
 #[cfg(test)]
 mod tests;
 
