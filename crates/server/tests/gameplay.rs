@@ -17,6 +17,10 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
+#[cfg(test)]
+#[path = "gameplay/subscription.rs"]
+mod subscription;
+
 async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -322,10 +326,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut socket).await,
-        GameplayServerMessage::Error { code: 409, .. }
-    ));
+    subscription::receive_error(&mut socket, 409).await;
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {
@@ -334,10 +335,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut socket).await,
-        GameplayServerMessage::Error { code: 400, .. }
-    ));
+    subscription::receive_error(&mut socket, 400).await;
     server.abort();
     ticker.abort();
 }
