@@ -116,7 +116,7 @@ impl<R: Read + std::os::fd::AsFd> Pipe<R> {
 #[cfg(test)]
 mod tests;
 
-pub(super) fn capture_command(
+pub(crate) fn capture_command(
     mut command: Command,
     deadline: Duration,
     cancellation: &Cancellation,

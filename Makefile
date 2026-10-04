@@ -74,6 +74,9 @@ HARNESS_SUPERVISOR_REQUIREMENTS ?= $(HARNESS_SUPERVISOR_DIR)/requirements.json
 override HARNESS_SUPERVISOR_DIR_REAL := $(realpath $(HARNESS_SUPERVISOR_DIR))
 override HARNESS_SUPERVISOR_REQUIREMENTS_REAL := $(realpath $(HARNESS_SUPERVISOR_REQUIREMENTS))
 override SUPERVISOR_MODEL_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_SUPERVISOR_DIR_REAL):$(HARNESS_SUPERVISOR_DIR_REAL):ro -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(TOOL_IMAGE)
+HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
+HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
+override SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
@@ -256,7 +259,7 @@ task-plan: harness-task-path-check
 
 supervisor-model: harness-supervisor-path-check
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(SUPERVISOR_MODEL_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS_REAL) --output $(HARNESS_EVIDENCE_REAL)
+	@$(SUPERVISOR_MODEL_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS_REAL) --output $(HARNESS_EVIDENCE_REAL) $(SUPERVISOR_MODEL_FLAGS)
 
 policy-prepare: harness-policy-path-check
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
