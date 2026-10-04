@@ -363,119 +363,26 @@ fn supervise(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::Cell;
-
-    struct FakeClock(Cell<Duration>);
-    impl Clock for FakeClock {
-        fn elapsed(&self) -> Duration {
-            self.0.get()
-        }
-        fn sleep(&self, duration: Duration) {
-            self.0.set(self.0.get() + duration);
-        }
-    }
-    struct FakeProcess {
-        polls: usize,
-        exit_after: usize,
-        terminated: bool,
-    }
-    impl ProcessHandle for FakeProcess {
-        fn poll(&mut self) -> io::Result<Option<ExitState>> {
-            self.polls += 1;
-            Ok((self.polls >= self.exit_after).then_some(ExitState {
-                success: true,
-                code: Some(0),
-            }))
-        }
-        fn terminate(&mut self) -> io::Result<()> {
-            self.terminated = true;
-            Ok(())
+/// Execute against an explicit input root without changing the parent cwd.
+pub fn run_in(
+    root: &Path,
+    program: &str,
+    args: &[&str],
+    environment: &[(&str, &str)],
+    deadline: Duration,
+) -> Result<(), ProcessError> {
+    let mut command = Command::new(program);
+    command.current_dir(root).args(args);
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            command.env_remove(name);
         }
     }
-
-    #[test]
-    fn fake_deadline_and_cancellation_terminate() {
-        let clock = FakeClock(Cell::new(Duration::ZERO));
-        let mut process = FakeProcess {
-            polls: 0,
-            exit_after: usize::MAX,
-            terminated: false,
-        };
-        assert!(matches!(
-            wait_loop(
-                &clock,
-                &mut process,
-                Duration::from_millis(50),
-                &Cancellation::default()
-            )
-            .expect("wait"),
-            Outcome::Deadline
-        ));
-        assert!(process.terminated);
-        let cancel = Cancellation::default();
-        cancel.cancel();
-        let mut process = FakeProcess {
-            polls: 0,
-            exit_after: usize::MAX,
-            terminated: false,
-        };
-        assert!(matches!(
-            wait_loop(&clock, &mut process, Duration::from_secs(1), &cancel).expect("wait"),
-            Outcome::Cancelled
-        ));
-        assert!(process.terminated);
+    for (name, value) in environment {
+        command.env(name, value);
     }
-
-    #[test]
-    fn bounded_log_keeps_tail() {
-        let mut log = BoundedLog::new();
-        log.push(&vec![b'a'; LOG_LIMIT]);
-        log.push(b"tail");
-        let rendered = log.render();
-        assert!(rendered.starts_with(b"[earlier output truncated]"));
-        assert!(rendered.ends_with(b"tail"));
-    }
-
-    #[test]
-    fn real_exit_and_timeout_are_visible() {
-        assert!(matches!(
-            run("false", &[], Duration::from_secs(2)),
-            Err(ProcessError::Exit { .. })
-        ));
-        assert!(matches!(
-            run("sleep", &["2"], Duration::from_millis(10)),
-            Err(ProcessError::Deadline { .. })
-        ));
-    }
-
-    #[test]
-    fn supervised_child_receives_explicit_environment() {
-        run_with_env(
-            "sh",
-            &["-c", "test \"$AOE_TEST_VALUE\" = expected"],
-            &[("AOE_TEST_VALUE", "expected")],
-            Duration::from_secs(2),
-        )
-        .expect("child environment");
-    }
-
-    #[test]
-    fn real_cancellation_stops_child_promptly() {
-        let cancellation = Cancellation::default();
-        let signal = cancellation.clone();
-        let worker = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(30));
-            signal.cancel();
-        });
-        let start = Instant::now();
-        assert!(matches!(
-            run_cancellable("sleep", &["5"], Duration::from_secs(10), &cancellation),
-            Err(ProcessError::Cancelled { .. })
-        ));
-        worker.join().expect("cancellation worker");
-        assert!(start.elapsed() < Duration::from_secs(2));
-    }
+    supervise(program, command, deadline, &Cancellation::default())
 }
+
+#[cfg(test)]
+mod tests;

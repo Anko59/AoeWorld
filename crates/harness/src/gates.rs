@@ -1,6 +1,7 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 mod paths;
 pub(crate) mod registry;
+pub(crate) mod scopes;
 use registry::{Cadence, Registry};
 
 use serde::{Deserialize, Serialize};

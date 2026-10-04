@@ -89,3 +89,28 @@ Source/artwork/hardware checks are explicit qualification plans, never silently
 substituted by synthetic tests. Release publication is not a generic cadence.
 Pull requests targeting `harness/**` also receive validation while the upgrade
 is reviewed as a dependent stack; protected branch publication is unchanged.
+
+## Exact static inputs
+
+`make pre-commit` now checks an exported index tree, not unstaged working bytes.
+It preserves the existing formatting (including fuzz), structure, architecture,
+docs, and strict workspace/all-target Clippy checks. Git's effective hook index
+is forwarded into Docker: `commit -a` and pathspec commits use temporary indexes,
+not necessarily the ordinary index. No source `write-tree` or index refresh runs.
+Private Git metadata disables checkout conversions; raw file bytes and modes
+are checked against that exact tree before/after each static check.
+
+`make scope-check` reports index identity and affected paths without running gates.
+A full resolved commit ID may be passed to the Dockerized CLI's `scope-check
+--revision` option; symbolic refs are refused. Working preflight still checks
+working source and runs the same native tests/smoke. Exported index/commit inputs
+exclude ignored reports, original assets, untracked files, and copied caches; Cargo outputs stay
+outside exported inputs. Linked worktrees and split indexes are covered.
+
+These are consistency checks, not hostile same-user isolation or a trusted
+judge. Reverted edits between probes, mutable caches, arbitrary candidate build
+scripts, and source bootstrap compilation remain limits. Bare/unborn roots,
+non-UTF-8 paths, conflicts, intent-to-add, symlink/gitlink input paths, and indexes
+outside this checkout's Git metadata fail closed. Shared cadence execution and
+protected-base authority remain subsequent stack work; no provider hook is
+claimed installed.

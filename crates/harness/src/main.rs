@@ -53,6 +53,10 @@ enum Command {
     ArchitectureCheck,
     DocsCheck,
     GatesDocs,
+    ScopeCheck {
+        #[arg(long)]
+        revision: Option<String>,
+    },
     GatePlan {
         #[arg(value_enum)]
         cadence: gates::registry::Cadence,
@@ -229,6 +233,9 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
+        Command::ScopeCheck { revision } => {
+            gates::scopes::inspect(Path::new("."), revision.as_deref())?
+        }
         Command::GatePlan {
             cadence,
             base,
@@ -303,14 +310,10 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
         Command::PreCommit => {
-            run(Command::FmtCheck)?;
-            run(Command::StructureCheck)?;
-            run(Command::ArchitectureCheck)?;
-            run(Command::DocsCheck)?;
-            run(Command::Lint)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }
         Command::Preflight => {
-            run(Command::PreCommit)?;
+            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
             run(Command::TestUnit)?;
             run(Command::PerfSmoke)?;
         }

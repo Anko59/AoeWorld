@@ -21,9 +21,23 @@ pub enum PolicyError {
 }
 
 fn tracked(root: &Path) -> Result<Vec<PathBuf>, PolicyError> {
-    let result = Command::new("git")
-        .args(["ls-files", "--cached", "-z"])
-        .current_dir(root)
+    let mut command = Command::new("git");
+    command.current_dir(root);
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            command.env_remove(name);
+        }
+    }
+    let result = command
+        .args([
+            "--no-replace-objects",
+            "-c",
+            "core.fsmonitor=false",
+            "ls-files",
+            "--cached",
+            "-z",
+        ])
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .output()
         .map_err(|e| PolicyError::Git(e.to_string()))?;
     if !result.status.success() {

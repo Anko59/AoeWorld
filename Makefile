@@ -15,7 +15,7 @@ GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
 ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT)
-DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
@@ -171,7 +171,7 @@ deny: policy-tools
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
-.PHONY: test-harness gates-docs gate-plan
+.PHONY: test-harness gates-docs gate-plan scope-check
 test-harness:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
@@ -180,6 +180,9 @@ gates-docs:
 
 gate-plan:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gate-plan pr
+
+scope-check:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- scope-check
 
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap
