@@ -42,6 +42,9 @@ HARNESS_CANDIDATE ?= $(shell git rev-parse HEAD)
 HARNESS_TASK_FILE ?= /tmp/aoeworld-task.json
 HARNESS_SUPERVISOR_DIR ?= /tmp/aoeworld-supervisor
 HARNESS_SUPERVISOR_REQUIREMENTS ?= $(HARNESS_SUPERVISOR_DIR)/requirements.json
+HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
+HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
+SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 SUPERVISOR_MODEL_RUN := docker run --rm --init --network none --user $(UID):$(GID) -v $(ROOT):$(ROOT):ro -v $(HARNESS_SUPERVISOR_DIR):$(HARNESS_SUPERVISOR_DIR):ro -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) -w $(ROOT) $(TOOL_IMAGE)
 HARNESS_TASK_RUN := $(DEV_ORCH_BASE) -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) -v $(HARNESS_TASK_FILE):$(HARNESS_TASK_FILE):ro $(ORCH_IMAGE)
 HARNESS_POLICY_RUN := $(DEV_ORCH_BASE) -e GH_TOKEN -e GITHUB_TOKEN -v $(HARNESS_EVIDENCE_DIR):$(HARNESS_EVIDENCE_DIR) -v $(HARNESS_POLICY_ANCHOR):$(HARNESS_POLICY_ANCHOR):ro $(ORCH_IMAGE)
@@ -209,7 +212,7 @@ task-plan:
 
 supervisor-model:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(SUPERVISOR_MODEL_RUN) $(ROOT)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS) --output $(HARNESS_EVIDENCE_DIR)
+	@$(SUPERVISOR_MODEL_RUN) $(ROOT)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS) --output $(HARNESS_EVIDENCE_DIR) $(SUPERVISOR_MODEL_FLAGS)
 
 policy-prepare:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness

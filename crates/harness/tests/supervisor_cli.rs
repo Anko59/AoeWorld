@@ -2,6 +2,9 @@
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 fn cli(root: &Path, input: &Path, output: &Path) -> std::process::Output {
+    cli_options(root, input, output, &[])
+}
+fn cli_options(root: &Path, input: &Path, output: &Path, extra: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
         .current_dir(root)
         .args([
@@ -11,10 +14,66 @@ fn cli(root: &Path, input: &Path, output: &Path) -> std::process::Output {
             "--output",
             output.to_str().unwrap(),
         ])
+        .args(extra)
         .env_remove("GH_TOKEN")
         .env_remove("GITHUB_TOKEN")
         .output()
         .unwrap()
+}
+#[test]
+#[cfg(unix)]
+fn durable_model_journal_reuses_history_and_corruption_never_reuses_ready_feedback() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let owner = tempfile::tempdir().unwrap();
+    let output = owner.path().join("output");
+    fs::create_dir(&output).unwrap();
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o700)).unwrap();
+    let input = owner.path().join("requirements.json");
+    fs::write(
+        &input,
+        serde_json::to_vec(&requirements(owner.path())).unwrap(),
+    )
+    .unwrap();
+    for expected in [2, 4] {
+        let result = cli_options(
+            root.path(),
+            &input,
+            &output,
+            &["--persist-model-journal", "--probe-service"],
+        );
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let report: Value =
+            serde_json::from_slice(&fs::read(output.join("supervisor-model.json")).unwrap())
+                .unwrap();
+        assert_eq!(report["status"], "UNAVAILABLE");
+        assert_eq!(report["authoritative"], false);
+        assert_eq!(report["local_journal"]["sequence"], expected);
+        assert_eq!(report["local_journal"]["authoritative"], false);
+        assert_eq!(report["local_journal"]["fsync_calls_completed"], true);
+        assert_eq!(report["daemon_probe"]["authoritative"], false);
+    }
+    let journal = output.join("lease-journal/journal.json");
+    fs::write(&journal, b"invalid history").unwrap();
+    fs::write(
+        output.join("supervisor-model.json"),
+        br#"{"status":"READY","authoritative":true}"#,
+    )
+    .unwrap();
+    assert!(
+        !cli_options(root.path(), &input, &output, &["--persist-model-journal"])
+            .status
+            .success()
+    );
+    let report: Value =
+        serde_json::from_slice(&fs::read(output.join("supervisor-model.json")).unwrap()).unwrap();
+    assert_eq!(report["status"], "UNAVAILABLE");
+    assert_eq!(report["authoritative"], false);
+    assert_eq!(fs::read(journal).unwrap(), b"invalid history");
 }
 fn requirements(owner: &Path) -> Value {
     for name in ["artifact", "service-evidence", "leases"] {
