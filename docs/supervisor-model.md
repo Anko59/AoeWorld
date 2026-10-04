@@ -17,11 +17,14 @@ aoe-harness supervisor-model --requirements /absolute/requirements.json \
 
 The thin Docker facade is `make supervisor-model`. Set
 `HARNESS_SUPERVISOR_DIR`, `HARNESS_SUPERVISOR_REQUIREMENTS` (inside that directory)
-and `HARNESS_EVIDENCE_DIR` to existing absolute paths. The model container uses
-network none, read-only checkout/configuration mounts, and no Docker socket or
-forwarded API credentials. This is feedback plumbing, not proof that the coding
-host or model lacks daemon control. Compilation uses the normal development
-Dockerized Make tools.
+and `HARNESS_EVIDENCE_DIR` to existing absolute paths. Make canonicalizes these
+paths and rejects evidence overlap with the checkout, common Git metadata, writable
+caches, host runtime paths, Docker sockets or the supervisor input directory;
+configured non-Unix Docker endpoints are rejected because bind paths resolve on the
+daemon host. The model container uses network none, read-only checkout/Git/input
+mounts, and no Docker socket or forwarded API credentials. This is feedback
+plumbing, not proof that the coding host or model lacks daemon control. Compilation
+uses the normal development Dockerized Make tools.
 
 Requirements are strict schema1 JSON, bounded32KiB. Top-level fields are `schema`,
 `anchor` (the existing protected-source anchor contract), `service_uid`,
