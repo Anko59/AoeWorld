@@ -21,6 +21,8 @@ pub(super) use eviction::evict_distant_chunks_with_limits;
 use heights::{
     include_chunk_height_bounds, refresh_chunk_height_bounds, visible_tiles_for_height_bounds,
 };
+#[path = "playground_map/presentation.rs"]
+pub(crate) mod presentation;
 #[path = "playground_map/render_cache.rs"]
 pub(super) mod render_cache;
 #[path = "playground_map/resources.rs"]
@@ -79,9 +81,9 @@ pub(super) fn inspection_label(client: &Client) -> String {
         return format!("tile {x}, {y}: terrain unavailable");
     };
     format!(
-        "tile {x}, {y}: movement level {} m · geographic height {:.2} m · {:?} · {:?} water · {:?} elevation · {}",
+        "tile {x}, {y}: movement level {} m · geographic height {} m · {:?} · {:?} water · {:?} elevation · {}",
         tile.game_height_level,
-        f64::from(tile.geographic_height_centimeters) / 100.0,
+        crate::web::numeric::format(f64::from(tile.geographic_height_centimeters) / 100.0, 2),
         tile.material,
         tile.water,
         tile.elevation_provenance,
@@ -101,10 +103,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let requests = visible_chunks(&mut client);
         (client.connection_id, content_hash, requests)
     };
-    let content_hash = map_hash
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let content_hash = super::storage::hex(&map_hash);
     for (x, y) in requests {
         let shared = shared.clone();
         let content_hash = content_hash.clone();
@@ -357,7 +356,8 @@ fn terrain_material(material: GroundMaterial) -> u8 {
         | GroundMaterial::Mud
         | GroundMaterial::Snow
         | GroundMaterial::Ice => 1,
-        GroundMaterial::Dirt | GroundMaterial::ForestFloor => 2,
+        GroundMaterial::Dirt => 2,
+        GroundMaterial::ForestFloor => 6,
         GroundMaterial::Sand | GroundMaterial::Shore => 3,
         GroundMaterial::Rock => 4,
         GroundMaterial::Water => 5,
@@ -414,7 +414,7 @@ fn chunk_resident_bytes(chunk: &Chunk) -> usize {
 }
 
 fn display_mebibytes(bytes: usize) -> String {
-    format!("{:.1}", bytes as f64 / (1024.0 * 1024.0))
+    crate::web::numeric::format(bytes as f64 / (1024.0 * 1024.0), 1)
 }
 
 async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<Chunk, JsValue> {

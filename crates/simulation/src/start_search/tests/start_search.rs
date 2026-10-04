@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "recipe_eight.rs"]
+mod recipe_eight;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,
@@ -84,7 +87,7 @@ fn footprint_boundary_candidates_fail_closed_for_every_supported_recipe() {
         RECIPE_4_START_RECIPE,
         RECIPE_5_START_RECIPE,
         PRIOR_WATER_MODEL_START_RECIPE,
-        WATER_MODEL_START_RECIPE,
+        PRIOR_FOREST_START_RECIPE,
     ] {
         assert_eq!(
             terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
@@ -104,7 +107,7 @@ fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
         RECIPE_4_START_RECIPE,
         RECIPE_5_START_RECIPE,
         PRIOR_WATER_MODEL_START_RECIPE,
-        WATER_MODEL_START_RECIPE,
+        PRIOR_FOREST_START_RECIPE,
     ] {
         let selected = terrain
             .search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false)
@@ -131,7 +134,7 @@ fn dense_modern_recipes_preserve_the_fixed_start_contract() {
     for recipe in [
         RECIPE_5_START_RECIPE,
         PRIOR_WATER_MODEL_START_RECIPE,
-        WATER_MODEL_START_RECIPE,
+        PRIOR_FOREST_START_RECIPE,
     ] {
         let terrain = Terrain::Map {
             generator: flat_temperate_generator(recipe),
@@ -197,55 +200,138 @@ fn assert_start_contract(terrain: &Terrain, config: WorldConfig, selected: Start
 }
 
 fn flat_temperate_generator(generation_recipe: u16) -> MapChunkGenerator {
+    flat_temperate_generator_with_water(generation_recipe, 0)
+}
+
+fn flat_temperate_generator_with_water(
+    generation_recipe: u16,
+    water_percent: u8,
+) -> MapChunkGenerator {
+    flat_temperate_generator_with_water_field(generation_recipe, 1, vec![water_percent])
+}
+
+fn flat_temperate_generator_with_water_field(
+    generation_recipe: u16,
+    samples: u16,
+    ocean_coverage_percent: Vec<u8>,
+) -> MapChunkGenerator {
+    let count = usize::from(samples).pow(2);
     let elevation = ElevationPage {
         level: 0,
         x: 0,
         y: 0,
-        width: 1,
-        height: 1,
-        geographic_height_centimeters: vec![0],
+        width: u8::try_from(samples).unwrap(),
+        height: u8::try_from(samples).unwrap(),
+        geographic_height_centimeters: vec![0; count],
     };
     let water = WaterPage {
         level: 0,
         x: 0,
         y: 0,
-        width: 1,
-        height: 1,
-        ocean_coverage_percent: vec![0],
-        inland_coverage_percent: vec![0],
+        width: u8::try_from(samples).unwrap(),
+        height: u8::try_from(samples).unwrap(),
+        ocean_coverage_percent,
+        inland_coverage_percent: vec![0; count],
     };
     let vegetation = PotentialBiomePage {
         level: 0,
         x: 0,
         y: 0,
-        width: 1,
-        height: 1,
-        potential_biome_class: vec![9],
+        width: u8::try_from(samples).unwrap(),
+        height: u8::try_from(samples).unwrap(),
+        potential_biome_class: vec![9; count],
     };
+    // Dense prepared constructors verify every advertised mip level and root.
+    // Keep a complete typed pyramid rather than bypassing schema validation.
+    let mut elevation_pages = vec![elevation];
+    let mut water_pages = vec![water];
+    let mut vegetation_pages = vec![vegetation];
+    let mut axis = samples;
+    while axis > 1 {
+        let previous = water_pages.last().expect("water level");
+        let next_axis = axis.div_ceil(2);
+        let mut ocean = Vec::new();
+        for y in 0..next_axis {
+            for x in 0..next_axis {
+                let mut sum = 0_u16;
+                let mut count = 0_u16;
+                for dy in 0..2 {
+                    for dx in 0..2 {
+                        let (x, y) = (x * 2 + dx, y * 2 + dy);
+                        if x < axis && y < axis {
+                            sum += u16::from(
+                                previous.ocean_coverage_percent[usize::from(y * axis + x)],
+                            );
+                            count += 1;
+                        }
+                    }
+                }
+                ocean.push((sum / count) as u8);
+            }
+        }
+        let level = u8::try_from(elevation_pages.len()).expect("small pyramid");
+        let side = u8::try_from(next_axis).expect("small page");
+        let count = usize::from(next_axis).pow(2);
+        elevation_pages.push(ElevationPage {
+            level,
+            x: 0,
+            y: 0,
+            width: side,
+            height: side,
+            geographic_height_centimeters: vec![0; count],
+        });
+        water_pages.push(WaterPage {
+            level,
+            x: 0,
+            y: 0,
+            width: side,
+            height: side,
+            ocean_coverage_percent: ocean,
+            inland_coverage_percent: vec![0; count],
+        });
+        vegetation_pages.push(PotentialBiomePage {
+            level,
+            x: 0,
+            y: 0,
+            width: side,
+            height: side,
+            potential_biome_class: vec![9; count],
+        });
+        axis = next_axis;
+    }
     let environment = PreparedEnvironment {
-        samples_per_axis: 1,
+        samples_per_axis: samples,
         geographic_millimeters_per_sample: 1_000,
         page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
         elevation: FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 1,
-                ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
-                    .expect("elevation root"),
-            }],
+            levels: elevation_pages
+                .iter()
+                .map(|page| PyramidLevel {
+                    samples_per_axis: u16::from(page.width),
+                    ordered_page_root: ordered_page_root(std::slice::from_ref(page))
+                        .expect("elevation root"),
+                })
+                .collect(),
         },
         water: Some(FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 1,
-                ordered_page_root: ordered_water_page_root(std::slice::from_ref(&water))
-                    .expect("water root"),
-            }],
+            levels: water_pages
+                .iter()
+                .map(|page| PyramidLevel {
+                    samples_per_axis: u16::from(page.width),
+                    ordered_page_root: ordered_water_page_root(std::slice::from_ref(page))
+                        .expect("water root"),
+                })
+                .collect(),
         }),
         vegetation: Some(FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 1,
-                ordered_page_root: ordered_biome_page_root(std::slice::from_ref(&vegetation))
-                    .expect("vegetation root"),
-            }],
+            levels: vegetation_pages
+                .iter()
+                .map(|page| PyramidLevel {
+                    samples_per_axis: u16::from(page.width),
+                    ordered_page_root: ordered_biome_page_root(std::slice::from_ref(page))
+                        .expect("vegetation root"),
+                })
+                .collect(),
         }),
         historical_land_use: None,
         hydrology_evidence: None,
@@ -264,11 +350,11 @@ fn flat_temperate_generator(generation_recipe: u16) -> MapChunkGenerator {
                 denominator: 1,
             },
             &environment,
-            vec![elevation],
+            elevation_pages,
         )
         .expect("flat elevation")
-        .with_prepared_water(&environment, vec![water])
+        .with_prepared_water(&environment, water_pages)
         .expect("flat water")
-        .with_prepared_biomes(&environment, vec![vegetation])
+        .with_prepared_biomes(&environment, vegetation_pages)
         .expect("flat vegetation")
 }

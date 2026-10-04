@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { gameAssets } from "./game-assets.js";
+import { forceCanvas } from "./rendering/backends.js";
 
 type Profile = "overview" | "detailed";
 const profiles: Profile[] = ["overview", "detailed"];
@@ -319,9 +320,7 @@ test("overview and detailed packages reopen and load unseen chunks offline", asy
 }) => {
   test.skip(phase !== "reopen", "reopen runs only after the server restart");
   const assetSource = await gameAssets(page);
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "gpu", { value: undefined });
-  });
+  await forceCanvas(page);
   const requestedChunks = new Set<string>();
   page.on("request", (browserRequest) => {
     const url = new URL(browserRequest.url());

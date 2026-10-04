@@ -11,7 +11,10 @@ const LEGACY_START_RECIPE: u16 = 3;
 const RECIPE_4_START_RECIPE: u16 = 4;
 const RECIPE_5_START_RECIPE: u16 = 5;
 const PRIOR_WATER_MODEL_START_RECIPE: u16 = aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION;
+const PRIOR_FOREST_START_RECIPE: u16 = aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION;
 const WATER_MODEL_START_RECIPE: u16 = aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION;
+const START_EXIT_DISTANCE: u32 = 64;
+const START_EXIT_VISITS: usize = 4_096;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartSearchResult {
@@ -67,6 +70,7 @@ impl Terrain {
             | RECIPE_4_START_RECIPE
             | RECIPE_5_START_RECIPE
             | PRIOR_WATER_MODEL_START_RECIPE
+            | PRIOR_FOREST_START_RECIPE
             | WATER_MODEL_START_RECIPE => {}
             _ => return Err(EnvironmentPageError::Invalid),
         }
@@ -78,8 +82,15 @@ impl Terrain {
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
+        cache.require_exit = generation_recipe_version == WATER_MODEL_START_RECIPE;
         if valid_start(&mut cache, center)? {
             return Ok(StartSearchResult::Found(center));
+        }
+        if cancelled() {
+            return Ok(StartSearchResult::Cancelled);
+        }
+        if cache.exit_budget_exhausted {
+            return Ok(StartSearchResult::LimitReached);
         }
         let center_chunk = TileCoord::new(
             center.x.div_euclid(CHUNK_TILES),
@@ -107,6 +118,12 @@ impl Terrain {
                 }
                 scanned += 1;
                 scan_start_chunk(&mut cache, chunk_x, chunk_y, &mut best)?;
+                if cancelled() {
+                    return Ok(StartSearchResult::Cancelled);
+                }
+                if cache.exit_budget_exhausted {
+                    return Ok(StartSearchResult::LimitReached);
+                }
             }
             if best.is_some_and(|tile| farther_than_best(tile, config, center_chunk, ring)) {
                 return Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found));
@@ -122,6 +139,10 @@ struct StartPassabilityCache<'a> {
     entries: BTreeMap<(i32, i32), Vec<bool>>,
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
+    require_exit: bool,
+    exit_visits: usize,
+    exit_chunks: BTreeSet<(i32, i32)>,
+    exit_budget_exhausted: bool,
     cancelled: &'a dyn Fn() -> bool,
 }
 
@@ -133,6 +154,10 @@ impl<'a> StartPassabilityCache<'a> {
             entries: BTreeMap::new(),
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
+            require_exit: false,
+            exit_visits: 0,
+            exit_chunks: BTreeSet::new(),
+            exit_budget_exhausted: false,
             cancelled,
         }
     }
@@ -184,6 +209,70 @@ impl<'a> StartPassabilityCache<'a> {
             }
         }
         Ok(result)
+    }
+
+    /// Recipe eight certifies an actual route beyond any starting glade.
+    /// A distance-prioritized frontier avoids exploring an entire open disk.
+    /// Work and chunk bounds apply across ALL candidates in this search.
+    fn reaches_exit(&mut self, origin: TileCoord) -> Result<bool, EnvironmentPageError> {
+        use std::collections::BinaryHeap;
+        if self.exit_visits == START_EXIT_VISITS {
+            self.exit_budget_exhausted = true;
+            return Ok(false);
+        }
+        self.exit_visits += 1;
+        let mut visited = BTreeSet::from([origin]);
+        let mut pending = BinaryHeap::from([(0_u32, std::cmp::Reverse((origin.y, origin.x)))]);
+        // Large maps still require 64 tiles, beyond the central glade's 27.
+        // Small maps certify a route toward their edge rather than requiring
+        // a destination outside the world. Keep the work bounds unchanged.
+        let exit_distance = START_EXIT_DISTANCE
+            .min(((self.config.width_tiles.max(self.config.height_tiles) - 1) / 2).max(1) as u32);
+        while let Some((distance, std::cmp::Reverse((y, x)))) = pending.pop() {
+            if (self.cancelled)() {
+                return Ok(false);
+            }
+            if distance >= exit_distance {
+                return Ok(true);
+            }
+            let tile = TileCoord::new(x, y);
+            for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
+                let next = TileCoord::new(x + dx, y + dy);
+                if visited.contains(&next) {
+                    continue;
+                }
+                let chunk = (
+                    next.x.div_euclid(CHUNK_TILES),
+                    next.y.div_euclid(CHUNK_TILES),
+                );
+                if !self.exit_chunks.contains(&chunk)
+                    && self.exit_chunks.len() == START_SEARCH_CHUNKS
+                {
+                    self.exit_budget_exhausted = true;
+                    return Ok(false);
+                }
+                self.exit_chunks.insert(chunk);
+                if !self.passable(next)? {
+                    continue;
+                }
+                if self
+                    .terrain
+                    .crossable_with_cancel(tile, next, self.config, self.cancelled)?
+                {
+                    if self.exit_visits == START_EXIT_VISITS {
+                        self.exit_budget_exhausted = true;
+                        return Ok(false);
+                    }
+                    self.exit_visits += 1;
+                    visited.insert(next);
+                    pending.push((
+                        next.x.abs_diff(origin.x).max(next.y.abs_diff(origin.y)),
+                        std::cmp::Reverse((next.y, next.x)),
+                    ));
+                }
+            }
+        }
+        Ok(false)
     }
 
     fn passable(&mut self, tile: TileCoord) -> Result<bool, EnvironmentPageError> {
@@ -248,6 +337,9 @@ fn scan_start_chunk(
         if valid_start(cache, candidate)? {
             *best = Some(candidate);
         }
+        if cache.exit_budget_exhausted || (cache.cancelled)() {
+            break;
+        }
     }
     Ok(())
 }
@@ -256,7 +348,9 @@ fn valid_start(
     cache: &mut StartPassabilityCache<'_>,
     candidate: TileCoord,
 ) -> Result<bool, EnvironmentPageError> {
-    Ok(clear_starting_area(cache, candidate)? && cache.reaches_required_tiles(candidate)?)
+    Ok(clear_starting_area(cache, candidate)?
+        && cache.reaches_required_tiles(candidate)?
+        && (!cache.require_exit || cache.reaches_exit(candidate)?))
 }
 
 fn clear_starting_area(

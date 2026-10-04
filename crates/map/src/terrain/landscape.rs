@@ -6,6 +6,28 @@ const CANOPY_GRID_TILES: i32 = 128;
 const OPENING_GRID_TILES: i32 = 192;
 const OPENING_CENTER_JITTER: i32 = 30;
 
+impl MapChunkGenerator {
+    /// Pure, bounded lookup of the procedural opening in this tile's cell.
+    /// A node is not a claim that source water or cliffs are traversable.
+    pub fn forest_opening_center_at(&self, tile: TileCoord) -> Option<TileCoord> {
+        if !uses_forest_landscape(self) || opening_geometry(self, tile).is_none() {
+            return None;
+        }
+        let cell = (
+            tile.x.div_euclid(OPENING_GRID_TILES),
+            tile.y.div_euclid(OPENING_GRID_TILES),
+        );
+        Some(opening_center(cell_layout(self, cell), cell))
+    }
+}
+
+pub(super) fn uses_forest_landscape(generator: &MapChunkGenerator) -> bool {
+    matches!(
+        generator.generation_recipe_version(),
+        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION | crate::GENERATION_RECIPE_VERSION
+    )
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OpeningGeometry {
     vertices: [TileCoord; 16],
@@ -59,7 +81,7 @@ pub(super) fn opening_contains(generator: &MapChunkGenerator, tile: TileCoord) -
 }
 
 fn starting_glade(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION {
+    if !uses_forest_landscape(generator) {
         return false;
     }
     let width = generator.width_tiles.max(1);
@@ -111,6 +133,10 @@ fn opening_geometry_for_cell(
         19
     } else if kind < 760 {
         31
+    } else if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION {
+        // Small mandatory nodes join the recipe-eight graph without reseeding
+        // the already established larger openings or canopy.
+        19
     } else {
         return None;
     };
@@ -162,8 +188,11 @@ fn opening_center(layout: u64, cell: (i32, i32)) -> TileCoord {
 }
 
 pub(super) fn procedural_trail_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION {
+    if !uses_forest_landscape(generator) {
         return false;
+    }
+    if starting_connector_contains(generator, tile) {
+        return true;
     }
     let cell_x = tile.x.div_euclid(OPENING_GRID_TILES);
     let cell_y = tile.y.div_euclid(OPENING_GRID_TILES);
@@ -188,7 +217,9 @@ fn trail_segment(
 ) -> Option<TrailSegment> {
     let start_layout = cell_layout(generator, cell);
     let connection = mix64(start_layout ^ (u64::from(axis) << 48));
-    if connection % 100 >= 88 || start_layout % 1_000 >= 760 {
+    let legacy =
+        generator.generation_recipe_version() == crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION;
+    if legacy && (connection % 100 >= 88 || start_layout % 1_000 >= 760) {
         return None;
     }
     let neighbor = if axis == 0 {
@@ -197,7 +228,7 @@ fn trail_segment(
         (cell.0, cell.1.saturating_add(1))
     };
     let end_layout = cell_layout(generator, neighbor);
-    if end_layout % 1_000 >= 760 {
+    if legacy && end_layout % 1_000 >= 760 {
         return None;
     }
     let start = opening_center(start_layout, cell);
@@ -221,6 +252,27 @@ fn trail_segment(
         end,
         half_width: 2 + ((connection >> 32) % 2) as i32,
     })
+}
+
+fn starting_connector_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
+    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION {
+        return false;
+    }
+    let coordinate = (generator.width_tiles.max(1) - 1) / 2;
+    let center = TileCoord::new(coordinate, coordinate);
+    // The center and its node are in one 192-tile cell. Reject far-away tiles
+    // before hashing; no map-wide allocation or source search during sampling.
+    if tile.x.abs_diff(center.x) > OPENING_GRID_TILES as u32
+        || tile.y.abs_diff(center.y) > OPENING_GRID_TILES as u32
+    {
+        return false;
+    }
+    let cell = (
+        coordinate.div_euclid(OPENING_GRID_TILES),
+        coordinate.div_euclid(OPENING_GRID_TILES),
+    );
+    let end = opening_center(cell_layout(generator, cell), cell);
+    near_segment(center, end, tile, 3)
 }
 
 fn midpoint(left: i32, right: i32) -> i32 {
@@ -253,7 +305,7 @@ pub(super) fn material_for_tile(
     biome: Biome,
     base: GroundMaterial,
 ) -> GroundMaterial {
-    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION
+    if !uses_forest_landscape(generator)
         || biome != Biome::Temperate
         || base != GroundMaterial::TemperateGrass
     {

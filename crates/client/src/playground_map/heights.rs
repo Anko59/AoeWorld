@@ -127,10 +127,7 @@ pub(super) fn ensure_bounds(
 }
 
 async fn fetch_bounds(hash: [u8; 32]) -> Result<(i16, i16), JsValue> {
-    let content_hash = hash
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let content_hash = super::super::storage::hex(&hash);
     let window = web_sys::window().ok_or("No window")?;
     let response: Response =
         JsFuture::from(window.fetch_with_str(&format!("/maps/{content_hash}/height-bounds")))

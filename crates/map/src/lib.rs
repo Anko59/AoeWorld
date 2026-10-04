@@ -65,10 +65,12 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// Increment when deterministic generation behavior changes. This version is
 /// part of the canonical package identity but does not reseed geography.
-pub const GENERATION_RECIPE_VERSION: u16 = 7;
-/// Recipe 7 consumes verified modeled water when present and adds the current
-/// forest and ground landscape behavior to both overview and detailed maps.
-pub const WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 7;
+pub const GENERATION_RECIPE_VERSION: u16 = 8;
+/// Recipe 8 connects the central glade and the local opening graph; natural
+/// water and cliff constraints still determine actual traversal.
+pub const WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 8;
+/// Published recipe 7 retains its original canopy, openings and optional trails.
+pub const PRIOR_FOREST_GENERATION_RECIPE_VERSION: u16 = 7;
 /// Recipe 6 remains readable for packages generated before recipe 7.
 pub const PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 6;
 /// Recipe 5 remains readable for model-free overview packages.

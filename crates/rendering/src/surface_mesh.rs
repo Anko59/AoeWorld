@@ -47,7 +47,17 @@ pub fn sample_surface_height(
     local_x: f64,
     local_y: f64,
 ) -> f64 {
-    sample_float_surface_height(corners.map(f64::from), triangulation, local_x, local_y)
+    sample_float_surface_height(
+        [
+            f64::from(corners[0]),
+            f64::from(corners[1]),
+            f64::from(corners[2]),
+            f64::from(corners[3]),
+        ],
+        triangulation,
+        local_x,
+        local_y,
+    )
 }
 
 fn sample_float_surface_height(

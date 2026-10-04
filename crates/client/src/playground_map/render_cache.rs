@@ -22,6 +22,17 @@ impl<S> Default for RenderFrameCache<S> {
 }
 
 impl<S> RenderFrameCache<S> {
+    pub(crate) fn position(&self, id: aoe_core::EntityId) -> Option<[f64; 2]> {
+        // Scene units preserve the authoritative BTreeMap's entity-ID order.
+        let units = &self.previous.as_ref()?.units;
+        let index = units.binary_search_by_key(&id, |unit| unit.id).ok()?;
+        Some(units[index].position)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.previous = None;
+    }
+
     fn needs_render(
         &self,
         scene: &Rc<S>,
@@ -78,6 +89,13 @@ pub(in super::super) fn render_if_changed(
         return Ok(false);
     }
 
+    let grid_bounds = grid.then(|| {
+        client.camera.visible_tiles_at_height(
+            client.config,
+            1.0,
+            client.camera.focus_elevation_meters,
+        )
+    });
     let result = {
         let Client { renderer, art, .. } = client;
         renderer.render_prepared_world(
@@ -88,10 +106,12 @@ pub(in super::super) fn render_if_changed(
             units,
             camera,
             animation,
-            grid,
+            grid_bounds,
         )
     };
-    result?;
+    if !result? {
+        return Ok(false);
+    }
     client
         .rendered_frame
         .record_success(scene, units, resources, grid, animation);
@@ -123,6 +143,21 @@ mod tests {
             visual_variant: 0,
             elevation_meters: 1.0,
         }
+    }
+
+    #[wasm_bindgen_test]
+    fn picking_uses_only_successfully_presented_positions_until_reset() {
+        let scene = Rc::new(());
+        let units = [unit([1.0, 2.0], false, true)];
+        let mut cache = RenderFrameCache::default();
+        assert_eq!(cache.position(EntityId(7)), None);
+        cache.record_success(&scene, &units, &[], false, 0);
+        assert_eq!(cache.position(EntityId(7)), Some([1.0, 2.0]));
+        assert!(cache.needs_render(&scene, &[unit([1.5, 2.0], false, true)], &[], false, 0));
+        // Failed or throttled frames cannot move hitboxes ahead of their pixels.
+        assert_eq!(cache.position(EntityId(7)), Some([1.0, 2.0]));
+        cache.clear();
+        assert_eq!(cache.position(EntityId(7)), None);
     }
 
     #[wasm_bindgen_test]

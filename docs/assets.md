@@ -33,8 +33,12 @@ To inspect a pack in the local app, start `make dev` with
 dirt 15000, sand 15010, rock 15018, and water 15002. All six terrain groups
 use their reviewed 10×10 periodic texture sets, indexed x-major with reversed
 y so neighboring source edges meet. The map client selects those groups from
-semantic terrain chunks. It
-preserves frame anchors, player color, and imported shadow masks; tree frames
+semantic terrain chunks. Optional native Forest/g_for terrain 15011 contributes
+frames 0–9 as coordinate-stable forest-floor accents mixed with dirt. These
+accents do not claim the full source's 10×10 seamless grid. The other six groups
+retain all 100 frames. The bounded catalog loads at most 756 frames into the
+unchanged single 2048² gameplay atlas; missing forest art explicitly uses dirt.
+It preserves frame anchors, player color, and imported shadow masks; tree frames
 4652 use the paired shadow-only frames from 2296. Cavalry and non-tree resource
 frames without imported shadows use a fixed-direction fallback silhouette
 derived from their selected sprite alpha. The renderer culls terrain to the

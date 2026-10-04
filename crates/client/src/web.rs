@@ -13,6 +13,8 @@ use web_sys::{
 };
 
 mod metrics;
+#[path = "web/numeric.rs"]
+pub(crate) mod numeric;
 use metrics::{Metrics, now_ms, sample};
 
 struct Client {
@@ -323,7 +325,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.metrics.last_frame_time = None;
         }
         let diagnostics = format!(
-            "build: {} | scenario: {} | adapter: {} | connection: {} | tick: {} | camera: {},{} | zoom: {:.2} | resident: {} / {} | visible: {} | chunks: {} | draws: {} | GPU buffer: {} B | {}{}",
+            "build: {} | scenario: {} | adapter: {} | connection: {} | tick: {} | camera: {},{} | zoom: {} | resident: {} / {} | visible: {} | chunks: {} | draws: {} | GPU buffer: {} B | {}{}",
             client.build,
             client.scenario,
             client.adapter,
@@ -331,7 +333,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.tick.0,
             client.camera.x as i32,
             client.camera.y as i32,
-            client.camera.zoom,
+            numeric::format(f64::from(client.camera.zoom), 2),
             client.entities.len(),
             client.total_entities,
             client.counters.visible,

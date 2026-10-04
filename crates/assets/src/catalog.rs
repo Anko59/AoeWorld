@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 2;
+pub const VERSION: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AssetRole {
@@ -16,6 +16,7 @@ pub enum AssetRole {
     Sand,
     Rock,
     Water,
+    ForestFloor,
     WoodTree,
     WoodTreeShadow,
     ForageBush,
@@ -146,6 +147,17 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
     },
 ];
 
+/// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only
+/// frames 0..10 as coordinate-stable accents, not a complete periodic grid.
+/// Optional so older partial packs keep their explicit dirt fallback.
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 1] = [SpriteSource {
+    role: AssetRole::ForestFloor,
+    archive: "terrain.drs",
+    id: 15011,
+    frames: 10,
+    interpretation: "ten native forest-floor accents mixed with periodic dirt",
+}];
+
 /// Object roles without reviewed source art. Keep this empty while every
 /// supported resource role has an approved source mapping.
 pub const UNAVAILABLE_RESOURCE_ART: [&str; 0] = [];
@@ -159,21 +171,36 @@ mod tests {
         let mut roles = REQUIRED_RENDER_SOURCES
             .iter()
             .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+            .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .map(|source| source.role)
             .collect::<Vec<_>>();
         roles.sort_unstable();
         roles.dedup();
         assert_eq!(
             roles.len(),
-            REQUIRED_RENDER_SOURCES.len() + OPTIONAL_RESOURCE_SOURCES.len()
+            REQUIRED_RENDER_SOURCES.len()
+                + OPTIONAL_RESOURCE_SOURCES.len()
+                + OPTIONAL_TERRAIN_SOURCES.len()
         );
         assert!(
             REQUIRED_RENDER_SOURCES
                 .iter()
                 .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 2);
+        assert_eq!(VERSION, 3);
+        assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
+        assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
+        assert_eq!(
+            REQUIRED_RENDER_SOURCES
+                .iter()
+                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+                .map(|source| source.frames as usize)
+                .sum::<usize>(),
+            756
+        );
     }
 
     #[test]

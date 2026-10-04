@@ -73,7 +73,7 @@ impl Config {
             scenario,
             tick_hz,
             asset_pack: None,
-            // Generation recipe 7 changes forest and ground generation identity.
+            // Generation recipe 8 changes forest opening and trail identity.
             // Keep prior package directories intact and regenerate compatible
             // packages separately.
             map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),
