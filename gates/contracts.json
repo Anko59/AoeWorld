@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "requirements": [
+    {
+      "id": "rts-diagnostic-wire-bounds-v1",
+      "risk": "critical",
+      "scope": "Diagnostic binary wire fixtures only; not full gameplay protocol or transport qualification.",
+      "statement": "Diagnostic messages preserve supported round trips and reject oversized frames, malformed advertised allocations and oversized entity collections.",
+      "invariants": [
+        {
+          "id": "wire-supported-round-trips",
+          "claim": "The checked client subscription and server delta fixtures round trip through their matching codecs.",
+          "boundaries": [
+            {"path": "crates/protocol/src/lib.rs", "symbol": "encode_client", "kind": "function"},
+            {"path": "crates/protocol/src/lib.rs", "symbol": "decode_client", "kind": "function"},
+            {"path": "crates/protocol/src/lib.rs", "symbol": "encode_server", "kind": "function"},
+            {"path": "crates/protocol/src/lib.rs", "symbol": "decode_server", "kind": "function"}
+          ],
+          "case_ids": ["wire-messages-round-trip"]
+        },
+        {
+          "id": "wire-frame-and-collection-limits",
+          "claim": "The checked oversized client and server frames and oversized snapshot or delta collections are rejected rather than accepted as valid messages.",
+          "boundaries": [
+            {"path": "crates/protocol/src/lib.rs", "symbol": "decode_client", "kind": "function"},
+            {"path": "crates/protocol/src/lib.rs", "symbol": "decode_server", "kind": "function"},
+            {"path": "crates/protocol/src/lib.rs", "symbol": "encode_server", "kind": "function"}
+          ],
+          "case_ids": ["wire-rejects-oversized-data", "wire-enforces-both-direction-limits"]
+        },
+        {
+          "id": "wire-malformed-advertised-allocation",
+          "claim": "A short snapshot frame advertising an excessive entity vector length is rejected by the checked decoder fixture.",
+          "boundaries": [
+            {"path": "crates/protocol/src/lib.rs", "symbol": "decode_server", "kind": "function"}
+          ],
+          "case_ids": ["wire-rejects-huge-advertised-allocation"]
+        }
+      ],
+      "gate_refs": ["test-unit"]
+    },
+    {
+      "id": "rts-fixed-waypoint-order-v1",
+      "risk": "high",
+      "scope": "Predetermined synthetic tile-center waypoint orders only; not complete path planning, real-source routes or RTS performance qualification.",
+      "statement": "A checked fixed waypoint order retains its final destination and remaining route, while checked off-center and repeated waypoint inputs are rejected before an order is installed.",
+      "invariants": [
+        {
+          "id": "waypoint-order-retains-destination-and-queue",
+          "claim": "The checked valid fixed route retains the first waypoint, final destination and remaining waypoint queue as one active movement order.",
+          "boundaries": [
+            {"path": "crates/simulation/src/game_waypoints.rs", "symbol": "GameWorld::issue_move_waypoints", "kind": "method"}
+          ],
+          "case_ids": ["waypoint-retains-final-destination-and-route"]
+        },
+        {
+          "id": "waypoint-invalid-input-leaves-order-absent",
+          "claim": "The checked off-center and consecutive repeated waypoint inputs return InvalidPosition and leave the previously absent movement order absent.",
+          "boundaries": [
+            {"path": "crates/simulation/src/game_waypoints.rs", "symbol": "GameWorld::issue_move_waypoints", "kind": "method"}
+          ],
+          "case_ids": ["waypoint-rejects-invalid-fixed-input"]
+        }
+      ],
+      "gate_refs": ["test-unit"]
+    },
+    {
+      "id": "harness-effective-index-witness-v1",
+      "risk": "critical",
+      "scope": "Captured staged-index and raw referenced Git object endpoint witnesses only; hostile same-user reverted races and independent judging authority are excluded.",
+      "statement": "A selected staged index is captured independently of working-only content and private Git context, invalid index locations do not fall back, and observed raw object changes invalidate endpoint witnesses.",
+      "invariants": [
+        {
+          "id": "index-selected-source-and-private-context",
+          "claim": "The checked alternate index supplies staged bytes without modifying either source index or selecting that index for private Git commands; a later alternate-index change invalidates the snapshot.",
+          "boundaries": [
+            {"path": "crates/harness/src/gates/scopes/mod.rs", "symbol": "Snapshot::prepare_index", "kind": "method"},
+            {"path": "crates/harness/src/gates/scopes/mod.rs", "symbol": "Snapshot::verify_source", "kind": "method"}
+          ],
+          "case_ids": ["index-captures-selected-staged-source"]
+        },
+        {
+          "id": "index-invalid-location-has-no-fallback",
+          "claim": "The checked missing, directory and external index paths are rejected instead of silently choosing the default index; the native Unix fixture additionally rejects a symlink index.",
+          "boundaries": [
+            {"path": "crates/harness/src/gates/scopes/mod.rs", "symbol": "Snapshot::prepare_index", "kind": "method"}
+          ],
+          "case_ids": ["index-rejects-invalid-index-locations"]
+        },
+        {
+          "id": "index-witness-binds-raw-referenced-blobs",
+          "claim": "Replacing checked raw referenced blob bytes while preserving index bytes invalidates source verification and snapshot fingerprints.",
+          "boundaries": [
+            {"path": "crates/harness/src/gates/scopes/witness.rs", "symbol": "referenced_objects", "kind": "function"},
+            {"path": "crates/harness/src/gates/scopes/mod.rs", "symbol": "Snapshot::verify_source", "kind": "method"}
+          ],
+          "case_ids": ["index-rejects-referenced-blob-substitution"]
+        }
+      ],
+      "gate_refs": ["test-unit"]
+    }
+  ],
+  "cases": [
+    {
+      "id": "wire-messages-round-trip",
+      "kind": "positive",
+      "path": "crates/protocol/src/lib.rs",
+      "symbol": "tests::messages_round_trip",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "wire-rejects-oversized-data",
+      "kind": "negative",
+      "path": "crates/protocol/src/lib.rs",
+      "symbol": "tests::rejects_oversized_data",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "wire-rejects-huge-advertised-allocation",
+      "kind": "negative",
+      "path": "crates/protocol/src/lib.rs",
+      "symbol": "tests::a_short_frame_cannot_request_a_huge_snapshot_allocation",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "wire-enforces-both-direction-limits",
+      "kind": "negative",
+      "path": "crates/protocol/src/lib.rs",
+      "symbol": "tests::enforces_wire_and_collection_limits_for_both_directions",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "waypoint-retains-final-destination-and-route",
+      "kind": "positive",
+      "path": "crates/simulation/src/game_waypoints.rs",
+      "symbol": "tests::one_order_retains_the_final_destination_and_remaining_route",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "waypoint-rejects-invalid-fixed-input",
+      "kind": "negative",
+      "path": "crates/simulation/src/game_waypoints.rs",
+      "symbol": "tests::waypoint_orders_require_tile_centers_and_walkable_edges",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "index-captures-selected-staged-source",
+      "kind": "positive",
+      "path": "crates/harness/src/gates/scopes/tests/index_context.rs",
+      "symbol": "effective_source_index_is_distinct_from_default_and_never_leaks_into_private_git",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "index-rejects-invalid-index-locations",
+      "kind": "negative",
+      "path": "crates/harness/src/gates/scopes/tests/index_context.rs",
+      "symbol": "missing_external_or_symlink_index_never_falls_back_to_default",
+      "runner": "native-test",
+      "gate": "test-unit"
+    },
+    {
+      "id": "index-rejects-referenced-blob-substitution",
+      "kind": "negative",
+      "path": "crates/harness/src/gates/scopes/tests/witness.rs",
+      "symbol": "fingerprint_binds_referenced_blob_bytes_not_only_index_object_names",
+      "runner": "native-test",
+      "gate": "test-unit"
+    }
+  ],
+  "deferred": [
+    {
+      "id": "qa-original-source-assets",
+      "capability": "source-assets",
+      "reason": "Original licensed game assets remain outside Git and images. These diagnostic and synthetic native fixtures do not qualify original-art inputs or visual fidelity."
+    },
+    {
+      "id": "qa-real-source-geodata",
+      "capability": "source-geodata",
+      "reason": "These fixed synthetic route and wire fixtures do not qualify real geographic inputs, source-backed long routes or geographic gameplay. Separate externally available source evidence is required."
+    }
+  ]
+}

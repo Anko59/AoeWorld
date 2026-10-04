@@ -201,6 +201,10 @@ structure-check:
 architecture-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- architecture-check
 
+.PHONY: contracts-check
+contracts-check:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- contracts-check
+
 docs-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- docs-check
 
