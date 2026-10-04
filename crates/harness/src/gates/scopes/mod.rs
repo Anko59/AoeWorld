@@ -12,6 +12,7 @@ use std::{
 use tempfile::TempDir;
 
 mod checks;
+mod diff;
 mod git;
 mod index;
 mod metadata;
@@ -77,6 +78,11 @@ impl Snapshot {
     pub fn prepare(root: &Path, kind: Kind) -> Result<Self> {
         let index = std::env::var_os("GIT_INDEX_FILE").map(PathBuf::from);
         Self::prepare_index(root, kind, index.as_deref())
+    }
+
+    /// Fresh resolver repositories never inherit the candidate hook's index.
+    pub(crate) fn prepare_independent(root: &Path, kind: Kind) -> Result<Self> {
+        Self::prepare_index(root, kind, None)
     }
 
     fn prepare_index(root: &Path, kind: Kind, requested_index: Option<&Path>) -> Result<Self> {

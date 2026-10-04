@@ -3,7 +3,7 @@ use crate::process::Cancellation;
 
 /// Signal observation is scoped to the synchronous gate-run CLI thread. Linux
 /// signalfd avoids unsafe signal handlers; children are stopped by owned groups.
-pub(super) struct Signals {
+pub(crate) struct Signals {
     #[cfg(target_os = "linux")]
     old: nix::sys::signal::SigSet,
     #[cfg(target_os = "linux")]
@@ -12,7 +12,7 @@ pub(super) struct Signals {
     worker: Option<std::thread::JoinHandle<()>>,
 }
 impl Signals {
-    pub(super) fn new(cancellation: &Cancellation) -> Result<Self> {
+    pub(crate) fn new(cancellation: &Cancellation) -> Result<Self> {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = cancellation;

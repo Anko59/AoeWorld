@@ -2,7 +2,7 @@
 mod cli;
 pub(crate) mod evidence;
 mod real;
-mod signals;
+pub(crate) mod signals;
 pub(crate) use cli::{Options, execute};
 #[cfg(test)]
 mod tests;

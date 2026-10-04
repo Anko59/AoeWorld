@@ -19,6 +19,8 @@ fn git(root: &Path, args: &[&str]) -> String {
 fn repository() -> TempDir {
     let directory = tempfile::tempdir().expect("fixture directory");
     git(directory.path(), &["init", "--quiet"]);
+    let hooks = directory.path().join(".git/hooks").display().to_string();
+    git(directory.path(), &["config", "core.hooksPath", &hooks]);
     directory
 }
 
@@ -70,11 +72,20 @@ fn rejects_commented_unreachable_and_malformed_dispatchers() {
             fs::write(&path, &content).expect("alter hook");
             let error = check(root.path()).expect_err("reject altered dispatcher");
             assert!(error.to_string().contains(name), "{error}: {content:?}");
+            assert!(install(root.path()).is_err(), "never replace a custom hook");
+            assert_eq!(
+                fs::read(&path).unwrap(),
+                content.as_bytes(),
+                "preserve {name}"
+            );
+            fs::write(&path, expected).expect("restore fixture dispatcher");
         }
         fs::write(&path, [0xff]).expect("invalid UTF-8 hook");
         assert!(check(root.path()).is_err());
-        install(root.path()).expect("repair malformed hook");
-        check(root.path()).expect("repaired hooks");
+        assert!(install(root.path()).is_err());
+        assert_eq!(fs::read(&path).unwrap(), [0xff]);
+        fs::write(&path, expected).expect("restore fixture dispatcher");
+        check(root.path()).expect("restored hooks");
     }
 }
 
@@ -115,6 +126,19 @@ fn refuses_symlink_hooks_without_overwriting_the_target() {
 }
 
 #[test]
+fn existing_user_hook_is_preserved_without_partial_dispatcher_install() {
+    let root = repository();
+    let pre_commit = hook_path(root.path(), "pre-commit").unwrap();
+    let pre_push = hook_path(root.path(), "pre-push").unwrap();
+    let sentinel = b"user pre-push hook\n";
+    fs::write(&pre_push, sentinel).unwrap();
+
+    assert!(install(root.path()).is_err());
+    assert!(!pre_commit.exists());
+    assert_eq!(fs::read(pre_push).unwrap(), sentinel);
+}
+
+#[test]
 fn rejects_directory_hook_and_non_repository() {
     let root = repository();
     fs::create_dir(hook_path(root.path(), "pre-commit").unwrap()).unwrap();
@@ -126,19 +150,33 @@ fn rejects_directory_hook_and_non_repository() {
 }
 
 #[test]
-fn respects_configured_hook_paths_and_path_whitespace() {
+fn refuses_configured_hooks_paths_without_touching_shared_or_external_hooks() {
     let root = repository();
+    let external = tempfile::tempdir().unwrap();
     for configured in [
         "custom hooks ".to_owned(),
-        root.path().join("absolute hooks ").display().to_string(),
+        external
+            .path()
+            .join("absolute hooks ")
+            .display()
+            .to_string(),
     ] {
         git(root.path(), &["config", "core.hooksPath", &configured]);
-        install(root.path()).expect("configured hooks install");
-        check(root.path()).expect("configured hooks check");
-        let base = root.path().join(&configured);
-        for (name, expected) in HOOKS {
-            assert_eq!(hook_path(root.path(), name).unwrap(), base.join(name));
-            assert_eq!(fs::read(base.join(name)).unwrap(), expected);
+        let output = git(
+            root.path(),
+            &["rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+        );
+        let directory = PathBuf::from(output.strip_suffix('\n').unwrap_or(&output));
+        fs::create_dir_all(&directory).unwrap();
+        let sentinel = b"user-owned shared hook; preserve me\n";
+        for (name, _) in HOOKS {
+            fs::write(directory.join(name), sentinel).unwrap();
+        }
+        assert!(hook_path(root.path(), "pre-commit").is_err());
+        assert!(install(root.path()).is_err());
+        assert!(check(root.path()).is_err());
+        for (name, _) in HOOKS {
+            assert_eq!(fs::read(directory.join(name)).unwrap(), sentinel);
         }
     }
     assert!(!root.path().join(".git/hooks/pre-commit").exists());
