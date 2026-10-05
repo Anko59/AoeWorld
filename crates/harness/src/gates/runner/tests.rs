@@ -2,7 +2,7 @@
 use super::*;
 use evidence::{EndpointProof, JudgeIdentity, Metadata, PrivateOutput};
 
-fn registry() -> Registry {
+pub(super) fn registry() -> Registry {
     Registry::parse(&serde_json::to_vec(&serde_json::json!({
         "version": 2,
         "suites": [
@@ -30,7 +30,7 @@ fn proof() -> EndpointProof {
         private: "private-raw".into(),
     }
 }
-fn metadata() -> Metadata {
+pub(super) fn metadata() -> Metadata {
     Metadata {
         revision: "candidate-full-oid".into(),
         base_revision: None,
@@ -117,6 +117,7 @@ impl Runtime for Fake {
         Receipt {
             exit: self.failure.take().unwrap_or(Exit::Success),
             reason: "fake result".into(),
+            triage: None, // Synthetic compatibility mapping, never measured.
             log: (!self.missing_log).then(|| LogRef {
                 path: "/private/fake.log".into(),
                 blake3: "log-bytes".into(),
@@ -155,6 +156,8 @@ fn deterministic_one_result_per_gate_and_success_logs() {
     let ledger = run(&mut runtime, &root, &plan(), metadata(), budgets());
     assert_eq!(ledger.overall, Overall::Pass);
     assert!(!ledger.authoritative);
+    assert_eq!(ledger.schema, 2);
+    assert!(ledger.results.iter().all(|result| result.triage.is_none()));
     assert_eq!(
         ledger
             .results
@@ -249,6 +252,32 @@ fn budgets_cancellation_timeout_and_missing_logs_never_succeed() {
         Verdict::Unavailable
     );
 }
+#[test]
+fn synthetic_exit_mapping_only_never_fabricates_measurements() {
+    let (_directory, root) = root();
+    for (exit, expected) in [
+        (Exit::Success, Verdict::Pass),
+        (Exit::Failed, Verdict::Fail),
+        (Exit::Deadline, Verdict::Fail),
+        (Exit::Cancelled, Verdict::Skipped),
+        (Exit::StartError, Verdict::Unavailable),
+        (Exit::MonitorError, Verdict::Unavailable),
+    ] {
+        let mut runtime = Fake::new();
+        runtime.failure = Some(exit);
+        let ledger = run(&mut runtime, &root, &plan(), metadata(), budgets());
+        assert_eq!(ledger.results[0].verdict, expected);
+        assert!(ledger.results.iter().all(|result| result.triage.is_none()));
+        let summary: serde_json::Value = serde_json::from_str(
+            &triage::summary(&ledger, &triage::Publication::Published).unwrap(),
+        )
+        .unwrap();
+        let command = &summary["gates"][0]["command"];
+        assert_eq!(command, &serde_json::json!({"kind": "UNOBSERVED"}));
+        // None asserts neither measured success nor definite command non-start.
+    }
+}
+
 #[test]
 fn ci_job_uses_members_and_dependency_closure_preflight_keeps_baseline() {
     let registry = registry();

@@ -4,6 +4,43 @@ use std::fs;
 mod io;
 mod outcomes;
 
+pub(super) fn git(root: &Path, args: &[&str]) -> String {
+    let mut command = std::process::Command::new("git");
+    command.current_dir(root);
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            command.env_remove(name);
+        }
+    }
+    let output = command
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().into()
+}
+pub(super) fn repository() -> tempfile::TempDir {
+    let root = tempfile::tempdir().unwrap();
+    git(root.path(), &["init", "-q"]);
+    git(root.path(), &["config", "user.name", "fixture"]);
+    git(
+        root.path(),
+        &["config", "user.email", "fixture@example.invalid"],
+    );
+    fs::write(root.path().join("source.rs"), b"original committed bytes\n").unwrap();
+    fs::write(root.path().join(".gitignore"), b".cache/\nreports/\n").unwrap();
+    git(root.path(), &["add", "source.rs", ".gitignore"]);
+    git(root.path(), &["commit", "-qm", "fixture"]);
+    root
+}
+
 fn sample() -> Outcomes {
     Outcomes {
         cargo_mutants_version: TOOL_VERSION.into(),
@@ -28,7 +65,7 @@ fn descriptor(index: usize) -> Value {
         "span":{"start":{"line":index+1,"column":1},"end":{"line":index+1,"column":2}},
         "replacement":"","genre":"BinaryOperator"})
 }
-fn artifacts(caught: usize, unviable: usize) -> (Value, Value) {
+pub(super) fn artifacts(caught: usize, unviable: usize) -> (Value, Value) {
     let mut inventory = Vec::new();
     let mut records = vec![
         json!({"scenario":"Baseline","summary":"Success","log_path":"log/baseline.log",
@@ -61,7 +98,7 @@ fn artifacts(caught: usize, unviable: usize) -> (Value, Value) {
         json!(inventory),
     )
 }
-fn install(root: &Path, wire: &Value, inventory: &Value) {
+pub(super) fn install(root: &Path, wire: &Value, inventory: &Value) {
     let output = root.join(OUTPUT).join("mutants.out");
     fs::create_dir_all(&output).unwrap();
     fs::write(
@@ -83,12 +120,136 @@ fn parse(wire: &Value, inventory: &Value) -> Result<Outcomes> {
 }
 
 #[test]
+fn options_full_oids_and_exclusive_intentional_scope_fail_closed() {
+    use clap::Parser;
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        options: Options,
+    }
+    assert!(Cli::try_parse_from(["fixture", "--revision", "HEAD"]).is_err());
+    assert!(Cli::try_parse_from(["fixture", "--revision", &"A".repeat(40)]).is_err());
+    assert!(
+        Cli::try_parse_from([
+            "fixture",
+            "--revision",
+            &"a".repeat(40),
+            "--intentional-index"
+        ])
+        .is_err()
+    );
+    assert!(Cli::try_parse_from(["fixture", "--revision", &"a".repeat(64)]).is_ok());
+    assert!(
+        Cli::try_parse_from(["fixture", "--intentional-index"])
+            .unwrap()
+            .options
+            .intentional_index
+    );
+}
+#[test]
+fn intentional_index_is_captured_once_and_old_commit_is_allowed() {
+    let root = repository();
+    let head = scopes::resolved_head(root.path()).unwrap();
+    fs::write(root.path().join("source.rs"), b"pending index\n").unwrap();
+    git(root.path(), &["add", "source.rs"]);
+    fs::write(
+        root.path().join("source.rs"),
+        b"different unstaged working bytes\n",
+    )
+    .unwrap();
+    let index = prepare(
+        root.path(),
+        &Options {
+            revision: None,
+            intentional_index: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(index.root().join("source.rs")).unwrap(),
+        b"pending index\n"
+    );
+    let committed = prepare(root.path(), &Options::default()).unwrap();
+    assert_eq!(
+        fs::read(committed.root().join("source.rs")).unwrap(),
+        b"original committed bytes\n"
+    );
+    git(root.path(), &["add", "source.rs"]);
+    assert!(index.verify_source().is_err());
+    let fresh = prepare(
+        root.path(),
+        &Options {
+            revision: None,
+            intentional_index: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(fresh.root().join("source.rs")).unwrap(),
+        b"different unstaged working bytes\n"
+    );
+    git(root.path(), &["commit", "-qm", "later"]);
+    let older = prepare(
+        root.path(),
+        &Options {
+            revision: Some(head),
+            intentional_index: false,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(older.root().join("source.rs")).unwrap(),
+        b"original committed bytes\n"
+    );
+}
+#[test]
+fn default_commit_ignores_poisoned_git_environment_in_isolated_process() {
+    const MARKER: &str = "AOE_MUTATION_SCOPE_ENV_CHILD";
+    if std::env::var_os(MARKER).is_some() {
+        let root = Path::new(&std::env::var(MARKER).unwrap()).to_path_buf();
+        let snapshot = prepare(&root, &Options::default()).unwrap();
+        assert_eq!(
+            fs::read(snapshot.root().join("source.rs")).unwrap(),
+            b"original committed bytes\n"
+        );
+        assert!(
+            scopes::git_directories(&root)
+                .unwrap()
+                .iter()
+                .all(|path| path.starts_with(&root))
+        );
+        return;
+    }
+    let root = repository();
+    let result = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "mutation::tests::default_commit_ignores_poisoned_git_environment_in_isolated_process",
+            "--nocapture",
+        ])
+        .env(MARKER, root.path())
+        .env("GIT_DIR", "/not-a-repository")
+        .env("GIT_WORK_TREE", "/not-a-worktree")
+        .env("GIT_INDEX_FILE", "/poison-index")
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "core.fsmonitor")
+        .env("GIT_CONFIG_VALUE_0", "poison-command")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(String::from_utf8_lossy(&result.stdout).contains("1 passed"));
+}
+#[test]
 fn scanner_actually_receives_every_reported_file() {
-    let args = scanner_args();
+    let args = execution::scanner_args(Path::new("/tmp/fresh-mutation-output")).unwrap();
     let files: Vec<_> = args
         .windows(2)
         .filter(|pair| pair[0] == "--file")
-        .map(|pair| pair[1])
+        .map(|pair| pair[1].as_str())
         .collect();
     assert_eq!(files, FILES);
     assert!(files.contains(&"crates/harness/src/gates/registry/mod.rs"));
@@ -100,10 +261,11 @@ fn scanner_actually_receives_every_reported_file() {
             "--timeout",
             "120",
             "--output",
-            OUTPUT
+            "/tmp/fresh-mutation-output"
         ]
     );
     assert_eq!(&args[6..10], &["--re", FILTER, "--exclude-re", EXCLUDE]);
+    assert_eq!(args[10], "--cargo-arg=--locked");
 }
 #[test]
 fn incomplete_or_uncaught_mutations_cannot_pass() {
@@ -140,7 +302,7 @@ fn missing_outcomes_yield_inconclusive_report() {
     assert!(temp.path().join("reports/mutation/nightly.md").is_file());
 }
 #[test]
-fn complete_outcomes_write_revision_bound_pass_and_regression_reports() {
+fn complete_synthetic_fixture_outcomes_write_non_authoritative_pass_and_regression_reports() {
     let temp = tempfile::tempdir().unwrap();
     let (mut wire, inventory) = artifacts(38, 4);
     install(temp.path(), &wire, &inventory);
@@ -148,14 +310,13 @@ fn complete_outcomes_write_revision_bound_pass_and_regression_reports() {
     assert_eq!(report.verdict, Verdict::Pass);
     assert_eq!(report.total_mutants, Some(42));
     assert_eq!(report.evaluated_mutants, Some(38));
-    assert!(matches!(
-        report.revision.as_ref().map(String::len),
-        Some(40 | 64)
-    ));
+    // The unit-only structural adapter has NO retained subject; never read
+    // unrelated caller Git CWD to manufacture a revision or source binding.
+    assert!(report.revision.is_none());
     assert!(report.mutant_set_hash.is_some());
     assert_eq!(report.source_identity, "UNAVAILABLE");
     assert!(!report.authoritative);
-    // AFTER-run revision observation is NOT source binding despite the old test name.
+    // Counter/phase reconciliation is structural fixture data, not execution proof.
     wire["outcomes"][1]["summary"] = json!("MissedMutant");
     wire["outcomes"][1]["phase_results"][1]["process_status"] = json!("Success");
     wire["missed"] = json!(1);

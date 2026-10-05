@@ -3,7 +3,7 @@ use super::{CaptureExit, Captured};
 use serde::Serialize;
 use std::io;
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct SafeObservation {
     pub(crate) schema: u16,
     pub(crate) root_cause: RootCause,
@@ -14,13 +14,13 @@ pub(crate) struct SafeObservation {
     pub(crate) duration_ms: u128,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) enum RootCause {
     #[serde(rename = "ROOT_CAUSE_NOT_ASSESSED")]
     NotAssessed,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum Outcome {
     Success,
@@ -51,14 +51,14 @@ impl Outcome {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum Termination {
     ExitCode,
     SignalOrUnknown,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum SafeErrorKind {
     NotFound,
@@ -110,7 +110,7 @@ impl From<io::ErrorKind> for SafeErrorKind {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct StreamTail {
     pub(crate) bytes: usize,
     pub(crate) raw_blake3: String,

@@ -13,6 +13,7 @@ use tempfile::TempDir;
 
 mod checks;
 mod content;
+pub(crate) use content::ContentWitness;
 mod diff;
 mod git;
 mod index;
@@ -205,6 +206,24 @@ impl Snapshot {
         }
         Ok(())
     }
+}
+
+/// Resolve once using the same cleared Git context as immutable scopes.
+pub(crate) fn resolved_head(root: &Path) -> Result<String> {
+    resolve(root, "HEAD", "commit")
+}
+
+/// Physical metadata exclusions include both linked-worktree and common Git dirs.
+pub(crate) fn git_directories(root: &Path) -> Result<[PathBuf; 2]> {
+    let directory = |argument: &str| -> Result<PathBuf> {
+        let value = line(git(
+            root,
+            &["rev-parse", "--path-format=absolute", argument],
+            None,
+        )?)?;
+        Ok(fs::canonicalize(value)?)
+    };
+    Ok([directory("--git-dir")?, directory("--git-common-dir")?])
 }
 
 #[cfg(test)]

@@ -25,3 +25,27 @@ record other findings separately.
 Handoff must state the exact Git revision, dirty-tree status, Make commands and
 results, CI evidence for that revision, untested paths, and external
 qualification still needed. A missing gate is an explicit limit, not a pass.
+
+## Local live gate triage
+
+`gate-run` retains its legacy local ledger fields with schema 2. That ledger,
+its reasons, and its stdout/stderr log files remain **UNSANITIZED LOCAL** data.
+Console JSON is a separate generated whitelist: actual fixed-Make typed exit
+(including numeric Make exit, not recipe exit), bounded raw-tail lengths/BLAKE3,
+measured duration, log-retention outcome, original-source/private endpoint
+phases, and final-publication outcome. Publication failure emits those current
+facts and returns failure; no old ledger is read as a fallback. Missing success
+logs remain unavailable, and later success never replaces prior command failure.
+
+Null triage means unobserved, not measured success; synthetic runtime fixtures
+must not fabricate observations. Cache-path preconditions have no captured
+metrics. Root cause is always not assessed. Snapshot revision/tree/kind are
+subject metadata, not clean-working-source, history, provenance, or approval.
+Index/Commit scope does not qualify unstaged working inputs. Endpoint checks
+cannot establish absence of reverted edits or after-return races.
+
+Mode 0600, sync, and rename are local hygiene, not hostile same-UID isolation or
+an assurance that old hostile PASS bytes were erased. Neither capture metadata,
+hashes, modes, coding/Docker UID, nor fixture mocks authenticate a restricted
+worker, controller, publisher, hidden verdict, approval, runtime QA, or served
+build. Qualification and authorization remain independent required planes.
