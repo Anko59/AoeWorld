@@ -42,17 +42,27 @@ fn checkout_policies_and_synthetic_protocol_smoke_execute_through_cli() {
     invoke(&["qa-validate", "missing-report.json"], false);
 }
 
+fn hook_fixture_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            command.env_remove(name);
+        }
+    }
+    command
+}
+
 #[test]
 fn hooks_install_and_check_in_disposable_git_repository() {
     let directory = tempfile::tempdir().expect("temporary repository");
-    let init = Command::new("git")
+    let init = hook_fixture_command("git")
         .args(["init", "-q"])
         .current_dir(directory.path())
         .output()
         .expect("git init");
     assert!(init.status.success());
     let command = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        hook_fixture_command(env!("CARGO_BIN_EXE_aoe-harness"))
             .args(args)
             .current_dir(directory.path())
             .output()

@@ -1,6 +1,8 @@
 use super::*;
 use tempfile::TempDir;
 
+mod context;
+
 fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .arg("-C")
@@ -26,6 +28,9 @@ fn repository() -> TempDir {
 
 #[test]
 fn install_writes_exact_dispatchers_and_is_idempotent() {
+    if context::isolated("install_writes_exact_dispatchers_and_is_idempotent") {
+        return;
+    }
     let root = repository();
     assert!(check(root.path()).is_err(), "missing hooks must fail");
     install(root.path()).expect("install");
@@ -48,6 +53,9 @@ fn install_writes_exact_dispatchers_and_is_idempotent() {
 
 #[test]
 fn rejects_commented_unreachable_and_malformed_dispatchers() {
+    if context::isolated("rejects_commented_unreachable_and_malformed_dispatchers") {
+        return;
+    }
     let root = repository();
     install(root.path()).expect("install");
     for (name, expected) in HOOKS {
@@ -92,6 +100,9 @@ fn rejects_commented_unreachable_and_malformed_dispatchers() {
 #[cfg(unix)]
 #[test]
 fn rejects_unsafe_permissions_and_repairs_regular_files() {
+    if context::isolated("rejects_unsafe_permissions_and_repairs_regular_files") {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let root = repository();
     install(root.path()).expect("install");
@@ -112,6 +123,9 @@ fn rejects_unsafe_permissions_and_repairs_regular_files() {
 #[cfg(unix)]
 #[test]
 fn refuses_symlink_hooks_without_overwriting_the_target() {
+    if context::isolated("refuses_symlink_hooks_without_overwriting_the_target") {
+        return;
+    }
     use std::os::unix::fs::{PermissionsExt, symlink};
     let root = repository();
     let target = root.path().join("do-not-overwrite");
@@ -127,6 +141,9 @@ fn refuses_symlink_hooks_without_overwriting_the_target() {
 
 #[test]
 fn existing_user_hook_is_preserved_without_partial_dispatcher_install() {
+    if context::isolated("existing_user_hook_is_preserved_without_partial_dispatcher_install") {
+        return;
+    }
     let root = repository();
     let pre_commit = hook_path(root.path(), "pre-commit").unwrap();
     let pre_push = hook_path(root.path(), "pre-push").unwrap();
@@ -140,6 +157,9 @@ fn existing_user_hook_is_preserved_without_partial_dispatcher_install() {
 
 #[test]
 fn rejects_directory_hook_and_non_repository() {
+    if context::isolated("rejects_directory_hook_and_non_repository") {
+        return;
+    }
     let root = repository();
     fs::create_dir(hook_path(root.path(), "pre-commit").unwrap()).unwrap();
     assert!(install(root.path()).is_err());
@@ -151,6 +171,10 @@ fn rejects_directory_hook_and_non_repository() {
 
 #[test]
 fn refuses_configured_hooks_paths_without_touching_shared_or_external_hooks() {
+    if context::isolated("refuses_configured_hooks_paths_without_touching_shared_or_external_hooks")
+    {
+        return;
+    }
     let root = repository();
     let external = tempfile::tempdir().unwrap();
     for configured in [
@@ -184,6 +208,9 @@ fn refuses_configured_hooks_paths_without_touching_shared_or_external_hooks() {
 
 #[test]
 fn linked_worktree_uses_common_hooks_not_git_pointer_directory() {
+    if context::isolated("linked_worktree_uses_common_hooks_not_git_pointer_directory") {
+        return;
+    }
     let common = repository();
     let fixture = tempfile::tempdir().unwrap();
     let linked = fixture.path().join("linked checkout");
@@ -232,6 +259,9 @@ fn linked_worktree_uses_common_hooks_not_git_pointer_directory() {
 #[cfg(unix)]
 #[test]
 fn dispatchers_preserve_gate_arguments_and_failure_status() {
+    if context::isolated("dispatchers_preserve_gate_arguments_and_failure_status") {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let root = repository();
     install(root.path()).unwrap();
