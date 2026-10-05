@@ -3,12 +3,15 @@ use crate::qa::{self, Finding, Journey, Report, Status};
 use serde_json::{Value, json};
 use std::{
     error::Error,
-    fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     time::{Duration, Instant},
 };
+
+mod finish;
+#[cfg(test)]
+use std::fs;
 
 const VERSION: &str = "2025-11-25";
 const BROWSER_ACTIONS: [&str; 9] = [
@@ -168,7 +171,28 @@ fn required<'a>(args: &'a Value, key: &str, limit: usize) -> Result<&'a str, Str
     Ok(value)
 }
 
+fn closed_arguments(name: &str, args: &Value) -> Result<(), String> {
+    let allowed: &[&str] = match name {
+        "open_session" => &["session", "capability", "configuration"],
+        "observe" | "screenshot" | "diagnostics" | "close_session" => &["session"],
+        "activate" => &["session", "role", "label"],
+        "select_scenario" => &["session", "scenario"],
+        "canvas_input" => &["session", "action", "x", "y", "delta", "key"],
+        "wait_text" => &["session", "text", "timeout_ms"],
+        "record_journey" => &["journey", "evidence"],
+        "record_finding" => &["title", "reproduction", "expected", "actual", "evidence"],
+        "finish" => &["status"],
+        _ => return Err("unknown QA tool".into()),
+    };
+    let object = args.as_object().ok_or("QA arguments must be an object")?;
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err("unknown QA argument".into());
+    }
+    Ok(())
+}
+
 fn validate_action(name: &str, args: &Value) -> Result<(), String> {
+    closed_arguments(name, args)?;
     let session = required(args, "session", 32)?;
     if !session
         .bytes()
@@ -282,6 +306,7 @@ impl Server {
         if self.start.elapsed() > self.budget {
             return Err("QA time budget exhausted".into());
         }
+        closed_arguments(name, args)?;
         if BROWSER_ACTIONS.contains(&name) {
             validate_action(name, args)?;
             if self.worker.is_none() {
@@ -339,15 +364,7 @@ impl Server {
                     "BLOCKED" => Status::Blocked,
                     _ => return Err("invalid QA status".into()),
                 };
-                qa::validate(&self.report)?;
-                fs::create_dir_all(&self.evidence_dir).map_err(|error| error.to_string())?;
-                let path = self.evidence_dir.join("session.json");
-                fs::write(
-                    &path,
-                    serde_json::to_vec_pretty(&self.report).map_err(|error| error.to_string())?,
-                )
-                .map_err(|error| error.to_string())?;
-                Ok(json!({"report": path, "status": self.report.status}))
+                finish::finish(&self.report, &self.evidence_dir)
             }
             _ => Err("unknown QA tool".into()),
         }
@@ -421,7 +438,7 @@ fn serve_io<R: BufRead, W: Write>(
         if line.len() > 1_048_576 {
             return Err("MCP request exceeds 1 MiB".into());
         }
-        let request: Value = match serde_json::from_str(&line) {
+        let request: Value = match crate::input_json::parse(line.as_bytes(), 1_048_576) {
             Ok(value) => value,
             Err(_) => continue,
         };

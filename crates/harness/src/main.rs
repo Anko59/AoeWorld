@@ -5,6 +5,7 @@ mod e2e;
 mod fuzz;
 mod gates;
 mod hooks;
+mod input_json;
 mod mutation;
 mod native;
 mod perf;
