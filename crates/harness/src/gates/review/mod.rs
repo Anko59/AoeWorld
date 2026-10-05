@@ -44,6 +44,35 @@ struct Subject {
     required_pr_plan: Plan,
     mandatory_preflight_plan: Plan,
 }
+/// Generated from retained snapshots using the exact review materializer, not claims.
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct SourceSummary {
+    pub(crate) schema: u16,
+    pub(crate) review_algorithm: &'static str,
+    pub(crate) review_subject_digest: String,
+    pub(crate) candidate_content_witness_digest: String,
+    pub(crate) base_content_witness_digest: String,
+    pub(crate) scope: Value,
+}
+pub(crate) fn source_summary(base: &Snapshot, candidate: &Snapshot) -> Result<SourceSummary> {
+    let subject = materialize(base, candidate)?;
+    let result = SourceSummary {
+        schema: 1,
+        review_algorithm: "blake3:aoeworld-review-subject-v1",
+        review_subject_digest: digest(&subject)?,
+        candidate_content_witness_digest: subject.candidate_content["digest"]
+            .as_str()
+            .ok_or("generated candidate witness digest missing")?
+            .into(),
+        base_content_witness_digest: subject.base_content["digest"]
+            .as_str()
+            .ok_or("generated base witness digest missing")?
+            .into(),
+        scope: serde_json::to_value(&subject.scope)?,
+    };
+    recheck(base, candidate, &subject)?;
+    Ok(result)
+}
 fn files(witness: &Value) -> Result<BTreeMap<String, Value>> {
     let mut files = BTreeMap::new();
     for item in witness["files"]
