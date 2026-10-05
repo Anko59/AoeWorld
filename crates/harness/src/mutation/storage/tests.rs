@@ -65,6 +65,60 @@ fn actual_fresh_root_identity_changes_reject_and_other_allocations_are_disjoint(
     }
 }
 #[test]
+fn cached_driver_target_is_prohibited_and_never_reused_for_scanner_storage() {
+    const ROOT: &str = "AOE_MUTATION_DRIVER_TARGET_FIXTURE";
+    if let Some(root) = std::env::var_os(ROOT) {
+        let root = PathBuf::from(root);
+        let driver = root.join(".cache/mutation/driver-target");
+        let snapshot = Snapshot::prepare_independent(
+            &root,
+            Kind::Commit(scopes::resolved_head(&root).unwrap()),
+        )
+        .unwrap();
+        let storage = Storage::new(&root, &snapshot).unwrap();
+        assert!(storage.prohibited.contains(&driver));
+        assert!(disjoint(storage.raw(), &driver));
+        assert!(disjoint(storage.target(), &driver));
+        assert!(disjoint(storage.target(), snapshot.root()));
+        assert_eq!(
+            fs::read(driver.join("cache-sentinel")).unwrap(),
+            b"unqualified driver cache"
+        );
+        storage.verify().unwrap();
+        return;
+    }
+    let root = repository();
+    let driver = root.path().join(".cache/mutation/driver-target");
+    fs::create_dir_all(&driver).unwrap();
+    fs::write(driver.join("cache-sentinel"), b"unqualified driver cache").unwrap();
+    let executable = std::env::current_exe().unwrap();
+    let captured = crate::process::capture_in(
+        root.path(),
+        executable.to_str().unwrap(),
+        &[
+            "--exact",
+            "mutation::storage::tests::cached_driver_target_is_prohibited_and_never_reused_for_scanner_storage",
+            "--nocapture",
+        ],
+        &[
+            (ROOT, root.path().to_str().unwrap()),
+            ("CARGO_TARGET_DIR", driver.to_str().unwrap()),
+        ],
+        std::time::Duration::from_secs(30),
+        &crate::process::Cancellation::default(),
+    );
+    assert!(matches!(
+        captured.exit,
+        crate::process::CaptureExit::Success
+    ));
+    assert!(!captured.truncated);
+    assert!(
+        std::str::from_utf8(&captured.stdout)
+            .unwrap()
+            .contains("test result: ok. 1 passed; 0 failed; 0 ignored;")
+    );
+}
+#[test]
 fn temporary_root_under_source_is_rejected_before_any_scanner() {
     const MARKER: &str = "AOE_MUTATION_STORAGE_ENV_CHILD";
     if let Some(root) = std::env::var_os(MARKER) {
