@@ -55,12 +55,19 @@ Every result states `STRUCTURAL_EVIDENCE_OBSERVED_NON_AUTHORITATIVE`, with the
 report's `claimed_status` separate, `authoritative: false`, independent QA and
 journey execution `NOT_ASSESSED`, source identity and served build binding
 `UNAVAILABLE`. No caller-supplied hash creates measurement or approval. Original
-assets, geographic source and hardware qualification remain unavailable.
+assets, geographic source and hardware qualification remain unavailable. The
+MCP compatibility `status` result field merely repeats the claim; it is not an
+approval. Before publication rename, a drop guard attempts inode-checked
+cleanup of its pending entry; ordinary failures leave no pending report. A
+directory-sync or final-observation error after rename may still follow a
+committed `session.json` replacement; inspect the report before retrying.
 
 This slice does not independently authenticate QA, bind runtime artifacts,
 qualify Docker worker ownership/isolation, supervise blocking browser transport,
-or implement a full mutation campaign. Existing code tests use real bounded
-files and path attacks; a compiled known-bad QA mutation canary remains separate
-work. Coding-UID daemon control, hashes, signatures and root metadata do not
-create independent judge authority. Raw reports/images may contain credentials;
-no automatic public artifact upload or universal redaction is introduced.
+or implement a full mutation campaign. The 1 MiB MCP request-line limit is
+checked after line materialization, so it is not a pre-allocation transport-memory
+bound. Existing code tests use real bounded files and path attacks; a compiled
+known-bad QA mutation canary remains separate work. Coding-UID daemon control,
+hashes, signatures and root metadata do not create independent judge authority.
+Raw reports/images may contain credentials; no automatic public artifact upload
+or universal redaction is introduced.

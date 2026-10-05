@@ -42,7 +42,12 @@ fn absolute(path: &Path) -> Result<PathBuf, String> {
 #[cfg(unix)]
 mod local {
     use super::*;
-    use nix::libc::{O_DIRECTORY, O_NOFOLLOW, O_NONBLOCK};
+    use nix::{
+        fcntl::{AtFlags, OFlag, openat, renameat},
+        libc::{O_DIRECTORY, O_NOFOLLOW, O_NONBLOCK},
+        sys::stat::{Mode, fchmod, fstatat},
+        unistd::{UnlinkatFlags, unlinkat},
+    };
     use std::{
         fs::{File, Metadata, OpenOptions},
         io::{Read, Seek, SeekFrom, Write},
@@ -57,6 +62,17 @@ mod local {
             metadata.mode(),
             metadata.uid(),
             metadata.gid(),
+        )
+    }
+    // Normalize platform-specific libc stat field widths to MetadataExt widths.
+    #[allow(clippy::unnecessary_cast)]
+    fn stat_identity(metadata: &nix::sys::stat::FileStat) -> (u64, u64, u32, u32, u32) {
+        (
+            metadata.st_dev as u64,
+            metadata.st_ino as u64,
+            metadata.st_mode as u32,
+            metadata.st_uid as u32,
+            metadata.st_gid as u32,
         )
     }
     fn leaf_identity(
@@ -142,15 +158,76 @@ mod local {
             }
             Ok(())
         }
-        fn sync(&self) -> Result<(), String> {
+        fn root_file(&self) -> Result<&File, String> {
             self.ancestors
                 .last()
-                .ok_or("missing QA directory")?
-                .1
+                .map(|(_, file, _)| file)
+                .ok_or_else(|| "missing QA directory".into())
+        }
+        fn sync(&self) -> Result<(), String> {
+            self.root_file()?
                 .sync_all()
                 .map_err(|error| error.to_string())
         }
     }
+    struct PendingFile<'a> {
+        directory: &'a Directory,
+        name: String,
+        path: PathBuf,
+        file: File,
+        armed: bool,
+    }
+    impl<'a> PendingFile<'a> {
+        fn new(directory: &'a Directory, name: String, file: File) -> Self {
+            let path = directory.root.join(&name);
+            Self {
+                directory,
+                name,
+                path,
+                file,
+                armed: true,
+            }
+        }
+        fn rename_into_session(&mut self) -> Result<(), String> {
+            let root = self.directory.root_file()?;
+            renameat(root, self.name.as_str(), root, "session.json")
+                .map_err(|error| error.to_string())?;
+            self.armed = false;
+            Ok(())
+        }
+    }
+    impl Drop for PendingFile<'_> {
+        fn drop(&mut self) {
+            if !self.armed {
+                return;
+            }
+            let Some((_, parent, original)) = self.directory.ancestors.last() else {
+                return;
+            };
+            let (Ok(parent_metadata), Ok(file_metadata)) =
+                (parent.metadata(), self.file.metadata())
+            else {
+                return;
+            };
+            if identity(&parent_metadata) != identity(original)
+                || !file_metadata.is_file()
+                || file_metadata.nlink() != 1
+            {
+                return;
+            }
+            let Ok(entry) = fstatat(parent, self.name.as_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+            else {
+                return;
+            };
+            if stat_identity(&entry) != identity(&file_metadata) || entry.st_nlink != 1 {
+                return;
+            }
+            if unlinkat(parent, self.name.as_str(), UnlinkatFlags::NoRemoveDir).is_ok() {
+                let _ = parent.sync_all();
+            }
+        }
+    }
+
     fn correlate(file: &mut File, path: &Path, bytes: &[u8]) -> Result<(), String> {
         let held = file.metadata().map_err(|error| error.to_string())?;
         let current = regular(path)?.ok_or("QA report disappeared")?;
@@ -220,44 +297,54 @@ mod local {
         let mut pending = None;
         for attempt in 0..16 {
             directory.check()?;
-            let path = directory.root.join(format!(
+            let name = format!(
                 ".qa-report-pending-{}-{now}-{attempt}.json",
                 std::process::id()
-            ));
-            match OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .custom_flags(O_NOFOLLOW | O_NONBLOCK)
-                .open(&path)
-            {
+            );
+            match openat(
+                directory.root_file()?,
+                name.as_str(),
+                OFlag::O_RDWR
+                    | OFlag::O_CREAT
+                    | OFlag::O_EXCL
+                    | OFlag::O_NOFOLLOW
+                    | OFlag::O_NONBLOCK
+                    | OFlag::O_CLOEXEC,
+                Mode::S_IRUSR | Mode::S_IWUSR,
+            ) {
                 Ok(file) => {
-                    pending = Some((path, file));
+                    let pending_file = PendingFile::new(&directory, name, file.into());
+                    fchmod(&pending_file.file, Mode::S_IRUSR | Mode::S_IWUSR)
+                        .map_err(|error| error.to_string())?;
+                    pending = Some(pending_file);
                     break;
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(nix::errno::Errno::EEXIST) => {}
                 Err(error) => return Err(error.to_string()),
             }
         }
-        let (pending, mut file) = pending.ok_or("QA pending-file collision limit exceeded")?;
+        let mut pending = pending.ok_or("QA pending-file collision limit exceeded")?;
         directory.check()?;
-        correlate(&mut file, &pending, &[])?;
-        file.write_all(bytes).map_err(|error| error.to_string())?;
-        file.sync_all().map_err(|error| error.to_string())?;
-        correlate(&mut file, &pending, bytes)?;
+        correlate(&mut pending.file, &pending.path, &[])?;
+        pending
+            .file
+            .write_all(bytes)
+            .map_err(|error| error.to_string())?;
+        pending.file.sync_all().map_err(|error| error.to_string())?;
+        correlate(&mut pending.file, &pending.path, bytes)?;
         directory.check()?;
-        let observed = qa::observation::observe_file_at(&pending, &directory.root)
+        let observed = qa::observation::observe_file_at(&pending.path, &directory.root)
             .map_err(|error| error.to_string())?;
         directory.check()?;
-        correlate(&mut file, &pending, bytes)?;
+        correlate(&mut pending.file, &pending.path, bytes)?;
         unchanged(&session, &original)?;
         // Both resolved absolute parents and intended fixed/generated leaf names
         // are verified before the only move. Endpoint correlation is not race immunity.
-        if pending.parent() != Some(directory.root.as_path())
+        if pending.path.parent() != Some(directory.root.as_path())
             || session.parent() != Some(directory.root.as_path())
             || session.file_name().and_then(|name| name.to_str()) != Some("session.json")
             || !pending
+                .path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| {
@@ -266,10 +353,10 @@ mod local {
         {
             return Err("QA publication targets are not intended owned paths".into());
         }
-        fs::rename(&pending, &session).map_err(|error| error.to_string())?;
+        pending.rename_into_session()?;
         directory.sync()?;
         directory.check()?;
-        correlate(&mut file, &session, bytes)?;
+        correlate(&mut pending.file, &session, bytes)?;
         let final_observation = qa::observation::observe_file_at(&session, &directory.root)
             .map_err(|error| error.to_string())?;
         if serde_json::to_value(&observed).map_err(|error| error.to_string())?
@@ -278,10 +365,35 @@ mod local {
             return Err("QA evidence changed during report publication".into());
         }
         directory.check()?;
-        correlate(&mut file, &session, bytes)?;
+        correlate(&mut pending.file, &session, bytes)?;
         Ok(
             json!({"report":session,"status":report.status,"claimed_status":report.status,"assessment":"STRUCTURAL_EVIDENCE_OBSERVED_NON_AUTHORITATIVE","authoritative":false,"observation":final_observation}),
         )
+    }
+
+    #[cfg(test)]
+    mod pending_cleanup_tests {
+        use super::*;
+
+        #[test]
+        fn cleanup_removes_owned_leaf_even_after_mode_changes() {
+            let owner = tempfile::tempdir().unwrap();
+            let directory = Directory::open(owner.path()).unwrap();
+            let name = ".qa-report-pending-mode-test.json".to_owned();
+            let file: File = openat(
+                directory.root_file().unwrap(),
+                name.as_str(),
+                OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW,
+                Mode::S_IRUSR | Mode::S_IWUSR,
+            )
+            .unwrap()
+            .into();
+            let path = directory.root.join(&name);
+            let pending = PendingFile::new(&directory, name, file);
+            fchmod(&pending.file, Mode::S_IRUSR).unwrap();
+            drop(pending);
+            assert!(!path.exists());
+        }
     }
 }
 #[cfg(unix)]

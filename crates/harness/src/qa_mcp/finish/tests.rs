@@ -27,6 +27,13 @@ fn server(root: &Path) -> Server {
     }
     server
 }
+fn pending_count(root: &Path) -> usize {
+    fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().starts_with(".qa-report-pending-"))
+        .count()
+}
 #[test]
 fn actual_mcp_finish_observes_binary_bytes_but_never_authenticates_claimed_pass() {
     let owner = tempfile::tempdir().unwrap();
@@ -65,12 +72,16 @@ fn missing_evidence_finish_fails_without_replacing_existing_claim_report() {
     let old = fs::read(&path).unwrap();
     server.report.journeys[0].evidence =
         vec![owner.path().join("missing.png").to_str().unwrap().into()];
-    assert!(
-        server
-            .tool_call("finish", &json!({"status":"PASS"}))
-            .is_err()
-    );
-    assert_eq!(fs::read(&path).unwrap(), old);
+    let pending_before = pending_count(owner.path());
+    for _ in 0..3 {
+        assert!(
+            server
+                .tool_call("finish", &json!({"status":"PASS"}))
+                .is_err()
+        );
+        assert_eq!(pending_count(owner.path()), pending_before);
+        assert_eq!(fs::read(&path).unwrap(), old);
+    }
 }
 #[test]
 fn self_evidence_is_rejected_before_pending_file_creation() {
