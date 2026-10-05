@@ -29,6 +29,34 @@ const TESTS: &str = r#"    #[test]
     fn z_independent_arithmetic() { assert_eq!(2_u32.checked_add(3), Some(5)); }
 "#;
 
+/// Remove the bounded failure log that `process::retain` writes under this workspace.
+struct RetainedProcessLog(std::path::PathBuf);
+
+impl RetainedProcessLog {
+    fn new(path: &str) -> Self {
+        let path = std::path::PathBuf::from(path);
+        let current = std::env::current_dir().unwrap();
+        let workspace = current
+            .ancestors()
+            .find(|ancestor| {
+                fs::read_to_string(ancestor.join("Cargo.toml"))
+                    .is_ok_and(|manifest| manifest.lines().any(|line| line.trim() == "[workspace]"))
+            })
+            .unwrap_or(current.as_path());
+        let expected_directory = workspace.join("reports/process");
+        assert_eq!(path.parent(), Some(expected_directory.as_path()));
+        let name = path.file_name().and_then(|name| name.to_str()).unwrap();
+        assert!(name.starts_with("cargo-") && name.ends_with(".log"));
+        Self(path)
+    }
+}
+
+impl Drop for RetainedProcessLog {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
 fn git(root: &Path, args: &[&str], input: Option<&[u8]>) -> String {
     let mut command = Command::new("git");
     command
@@ -181,14 +209,22 @@ fn real_assertion_canary_rejects_compiled_staged_mutation_and_retains_noisy_fail
             Ok(())
         })
         .unwrap_err();
-    let ProcessError::Exit { code, log, .. } = error
+    let error = error
         .downcast_ref::<ProcessError>()
-        .expect("real test command must fail with an exit, not an unavailable tool")
-    else {
+        .expect("real test command must fail with an exit, not an unavailable tool");
+    let log = match error {
+        ProcessError::Exit { log, .. }
+        | ProcessError::Deadline { log, .. }
+        | ProcessError::Cancelled { log, .. } => log,
+        _ => panic!("native canary did not retain captured process output"),
+    };
+    let retained_log = RetainedProcessLog::new(log);
+    let retained_path = retained_log.0.clone();
+    let ProcessError::Exit { code, .. } = error else {
         panic!("not an actual native test exit")
     };
     assert!(code.is_some_and(|code| code != 0));
-    let retained = fs::read(log).unwrap();
+    let retained = fs::read(&retained_log.0).unwrap();
     let text = String::from_utf8_lossy(&retained);
     assert!(text.contains("[output capture truncated]"));
     assert!(text.contains(TOKEN));
@@ -228,4 +264,6 @@ fn real_assertion_canary_rejects_compiled_staged_mutation_and_retains_noisy_fail
     environment[0].1 = working_target.path().to_str().unwrap();
     run_in(root, &environment).expect("unmutated working source remains a passing control");
     assert_eq!(snapshot.content_witness().unwrap(), before);
+    drop(retained_log);
+    assert!(!retained_path.exists());
 }
