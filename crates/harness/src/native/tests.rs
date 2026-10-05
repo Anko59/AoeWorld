@@ -1,4 +1,5 @@
 use super::*;
+mod qa;
 use crate::{
     gates::scopes::{Kind, Snapshot},
     process::{Cancellation, CaptureExit, capture_in},
