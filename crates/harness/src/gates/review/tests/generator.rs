@@ -1,5 +1,45 @@
 use super::*;
 #[test]
+fn narrow_source_summary_uses_the_exact_materialized_subject_and_raw_witnesses() {
+    let (one, oid) = fixture();
+    let (two, other) = fixture();
+    assert_eq!(oid, other);
+    let (base, candidate) = snapshots(one.path(), &oid, &oid);
+    let subject = materialize(&base, &candidate).unwrap();
+    let summary = source_summary(&base, &candidate).unwrap();
+    assert_eq!(summary.schema, 1);
+    assert_eq!(summary.review_algorithm, subject.algorithm);
+    assert_eq!(summary.review_subject_digest, digest(&subject).unwrap());
+    assert_eq!(summary.scope, serde_json::to_value(&subject.scope).unwrap());
+    assert_eq!(
+        summary.base_content_witness_digest,
+        base.content_witness().unwrap().digest
+    );
+    assert_eq!(
+        summary.candidate_content_witness_digest,
+        candidate.content_witness().unwrap().digest
+    );
+    let (base2, candidate2) = snapshots(two.path(), &oid, &oid);
+    assert_eq!(summary, source_summary(&base2, &candidate2).unwrap());
+    fs::write(one.path().join("old.txt"), "pending bytes").unwrap();
+    git(one.path(), &["add", "old.txt"], None);
+    // Old retained endpoints must not be refreshed into apparently fresh evidence.
+    assert!(source_summary(&base, &candidate).is_err());
+    let fresh_base = Snapshot::prepare_independent(one.path(), Kind::Commit(oid.clone())).unwrap();
+    let pending = Snapshot::prepare(one.path(), Kind::Index).unwrap();
+    let index_summary = source_summary(&fresh_base, &pending).unwrap();
+    assert_eq!(index_summary.scope["kind"], "index");
+    assert_eq!(index_summary.scope["captured_source_head"], oid);
+    assert_eq!(
+        index_summary.scope["pending_tree"],
+        pending.identity.tree.as_deref().unwrap()
+    );
+    assert_ne!(
+        index_summary.review_subject_digest,
+        summary.review_subject_digest
+    );
+}
+#[test]
 fn actual_catalog_registry_and_ast_changes_generate_new_closed_subjects() {
     let (owner, oid) = fixture();
     let root = owner.path();

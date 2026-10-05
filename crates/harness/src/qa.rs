@@ -2,6 +2,8 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, error::Error, path::Path};
 pub(crate) mod observation;
+mod source;
+pub(crate) use source::{Options, execute};
 
 pub const REQUIRED: [&str; 6] = [
     "startup",

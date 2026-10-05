@@ -6,7 +6,9 @@ use std::{
     error::Error,
     path::Path,
 };
+mod input;
 mod io;
+pub(in crate::qa) use input::ExpectedSource;
 use io::Held;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const REPORT_BYTES: usize = 4 * 1024 * 1024;
@@ -71,11 +73,38 @@ fn manifest(report: &RawHash, artifacts: &[Artifact]) -> Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+pub(in crate::qa) struct RetainedInputs {
+    root: std::path::PathBuf,
+    report_file: Held,
+    files: Vec<Held>,
+    pub(in crate::qa) observation: Observation,
+    pub(in crate::qa) expected_source: Option<ExpectedSource>,
+}
+impl RetainedInputs {
+    pub(in crate::qa) fn recheck_all(&mut self) -> Result<()> {
+        io::root(&self.root)?;
+        for (file, artifact) in self.files.iter_mut().zip(&self.observation.artifacts) {
+            file.recheck(&artifact.raw_blake3)?;
+        }
+        self.report_file
+            .recheck(&self.observation.report.raw_blake3)?;
+        Ok(())
+    }
+}
 pub(crate) fn observe_file_at(path: &Path, root: &Path) -> Result<Observation> {
+    let mut retained = retain_file_at(path, root, false)?;
+    retained.recheck_all()?;
+    Ok(retained.observation)
+}
+pub(in crate::qa) fn retain_file_at(
+    path: &Path,
+    root: &Path,
+    allow_source: bool,
+) -> Result<RetainedInputs> {
     let root = io::root(root)?;
     let mut report_file = Held::open(path, REPORT_BYTES as u64)?;
     let bytes = report_file.read()?;
-    let report: Report = serde_json::from_value(crate::input_json::parse(&bytes, REPORT_BYTES)?)?;
+    let (report, expected_source) = input::parse(&bytes, allow_source)?;
     validate(&report).map_err(|error| -> Box<dyn Error> { error.into() })?;
     let report_hash = RawHash {
         algorithm: "blake3-raw-v1",
@@ -149,12 +178,9 @@ pub(crate) fn observe_file_at(path: &Path, root: &Path) -> Result<Observation> {
         artifact.purposes.sort();
     }
     report_file.recheck(&report_hash.raw_blake3)?;
-    let artifacts: Vec<_> = inventory
-        .into_values()
-        .map(|(_, artifact)| artifact)
-        .collect();
+    let (files, artifacts): (Vec<_>, Vec<_>) = inventory.into_values().unzip();
     let manifest_blake3 = manifest(&report_hash, &artifacts)?;
-    Ok(Observation {
+    let observation = Observation {
         schema: 1,
         algorithm: ALGORITHM,
         assessment: "STRUCTURAL_EVIDENCE_OBSERVED_NON_AUTHORITATIVE",
@@ -173,6 +199,13 @@ pub(crate) fn observe_file_at(path: &Path, root: &Path) -> Result<Observation> {
             "endpoint observations cannot detect every reverted hostile race or impose wall deadlines",
             "local hashes and claimed status do not authenticate independent QA or authorize submission",
         ],
+    };
+    Ok(RetainedInputs {
+        root,
+        report_file,
+        files,
+        observation,
+        expected_source,
     })
 }
 #[cfg(test)]
