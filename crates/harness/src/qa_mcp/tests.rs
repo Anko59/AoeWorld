@@ -1,4 +1,5 @@
 use super::*;
+mod semantic;
 
 struct FakeWorker;
 

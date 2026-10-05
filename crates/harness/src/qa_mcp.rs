@@ -182,6 +182,7 @@ fn closed_arguments(name: &str, args: &Value) -> Result<(), String> {
         "record_journey" => &["journey", "evidence"],
         "record_finding" => &["title", "reproduction", "expected", "actual", "evidence"],
         "finish" => &["status"],
+        "run_semantic_case" => &["criterion"],
         _ => return Err("unknown QA tool".into()),
     };
     let object = args.as_object().ok_or("QA arguments must be an object")?;
@@ -307,6 +308,13 @@ impl Server {
             return Err("QA time budget exhausted".into());
         }
         closed_arguments(name, args)?;
+        if name == "run_semantic_case" {
+            if required(args, "criterion", 32)? != "movement-arrival-v1" {
+                return Err("unknown semantic criterion".into());
+            }
+            // Local controller actions never dispatch to, or consume, BrowserWorker.
+            return serde_json::to_value(qa::semantic::run()).map_err(|error| error.to_string());
+        }
         if BROWSER_ACTIONS.contains(&name) {
             validate_action(name, args)?;
             if self.worker.is_none() {
@@ -389,7 +397,8 @@ fn tools() -> Value {
         tool("close_session", "Close one browser session", session, &["session"]),
         tool("record_journey", "Record completed required journey with evidence", json!({"journey":{"type":"string"},"evidence":{"type":"string"}}), &["journey","evidence"]),
         tool("record_finding", "Record a reproducible finding", json!({"title":{"type":"string"},"reproduction":{"type":"string"},"expected":{"type":"string"},"actual":{"type":"string"},"evidence":{"type":"string"}}), &["title","reproduction","expected","actual","evidence"]),
-        tool("finish", "Validate and write PASS, FINDINGS, or BLOCKED report", json!({"status":{"type":"string"}}), &["status"])
+        tool("finish", "Validate and write PASS, FINDINGS, or BLOCKED report", json!({"status":{"type":"string"}}), &["status"]),
+        tool("run_semantic_case", "Perform fixed local engine actions and calibration controls; not independent QA or whole RTS qualification", json!({"criterion":{"type":"string","enum":["movement-arrival-v1"]}}), &["criterion"])
     ]})
 }
 
