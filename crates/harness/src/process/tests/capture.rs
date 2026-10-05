@@ -163,6 +163,15 @@ fn capture_retains_bounded_raw_tails_and_marks_truncation() {
     assert_eq!(captured.stdout.len(), LOG_LIMIT);
     assert!(captured.stdout.ends_with(b"final"));
     assert!(captured.truncated);
+    let observation = safe_observation(&captured);
+    assert!(observation.truncated);
+    assert_eq!(observation.stdout.bytes, LOG_LIMIT);
+    assert_eq!(
+        observation.stdout.raw_blake3,
+        blake3::hash(&captured.stdout).to_hex().to_string()
+    );
+    assert_eq!(observation.stderr.bytes, captured.stderr.len());
+    assert_eq!(observation.duration_ms, captured.duration.as_millis());
     assert!(
         !captured.stdout.starts_with(b"[earlier output truncated]"),
         "receipt is raw bytes, not decorated legacy logs"
@@ -186,6 +195,9 @@ fn escaped_pipe_holder_cannot_block_drain_or_leave_reader_threads() {
         &Cancellation::default(),
     );
     let elapsed = captured.duration;
+    let observation = safe_observation(&captured);
+    let stdout_len = captured.stdout.len();
+    let stdout_hash = blake3::hash(&captured.stdout).to_hex().to_string();
     let pid: i32 = String::from_utf8(captured.stdout)
         .unwrap()
         .trim()
@@ -196,6 +208,12 @@ fn escaped_pipe_holder_cannot_block_drain_or_leave_reader_threads() {
     if getpgid(Some(pid)).ok() == Some(pid) {
         let _ = killpg(pid, Signal::SIGKILL);
     }
+    assert_eq!(observation.truncated, captured.truncated);
+    assert_eq!(observation.stdout.bytes, stdout_len);
+    assert_eq!(observation.stdout.raw_blake3, stdout_hash);
+    assert_eq!(observation.stderr.bytes, captured.stderr.len());
+    assert_eq!(observation.duration_ms, elapsed.as_millis());
+    assert!(observation.stdout.bytes < LOG_LIMIT && observation.stderr.bytes < LOG_LIMIT);
     assert!(matches!(captured.exit, CaptureExit::Success));
     assert!(
         captured.truncated,

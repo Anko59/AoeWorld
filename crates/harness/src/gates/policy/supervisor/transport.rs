@@ -2,7 +2,7 @@
 mod paths;
 #[cfg(test)]
 mod tests;
-use crate::process::{Cancellation, CaptureExit, Captured, capture_command};
+use crate::process::{Cancellation, CaptureExit, Captured, capture_command, safe_observation};
 use serde_json::{Value, json};
 use std::{path::Path, process::Command, time::Duration};
 const PROGRAM: &str = "/usr/bin/docker";
@@ -40,21 +40,15 @@ fn unavailable(reason: &str) -> Value {
     json!({"schema":1,"authoritative":false,"status":"UNAVAILABLE","reason":reason,"admission_granted":false,"limits":["read-only fixed info observation, no workers or daemon-container cleanup","root-owned paths and daemon ID cannot prove peer/operator/deployment authentication","same-user/reverted races, ACLs, container-root and coding-host daemon control remain limits","filesystem observations are not wall supervised"]})
 }
 fn observed(captured: Captured) -> Value {
-    let exit = match &captured.exit {
-        CaptureExit::Success => "SUCCESS",
-        CaptureExit::Failed(_) => "FAILED",
-        CaptureExit::Deadline => "DEADLINE",
-        CaptureExit::Cancelled => "CANCELLED",
-        CaptureExit::Start(_) => "START_UNAVAILABLE",
-        CaptureExit::Monitor(_) => "MONITOR_UNAVAILABLE",
-    };
+    let observation = safe_observation(&captured);
     let mut report =
         unavailable("daemon probe did not produce a complete bounded successful observation");
-    report["exit"] = json!(exit);
-    report["truncated"] = json!(captured.truncated);
-    report["duration_ms"] = json!(captured.duration.as_millis());
-    report["stdout_blake3"] = json!(blake3::hash(&captured.stdout).to_hex().to_string());
-    report["stderr_blake3"] = json!(blake3::hash(&captured.stderr).to_hex().to_string());
+    report["exit"] = json!(observation.outcome.exit_label());
+    report["truncated"] = json!(observation.truncated);
+    report["duration_ms"] = json!(observation.duration_ms);
+    report["stdout_blake3"] = json!(observation.stdout.raw_blake3);
+    report["stderr_blake3"] = json!(observation.stderr.raw_blake3);
+    report["capture_observation"] = json!(observation);
     if !matches!(captured.exit, CaptureExit::Success)
         || captured.truncated
         || captured.stdout.len() > LIMIT

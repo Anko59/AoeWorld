@@ -9,12 +9,25 @@ fn script(root: &Path, body: &str) -> std::path::PathBuf {
 fn fixture(body: &str) -> Value {
     let root = tempfile::tempdir().unwrap();
     let program = script(root.path(), body);
-    capture(
+    let report = capture(
         &program,
         &ARGS,
         Duration::from_secs(2),
         &Cancellation::default(),
-    )
+    );
+    assert_capture_fields(&report);
+    report
+}
+fn assert_capture_fields(report: &Value) {
+    let observation = &report["capture_observation"];
+    assert_eq!(observation["schema"], 1);
+    assert_eq!(observation["root_cause"], "ROOT_CAUSE_NOT_ASSESSED");
+    assert_eq!(report["duration_ms"], observation["duration_ms"]);
+    assert_eq!(report["truncated"], observation["truncated"]);
+    assert_eq!(report["stdout_blake3"], observation["stdout"]["raw_blake3"]);
+    assert_eq!(report["stderr_blake3"], observation["stderr"]["raw_blake3"]);
+    assert_eq!(report["authoritative"], false);
+    assert_eq!(report["admission_granted"], false);
 }
 #[test]
 fn fixed_read_only_contract_has_no_mutation_or_ambient_context() {
@@ -103,6 +116,8 @@ fn actual_deadline_cancelled_and_zero_budget_never_fake_success_or_spawn() {
         &Cancellation::default(),
     );
     assert_eq!(report["exit"], "DEADLINE");
+    assert_capture_fields(&report);
+    assert_eq!(report["capture_observation"]["outcome"]["kind"], "DEADLINE");
     assert_eq!(report["status"], "UNAVAILABLE");
     let root = tempfile::tempdir().unwrap();
     let marker = root.path().join("spawned");
@@ -142,12 +157,96 @@ fn observation_discards_monitor_errors_and_never_leaks_raw_stderr() {
         truncated: false,
         duration: Duration::ZERO,
     };
+    let expected = serde_json::to_value(safe_observation(&captured)).unwrap();
     let report = observed(captured);
+    assert_capture_fields(&report);
+    assert_eq!(report["capture_observation"], expected);
+    assert_eq!(
+        report["capture_observation"]["outcome"]["io_kind"],
+        "OTHER_UNKNOWN"
+    );
     assert_eq!(report["exit"], "MONITOR_UNAVAILABLE");
     assert!(!report.to_string().contains("SECRET_DO_NOT_RENDER"));
     assert!(!report.to_string().contains("sensitive detail"));
     let report = fixture("printf '\"id\"'; printf 'ordinary warning\\n' >&2");
     assert_eq!(report["status"], "PROBED_NON_AUTHORITATIVE");
+}
+#[test]
+fn actual_transport_uses_the_same_safe_capture_observation_without_failure_text_classification() {
+    for (body, kind, status) in [
+        (
+            "printf '\"model-id\"'; printf 'SECRET-TRANSPORT-TAIL-v1 panic stacktrace' >&2",
+            "SUCCESS",
+            "PROBED_NON_AUTHORITATIVE",
+        ),
+        (
+            "printf 'SECRET-TRANSPORT-TAIL-v1'; printf 'panic credentials SECRET-TRANSPORT-TAIL-v1' >&2; exit 7",
+            "FAILED",
+            "UNAVAILABLE",
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let program = script(root.path(), body);
+        let actual = capture_command(
+            isolated(&program, &ARGS),
+            Duration::from_secs(2),
+            &Cancellation::default(),
+        );
+        let expected = serde_json::to_value(safe_observation(&actual)).unwrap();
+        let report = observed(actual);
+        assert_capture_fields(&report);
+        assert_eq!(report["capture_observation"], expected);
+        assert_eq!(report["capture_observation"]["outcome"]["kind"], kind);
+        assert_eq!(report["status"], status);
+        if kind == "FAILED" {
+            assert_eq!(report["capture_observation"]["outcome"]["code"], 7);
+            assert_eq!(
+                report["capture_observation"]["outcome"]["termination"],
+                "EXIT_CODE"
+            );
+        }
+        for raw in [
+            "SECRET-TRANSPORT-TAIL-v1",
+            "stacktrace",
+            "credentials",
+            "CODE_BUG",
+        ] {
+            assert!(!report.to_string().contains(raw));
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let missing = root.path().join("SECRET-TRANSPORT-MISSING-v1");
+    let actual = capture_command(
+        isolated(&missing, &ARGS),
+        Duration::from_secs(2),
+        &Cancellation::default(),
+    );
+    let expected = serde_json::to_value(safe_observation(&actual)).unwrap();
+    let report = observed(actual);
+    assert_capture_fields(&report);
+    assert_eq!(report["capture_observation"], expected);
+    assert_eq!(
+        report["capture_observation"]["outcome"]["io_kind"],
+        "NOT_FOUND"
+    );
+    assert_eq!(report["exit"], "START_UNAVAILABLE");
+    assert!(!report.to_string().contains("SECRET-TRANSPORT-MISSING-v1"));
+    let cancel = Cancellation::default();
+    cancel.cancel();
+    let actual = capture_command(
+        isolated(Path::new(PROGRAM), &ARGS),
+        Duration::from_secs(2),
+        &cancel,
+    );
+    let expected = serde_json::to_value(safe_observation(&actual)).unwrap();
+    let report = observed(actual);
+    assert_capture_fields(&report);
+    assert_eq!(report["capture_observation"], expected);
+    assert_eq!(
+        report["capture_observation"]["outcome"]["kind"],
+        "CANCELLED"
+    );
+    assert_eq!(report["exit"], "CANCELLED");
 }
 // A self-test subprocess injects ambient secrets WITHOUT unsafe global env changes.
 #[test]
