@@ -1,6 +1,7 @@
 //! Provider-neutral exploratory QA report contract and validation.
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, error::Error, fs, path::Path};
+use std::{collections::BTreeSet, error::Error, path::Path};
+pub(crate) mod observation;
 
 pub const REQUIRED: [&str; 6] = [
     "startup",
@@ -20,6 +21,7 @@ pub enum Status {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Journey {
     pub name: String,
     pub completed: bool,
@@ -27,6 +29,7 @@ pub struct Journey {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Finding {
     pub title: String,
     pub reproduction: String,
@@ -36,6 +39,7 @@ pub struct Finding {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Report {
     pub version: u16,
     pub budget: String,
@@ -46,31 +50,58 @@ pub struct Report {
     pub findings: Vec<Finding>,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum Budget {
+    Fast,
+    Full,
+    Extended,
+}
+impl std::str::FromStr for Budget {
+    type Err = String;
+    fn from_str(value: &str) -> Result<Self, String> {
+        match value {
+            "fast" => Ok(Self::Fast),
+            "full" => Ok(Self::Full),
+            "extended" => Ok(Self::Extended),
+            _ => Err("invalid QA budget".into()),
+        }
+    }
+}
+fn text(value: &str, maximum: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= maximum && !value.chars().any(char::is_control)
+}
+fn evidence_list(values: &[String]) -> bool {
+    values.len() <= 128
+        && values.iter().all(|value| text(value, 4096))
+        && values.iter().collect::<BTreeSet<_>>().len() == values.len()
+}
 pub fn validate(report: &Report) -> Result<(), String> {
     if report.version != 1 {
         return Err("unsupported QA report version".into());
     }
-    if !["fast", "full", "extended"].contains(&report.budget.as_str()) {
-        return Err("invalid QA budget".into());
+    report.budget.parse::<Budget>()?;
+    if !text(&report.build, 4096) || !text(&report.scenario, 4096) {
+        return Err("bounded printable build and scenario claims are required".into());
     }
-    if report.build.trim().is_empty() || report.scenario.trim().is_empty() {
-        return Err("build and scenario are required".into());
+    if report.journeys.len() > 64 || report.findings.len() > 64 {
+        return Err("QA journey/finding count exceeds limit".into());
     }
     let mut seen = BTreeSet::new();
     for journey in &report.journeys {
         if !seen.insert(journey.name.as_str()) {
             return Err(format!("duplicate journey {}", journey.name));
         }
-        if journey.evidence.iter().any(|item| item.trim().is_empty()) {
-            return Err("empty journey evidence".into());
+        if !text(&journey.name, 128) || !evidence_list(&journey.evidence) {
+            return Err("invalid bounded journey name/evidence references".into());
         }
     }
     for finding in &report.findings {
-        if finding.title.trim().is_empty()
-            || finding.reproduction.trim().is_empty()
-            || finding.expected.trim().is_empty()
-            || finding.actual.trim().is_empty()
+        if !text(&finding.title, 4096)
+            || !text(&finding.reproduction, 4096)
+            || !text(&finding.expected, 4096)
+            || !text(&finding.actual, 4096)
             || finding.evidence.is_empty()
+            || !evidence_list(&finding.evidence)
         {
             return Err("finding lacks reproduction, expected/actual, or evidence".into());
         }
@@ -104,22 +135,8 @@ pub fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 fn validate_file_at(path: &Path, evidence_root: &Path) -> Result<(), Box<dyn Error>> {
-    let report: Report = serde_json::from_slice(&fs::read(path)?)?;
-    validate(&report).map_err(|error| -> Box<dyn Error> { error.into() })?;
-    for evidence in report
-        .journeys
-        .iter()
-        .flat_map(|journey| &journey.evidence)
-        .chain(report.findings.iter().flat_map(|finding| &finding.evidence))
-    {
-        validate_evidence_at(evidence_root, Path::new(evidence))
-            .map_err(|error| -> Box<dyn Error> { error.into() })?;
-    }
-    println!(
-        "validated QA report: {} ({:?})",
-        path.display(),
-        report.status
-    );
+    let observation = observation::observe_file_at(path, evidence_root)?;
+    println!("{}", serde_json::to_string_pretty(&observation)?);
     Ok(())
 }
 
@@ -135,6 +152,7 @@ pub(crate) fn validate_evidence_at(root: &Path, path: &Path) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn report(status: Status) -> Report {
         Report {
