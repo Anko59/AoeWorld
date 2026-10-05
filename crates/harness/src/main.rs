@@ -108,9 +108,7 @@ enum Command {
         #[arg(long, default_value = "baselines/perf/hardware.json")]
         baseline: PathBuf,
     },
-    QaValidate {
-        file: Option<PathBuf>,
-    },
+    QaValidate(qa::Options),
     QaServe {
         #[arg(long, default_value = "fast")]
         budget: String,
@@ -304,9 +302,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             samples,
             baseline,
         } => perf_hardware::check(&environment, &samples, &baseline)?,
-        Command::QaValidate { file } => {
-            qa::validate_file(&file.unwrap_or_else(|| PathBuf::from("reports/qa/session.json")))?
-        }
+        Command::QaValidate(options) => qa::execute(options)?,
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
         Command::GateRun(options) => gates::runner::execute(Path::new("."), options)?,
         Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
