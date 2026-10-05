@@ -197,6 +197,7 @@ pub(super) struct Pair {
     pub(super) measurements: Measurements,
 }
 impl Pair {
+    #[cfg(test)]
     pub(super) fn at(root: &Path) -> Result<Self> {
         Self::open(&absolute(root)?.join(super::OUTPUT).join("mutants.out"))
     }

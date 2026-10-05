@@ -7,7 +7,7 @@ fn original_pair_fd_bytes_hashes_and_late_rewrite_rejection() {
     let (wire, inventory) = artifacts(30, 0);
     install(temp.path(), &wire, &inventory);
     let output = temp.path().join(OUTPUT).join("mutants.out");
-    let mut pair = Pair::open(&output).unwrap();
+    let mut pair = Pair::at(temp.path()).unwrap();
     assert_eq!(
         pair.measurements.outcomes.bytes,
         pair.outcomes_bytes.len() as u64
