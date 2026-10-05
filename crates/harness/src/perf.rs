@@ -358,24 +358,4 @@ fn summary(report: &Report) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn comparator_rejects_missing_and_regressed_samples() {
-        assert_eq!(network::initial_client_result(37).bytes, 37);
-        assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);
-        assert_eq!(compare("x", Some(100), None).verdict, Verdict::Unbaselined);
-        assert_eq!(compare("x", Some(105), Some(100)).verdict, Verdict::Pass);
-        assert_eq!(compare("x", Some(0), Some(0)).verdict, Verdict::Pass);
-        assert_eq!(compare("x", Some(1), Some(0)).verdict, Verdict::Regression);
-        assert_eq!(
-            compare("x", Some(106), Some(100)).verdict,
-            Verdict::Regression
-        );
-        assert_eq!(
-            compare("x", Some(u64::MAX), Some(1)).verdict,
-            Verdict::Regression
-        );
-    }
-}
+mod tests;

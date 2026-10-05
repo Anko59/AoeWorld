@@ -296,7 +296,11 @@ impl Registry {
                 }
             }
         }
-        loop {
+        // At most one round per declared owner plus a final pass covers the
+        // finite graph and every implication reason, including shared edges.
+        // Bound traversal rather than relying on convergence alone. Unknown
+        // implied IDs have no outgoing edges.
+        for _ in 0..=self.suites.len() {
             let before = result.suites.len();
             for suite in &self.suites {
                 if result.suites.contains(&suite.id) {
