@@ -3,6 +3,7 @@ mod cli;
 pub(crate) mod evidence;
 mod real;
 pub(crate) mod signals;
+mod triage;
 pub(crate) use cli::{Options, execute};
 #[cfg(test)]
 mod tests;
@@ -86,6 +87,8 @@ pub(crate) struct GateResult {
     pub(crate) unavailable: Vec<Capability>,
     pub(crate) log: Option<LogRef>,
     pub(crate) blocks_cadence: bool,
+    /// None means unobserved, including synthetic Runtime receipts.
+    pub(crate) triage: Option<triage::CommandObservation>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct LogRef {
@@ -118,6 +121,7 @@ pub(crate) struct Receipt {
     pub(crate) exit: Exit,
     pub(crate) reason: String,
     pub(crate) log: Option<LogRef>,
+    pub(crate) triage: Option<triage::CommandObservation>,
 }
 
 /// No arbitrary program/string-shell API. Real adapter calls ONLY supervised
@@ -227,18 +231,19 @@ pub(crate) fn run(
     let capabilities = runtime.capabilities();
     let mut invalid = Vec::new();
     let expected = metadata.fingerprint.clone();
-    let mut probe = |runtime: &mut dyn Runtime| match runtime.verify(root) {
-        Ok(proof) if proof == expected => true,
-        Ok(_) => {
-            invalid.push("source/private snapshot identity changed".into());
-            false
-        }
-        Err(error) => {
-            invalid.push(format!("snapshot verification: {error}"));
-            false
-        }
+    let mut endpoints = Vec::new();
+    let mut probe = |runtime: &mut dyn Runtime, phase, gate| {
+        triage::probe(
+            runtime,
+            root,
+            &expected,
+            phase,
+            gate,
+            &mut endpoints,
+            &mut invalid,
+        )
     };
-    let initial_ok = probe(runtime);
+    let initial_ok = probe(runtime, triage::Phase::Initial, None);
     let mut results: Vec<GateResult> = Vec::new();
     let mut identity_ok = initial_ok;
     for (id, gate) in &prepared.gates {
@@ -251,6 +256,7 @@ pub(crate) fn run(
             unavailable: Vec::new(),
             log: None,
             blocks_cadence: gate.blocks.contains(&prepared.plan.cadence),
+            triage: None,
         };
         let elapsed = Duration::from_millis(runtime.now_ms().saturating_sub(started));
         result.blocked_by = gate
@@ -286,7 +292,7 @@ pub(crate) fn run(
         } else if elapsed >= budgets.total || budgets.per_gate_max.is_zero() {
             result.reason = "runner budget exhausted; selected gate remains incomplete".into();
         } else {
-            identity_ok = probe(runtime);
+            identity_ok = probe(runtime, triage::Phase::PreGate, Some(id.clone()));
             if identity_ok {
                 // Verification consumes the same total wall budget.
                 let start = runtime.now_ms();
@@ -311,20 +317,21 @@ pub(crate) fn run(
                 };
                 result.reason = receipt.reason;
                 result.log = receipt.log;
+                result.triage = receipt.triage;
                 // Missing successful output is not usable PASS evidence.
                 if result.log.is_none() && result.verdict == Verdict::Pass {
                     result.verdict = Verdict::Unavailable;
                     result.reason = "successful output could not be retained".into();
                 }
                 // Even failure/cancellation must run BOTH endpoint checks.
-                identity_ok = probe(runtime);
+                identity_ok = probe(runtime, triage::Phase::PostGate, Some(id.clone()));
             } else {
                 result.reason = "pre-gate snapshot verification failed".into();
             }
         }
         results.push(result);
     }
-    let _ = probe(runtime);
+    let _ = probe(runtime, triage::Phase::FinalRuntime, None);
     if prepared.gates.is_empty() {
         invalid.push("empty selected plan is not validation evidence".into());
     }
@@ -341,7 +348,7 @@ pub(crate) fn run(
         Overall::Pass
     };
     Ledger {
-        schema: 1,
+        schema: 2,
         authoritative: false,
         metadata,
         canonical_registry_hash: prepared.registry_hash.clone(),
@@ -353,6 +360,7 @@ pub(crate) fn run(
         results,
         overall,
         invalid_reasons: invalid,
+        endpoints,
         duration_ms: runtime.now_ms().saturating_sub(started),
     }
 }

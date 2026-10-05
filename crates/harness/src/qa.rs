@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, error::Error, path::Path};
 pub(crate) mod observation;
+pub(crate) mod semantic;
 mod source;
 pub(crate) use source::{Options, execute};
 

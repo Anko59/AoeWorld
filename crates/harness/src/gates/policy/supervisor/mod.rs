@@ -8,6 +8,7 @@ mod requirements;
 #[cfg(test)]
 mod tests;
 mod transport;
+pub(crate) mod worker;
 use super::{
     Anchor, Result,
     descriptor::{Abi, Operation},

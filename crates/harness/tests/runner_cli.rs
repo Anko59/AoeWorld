@@ -89,6 +89,11 @@ fn cli_sigterm_cancels_owned_make_and_retains_incomplete_ledger() {
     }
     assert_eq!(ledger(output.path())["overall"], "INCOMPLETE");
     assert_eq!(ledger(output.path())["results"][0]["verdict"], "SKIPPED");
+    assert_eq!(
+        ledger(output.path())["results"][0]["triage"]["capture"]["outcome"]["kind"],
+        "CANCELLED"
+    );
+    assert!(ledger(output.path())["results"][0]["triage"]["capture"]["duration_ms"].is_number());
     let state = fs::read_to_string(format!("/proc/{owned}/stat")).ok();
     assert!(
         state.as_ref().is_none_or(|state| state
@@ -156,7 +161,16 @@ fn run(root: &Path, output: &Path, extra: &[&str]) -> std::process::Output {
         .unwrap()
 }
 fn ledger(output: &Path) -> serde_json::Value {
-    serde_json::from_slice(&fs::read(output.join("ledger.json")).unwrap()).unwrap()
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("ledger.json")).unwrap()).unwrap();
+    assert_eq!(
+        value["schema"], 2,
+        "live triage changes the local ledger contract"
+    );
+    value
+}
+fn summary(result: &std::process::Output) -> serde_json::Value {
+    serde_json::from_slice(&result.stdout).unwrap()
 }
 
 #[test]
@@ -171,6 +185,23 @@ fn real_job_execution_retains_success_logs_and_index_ignores_working_make() {
     );
     let evidence = ledger(output.path());
     assert_eq!(evidence["overall"], "PASS");
+    assert_eq!(
+        evidence["results"][0]["triage"]["capture"]["outcome"]["kind"],
+        "SUCCESS"
+    );
+    assert_eq!(summary(&passing)["final_publication"]["kind"], "PUBLISHED");
+    assert_eq!(
+        summary(&passing)["source_expected"]["revision"],
+        evidence["metadata"]["revision"]
+    );
+    assert_eq!(
+        summary(&passing)["endpoints"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()["phase"],
+        "FINAL_CLI_AFTER_IMAGES"
+    );
     assert_eq!(evidence["authoritative"], serde_json::json!(false));
     assert_eq!(evidence["results"].as_array().unwrap().len(), 2);
     let log = fs::read_to_string(output.path().join("alpha.log")).unwrap();
@@ -224,4 +255,155 @@ fn mutation_empty_budget_and_overlapping_output_do_not_pass() {
     let mutated = run(root.path(), output.path(), &[]);
     assert!(!mutated.status.success());
     assert_eq!(ledger(output.path())["overall"], "INVALID");
+    assert_eq!(
+        summary(&mutated)["gates"][0]["command"]["observation"]["capture"]["outcome"]["kind"],
+        "SUCCESS"
+    );
+    // The actual snapshot verifier rejects altered export bytes before returning
+    // either fingerprint. Do not invent which independent proof was measured.
+    assert_eq!(summary(&mutated)["endpoints"][2]["phase"], "POST_GATE");
+    assert_eq!(summary(&mutated)["endpoints"][2]["source"], "UNAVAILABLE");
+    assert_eq!(summary(&mutated)["endpoints"][2]["private"], "UNAVAILABLE");
+}
+
+#[test]
+fn numeric_make_failure_secret_tails_and_later_independent_success_reach_safe_console() {
+    let root = fixture();
+    let output = tempfile::tempdir().unwrap();
+    let registry_path = root.path().join("gates/registry.json");
+    let mut registry: serde_json::Value =
+        serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
+    registry["gates"][1]["requires"] = serde_json::json!([]);
+    fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+    fs::write(root.path().join("Makefile"), "alpha:\n\t@printf 'STDOUT_SECRET panic: not a diagnosis'; printf 'STDERR_SECRET' >&2; exit 7\nbeta:\n\t@printf 'later success'\n").unwrap();
+    let result = run(root.path(), output.path(), &[]);
+    assert!(!result.status.success());
+    let value = summary(&result);
+    let measured = &value["gates"][0]["command"]["observation"]["capture"];
+    assert_eq!(measured["outcome"]["kind"], "FAILED");
+    assert_eq!(measured["outcome"]["code"], 2);
+    assert_eq!(measured["root_cause"], "ROOT_CAUSE_NOT_ASSESSED");
+    assert_eq!(
+        measured["stdout"]["raw_blake3"],
+        blake3::hash(b"STDOUT_SECRET panic: not a diagnosis")
+            .to_hex()
+            .to_string()
+    );
+    assert_eq!(
+        value["gates"][1]["command"]["observation"]["capture"]["outcome"]["kind"],
+        "SUCCESS"
+    );
+    let console = String::from_utf8_lossy(&result.stdout);
+    for forbidden in [
+        "STDOUT_SECRET",
+        "STDERR_SECRET",
+        "diagnosis",
+        "reason",
+        "path",
+        "judge",
+    ] {
+        assert!(!console.contains(forbidden));
+    }
+    let raw = fs::read_to_string(output.path().join("alpha.log")).unwrap();
+    assert!(raw.contains("STDOUT_SECRET") && raw.contains("STDERR_SECRET"));
+}
+
+#[test]
+fn live_deadline_preserves_measured_outcome_not_legacy_reason_reconstruction() {
+    let root = fixture();
+    let output = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("Makefile"),
+        "alpha:\n\t@sleep 5\nbeta:\n\t@true\n",
+    )
+    .unwrap();
+    let result = run(root.path(), output.path(), &["--per-gate-seconds", "1"]);
+    assert!(!result.status.success());
+    let value = summary(&result);
+    let measured = &value["gates"][0]["command"]["observation"]["capture"];
+    assert_eq!(measured["outcome"]["kind"], "DEADLINE");
+    assert!(measured["duration_ms"].as_u64().unwrap() >= 1000);
+    assert_eq!(value["gates"][1]["command"]["kind"], "UNOBSERVED");
+}
+
+#[test]
+fn measured_success_and_failure_survive_log_and_final_publication_collisions() {
+    for failed_command in [false, true] {
+        let root = fixture();
+        let output = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("Makefile"),
+            format!(
+                "alpha:\n\t@printf 'RETENTION_SECRET'; {}\nbeta:\n\t@true\n",
+                if failed_command { "exit 7" } else { "true" }
+            ),
+        )
+        .unwrap();
+        fs::create_dir(output.path().join("alpha.log")).unwrap();
+        fs::create_dir(output.path().join("ledger.json")).unwrap();
+        let forged = output.path().join("ledger.json/old-pass");
+        fs::write(&forged, b"{\"overall\":\"PASS\"}").unwrap();
+        let result = run(root.path(), output.path(), &[]);
+        assert!(!result.status.success());
+        let value = summary(&result);
+        let observation = &value["gates"][0]["command"]["observation"];
+        assert_eq!(
+            observation["capture"]["outcome"]["kind"],
+            if failed_command { "FAILED" } else { "SUCCESS" }
+        );
+        assert_eq!(observation["retention"]["kind"], "FAILED");
+        assert_eq!(
+            value["gates"][0]["verdict"],
+            if failed_command {
+                "FAIL"
+            } else {
+                "UNAVAILABLE"
+            }
+        );
+        assert_eq!(value["final_publication"]["kind"], "FAILED");
+        assert_eq!(value["overall"], "INVALID");
+        assert!(!String::from_utf8_lossy(&result.stdout).contains("RETENTION_SECRET"));
+        assert_eq!(fs::read(forged).unwrap(), b"{\"overall\":\"PASS\"}");
+    }
+}
+
+#[test]
+fn successful_live_commands_still_fail_cli_when_final_publication_fails() {
+    let root = fixture();
+    let output = tempfile::tempdir().unwrap();
+    fs::create_dir(output.path().join("ledger.json")).unwrap();
+    let forged = output.path().join("ledger.json/forged-pass");
+    fs::write(&forged, b"{\"overall\":\"PASS\",\"reason\":\"OLD_SECRET\"}").unwrap();
+    let result = run(root.path(), output.path(), &[]);
+    assert!(!result.status.success());
+    let value = summary(&result);
+    assert_eq!(value["execution_overall"], "PASS");
+    assert_eq!(value["overall"], "INVALID");
+    assert_eq!(value["final_publication"]["kind"], "FAILED");
+    assert_eq!(
+        value["gates"][0]["command"]["observation"]["capture"]["outcome"]["kind"],
+        "SUCCESS"
+    );
+    assert!(!String::from_utf8_lossy(&result.stdout).contains("OLD_SECRET"));
+    assert!(fs::read_to_string(forged).unwrap().contains("OLD_SECRET"));
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_output_symlink_is_replaced_without_writing_its_missing_target() {
+    let root = fixture();
+    let output = tempfile::tempdir().unwrap();
+    let absent = output.path().join("never-written-target");
+    std::os::unix::fs::symlink(&absent, output.path().join("ledger.json")).unwrap();
+    let result = run(root.path(), output.path(), &[]);
+    assert!(result.status.success());
+    assert!(!absent.exists());
+    assert!(
+        !fs::symlink_metadata(output.path().join("ledger.json"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(ledger(output.path())["schema"], 2);
+    // Atomic local hygiene only: no promise to erase hostile same-UID old data.
 }

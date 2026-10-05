@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::{Value, json};
+mod classification;
 mod job_mapping;
 
 fn proposal() -> Value {

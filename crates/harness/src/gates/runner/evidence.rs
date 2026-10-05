@@ -55,6 +55,7 @@ pub(crate) struct Ledger {
     pub(crate) overall: Overall,
     pub(crate) invalid_reasons: Vec<String>,
     pub(crate) duration_ms: u64,
+    pub(crate) endpoints: Vec<super::triage::EndpointObservation>,
 }
 
 /// Algorithm v1: validated registry, stable struct field order, set-like arrays

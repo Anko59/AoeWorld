@@ -179,3 +179,87 @@ fn impact_accepts_git_base_and_rejects_unknown_ref() {
     impact(Some("HEAD"), Vec::new()).expect("known base");
     assert!(impact(Some("this-ref-does-not-exist"), Vec::new()).is_err());
 }
+
+fn selected_job_members(registry: &Registry, selection: &Selection) -> BTreeSet<String> {
+    registry
+        .jobs
+        .iter()
+        .filter(|(job, _)| selection.jobs.get(*job) == Some(&true))
+        .flat_map(|(_, members)| members.iter().cloned())
+        .collect()
+}
+
+#[test]
+fn ci_selection_rejects_unexecuted_nightly_and_weekly_dependencies() {
+    let original = registry();
+    let docs = vec!["docs/testing.md".to_owned()];
+    let control = super::selection(&original, "a".repeat(40), None, docs.clone())
+        .expect("normal docs selection");
+    assert!(control.jobs["static"]);
+    assert!(!control.jobs["target-performance"]);
+    let executed = selected_job_members(&original, &control);
+    assert!(control.gates.iter().all(|gate| executed.contains(gate)));
+    for dependency in ["perf-full", "perf-stress"] {
+        let mut changed = original.clone();
+        changed
+            .gates
+            .iter_mut()
+            .find(|gate| gate.id == "docs-check")
+            .expect("docs gate")
+            .requires = vec![dependency.into()];
+        let suites = changed.classify(&docs).suites;
+        let plan = changed
+            .plan(Cadence::Ci, &suites)
+            .expect("valid dependency graph");
+        assert!(plan.gates.contains(&dependency.to_owned()));
+        let error = super::selection(&changed, "a".repeat(40), None, docs.clone())
+            .expect_err("unexecuted prerequisite must not be promised")
+            .to_string();
+        assert!(error.contains("without selected executing jobs"), "{error}");
+        assert!(error.contains(dependency), "{error}");
+    }
+}
+
+#[test]
+fn ci_selection_execution_coverage_is_the_union_of_selected_jobs() {
+    let mut changed = registry();
+    changed
+        .gates
+        .iter_mut()
+        .find(|gate| gate.id == "docs-check")
+        .expect("docs gate")
+        .requires = vec!["perf-instructions".into(), "browser-check".into()];
+    let docs = vec!["docs/testing.md".to_owned()];
+    let selected = super::selection(&changed, "a".repeat(40), None, docs.clone())
+        .expect("covered prerequisites select their executing jobs");
+    for job in ["static", "browser", "target-performance"] {
+        assert!(selected.jobs[job], "{job}");
+    }
+    let executed = selected_job_members(&changed, &selected);
+    assert!(selected.gates.iter().all(|gate| executed.contains(gate)));
+    let plan = changed
+        .plan(Cadence::Ci, &changed.classify(&docs).suites)
+        .unwrap();
+    assert_eq!(
+        selected.gates, plan.gates,
+        "coverage validation must not drop gates"
+    );
+    assert_eq!(selected.jobs, plan.jobs);
+    for path in [
+        None,
+        Some("docs/testing.md"),
+        Some("crates/assets/src/slp.rs"),
+        Some("web/index.html"),
+        Some("unknown/file"),
+        Some("AGENTS.md"),
+    ] {
+        let paths = path.into_iter().map(str::to_owned).collect();
+        let selected = super::selection(&changed, "a".repeat(40), None, paths)
+            .expect("all selected gates have executing coverage");
+        let executed = selected_job_members(&changed, &selected);
+        assert!(
+            selected.gates.iter().all(|gate| executed.contains(gate)),
+            "{path:?}"
+        );
+    }
+}

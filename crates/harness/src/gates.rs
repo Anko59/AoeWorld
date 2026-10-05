@@ -179,6 +179,27 @@ fn selection(
 ) -> Result<Selection, Box<dyn Error>> {
     let suites = classify(registry, &paths).suites;
     let plan = registry.plan(Cadence::Ci, &suites)?;
+    // Dependency closure can include gates outside CI cadence. A manifest must
+    // never promise work that none of its selected jobs actually executes.
+    let executed: BTreeSet<_> = registry
+        .jobs
+        .iter()
+        .filter(|(job, _)| plan.jobs.get(*job) == Some(&true))
+        .flat_map(|(_, members)| members.iter())
+        .collect();
+    let uncovered: Vec<_> = plan
+        .gates
+        .iter()
+        .filter(|gate| !executed.contains(gate))
+        .cloned()
+        .collect();
+    if !uncovered.is_empty() {
+        return Err(format!(
+            "CI selection has gates without selected executing jobs: {}",
+            uncovered.join(", ")
+        )
+        .into());
+    }
     Ok(Selection {
         version: 2,
         revision,
