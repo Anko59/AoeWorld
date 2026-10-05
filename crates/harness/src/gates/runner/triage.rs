@@ -17,6 +17,10 @@ pub(crate) enum CommandObservation {
     NotStarted {
         reason: Precondition,
     },
+    RestrictedWorker {
+        observation: crate::gates::policy::supervisor::worker::Observation,
+        log_retention: Retention,
+    },
 }
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -27,6 +31,7 @@ pub(crate) enum Precondition {
 #[serde(tag = "kind", rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum Retention {
     Retained,
+    Unavailable,
     Failed { io_kind: SafeErrorKind },
 }
 

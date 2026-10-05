@@ -12,8 +12,16 @@ pub(crate) enum Scope {
     Index,
     Commit,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(super) enum Backend {
+    BootstrapLocal,
+    RestrictedLocal,
+}
 #[derive(clap::Args)]
 pub(crate) struct Options {
+    /// Closed local backend selection; neither backend authenticates a judge.
+    #[arg(long, value_enum, default_value = "bootstrap-local")]
+    backend: Backend,
     #[arg(long, value_enum, default_value = "edit", conflicts_with = "job")]
     cadence: Cadence,
     #[arg(long)]
@@ -46,14 +54,15 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
     let git_common = crate::hooks::common_directory(&source)?;
     let cargo = source.join(".cache/cargo");
     let target = source.join("target");
-    fs::create_dir_all(&cargo)?;
-    fs::create_dir_all(&target)?;
-    let output = PrivateOutput::new(
-        &options.output,
-        &[source.clone(), git_common, cargo, target],
-    )?;
+    let mut excluded = vec![source.clone(), git_common];
+    if options.backend == Backend::BootstrapLocal {
+        fs::create_dir_all(&cargo)?;
+        fs::create_dir_all(&target)?;
+        excluded.extend([cargo, target]);
+    }
+    let output = PrivateOutput::new(&options.output, &excluded)?;
     eprintln!(
-        "bootstrap-local evidence directory: {}",
+        "local non-authoritative evidence directory: {}",
         output.directory().display()
     );
     let snapshot = Snapshot::prepare(&source, kind)?;
@@ -74,16 +83,31 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
         private,
     };
     let executable = std::env::current_exe()?;
-    let metadata = Metadata {
+    let mode = match options.backend {
+        Backend::BootstrapLocal => "bootstrap-local",
+        Backend::RestrictedLocal => "restricted-local-non-authoritative",
+    };
+    let mut metadata = Metadata {
         revision: match &snapshot.identity.kind { Kind::Commit(commit) => commit.clone(), _ => snapshot.identity.source_head.clone() },
         base_revision: None, tree: snapshot.identity.tree.clone(), scope: snapshot.identity.kind.clone(),
         index_fingerprint: snapshot.identity.index_fingerprint.clone(), fingerprint,
-        judge: JudgeIdentity { executable_blake3: blake3::hash(&fs::read(executable)?).to_hex().to_string(), policy_revision: None, trust_closure_hash: None, mode: "bootstrap-local".into() },
+        judge: JudgeIdentity { executable_blake3: blake3::hash(&fs::read(executable)?).to_hex().to_string(), policy_revision: None, trust_closure_hash: None, mode: mode.into() },
         tool_image_actual_ids: BTreeMap::new(),
         capability_limits: vec!["source-art/geodata/hardware qualification not supplied".into()],
         runtime_limits: vec!["candidate bootstrap and Make are arbitrary code; same-user evidence forging possible".into(), "no installed provider interception or hostile isolation claimed".into(), "Git endpoint probes cannot detect reverted edits and are not wall-supervised".into(), "process groups do not stop escaped or Docker-daemon work; no daemon cleanup claimed".into(), "image IDs are post-execution observations, not proof of which images candidate Make used".into()],
     };
+    if options.backend == Backend::RestrictedLocal {
+        metadata.runtime_limits = vec![
+            "fixed local deployment worker; candidate Make is never invoked; unsupported gates remain unavailable".into(),
+            "coding UID owns Docker: template, UID, image ID and local journal do not authenticate independent authority".into(),
+            "prebuilt protected judge and offline dependencies require operator preparation; no image build/pull/import".into(),
+            "exact-CID cleanup is a bounded daemon observation, not proof of all escaped descendants or crash recovery".into(),
+            "source/template/transport endpoint checks do not detect reverted races; filesystem IO is not wall supervised".into(),
+            "independent hidden verdict, service authentication and protected publisher remain UNAVAILABLE".into(),
+        ];
+    }
     let mut runtime = real::Local {
+        backend: options.backend,
         snapshot: &snapshot,
         source: source.clone(),
         output: &output,
@@ -101,11 +125,13 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
             per_gate_max: Duration::from_secs(options.per_gate_seconds),
         },
     );
-    ledger.metadata.tool_image_actual_ids = real::images(
-        &source,
-        &runtime.cancellation,
-        total.saturating_sub(started.elapsed()),
-    );
+    if options.backend == Backend::BootstrapLocal {
+        ledger.metadata.tool_image_actual_ids = real::images(
+            &source,
+            &runtime.cancellation,
+            total.saturating_sub(started.elapsed()),
+        );
+    }
     if !triage::probe(
         &mut runtime,
         &root,

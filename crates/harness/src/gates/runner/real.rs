@@ -7,6 +7,7 @@ use evidence::{EndpointProof, PrivateOutput};
 use std::time::Instant;
 
 pub(super) struct Local<'a> {
+    pub(super) backend: cli::Backend,
     pub(super) snapshot: &'a Snapshot,
     pub(super) source: PathBuf,
     pub(super) output: &'a PrivateOutput,
@@ -26,6 +27,36 @@ impl Runtime for Local<'_> {
         self.cancellation.cancelled()
     }
     fn capabilities(&mut self) -> Capabilities {
+        if self.backend == cli::Backend::RestrictedLocal {
+            let docker = if crate::gates::policy::supervisor::worker::deployment_observed() {
+                CapabilityState::Available { observation: "fixed local deployment paths observed; per-operation image/daemon admission still required".into() }
+            } else {
+                CapabilityState::Unavailable {
+                    reason: "fixed local worker deployment unavailable".into(),
+                }
+            };
+            return BTreeMap::from([
+                (Capability::Docker, docker),
+                (
+                    Capability::SourceAssets,
+                    CapabilityState::Unavailable {
+                        reason: "original assets unqualified".into(),
+                    },
+                ),
+                (
+                    Capability::SourceGeodata,
+                    CapabilityState::Unavailable {
+                        reason: "source geodata unqualified".into(),
+                    },
+                ),
+                (
+                    Capability::Hardware,
+                    CapabilityState::Unavailable {
+                        reason: "hardware unqualified".into(),
+                    },
+                ),
+            ]);
+        }
         let observed = process::capture_in(
             &self.source,
             "docker",
@@ -76,6 +107,16 @@ impl Runtime for Local<'_> {
         Ok(EndpointProof { source, private })
     }
     fn make(&mut self, root: &ExecutionRoot, gate: &GateId, deadline: Duration) -> Receipt {
+        if self.backend == cli::Backend::RestrictedLocal {
+            return restricted_fixed(
+                self.snapshot,
+                self.output,
+                &self.cancellation,
+                root,
+                gate,
+                deadline,
+            );
+        }
         make_fixed(
             &self.source,
             self.output,
@@ -84,6 +125,96 @@ impl Runtime for Local<'_> {
             gate,
             deadline,
         )
+    }
+}
+
+/// The source witness remains alive throughout create/start/wait/cleanup and final checks.
+fn restricted_fixed(
+    snapshot: &Snapshot,
+    output: &PrivateOutput,
+    cancel: &Cancellation,
+    root: &ExecutionRoot,
+    gate: &GateId,
+    budget: Duration,
+) -> Receipt {
+    use crate::gates::policy::supervisor::worker::{self, Cleanup, Status};
+    let mut execution = worker::Execution {
+        observation: worker::Observation::empty(),
+        logs: None,
+    };
+    let operation = worker::operation(gate.as_str());
+    if snapshot.identity.isolated_inputs
+        && root.path() == snapshot.root()
+        && let (Some(operation), Ok(before)) = (operation, snapshot.content_witness())
+        && snapshot.run_checked(|_| Ok(())).is_ok()
+    {
+        // Do not let a snapshot error mask the independently retained worker outcome.
+        execution = worker::execute(
+            root.path(),
+            operation,
+            output,
+            budget,
+            cancel,
+            &before.digest,
+        );
+        let unchanged = snapshot
+            .run_checked(|_| snapshot.content_witness())
+            .is_ok_and(|after| after == before);
+        execution.observation.source_witness_unchanged = Some(unchanged);
+        if !unchanged && execution.observation.status == Status::CompletedNonAuthoritative {
+            execution.observation.status = Status::Incomplete;
+        }
+    }
+    let (log, retention) = if let Some(capture) = execution.logs {
+        let mut bytes = b"--- docker logs CLI stdout tail ---\n".to_vec();
+        bytes.extend(&capture.stdout);
+        bytes.extend(b"\n--- docker logs CLI stderr tail ---\n");
+        bytes.extend(&capture.stderr);
+        match output.atomic(&format!("{}.log", gate.as_str()), &bytes) {
+            Ok(path) => (
+                Some(LogRef {
+                    path,
+                    blake3: blake3::hash(&bytes).to_hex().to_string(),
+                    truncated: capture.truncated,
+                }),
+                triage::Retention::Retained,
+            ),
+            Err(error) => (
+                None,
+                triage::Retention::Failed {
+                    io_kind: triage::io_kind(error.as_ref()),
+                },
+            ),
+        }
+    } else {
+        (None, triage::Retention::Unavailable)
+    };
+    let observed = &execution.observation;
+    let exit = match observed.status {
+        Status::CompletedNonAuthoritative
+            if observed.cleanup == Cleanup::VerifiedAbsent
+                && observed.journal_retained
+                && observed.template_endpoint_unchanged
+                && observed.source_witness_unchanged == Some(true) =>
+        {
+            Exit::Success
+        }
+        Status::Failed => Exit::Failed,
+        Status::Deadline => Exit::Deadline,
+        Status::Cancelled => Exit::Cancelled,
+        _ => Exit::MonitorError,
+    };
+    Receipt {
+        exit,
+        reason: format!(
+            "restricted local worker {:?}; independent authority UNAVAILABLE",
+            observed.status
+        ),
+        log,
+        triage: Some(triage::CommandObservation::RestrictedWorker {
+            observation: execution.observation,
+            log_retention: retention,
+        }),
     }
 }
 
@@ -177,6 +308,9 @@ pub(super) fn fixture_make(
 ) -> Receipt {
     make_fixed(source, output, cancellation, root, gate, deadline)
 }
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn images(
     source: &Path,
