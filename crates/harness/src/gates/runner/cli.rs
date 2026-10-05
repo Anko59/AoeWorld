@@ -106,11 +106,16 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
         &runtime.cancellation,
         total.saturating_sub(started.elapsed()),
     );
-    if runtime.verify(&root).is_err() {
+    if !triage::probe(
+        &mut runtime,
+        &root,
+        &ledger.metadata.fingerprint,
+        triage::Phase::FinalCliAfterImages,
+        None,
+        &mut ledger.endpoints,
+        &mut ledger.invalid_reasons,
+    ) {
         ledger.overall = Overall::Invalid;
-        ledger
-            .invalid_reasons
-            .push("final snapshot failed after image observation".into());
     }
     ledger.duration_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     ledger.budgets.total = total;
@@ -120,9 +125,29 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
             .invalid_reasons
             .push("cancelled or overall budget exhausted including metadata work".into());
     }
-    let path = output.ledger(&ledger)?;
-    println!("{}", serde_json::to_string_pretty(&ledger)?);
-    eprintln!("local ledger: {}", path.display());
+    publish(&output, &ledger)
+}
+
+/// Publish local raw evidence separately; always emit this run's safe facts.
+pub(super) fn publish(output: &PrivateOutput, ledger: &evidence::Ledger) -> Result<()> {
+    let publication = output.ledger(ledger);
+    let status = match &publication {
+        Ok(_) => triage::Publication::Published,
+        Err(error) => triage::Publication::Failed {
+            io_kind: triage::io_kind(error.as_ref()),
+        },
+    };
+    println!("{}", triage::summary(ledger, &status)?);
+    match publication {
+        Ok(path) => eprintln!("local UNSANITIZED ledger: {}", path.display()),
+        Err(_) => {
+            return Err(format!(
+                "final local publication {status:?}; execution {:?}",
+                ledger.overall
+            )
+            .into());
+        }
+    }
     if ledger.overall != Overall::Pass {
         return Err(format!(
             "gate execution {:?}; see retained complete ledger",

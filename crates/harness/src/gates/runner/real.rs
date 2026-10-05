@@ -76,60 +76,106 @@ impl Runtime for Local<'_> {
         Ok(EndpointProof { source, private })
     }
     fn make(&mut self, root: &ExecutionRoot, gate: &GateId, deadline: Duration) -> Receipt {
-        let cargo = self.source.join(".cache/cargo");
-        let target = self.source.join("target");
-        let Some(cargo) = cargo.to_str() else {
-            return Receipt {
-                exit: Exit::StartError,
-                reason: "non-UTF-8 cache path".into(),
-                log: None,
-            };
-        };
-        let Some(target) = target.to_str() else {
-            return Receipt {
-                exit: Exit::StartError,
-                reason: "non-UTF-8 target path".into(),
-                log: None,
-            };
-        };
-        let captured: process::Captured = process::capture_in(
-            root.path(),
-            "make",
-            &["--", gate.as_str()],
-            &[
-                ("HARNESS_CARGO_CACHE", cargo),
-                ("HARNESS_TARGET_CACHE", target),
-            ],
-            deadline,
+        make_fixed(
+            &self.source,
+            self.output,
             &self.cancellation,
-        );
-        let mut bytes = b"--- stdout ---\n".to_vec();
-        bytes.extend(&captured.stdout);
-        bytes.extend(b"\n--- stderr ---\n");
-        bytes.extend(&captured.stderr);
-        let log = self
-            .output
-            .atomic(&format!("{}.log", gate.as_str()), &bytes)
-            .ok()
-            .map(|path| LogRef {
+            root,
+            gate,
+            deadline,
+        )
+    }
+}
+
+// Private fixed-program seam shared by Local and canonical in-module fixtures.
+fn make_fixed(
+    source: &Path,
+    output: &PrivateOutput,
+    cancellation: &Cancellation,
+    root: &ExecutionRoot,
+    gate: &GateId,
+    deadline: Duration,
+) -> Receipt {
+    let cargo = source.join(".cache/cargo");
+    let target = source.join("target");
+    let Some(cargo) = cargo.to_str() else {
+        return Receipt {
+            exit: Exit::StartError,
+            reason: "non-UTF-8 cache path".into(),
+            log: None,
+            triage: Some(triage::CommandObservation::NotStarted {
+                reason: triage::Precondition::PreconditionUnavailable,
+            }),
+        };
+    };
+    let Some(target) = target.to_str() else {
+        return Receipt {
+            exit: Exit::StartError,
+            reason: "non-UTF-8 target path".into(),
+            log: None,
+            triage: Some(triage::CommandObservation::NotStarted {
+                reason: triage::Precondition::PreconditionUnavailable,
+            }),
+        };
+    };
+    let captured: process::Captured = process::capture_in(
+        root.path(),
+        "make",
+        &["--", gate.as_str()],
+        &[
+            ("HARNESS_CARGO_CACHE", cargo),
+            ("HARNESS_TARGET_CACHE", target),
+        ],
+        deadline,
+        cancellation,
+    );
+    let capture = process::safe_observation(&captured);
+    let mut bytes = b"--- stdout ---\n".to_vec();
+    bytes.extend(&captured.stdout);
+    bytes.extend(b"\n--- stderr ---\n");
+    bytes.extend(&captured.stderr);
+    let (log, retention) = match output.atomic(&format!("{}.log", gate.as_str()), &bytes) {
+        Ok(path) => (
+            Some(LogRef {
                 path,
                 blake3: blake3::hash(&bytes).to_hex().to_string(),
                 truncated: captured.truncated,
-            });
-        let (exit, reason) = match captured.exit {
-            CaptureExit::Success => (Exit::Success, "supervised command exited zero".to_owned()),
-            CaptureExit::Failed(code) => (Exit::Failed, format!("exit {code:?}")),
-            CaptureExit::Deadline => (Exit::Deadline, "wall deadline exceeded".into()),
-            CaptureExit::Cancelled => (Exit::Cancelled, "human cancellation".into()),
-            CaptureExit::Start(error) => (Exit::StartError, format!("start: {error}")),
-            CaptureExit::Monitor(error) => (Exit::MonitorError, format!("monitor: {error}")),
-        };
-        Receipt {
-            exit,
-            reason: format!("{reason}; captured {}ms", captured.duration.as_millis()),
-            log,
-        }
+            }),
+            triage::Retention::Retained,
+        ),
+        Err(error) => (
+            None,
+            triage::Retention::Failed {
+                io_kind: triage::io_kind(error.as_ref()),
+            },
+        ),
+    };
+    let (exit, reason) = match captured.exit {
+        CaptureExit::Success => (Exit::Success, "supervised command exited zero".to_owned()),
+        CaptureExit::Failed(code) => (Exit::Failed, format!("exit {code:?}")),
+        CaptureExit::Deadline => (Exit::Deadline, "wall deadline exceeded".into()),
+        CaptureExit::Cancelled => (Exit::Cancelled, "human cancellation".into()),
+        CaptureExit::Start(error) => (Exit::StartError, format!("start: {error}")),
+        CaptureExit::Monitor(error) => (Exit::MonitorError, format!("monitor: {error}")),
+    };
+    Receipt {
+        exit,
+        reason: format!("{reason}; captured {}ms", captured.duration.as_millis()),
+        log,
+        triage: Some(triage::CommandObservation::Measured { capture, retention }),
     }
+}
+
+#[cfg(test)]
+pub(super) fn fixture_make(
+    source: &Path,
+    output: &PrivateOutput,
+    cancellation: &Cancellation,
+    root: &ExecutionRoot,
+    gate: &GateId,
+    deadline: Duration,
+) -> Receipt {
+    make_fixed(source, output, cancellation, root, gate, deadline)
 }
 
 pub(super) fn images(

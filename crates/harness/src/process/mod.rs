@@ -15,7 +15,10 @@ use std::{
 };
 
 mod capture;
-pub(crate) use capture::{CaptureExit, Captured, capture_command, capture_in, safe_observation};
+pub(crate) use capture::{
+    CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command, capture_in,
+    safe_observation,
+};
 
 const LOG_LIMIT: usize = 64 * 1024;
 

@@ -1,7 +1,7 @@
 use super::*;
 
 mod observation;
-pub(crate) use observation::safe_observation;
+pub(crate) use observation::{SafeErrorKind, SafeObservation, safe_observation};
 
 #[derive(Debug)]
 pub(crate) enum CaptureExit {
