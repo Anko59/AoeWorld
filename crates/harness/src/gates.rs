@@ -3,6 +3,7 @@ pub(crate) mod contracts;
 mod paths;
 pub(crate) mod policy;
 pub(crate) mod registry;
+pub(crate) mod review;
 pub(crate) mod runner;
 pub(crate) mod scopes;
 pub(crate) mod tasks;
