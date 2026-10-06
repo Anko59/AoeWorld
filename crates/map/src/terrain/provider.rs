@@ -20,6 +20,23 @@ pub(super) fn sample_tile(
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Tile, EnvironmentPageError> {
+    let mut sample = sample_base_tile(generator, tile, cancelled)?;
+    if sample.water == WaterKind::None && sample.surface.walkable() {
+        sample.material =
+            super::landscape::material_for_tile(generator, tile, sample.biome, sample.material);
+    }
+    sample.passable = sample.water == WaterKind::None
+        && sample.material != GroundMaterial::Ice
+        && sample.surface.walkable();
+    Ok(sample)
+}
+
+/// Undecorated source terrain; preserves page failures and caller cancellation.
+pub(super) fn sample_base_tile(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Tile, EnvironmentPageError> {
     let environment = generator
         .provider_environment
         .as_ref()
@@ -114,11 +131,6 @@ pub(super) fn sample_tile(
         WaterKind::None => material_for(biome.0, geographic_height_centimeters),
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
         WaterKind::Shallow => GroundMaterial::Shore,
-    };
-    let material = if water == WaterKind::None && surface_kind.walkable() {
-        super::landscape::material_for_tile(generator, tile, biome.0, material)
-    } else {
-        material
     };
     Ok(Tile {
         geographic_height_centimeters,

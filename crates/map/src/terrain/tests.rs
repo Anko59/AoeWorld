@@ -1,5 +1,6 @@
 use super::*;
 
+mod base_sampling;
 mod published_recipes;
 
 mod elevation_interpolation;
