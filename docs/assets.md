@@ -29,20 +29,26 @@ version 1, including arbitrary partial alpha in externally produced packs.
 
 To inspect a pack in the local app, start `make dev` with
 `AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game imports cavalry walking/standing resources
-3008/3004 and six terrain groups: temperate grass 15008, dry grass 15007,
-dirt 15000, sand 15010, rock 15018, and water 15002. All six terrain groups
-use their reviewed 10×10 periodic texture sets, indexed x-major with reversed
-y so neighboring source edges meet. The map client selects those groups from
+3008/3004 and five reviewed imported terrain groups: temperate grass 15008,
+dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
+10×10 periodic topology explicitly, indexed x-major with reversed y so
+neighboring source edges meet. Catalog v4 removes paved 15018 from the natural
+rock role: natural rock requires procedural neutral ground, not paving. The
+renderer owns that fallback's appearance. Frame count alone is never topology. The map client selects those groups from
 semantic terrain chunks. Optional native Forest/g_for terrain 15011 contributes
-frames 0–9 as coordinate-stable forest-floor accents mixed with dirt. These
-accents do not claim the full source's 10×10 seamless grid. The other six groups
-retain all 100 frames. The bounded catalog loads at most 756 frames into the
+frames 0–9 as coordinate-stable forest-floor accents. These
+accents declare nonperiodic coordinate-stable topology. The five periodic groups
+retain all 100 frames. The bounded catalog selects at most 656 frames for the
 unchanged single 2048² gameplay atlas; missing forest art explicitly uses dirt.
 It preserves frame anchors, player color, and imported shadow masks; tree frames
 4652 use the paired shadow-only frames from 2296. Cavalry and non-tree resource
 frames without imported shadows use a fixed-direction fallback silhouette
 derived from their selected sprite alpha. The renderer culls terrain to the
 viewport and subsamples it to a bounded sprite budget.
+
+The [landscape inventory](assets/landscape.md) records stage 1 candidates and
+review limits separately from the approved load list. It does not expand the
+single-atlas budget or implement multi-atlas loading.
 
 The current local pack is intentionally a narrow gameplay mapping. Its
 versioned catalog renders four visually reviewed resource roles when their

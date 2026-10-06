@@ -352,13 +352,14 @@ fn chunk_tile_index(
 fn terrain_material(material: GroundMaterial) -> u8 {
     match material {
         GroundMaterial::TemperateGrass | GroundMaterial::LushGrass => 0,
-        GroundMaterial::DryGrass
-        | GroundMaterial::Mud
-        | GroundMaterial::Snow
-        | GroundMaterial::Ice => 1,
+        GroundMaterial::DryGrass => 1,
+        GroundMaterial::Snow => 7,
+        GroundMaterial::Ice => 8,
+        GroundMaterial::Mud => 9,
+        GroundMaterial::Shore => 10,
         GroundMaterial::Dirt => 2,
         GroundMaterial::ForestFloor => 6,
-        GroundMaterial::Sand | GroundMaterial::Shore => 3,
+        GroundMaterial::Sand => 3,
         GroundMaterial::Rock => 4,
         GroundMaterial::Water => 5,
     }

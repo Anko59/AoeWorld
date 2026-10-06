@@ -66,6 +66,9 @@ pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// Increment when deterministic generation behavior changes. This version is
 /// part of the canonical package identity but does not reseed geography.
 pub const GENERATION_RECIPE_VERSION: u16 = 8;
+/// Published recipe 8 behavior is pinned independently of the latest recipe.
+/// Use this constant, not the latest-version alias, for legacy forest rules.
+pub const CONNECTED_FOREST_GENERATION_RECIPE_VERSION: u16 = 8;
 /// Recipe 8 connects the central glade and the local opening graph; natural
 /// water and cliff constraints still determine actual traversal.
 pub const WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 8;

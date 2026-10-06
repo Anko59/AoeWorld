@@ -74,7 +74,9 @@ pub struct SceneUnit {
 #[derive(Clone, Copy)]
 pub struct SceneTerrain {
     pub position: [f64; 2],
-    /// One of the six `GameArt::terrain` groups.
+    /// Display material: 0 grass, 1 dry grass, 2 dirt, 3 sand, 4 procedural
+    /// rock, 5 water, 6 forest, 7 procedural snow, 8 interim procedural ice,
+    /// 9 procedural mud, 10 procedural shallow/shore water. Not recipe identity.
     pub material: u8,
     pub elevation_meters: f64,
     pub surface: SceneTerrainSurface,

@@ -24,7 +24,8 @@ impl MapChunkGenerator {
 pub(super) fn uses_forest_landscape(generator: &MapChunkGenerator) -> bool {
     matches!(
         generator.generation_recipe_version(),
-        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION | crate::GENERATION_RECIPE_VERSION
+        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
+            | crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
     )
 }
 
@@ -133,7 +134,9 @@ fn opening_geometry_for_cell(
         19
     } else if kind < 760 {
         31
-    } else if generator.generation_recipe_version() == crate::GENERATION_RECIPE_VERSION {
+    } else if generator.generation_recipe_version()
+        == crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
+    {
         // Small mandatory nodes join the recipe-eight graph without reseeding
         // the already established larger openings or canopy.
         19
@@ -255,7 +258,7 @@ fn trail_segment(
 }
 
 fn starting_connector_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if generator.generation_recipe_version() != crate::GENERATION_RECIPE_VERSION {
+    if generator.generation_recipe_version() != crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION {
         return false;
     }
     let coordinate = (generator.width_tiles.max(1) - 1) / 2;
