@@ -240,6 +240,7 @@ fn tint_sample(texel: [u8; 4], tint: u8) -> [u8; 4] {
                 0.0,
             ],
         ),
+        5..=10 | 12 | 21..=26 => crate::surface_mesh::procedural_tint(texel, tint),
         _ => texel,
     }
 }

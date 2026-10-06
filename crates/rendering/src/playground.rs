@@ -32,8 +32,10 @@ pub struct GameArt {
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
     /// Local terrain groups in this order: temperate grass, dry grass, dirt,
-    /// sand, rock, water, and optional forest accents. Map binding stays in the client so the
-    /// renderer remains independent from geographic map contracts.
+    /// sand, legacy rock (unused for natural surfaces), water, and optional
+    /// forest accents. Procedural scene materials reuse dirt/water detail.
+    /// Map binding stays in the client so the renderer remains independent
+    /// from geographic map contracts.
     pub terrain: [Vec<GameFrame>; 7],
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.

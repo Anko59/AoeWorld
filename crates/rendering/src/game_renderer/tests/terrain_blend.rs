@@ -18,6 +18,32 @@ fn blend_atlas() -> Vec<u8> {
     atlas
 }
 
+#[wasm_bindgen_test]
+fn canvas_procedural_material_pixels_match_shared_kernel() {
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = blend_atlas();
+    for tint in (5..=10).chain([12]).chain(21..=26) {
+        let mut face = blended_triangle();
+        face.texture_blend = None;
+        face.tint = tint;
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &[WorldLayer::Surface(face)],
+            test_camera(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            pixel(&presentation.color_buffer, 48, 48),
+            crate::surface_mesh::procedural_tint([255, 0, 0, 255], tint)
+        );
+    }
+}
+
 fn assert_blended(pixel: &[u8]) {
     for (actual, expected) in pixel.iter().zip([82_u8, 86, 86, 255]) {
         assert!(

@@ -6,7 +6,7 @@ use aoe_core::{Camera, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
-pub(crate) use appearance::{apply_terrain_textures, terrain_texture_frame};
+pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
 pub use lod::projected_surface_triangles;
 
@@ -426,6 +426,10 @@ fn surface_color(sample: SceneTerrain) -> [f32; 3] {
         3 => [0.74, 0.66, 0.42],
         4 => [0.40, 0.40, 0.40],
         5 => [0.22, 0.46, 0.66],
+        7 => [0.84, 0.85, 0.84],
+        8 => [0.57, 0.70, 0.75],
+        9 => [0.28, 0.24, 0.19],
+        10 => [0.34, 0.48, 0.45],
         _ => [0.28, 0.50, 0.23],
     };
     if sample.surface.water != 0 {
@@ -435,6 +439,9 @@ fn surface_color(sample: SceneTerrain) -> [f32; 3] {
         color = darken(color, 0.88);
     }
     if sample.surface.kind == SceneTerrainSurface::CLIFF {
+        if sample.surface.water == 0 {
+            color = [0.40; 3];
+        }
         color = darken(color, 0.78);
     }
     color

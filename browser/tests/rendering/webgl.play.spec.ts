@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
-import { gameAssets, syntheticSurfaceColors } from "../game-assets.js";
+import {
+  gameAssets,
+  syntheticPavedRockColors,
+  syntheticSurfaceColors,
+} from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { forceCanvas, forceWebGl } from "./backends.js";
 
@@ -24,8 +28,8 @@ async function ready(page: Page, backend: "webgl2" | "canvas2d") {
 }
 
 function paletteClass(image: PNG, offset: number): number {
-  // Cliff and skirt differ by only [6, 5, 6], so both match tolerance 6.
-  // First-match classification steals every skirt pixel for the cliff class.
+  // Natural top/skirt and accent grays have overlapping tolerance-6 windows.
+  // First-match classification can steal a neighboring material's pixels.
   // Keep that tolerance, but resolve overlapping candidates by nearest RGB.
   let selected = -1;
   let minimum = Number.POSITIVE_INFINITY;
@@ -51,9 +55,29 @@ function paletteClass(image: PNG, offset: number): number {
 
 function paletteCounts(image: PNG): number[] {
   const counts = colors.map(() => 0);
+  const pavedCounts = syntheticPavedRockColors.map(() => 0);
   for (let offset = 0; offset < image.data.length; offset += 4) {
     const index = paletteClass(image, offset);
     if (index >= 0) counts[index] = (counts[index] ?? 0) + 1;
+    // Only the negative sentinel uses the parity world ROI; positive counts
+    // and restoration still cover every original pixel and palette class.
+    const x = (offset / 4) % image.width;
+    const y = Math.floor(offset / 4 / image.width);
+    if (x < 32 || x >= image.width - 280 || y < 100 || y >= image.height - 120)
+      continue;
+    syntheticPavedRockColors.forEach((color, paved) => {
+      if (
+        color.every(
+          (value, axis) =>
+            Math.abs((image.data[offset + axis] ?? 0) - value) <= 6,
+        )
+      ) {
+        pavedCounts[paved] = (pavedCounts[paved] ?? 0) + 1;
+      }
+    });
+  }
+  for (const count of pavedCounts) {
+    expect(count, "unused 15018 paving world pixels").toBe(0);
   }
   return counts;
 }

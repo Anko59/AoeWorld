@@ -1,6 +1,10 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { PNG } from "pngjs";
-import { gameAssets, syntheticSurfaceColors } from "./game-assets.js";
+import {
+  gameAssets,
+  syntheticPavedRockColors,
+  syntheticSurfaceColors,
+} from "./game-assets.js";
 import { activateSyntheticMap } from "./synthetic-map.js";
 import {
   saveSelectedCapture,
@@ -104,6 +108,7 @@ test("shared terrain textures, painter transitions, and selection render", async
     10,
   );
   if (evidence === "generated CI fixtures") {
+    assertNoPavedRock(selected);
     const selectedCounts = countColors(selected);
     for (const name of Object.keys(counts) as (keyof typeof counts)[]) {
       expect(
@@ -176,6 +181,7 @@ function assertSyntheticSurfaces(
   counts: Record<keyof typeof colors, number>,
   image: PNG,
 ) {
+  assertNoPavedRock(image);
   const pairs: ReadonlyArray<
     readonly [keyof typeof colors, keyof typeof colors]
   > = [
@@ -196,6 +202,19 @@ function assertSyntheticSurfaces(
   expect(counts.skirt, "cliff skirt pixels").toBeGreaterThan(24);
   expect(adjacentPixels(image, colors.cliff, colors.skirt)).toBeGreaterThan(8);
   expect(colorBandsTouch(image, colors.water, colors.shore)).toBe(true);
+}
+
+function assertNoPavedRock(image: PNG) {
+  // Same world ROI as material parity: exclude HUD text and minimap colors.
+  for (const color of syntheticPavedRockColors) {
+    let count = 0;
+    for (let y = 100; y < image.height - 120; y++) {
+      for (let x = 32; x < image.width - 280; x++) {
+        if (matches(image.data, (y * image.width + x) * 4, color, 6)) count++;
+      }
+    }
+    expect(count, "unused 15018 paving world pixels").toBe(0);
+  }
 }
 
 function assertPrivateTexture(

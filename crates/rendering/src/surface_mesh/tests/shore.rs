@@ -71,7 +71,7 @@ fn shoreline_skirts_close_unequal_east_and_south_edges_with_water_on_either_side
             assert!(skirts.iter().all(|triangle| {
                 !triangle.pickable
                     && triangle.material == 4
-                    && triangle.tint == 3
+                    && triangle.tint == 7
                     && triangle.texture_uv.is_some()
                     && triangle.color == darken(surface_color(land), 0.62)
             }));
