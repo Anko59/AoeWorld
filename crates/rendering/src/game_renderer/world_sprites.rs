@@ -109,7 +109,7 @@ pub(super) fn world_sprite_frames(
         {
             continue;
         }
-        let mut uv = frame.uv;
+        let mut uv = frame.atlas.uv;
         if flipped {
             uv[0] += uv[2];
             uv[2] = -uv[2];
@@ -134,6 +134,7 @@ pub(super) fn world_sprite_frames(
             uv,
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [frame.atlas.page, 0, 0, 0],
         };
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
@@ -203,9 +204,10 @@ fn scene_sprite(
             (height / camera.viewport[1]) as f32,
         ],
         color: [1.0; 4],
-        uv: frame.uv,
+        uv: frame.atlas.uv,
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [frame.atlas.page, 0, 0, 0],
     })
 }
 
@@ -276,7 +278,10 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
     use bytemuck::Zeroable;
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [1.0; 2],
         anchor: [0.0; 2],
     };

@@ -3,6 +3,8 @@ use aoe_core::ScreenPoint;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
+#[path = "web/tests/atlas_pages.rs"]
+mod atlas_pages;
 #[path = "web/tests/grid.rs"]
 mod grid;
 #[path = "web/tests/terrain_blend.rs"]
@@ -87,6 +89,7 @@ async fn instance_buffer_grows_at_capacity_boundaries_with_layer_pressure() {
             expected_capacity * std::mem::size_of::<Sprite>()
         );
     }
+    renderer.device.destroy();
     assert!(instance_buffer::required_instance_count(instance_buffer::MAX_CAPACITY, 0).is_ok());
     assert!(
         instance_buffer::required_instance_count(instance_buffer::MAX_CAPACITY + 1, 0).is_err()
@@ -102,6 +105,7 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         uv: [0.1, 0.2, 0.3, 0.4],
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0, 0, 0, 0],
     };
     let horizontally_flipped_atlas_frame = Sprite {
         uv: [0.4, 0.2, -0.3, 0.4],
@@ -119,7 +123,10 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
         material: 0,
         texture_mode: 1,
         tint: 4,
-        texture_uv: Some([0.1, 0.2, 0.3, 0.4]),
+        texture_uv: Some(crate::AtlasAddress {
+            page: 0,
+            uv: [0.1, 0.2, 0.3, 0.4],
+        }),
         texture_blend: None,
         texture_tile: [0; 2],
         texture_materials: None,
@@ -227,7 +234,10 @@ fn capacity_surface() -> ProjectedSurfaceTriangle {
         material: 0,
         texture_mode: 4,
         tint: 0,
-        texture_uv: Some([0.1, 0.2, 0.3, 0.4]),
+        texture_uv: Some(crate::AtlasAddress {
+            page: 0,
+            uv: [0.1, 0.2, 0.3, 0.4],
+        }),
         texture_blend: None,
         texture_tile: [0; 2],
         texture_materials: None,
@@ -244,5 +254,27 @@ fn solid_sprite() -> Sprite {
         uv: [0.0, 0.0, 0.1, 0.1],
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0, 0, 0, 0],
     }
+}
+
+#[wasm_bindgen_test]
+fn sprite_array_page_abi_preserves_offsets_reserved_zero_and_instance_ceiling() {
+    assert_eq!(std::mem::size_of::<Sprite>(), 112);
+    assert_eq!(std::mem::offset_of!(Sprite, position), 0);
+    assert_eq!(std::mem::offset_of!(Sprite, radius), 8);
+    assert_eq!(std::mem::offset_of!(Sprite, color), 16);
+    assert_eq!(std::mem::offset_of!(Sprite, uv), 32);
+    assert_eq!(std::mem::offset_of!(Sprite, depths), 48);
+    assert_eq!(std::mem::offset_of!(Sprite, terrain_blend), 64);
+    assert_eq!(std::mem::offset_of!(Sprite, pages), 96);
+    assert_eq!(solid_sprite().pages, [0; 4]);
+    assert_eq!(
+        surface_instance(&capacity_surface(), [64.0; 2], 0.0).pages[3],
+        0
+    );
+    assert_eq!(
+        instance_buffer::MAX_CAPACITY,
+        64 * 1024 * 1024 / std::mem::size_of::<Sprite>()
+    );
 }

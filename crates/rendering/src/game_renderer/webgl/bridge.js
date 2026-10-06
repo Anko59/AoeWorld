@@ -1,7 +1,8 @@
 // Graphics-only WebGL2 adapter. Keep this module self-contained: wasm-bindgen
 // packages local modules, not arbitrary transitive shader/JS asset imports.
 const SIDE = 2048;
-const STRIDE = 96;
+const STRIDE = 112;
+const PAGES = 3;
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_PIXELS = 4194304;
 
@@ -16,7 +17,8 @@ layout(location=2) in vec4 uv;
 layout(location=3) in vec4 depths;
 layout(location=4) in vec4 terrainBlend0;
 layout(location=5) in vec4 terrainBlend1;
-uniform sampler2D atlas;
+layout(location=6) in uvec4 pages;
+uniform highp sampler2DArray atlas;
 out vec4 vColor;
 out vec2 vUv;
 out vec2 vUv2;
@@ -24,6 +26,7 @@ out vec2 vUv3;
 out vec3 vWeights;
 flat out uint vSolid;
 flat out uint vTint;
+flat out uvec3 vPages;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -61,7 +64,7 @@ vec2 terrainUv(uint mode, uint corner) {
     return vec2(0);
 }
 vec2 terrainAtlasUv(vec4 rect, vec2 local) {
-    vec2 pixel = 1.0 / vec2(textureSize(atlas, 0));
+    vec2 pixel = 1.0 / vec2(textureSize(atlas, 0).xy);
     return rect.xy + pixel * .5 + local * max(rect.zw - pixel, vec2(0));
 }
 vec3 terrainTint(uint kind) {
@@ -72,6 +75,7 @@ vec3 terrainTint(uint kind) {
 }
 void main() {
     uint vertex = uint(gl_VertexID);
+    vPages = pages.xyz;
     vUv2 = vec2(0);
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
@@ -113,7 +117,7 @@ void main() {
 const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D atlas;
+uniform highp sampler2DArray atlas;
 in vec4 vColor;
 in vec2 vUv;
 in vec2 vUv2;
@@ -121,17 +125,18 @@ in vec2 vUv3;
 in vec3 vWeights;
 flat in uint vSolid;
 flat in uint vTint;
+flat in uvec3 vPages;
 out vec4 result;
 void main() {
     if (vSolid == 2u) {
         result = vColor;
         return;
     }
-    vec4 texel = textureLod(atlas, vUv, 0.0);
+    vec4 texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
     if (vSolid == 3u) {
         texel = texel * vWeights.x
-              + textureLod(atlas, vUv2, 0.0) * vWeights.y
-              + textureLod(atlas, vUv3, 0.0) * vWeights.z;
+              + textureLod(atlas, vec3(vUv2, float(vPages.y)), 0.0) * vWeights.y
+              + textureLod(atlas, vec3(vUv3, float(vPages.z)), 0.0) * vWeights.z;
     }
     if (texel.a <= 0.0) discard;
     if (vTint == 4u) {
@@ -196,7 +201,8 @@ export class AoeWebGl {
         try {
             if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < SIDE ||
                 gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 1 ||
-                gl.getParameter(gl.MAX_VERTEX_ATTRIBS) < 6 ||
+                gl.getParameter(gl.MAX_VERTEX_ATTRIBS) < 7 ||
+                gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < PAGES ||
                 gl.getParameter(gl.DEPTH_BITS) < 24) {
                 throw new Error('WebGL2 sprite/depth limits unavailable');
             }
@@ -237,13 +243,16 @@ export class AoeWebGl {
                 gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, STRIDE, slot * 16);
                 gl.vertexAttribDivisor(slot, 1);
             }
+            gl.enableVertexAttribArray(6);
+            gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, 96);
+            gl.vertexAttribDivisor(6, 1);
             gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, this.texture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, SIDE, SIDE);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, SIDE, SIDE, PAGES, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
             gl.useProgram(this.program);
             gl.uniform1i(gl.getUniformLocation(this.program, 'atlas'), 0);
             this.resize(this.canvas.width, this.canvas.height);
@@ -280,20 +289,20 @@ export class AoeWebGl {
 
     upload(pixels) {
         this.check();
-        if (pixels.byteLength !== SIDE * SIDE * 4) throw new Error('Invalid WebGL2 atlas size');
+        if (pixels.byteLength !== SIDE * SIDE * 4 * PAGES) throw new Error('Invalid WebGL2 atlas size');
         const gl = this.gl;
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
         // Typed bytes preserve the WebGPU atlas row convention, without browser
         // image-source flipping, premultiplication, or colour-space conversion.
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SIDE, SIDE, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, SIDE, SIDE, PAGES, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         this.check();
         this.atlasReady = true;
-        // One bounded 16 MiB source atlas permits device-context restoration.
+        // One bounded 48 MiB source atlas permits device-context restoration.
         this.atlasPixels = pixels;
     }
 
@@ -318,7 +327,7 @@ export class AoeWebGl {
         }
         if (instances.byteLength) gl.bufferSubData(gl.ARRAY_BUFFER, 0, instances);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.disable(gl.CULL_FACE);
         gl.disable(gl.SCISSOR_TEST);

@@ -28,7 +28,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
     canvas.set_height(128);
     let mut renderer = GameRenderer::Canvas {
         context: context(&canvas).unwrap(),
-        atlas: new_atlas(&canvas).unwrap(),
+        atlas: [None, None, None],
         presentation: CanvasPresentation::new(0, 128),
         source_atlas: Vec::new(),
         canvas,
@@ -40,6 +40,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
         terrain: std::array::from_fn(|_| Vec::new()),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        terrain_topology: [None; 7],
     };
     let camera = SceneCamera {
         center: [0.0; 2],
@@ -63,6 +64,7 @@ fn gpu_depth_normalization_preserves_original_iterator_bits() {
         uv: [0.0; 4],
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0; 4],
     };
     let special = [
         f32::NEG_INFINITY,
@@ -152,7 +154,10 @@ fn webgl_procedural_materials_match_shared_canvas_kernel() {
             [0.0; 3],
             [0.0; 3],
         );
-        face.texture_uv = Some(rect(0.0));
+        face.texture_uv = Some(crate::AtlasAddress {
+            page: 0,
+            uv: rect(0.0),
+        });
         face.tint = tint;
         let mut packet = [surface_instance(&face, [128.0; 2], 0.0)];
         render(&mut renderer, &mut packet);
@@ -185,7 +190,7 @@ fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
 }
 
 fn atlas(texels: &[[u8; 4]]) -> Vec<u8> {
-    let mut result = vec![0; (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize];
+    let mut result = vec![0; crate::GAME_ATLAS_BYTES];
     for (index, texel) in texels.iter().enumerate() {
         result[index * 4..index * 4 + 4].copy_from_slice(texel);
     }
@@ -210,7 +215,7 @@ fn assert_pixel(canvas: &HtmlCanvasElement, x: u32, y: u32, expected: [u8; 4]) {
 }
 
 fn render(renderer: &mut WebGlRenderer, sprites: &mut [Sprite]) {
-    assert_eq!(std::mem::size_of::<Sprite>(), 96, "shared GPU sprite ABI");
+    assert_eq!(std::mem::size_of::<Sprite>(), 112, "shared GPU sprite ABI");
     assert!(
         renderer
             .render(sprites)
@@ -231,6 +236,7 @@ fn sprite(x: f32, depth: f32) -> Sprite {
         uv: rect(x),
         depths: [depth; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0; 4],
     }
 }
 
@@ -315,7 +321,10 @@ fn webgl_native_terrain_water_tint_preserves_texel_center_and_alpha() {
         [0.0; 3],
         [0.0; 3],
     );
-    water.texture_uv = Some(rect(0.0));
+    water.texture_uv = Some(crate::AtlasAddress {
+        page: 0,
+        uv: rect(0.0),
+    });
     water.tint = 4;
     let mut sprites = [instance(&water)];
     render(&mut renderer, &mut sprites);
@@ -334,8 +343,20 @@ fn webgl_three_native_materials_use_shared_barycentric_weights() {
         [0.0; 3],
         [0.0; 3],
     );
-    blended.texture_uv = Some(rect(0.0));
-    blended.texture_blend = Some([rect(1.0), rect(2.0)]);
+    blended.texture_uv = Some(crate::AtlasAddress {
+        page: 0,
+        uv: rect(0.0),
+    });
+    blended.texture_blend = Some([
+        crate::AtlasAddress {
+            page: 0,
+            uv: rect(1.0),
+        },
+        crate::AtlasAddress {
+            page: 0,
+            uv: rect(2.0),
+        },
+    ]);
     let mut sprites = [instance(&blended)];
     render(&mut renderer, &mut sprites);
     assert_pixel(&canvas, 48, 48, [82, 86, 86, 255]);
@@ -366,3 +387,6 @@ fn webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad() {
     assert_pixel(&canvas, 32, 32, [64, 128, 191, 255]);
     assert_pixel(&canvas, 110, 110, [41, 74, 36, 255]);
 }
+
+#[path = "webgl_pages.rs"]
+mod pages;

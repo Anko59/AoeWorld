@@ -1,7 +1,12 @@
 //! Local AoE II atlas rendering through the shared WebGPU sprite pipeline.
 use crate::{Counters, Renderer, web::Sprite};
 
-pub const GAME_ATLAS_SIDE: u32 = 2048;
+#[path = "playground/atlas.rs"]
+mod atlas;
+pub use atlas::{
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    TerrainTopology,
+};
 
 const TREE_VISUAL_VARIANTS: [usize; 40] = [
     0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9,
@@ -22,7 +27,7 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
 
 #[derive(Clone, Copy)]
 pub struct GameFrame {
-    pub uv: [f32; 4],
+    pub atlas: AtlasAddress,
     pub size: [f32; 2],
     pub anchor: [f32; 2],
 }
@@ -37,6 +42,8 @@ pub struct GameArt {
     /// Map binding stays in the client so the renderer remains independent
     /// from geographic map contracts.
     pub terrain: [Vec<GameFrame>; 7],
+    /// Authored sheet topology; never infer a repeating sheet from frame count.
+    pub terrain_topology: [Option<TerrainTopology>; 7],
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
@@ -47,15 +54,21 @@ pub struct GameArt {
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
         let side = GAME_ATLAS_SIDE;
-        if pixels.len() != (side * side * 4) as usize {
+        if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
+        }
+        let limits = self.device.limits();
+        if limits.max_texture_dimension_2d < side
+            || limits.max_texture_array_layers < GAME_ATLAS_PAGES
+        {
+            return Err("WebGPU cannot support the bounded three-page atlas".into());
         }
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("local AoE II game atlas"),
             size: wgpu::Extent3d {
                 width: side,
                 height: side,
-                depth_or_array_layers: 1,
+                depth_or_array_layers: GAME_ATLAS_PAGES,
             },
             mip_level_count: 1,
             sample_count: 1,
@@ -75,10 +88,13 @@ impl Renderer {
             wgpu::Extent3d {
                 width: side,
                 height: side,
-                depth_or_array_layers: 1,
+                depth_or_array_layers: GAME_ATLAS_PAGES,
             },
         );
-        let view = texture.create_view(&Default::default());
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
         let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
@@ -90,6 +106,7 @@ impl Renderer {
             &view,
             &sampler,
         );
+        self._atlas.destroy();
         self._atlas = texture;
         Ok(())
     }
@@ -104,9 +121,7 @@ impl Renderer {
         facing: (usize, bool),
     ) -> Result<Counters, String> {
         let sprites = game_sprites(art, unit, target, moving, animation, facing);
-        let mut counters = self.render_sprites(&sprites)?;
-        counters.atlas_bytes = (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize;
-        Ok(counters)
+        self.render_sprites(&sprites)
     }
 }
 
@@ -156,7 +171,7 @@ fn push(
     let [ax, ay] = frame.anchor.map(|n| n * scale);
     let x = position[0] - if flipped { w - ax } else { ax };
     let y = position[1] - ay;
-    let mut uv = frame.uv;
+    let mut uv = frame.atlas.uv;
     if flipped {
         uv[0] += uv[2];
         uv[2] = -uv[2];
@@ -168,6 +183,7 @@ fn push(
         uv,
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [frame.atlas.page, 0, 0, 0],
     });
 }
 
@@ -187,6 +203,7 @@ fn ring(sprites: &mut Vec<Sprite>, p: [f32; 2], color: [f32; 4], radius: f32) {
             ],
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [AtlasAddress::WHITE.page, 0, 0, 0],
         });
     }
 }

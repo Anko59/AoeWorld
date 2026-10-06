@@ -1,9 +1,12 @@
 use super::*;
-use wasm_bindgen::JsCast;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 #[path = "tests/appearance.rs"]
 mod appearance_tests;
+#[path = "tests/equivalence.rs"]
+mod equivalence_tests;
+#[path = "tests/native_canvas.rs"]
+mod native_canvas_tests;
 #[path = "tests/shore.rs"]
 mod shore_tests;
 #[path = "tests/terrain_texture.rs"]
@@ -17,6 +20,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         standing: Vec::new(),
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
+        terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
     }
@@ -25,7 +29,7 @@ fn test_art(frame: GameFrame) -> GameArt {
 #[wasm_bindgen_test]
 fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
     let frame = |uv| GameFrame {
-        uv,
+        atlas: crate::AtlasAddress { page: 0, uv },
         size: [96.0, 48.0],
         anchor: [48.0, 24.0],
     };
@@ -53,7 +57,12 @@ fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
     apply_terrain_textures(&mut triangles, &art);
     assert_eq!(triangles.len(), 2);
     assert!(triangles.iter().all(|triangle| {
-        triangle.texture_uv == Some([0.2, 0.3, 0.04, 0.06]) && triangle.tint == 4
+        triangle.texture_uv
+            == Some(crate::AtlasAddress {
+                page: 0,
+                uv: [0.2, 0.3, 0.04, 0.06],
+            })
+            && triangle.tint == 4
     }));
     assert_eq!(
         triangle_texture_coordinates(0),
@@ -99,7 +108,10 @@ fn flat_zero_height_ground_is_textured_contiguous_and_pickable() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
-            uv: [0.0, 0.0, 0.1, 0.1],
+            atlas: crate::AtlasAddress {
+                page: 0,
+                uv: [0.0, 0.0, 0.1, 0.1],
+            },
             size: [96.0, 48.0],
             anchor: [48.0, 24.0],
         }),
@@ -143,7 +155,10 @@ fn both_ramp_orientations_keep_matching_uvs_on_the_shared_diagonal() {
         apply_terrain_textures(
             &mut triangles,
             &test_art(GameFrame {
-                uv: [0.2, 0.3, 0.05, 0.06],
+                atlas: crate::AtlasAddress {
+                    page: 0,
+                    uv: [0.2, 0.3, 0.05, 0.06],
+                },
                 size: [96.0, 48.0],
                 anchor: [48.0, 24.0],
             }),
@@ -236,85 +251,6 @@ fn canvas_texture_affine_mapping_hits_all_projected_triangle_corners() {
 }
 
 #[wasm_bindgen_test]
-fn canvas_keeps_an_alpha_bearing_native_terrain_diamond_aligned_to_the_tile() {
-    let document = web_sys::window().unwrap().document().unwrap();
-    let atlas: web_sys::HtmlCanvasElement = document
-        .create_element("canvas")
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    atlas.set_width(GAME_ATLAS_SIDE);
-    atlas.set_height(GAME_ATLAS_SIDE);
-    let atlas_context: web_sys::CanvasRenderingContext2d = atlas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    atlas_context.set_fill_style_str("#ffffff");
-    atlas_context.begin_path();
-    atlas_context.move_to(48.0, 0.0);
-    atlas_context.line_to(96.0, 24.0);
-    atlas_context.line_to(48.0, 48.0);
-    atlas_context.line_to(0.0, 24.0);
-    atlas_context.close_path();
-    atlas_context.fill();
-
-    let canvas: web_sys::HtmlCanvasElement = document
-        .create_element("canvas")
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    canvas.set_width(256);
-    canvas.set_height(128);
-    let context: web_sys::CanvasRenderingContext2d = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into()
-        .unwrap();
-    let art = test_art(GameFrame {
-        uv: [
-            0.0,
-            0.0,
-            96.0 / GAME_ATLAS_SIDE as f32,
-            48.0 / GAME_ATLAS_SIDE as f32,
-        ],
-        size: [96.0, 48.0],
-        anchor: [48.0, 24.0],
-    });
-    let camera = SceneCamera {
-        center: [0.5, 0.5],
-        zoom: 1.0,
-        viewport: [256.0, 128.0],
-        focus_elevation_meters: 0.0,
-    };
-    let mut triangles = projected_surface_triangles(
-        &[SceneTerrain {
-            position: [0.5, 0.5],
-            material: 0,
-            elevation_meters: 0.0,
-            surface: SceneTerrainSurface::flat(0.0),
-        }],
-        camera,
-    );
-    apply_terrain_textures(&mut triangles, &art);
-    let atlases: [web_sys::HtmlCanvasElement; 5] = std::array::from_fn(|_| atlas.clone());
-    for triangle in &triangles {
-        draw_surface_triangle(&context, &atlases, triangle).unwrap();
-    }
-
-    for (x, y) in [(128, 34), (180, 60), (128, 94), (76, 64), (128, 64)] {
-        let pixel = context
-            .get_image_data(f64::from(x), f64::from(y), 1.0, 1.0)
-            .unwrap();
-        assert!(pixel.data().0[3] > 0, "transparent tile edge at {x},{y}");
-    }
-    let outside = context.get_image_data(128.0, 30.0, 1.0, 1.0).unwrap();
-    assert_eq!(outside.data().0[3], 0);
-}
-
-#[wasm_bindgen_test]
 fn cliff_adjacency_creates_a_textured_nonpickable_height_transition() {
     let camera = SceneCamera {
         center: [1.0, 0.5],
@@ -343,7 +279,10 @@ fn cliff_adjacency_creates_a_textured_nonpickable_height_transition() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
-            uv: [0.4, 0.5, 0.03, 0.02],
+            atlas: crate::AtlasAddress {
+                page: 0,
+                uv: [0.4, 0.5, 0.03, 0.02],
+            },
             size: [96.0, 48.0],
             anchor: [48.0, 24.0],
         }),
@@ -395,7 +334,10 @@ fn adjacent_chunks_share_boundary_geometry_and_deterministic_texture_placement()
     let mut left = projected_surface_triangles(&[tile(0.5)], camera);
     let mut right = projected_surface_triangles(&[tile(1.5)], camera);
     let art = test_art(GameFrame {
-        uv: [0.1, 0.2, 0.07, 0.08],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.1, 0.2, 0.07, 0.08],
+        },
         size: [96.0, 48.0],
         anchor: [48.0, 24.0],
     });
@@ -440,7 +382,10 @@ fn water_beside_raised_land_shares_a_shore_edge_without_a_cliff_skirt() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
-            uv: [0.7, 0.1, 0.04, 0.04],
+            atlas: crate::AtlasAddress {
+                page: 0,
+                uv: [0.7, 0.1, 0.04, 0.04],
+            },
             size: [96.0, 48.0],
             anchor: [48.0, 24.0],
         }),
