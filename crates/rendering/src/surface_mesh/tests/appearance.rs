@@ -74,7 +74,7 @@ fn fixed_height_conversion_preserves_old_array_map_bits() {
 }
 
 #[wasm_bindgen_test]
-fn bounded_forest_accents_mix_with_dirt_and_missing_art_uses_dirt() {
+fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
     let frame = GameFrame {
         uv: [0.0, 0.0, 0.01, 0.01],
         size: [97.0, 49.0],
@@ -107,12 +107,156 @@ fn bounded_forest_accents_mix_with_dirt_and_missing_art_uses_dirt() {
             );
         }
     }
-    assert_eq!((accents, dirt), (512, 512));
+    assert_eq!((accents, dirt), (1024, 0));
     art.terrain[6].clear();
     assert_eq!(
         terrain_texture_frame(&art, 6, [8, 0]).unwrap().uv,
         terrain_texture_frame(&art, 2, [8, 0]).unwrap().uv
     );
+}
+
+#[wasm_bindgen_test]
+fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
+    let frame = GameFrame {
+        uv: [0.1, 0.0, 0.01, 0.01],
+        size: [97.0, 49.0],
+        anchor: [48.0, 24.0],
+    };
+    let mut art = test_art(frame);
+    art.terrain[4][0].uv[0] = 0.9; // Deliberately distinct paving sentinel.
+    for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9), (10, 10)] {
+        for ramp in [false, true] {
+            let tint = base_tint + if ramp { 16 } else { 0 };
+            let mut sample = SceneTerrain {
+                position: [0.5, 0.5],
+                material,
+                elevation_meters: 0.0,
+                surface: SceneTerrainSurface::flat(0.0),
+            };
+            if ramp {
+                sample.surface.kind = SceneTerrainSurface::RAMP;
+                sample.surface.corner_game_height_levels = [0, 1, 1, 0];
+            }
+            let mut triangles =
+                projected_surface_triangles(&[sample], camera([0.5, 0.5], 1.0, [256.0, 128.0]));
+            let before = triangles.clone();
+            apply_terrain_textures(&mut triangles, &art);
+            for (old, new) in before.iter().zip(&triangles) {
+                assert_eq!(new.material, material);
+                assert_eq!(new.tint, tint);
+                assert_eq!(new.texture_uv, Some(frame.uv));
+                assert!(new.texture_blend.is_none());
+                assert_eq!(new.pickable, old.pickable);
+                assert_eq!(
+                    new.points.map(|point| point.world),
+                    old.points.map(|point| point.world)
+                );
+            }
+            apply_terrain_textures(&mut triangles, &art);
+            assert!(triangles.iter().all(|triangle| triangle.tint == tint));
+        }
+    }
+    let source = [170, 85, 40, 123];
+    let rock = procedural_tint(source, 5);
+    let snow = procedural_tint(source, 6);
+    let ice = procedural_tint(source, 8);
+    assert_eq!(rock[0], rock[1]);
+    assert_eq!(rock[1], rock[2]);
+    assert!(snow[0] > 198 && snow[0].abs_diff(snow[2]) <= 1);
+    assert!(ice[2] > ice[0] + 40);
+    for tint in 5..=10 {
+        assert_eq!(procedural_tint(source, tint)[3], 123);
+    }
+}
+
+#[wasm_bindgen_test]
+fn procedural_ramp_kernel_preserves_alpha_and_rounds_luminance_once() {
+    let profiles = [
+        (5, [0.18; 3], 0.55, 1.0),
+        (6, [0.78, 0.79, 0.78], 0.12, 1.0),
+        (7, [0.18; 3], 0.55, 0.72),
+        (8, [0.42, 0.57, 0.65], 0.20, 1.0),
+        (9, [0.10, 0.08, 0.05], 0.35, 1.0),
+        (10, [0.22, 0.36, 0.33], 0.25, 1.0),
+    ];
+    for rgb in [
+        [0, 0, 0],
+        [255, 255, 255],
+        [255, 0, 0],
+        [1, 127, 254],
+        [170, 85, 40],
+    ] {
+        for alpha in [0, 1, 127, 255] {
+            let source = [rgb[0], rgb[1], rgb[2], alpha];
+            let detail = rgb.into_iter().map(f32::from).sum::<f32>() / 3.0;
+            for (tint, base, amount, face_shade) in profiles {
+                let plateau = procedural_tint(source, tint);
+                let ramp = procedural_tint(source, tint + 16);
+                assert_eq!(plateau[3], alpha);
+                assert_eq!(ramp[3], alpha);
+                for channel in 0..3 {
+                    let expected = ((base[channel] * 255.0 + detail * amount) * (face_shade * 0.92))
+                        .round() as u8;
+                    assert_eq!(ramp[channel], expected);
+                    assert!(ramp[channel] < plateau[channel]);
+                }
+            }
+            let top = procedural_tint(source, 12);
+            let skirt = procedural_tint(source, 7);
+            assert_eq!(top[3], alpha);
+            for channel in 0..3 {
+                assert_eq!(
+                    top[channel],
+                    ((0.18 * 255.0 + detail * 0.55) * 0.78).round() as u8
+                );
+                assert!(top[channel] > skirt[channel]);
+                assert!(top[channel] < procedural_tint(source, 5)[channel]);
+            }
+            assert_eq!(procedural_tint(source, 11), source);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn natural_cliffs_use_procedural_rock_at_fine_and_coarse_lod() {
+    let mut terrain = map(128);
+    for sample in &mut terrain {
+        sample.material = 0; // Semantic recipe remains grass; exposed faces are rock.
+        sample.surface.kind = SceneTerrainSurface::CLIFF;
+        sample.surface.corner_game_height_levels = [if sample.position[0].floor() as i32 % 2 == 0 {
+            4
+        } else {
+            0
+        }; 4];
+    }
+    let frame = GameFrame {
+        uv: [0.2, 0.0, 0.01, 0.01],
+        size: [97.0, 49.0],
+        anchor: [48.0, 24.0],
+    };
+    let art = test_art(frame);
+    for zoom in [1.0, 0.125] {
+        let mut triangles =
+            projected_surface_triangles(&terrain, camera([64.0, 64.0], zoom, [1280.0, 720.0]));
+        assert!(!triangles.is_empty());
+        assert!(triangles.len() <= MAX_SURFACE_TRIANGLES);
+        let before = triangles.clone();
+        apply_terrain_textures(&mut triangles, &art);
+        apply_terrain_textures(&mut triangles, &art);
+        for (old, new) in before.iter().zip(&triangles) {
+            assert_eq!(new.material, 4);
+            assert_eq!(new.tint, if new.skirt { 7 } else { 12 });
+            assert!(!new.pickable);
+            assert_eq!(
+                new.points.map(|point| point.world),
+                old.points.map(|point| point.world)
+            );
+        }
+        if zoom == 1.0 {
+            assert!(triangles.iter().any(|triangle| triangle.skirt));
+        }
+    }
+    assert!(terrain.iter().all(|sample| sample.material == 0));
 }
 
 fn map(side: i32) -> Vec<SceneTerrain> {

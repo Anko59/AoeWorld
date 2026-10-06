@@ -138,6 +138,23 @@ void main() {
         result = vec4(mix(texel.rgb, vec3(.14901961,.44313726,.74509805), .14), texel.a);
         return;
     }
+    bool ramp = vTint >= 21u && vTint <= 26u;
+    uint kind = ramp ? vTint - 16u : vTint;
+    if ((kind >= 5u && kind <= 10u) || kind == 12u) {
+        float detail = dot(texel.rgb, vec3(1.0 / 3.0));
+        vec3 base = vec3(.18);
+        float amount = .55;
+        float shade = 1.0;
+        if (kind == 6u) { base = vec3(.78,.79,.78); amount = .12; }
+        if (kind == 7u) { shade = .72; }
+        if (kind == 12u) { shade = .78; }
+        if (kind == 8u) { base = vec3(.42,.57,.65); amount = .20; }
+        if (kind == 9u) { base = vec3(.10,.08,.05); amount = .35; }
+        if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
+        shade *= ramp ? .92 : 1.0;
+        result = vec4((base + detail * amount) * shade, texel.a);
+        return;
+    }
     result = texel * vColor;
 }`;
 

@@ -38,7 +38,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (756 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (656 total).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -80,6 +80,10 @@ fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<us
         .then_some(frames)
 }
 
+fn source_present(manifest: &Manifest, source: &str) -> bool {
+    manifest.frames.iter().any(|frame| frame.source == source)
+}
+
 fn packing_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     let mut order = (0..selected.len()).collect::<Vec<_>>();
     // An explicit semantic index keeps the former stable order on size ties.
@@ -112,9 +116,11 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         for selection in sources {
             let source = selection.manifest_source();
             let Some(frames) = source_frames(&manifest, &source, selection.frames) else {
-                if required {
+                // Optional means absent art may use a semantic fallback. A
+                // present but incomplete/duplicate source is corrupt, not absent.
+                if required || source_present(&manifest, &source) {
                     return Err(JsValue::from_str(&format!(
-                        "Local pack is missing reviewed {:?} art ({})",
+                        "Local pack has missing or corrupt reviewed {:?} art ({})",
                         selection.role, selection.id
                     )));
                 }
@@ -249,6 +255,15 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
 mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    #[wasm_bindgen_test]
+    fn optional_source_absence_is_distinct_from_corrupt_present_frames() {
+        let manifest: Manifest = serde_json::from_value(manifest::fixture()).unwrap();
+        assert!(!source_present(&manifest, "absent"));
+        assert_eq!(source_frames(&manifest, "absent", 2), None);
+        assert!(source_present(&manifest, "fixture"));
+        assert_eq!(source_frames(&manifest, "fixture", 2), None);
+    }
 
     #[wasm_bindgen_test]
     fn source_indices_preserve_frame_order_and_reject_missing_or_duplicate_frames() {

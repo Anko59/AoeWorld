@@ -81,7 +81,8 @@ pub(crate) fn tree_present_for_recipe(
 ) -> bool {
     if !matches!(
         recipe,
-        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION | crate::GENERATION_RECIPE_VERSION
+        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
+            | crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
     ) {
         return tree_present(key, x, y, biome);
     }

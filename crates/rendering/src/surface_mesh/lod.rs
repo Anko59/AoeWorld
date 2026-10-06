@@ -127,7 +127,13 @@ pub fn projected_surface_triangles(
                         color,
                         tile,
                         skirt: false,
-                        material: sample.material,
+                        material: if sample.surface.water == 0
+                            && sample.surface.kind == SceneTerrainSurface::CLIFF
+                        {
+                            4
+                        } else {
+                            sample.material
+                        },
                         texture_mode: texture_mode(sample.surface.triangulation, order as u8),
                         tint: if sample.surface.water == 1 {
                             4

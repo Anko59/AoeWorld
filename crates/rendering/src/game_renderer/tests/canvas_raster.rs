@@ -160,7 +160,7 @@ fn triangle(mode: u8, tint: u8, textured: bool, blend: bool) -> ProjectedSurface
 fn canvas_surface_kernel_preserves_texture_blend_water_and_depth_bits() {
     let atlas = atlas();
     for mode in 0..8 {
-        for tint in 0..6 {
+        for tint in [0, 1, 2, 3, 4, 11] {
             for (textured, blend) in [(false, false), (true, false), (true, true)] {
                 let triangle = triangle(mode, tint, textured, blend);
                 let mut actual = buffers(usize::from(mode + tint));
@@ -295,7 +295,11 @@ fn canvas_shared_transform_preserves_every_terrain_tint_and_channel_byte() {
             value.wrapping_add(127),
             value.wrapping_add(181),
         ];
-        for tint in 0..=u8::MAX {
+        // New procedural codes have their own shared-kernel pixel regressions;
+        // preserve the frozen oracle for all pre-existing/unknown codes.
+        for tint in (0..=u8::MAX)
+            .filter(|tint| !(5..=10).contains(tint) && *tint != 12 && !(21..=26).contains(tint))
+        {
             assert_eq!(
                 tint_sample(source, tint),
                 original_terrain_tint(source, tint)
