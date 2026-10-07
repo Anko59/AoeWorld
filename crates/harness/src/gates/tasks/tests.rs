@@ -280,6 +280,7 @@ fn adapters_report_unavailable_without_claiming_invocation_isolation_or_identity
         adapters::Provider::Codex,
         adapters::Provider::PiDev,
         adapters::Provider::DeepSeekHarness,
+        adapters::Provider::ClaudeCode,
     ] {
         let descriptor = adapters::describe(
             provider,

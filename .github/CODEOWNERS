@@ -3,3 +3,7 @@
 /gates/ @Anko59
 /baselines/ @Anko59
 /.github/ @Anko59
+/.claude/ @Anko59
+/CLAUDE.md @Anko59
+/docs/claude-code.md @Anko59
+/crates/harness/src/claude/ @Anko59

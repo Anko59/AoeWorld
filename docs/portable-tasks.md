@@ -1,7 +1,8 @@
 # Portable task planning
 
-`aoe-harness task-plan` gives Codex, pi.dev and DeepSeek Harness the same bounded
-contract, canonical guides and mandatory gate recipes. It launches no provider,
+`aoe-harness task-plan` gives Codex, pi.dev, DeepSeek Harness and Claude Code
+(`claude-code`) the same bounded contract, canonical guides and mandatory gate
+recipes. It launches no provider,
 runs no validation, and grants no tool permissions. Provider availability remains
 `UNAVAILABLE`: task planning never resolves or executes a PATH-selected binary.
 Its output is always `authoritative:false`. No Claude SDK, model, account or API
