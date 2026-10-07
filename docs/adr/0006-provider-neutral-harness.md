@@ -9,7 +9,7 @@ Keep `make preflight` as the minimum handoff gate and preserve existing coverage
 floors, benchmark baselines, and the verified `dev` → artifact → `main` flow.
 
 Codex, pi.dev, DeepSeek Harness and Claude Code adapters translate events and
-findings only. The Claude Code adapter ([Claude Code](../claude-code.md)) is the
+findings only. The Claude Code adapter ([Claude Code](../agent-runtimes.md)) is the
 one that uses its runtime's pre-tool hooks: committed hooks judge each call.
 Canonical instructions remain in AGENTS and provider-neutral task guides.
 Runtime integration must report observed capabilities and versions. Unsupported

@@ -1,5 +1,5 @@
+mod agents;
 mod architecture;
-mod claude;
 mod coverage;
 mod dev;
 mod e2e;
@@ -124,11 +124,8 @@ enum Command {
     Preflight,
     HooksInstall,
     HooksCheck,
-    /// Claude Code hook handler: hook JSON on stdin, answer on stdout.
-    ClaudeHook {
-        #[arg(value_enum)]
-        event: claude::Event,
-    },
+    #[command(flatten)]
+    Agents(agents::Commands),
     ReleaseBuild,
     ReleasePublish,
     ReleaseSourceCheck,
@@ -329,7 +326,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,
         Command::HooksCheck => hooks::check(Path::new("."))?,
-        Command::ClaudeHook { event } => claude::run(event)?,
+        Command::Agents(command) => agents::execute(command)?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,

@@ -3,12 +3,12 @@
 @AGENTS.md
 
 The rules above are canonical; this file only adds what is specific to Claude
-Code. The [Claude Code adapter](docs/claude-code.md) explains every hook.
+Code. The [Claude Code adapter](docs/agent-runtimes.md) explains every hook.
 
 ## What the hooks do
 
 `.claude/settings.json` sends every hook event to `aoe-harness claude-hook`
-through `.claude/hooks/harness.sh`. A denial always says what to do instead:
+through `.agents/hooks/harness.sh`. A denial always says what to do instead:
 follow it rather than rephrasing the command to get past it.
 
 - **Every Bash, Edit and Write call is judged** by the caller's role. Host

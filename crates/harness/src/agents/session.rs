@@ -7,7 +7,7 @@ use super::{
 use std::{fs, path::Path, process::Command};
 
 const RULES: &str = "\
-Rules this harness enforces in every Bash/Edit/Write call (see CLAUDE.md and docs/claude-code.md):
+Rules this harness enforces in every Bash/Edit/Write call (see CLAUDE.md and docs/agent-runtimes.md):
 - Compile and check only through Dockerized Make targets (`make help`); host cargo/npm are refused.
 - Never bypass hooks (`--no-verify`, `git -c`, hook config) and never weaken a gate, baseline or test to pass.
 - Ship by committing on a feature branch (pre-commit runs `make pre-commit`), pushing it (pre-push runs `make preflight`) and opening a PR against `dev`. A person merges; no session merges, approves or pushes `dev`/`main`.
@@ -41,9 +41,14 @@ fn compaction_file(root: &Path, session: &str) -> std::path::PathBuf {
         .join(format!("compact-{}.md", safe(session)))
 }
 
-pub(crate) fn start(context: &Context, session: &str, source: Option<&str>) -> serde_json::Value {
+pub(crate) fn start(
+    context: &Context,
+    runtime: super::Runtime,
+    session: &str,
+    source: Option<&str>,
+) -> serde_json::Value {
     let root = &context.root;
-    let judge = std::env::var("AOE_CLAUDE_HOOK_JUDGE").unwrap_or_else(|_| "unlabelled".into());
+    let judge = std::env::var("AOE_AGENT_HOOK_JUDGE").unwrap_or_else(|_| "unlabelled".into());
     let branch = git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default();
     let head = git(root, &["rev-parse", "--short=12", "HEAD"]).unwrap_or_default();
     let base = stop::merge_base(root).map_or_else(
@@ -51,7 +56,10 @@ pub(crate) fn start(context: &Context, session: &str, source: Option<&str>) -> s
         |b| format!("merge base with origin/dev {}", &b[..b.len().min(12)]),
     );
     let mut lines = vec![
-        format!("AoeWorld Claude Code harness (`aoe-harness claude-hook`, judge {judge})."),
+        format!(
+            "AoeWorld agent harness for {} (`aoe-harness agent-hook`, judge {judge}).",
+            runtime.label()
+        ),
         format!(
             "Checkout {} · branch {branch} · HEAD {head} · {base}.",
             root.display()

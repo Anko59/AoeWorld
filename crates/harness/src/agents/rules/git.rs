@@ -1,7 +1,7 @@
 //! Git rules. No Claude session bypasses a hook or moves `dev`/`main`, and
 //! duty-bound agents only read Git state.
 use super::SHIP;
-use crate::claude::{
+use crate::agents::{
     args::{self, Spec},
     bash::{self, State},
     context::{Access, Context, Verdict},

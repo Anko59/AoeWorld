@@ -73,9 +73,14 @@ const BASELINES: Class = Class {
 
 /// Repository-relative, lower-case, `/`-separated path → its protected class.
 pub(crate) fn protected(relative: &str) -> Option<Class> {
-    const HARNESS_PREFIXES: [&str; 5] = [
+    const HARNESS_PREFIXES: [&str; 10] = [
         "crates/harness/",
+        "make/",
+        ".agents/",
         ".claude/",
+        ".codex/",
+        ".dsh/",
+        ".pi/",
         "docker/",
         "skills/",
         "docs/adr/",
@@ -90,7 +95,7 @@ pub(crate) fn protected(relative: &str) -> Option<Class> {
         ".gitignore",
         ".dockerignore",
         "docs/agent-engineering.md",
-        "docs/claude-code.md",
+        "docs/agent-runtimes.md",
     ];
     let under =
         |prefix: &str| relative == prefix.trim_end_matches('/') || relative.starts_with(prefix);

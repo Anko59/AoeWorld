@@ -1,5 +1,5 @@
 //! Make and Docker, the dispatchers every check runs through.
-use crate::claude::{
+use crate::agents::{
     args::{self, Spec},
     context::{Context, Verdict},
     role::Role,
@@ -10,7 +10,8 @@ use crate::claude::{
 const PERSON_TARGETS: &[&str] = &[
     "hooks-install",
     "bootstrap",
-    "claude-hook-build",
+    "agent-hook-build",
+    "agent-smoke",
     "release-publish",
     "release-build",
     "repo-policy-check",

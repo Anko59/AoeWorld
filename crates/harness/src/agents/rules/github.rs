@@ -1,6 +1,6 @@
 //! GitHub CLI rules: an agent never merges, approves or rewrites GitHub state.
 use super::SHIP;
-use crate::claude::{
+use crate::agents::{
     args::{self, Spec},
     context::{Context, Verdict},
     shell::Word,

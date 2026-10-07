@@ -8,6 +8,13 @@ fn fresh_default_workspace_does_not_precreate_root_owned_cache_mounts() {
         include_str!("../../../Makefile"),
     )
     .unwrap();
+    // The Makefile includes its agent-runtime targets from make/.
+    fs::create_dir(workspace.path().join("make")).unwrap();
+    fs::write(
+        workspace.path().join("make/agents.mk"),
+        include_str!("../../../make/agents.mk"),
+    )
+    .unwrap();
     let render = |extra: &[String]| {
         let result = Command::new("make")
             .current_dir(workspace.path())

@@ -1,6 +1,6 @@
 //! `curl` and `wget`: where they write, and for agents, that they reach
 //! localhost only.
-use crate::claude::{
+use crate::agents::{
     args::{self, Spec},
     context::{Access, Context, Verdict},
     shell::Word,
