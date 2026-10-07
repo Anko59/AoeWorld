@@ -1,8 +1,27 @@
 use super::*;
 use std::{fs, os::unix::fs::PermissionsExt};
+/// The script is written by a short-lived child process, never through a write
+/// handle in this test binary: a sibling test forking while such a handle is
+/// open would inherit it and make the exec fail with "text file busy" (#116).
 fn script(root: &Path, body: &str) -> std::path::PathBuf {
+    use std::io::Write;
     let path = root.join("fixture");
-    fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    // A fixed environment: some tests run with a poisoned PATH and LD_PRELOAD.
+    let mut writer = std::process::Command::new("/bin/sh")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .args(["-c", "cat > \"$1\"", "sh"])
+        .arg(&path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    writer
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("#!/bin/sh\n{body}\n").as_bytes())
+        .unwrap();
+    assert!(writer.wait().unwrap().success());
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     path
 }
