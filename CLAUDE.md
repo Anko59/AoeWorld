@@ -33,6 +33,13 @@ pull request against `dev` and arms auto-merge ([shipping](docs/shipping.md)). D
 `gh pr create` are refused. GitHub merges when the required checks pass; never
 merge, approve, or push `dev` or `main`.
 
+## Credentials
+
+API keys and tokens are in the keyring, not in the environment: before saying
+you lack a credential, look it up with
+`secret-tool lookup service codex-api name <VARIABLE>` and set it only for the
+command that needs it ([credentials](docs/credentials.md)). Never print it.
+
 ## Roles
 
 Delegate test-first work to the agents in `.claude/agents/`: `tester` writes
