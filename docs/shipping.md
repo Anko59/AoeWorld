@@ -15,8 +15,8 @@ not ship; the session that ran them reviews, commits and ships.
 
 `aoe-harness ship` (`crates/harness/src/ship/`), run on the host by the same
 judge binary as the agent hooks (`.agents/hooks/harness.sh exec ship`, built
-from `origin/dev`, or from the committed HEAD while bootstrapping), never by a
-binary compiled from the checkout under judgment. `SHIP_TITLE`, `SHIP_BODY` and
+from `origin/dev`; while bootstrapping, from the checkout's committed HEAD and
+labelled non-authoritative), never from uncommitted edits. `SHIP_TITLE`, `SHIP_BODY` and
 `SHIP_FORCE` reach it through the environment, never through shell text, and the
 agent policy refuses `$` in agent-set Make values.
 
