@@ -463,11 +463,17 @@ revision-bound CI evidence. Keep screenshots and original art private.
   this is an optimization/measurement risk, not a claimed hang or timeout.
   Separate map-country-probe diagnoses ordinary start work and four fixed 256m
   local orders without weakening the canonical 50k/1:1 source qualification case.
-  It preserves limit/unavailable/cancelled outcomes, does not simulate movement,
-  activate a live server or qualify hardware. Negative country results remain
-  evidence, not reasons to relax start/route budgets or physical terrain.
+  It preserves limit/unavailable/cancelled outcomes and original endpoints/budgets.
+  Follow-up physical/resource observations and bounded4096tile components found
+  no water/cliff obstruction on the typed512 fixed-line samples: tree resources
+  explain the observed effective blockers; planner budget failures remain distinct.
+  Separate four predeclared64m native orders retain every result, without replacing
+  old256m probes. TypedS/W and overviewE/S/N arrived in authoritative simulation.
+  Country qualification ledger records exact counts/limits; this is not live
+  activation, global traversal, measured realtime20Hz or hardware qualification.
+  Negative country results remain evidence, not reasons to relax physics/budgets.
   Final preflight/browser gate results for this follow-up are reported separately;
   offline PASS is not real-source qualification. Real France preparation is now
-  verified, but activation, playable source traversal, visuals, memory and hardware
+  verified, but activation, global source traversal, visuals, memory and hardware
   remain pending. Neither successful start search nor immutable verification
   makes the typed-vector candidate ready to activate.
