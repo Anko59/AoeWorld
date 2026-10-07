@@ -295,6 +295,8 @@ fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<(
                 &[
                     "pr",
                     "create",
+                    "--repo",
+                    &repository,
                     "--base",
                     &options.base,
                     "--head",
