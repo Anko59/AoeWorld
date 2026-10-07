@@ -119,8 +119,8 @@ fn findings_are_cross_examined_and_confirmed_ones_cap_the_grade() {
     );
     assert!(!report.passes());
     assert_eq!(
-        report.rounds, 3,
-        "round 3 changed nothing, so the review converged there"
+        report.rounds, 2,
+        "round 2 settled every finding, so round 3 would only repeat it"
     );
     assert_eq!(report.model, "claude-sonnet-5-5");
     assert_eq!(
@@ -130,8 +130,8 @@ fn findings_are_cross_examined_and_confirmed_ones_cap_the_grade() {
         1,
         "the report is stored"
     );
-    // 3 blind reviewers, 3 cross-examiners in rounds 2 and 3, 1 grader.
-    assert_eq!(*script.sessions.lock().unwrap(), 10);
+    // 3 blind reviewers, 3 cross-examiners in round 2, 1 grader.
+    assert_eq!(*script.sessions.lock().unwrap(), 7);
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn a_tier_below_the_floor_is_refused() {
     assert!(error.contains("at least a high review"), "{error}");
 }
 
-const BOTH_UPHELD_F1: &str = r#"{"verdicts": [{"id": "F1", "verdict": "upheld", "evidence": "README.md:1"}, {"id": "F2", "verdict": "refuted", "evidence": "not real"}], "findings": []}"#;
+const DISPUTED_F2: &str = r#"{"verdicts": [{"id": "F1", "verdict": "upheld", "evidence": "README.md:1"}, {"id": "F2", "verdict": "unverifiable", "evidence": "cannot tell"}], "findings": []}"#;
 
 fn findings_by_persona(p: &str) -> String {
     if p.contains("# Correctness breaker") {
@@ -190,12 +190,14 @@ fn a_review_stops_when_a_round_changes_nothing_before_the_cap() {
     let temp = fixture("README.md");
     let script = Script {
         first: findings_by_persona,
-        cross: |_| BOTH_UPHELD_F1.into(),
+        // F2 stays disputed (nobody can verify it), so round 3 runs, changes
+        // nothing, and the review converges there.
+        cross: |_| DISPUTED_F2.into(),
         grade: r#"{"grade": 9, "summary": "x"}"#.into(),
         sessions: Mutex::new(0),
     };
-    // The max tier allows 5 rounds: round 2 settles both findings, round 3
-    // changes nothing, so rounds 4 and 5 never run.
+    // The max tier allows 5 rounds: round 3 changes nothing, so rounds 4 and
+    // 5 never run.
     let report = review_with(temp.path(), Tier::Max, Runtime::Claude, "", &script).unwrap();
     assert_eq!(report.rounds, 3);
     // 5 blind reviewers, 5 cross-examiners in rounds 2 and 3, 1 grader.
@@ -212,7 +214,7 @@ fn a_finding_raised_in_the_last_round_is_not_accepted_unexamined() {
                 assert!(p.contains("new findings are no longer accepted"));
                 r#"{"verdicts": [{"id": "F1", "verdict": "upheld", "evidence": "a"}, {"id": "F2", "verdict": "upheld", "evidence": "b"}], "findings": [{"file": "README.md", "line": 1, "severity": "critical", "category": "safety", "claim": "late", "trigger": "x", "expected_vs_actual": "y", "evidence": "z"}]}"#.into()
             } else {
-                BOTH_UPHELD_F1.into()
+                DISPUTED_F2.into()
             }
         },
         grade: r#"{"grade": 9, "summary": "x"}"#.into(),
@@ -307,4 +309,74 @@ fn a_branch_cannot_lower_its_own_bar() {
     let report = review_with(root, Tier::High, Runtime::Claude, "", &script).unwrap();
     assert_eq!(report.merge_grade, 8, "origin/dev's merge grade applies");
     assert!(!report.passes());
+}
+
+#[test]
+fn a_vote_on_a_finding_the_reviewer_never_saw_is_ignored() {
+    let temp = fixture("README.md");
+    let script = Script {
+        first: findings_by_persona,
+        cross: |p| {
+            if p.contains("# Correctness breaker") {
+                // Adds F3 in round 2.
+                r#"{"verdicts": [{"id": "F2", "verdict": "upheld", "evidence": "x"}], "findings": [{"file": "README.md", "line": 1, "severity": "major", "category": "spec", "claim": "new", "trigger": "x", "expected_vs_actual": "y", "evidence": "z"}]}"#.into()
+            } else {
+                // Votes on F3, which was not in its prompt.
+                r#"{"verdicts": [{"id": "F1", "verdict": "upheld", "evidence": "a"}, {"id": "F2", "verdict": "upheld", "evidence": "b"}, {"id": "F3", "verdict": "refuted", "evidence": "never shown"}], "findings": []}"#.into()
+            }
+        },
+        grade: r#"{"grade": 9, "summary": "x"}"#.into(),
+        sessions: Mutex::new(0),
+    };
+    let report = review_with(temp.path(), Tier::Medium, Runtime::Claude, "", &script).unwrap();
+    let f3 = report.findings.iter().find(|f| f.id == "F3").expect("F3");
+    assert!(
+        f3.votes.iter().all(|v| v.round > 2),
+        "round-2 votes on F3 came from reviewers who never saw it: {:?}",
+        f3.votes
+    );
+}
+
+#[test]
+fn a_dirty_tree_is_not_reviewed() {
+    let temp = fixture("README.md");
+    fs::write(temp.path().join("README.md"), "uncommitted\n").unwrap();
+    let script = Script {
+        first: |_| unreachable!(),
+        cross: |_| unreachable!(),
+        grade: String::new(),
+        sessions: Mutex::new(0),
+    };
+    let error = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &script)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("commit or stash"), "{error}");
+}
+
+/// Every session fails outright.
+struct Down {
+    calls: Mutex<usize>,
+}
+
+impl Ask for Down {
+    fn all(&self, prompts: Vec<String>) -> Vec<Result<String, String>> {
+        *self.calls.lock().unwrap() += 1;
+        prompts
+            .iter()
+            .map(|_| Err("reviewer session failed (Failed(Some(1))): auth".into()))
+            .collect()
+    }
+}
+
+#[test]
+fn a_crashed_session_is_not_asked_again() {
+    let temp = fixture("README.md");
+    let down = Down {
+        calls: Mutex::new(0),
+    };
+    let report = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &down).unwrap();
+    assert!(!report.passes());
+    // The reviewer and the grader, each once: no retry of a crash.
+    assert_eq!(*down.calls.lock().unwrap(), 2);
+    assert!(report.failures.iter().all(|f| !f.contains("asked again")));
 }

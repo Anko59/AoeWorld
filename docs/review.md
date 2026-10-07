@@ -15,7 +15,7 @@ tier (never below the floor) and says why in the description. A review passes at
 
 `gates/review.json` holds the tiers, the model family of each runtime and the
 floors. Reviewers use the model family of the runtime you are working in
-(`SHIP_RUNTIME`): Claude reviews in Claude Code, GPT in Codex, GLM in DeepSeek
+(`REVIEW_RUNTIME`; set it, the default is `claude`): Claude reviews in Claude Code, GPT in Codex, GLM in DeepSeek
 Harness and pi.
 
 | Tier | Reviewers (personas) | Rounds | Models |

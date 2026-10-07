@@ -118,7 +118,9 @@ fn confirmed_findings_cap_the_grade() {
         finding("F1", 0, Severity::Minor, "correctness", &[]),
         finding("F2", 1, Severity::Critical, "safety", &[]),
     ];
-    assert_eq!(cap(&findings), 10, "unconfirmed findings do not cap");
+    assert_eq!(cap(&findings), 7, "a disputed critical counts as a major");
+    findings[1].status = Status::Refuted;
+    assert_eq!(cap(&findings), 10, "refuted findings do not cap");
     findings[0].status = Status::Confirmed;
     assert_eq!(cap(&findings), 10);
     findings[1].status = Status::Confirmed;

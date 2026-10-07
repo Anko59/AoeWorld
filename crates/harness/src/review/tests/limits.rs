@@ -124,3 +124,94 @@ fn only_a_clean_session_on_stdout_answers() {
         "{echoed_on_stderr}"
     );
 }
+
+#[test]
+fn a_huge_task_or_file_list_is_cut_not_fatal() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let subject = Subject {
+        head: "a".repeat(40),
+        merge_base: "b".repeat(40),
+        task: "task line\n".repeat(30_000),
+        stat: " assets/a.png | Bin\n".repeat(20_000),
+        diff: "+x\n".into(),
+        facts: "facts".into(),
+    };
+    let prompt = prompt::first_round(&root, "correctness", &subject).unwrap();
+    assert!(prompt.len() <= PROMPT_LIMIT, "{}", prompt.len());
+    assert!(prompt.contains("[cut here]"));
+}
+
+#[test]
+fn a_disputed_finding_still_counts_one_severity_lower() {
+    use Vote::{Refuted, Upheld};
+    let mut split = finding(
+        "F1",
+        0,
+        Severity::Critical,
+        "safety",
+        &[(1, 2, Upheld), (2, 2, Refuted)],
+    );
+    split.status = status(&split, 3);
+    assert_eq!(split.status, Status::Disputed);
+    assert_eq!(
+        cap(&[split]),
+        7,
+        "one dissenter cannot erase a critical finding"
+    );
+    let mut refuted = finding("F2", 0, Severity::Critical, "safety", &[(1, 2, Refuted)]);
+    refuted.status = status(&refuted, 2);
+    assert_eq!(cap(&[refuted]), 10);
+}
+
+#[test]
+fn each_runtime_launches_its_reviewer_read_only_with_the_tier_model() {
+    use super::super::{config::Model, runner::command};
+    use crate::agents::Runtime;
+    // Codex reads the repository's hook file; dsh writes under .cache.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let model = |name: &str, effort: &str| Model {
+        model: name.into(),
+        effort: effort.into(),
+    };
+    let args = |runtime, m: &Model| -> Vec<String> {
+        let (command, _) = command(runtime, &root, m, "PROMPT").unwrap();
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(k, _)| *k == "AOE_AGENT_ROLE")
+                .and_then(|(_, v)| v),
+            Some(std::ffi::OsStr::new("reviewer"))
+        );
+        command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    };
+    let claude = args(Runtime::Claude, &model("claude-sonnet-5-5", "high")).join(" ");
+    assert!(
+        claude.contains("--model claude-sonnet-5-5 --effort high"),
+        "{claude}"
+    );
+    assert!(
+        claude.contains("--allowedTools=Read,Grep,Glob,Bash"),
+        "{claude}"
+    );
+    assert!(claude.ends_with("PROMPT"));
+    let codex = args(Runtime::Codex, &model("gpt-6-luna", "xhigh")).join(" ");
+    assert!(codex.contains("-s read-only"), "{codex}");
+    assert!(
+        codex.contains("-m gpt-6-luna -c model_reasoning_effort=\"xhigh\""),
+        "{codex}"
+    );
+    let pi = args(Runtime::Pi, &model("litellm/glm-5.3", "high")).join(" ");
+    assert!(pi.contains("--model litellm/glm-5.3:high"), "{pi}");
+    assert!(pi.contains("--tools read,grep,find,ls,bash"), "{pi}");
+    let (_, patch) = command(Runtime::Dsh, &root, &model("litellm/glm-5.3", "high"), "P").unwrap();
+    let body = std::fs::read_to_string(patch.expect("a dsh patch")).unwrap();
+    assert_eq!(body.matches("agent-default-model").count(), 1, "{body}");
+    assert!(
+        body.contains("\"litellm\"") && body.contains("\"glm-5.3\"") && body.contains("\"high\""),
+        "{body}"
+    );
+    assert!(command(Runtime::Dsh, &root, &model("no-provider", "high"), "P").is_err());
+}

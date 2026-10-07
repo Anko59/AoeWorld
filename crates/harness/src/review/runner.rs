@@ -16,6 +16,9 @@ use std::{
     time::Duration,
 };
 
+/// A session that ran to the end but printed no answer between the markers.
+pub(crate) const NO_ANSWER: &str = "no AOE-REVIEW answer";
+
 /// One reviewer session's budget.
 const BUDGET: Duration = Duration::from_secs(1800);
 
@@ -82,7 +85,7 @@ pub(crate) fn command(
             ));
             let body = format!(
                 "{}- id: agent-default-model\n  config:\n    provider: {}\n    model: {}\n    reasoningEffort: {}\n",
-                launch::dsh_patch(root),
+                launch::dsh_hooks(root),
                 json_string(provider),
                 json_string(name),
                 json_string(&model.effort)
@@ -154,7 +157,7 @@ pub(crate) fn answer(stdout: &str, stderr: &str, exit: &CaptureExit) -> Result<S
     match (exit, protocol::extract(stdout)) {
         (CaptureExit::Success, Some(answer)) => Ok(answer),
         (CaptureExit::Deadline, _) => Err(format!("reviewer exceeded {}s", BUDGET.as_secs())),
-        (CaptureExit::Success, None) => Err(format!("no AOE-REVIEW answer: {}", tail(stdout))),
+        (CaptureExit::Success, None) => Err(format!("{NO_ANSWER}: {}", tail(stdout))),
         (exit, _) => Err(format!(
             "reviewer session failed ({exit:?}): {}",
             tail(&format!("{stdout}{stderr}"))

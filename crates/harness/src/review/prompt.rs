@@ -60,7 +60,18 @@ fn fit(subject: &Subject, build: impl Fn(&str) -> String) -> Result<String, Stri
     }
 }
 
+/// The task, file list and facts get a fixed budget each; the diff gets the rest.
+const PART_LIMIT: usize = 20_000;
+
 fn subject_text(subject: &Subject, diff_limit: usize) -> String {
+    let part = |text: &str| {
+        let text = text.trim();
+        if text.len() > PART_LIMIT {
+            format!("{}\n[cut here]", cut(text, PART_LIMIT))
+        } else {
+            text.to_owned()
+        }
+    };
     let mut diff = subject.diff.clone();
     if diff.len() > diff_limit {
         let mut cut = diff_limit;
@@ -72,11 +83,11 @@ fn subject_text(subject: &Subject, diff_limit: usize) -> String {
     }
     format!(
         "## The task\n\n{}\n\n## The change\n\n`git diff {}..{}` (run it yourself to read more):\n\n```\n{}\n```\n\n```diff\n{diff}\n```\n\n## Deterministic facts (not findings)\n\n{}\n",
-        subject.task.trim(),
+        part(&subject.task),
         &subject.merge_base[..12.min(subject.merge_base.len())],
         &subject.head[..12.min(subject.head.len())],
-        subject.stat.trim(),
-        subject.facts.trim()
+        part(&subject.stat),
+        part(&subject.facts)
     )
 }
 
@@ -136,7 +147,7 @@ pub(crate) fn cross_round(
             "### {} ({:?})\n- where: {}{}\n- claim: {}\n- trigger: {}\n- expected vs actual: {}\n- evidence: {}\n\n",
             finding.id,
             reported.severity,
-            reported.file,
+            field(&reported.file),
             reported.line.map(|l| format!(":{l}")).unwrap_or_default(),
             field(&reported.claim),
             field(&reported.trigger),
@@ -175,7 +186,7 @@ pub(crate) fn grading(
             "- {} [{status}, {:?}] {} — {}\n",
             finding.id,
             finding.reported.severity,
-            finding.reported.file,
+            cut(&finding.reported.file, 300),
             cut(&finding.reported.claim, field_limit(findings.len()))
         ));
     }

@@ -76,10 +76,17 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
             if report.passes() {
                 Ok(())
             } else {
-                Err(format!(
-                    "review grade {}/10 is below {}",
-                    report.grade, report.merge_grade
-                )
+                Err(if report.failures.is_empty() {
+                    format!(
+                        "review grade {}/10 is below {}",
+                        report.grade, report.merge_grade
+                    )
+                } else {
+                    format!(
+                        "review incomplete: {} session(s) gave no usable answer",
+                        report.failures.len()
+                    )
+                }
                 .into())
             }
         }
@@ -170,8 +177,9 @@ pub(crate) trait Ask: Sync {
     fn all(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>>;
 }
 
-/// Ask every prompt; a session whose answer cannot be read is asked once
-/// more, told why. Answers come back in prompt order.
+/// Ask every prompt; a session that answered but whose answer cannot be read
+/// is asked once more, told why (a crashed or timed-out session is not).
+/// Answers come back in prompt order.
 fn ask_checked(
     ask: &dyn Ask,
     prompts: Vec<String>,
@@ -185,6 +193,10 @@ fn ask_checked(
     let retry: Vec<(usize, String)> = answers
         .iter()
         .enumerate()
+        .filter(|(_, answer)| match answer {
+            Ok(_) => true,
+            Err(error) => error.starts_with(runner::NO_ANSWER),
+        })
         .filter_map(|(i, answer)| check(answer).err().map(|e| (i, e)))
         .collect();
     if retry.is_empty() {
@@ -262,6 +274,10 @@ pub(crate) fn review_with(
             tier.name()
         )
         .into());
+    }
+    // Reviewers read the working tree: it must be the commit under review.
+    if !git::git(root, &["status", "--porcelain"])?.is_empty() {
+        return Err("commit or stash your changes first: reviewers read the working tree, and the review is of HEAD".into());
     }
     let head = git::git(root, &["rev-parse", "HEAD"])?;
     let subject = prompt::Subject {
@@ -363,10 +379,9 @@ pub(crate) fn review_with(
                         ));
                     }
                     for verdict in answer.verdicts {
-                        if let Some(finding) = findings
-                            .iter_mut()
-                            .find(|f| f.id == verdict.id && f.reporter != reviewer)
-                        {
+                        if let Some(finding) = findings.iter_mut().find(|f| {
+                            f.id == verdict.id && ids.contains(&f.id) && f.reporter != reviewer
+                        }) {
                             finding.votes.push(Cast {
                                 reviewer,
                                 round,
@@ -391,7 +406,11 @@ pub(crate) fn review_with(
             finding.status = protocol::status(finding, reviewers);
         }
         rounds = round;
-        if protocol::converged(&before, &findings) {
+        // Without new findings, a round where every finding is settled would
+        // only be asked again verbatim.
+        let settled =
+            findings.len() == before.len() && findings.iter().all(|f| f.status != Status::Disputed);
+        if protocol::converged(&before, &findings) || settled {
             break;
         }
     }

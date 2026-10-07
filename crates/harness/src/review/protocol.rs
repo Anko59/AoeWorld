@@ -205,8 +205,11 @@ fn downgraded(finding: &Finding) -> bool {
 }
 
 /// The severity a confirmed finding counts at, after the `partial` downgrade.
+/// A disputed finding counts one severity lower too: a single dissenting (or
+/// prompt-injected) reviewer cannot make a critical finding vanish.
 fn effective(finding: &Finding) -> Severity {
-    match (finding.reported.severity, downgraded(finding)) {
+    let lower = finding.status == Status::Disputed || downgraded(finding);
+    match (finding.reported.severity, lower) {
         (severity, false) => severity,
         (Severity::Critical, true) => Severity::Major,
         (Severity::Major, true) => Severity::Minor,
@@ -214,13 +217,13 @@ fn effective(finding: &Finding) -> Severity {
     }
 }
 
-/// The highest grade the confirmed findings allow: critical caps at 4, major
+/// The highest grade the confirmed and disputed findings allow: critical caps at 4, major
 /// at 7. A test-integrity finding (weakened or gamed tests) caps at 4 from
 /// major up; a minor one, such as a small coverage gap, counts by severity.
 pub(crate) fn cap(findings: &[Finding]) -> u8 {
-    let confirmed = findings.iter().filter(|f| f.status == Status::Confirmed);
+    let standing = findings.iter().filter(|f| f.status != Status::Refuted);
     let mut cap = 10;
-    for finding in confirmed {
+    for finding in standing {
         let limit = match effective(finding) {
             Severity::Critical => 4,
             Severity::Major if finding.test_integrity() => 4,
