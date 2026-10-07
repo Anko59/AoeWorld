@@ -162,6 +162,16 @@ impl Config {
         }
         model
     }
+
+    /// A closing review (docs/review.md) runs on the strong models whatever
+    /// the tier, with the tier's reasoning bump.
+    pub(crate) fn closing_model(&self, tier: Tier, runtime: Runtime) -> Model {
+        let mut model = self.models[runtime_key(runtime)].strong.clone();
+        if self.tiers[&tier].reasoning_bump {
+            model.effort = bump(runtime_key(runtime), &model.effort).to_owned();
+        }
+        model
+    }
 }
 
 pub(crate) fn runtime_key(runtime: Runtime) -> &'static str {

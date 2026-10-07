@@ -4,7 +4,10 @@
 //! is posted and GitHub auto-merge is armed, so GitHub merges once every
 //! required check passes. No agent runs a merge command itself.
 use super::{Options, evidence::Evidence, gh, git};
-use crate::review::{self, Report, Tier};
+use crate::review::{
+    self, Plan, Report, Tier,
+    closing::{self, Next},
+};
 use std::{fs, path::Path};
 
 #[cfg(test)]
@@ -18,8 +21,12 @@ pub(crate) type Reviewer<'a> = dyn Fn(
         Tier,
         crate::agents::Runtime,
         &str,
+        &Plan,
     ) -> std::result::Result<Report, Box<dyn std::error::Error>>
     + 'a;
+
+/// A final fix is the fixes only: at most this many changed lines.
+pub(crate) const FINAL_FIX_LINES: u64 = 150;
 
 const TIERS: [Tier; 5] = [Tier::Low, Tier::Medium, Tier::High, Tier::Xhigh, Tier::Max];
 
@@ -62,12 +69,35 @@ pub(crate) fn require(
         Some(path) => fs::read_to_string(path)?,
         None => String::new(),
     };
+    let history = review::history(root, &evidence.branch)?;
+    let plan = match closing::next(&history, &evidence.head) {
+        Next::Review(plan) => plan,
+        Next::FixFirst(why) | Next::Unavailable(why) => {
+            return Err(format!("ship: {why}; nothing was pushed").into());
+        }
+        Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
+        Next::FinalFix(reviewed) => {
+            final_fix_scope(root, &reviewed.head, &evidence.head)?;
+            let report = closing::final_fix(&reviewed, &evidence.head);
+            report.store(root)?;
+            eprintln!(
+                "ship: final fix: the review budget is spent and converging; this commit ships on tests and gates. Open an issue asking for a post-merge review of {} (docs/review.md)",
+                short(&evidence.head)
+            );
+            return Ok(report);
+        }
+    };
     eprintln!(
-        "ship: {} review on {}",
+        "ship: {}{} review on {}",
         tier.name(),
+        if matches!(plan, Plan::Closing { .. }) {
+            " closing"
+        } else {
+            ""
+        },
         crate::review::config::runtime_key(options.runtime)
     );
-    let report = reviewer(root, tier, options.runtime, &task)?;
+    let report = reviewer(root, tier, options.runtime, &task, &plan)?;
     eprintln!("{}", report.markdown());
     // A review takes minutes: only a review of the very commit the gates
     // passed, still checked out, unlocks the push.
@@ -84,18 +114,70 @@ pub(crate) fn require(
     if report.passes() {
         return Ok(report);
     }
-    let verdict = format!(
-        "review {}/10 (needs {}{})",
-        report.grade,
-        report.merge_grade,
-        if report.failures.is_empty() {
-            ""
-        } else {
-            ", and the review was incomplete"
-        }
-    );
-    let next = "fix the confirmed findings (never weaken a test or gate), commit, and ship again";
+    let verdict = if report.closing {
+        format!(
+            "closing review failed ({} blocking finding(s) left{})",
+            report.blocking().len(),
+            if report.complete() {
+                ""
+            } else {
+                ", incomplete"
+            }
+        )
+    } else {
+        format!(
+            "review {}/10 (needs {}{})",
+            report.grade,
+            report.merge_grade,
+            if report.complete() {
+                ""
+            } else {
+                ", and the review was incomplete"
+            }
+        )
+    };
+    let history = review::history(root, &evidence.branch)?;
+    let next = match closing::next(&history, "") {
+        _ if !report.complete() => "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".to_owned(),
+        Next::Split(why) => split(&evidence.branch, &why),
+        Next::Unavailable(why) => why,
+        Next::FinalFix(_) => format!("fix the last closing review's findings, each with a test that fails without the fix, in at most {FINAL_FIX_LINES} changed lines, commit, and ship again: that commit ships as the final fix, with no further model review (docs/review.md)"),
+        Next::Review(Plan::Closing { .. }) => "fix and commit every confirmed finding, then ship again: the next review is a closing review of your fixes (docs/review.md)".to_owned(),
+        _ => "fix the confirmed findings (never weaken a test or gate), commit, and ship again".to_owned(),
+    };
     Err(format!("ship: {verdict}; nothing was pushed. Next: {next}").into())
+}
+
+/// A final fix carries only the fixes: few changed lines, and a test with them.
+fn final_fix_scope(root: &Path, reviewed: &str, head: &str) -> Result<()> {
+    let numstat = git::git(root, &["diff", "--numstat", reviewed, head])?;
+    let (mut lines, mut tests) = (0u64, false);
+    for line in numstat.lines() {
+        let mut parts = line.split('\t');
+        let added: u64 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        let removed: u64 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        lines += added + removed;
+        tests |= parts
+            .next()
+            .is_some_and(|path| crate::agents::is_test_path(&path.to_ascii_lowercase()));
+    }
+    if lines > FINAL_FIX_LINES || !tests {
+        return Err(format!(
+            "ship: a final fix is the fixes only, each with a test: at most {FINAL_FIX_LINES} changed lines including a test file since {} (found {lines} lines{}); nothing was pushed. Move anything else to a new pull request",
+            short(reviewed),
+            if tests { "" } else { ", no test" }
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// The findings are not converging: the change is too big to fix by
+/// iteration, and the agent splits it (no person steps in).
+fn split(branch: &str, why: &str) -> String {
+    format!(
+        "{why}: the reviews of `{branch}` are not converging. Split the change into smaller pull requests on new branches (each gets its own review budget), close this one, and file what is left as issues (docs/review.md)"
+    )
 }
 
 fn short(sha: &str) -> &str {
@@ -134,8 +216,15 @@ pub(crate) fn publish_calls(
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
     }
     let description = format!(
-        "grade {}/10 · {} tier · {} rounds",
-        report.grade, report.tier, report.rounds
+        "{}grade {}/10 · {} tier · {} rounds",
+        match (report.closing, report.final_fix) {
+            (true, _) => "closing review passed · ",
+            (_, true) => "final fix after the review budget · ",
+            _ => "",
+        },
+        report.grade,
+        report.tier,
+        report.rounds
     );
     let owned = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
     Ok(vec![

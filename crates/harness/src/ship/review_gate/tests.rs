@@ -4,7 +4,7 @@ use super::super::{
     ship_with,
     tests::{fixture, offline, run},
 };
-use crate::review::{Report, Tier};
+use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
 /// A stored review of HEAD with this grade, as `review::review` leaves it.
@@ -40,6 +40,8 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64,
+        closing: false,
+        final_fix: false,
     }
 }
 
@@ -59,7 +61,7 @@ fn pushed(root: &Path) -> bool {
 #[test]
 fn a_review_below_the_merge_grade_pushes_nothing() {
     let (_temp, root) = fixture("true");
-    let error = ship_with(&root, &reviewed(), &|root, tier, _, _| {
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
         Ok(graded(root, tier, 7))
     })
     .unwrap_err()
@@ -74,7 +76,7 @@ fn a_review_below_the_merge_grade_pushes_nothing() {
 #[test]
 fn an_incomplete_review_pushes_nothing_whatever_its_grade() {
     let (_temp, root) = fixture("true");
-    let error = ship_with(&root, &reviewed(), &|root, tier, _, _| {
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
         let mut report = graded(root, tier, 9);
         report.failures.push("round 1, quick: no answer".into());
         report.store(root).unwrap();
@@ -90,7 +92,7 @@ fn an_incomplete_review_pushes_nothing_whatever_its_grade() {
 fn a_passing_review_is_pushed_and_reused_for_the_same_commit() {
     let (_temp, root) = fixture("true");
     let calls = Cell::new(0);
-    let review = |root: &Path, tier, _, _: &str| {
+    let review = |root: &Path, tier, _, _: &str, _: &Plan| {
         calls.set(calls.get() + 1);
         Ok(graded(root, tier, 9))
     };
@@ -104,7 +106,7 @@ fn a_passing_review_is_pushed_and_reused_for_the_same_commit() {
 fn the_tier_defaults_to_the_floor_and_never_goes_below_it() {
     let (_temp, root) = fixture("true");
     let asked = Cell::new(None);
-    ship_with(&root, &reviewed(), &|root, tier, _, _| {
+    ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
         asked.set(Some(tier));
         Ok(graded(root, tier, 9))
     })
@@ -122,7 +124,7 @@ fn the_tier_defaults_to_the_floor_and_never_goes_below_it() {
         tier: Some(Tier::Low),
         ..reviewed()
     };
-    let error = ship_with(&root, &options, &|_, _, _, _| {
+    let error = ship_with(&root, &options, &|_, _, _, _, _| {
         panic!("no review below the floor")
     })
     .unwrap_err()
@@ -133,7 +135,7 @@ fn the_tier_defaults_to_the_floor_and_never_goes_below_it() {
 #[test]
 fn a_commit_that_moves_during_the_review_is_not_pushed() {
     let (_temp, root) = fixture("true");
-    let error = ship_with(&root, &reviewed(), &|root, tier, _, _| {
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
         // Another session commits while the reviewers work.
         run(root, &["commit", "-q", "--allow-empty", "-m", "racing"]);
         Ok(graded(root, tier, 9))
@@ -209,10 +211,182 @@ fn a_reviewed_ship_needs_a_description() {
         no_pr: false,
         ..reviewed()
     };
-    let error = ship_with(&root, &options, &|_, _, _, _| {
+    let error = ship_with(&root, &options, &|_, _, _, _, _| {
         panic!("no review without SHIP_BODY")
     })
     .unwrap_err()
     .to_string();
     assert!(error.contains("SHIP_BODY is required"), "{error}");
+}
+
+fn commit(root: &Path, message: &str) {
+    run(root, &["commit", "-q", "--allow-empty", "-m", message]);
+}
+
+/// A failing closing review that did answer: one new major finding in the fixes.
+fn failed_closing(root: &Path, tier: Tier) -> Report {
+    let mut report = unstored(root, tier, 6);
+    report.closing = true;
+    report.findings = finding(crate::review::protocol::Severity::Major);
+    report.store(root).unwrap();
+    report
+}
+
+fn finding(severity: crate::review::protocol::Severity) -> Vec<crate::review::protocol::Finding> {
+    use crate::review::protocol::{Finding, Reported, Status};
+    vec![Finding {
+        id: "F1".into(),
+        reporter: 0,
+        round: 1,
+        reported: Reported {
+            file: "x.rs".into(),
+            line: Some(1),
+            severity,
+            category: "correctness".into(),
+            claim: "c".into(),
+            trigger: "t".into(),
+            expected_vs_actual: "e".into(),
+            evidence: "v".into(),
+        },
+        votes: vec![],
+        status: Status::Confirmed,
+    }]
+}
+
+/// Three failed full reviews whose blocking findings do not grow.
+fn three_failed(root: &Path) {
+    for attempt in 1..=3 {
+        commit(root, &format!("try {attempt}"));
+        let _ = ship_with(root, &reviewed(), &|root, tier, _, _, plan| {
+            assert_eq!(*plan, Plan::Full);
+            Ok(graded(root, tier, 5))
+        });
+    }
+}
+
+#[test]
+fn the_review_budget_always_ends_without_a_person() {
+    let (_temp, root) = fixture("true");
+    three_failed(&root);
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("fix first"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("already failed a review; fix and commit"),
+        "{error}"
+    );
+    for (closing, expected) in [(1, "closing review of your fixes"), (2, "final fix")] {
+        commit(&root, &format!("fixes {closing}"));
+        let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
+            assert!(matches!(plan, Plan::Closing { .. }), "{plan:?}");
+            Ok(failed_closing(root, tier))
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("closing review failed (1 blocking finding(s) left)")
+                && error.contains(expected),
+            "closing {closing}: {error}"
+        );
+    }
+    std::fs::create_dir_all(root.join("crates/x/src")).unwrap();
+    std::fs::write(root.join("crates/x/src/tests.rs"), "// the fix's test\n").unwrap();
+    run(&root, &["add", "-A"]);
+    commit(&root, "final fixes, with tests");
+    ship_with(&root, &reviewed(), &|_, _, _, _, _| {
+        panic!("a final fix has no model review")
+    })
+    .expect("the final fix ships on tests and gates");
+    assert!(pushed(&root));
+}
+
+#[test]
+fn a_final_fix_must_be_small_and_tested() {
+    let (_temp, root) = fixture("true");
+    three_failed(&root);
+    for closing in 1..=2 {
+        commit(&root, &format!("fixes {closing}"));
+        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
+            Ok(failed_closing(root, tier))
+        });
+    }
+    std::fs::write(root.join("big.txt"), "x\n".repeat(400)).unwrap();
+    run(&root, &["add", "-A"]);
+    commit(&root, "not just the fixes");
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("a final fix is the fixes only") && error.contains("no test"),
+        "{error}"
+    );
+    assert!(!pushed(&root));
+}
+
+#[test]
+fn incomplete_reviews_do_not_spend_the_budget() {
+    let (_temp, root) = fixture("true");
+    let incomplete = |root: &Path, tier, _, _: &str, _: &Plan| {
+        let mut report = unstored(root, tier, 9);
+        report.failures.push("no answer".into());
+        report.store(root).unwrap();
+        Ok(report)
+    };
+    for attempt in 1..=2 {
+        let error = ship_with(&root, &reviewed(), &incomplete)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("does not count"),
+            "attempt {attempt}: {error}"
+        );
+    }
+    // Same commit, reviewed again: an incomplete review checked nothing.
+    let error = ship_with(&root, &reviewed(), &incomplete)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("unavailable") || error.contains("does not count"),
+        "{error}"
+    );
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("unavailable"))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("reviewers are unavailable"), "{error}");
+}
+
+#[test]
+fn a_diverging_branch_is_told_to_split() {
+    let (_temp, root) = fixture("true");
+    for _ in 0..3 {
+        commit(&root, "try");
+        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
+            let mut report = unstored(root, tier, 4);
+            report.findings = finding(crate::review::protocol::Severity::Critical);
+            report.store(root).unwrap();
+            Ok(report)
+        });
+    }
+    commit(&root, "more");
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("Split the change"), "{error}");
+    assert!(!pushed(&root));
+}
+
+#[test]
+fn rerunning_a_failed_commit_is_refused_and_every_attempt_is_kept() {
+    let (_temp, root) = fixture("true");
+    let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
+        Ok(graded(root, tier, 5))
+    });
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| {
+        panic!("no second review of a failed commit")
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("already failed"), "{error}");
+    graded(&root, Tier::Low, 5);
+    assert_eq!(crate::review::history(&root, "feature").unwrap().len(), 2);
 }

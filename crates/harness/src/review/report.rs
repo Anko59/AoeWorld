@@ -1,7 +1,7 @@
 //! The review report: stored as JSON next to the ship evidence
 //! (`<git common dir>/aoe-ship/reviews/<sha>-<tier>.json`, where agents cannot
 //! write) and rendered as Markdown for the pull request.
-use super::protocol::{Finding, Status};
+use super::protocol::{Finding, Status, blocking};
 use crate::ship::git;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, path::PathBuf};
@@ -31,6 +31,14 @@ pub(crate) struct Report {
     pub(crate) merge_grade: u8,
     pub(crate) started: u64,
     pub(crate) finished: u64,
+    /// A closing review (docs/review.md): it passes on "no blocking finding
+    /// left", and its grade is reported, not gated.
+    #[serde(default)]
+    pub(crate) closing: bool,
+    /// A final fix after the whole review budget: it passes on tests and
+    /// gates, and no model reviewed this commit (docs/review.md).
+    #[serde(default)]
+    pub(crate) final_fix: bool,
 }
 
 pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
@@ -43,9 +51,26 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 
 impl Report {
     /// A review passes only when every session answered and the capped grade
-    /// reaches the merge grade.
+    /// reaches the merge grade; a closing review when no confirmed finding
+    /// blocks; a final fix on its tests and gates.
     pub(crate) fn passes(&self) -> bool {
-        self.failures.is_empty() && self.grade >= self.merge_grade
+        self.final_fix
+            || self.failures.is_empty()
+                && if self.closing {
+                    !self.findings.iter().any(blocking)
+                } else {
+                    self.grade >= self.merge_grade
+                }
+    }
+
+    /// Every session answered: the review counts toward the branch's budget.
+    pub(crate) fn complete(&self) -> bool {
+        self.failures.is_empty()
+    }
+
+    /// The confirmed findings that block a merge.
+    pub(crate) fn blocking(&self) -> Vec<&Finding> {
+        self.findings.iter().filter(|f| blocking(f)).collect()
     }
 
     fn count(&self, status: Status) -> usize {
@@ -56,9 +81,14 @@ impl Report {
     pub(crate) fn store(&self, root: &Path) -> Result<PathBuf, String> {
         let directory = directory(root)?;
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+        let kind = match (self.closing, self.final_fix) {
+            (true, _) => "-closing",
+            (_, true) => "-final-fix",
+            _ => "",
+        };
         let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
         for attempt in 1.. {
-            let path = directory.join(format!("{}-{}-{attempt}.json", self.head, self.tier));
+            let path = directory.join(format!("{}-{}{kind}-{attempt}.json", self.head, self.tier));
             match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -99,6 +129,9 @@ impl Report {
 
     /// The emoji badge for the grade.
     pub(crate) fn badge(&self) -> &'static str {
+        if self.closing || self.final_fix {
+            return if self.passes() { "🟡" } else { "🔴" };
+        }
         match self.grade {
             9..=10 => "🟢",
             8 => "🟡",
@@ -108,8 +141,13 @@ impl Report {
 
     pub(crate) fn headline(&self) -> String {
         format!(
-            "{} **Review: {}/10** ({} tier · {} reviewer{} · {} round{} · {} {}): {} confirmed · {} disputed · {} refuted",
+            "{} **{}: {}/10** ({} tier · {} reviewer{} · {} round{} · {} {}): {} confirmed · {} disputed · {} refuted",
             self.badge(),
+            match (self.closing, self.final_fix) {
+                (true, _) => "Closing review",
+                (_, true) => "Final fix",
+                _ => "Review",
+            },
             self.grade,
             self.tier,
             self.personas.len(),
@@ -130,6 +168,12 @@ impl Report {
             self.headline(),
             self.summary.trim().replace('\n', "\n> ")
         );
+        if self.closing {
+            out.push_str(&format!(
+                "Closing review after three failed reviews: it {} on \"no blocking finding left\"; the grade is reported, not gated (docs/review.md).\n\n",
+                if self.passes() { "passed" } else { "failed" }
+            ));
+        }
         if self.written_grade != self.grade {
             out.push_str(&format!(
                 "The grader wrote {}/10; confirmed and disputed findings cap it at {}/10.\n\n",
@@ -174,4 +218,19 @@ impl Report {
         }
         out
     }
+}
+
+/// Every stored review of `branch`, oldest first.
+pub(crate) fn history(root: &Path, branch: &str) -> Result<Vec<Report>, String> {
+    let Ok(entries) = fs::read_dir(directory(root)?) else {
+        return Ok(vec![]);
+    };
+    let mut reports: Vec<Report> = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| fs::read(entry.path()).ok())
+        .filter_map(|bytes| serde_json::from_slice::<Report>(&bytes).ok())
+        .filter(|report| report.branch == branch)
+        .collect();
+    reports.sort_by_key(|r| (r.finished, r.started));
+    Ok(reports)
 }

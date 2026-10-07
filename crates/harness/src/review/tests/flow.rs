@@ -1,8 +1,8 @@
-use super::super::{Ask, Tier, protocol::Status, report, review_with};
+use super::super::{Ask, Plan, Tier, protocol::Status, report, review_with};
 use crate::agents::Runtime;
 use std::{fs, path::Path, process::Command, sync::Mutex};
 
-fn git(root: &Path, args: &[&str]) {
+pub(super) fn git(root: &Path, args: &[&str]) {
     let status = Command::new("git")
         .current_dir(root)
         .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
@@ -16,7 +16,7 @@ fn git(root: &Path, args: &[&str]) {
 
 /// A checkout on `feature` with the real registry and review prompts, and
 /// an `origin/dev` to compare with; `changed` is the file the branch edits.
-fn fixture(changed: &str) -> tempfile::TempDir {
+pub(super) fn fixture(changed: &str) -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     git(root, &["init", "-q", "-b", "dev"]);
@@ -48,11 +48,11 @@ fn fixture(changed: &str) -> tempfile::TempDir {
 }
 
 /// Answers by prompt kind and persona; records how many sessions ran.
-struct Script {
-    first: fn(&str) -> String,
-    cross: fn(&str) -> String,
-    grade: String,
-    sessions: Mutex<usize>,
+pub(super) struct Script {
+    pub(super) first: fn(&str) -> String,
+    pub(super) cross: fn(&str) -> String,
+    pub(super) grade: String,
+    pub(super) sessions: Mutex<usize>,
 }
 
 /// The runner hands back the JSON already cut from between the markers.
@@ -106,6 +106,7 @@ fn findings_are_cross_examined_and_confirmed_ones_cap_the_grade() {
         Tier::Medium,
         Runtime::Claude,
         "Change the README",
+        &Plan::Full,
         &script,
     )
     .unwrap();
@@ -143,7 +144,15 @@ fn a_clean_low_tier_review_passes_and_garbage_makes_it_incomplete() {
         grade: r#"{"grade": 9, "summary": "Small README edit.\nNothing wrong."}"#.into(),
         sessions: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Low, Runtime::Codex, "", &clean).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Low,
+        Runtime::Codex,
+        "",
+        &Plan::Full,
+        &clean,
+    )
+    .unwrap();
     assert!(report.passes(), "{}", report.markdown());
     assert_eq!(report.model, "gpt-6-luna");
     assert_eq!(*clean.sessions.lock().unwrap(), 2);
@@ -153,7 +162,15 @@ fn a_clean_low_tier_review_passes_and_garbage_makes_it_incomplete() {
         grade: r#"{"grade": 10, "summary": "x"}"#.into(),
         sessions: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &garbage).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Low,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &garbage,
+    )
+    .unwrap();
     assert!(!report.failures.is_empty());
     assert!(!report.passes(), "an unanswered reviewer never passes");
 }
@@ -167,9 +184,16 @@ fn a_tier_below_the_floor_is_refused() {
         grade: String::new(),
         sessions: Mutex::new(0),
     };
-    let error = review_with(temp.path(), Tier::Medium, Runtime::Claude, "", &script)
-        .unwrap_err()
-        .to_string();
+    let error = review_with(
+        temp.path(),
+        Tier::Medium,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &script,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("at least a high review"), "{error}");
 }
 
@@ -198,7 +222,15 @@ fn a_review_stops_when_a_round_changes_nothing_before_the_cap() {
     };
     // The max tier allows 5 rounds: round 3 changes nothing, so rounds 4 and
     // 5 never run.
-    let report = review_with(temp.path(), Tier::Max, Runtime::Claude, "", &script).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Max,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &script,
+    )
+    .unwrap();
     assert_eq!(report.rounds, 3);
     // 5 blind reviewers, 5 cross-examiners in rounds 2 and 3, 1 grader.
     assert_eq!(*script.sessions.lock().unwrap(), 16);
@@ -220,7 +252,15 @@ fn a_finding_raised_in_the_last_round_is_not_accepted_unexamined() {
         grade: r#"{"grade": 9, "summary": "x"}"#.into(),
         sessions: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Medium, Runtime::Claude, "", &script).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Medium,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &script,
+    )
+    .unwrap();
     assert_eq!(report.findings.len(), 2, "the round-3 finding was dropped");
 }
 
@@ -241,7 +281,15 @@ fn a_cross_examiner_that_skips_a_finding_makes_the_review_incomplete() {
             grade: r#"{"grade": 9, "summary": "x"}"#.into(),
             sessions: Mutex::new(0),
         };
-        let report = review_with(temp.path(), Tier::Medium, Runtime::Claude, "", &script).unwrap();
+        let report = review_with(
+            temp.path(),
+            Tier::Medium,
+            Runtime::Claude,
+            "",
+            &Plan::Full,
+            &script,
+        )
+        .unwrap();
         assert!(!report.failures.is_empty(), "{answer}");
         assert!(!report.passes(), "{answer}");
     }
@@ -277,7 +325,15 @@ fn an_unreadable_answer_is_asked_for_once_more() {
     let flaky = Flaky {
         calls: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &flaky).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Low,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &flaky,
+    )
+    .unwrap();
     assert!(report.failures.is_empty(), "{:?}", report.failures);
     assert!(report.passes());
     // Reviewer, its retry, grader, its retry.
@@ -306,7 +362,7 @@ fn a_branch_cannot_lower_its_own_bar() {
         grade: r#"{"grade": 5, "summary": "weak"}"#.into(),
         sessions: Mutex::new(0),
     };
-    let report = review_with(root, Tier::High, Runtime::Claude, "", &script).unwrap();
+    let report = review_with(root, Tier::High, Runtime::Claude, "", &Plan::Full, &script).unwrap();
     assert_eq!(report.merge_grade, 8, "origin/dev's merge grade applies");
     assert!(!report.passes());
 }
@@ -328,7 +384,15 @@ fn a_vote_on_a_finding_the_reviewer_never_saw_is_ignored() {
         grade: r#"{"grade": 9, "summary": "x"}"#.into(),
         sessions: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Medium, Runtime::Claude, "", &script).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Medium,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &script,
+    )
+    .unwrap();
     let f3 = report.findings.iter().find(|f| f.id == "F3").expect("F3");
     assert!(
         f3.votes.iter().all(|v| v.round > 2),
@@ -347,9 +411,16 @@ fn a_dirty_tree_is_not_reviewed() {
         grade: String::new(),
         sessions: Mutex::new(0),
     };
-    let error = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &script)
-        .unwrap_err()
-        .to_string();
+    let error = review_with(
+        temp.path(),
+        Tier::Low,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &script,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("commit or stash"), "{error}");
 }
 
@@ -374,7 +445,15 @@ fn a_crashed_session_is_not_asked_again() {
     let down = Down {
         calls: Mutex::new(0),
     };
-    let report = review_with(temp.path(), Tier::Low, Runtime::Claude, "", &down).unwrap();
+    let report = review_with(
+        temp.path(),
+        Tier::Low,
+        Runtime::Claude,
+        "",
+        &Plan::Full,
+        &down,
+    )
+    .unwrap();
     assert!(!report.passes());
     // The reviewer and the grader, each once: no retry of a crash.
     assert_eq!(*down.calls.lock().unwrap(), 2);
