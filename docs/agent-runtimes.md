@@ -64,8 +64,10 @@ stop rule judges the agent's whole working tree.
 **Transition.** A branch created before this adapter carries the older
 `.claude/hooks/harness.sh`, which looks for `crates/harness/src/claude/` on
 `origin/dev`. Once that path is gone it builds a bootstrap judge from its own
-checkout (labelled non-authoritative) until it rebases onto `dev`. The new
-binary still answers to the old `claude-hook` name.
+checkout (labelled non-authoritative) until it rebases onto `dev`, so rebase open
+branches after this adapter merges. Rebasing also moves the hook environment
+from `AOE_CLAUDE_HOOK_*` to `AOE_AGENT_HOOK_*` and the records from
+`.cache/claude-hook/` to `.cache/agent-hook/`.
 
 `harness.sh` runs a cached `aoe-harness` binary built in the pinned
 `aoeworld/rust-tools` image by `make agent-hook-build`, under the Git common

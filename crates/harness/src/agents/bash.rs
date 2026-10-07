@@ -21,8 +21,9 @@ pub(crate) fn judge(context: &Context, command: &str, cwd: Option<&Path>) -> Ver
     line(context, command, cwd.map(Path::to_path_buf), 0)
 }
 
-/// Whether any simple command in the line (or its substitutions) is `cd`,
-/// `pushd` or `popd`; an unparseable line counts as one.
+/// Whether the line may change the shell's directory: any `cd`, `pushd` or
+/// `popd` word in any simple command or substitution (so `builtin cd`,
+/// `command cd` and `time cd` count too); an unparseable line counts as one.
 pub(crate) fn changes_directory(text: &str) -> bool {
     let Ok(parsed) = shell::parse(text) else {
         return true;
@@ -32,9 +33,10 @@ pub(crate) fn changes_directory(text: &str) -> bool {
         .iter()
         .any(|inner| changes_directory(inner))
         || parsed.items.iter().any(|item| match item {
-            Item::Command(simple, _) => strip_keywords(&simple.words)
-                .first()
-                .is_some_and(|word| matches!(word.text.as_str(), "cd" | "pushd" | "popd")),
+            Item::Command(simple, _) => simple
+                .words
+                .iter()
+                .any(|word| matches!(word.text.as_str(), "cd" | "pushd" | "popd")),
             _ => false,
         })
 }

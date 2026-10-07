@@ -381,6 +381,24 @@ fn runtime_path_rewrites_and_hidden_working_directories_are_closed() {
         absolute
     )));
     // dsh's persistent shell keeps `cd`; agents pass workdir instead.
+    for wrapped in [
+        "builtin cd gates",
+        "command cd gates",
+        "time cd gates",
+        "ls; pushd gates",
+    ] {
+        let call = json!({ "command": wrapped });
+        assert!(
+            denied(&hook(
+                &fixture,
+                Runtime::Dsh,
+                Some("implementer"),
+                "bash",
+                call
+            )),
+            "{wrapped}"
+        );
+    }
     let cd = json!({ "command": "cd gates" });
     assert!(denied(&hook(
         &fixture,
