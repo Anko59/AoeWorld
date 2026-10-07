@@ -110,7 +110,7 @@ impl Report {
         );
         if self.written_grade != self.grade {
             out.push_str(&format!(
-                "The grader wrote {}/10; confirmed findings cap it at {}/10.\n\n",
+                "The grader wrote {}/10; confirmed and disputed findings cap it at {}/10.\n\n",
                 self.written_grade, self.grade
             ));
         }

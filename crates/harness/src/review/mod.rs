@@ -115,6 +115,16 @@ fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTre
     let (base, merge_base) = git::base(root, "dev", false)?;
     let changed = git::changed(root, &merge_base)?;
     let registry = Registry::parse(trusted(root, "gates/registry.json")?.as_bytes())?;
+    // A misspelt floor would silently give the low tier.
+    let known: std::collections::BTreeSet<&str> =
+        registry.suites.iter().map(|s| s.id.as_str()).collect();
+    if let Some(unknown) = Config::load(root)?
+        .floors
+        .keys()
+        .find(|k| !known.contains(k.as_str()))
+    {
+        return Err(format!("gates/review.json: floor for unknown suite `{unknown}`").into());
+    }
     let suites = registry.classify(&changed).suites;
     Ok((base, merge_base, suites))
 }

@@ -58,13 +58,16 @@ and effort (`crates/harness/src/review/`).
    reviewer's findings stand as confirmed. A finding that full `upheld` votes
    alone would not confirm counts one severity lower (`partial` means "real,
    but a different severity or scope").
-4. **Stop** when a round changes no status and adds no finding, or at the tier's
-   round cap.
+4. **Stop** when a round changes no status and adds no finding, when it adds
+   no finding and leaves none disputed (asking again would repeat the same
+   question), or at the tier's round cap.
 5. **Grade.** A fresh grader session writes a grade /10 and at most two plain
    lines. Rust caps it: a confirmed critical finding, or a major or critical
    test-integrity one (weakened or gamed tests), caps it at 4; a confirmed
    major one at 7. A minor test-integrity finding (a small coverage gap) counts
-   by its severity, like any other.
+   by its severity, like any other. A **disputed** finding (votes split) counts
+   one severity lower, so a single dissenting reviewer cannot erase a critical
+   one.
 
 The review **passes** when every session answered and the capped grade is at
 least `merge_grade` (8). Every report is stored, keyed by commit, tier and
@@ -74,7 +77,8 @@ none replaces another.
 ## Limits
 
 - Grades are model judgements. The protocol makes them harder to game (blind
-  first round, code-cited refutations, caps from confirmed findings), but a
+  first round, code-cited refutations, caps from confirmed and disputed
+  findings), but a
   shared blind spot of one model family can survive; mix families when usage
   allows.
 - Reviewers can be slow: a high-tier review is up to 16 sessions.

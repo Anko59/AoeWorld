@@ -380,3 +380,20 @@ fn a_crashed_session_is_not_asked_again() {
     assert_eq!(*down.calls.lock().unwrap(), 2);
     assert!(report.failures.iter().all(|f| !f.contains("asked again")));
 }
+
+#[test]
+fn a_floor_for_an_unknown_suite_is_refused() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    let misspelt = fs::read_to_string(root.join("gates/review.json"))
+        .unwrap()
+        .replace("\"everything\": \"high\"", "\"everyting\": \"high\"");
+    assert!(misspelt.contains("everyting"));
+    fs::write(root.join("gates/review.json"), misspelt).unwrap();
+    git(root, &["commit", "-q", "-am", "misspelt floor"]);
+    // The criteria are read from origin/dev: put the misspelling there.
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    git(root, &["commit", "-q", "--allow-empty", "-m", "change"]);
+    let error = super::super::floor(root).unwrap_err().to_string();
+    assert!(error.contains("unknown suite `everyting`"), "{error}");
+}
