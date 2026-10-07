@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec ship|ship-status    (`make ship`: the same judge runs the publishing step)
+#   harness.sh exec ship|ship-status|review|review-floor    (the same judge publishes and reviews)
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -13,8 +13,8 @@ case ${1:-} in
   build) runtime=claude event=build ;;
   claude|codex|dsh|pi) runtime=$1 event=${2:?usage: harness.sh <runtime> <event>} ;;
   exec)
-    case ${2:-} in ship|ship-status) ;; *) echo "harness.sh exec: ship or ship-status only" >&2; exit 2 ;; esac
-    runtime=claude event=exec probe=crates/harness/src/ship/mod.rs ;;
+    case ${2:-} in ship|ship-status|review|review-floor) ;; *) echo "harness.sh exec: ship, ship-status, review or review-floor only" >&2; exit 2 ;; esac
+    runtime=claude event=exec probe=crates/harness/src/review/mod.rs ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) || exit 2
