@@ -57,7 +57,13 @@ impl Report {
         self.final_fix
             || self.failures.is_empty()
                 && if self.closing {
-                    !self.findings.iter().any(blocking)
+                    // Every carried finding must be shown fixed (refuted), not
+                    // merely left undecided.
+                    !self.findings.iter().any(|f| {
+                        blocking(f)
+                            || (f.reporter == super::closing::CARRIED
+                                && f.status != Status::Refuted)
+                    })
                 } else {
                     self.grade >= self.merge_grade
                 }

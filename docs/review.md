@@ -106,8 +106,8 @@ has a budget, and `make ship` decides from the stored reports
    failed a review is never reviewed again; only new commits are. An
    **incomplete** review (a session never answered) checked nothing: it does
    not count and the same commit may be reviewed again. Three incomplete
-   reviews in a row mean the reviewers are unavailable: `make ship` stops and
-   you ship again later.
+   reviews within an hour mean the reviewers are unavailable: `make ship`
+   refuses for the rest of that hour, then reviews again.
 2. **Not converging: split.** If the last full review confirmed a finding
    that caps at 4 (critical, or a major test weakening), or more blocking
    findings (those capping below 8) than the full review before it, the change
@@ -118,15 +118,17 @@ has a budget, and `make ship` decides from the stored reports
    the **strong** models and skips the blind round. Every reviewer votes on
    each blocking finding found so far (`upheld` = still there, `refuted` =
    fixed, citing the fix) and audits only the diff since the last reviewed
-   commit; new findings must be in that diff. A closing review **passes when
-   no blocking finding is left** and every session answered; its grade is
-   reported, not gated. If it finds an earlier finding still open (a fix that
+   commit; new findings must be in that diff. It always has at least two
+   rounds, so what it finds is cross-examined. A closing review **passes when
+   no blocking finding is left, every carried finding was shown fixed
+   (refuted)** and every session answered; its grade is reported, not gated. If it finds an earlier finding still open (a fix that
    did not fix) or a critical one, split as in 2.
 4. **Final fix.** When both closing reviews failed only on new findings in
    the fixes, fix those, each with a test that fails without the fix, and ship:
    that commit merges on tests and gates (`Final fix` in the pull request), with
    no further model review. `make ship` refuses a final fix of more than 150
-   changed lines since the last closing review, or one without a test file.
+   changed lines since the last closing review (a binary file counts as over),
+   or one without a test file.
    Open an issue asking for a post-merge review of it.
 
 The budget bounds the cost at five reviews plus one small unreviewed fix, and

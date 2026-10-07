@@ -17,6 +17,8 @@ pub(crate) const CLOSING_BUDGET: usize = 2;
 /// Incomplete reviews (some session never answered) in a row before
 /// `make ship` stops and asks to retry later.
 pub(crate) const UNANSWERED: usize = 3;
+/// How long "reviewers unavailable" lasts before `make ship` tries again.
+pub(crate) const UNAVAILABLE_SECONDS: u64 = 3600;
 /// Marks findings carried from earlier reviews: every reviewer votes on them.
 pub(crate) const CARRIED: usize = usize::MAX;
 
@@ -67,17 +69,22 @@ fn still_open(report: &Report) -> usize {
 
 /// What `make ship` does next on a branch, from its stored reviews (oldest
 /// first) and the commit about to ship.
-pub(crate) fn next(history: &[Report], head: &str) -> Next {
+pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
     // Reviews before the branch's last passing one are settled.
     let start = history
         .iter()
         .rposition(Report::passes)
         .map_or(0, |i| i + 1);
     let tail = &history[start..];
-    let unanswered = tail.iter().rev().take_while(|r| !r.complete()).count();
+    // Recent incomplete reviews only: an outage passes, and then reviews run again.
+    let unanswered = tail
+        .iter()
+        .rev()
+        .take_while(|r| !r.complete() && now.saturating_sub(r.finished) < UNAVAILABLE_SECONDS)
+        .count();
     if unanswered >= UNANSWERED {
         return Next::Unavailable(format!(
-            "the last {unanswered} reviews were incomplete (sessions gave no answer); the reviewers are unavailable, so ship again later"
+            "the last {unanswered} reviews were incomplete (sessions gave no answer); the reviewers are unavailable, so ship again in an hour"
         ));
     }
     // An incomplete review checked nothing: it neither counts nor blocks a re-run.
@@ -145,9 +152,12 @@ pub(crate) fn next(history: &[Report], head: &str) -> Next {
 
 /// The record of a final fix: the last closing review, carried to the fixing
 /// commit. It passes on tests and gates; no model reviewed the fix itself.
-pub(crate) fn final_fix(reviewed: &Report, head: &str) -> Report {
+pub(crate) fn final_fix(reviewed: &Report, head: &str, now: u64) -> Report {
     let mut report = reviewed.clone();
     report.head = head.to_owned();
+    // It comes after the review it closes, in the branch's history.
+    report.started = now;
+    report.finished = now;
     report.closing = false;
     report.final_fix = true;
     report.failures.clear();

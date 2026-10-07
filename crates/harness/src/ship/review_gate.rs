@@ -70,7 +70,7 @@ pub(crate) fn require(
         None => String::new(),
     };
     let history = review::history(root, &evidence.branch)?;
-    let plan = match closing::next(&history, &evidence.head) {
+    let plan = match closing::next(&history, &evidence.head, unix_now()) {
         Next::Review(plan) => plan,
         Next::FixFirst(why) | Next::Unavailable(why) => {
             return Err(format!("ship: {why}; nothing was pushed").into());
@@ -78,7 +78,7 @@ pub(crate) fn require(
         Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
         Next::FinalFix(reviewed) => {
             final_fix_scope(root, &reviewed.head, &evidence.head)?;
-            let report = closing::final_fix(&reviewed, &evidence.head);
+            let report = closing::final_fix(&reviewed, &evidence.head, unix_now());
             report.store(root)?;
             eprintln!(
                 "ship: final fix: the review budget is spent and converging; this commit ships on tests and gates. Open an issue asking for a post-merge review of {} (docs/review.md)",
@@ -137,7 +137,7 @@ pub(crate) fn require(
         )
     };
     let history = review::history(root, &evidence.branch)?;
-    let next = match closing::next(&history, "") {
+    let next = match closing::next(&history, "", unix_now()) {
         _ if !report.complete() => "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".to_owned(),
         Next::Split(why) => split(&evidence.branch, &why),
         Next::Unavailable(why) => why,
@@ -154,9 +154,14 @@ fn final_fix_scope(root: &Path, reviewed: &str, head: &str) -> Result<()> {
     let (mut lines, mut tests) = (0u64, false);
     for line in numstat.lines() {
         let mut parts = line.split('\t');
-        let added: u64 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
-        let removed: u64 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
-        lines += added + removed;
+        // Binary files show `-`: they count as over the cap.
+        let mut count = || {
+            parts
+                .next()
+                .and_then(|n| n.parse::<u64>().ok())
+                .unwrap_or(FINAL_FIX_LINES + 1)
+        };
+        lines += count() + count();
         tests |= parts
             .next()
             .is_some_and(|path| crate::agents::is_test_path(&path.to_ascii_lowercase()));
@@ -178,6 +183,12 @@ fn split(branch: &str, why: &str) -> String {
     format!(
         "{why}: the reviews of `{branch}` are not converging. Split the change into smaller pull requests on new branches (each gets its own review budget), close this one, and file what is left as issues (docs/review.md)"
     )
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn short(sha: &str) -> &str {

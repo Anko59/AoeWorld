@@ -201,17 +201,23 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
         Tier::High
     );
     assert_eq!(
-        config.model(Tier::Medium, Runtime::Claude).model,
+        config.model_for(Tier::Medium, Runtime::Claude, false).model,
         "claude-sonnet-5-5"
     );
     assert_eq!(
-        config.model(Tier::Xhigh, Runtime::Claude).model,
+        config.model_for(Tier::Xhigh, Runtime::Claude, false).model,
         "claude-opus-5-5"
     );
     // High uses the average models one reasoning step higher.
-    assert_eq!(config.model(Tier::High, Runtime::Claude).effort, "high");
+    assert_eq!(
+        config.model_for(Tier::High, Runtime::Claude, false).effort,
+        "high"
+    );
     // Codex's highest effort is xhigh: the bump never invents one it refuses.
-    assert_eq!(config.model(Tier::High, Runtime::Codex).effort, "xhigh");
+    assert_eq!(
+        config.model_for(Tier::High, Runtime::Codex, false).effort,
+        "xhigh"
+    );
     assert_eq!(config.tiers[&Tier::Max].personas.len(), 5);
     assert_eq!(bump("claude", "max"), "max");
     assert_eq!(bump("codex", "high"), "xhigh");

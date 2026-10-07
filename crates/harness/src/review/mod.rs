@@ -195,10 +195,7 @@ pub(crate) fn review(
     plan: &Plan,
 ) -> Result<Report> {
     let config = Config::load(root)?;
-    let model = match plan {
-        Plan::Full => config.model(tier, runtime),
-        Plan::Closing { .. } => config.closing_model(tier, runtime),
-    };
+    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
     let live = Live {
         runtime,
         root,
@@ -252,10 +249,7 @@ pub(crate) fn review_with(
     };
     let closing = matches!(plan, Plan::Closing { .. });
     let tier_config = config.tiers[&tier].clone();
-    let model = match plan {
-        Plan::Full => config.model(tier, runtime),
-        Plan::Closing { .. } => config.closing_model(tier, runtime),
-    };
+    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
     let personas = tier_config.personas.clone();
     let started = now();
     let mut findings: Vec<Finding> = Vec::new();
@@ -280,14 +274,20 @@ pub(crate) fn review_with(
         }
     };
     let mut rounds = 1;
-    for round in first..=tier_config.max_rounds {
+    // A closing review needs a round after the first to examine what it finds.
+    let max_rounds = if closing {
+        tier_config.max_rounds.max(2)
+    } else {
+        tier_config.max_rounds
+    };
+    for round in first..=max_rounds {
         if (reviewers < 2 || findings.is_empty()) && !(closing && round == 1) {
             break;
         }
         let before: Vec<(String, Status)> =
             findings.iter().map(|f| (f.id.clone(), f.status)).collect();
         // A finding added in the last round could never be cross-examined.
-        let last = round == tier_config.max_rounds;
+        let last = round == max_rounds;
         let mut asked = Vec::new();
         let mut prompts = Vec::new();
         for (reviewer, persona) in personas.iter().enumerate() {

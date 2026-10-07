@@ -149,25 +149,16 @@ impl Config {
             .unwrap_or(Tier::Low)
     }
 
-    /// The model and effort for this tier on this runtime.
-    pub(crate) fn model(&self, tier: Tier, runtime: Runtime) -> Model {
+    /// The model for a review: a closing review (docs/review.md) runs on the
+    /// strong models whatever the tier.
+    pub(crate) fn model_for(&self, tier: Tier, runtime: Runtime, closing: bool) -> Model {
         let family = &self.models[runtime_key(runtime)];
         let tier_config = &self.tiers[&tier];
-        let mut model = match tier_config.strength {
-            Strength::Average => family.average.clone(),
-            Strength::Strong => family.strong.clone(),
+        let mut model = match (closing, tier_config.strength) {
+            (true, _) | (_, Strength::Strong) => family.strong.clone(),
+            (false, Strength::Average) => family.average.clone(),
         };
         if tier_config.reasoning_bump {
-            model.effort = bump(runtime_key(runtime), &model.effort).to_owned();
-        }
-        model
-    }
-
-    /// A closing review (docs/review.md) runs on the strong models whatever
-    /// the tier, with the tier's reasoning bump.
-    pub(crate) fn closing_model(&self, tier: Tier, runtime: Runtime) -> Model {
-        let mut model = self.models[runtime_key(runtime)].strong.clone();
-        if self.tiers[&tier].reasoning_bump {
             model.effort = bump(runtime_key(runtime), &model.effort).to_owned();
         }
         model

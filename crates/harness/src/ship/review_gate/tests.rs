@@ -390,3 +390,23 @@ fn rerunning_a_failed_commit_is_refused_and_every_attempt_is_kept() {
     graded(&root, Tier::Low, 5);
     assert_eq!(crate::review::history(&root, "feature").unwrap().len(), 2);
 }
+
+#[test]
+fn a_final_fix_over_the_line_cap_is_refused_even_with_a_test() {
+    let (_temp, root) = fixture("true");
+    three_failed(&root);
+    for closing in 1..=2 {
+        commit(&root, &format!("fixes {closing}"));
+        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
+            Ok(failed_closing(root, tier))
+        });
+    }
+    std::fs::create_dir_all(root.join("crates/x/src")).unwrap();
+    std::fs::write(root.join("crates/x/src/tests.rs"), "// test\n".repeat(200)).unwrap();
+    run(&root, &["add", "-A"]);
+    commit(&root, "too big, though tested");
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("found 200 lines)"), "{error}");
+}
