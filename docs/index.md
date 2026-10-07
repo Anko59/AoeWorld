@@ -1,7 +1,7 @@
 # Documentation
 
 - [Engineering guide](agent-engineering.md)
-- [Claude Code adapter](agent-runtimes.md)
+- [Agent runtimes](agent-runtimes.md)
 - [Architecture](architecture.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)

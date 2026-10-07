@@ -240,3 +240,16 @@ fn codex_edits_are_checked_against_the_structure_rules() {
     .expect("block");
     assert_eq!(answer["decision"], "block");
 }
+
+#[test]
+fn codex_launches_carry_the_committed_hooks_inline() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let settings = super::super::launch::codex_hooks(&root).expect("hooks.json");
+    let pre = settings
+        .iter()
+        .find(|s| s.starts_with("hooks.PreToolUse="))
+        .expect("PreToolUse");
+    assert!(pre.contains(r#""matcher"="^(Bash|apply_patch)$""#), "{pre}");
+    assert!(pre.contains("harness.sh codex pre-tool-use"), "{pre}");
+    assert!(settings.iter().any(|s| s.starts_with("hooks.Stop=")));
+}

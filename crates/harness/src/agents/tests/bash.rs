@@ -27,9 +27,9 @@ fn every_role_is_refused_privilege_toolchain_and_hook_bypass() {
             "make -t lint",
             "echo hi > .git/hooks/pre-commit",
             "cp /tmp/x .git/config",
-            "rm -rf .cache/claude-hook",
-            "echo '{}' > .cache/claude-hook/state.json",
-            "tee .CACHE/Claude-Hook/state.json < /dev/null",
+            "rm -rf .cache/agent-hook",
+            "echo '{}' > .cache/agent-hook/state.json",
+            "tee .CACHE/Agent-Hook/state.json < /dev/null",
         ] {
             denied(&fixture, role, command);
         }

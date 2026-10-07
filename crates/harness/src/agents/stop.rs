@@ -431,7 +431,7 @@ fn strip_ansi(text: &str) -> String {
     out
 }
 
-/// Read-modify-write `.cache/claude-hook/state.json` under an exclusive lock.
+/// Read-modify-write `.cache/agent-hook/state.json` under an exclusive lock.
 pub(crate) fn with_state<T>(
     root: &Path,
     change: impl FnOnce(&mut State) -> T,

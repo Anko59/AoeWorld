@@ -25,5 +25,5 @@ The harness enforces these rules on every call:
 - Files stay within 500 lines and directories within 14 code/config files.
 
 When you stop, check-fast runs; you are held while it is red, for five rounds,
-then asked to write `.cache/claude-hook/BLOCKED.md`. Report the exact commands
+then asked to write `.cache/agent-hook/BLOCKED.md`. Report the exact commands
 and results.

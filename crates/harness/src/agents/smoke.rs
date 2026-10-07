@@ -6,7 +6,7 @@
 use super::Runtime;
 use crate::process::{Cancellation, CaptureExit, capture_command};
 use serde::Serialize;
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{fs, path::Path, time::Duration};
 
 const PROTECTED: &str = "gates/agent-smoke.txt";
 const ALLOWED: &str = ".cache/tmp/agent-smoke.txt";
@@ -23,81 +23,13 @@ pub(crate) struct Report {
     verdict: &'static str,
 }
 
-fn command(runtime: Runtime, root: &Path) -> Command {
-    let mut command = match runtime {
-        Runtime::Claude => {
-            let mut c = Command::new("claude");
-            c.args([
-                "-p",
-                "--output-format",
-                "json",
-                "--allowedTools=Bash",
-                "--max-turns",
-                "8",
-            ]);
-            c.arg(PROMPT);
-            c
-        }
-        Runtime::Codex => {
-            let mut c = Command::new("codex");
-            c.args([
-                "exec",
-                "--json",
-                "--dangerously-bypass-hook-trust",
-                "-s",
-                "workspace-write",
-            ]);
-            c.arg(PROMPT);
-            c
-        }
-        Runtime::Dsh => {
-            let mut c = Command::new("npx");
-            c.args([
-                "--yes",
-                "@deepseek-ai/dsh@0.2.0-rc.2",
-                "--profile",
-                "headless",
-                "--json",
-            ]);
-            c.arg("--patch")
-                .arg(root.join(".cache/tmp/dsh-hooks.patch.yml"));
-            c.arg(PROMPT);
-            c
-        }
-        Runtime::Pi => {
-            let mut c = Command::new("pi");
-            c.args(["-p", "--mode", "json", "--no-session", "-a"]);
-            c.arg(PROMPT);
-            c
-        }
-    };
-    command
-        .current_dir(root)
-        .env("AOE_AGENT_ROLE", "implementer");
-    command
-}
-
-/// The DeepSeek bridge reads one absolute hook config per process.
-pub(crate) fn dsh_patch(root: &Path) -> String {
-    format!(
-        "- name: '@deepseek-ai/dsh-hooks-claude-code'\n  config:\n    configPath: {}\n",
-        root.join(".dsh/hooks.json").display()
-    )
-}
-
 pub(crate) fn run(runtime: Runtime, root: &Path) -> Result<Report, Box<dyn std::error::Error>> {
     let root = fs::canonicalize(root)?;
     fs::create_dir_all(root.join(".cache/tmp"))?;
     for file in [PROTECTED, ALLOWED] {
         let _ = fs::remove_file(root.join(file));
     }
-    if runtime == Runtime::Dsh {
-        fs::write(
-            root.join(".cache/tmp/dsh-hooks.patch.yml"),
-            dsh_patch(&root),
-        )?;
-    }
-    let child_command = command(runtime, &root);
+    let child_command = super::launch::command(runtime, &root, "implementer", PROMPT)?;
     let shown = format!("{child_command:?}");
     let captured = capture_command(
         child_command,

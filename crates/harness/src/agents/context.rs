@@ -13,8 +13,8 @@ use std::{
 pub(crate) type Verdict = Result<(), String>;
 
 /// Records only the hook itself writes; agents may add `BLOCKED.md` there.
-pub(crate) const RECORDS: &str = ".cache/claude-hook";
-pub(crate) const BLOCKED: &str = ".cache/claude-hook/BLOCKED.md";
+pub(crate) const RECORDS: &str = ".cache/agent-hook";
+pub(crate) const BLOCKED: &str = ".cache/agent-hook/BLOCKED.md";
 const WALK_LIMIT: usize = 20_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

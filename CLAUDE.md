@@ -3,18 +3,19 @@
 @AGENTS.md
 
 The rules above are canonical; this file only adds what is specific to Claude
-Code. The [Claude Code adapter](docs/agent-runtimes.md) explains every hook.
+Code. [Agent runtimes](docs/agent-runtimes.md) explains every hook and how
+Codex, DeepSeek Harness and pi get the same rules.
 
 ## What the hooks do
 
-`.claude/settings.json` sends every hook event to `aoe-harness claude-hook`
+`.claude/settings.json` sends every hook event to `aoe-harness agent-hook`
 through `.agents/hooks/harness.sh`. A denial always says what to do instead:
 follow it rather than rephrasing the command to get past it.
 
 - **Every Bash, Edit and Write call is judged** by the caller's role. Host
   `cargo`/`npm` are refused (use the Dockerized Make targets), as are hook
   bypasses (`--no-verify`, `git -c`, hook or alias configuration), edits to
-  `.git/` or `.cache/claude-hook/`, and merging, approving or pushing
+  `.git/` or `.cache/agent-hook/`, and merging, approving or pushing
   `dev`/`main`/`release/*`.
 - **Edited files** are checked at once against the 500-line and 14-files rules.
 - **Stopping** runs check-fast: the static stop-cadence gates that

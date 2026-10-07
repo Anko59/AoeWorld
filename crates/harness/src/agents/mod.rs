@@ -16,6 +16,7 @@ mod args;
 mod bash;
 mod context;
 mod edit;
+mod launch;
 mod paths;
 mod role;
 mod rules;
