@@ -1,5 +1,6 @@
 use super::*;
 mod helpers;
+mod strict_reader;
 use helpers::{decoration, fixture, malformed, resource};
 
 #[test]

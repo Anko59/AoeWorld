@@ -79,6 +79,11 @@ pub(crate) fn tree_present_for_recipe(
     biome: Biome,
     recipe: u16,
 ) -> bool {
+    // Recipe nine obtains trees only from the shared composed descriptor.
+    // Never silently fall back to legacy per-tile density/parity here.
+    if recipe == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
+        return false;
+    }
     if !matches!(
         recipe,
         crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION

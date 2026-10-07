@@ -8,6 +8,13 @@ use aoe_core::TileCoord;
 
 impl MapChunkGenerator {
     pub(super) fn sample_tile(&self, tile: TileCoord) -> Tile {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            // Dense defaults cannot produce page errors; source-backed callers
+            // always use the fallible dispatcher, never this compatibility path.
+            return self
+                .landscape_tile_required(tile, &|| false)
+                .unwrap_or_else(|_| self.sample_base_tile(tile));
+        }
         let mut sample = self.sample_base_tile(tile);
         if sample.water == WaterKind::None && sample.surface.walkable() {
             sample.material =
@@ -154,6 +161,12 @@ impl MapChunkGenerator {
     }
 
     pub(super) fn resource_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            return self
+                .landscape_node_with_cancel(tile, &|| false)
+                .ok()
+                .flatten();
+        }
         if !sample.passable {
             return None;
         }
@@ -167,6 +180,11 @@ impl MapChunkGenerator {
     }
 
     pub(super) fn occupied_without_access(&self, tile: TileCoord, sample: Tile) -> bool {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            return self
+                .landscape_occupied_with_cancel(tile, &|| false)
+                .unwrap_or(true);
+        }
         if !sample.passable {
             return true;
         }

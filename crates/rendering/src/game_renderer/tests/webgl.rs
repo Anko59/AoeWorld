@@ -7,6 +7,54 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
+    let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
+    for (page, texel) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
+        .iter()
+        .enumerate()
+    {
+        let start = page * crate::GAME_ATLAS_PAGE_BYTES;
+        pixels[start..start + 4].copy_from_slice(texel);
+    }
+    let (canvas, mut renderer) = target(&pixels);
+    let address = |page| crate::AtlasAddress {
+        page,
+        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+    };
+    let mut face = triangle(
+        [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]],
+        [0.0; 3],
+        [0.0; 3],
+    );
+    face.texture_uv = Some(address(0));
+    face.texture_blend = Some([address(1), address(2)]);
+    assert_eq!(instance(&face).pages[3], 0);
+    for palette in 0..4 {
+        face.appearance =
+            crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
+                floor_strength: 650,
+                canopy_strength: 650,
+                palette,
+                exposure: 1,
+                height_band: 2,
+            }));
+        face.tint = 1;
+        let packet = instance(&face);
+        assert_eq!(packet.pages[..3], [0, 1, 2]);
+        let expected = crate::surface_mesh::landscape::texel(
+            [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+            crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
+            1,
+            packet.pages[3],
+        );
+        render(&mut renderer, &mut [packet]);
+        assert_pixel(&canvas, 48, 48, expected);
+        assert_pixel(&canvas, 32, 32, expected);
+        assert_ne!(expected, [82, 86, 86, 255]);
+    }
+}
+
+#[wasm_bindgen_test]
 fn webgl_backing_axis_limit_and_zero_size_never_report_a_presented_frame() {
     let (canvas, mut renderer) = target(&atlas(&[]));
     assert!(renderer.resize(4097, 1).is_err());
@@ -246,6 +294,7 @@ fn triangle(
     color: [f32; 3],
 ) -> ProjectedSurfaceTriangle {
     ProjectedSurfaceTriangle {
+        appearance: 0,
         points: std::array::from_fn(|index| SurfacePoint {
             world: [0.0, 0.0, elevation[index]],
             screen: ScreenPoint {

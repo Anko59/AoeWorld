@@ -3,6 +3,13 @@
 Use Rust/WASM with wgpu's WebGPU backend and instanced sprites as the preferred
 renderer. The client remains single threaded.
 
+Readable WGSL is lexically compacted by Rust at build time into an embedded
+constant: comments (including nested blocks) are removed, whitespace becomes one
+ASCII space, and quoted text/escapes remain unchanged. Token boundaries and
+operators are never joined or renamed. Unterminated comments/quotes fail the
+build; native golden tests compare the source and compacted token streams. This
+adds no runtime decompression, fetching, allocation or shader dependency.
+
 The first playable feature exposed a compatibility gap: successful tests with
 forced software WebGPU did not establish that ordinary browsers could start the
 game. When WebGPU initialization fails (including a missing API, adapter, or
@@ -28,6 +35,13 @@ Restore shaders, buffers, texture, and atlas on the original canvas, then
 invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
 skipped GPU frame is not a successful presentation: do not advance picking or
 render-cache positions until pixels have actually been submitted.
+
+World layers retain exact stable (depth total_cmp, tier, resource id, source order)
+ordering by sorting an integer index sidecar with original indices as final ties,
+then applying permutation cycles in place with one saved Copy layer. There is no
+second layer scene or large-layer stable-sort scratch allocation. Empty-terrain
+fallback generates unique canonical cells in lexicographic (x,y) order directly;
+the generic nonempty compatibility helper and its behavior remain available.
 
 Diagnostics continue to require WebGPU. Test their explicit capability error.
 Test the game both with WebGPU and without special GPU launch flags, including
@@ -73,8 +87,9 @@ Gameplay owns exactly three 2048-square RGBA pages (48 MiB base pixels): terrain
 0/1, objects/units/shadows 2. Source page numbers are never runtime page numbers.
 Required overflow fails; never discard visible trees or regroup painter order.
 Page and UV travel together through shared terrain samples and sprite frames.
-Selectors append at byte 96 of the 112-byte ABI (primary, two blends, reserved
-zero); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
+Selectors append at byte 96 of the 112-byte ABI (primary, two blends, appearance
+word); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
+Legacy sprites retain the exact reserved-zero fourth word.
 WebGPU uses D2Array, WebGL2 uses integer attribute 6 and TEXTURE_2D_ARRAY, and
 Canvas samples page-major pixels with lazily created legacy page canvases.
 Diagnostic WebGPU still uses one 8-square layer (256 bytes), with actual texture
@@ -83,3 +98,40 @@ observation API; unavailable measurements must not become fabricated counters.
 48 MiB is not total memory: source decode scratch, GL restoration ownership,
 Canvas copies, transient uploads and presentation buffers remain separately real.
 Synthetic page/depth/blend/restoration pixels do not qualify France or hardware.
+
+## Opt-in landscape appearance
+
+Scene terrain carries optional canopy/floor strength, palette, exposure and height
+band. None follows the exact legacy kernel. Displayed triangles retain a packed
+u32 sidecar (private field, not a public DTO change), with zero for None and a
+presence bit for Some zero-strength metadata. Canonical nearest world-cell-centre
+ownership with tile-key tie breaks
+makes coarse appearance independent of source order and fine camera visibility.
+Geometry and canonical appearance share one input traversal and the same bounded
+CellSample candidate storage/comparator. Appearance ownership is selected before
+fine visibility rejection; geometry still applies its existing visibility test.
+No resident-world appearance map is cloned and no geometry/picking budget changes.
+
+Vegetative terrain packets use pages.w: presence bit 0, palette bits 1–3, floor
+strength bits 4–13, canopy bits 14–23, exposure bits 24–25, height band bits 26–28;
+29–31 remain zero. Some zero strength still has presence set. Protected procedural
+rock/snow/ice/mud/water, sand and skirts retain their existing kernels and zero
+packet word; their raw scene/triangle metadata is not discarded. Exposure and
+height are carried semantic evidence, not species/art selection permissions.
+
+New vegetative faces blend coherent grass (dry grass in dry/savanna regions) with
+forest detail, uniformly falling back to dirt when forest frames are absent.
+Weights are (1-floor/1000, floor/1000, 0), not legacy barycentric weights. The
+primary and both secondary page addresses still travel together without extra
+geometry, atlas allocations or draw-order regrouping. Restrained palette channel
+multipliers and canopy shading (at most 12%) follow face lighting, with shared
+byte rounding in Canvas, WGSL and GLSL. This does not qualify forest accent sheets
+as seamless full-sheet art; that review limitation above remains in force.
+
+Resource family zero keeps exact legacy variant selection. Families 1–4 explicitly
+fall back to healthy approved broadleaf 4652 frames, paired with 2296 shadows;
+client culling and renderer selection share scene_resource_frame. No conifer,
+dry-scrub, tropical or cliff sheet is approved by its semantic name. Decorations
+retain a distinct scene DTO and visible client collection, but are deliberately
+omitted from drawing while reviewed decoration mappings remain empty. They are
+never proxied into resources, gatherables, blockers or economy objects.

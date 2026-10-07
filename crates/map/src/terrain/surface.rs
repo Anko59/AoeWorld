@@ -50,6 +50,11 @@ impl MapChunkGenerator {
         if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
             return EdgePassability::Blocked;
         }
+        if self.uses_landscape_v2() {
+            return self
+                .edge_between_with_cancel(from, to, &|| false)
+                .unwrap_or(EdgePassability::Blocked);
+        }
         let Some(from) = self.tile_at(from) else {
             return EdgePassability::Blocked;
         };
@@ -78,6 +83,15 @@ impl MapChunkGenerator {
         if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
             return Ok(EdgePassability::Blocked);
         }
+        if self.uses_landscape_v2() {
+            let from = self
+                .base_physical_tile_with_cancel(from, cancelled)?
+                .ok_or(EnvironmentPageError::Invalid)?;
+            let to = self
+                .base_physical_tile_with_cancel(to, cancelled)?
+                .ok_or(EnvironmentPageError::Invalid)?;
+            return Ok(physical_edge(from, to));
+        }
         let from = self
             .tile_at_with_cancel(from, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;
@@ -96,6 +110,19 @@ impl MapChunkGenerator {
                 EdgePassability::Passable
             },
         )
+    }
+}
+
+fn physical_edge(from: super::Tile, to: super::Tile) -> EdgePassability {
+    if !from.passable
+        || !to.passable
+        || !from.surface.walkable()
+        || !to.surface.walkable()
+        || (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() > 1
+    {
+        EdgePassability::Blocked
+    } else {
+        EdgePassability::Passable
     }
 }
 

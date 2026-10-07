@@ -212,7 +212,14 @@ pub(crate) fn surface_instance(
                 triangle
                     .texture_blend
                     .map_or(0, |addresses| addresses[1].page),
-                0,
+                if matches!(triangle.material, 0 | 1 | 2 | 6)
+                    && triangle.tint <= 3
+                    && !triangle.skirt
+                {
+                    triangle.appearance
+                } else {
+                    0
+                },
             ],
         },
         None => Sprite {

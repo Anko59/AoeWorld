@@ -4,6 +4,8 @@ use bytemuck::{Pod, Zeroable};
 use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
 use wgpu::SurfaceTarget;
+// Generated at build time from the readable WGSL; no runtime decompression.
+include!(concat!(env!("OUT_DIR"), "/sprites_shader.rs"));
 const CAPACITY: usize = 16_384;
 const ATLAS_SIDE: u32 = 8;
 const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
@@ -27,7 +29,7 @@ pub(crate) struct Sprite {
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
-    /// Primary, secondary, tertiary atlas layers, followed by reserved zero.
+    /// Primary, secondary, tertiary atlas layers, then appearance (legacy zero).
     pub(crate) pages: [u32; 4],
 }
 pub struct Renderer {
@@ -92,7 +94,7 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("synthetic sprites"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sprites.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER_SOURCE)),
         });
         let atlas = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("synthetic sprite atlas"),

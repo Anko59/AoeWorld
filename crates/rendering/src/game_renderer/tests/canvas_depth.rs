@@ -443,6 +443,7 @@ fn triangle(
         },
     });
     ProjectedSurfaceTriangle {
+        appearance: 0,
         points,
         color,
         tile: [0, 0],

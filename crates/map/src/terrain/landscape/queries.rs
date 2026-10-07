@@ -1,6 +1,6 @@
 //! Explicit candidate evaluation on real dense/provider source inputs.
 //! This does not activate a profile or modify any published chunk/recipe.
-use super::{MapChunkGenerator, Tile, provider};
+use super::{LandscapePoint, MapChunkGenerator, Tile, provider};
 #[path = "queries/chunks.rs"]
 mod chunks;
 use crate::historical_parcels::{LandUse, Parcels, SourceFractions};
@@ -53,6 +53,29 @@ impl MapChunkGenerator {
         reservations: &dyn Fn(TileCoord) -> Result<Reservations, EnvironmentPageError>,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<(LandscapeSample, Tile)>, EnvironmentPageError> {
+        self.evaluate_landscape_inner_with_base(
+            tile,
+            policy_at,
+            reservations,
+            cancelled,
+            &|position| {
+                if self.provider.is_some() {
+                    provider::sample_base_tile(self, position, cancelled)
+                } else {
+                    Ok(self.sample_base_tile(position))
+                }
+            },
+        )
+    }
+
+    fn evaluate_landscape_inner_with_base(
+        &self,
+        tile: TileCoord,
+        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
+        reservations: &dyn Fn(TileCoord) -> Result<Reservations, EnvironmentPageError>,
+        cancelled: &dyn Fn() -> bool,
+        base_at: &dyn Fn(TileCoord) -> Result<Tile, EnvironmentPageError>,
+    ) -> Result<Option<(LandscapeSample, Tile)>, EnvironmentPageError> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
@@ -66,8 +89,14 @@ impl MapChunkGenerator {
         )
         .map_err(|_| EnvironmentPageError::Invalid)?;
         let parcels = Parcels::new(self.geography_key, self.procedural_seed);
-        let (center, observation, base) =
-            self.landscape_assessment(tile, policy_at, &parcels, reservations(tile)?, cancelled)?;
+        let (center, observation, base) = self.landscape_assessment(
+            tile,
+            policy_at,
+            &parcels,
+            reservations(tile)?,
+            cancelled,
+            base_at,
+        )?;
         let density = patches.try_sample(tile.x, tile.y, |x, y| {
             let neighbor = TileCoord::new(x, y);
             if neighbor == tile {
@@ -84,6 +113,7 @@ impl MapChunkGenerator {
                 &parcels,
                 reservations(neighbor)?,
                 cancelled,
+                base_at,
             )
             .map(|(assessment, _, _)| assessment.input)
         })?;
@@ -108,16 +138,13 @@ impl MapChunkGenerator {
         parcels: &Parcels,
         reservations: Reservations,
         cancelled: &dyn Fn() -> bool,
+        base_at: &dyn Fn(TileCoord) -> Result<Tile, EnvironmentPageError>,
     ) -> Result<(Assessment, Option<HistoricalLandUseObservation>, Tile), EnvironmentPageError>
     {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        let base = if self.provider.is_some() {
-            provider::sample_base_tile(self, tile, cancelled)?
-        } else {
-            self.sample_base_tile(tile)
-        };
+        let base = base_at(tile)?;
         let observation = if self.provider.is_some() {
             match self
                 .provider_environment

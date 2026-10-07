@@ -193,7 +193,12 @@ impl RoutePlanner {
                 continue;
             }
             if self.search.is_none() {
-                self.search = Some(SearchState::new(self.origin, self.destination));
+                self.search = Some(SearchState::new(
+                    self.origin,
+                    self.destination,
+                    terrain.generation_recipe_version()
+                        == crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
+                ));
                 self.update_peak_retained_entries();
             }
             let Some(mut search) = self.search.take() else {
@@ -235,7 +240,7 @@ impl RoutePlanner {
                 self.search = Some(search);
                 continue;
             };
-            if current.cost != record.cost {
+            if current.cost != super::priority_cost(record.cost, search.prefer_progress) {
                 self.search = Some(search);
                 continue;
             }
@@ -253,7 +258,7 @@ impl RoutePlanner {
             }
             search.active = Some(ActiveExpansion {
                 tile: current.tile,
-                cost: current.cost,
+                cost: record.cost,
                 next_neighbor: 0,
             });
             self.search = Some(search);

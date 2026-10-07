@@ -11,6 +11,7 @@ use aoe_map::{
 use axum::http::{HeaderValue, StatusCode};
 use std::{collections::BTreeMap, sync::Arc};
 
+mod landscape;
 mod preview;
 
 #[derive(Debug, Default)]

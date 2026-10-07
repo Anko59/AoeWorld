@@ -1,6 +1,8 @@
 //! Bounded candidate scene generation; not a profile/package activation path.
 use super::*;
 use crate::terrain::{resource_id, resources, unsigned_noise};
+#[path = "chunks/memo.rs"]
+mod memo;
 use crate::{
     Biome, CHUNK_TILES, DecorationFamily, EcologicalPalette, GroundMaterial, LandscapeAppearance,
     LandscapeChunk, LandscapeDecoration, LandscapeResource, LandscapeTile, NativeExposure,
@@ -33,6 +35,46 @@ impl MapChunkGenerator {
         if !self.landscape_in_bounds(TileCoord::new(ox, oy)) {
             return Ok(None);
         }
+        let mut chunk = LandscapeChunk {
+            x,
+            y,
+            tiles: Vec::with_capacity(1024),
+            resources: Vec::new(),
+            decorations: Vec::new(),
+        };
+        for ly in 0..CHUNK_TILES {
+            for lx in 0..CHUNK_TILES {
+                let position = TileCoord::new(
+                    ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
+                    oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
+                );
+                if let Some(point) = self.evaluate_landscape_point_with_cancel(
+                    position,
+                    policy_at,
+                    reserved_at,
+                    cancelled,
+                )? {
+                    chunk.tiles.push(point.tile);
+                    if let Some(resource) = point.resource {
+                        chunk.resources.push(resource);
+                    }
+                    if let Some(decoration) = point.decoration {
+                        chunk.decorations.push(decoration);
+                    }
+                }
+            }
+        }
+        Ok(Some(chunk))
+    }
+
+    pub(in crate::terrain) fn evaluate_landscape_point_with_cancel(
+        &self,
+        position: TileCoord,
+        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
+        reserved_at: &dyn Fn(TileCoord) -> Reservations,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
+        let memo = memo::PointMemo::new(self, position, cancelled);
         let effective_policy = |position, base: Tile| {
             let mut policy = policy_at(position, base);
             // Explicit temperate-summer model policy, not reconstructed climate
@@ -50,102 +92,95 @@ impl MapChunkGenerator {
         };
         let shared_reservations = |position| {
             let mut reservations = reserved_at(position);
-            reservations.resource_approach |=
-                self.landscape_resource_reserved(position, cancelled)?;
+            reservations.resource_approach |= memo.reserved(position)?;
             Ok(reservations)
         };
-        let mut chunk = LandscapeChunk {
-            x,
-            y,
-            tiles: Vec::with_capacity(1024),
-            resources: Vec::new(),
-            decorations: Vec::new(),
+        let Some((sample, base)) = self.evaluate_landscape_inner_with_base(
+            position,
+            &effective_policy,
+            &shared_reservations,
+            cancelled,
+            &|position| memo.base(position)?.ok_or(EnvironmentPageError::Invalid),
+        )?
+        else {
+            return Ok(None);
         };
-        for ly in 0..CHUNK_TILES {
-            for lx in 0..CHUNK_TILES {
-                let position = TileCoord::new(
-                    ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
-                    oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
-                );
-                let Some((sample, base)) = self.evaluate_landscape_inner(
-                    position,
-                    &effective_policy,
-                    &shared_reservations,
-                    cancelled,
-                )?
-                else {
-                    continue;
-                };
-                let appearance = appearance(base, sample.density);
-                let mut terrain = base;
-                terrain.material = material(base, appearance);
-                chunk.tiles.push(LandscapeTile {
+        let appearance = appearance(base, sample.density);
+        let mut terrain = base;
+        terrain.material = material(base, appearance);
+        let tile = LandscapeTile {
+            tile: position,
+            terrain,
+            appearance: Some(appearance),
+        };
+        let reserved = shared_reservations(position)?;
+        let node = if !reserved.route && !reserved.start {
+            memo.resource(position, base)?
+        } else {
+            None
+        };
+        let resource = if let Some(node) = node {
+            Some(LandscapeResource {
+                node,
+                visual_family: ResourceVisualFamily::Legacy,
+            })
+        } else if sample.density.tree {
+            let value = unsigned_noise(self.geography_key, b"objects", position.x, position.y)
+                ^ self.procedural_seed.rotate_left(17);
+            Some(LandscapeResource {
+                node: ResourceNode {
+                    id: resource_id(position, 0),
                     tile: position,
-                    terrain,
-                    appearance: Some(appearance),
-                });
-                let reserved = shared_reservations(position)?;
-                let resource = if !reserved.route && !reserved.start {
-                    self.landscape_resource_at(position, base, cancelled)?
+                    kind: ResourceKind::Wood,
+                    object: ObjectKind::Tree,
+                    initial_amount: 100,
+                    visual_variant: (value >> 8) as u8,
+                },
+                visual_family: tree_family(base.biome),
+            })
+        } else {
+            None
+        };
+        let mut decoration = None;
+        if resource.is_none()
+            && base.passable
+            && !matches!(
+                sample.historical_land_use,
+                LandUse::Crop | LandUse::Grazing | LandUse::Nonland
+            )
+            && !reserved.route
+            && !reserved.start
+            && !reserved.resource_approach
+        {
+            let roll = unsigned_noise(
+                self.geography_key,
+                b"landscape-dressing-v9",
+                position.x,
+                position.y,
+            ) ^ self.procedural_seed.rotate_left(29);
+            if roll % 100 < 3 {
+                let family = if sample.density.canopy_per_thousand > 0 {
+                    DecorationFamily::Deadwood
+                } else if appearance.exposure == NativeExposure::Exposed {
+                    DecorationFamily::Stone
+                } else if matches!(base.biome, Biome::Woodland | Biome::Savanna) {
+                    DecorationFamily::Shrub
                 } else {
-                    None
+                    DecorationFamily::Grass
                 };
-                if let Some(node) = resource {
-                    chunk.resources.push(LandscapeResource {
-                        node,
-                        visual_family: ResourceVisualFamily::Legacy,
-                    });
-                } else if sample.density.tree {
-                    let value =
-                        unsigned_noise(self.geography_key, b"objects", position.x, position.y)
-                            ^ self.procedural_seed.rotate_left(17);
-                    chunk.resources.push(LandscapeResource {
-                        node: ResourceNode {
-                            id: resource_id(position, 0),
-                            tile: position,
-                            kind: ResourceKind::Wood,
-                            object: ObjectKind::Tree,
-                            initial_amount: 100,
-                            visual_variant: (value >> 8) as u8,
-                        },
-                        visual_family: tree_family(base.biome),
-                    });
-                } else if base.passable
-                    && !matches!(
-                        sample.historical_land_use,
-                        LandUse::Crop | LandUse::Grazing | LandUse::Nonland
-                    )
-                    && !reserved.route
-                    && !reserved.start
-                    && !reserved.resource_approach
-                {
-                    let roll = unsigned_noise(
-                        self.geography_key,
-                        b"landscape-dressing-v9",
-                        position.x,
-                        position.y,
-                    ) ^ self.procedural_seed.rotate_left(29);
-                    if roll % 100 < 3 {
-                        let family = if sample.density.canopy_per_thousand > 0 {
-                            DecorationFamily::Deadwood
-                        } else if appearance.exposure == NativeExposure::Exposed {
-                            DecorationFamily::Stone
-                        } else if matches!(base.biome, Biome::Woodland | Biome::Savanna) {
-                            DecorationFamily::Shrub
-                        } else {
-                            DecorationFamily::Grass
-                        };
-                        chunk.decorations.push(LandscapeDecoration {
-                            tile: position,
-                            family,
-                            variant: (roll >> 8) as u8,
-                            orientation: ((roll >> 16) & 7) as u8,
-                        });
-                    }
-                }
+                decoration = Some(LandscapeDecoration {
+                    tile: position,
+                    family,
+                    variant: (roll >> 8) as u8,
+                    orientation: ((roll >> 16) & 7) as u8,
+                });
             }
         }
-        Ok(Some(chunk))
+        Ok(Some(super::LandscapePoint {
+            tile,
+            resource,
+            decoration,
+        }))
     }
 
     fn landscape_base_at(
@@ -166,6 +201,7 @@ impl MapChunkGenerator {
         }
     }
 
+    #[cfg(test)]
     fn landscape_resource_reserved(
         &self,
         position: TileCoord,
@@ -190,6 +226,7 @@ impl MapChunkGenerator {
         Ok(false)
     }
 
+    #[cfg(test)]
     fn landscape_resource_at(
         &self,
         position: TileCoord,

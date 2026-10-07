@@ -1,9 +1,13 @@
-use super::{Camera, Chunk, chunk_distance_for, chunk_resident_bytes, heights};
+use super::{CachedChunk, Camera, chunk_distance_for, chunk_resident_bytes, heights};
 use aoe_core::WorldConfig;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "eviction/tests.rs"]
+#[cfg(test)]
+mod tests;
+
 pub(crate) fn evict_distant_chunks_with_limits(
-    chunks: &mut BTreeMap<(i32, i32), Chunk>,
+    chunks: &mut BTreeMap<(i32, i32), CachedChunk>,
     discovered: &mut BTreeSet<(i32, i32)>,
     camera: Camera,
     config: WorldConfig,
@@ -17,7 +21,8 @@ pub(crate) fn evict_distant_chunks_with_limits(
     }
     let preferred = preferred.iter().copied().collect::<BTreeSet<_>>();
     let mut coordinates = chunks.keys().copied().collect::<Vec<_>>();
-    coordinates.sort_by(|left, right| {
+    // Unique map keys and the final coordinate tie-break define a strict order.
+    coordinates.sort_unstable_by(|left, right| {
         let left_distance = chunk_distance_for(*left, camera, config);
         let right_distance = chunk_distance_for(*right, camera, config);
         preferred

@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "recipe_eight.rs"]
 mod recipe_eight;
+#[path = "recipe_nine.rs"]
+mod recipe_nine;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,

@@ -11,6 +11,7 @@ pub(super) struct SearchState {
     pub(super) open: BTreeSet<OpenNode>,
     pub(super) records: BTreeMap<TileCoord, SearchRecord>,
     pub(super) active: Option<ActiveExpansion>,
+    pub(super) prefer_progress: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,11 +58,11 @@ impl PartialOrd for OpenNode {
 }
 
 impl SearchState {
-    pub(super) fn new(origin: TileCoord, destination: TileCoord) -> Self {
+    pub(super) fn new(origin: TileCoord, destination: TileCoord, prefer_progress: bool) -> Self {
         let mut open = BTreeSet::new();
         open.insert(OpenNode::new(
             super::heuristic(origin, destination),
-            0,
+            super::super::priority_cost(0, prefer_progress),
             origin,
         ));
         Self {
@@ -74,6 +75,7 @@ impl SearchState {
                 },
             )]),
             active: None,
+            prefer_progress,
         }
     }
 }
@@ -163,7 +165,7 @@ impl<'a> ExpansionContext<'a> {
         );
         search.open.insert(OpenNode::new(
             next_cost.saturating_add(super::heuristic(next, self.destination)),
-            next_cost,
+            super::super::priority_cost(next_cost, search.prefer_progress),
             next,
         ));
         Ok(())
@@ -206,10 +208,9 @@ pub(super) fn checked_walkable(
     if cancelled() {
         return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
     }
-    let Some(sample) = terrain.tile_at_with_cancel(tile, cancelled)? else {
+    let Some((sample, object)) = terrain.tile_and_node_with_cancel(tile, cancelled)? else {
         return Ok(false);
     };
-    let object = terrain.object_at_with_cancel(tile, cancelled)?;
     Ok(sample.passable && object.is_none_or(|node| !overlay.blocks_node(node)))
 }
 

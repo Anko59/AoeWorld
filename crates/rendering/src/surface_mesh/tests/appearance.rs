@@ -68,6 +68,7 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
         for ramp in [false, true] {
             let tint = base_tint + if ramp { 16 } else { 0 };
             let mut sample = SceneTerrain {
+                appearance: None,
                 position: [0.5, 0.5],
                 material,
                 elevation_meters: 0.0,
@@ -206,6 +207,7 @@ pub(super) fn map(side: i32) -> Vec<SceneTerrain> {
     (-2..side)
         .flat_map(|y| {
             (-2..side).map(move |x| SceneTerrain {
+                appearance: None,
                 position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                 material: if x < side / 2 { 0 } else { 2 },
                 elevation_meters: 0.0,
