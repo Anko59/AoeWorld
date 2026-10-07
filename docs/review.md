@@ -4,8 +4,12 @@ No person reviews AoeWorld pull requests. Instead, every change gets a tiered
 adversarial review of its exact commit, graded /10:
 
 ```sh
-make review REVIEW_TIER=medium REVIEW_RUNTIME=claude REVIEW_TASK=<description file>
+make ship SHIP_TITLE='…' SHIP_BODY=<description file> SHIP_TIER=medium SHIP_RUNTIME=claude
+make review REVIEW_TIER=medium REVIEW_RUNTIME=claude REVIEW_TASK=<description file>   # review only
 ```
+
+`make ship` runs the review of the exact commit after the gates and before
+anything is pushed.
 
 `make review-floor` prints the lowest tier the change allows. The agent picks the
 tier (never below the floor) and says why in the description. A review passes at
@@ -74,6 +78,18 @@ least `merge_grade` (8). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
 
+## What happens next
+
+- **Pass:** `make ship` pushes, appends the review to the pull request, posts
+  the commit status `harness/review` = success and arms GitHub auto-merge. A
+  passing review is reused by a later `make ship` of the same commit. Branch
+  protection on `dev` requires `required` (CI) today; adding `harness/review` to
+  the required checks is a pending repository setting, to be made once every
+  agent session ships through `make ship`.
+- **Fail:** nothing is pushed. Fix every confirmed finding without weakening a
+  test or gate, commit, and ship again. File what you leave out of scope as an
+  issue.
+
 ## Limits
 
 - Grades are model judgements. The protocol makes them harder to game (blind
@@ -81,6 +97,8 @@ none replaces another.
   findings), but a
   shared blind spot of one model family can survive; mix families when usage
   allows.
+- The `harness/review` status is posted with the person's GitHub token by the
+  harness. A same-user process could forge it; CI re-runs every gate.
 - Reviewers can be slow: a high-tier review is up to 16 sessions.
 - Prompts are passed as one command-line argument, so each is kept under
   120 KB: the diff is cut first (reviewers read the rest with `git diff`).

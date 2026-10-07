@@ -37,11 +37,15 @@ agent policy refuses `$` in agent-set Make values.
    `<git common dir>/aoe-ship/evidence/<sha>.json` (`make ship-status` prints it).
    A new commit has no evidence, so evidence for one commit never stands in for
    another. The agent policy refuses every write into the Git common directory.
-6. **Only on PASS**, pushes exactly that commit to `origin` as the branch
+6. **Reviews** the commit with the tiered [adversarial review](review.md)
+   (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
+   family). Below 8/10, or incomplete, nothing is pushed.
+7. **Only then**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make preflight` again.
-7. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
-   repository, found by head branch (never by a number).
+8. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
+   repository, found by head branch (never by a number), with the review
+   appended; posts the `harness/review` status and arms auto-merge.
 
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks

@@ -5,7 +5,7 @@ use super::{
 };
 use std::{fs, path::Path, process::Command};
 
-fn run(root: &Path, args: &[&str]) {
+pub(super) fn run(root: &Path, args: &[&str]) {
     let status = Command::new("git")
         .current_dir(root)
         .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
@@ -36,7 +36,7 @@ fn registry() -> String {
 }
 
 /// A checkout on `feature` whose `origin` is a local bare repository with `dev`.
-fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     let temp = tempfile::tempdir().expect("temp");
     let origin = temp.path().join("origin.git");
     let root = temp.path().join("work");
@@ -57,6 +57,11 @@ fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     );
     fs::create_dir_all(root.join("gates")).unwrap();
     fs::write(root.join("gates/registry.json"), registry()).unwrap();
+    // The real review config, with floors for this fixture's two suites.
+    let mut review: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../gates/review.json")).unwrap();
+    review["floors"] = serde_json::json!({"static": "low", "everything": "high"});
+    fs::write(root.join("gates/review.json"), review.to_string()).unwrap();
     // The registry runs `make <gate>`; the recipe is the fixture's behaviour.
     fs::write(root.join("Makefile"), format!("fmt-check:\n\t@{gate}\n")).unwrap();
     fs::write(root.join("README.md"), "x\n").unwrap();
@@ -73,10 +78,11 @@ fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     (temp, root)
 }
 
-fn offline() -> Options {
+pub(super) fn offline() -> Options {
     Options {
         no_pr: true,
         no_fetch: true,
+        no_review: true,
         ..Options::default()
     }
 }

@@ -25,9 +25,11 @@ follow it rather than rephrasing the command to get past it.
 ## Shipping
 
 Commit on a feature branch (the pre-commit hook runs `make pre-commit`), then
-publish with `make ship SHIP_TITLE=… SHIP_BODY=<description file>`: it runs the
-preflight gates at that exact commit, records evidence, pushes and opens the
-pull request against `dev` ([shipping](docs/shipping.md)). Direct `git push` and
+publish with `make ship SHIP_TITLE=… SHIP_BODY=<description file> SHIP_TIER=<tier>`:
+it runs the preflight gates at that exact commit, records evidence, runs the
+tiered [adversarial review](docs/review.md) (choose the tier; `make
+review-floor` prints the minimum), and only at 8/10 or more pushes, opens the
+pull request against `dev` and arms auto-merge ([shipping](docs/shipping.md)). Direct `git push` and
 `gh pr create` are refused. GitHub merges when the required checks pass; never
 merge, approve, or push `dev` or `main`.
 

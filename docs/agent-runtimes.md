@@ -208,7 +208,8 @@ of this is a hostile same-user boundary:
   authenticated launcher identity. In-process subagents of Codex, dsh and pi are
   judged as the main session unless the harness launched them. Rust inline `#[cfg(test)]` modules inside production files are not
   separated by file ownership; keep tests in `tests.rs`/`tests/` modules.
-- Hidden (sealed) tests, the test-first workflow script, canaries for each
-  rule, `make pr` with per-commit evidence and a review gate are not built yet.
+- Hidden (sealed) tests, the test-first workflow script and canaries for each
+  rule are not built yet. `make ship` (per-commit evidence) and its review gate
+  are described in [shipping](shipping.md) and [review](review.md).
 - Read, Grep and Glob are not intercepted: nothing in the repository is secret
   from an agent.
