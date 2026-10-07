@@ -143,6 +143,8 @@ enum Command {
         package_directory: PathBuf,
         #[arg(long)]
         content_hash: String,
+        #[arg(long)]
+        browser: bool,
     },
     SourceQualify {
         #[arg(long)]
@@ -358,10 +360,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::SourceCountryProbe {
             package_directory,
             content_hash,
-        } => {
-            let report = aoe_server::run_source_country_probe(&package_directory, &content_hash)?;
-            println!("{}", serde_json::to_string_pretty(&report)?);
-        }
+            browser,
+        } => e2e::country_probe(&package_directory, &content_hash, browser)?,
         Command::SourceQualify {
             package_directory,
             content_hash,

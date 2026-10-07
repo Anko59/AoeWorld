@@ -1,5 +1,6 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+mod country;
 mod landscape;
 mod matrix;
 mod source;
@@ -70,6 +71,22 @@ fn ready(address: SocketAddr) -> bool {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
     let mut prefix = [0u8; 12];
     stream.read_exact(&mut prefix).is_ok() && &prefix == b"HTTP/1.1 200"
+}
+
+pub fn country_probe(
+    directory: &std::path::Path,
+    hash: &str,
+    browser: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if browser {
+        country::run(directory, hash)
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&aoe_server::run_source_country_probe(directory, hash)?)?
+        );
+        Ok(())
+    }
 }
 
 pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {

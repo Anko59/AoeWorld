@@ -195,11 +195,17 @@ fn synthetic_local_order_advances_real_fixed_point_simulation_not_hardware() {
     let world = aoe_simulation::GameWorld::new(config).expect("synthetic uniform world");
     let origin = TileCoord::new(64, 64);
     let destination = TileCoord::new(96, 64);
-    let report =
-        movement::advance_order(world, origin, destination).expect("synthetic native move");
+    let report = movement::advance_order(world, origin, destination, movement::OrderCase::Nearby32)
+        .expect("synthetic native move");
     assert_eq!(report.outcome, "arrived");
     assert!(report.ticks_advanced > 0 && report.ticks_advanced <= 2048);
+    assert_eq!(report.requested_distance_tiles, 32);
     assert_eq!(report.requested_game_meters, 64);
+    assert_eq!(report.maximum_ticks, 2048);
+    assert_eq!(
+        report.policy,
+        "native-country-four-fixed-32-tile-orders-2048-ticks-v1"
+    );
     assert!(report.failure.is_none());
     assert!(!report.hardware_qualified);
     let target = aoe_core::WorldPosition::from_tile_center(destination).expect("destination");
@@ -213,5 +219,98 @@ fn synthetic_rejected_local_order_does_not_become_an_arrival() {
     let world = aoe_simulation::GameWorld::new(config).expect("synthetic uniform world");
     // issue_move canonicalizes positions; an out-of-range target is clamped,
     // so exercise an origin error instead of fabricating an invalid verdict.
-    assert!(movement::advance_order(world, TileCoord::new(-1, -1), TileCoord::new(32, 0)).is_err());
+    assert!(
+        movement::advance_order(
+            world,
+            TileCoord::new(-1, -1),
+            TileCoord::new(32, 0),
+            movement::OrderCase::Nearby32,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn native_order_case_labels_and_original_endpoints_are_fixed_not_adaptive() {
+    let origin = TileCoord::new(9999, 9999);
+    let cases = movement::ORDER_CASES;
+    assert_eq!(cases.len(), 2);
+    assert_eq!(cases[0].distance_tiles(), 32);
+    assert_eq!(cases[0].maximum_ticks(), 2048);
+    assert_eq!(cases[1].distance_tiles(), LOCAL_DISTANCE);
+    assert_eq!(cases[1].maximum_ticks(), 8192);
+    assert_ne!(cases[0].policy(), cases[1].policy());
+    assert_eq!(
+        cases[1].policy(),
+        "native-country-original-four-fixed-128-tile-orders-8192-ticks-v1"
+    );
+    for (direction, endpoint) in
+        DIRECTIONS
+            .into_iter()
+            .zip([[10127, 9999], [9999, 10127], [9871, 9999], [9999, 9871]])
+    {
+        let native = cases[1].destination(origin, direction);
+        assert_eq!([native.x, native.y], endpoint);
+        let (_, original_direct) = straight_destinations(origin, direction)
+            .last()
+            .expect("original fixed endpoint");
+        assert_eq!(native, original_direct);
+    }
+}
+
+#[test]
+fn synthetic_original_endpoint_native_order_retains_256m_and_8192_tick_labels() {
+    let config = aoe_core::WorldConfig::new(512, 512, aoe_core::Seed(1))
+        .expect("synthetic larger movement config");
+    let world = aoe_simulation::GameWorld::new(config).expect("synthetic uniform world");
+    let origin = TileCoord::new(256, 256);
+    let case = movement::OrderCase::Original128;
+    let destination = case.destination(origin, DIRECTIONS[0]);
+    let report = movement::advance_order(world, origin, destination, case)
+        .expect("synthetic original-distance move");
+    assert_eq!(report.outcome, "arrived");
+    assert_eq!(report.requested_distance_tiles, 128);
+    assert_eq!(report.requested_game_meters, 256);
+    assert_eq!(report.maximum_ticks, 8192);
+    assert_eq!(report.policy, case.policy());
+    assert!(report.ticks_advanced > 0 && report.ticks_advanced <= 8192);
+    assert!(report.failure.is_none());
+    assert!(!report.hardware_qualified);
+    let target = aoe_core::WorldPosition::from_tile_center(destination).expect("destination");
+    assert_eq!(report.final_position_subunits, [target.x, target.y]);
+}
+
+#[test]
+fn synthetic_slow_native_orders_stop_at_each_case_tick_cap_without_false_arrival() {
+    // Slower synthetic uniform fixture proves each observer stops. Production
+    // source worlds retain their ordinary configuration and all route budgets.
+    for case in movement::ORDER_CASES {
+        let config = aoe_core::WorldConfig {
+            width_tiles: 512,
+            height_tiles: 512,
+            move_speed_subunits_per_tick: 1,
+            ..aoe_core::WorldConfig::default()
+        };
+        let world = aoe_simulation::GameWorld::new(config).expect("slow synthetic world");
+        let origin = TileCoord::new(256, 256);
+        let destination = case.destination(origin, DIRECTIONS[0]);
+        let report = movement::advance_order(world, origin, destination, case)
+            .expect("bounded synthetic slow move");
+        assert_eq!(report.outcome, "tick_limit");
+        assert_eq!(report.maximum_ticks, case.maximum_ticks());
+        assert_eq!(report.ticks_advanced, case.maximum_ticks());
+        assert_eq!(report.policy, case.policy());
+        assert_eq!(
+            report.requested_distance_tiles,
+            case.distance_tiles() as u32
+        );
+        assert_eq!(
+            report.requested_game_meters,
+            case.distance_tiles() as u32 * 2
+        );
+        assert!(report.failure.is_none());
+        assert!(!report.hardware_qualified);
+        let target = aoe_core::WorldPosition::from_tile_center(destination).expect("target");
+        assert_ne!(report.final_position_subunits, [target.x, target.y]);
+    }
 }
