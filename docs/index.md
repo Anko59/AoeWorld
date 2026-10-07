@@ -2,6 +2,7 @@
 
 - [Engineering guide](agent-engineering.md)
 - [Agent runtimes](agent-runtimes.md)
+- [Shipping](shipping.md)
 - [Architecture](architecture.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)

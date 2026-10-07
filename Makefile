@@ -196,7 +196,7 @@ hooks-install:
 hooks-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
 
-include make/agents.mk
+include make/agents.mk make/ship.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check

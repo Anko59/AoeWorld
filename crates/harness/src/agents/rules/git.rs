@@ -8,7 +8,6 @@ use crate::agents::{
     role::Role,
     shell::Word,
 };
-use std::{path::PathBuf, process::Command};
 
 const PROTECTED: &[&str] = &["dev", "main"];
 
@@ -160,7 +159,10 @@ pub(crate) fn git(context: &Context, state: &mut State, rest: &[Word]) -> Verdic
         return duty_bound_git(context.role, sub, args, &parsed);
     }
     match sub {
-        "push" | "send-pack" => push(cwd, sub, &parsed),
+        "push" | "send-pack" => Err(format!("`git {sub}` is not run directly; {SHIP}")),
+        "subtree" if parsed.positionals.iter().any(|w| w.text == "push") => Err(format!(
+            "`git subtree push` publishes without evidence; {SHIP}"
+        )),
         "update-ref" | "symbolic-ref"
             if args
                 .iter()
@@ -358,82 +360,6 @@ fn config(agent: bool, parsed: &args::Args<'_>) -> Verdict {
         )),
         _ => Ok(()),
     }
-}
-
-fn current_branch(cwd: Option<&std::path::Path>) -> Option<String> {
-    let mut command = Command::new("git");
-    if let Some(cwd) = cwd {
-        command.arg("-C").arg(cwd);
-    }
-    let output = command
-        .args(["rev-parse", "--abbrev-ref", "@{push}"])
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-fn push(cwd: Option<PathBuf>, sub: &str, parsed: &args::Args<'_>) -> Verdict {
-    let refuse = |why: &str| Err(format!("{why}; {SHIP}"));
-    if parsed.has(&[
-        "--mirror",
-        "--all",
-        "--branches",
-        "--prune",
-        "--tags",
-        "--follow-tags",
-    ]) || parsed.has_long("--receive-pack", 6)
-        || parsed.has_long("--exec", 4)
-    {
-        return refuse(
-            "pushes name one feature branch; no `--all`, `--mirror`, `--prune`, tags or custom receive-pack",
-        );
-    }
-    if sub == "send-pack" {
-        return refuse("`git send-pack` is not used");
-    }
-    let refspecs: Vec<&Word> = parsed.positionals.iter().skip(1).copied().collect();
-    if refspecs.is_empty() {
-        return match current_branch(cwd.as_deref()) {
-            Some(target)
-                if !protected_branch(
-                    target.split_once('/').map_or(target.as_str(), |(_, b)| b),
-                ) =>
-            {
-                Ok(())
-            }
-            Some(target) => refuse(&format!("this would push to `{target}`")),
-            None => refuse("name the branch: `git push -u origin <feature-branch>`"),
-        };
-    }
-    for refspec in refspecs {
-        if !refspec.plain() {
-            return refuse("write the refspec plainly");
-        }
-        let text = refspec.text.trim_start_matches('+');
-        let destination = text.split_once(':').map_or(text, |(_, dst)| dst);
-        let destination = if destination == "HEAD" || destination == "@" {
-            current_branch(cwd.as_deref())
-                .map(|b| b.split_once('/').map_or(b.clone(), |(_, b)| b.to_owned()))
-                .unwrap_or_default()
-        } else {
-            destination.to_owned()
-        };
-        if destination.is_empty()
-            || destination.starts_with("refs/tags/")
-            || protected_branch(&destination)
-            || (text.starts_with(':') || parsed.has(&["-d", "--delete"]))
-                && protected_branch(text.trim_start_matches(':'))
-        {
-            return refuse(&format!(
-                "`{}` targets a protected branch or tag",
-                refspec.text
-            ));
-        }
-    }
-    Ok(())
 }
 
 /// Paths `git checkout -- …`, `restore`, `rm` and `mv` overwrite or delete.

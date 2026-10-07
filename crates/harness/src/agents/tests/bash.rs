@@ -29,6 +29,7 @@ fn every_role_is_refused_privilege_toolchain_and_hook_bypass() {
             "cp /tmp/x .git/config",
             "rm -rf .cache/agent-hook",
             "echo '{}' > .cache/agent-hook/state.json",
+            "echo '{}' > .git/aoe-ship/evidence/0000000000000000000000000000000000000000.json",
             "tee .CACHE/Agent-Hook/state.json < /dev/null",
         ] {
             denied(&fixture, role, command);
@@ -83,6 +84,8 @@ fn agents_are_held_to_an_allow_list() {
             "PATH=/tmp:$PATH make lint",
             "make hooks-install",
             "make lint FOO=bar",
+            "make ship 'SHIP_BODY=$(shell git push origin main)'",
+            "make ship SHIP_TITLE='$(shell id)'",
             "awk 'BEGIN { system(\"rm x\") }'",
             "awk '{ print > \"crates/map/src/lib.rs\" }' x",
             "sed -n 'w /tmp/a' x && sed 'e rm x' y",

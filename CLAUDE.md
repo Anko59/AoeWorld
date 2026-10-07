@@ -24,11 +24,12 @@ follow it rather than rephrasing the command to get past it.
 
 ## Shipping
 
-Commit on a feature branch (the pre-commit hook runs `make pre-commit`), run
-`make preflight` and the focused gates, push the branch (the pre-push hook runs
-`make preflight` again) and open a pull request against `dev` with the exact
-revision, commands, results and limits. A person merges. Never merge, approve,
-or push `dev` or `main`.
+Commit on a feature branch (the pre-commit hook runs `make pre-commit`), then
+publish with `make ship SHIP_TITLE=… SHIP_BODY=<description file>`: it runs the
+preflight gates at that exact commit, records evidence, pushes and opens the
+pull request against `dev` ([shipping](docs/shipping.md)). Direct `git push` and
+`gh pr create` are refused. GitHub merges when the required checks pass; never
+merge, approve, or push `dev` or `main`.
 
 ## Roles
 

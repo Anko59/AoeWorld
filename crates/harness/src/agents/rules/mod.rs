@@ -7,4 +7,4 @@ pub(crate) mod tools;
 pub(crate) mod writers;
 
 /// How a change ships; every Git and GitHub denial ends with it.
-pub(crate) const SHIP: &str = "commit on a feature branch (the pre-commit hook runs `make pre-commit`), push that branch (the pre-push hook runs `make preflight`) and open a pull request against `dev`; a person merges";
+pub(crate) const SHIP: &str = "commit on a feature branch (the pre-commit hook runs `make pre-commit`) and run `make ship SHIP_TITLE=... SHIP_BODY=<file>`: it runs the preflight gates at that exact commit, records evidence, pushes the branch and opens the pull request against `dev`; GitHub merges it when the required checks pass";

@@ -64,15 +64,19 @@ fn cli_sigterm_cancels_owned_make_and_retains_incomplete_ledger() {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
+    // The recipe creates the marker before `printf` writes the PID (#116):
+    // wait for a parseable PID, not merely for the file.
     let started = Instant::now();
-    while !marker.exists() && started.elapsed() < Duration::from_secs(5) {
-        std::thread::sleep(Duration::from_millis(10));
+    let mut owned: Option<i32> = None;
+    while owned.is_none() && started.elapsed() < Duration::from_secs(5) {
+        owned = fs::read_to_string(&marker)
+            .ok()
+            .and_then(|text| text.parse().ok());
+        if owned.is_none() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
-    assert!(
-        marker.exists(),
-        "real make recipe must start before cancellation"
-    );
-    let owned: i32 = fs::read_to_string(&marker).unwrap().parse().unwrap();
+    let owned = owned.expect("real make recipe must start before cancellation");
     kill(Pid::from_raw(child.id() as i32), Signal::SIGTERM).unwrap();
     let stopped = Instant::now();
     loop {

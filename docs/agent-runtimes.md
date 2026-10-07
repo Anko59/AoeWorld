@@ -105,11 +105,11 @@ nothing.
 
 | Role | `agent_type` | May write | Git and GitHub |
 |---|---|---|---|
-| Main | absent | Everything except `.git/` and `.cache/agent-hook/` | Commit and push feature branches |
+| Main | absent | Everything except `.git/` and `.cache/agent-hook/` | Commit; publish with `make ship` |
 | Tester | `tester` | Tests only: `tests.rs`, `tests/`, `*_tests.rs`, `*.spec.ts`, fixtures, `fuzz/` | Read only |
 | Implementer | `implementer`, `coder` | Code, never a test | Read only |
 | Reviewer | `reviewer`, `verifier`, `qa`, `Explore`, `Plan`, `claude-code-guide`, `reviewer-*`, `rv-*` | Nothing | Read only |
-| Other | any other agent | Outside the protected classes | Commit and push feature branches |
+| Other | any other agent | Outside the protected classes | Commit; publish with `make ship` |
 
 Every agent may also write temp directories, `.cache/tmp/` and
 `.cache/agent-hook/BLOCKED.md`.
@@ -144,9 +144,9 @@ Denied to **every role**:
   `GIT_DIR` and other variables that reconfigure Git, gh or Make;
 - `make -f/-e/-i/-t/-o/-W/--eval`, and overriding `SHELL`, `*_IMAGE`, `*_RUN`,
   `*_MOUNTS` or `GIT_*` on the Make command line;
-- pushing `dev`, `main`, `release/*` or tags, `--all`, `--mirror`, `--prune`,
-  a custom receive-pack, `send-pack`, `update-ref` on those branches, and force
-  moving them (`branch -f`, `checkout -B`, `switch -C`);
+- any `git push` or `send-pack` and `gh pr create`: work is published only by
+  `make ship` ([shipping](shipping.md)); `update-ref` on `dev`, `main` or
+  `release/*`, and force moving them (`branch -f`, `checkout -B`, `switch -C`);
 - `gh pr merge`, approving a review, `gh pr update-branch`, repository,
   ruleset, secret, release and auth changes, gh aliases and extensions, and
   `gh api` writes to merges, refs, contents, branches, reviews, checks or
