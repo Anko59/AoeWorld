@@ -75,6 +75,28 @@ impl Report {
         unreachable!("attempt numbers are unbounded")
     }
 
+    /// The passing review of `head`, if one is stored (any of `tiers`).
+    pub(crate) fn load_passing(
+        root: &Path,
+        head: &str,
+        tiers: &[&str],
+    ) -> Result<Option<Self>, String> {
+        let Ok(entries) = fs::read_dir(directory(root)?) else {
+            return Ok(None);
+        };
+        Ok(entries
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(&format!("{head}-"))
+            })
+            .filter_map(|entry| fs::read(entry.path()).ok())
+            .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
+            .find(|r| r.head == head && tiers.contains(&r.tier.as_str()) && r.passes()))
+    }
+
     /// The emoji badge for the grade.
     pub(crate) fn badge(&self) -> &'static str {
         match self.grade {

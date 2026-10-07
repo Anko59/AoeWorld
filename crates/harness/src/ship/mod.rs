@@ -6,6 +6,7 @@
 //! The agent policy denies `git push` and `gh pr create` to every role.
 pub(crate) mod evidence;
 pub(crate) mod git;
+mod review_gate;
 pub(crate) mod run;
 #[cfg(test)]
 mod tests;
@@ -48,6 +49,15 @@ pub(crate) struct Options {
     /// Tests only: use the already-fetched `origin/dev`.
     #[arg(skip)]
     pub(crate) no_fetch: bool,
+    /// Review tier (SHIP_TIER); defaults to, and may not go below, the floor.
+    #[arg(long, value_enum)]
+    pub(crate) tier: Option<crate::review::Tier>,
+    /// The runtime whose model family reviews (SHIP_RUNTIME).
+    #[arg(long, value_enum, default_value = "claude")]
+    pub(crate) runtime: crate::agents::Runtime,
+    /// Tests only: skip the adversarial review.
+    #[arg(skip)]
+    pub(crate) no_review: bool,
 }
 
 impl Default for Options {
@@ -59,6 +69,9 @@ impl Default for Options {
             base: "dev".into(),
             no_pr: false,
             no_fetch: false,
+            tier: None,
+            runtime: crate::agents::Runtime::Claude,
+            no_review: false,
         }
     }
 }
@@ -74,6 +87,15 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 .body_file
                 .or_else(|| env("SHIP_BODY").map(PathBuf::from));
             options.force |= env("SHIP_FORCE").as_deref() == Some("1");
+            if let Some(tier) = env("SHIP_TIER") {
+                options.tier = Some(clap::ValueEnum::from_str(&tier, true).map_err(|_| {
+                    format!("SHIP_TIER={tier}: use low, medium, high, xhigh or max")
+                })?);
+            }
+            if let Some(runtime) = env("SHIP_RUNTIME") {
+                options.runtime = clap::ValueEnum::from_str(&runtime, true)
+                    .map_err(|_| format!("SHIP_RUNTIME={runtime}: use claude, codex, dsh or pi"))?;
+            }
             ship(&root, &options).map(|_| ())
         }
         Commands::ShipStatus => {
@@ -137,6 +159,20 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
 }
 
 pub(crate) fn ship(root: &Path, options: &Options) -> Result<Evidence> {
+    ship_with(root, options, &crate::review::review)
+}
+
+/// `ship` with the reviewer injected: the real one, or a scripted one in tests.
+pub(crate) fn ship_with(
+    root: &Path,
+    options: &Options,
+    reviewer: &review_gate::Reviewer<'_>,
+) -> Result<Evidence> {
+    if !options.no_review && !options.no_pr && options.body_file.is_none() {
+        return Err(
+            "SHIP_BODY is required: the review is appended to the pull request description".into(),
+        );
+    }
     if !options.no_pr {
         preflight_pull_request(root, options)?;
     }
@@ -159,9 +195,21 @@ pub(crate) fn ship(root: &Path, options: &Options) -> Result<Evidence> {
             );
         }
     }
+    let review = if options.no_review {
+        None
+    } else {
+        Some(review_gate::require(root, &evidence, options, reviewer)?)
+    };
     push(root, &evidence, options.force)?;
     if !options.no_pr {
-        pull_request(root, &evidence, options)?;
+        let mut options = options.clone();
+        if let Some(report) = &review {
+            options.body_file = review_gate::description(root, &options, report)?;
+        }
+        let url = pull_request(root, &evidence, &options)?;
+        if let Some(report) = &review {
+            review_gate::publish(root, &url, report)?;
+        }
     }
     Ok(evidence)
 }
@@ -190,7 +238,7 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     Ok(())
 }
 
-fn gh(root: &Path, args: &[&str]) -> Result<String> {
+pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("gh").current_dir(root).args(args).output()?;
     if !output.status.success() {
         return Err(format!(
@@ -265,7 +313,7 @@ fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Opti
     Ok((!url.is_empty()).then_some(url))
 }
 
-fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<()> {
+fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {
     let branch = evidence.branch.as_str();
     let repository = git::origin_repository(root)?;
     let body = options.body_file.as_ref().map(|p| p.display().to_string());
@@ -310,5 +358,5 @@ fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<(
         }
     };
     println!("{url}");
-    Ok(())
+    Ok(url)
 }

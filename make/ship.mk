@@ -4,7 +4,7 @@
 # non-authoritative) from this checkout's committed HEAD while bootstrapping;
 # never from uncommitted edits. SHIP_TITLE, SHIP_BODY and SHIP_FORCE reach it
 # through the environment only; they are never pasted into shell text.
-export SHIP_TITLE SHIP_BODY SHIP_FORCE REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK
 .PHONY: ship ship-status review review-floor
 ship:
 	@.agents/hooks/harness.sh exec ship
