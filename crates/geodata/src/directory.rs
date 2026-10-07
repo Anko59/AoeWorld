@@ -50,6 +50,27 @@ pub(super) struct PageKey {
 impl GeneratedMap {
     /// Publishes one immutable package into a shared map directory.
     pub fn write_directory(&self, directory: &Path) -> Result<(), GeodataError> {
+        self.write_directory_with_cancel_check(directory, &|| false)
+    }
+
+    /// Native opt-in publication checks cancellation before publishing the
+    /// manifest; orphan immutable pages are not a published package.
+    pub fn write_directory_with_cancellation(
+        &self,
+        directory: &Path,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<(), GeodataError> {
+        self.write_directory_with_cancel_check(directory, &|| cancelled.load(Ordering::SeqCst))
+    }
+
+    fn write_directory_with_cancel_check(
+        &self,
+        directory: &Path,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), GeodataError> {
+        if cancelled() {
+            return Err(crate::CacheError::Cancelled.into());
+        }
         self.package.validate()?;
         ensure_directory(directory)?;
         let hash = self.package.content_hash_hex();
@@ -65,7 +86,14 @@ impl GeneratedMap {
         if bytes.len() as u64 > MAX_DIRECTORY_MANIFEST_BYTES {
             return Err(invalid("directory manifest exceeds its byte limit"));
         }
+        if cancelled() {
+            return Err(crate::CacheError::Cancelled.into());
+        }
         let temporary = write_temporary(&manifest_path, &bytes)?;
+        if cancelled() {
+            let _ = fs::remove_file(&temporary);
+            return Err(crate::CacheError::Cancelled.into());
+        }
         match fs::hard_link(&temporary, &manifest_path) {
             Ok(()) => fs::remove_file(&temporary).map_err(GeodataError::from),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {

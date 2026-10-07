@@ -136,10 +136,12 @@ pub enum GeodataError {
 }
 
 mod map_result;
-pub use map_result::{GeneratedMap, PreparedOverview, WorkerRequest, WorkerResponse};
+pub use map_result::{
+    GeneratedMap, OverviewHydrologyMode, PreparedOverview, WorkerRequest, WorkerResponse,
+};
 
 mod worker;
-pub use worker::execute;
+pub use worker::{execute, execute_with_cancellation};
 
 #[path = "lib/overview.rs"]
 mod overview;

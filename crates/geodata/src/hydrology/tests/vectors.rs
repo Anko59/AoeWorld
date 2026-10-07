@@ -64,6 +64,42 @@ fn pinned_vector_selection_has_no_worldcover_or_catalog_inputs() {
 }
 
 #[test]
+fn overview_dem_context_accepts_full_128_and_1024_pyramids_without_relaxing_grid_validation() {
+    for axis in [128_u16, 1024] {
+        let mut pages = Vec::new();
+        for y in 0..axis / PAGE {
+            for x in 0..axis / PAGE {
+                pages.push(aoe_map::ElevationPage {
+                    level: 0,
+                    x,
+                    y,
+                    width: PAGE as u8,
+                    height: PAGE as u8,
+                    geographic_height_centimeters: vec![4200; usize::from(PAGE).pow(2)],
+                });
+            }
+        }
+        let level_zero = pages.clone();
+        pages.push(aoe_map::ElevationPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            geographic_height_centimeters: vec![4200],
+        });
+        assert!(water_model::ElevationGrid::new(&pages).is_err());
+        assert_eq!(
+            super::super::overview_elevation_context(&pages).unwrap(),
+            level_zero
+        );
+        pages.push(pages[0].clone());
+        assert!(super::super::overview_elevation_context(&pages).is_err());
+    }
+    assert!(super::super::overview_elevation_context(&[]).is_err());
+}
+
+#[test]
 fn vector_api_cancel_and_invalid_axis_fail_before_context_cache_or_network() {
     let root = std::env::temp_dir().join(format!("aoe-vector-no-cache-{}", std::process::id()));
     assert!(!root.exists(), "test root must not already exist");

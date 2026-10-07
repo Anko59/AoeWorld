@@ -113,6 +113,7 @@ async fn failed_enqueue_and_cancel_checkpoint_leave_live_state_unchanged() {
     let input = CreationRequest {
         request: MapRequest::default(),
         preparation: PreparationPreference::Automatic,
+        hydrology_mode: crate::map_jobs::HydrologyMode::None,
     };
     assert!(crate::map_jobs::start(&state, input, None).await.is_err());
     assert_eq!(state.map_jobs.lock().await.next_id, next_id);

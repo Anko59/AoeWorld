@@ -5,6 +5,21 @@ pub(super) const MODERN_NOT_REQUESTED: &str =
     "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only";
 
 impl PreparedHydrology {
+    /// Validates the bounded vector pilot and correction binding without acquisition.
+    pub fn validate_vectors_request(
+        request: MapRequest,
+        axis: u16,
+        corrections: &WaterCorrectionDocument,
+        cancelled: &AtomicBool,
+    ) -> Result<(), GeodataError> {
+        check_cancelled(cancelled)?;
+        let request = validate_vector_request(request, axis)?;
+        corrections.validate_for(request, axis).map_err(|_| {
+            GeodataError::Preparation("water corrections do not match request grid")
+        })?;
+        validate_vector_footprint(request, axis, cancelled)
+    }
+
     /// Opt-in vector evidence using already prepared overview context. No overview,
     /// WorldCover catalog, HEAD, ZIP, or raster is acquired by this entry point.
     /// The caller supplies its current policy's correction document. Vector extents
@@ -61,7 +76,7 @@ pub fn prepare_hydrology_vectors(
         .validate_for(request, samples_per_axis)
         .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     // Reject malformed supplied context before any cache or provider access.
-    water_model::ElevationGrid::new(overview_elevation_pages)?;
+    let elevation_context = super::overview_elevation_context(overview_elevation_pages)?;
     hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
     validate_vector_footprint(request, samples_per_axis, cancelled)?;
     let plan = HydrologySourcePlan {
@@ -79,12 +94,7 @@ pub fn prepare_hydrology_vectors(
         HydrologySelection::Vectors(cancelled),
     )?;
     check_cancelled(cancelled)?;
-    apply_water_model(
-        &mut prepared,
-        request,
-        overview_elevation_pages,
-        corrections,
-    )?;
+    apply_water_model(&mut prepared, request, &elevation_context, corrections)?;
     check_cancelled(cancelled)?;
     Ok(prepared)
 }

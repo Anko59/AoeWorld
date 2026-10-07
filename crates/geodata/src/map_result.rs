@@ -8,6 +8,15 @@ use aoe_map::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Native overview-only opt-in; never part of MapRequest or the game wire.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverviewHydrologyMode {
+    #[default]
+    None,
+    Vectors,
+}
+
 /// A bounded native-worker operation passed on stdin by a direct process spawn.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
@@ -24,6 +33,10 @@ pub enum WorkerRequest {
         samples_per_axis: u16,
         #[serde(default)]
         field_axes: Option<OverviewFieldAxes>,
+        #[serde(default)]
+        hydrology_mode: OverviewHydrologyMode,
+        #[serde(default)]
+        water_corrections: Option<WaterCorrectionDocument>,
         #[serde(default)]
         historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
         #[serde(default)]
@@ -260,6 +273,8 @@ mod tests {
             WorkerRequest::PrepareOverviewDirectory {
                 historical_corrections: None,
                 field_axes: None,
+                hydrology_mode: OverviewHydrologyMode::None,
+                water_corrections: None,
                 ..
             }
         ));

@@ -326,3 +326,5 @@ fn compatible_legend() -> &'static str {
 
 #[path = "tests/field_axes.rs"]
 mod field_axes_tests;
+#[path = "tests/vector_compose.rs"]
+mod vector_compose_tests;

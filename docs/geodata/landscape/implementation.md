@@ -425,8 +425,49 @@ revision-bound CI evidence. Keep screenshots and original art private.
   the required 2021 field is a classification legend, not coverage evidence.
   Offline vector fixtures exercise lake/river/regulation/topology/page roots;
   successful real acquisition and source-lock counts are not qualified by mocks.
-  Worker vectors selection, public modern-layer absent-lock metadata and marker
-  propagation still need integration; this API is not yet selected by country CLI.
+  This slice is committed as c4871452a788b6e64c7e7f092eddda28028ee5cd;
+  final preflight passed 1208 native tests/one skip, browser 79 PASS/eight existing
+  source-only skips in 4.5m, hooks/perf/parser fuzz PASS. Seven actual overview
+  inputs verified (6043158637 cached bytes, zero new download bytes). Separate
+  immutable France LandscapeV2 candidate c3436bbd6fd154971bbf79ec6f3b88669123e09d2df41e534fa718f83793e8e6
+  generated and map-verify PASS; old baseline untouched. Candidate has no vector
+  evidence and is not activated or gameplay/hardware-qualified.
+  Follow-up routing selects vectors explicitly via native hydrology_mode:vectors,
+  Creator overview/LandscapeV2 hydrology_mode:vectors or CLI configuration
+  AOE_MAP_HYDROLOGY_MODE=vectors (forwarded into Docker). Absent/none preserves
+  the original path; profile alone never enables a global or European default.
+  Profile, exact axes, corrections and full pilot footprint reject before overview
+  acquisition. Composition retains categorical water128 and attaches independently
+  typed modeled water/evidence1024, nine real locks and class0 modern nodata.
+  Raw wire 2021 is legend-only; no public per-layer source-lock DTO/WorldCover lookup
+  exists here, so no fake modern observation metadata or lock is introduced.
+  Cancellation is checked before publication; acquisition inside the legacy
+  overview helper and a narrow check-to-publication race remain explicit limits.
+  Follow-up focused tests PASS: 204 geodata library, one binary, six integration.
+  Full preflight PASS: 1216 native tests/one existing skip. Hooks, perf and fuzz
+  PASS; complete browser suite 79 PASS/eight existing source-only skips in 3.8m.
+  Initial fixture failures exposed wrong fixture module/borrow and full-pyramid
+  DEM context; fixed by selecting real level-zero pages without lowering1024
+  or relaxing the old strict ElevationGrid parser. Test paths/Clippy policy retained.
+  Real explicit-vector France candidate 146c49268ecac72372db928436976fcc7ac96a4350d81dbd3a75b983d69c3b50
+  generated from nine verified cached inputs (6873327368 bytes, zero download)
+  and map-verify PASS. 1228 indexed pages, typed evidence/model present.
+  Ordinary start found at (9999,9999), but zero of four fixed256m local orders
+  produced a path: east/south/north invalid destination, west budget exceeded.
+  Nonvector candidate had east/west paths129tiles, south invalid, north budget.
+  No budgets raised, geometry cleared, fake positive substituted or activation
+  performed. These negative route results require source/model/traversal diagnosis.
+  A read-only sampler audit found worst-case per-cell/page-feature geometry scans
+  can reach billions of predicates under current feature caps; no page work counter
+  or exact generation-phase timing exists. Actual generation finished successfully;
+  this is an optimization/measurement risk, not a claimed hang or timeout.
+  Separate map-country-probe diagnoses ordinary start work and four fixed 256m
+  local orders without weakening the canonical 50k/1:1 source qualification case.
+  It preserves limit/unavailable/cancelled outcomes, does not simulate movement,
+  activate a live server or qualify hardware. Negative country results remain
+  evidence, not reasons to relax start/route budgets or physical terrain.
   Final preflight/browser gate results for this follow-up are reported separately;
-  offline PASS is not real-source qualification. Real France acquisition/activation,
-  source traversal/visual/memory and hardware remain pending.
+  offline PASS is not real-source qualification. Real France preparation is now
+  verified, but activation, playable source traversal, visuals, memory and hardware
+  remain pending. Neither successful start search nor immutable verification
+  makes the typed-vector candidate ready to activate.

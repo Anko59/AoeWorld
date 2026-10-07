@@ -72,15 +72,34 @@ pub(super) fn prepare(
         input["field_axes"] = serde_json::to_value(axes)
             .map_err(|error| format!("could not encode field axes: {error}"))?;
     }
+    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
+        input["hydrology_mode"] = serde_json::json!("vectors");
+    }
     let input = serde_json::to_vec(&input)
         .map_err(|error| format!("could not encode map-worker request: {error}"))?;
     let output = execute(worker, input, cancelled, || monitor.poll())?;
-    decode_prepared_output(
+    let package = decode_prepared_output(
         &output,
         request,
         preparation.samples_per_axis,
         preparation.field_axes,
-    )
+    )?;
+    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
+        let index = package
+            .environment
+            .hydrology_evidence
+            .as_ref()
+            .ok_or("vector worker returned no typed hydrology")?;
+        if index.samples_per_axis != 1024 || index.water_model.is_none()
+            || package.source_locks.len() != 9
+            || ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"].iter().any(|id|
+                !package.source_locks.iter().any(|lock| lock.id == *id && lock.preprocessing_version.contains(
+                    "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only")))
+        {
+            return Err("vector worker returned incompatible hydrology metadata".to_owned());
+        }
+    }
+    Ok(package)
 }
 
 fn decode_prepared_output(

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub(super) struct Identity {
     pub key: String,
     pub preference: PreparationPreference,
+    #[serde(default, skip_serializing_if = "super::HydrologyMode::is_none")]
+    pub hydrology_mode: super::HydrologyMode,
 }
 impl Identity {
     pub fn new(
@@ -14,7 +16,11 @@ impl Identity {
         preference: PreparationPreference,
     ) -> Result<Option<Self>, String> {
         key.map(|key| {
-            let value = Self { key, preference };
+            let value = Self {
+                key,
+                preference,
+                hydrology_mode: super::HydrologyMode::None,
+            };
             value.validate()?;
             Ok(value)
         })
@@ -45,7 +51,10 @@ pub(super) fn existing(
         if let Some(previous) = &entry.submission
             && previous.key == identity.key
         {
-            if entry.job.request != request || previous.preference != identity.preference {
+            if entry.job.request != request
+                || previous.preference != identity.preference
+                || previous.hydrology_mode != identity.hydrology_mode
+            {
                 return Err(StartError::Conflict(
                     "submission key was already used for another request".into(),
                 ));

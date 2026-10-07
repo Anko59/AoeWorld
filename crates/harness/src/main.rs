@@ -138,6 +138,12 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+    SourceCountryProbe {
+        #[arg(long)]
+        package_directory: PathBuf,
+        #[arg(long)]
+        content_hash: String,
+    },
     SourceQualify {
         #[arg(long)]
         package_directory: PathBuf,
@@ -349,6 +355,13 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             release::rehearse(&candidate, &previous)?;
         }
         Command::RepoPolicyCheck => repo_policy::check()?,
+        Command::SourceCountryProbe {
+            package_directory,
+            content_hash,
+        } => {
+            let report = aoe_server::run_source_country_probe(&package_directory, &content_hash)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
         Command::SourceQualify {
             package_directory,
             content_hash,

@@ -22,6 +22,19 @@ use topology::{
     RiverCellProjection, RiverReachMetadata, meters_to_centimeters, nearest_river_reach,
 };
 
+#[cfg(test)]
+pub(crate) fn offline_vector_pages(
+    request: MapRequest,
+    axis: u16,
+    ocean: Vec<u8>,
+) -> (
+    Vec<HydrologyPage>,
+    Vec<ModernLandCoverPage>,
+    Option<RiverTopologyGrid>,
+) {
+    pipeline_tests::offline_vector_pages(request, axis, ocean)
+}
+
 pub(super) struct Sampler {
     request: MapRequest,
     axis: u16,

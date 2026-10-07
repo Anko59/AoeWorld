@@ -11,6 +11,32 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+pub(super) fn offline_vector_pages(
+    request: MapRequest,
+    axis: u16,
+    ocean: Vec<u8>,
+) -> (
+    Vec<HydrologyPage>,
+    Vec<ModernLandCoverPage>,
+    Option<RiverTopologyGrid>,
+) {
+    let directory = TestDirectory::new();
+    let mut sampler = Sampler {
+        request,
+        axis,
+        tiles: Vec::new(),
+        ocean,
+        lakes: lake_dataset(&directory),
+        rivers: Some(river_dataset_with_terminal_connection(&directory, true)),
+        river_reaches: Default::default(),
+        river_cells: vec![None; usize::from(axis).pow(2)],
+        river_topology: None,
+    };
+    let (water, modern) = sampler.pages().expect("offline vector sampling");
+    assert!(!directory.path("worldcover.tif").exists());
+    (water, modern, sampler.take_river_topology().unwrap())
+}
+
 const AXIS: u16 = 16;
 const SAMPLE_SPACING_METERS: f64 = 1_875.0;
 

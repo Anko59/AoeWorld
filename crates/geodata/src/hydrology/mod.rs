@@ -28,6 +28,39 @@ mod vectors;
 mod water_model;
 pub use vectors::prepare_hydrology_vectors;
 
+#[cfg(test)]
+pub(crate) fn offline_vector_pages(
+    request: MapRequest,
+    axis: u16,
+    water: &[aoe_map::WaterPage],
+) -> (
+    Vec<HydrologyPage>,
+    Vec<ModernLandCoverPage>,
+    Option<RiverTopologyGrid>,
+) {
+    let ocean = hydrology_sampling::resample_ocean_coverage(128, axis, water).unwrap();
+    sampler::offline_vector_pages(request, axis, ocean)
+}
+
+/// Overview preparation returns a complete pyramid; the modeled-water DEM
+/// context is only its bounded level-zero source grid, never virtual tiles.
+/// Keep ElevationGrid::new strict for legacy callers supplying a single grid.
+pub(crate) fn overview_elevation_context(
+    pages: &[aoe_map::ElevationPage],
+) -> Result<Vec<aoe_map::ElevationPage>, GeodataError> {
+    for page in pages {
+        page.validate()
+            .map_err(|_| GeodataError::Preparation("water-model elevation page is invalid"))?;
+    }
+    let context = pages
+        .iter()
+        .filter(|page| page.level == 0)
+        .cloned()
+        .collect::<Vec<_>>();
+    water_model::ElevationGrid::new(&context)?;
+    Ok(context)
+}
+
 pub const MAX_HYDROLOGY_SAMPLES_PER_AXIS: u16 = 1_024;
 const PAGE: u16 = 64;
 const MAX_PAGE_FEATURES: usize = 10_000;
