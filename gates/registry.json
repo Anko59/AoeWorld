@@ -1,7 +1,7 @@
 {
   "version": 2,
   "suites": [
-    {"id":"everything","paths":["AGENTS.md","**/AGENTS.md","CLAUDE.md",".claude/**","docs/agent-engineering.md","docs/claude-code.md","skills/**","crates/harness/**","gates/**",".github/**","crates/map/**","crates/geodata/**"],"implies":["static","docs","native","gameplay","browser","assets","performance","release"],"review":true},
+    {"id":"everything","paths":["AGENTS.md","**/AGENTS.md","CLAUDE.md",".claude/**",".agents/**",".codex/**",".dsh/**",".pi/**","make/**","docs/agent-engineering.md","docs/agent-runtimes.md","skills/**","crates/harness/**","gates/**",".github/**","crates/map/**","crates/geodata/**"],"implies":["static","docs","native","gameplay","browser","assets","performance","release"],"review":true},
     {"id":"static","paths":[],"implies":[],"review":false},
     {"id":"docs","paths":["docs/**","README.md","LICENSE","THIRD_PARTY.md"],"implies":["static"],"review":false},
     {"id":"native","paths":[],"implies":["performance"],"review":true},

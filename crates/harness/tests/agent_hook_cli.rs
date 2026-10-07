@@ -7,6 +7,10 @@ use std::{
 };
 
 fn hook(root: &Path, event: &str, input: &[u8]) -> (bool, String) {
+    hook_named(root, &["agent-hook", "--runtime", "claude", event], input)
+}
+
+fn hook_named(root: &Path, args: &[&str], input: &[u8]) -> (bool, String) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_aoe-harness"));
     for (name, _) in std::env::vars_os() {
         if name.as_encoded_bytes().starts_with(b"GIT_") {
@@ -14,8 +18,8 @@ fn hook(root: &Path, event: &str, input: &[u8]) -> (bool, String) {
         }
     }
     let mut child = command
-        .args(["claude-hook", event])
-        .env("AOE_CLAUDE_HOOK_ROOT", root)
+        .args(args)
+        .env("AOE_AGENT_HOOK_ROOT", root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -84,4 +88,23 @@ fn garbage_input_is_denied_with_exit_zero() {
     assert!(ok);
     let answer: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(answer["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[test]
+fn the_old_claude_hook_name_still_answers() {
+    let root = checkout();
+    let input = serde_json::json!({
+        "session_id": "s",
+        "hook_event_name": "PreToolUse",
+        "cwd": root.path(),
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push origin dev"},
+    });
+    let (ok, stdout) = hook_named(
+        root.path(),
+        &["claude-hook", "pre-tool-use"],
+        input.to_string().as_bytes(),
+    );
+    assert!(ok);
+    assert!(stdout.contains("\"deny\""), "{stdout}");
 }

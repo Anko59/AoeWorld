@@ -104,7 +104,7 @@ help:
 	@echo '  make map-test        Run deterministic map-model tests'
 	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
 	@echo '  make coverage        Check native production-line coverage floors'
-	@echo '  .claude/hooks/harness.sh build  Build the Claude Code hook judge (docs/claude-code.md)'
+	@echo '  .agents/hooks/harness.sh build  Build the agent hook judge (docs/agent-runtimes.md)'
 	@echo '  make pre-commit      Local static gate'
 	@echo '  make preflight       Static gate plus native tests'
 	@echo '  make ci-select       Emit revision-bound selected CI jobs'
@@ -196,14 +196,7 @@ hooks-install:
 hooks-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
 
-# Claude Code hook judge, built by .claude/hooks/harness.sh from origin/dev (or this checkout while bootstrapping).
-CLAUDE_HOOK_HOME := $(GIT_COMMON)/aoe-claude-hook
-.PHONY: claude-hook-build
-claude-hook-build:
-	@test -n '$(CLAUDE_HOOK_OUTPUT)' || { echo 'run .claude/hooks/harness.sh build' >&2; exit 2; }
-	@$(if $(CLAUDE_HOOK_REVISION),rm -rf '$(CLAUDE_HOOK_HOME)/source' && mkdir -p '$(CLAUDE_HOOK_HOME)/source' && git archive '$(CLAUDE_HOOK_REVISION)' | tar -x -C '$(CLAUDE_HOOK_HOME)/source',true)
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(if $(CLAUDE_HOOK_REVISION),$(CLAUDE_HOOK_HOME)/source,$(ROOT)) $(TOOL_IMAGE) cargo build --locked -p aoe-harness --target-dir $(CLAUDE_HOOK_HOME)/target
-	@install -D -m 0755 '$(CLAUDE_HOOK_HOME)/target/debug/aoe-harness' '$(CLAUDE_HOOK_OUTPUT)' && find '$(CLAUDE_HOOK_HOME)' -mindepth 1 -maxdepth 1 -type d ! -name target ! -name source -mtime +7 -exec rm -rf {} +
+include make/agents.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check

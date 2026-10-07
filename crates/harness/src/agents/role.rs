@@ -1,5 +1,7 @@
-//! Roles come from the hook's `agent_type` and nothing else, so each agent
-//! file's `name` is its role. Protected classes are edited by the main session
+//! A role comes from two sources only: `AOE_AGENT_ROLE`, set by the harness when
+//! it launches an agent (hook processes inherit it; the agent cannot change it),
+//! and the hook's `agent_type`, so each Claude agent file's `name` is its role.
+//! When both name a role, the narrower one applies. Protected classes are edited by the main session
 //! only, where a person is present; `.github/CODEOWNERS` names the same paths.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,17 +20,37 @@ pub(crate) enum Role {
 
 impl Role {
     pub(crate) fn from_agent(agent_type: Option<&str>) -> Self {
-        match agent_type.map(str::trim) {
+        let lower = agent_type.map(|name| name.trim().to_ascii_lowercase());
+        match lower.as_deref() {
             None | Some("" | "main") => Self::Main,
             Some("tester") => Self::Tester,
             Some("implementer" | "coder") => Self::Implementer,
-            Some("reviewer" | "verifier" | "qa" | "Explore" | "Plan" | "claude-code-guide") => {
+            Some("reviewer" | "verifier" | "qa" | "explore" | "plan" | "claude-code-guide") => {
                 Self::Reviewer
             }
             Some(name) if name.starts_with("reviewer-") || name.starts_with("rv-") => {
                 Self::Reviewer
             }
             Some(_) => Self::Other,
+        }
+    }
+
+    /// The role for a call: a launched role and a reported agent type each
+    /// restrict, and when both are set the narrower one wins. An empty or
+    /// `main` launched role restricts nothing.
+    pub(crate) fn resolve(launched: Option<&str>, agent_type: Option<&str>) -> Self {
+        Self::from_agent(launched).narrower(Self::from_agent(agent_type))
+    }
+
+    fn narrower(self, other: Self) -> Self {
+        match (self, other) {
+            (a, b) if a == b => a,
+            (Self::Main, b) => b,
+            (a, Self::Main) => a,
+            (Self::Other, b) => b,
+            (a, Self::Other) => a,
+            // Tester and implementer write disjoint files; together, nothing.
+            _ => Self::Reviewer,
         }
     }
 
@@ -73,9 +95,14 @@ const BASELINES: Class = Class {
 
 /// Repository-relative, lower-case, `/`-separated path → its protected class.
 pub(crate) fn protected(relative: &str) -> Option<Class> {
-    const HARNESS_PREFIXES: [&str; 5] = [
+    const HARNESS_PREFIXES: [&str; 10] = [
         "crates/harness/",
+        "make/",
+        ".agents/",
         ".claude/",
+        ".codex/",
+        ".dsh/",
+        ".pi/",
         "docker/",
         "skills/",
         "docs/adr/",
@@ -90,7 +117,7 @@ pub(crate) fn protected(relative: &str) -> Option<Class> {
         ".gitignore",
         ".dockerignore",
         "docs/agent-engineering.md",
-        "docs/claude-code.md",
+        "docs/agent-runtimes.md",
     ];
     let under =
         |prefix: &str| relative == prefix.trim_end_matches('/') || relative.starts_with(prefix);

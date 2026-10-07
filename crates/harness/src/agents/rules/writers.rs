@@ -1,7 +1,7 @@
 //! Which arguments a file-writing command writes to. Every role is judged, so
 //! the main session cannot clobber Git metadata or the harness records by
 //! mistake; agents are further held to their role's files.
-use crate::claude::{
+use crate::agents::{
     args::{self, Spec},
     context::{Access, Context, Verdict},
     shell::Word,

@@ -1,5 +1,5 @@
 use super::{
-    super::{Event, respond, role::Role, shell},
+    super::{Event, Runtime, respond, role::Role, shell},
     Fixture,
 };
 use serde_json::{Value, json};
@@ -7,7 +7,7 @@ use std::fs;
 
 fn call(fixture: &Fixture, event: Event, input: Value) -> Option<Value> {
     let bytes = serde_json::to_vec(&input).expect("json");
-    respond(event, Some(&bytes), fixture.root())
+    respond(Runtime::Claude, event, Some(&bytes), fixture.root(), None)
 }
 
 fn decision(answer: &Option<Value>) -> Option<&str> {
@@ -33,14 +33,22 @@ fn tool(fixture: &Fixture, agent: Option<&str>, name: &str, input: Value) -> Opt
 fn unreadable_oversized_or_mismatched_input_is_denied() {
     let fixture = Fixture::new();
     assert_eq!(
-        decision(&respond(Event::PreToolUse, None, fixture.root())),
+        decision(&respond(
+            Runtime::Claude,
+            Event::PreToolUse,
+            None,
+            fixture.root(),
+            None
+        )),
         Some("deny")
     );
     assert_eq!(
         decision(&respond(
+            Runtime::Claude,
             Event::PreToolUse,
             Some(b"{not json"),
-            fixture.root()
+            fixture.root(),
+            None
         )),
         Some("deny")
     );
@@ -53,7 +61,10 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
     let no_command = tool(&fixture, None, "Bash", json!({}));
     assert_eq!(decision(&no_command), Some("deny"));
     // Other events never block on bad input.
-    assert_eq!(respond(Event::Stop, None, fixture.root()), None);
+    assert_eq!(
+        respond(Runtime::Claude, Event::Stop, None, fixture.root(), None),
+        None
+    );
 }
 
 #[test]

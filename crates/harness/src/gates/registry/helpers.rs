@@ -27,7 +27,9 @@ pub(super) fn instruction_path(path: &str) -> bool {
         || path == "AGENTS.md"
         || path.ends_with("/AGENTS.md")
         || path == "CLAUDE.md"
-        || path.starts_with(".claude/")
+        || [".agents/", ".claude/", ".codex/", ".dsh/", ".pi/"]
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
 }
 
 pub(super) fn duplicates<T: Ord>(values: &[T], owner: &str, problems: &mut Vec<String>) {

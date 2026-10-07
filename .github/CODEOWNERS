@@ -5,5 +5,10 @@
 /.github/ @Anko59
 /.claude/ @Anko59
 /CLAUDE.md @Anko59
-/docs/claude-code.md @Anko59
-/crates/harness/src/claude/ @Anko59
+/docs/agent-runtimes.md @Anko59
+/crates/harness/src/agents/ @Anko59
+/.agents/ @Anko59
+/.codex/ @Anko59
+/.dsh/ @Anko59
+/.pi/ @Anko59
+/make/ @Anko59

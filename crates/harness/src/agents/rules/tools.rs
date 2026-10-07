@@ -1,7 +1,7 @@
 //! Command rules other than Git, GitHub, Make and Docker: the environment, the
 //! host toolchain, `find`, and the agents' read-mostly allow-list.
 use super::writers;
-use crate::claude::{
+use crate::agents::{
     bash::{self, State},
     context::{Access, Context, Verdict},
     shell::{Join, Word},
