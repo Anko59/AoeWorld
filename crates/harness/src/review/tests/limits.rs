@@ -99,6 +99,7 @@ fn prompts_stay_under_the_argument_limit_for_any_diff() {
         prompt::Round {
             number: 2,
             last: false,
+            closing: false,
         },
     )
     .unwrap();

@@ -39,7 +39,10 @@ agent policy refuses `$` in agent-set Make values.
    another. The agent policy refuses every write into the Git common directory.
 6. **Reviews** the commit with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
-   family). Below 8/10, or incomplete, nothing is pushed.
+   family). Below 8/10, or incomplete, nothing is pushed: fix and ship again.
+   A branch has a review budget (three full reviews, then up to two closing
+   reviews of the fixes); when it is spent `make ship` says to split the change
+   ([review](review.md#when-reviews-do-not-converge)).
 7. **Only then**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make preflight` again.

@@ -117,12 +117,13 @@ pub(crate) fn has_work(findings: &[Finding], reviewer: usize) -> bool {
     findings.iter().any(|f| f.reporter != reviewer)
 }
 
-/// Which cross-examination round: its number and whether it is the last one
-/// (no new findings).
+/// Which cross-examination round: its number, whether it is the last one
+/// (no new findings) and whether it belongs to a closing review.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Round {
     pub(crate) number: u32,
     pub(crate) last: bool,
+    pub(crate) closing: bool,
 }
 
 pub(crate) fn cross_round(
@@ -136,6 +137,7 @@ pub(crate) fn cross_round(
     let Round {
         number: round,
         last,
+        closing,
     } = at;
     let mut listing = String::new();
     let shown = others(findings, reviewer, round);
@@ -160,7 +162,11 @@ pub(crate) fn cross_round(
     } else {
         "You may add a new finding only if it is `major` or `critical`."
     };
-    let task = "verify the other reviewers' findings\n\nAssume each finding below is wrong until the code proves it right. Do not agree for its own sake and do not refute for its own sake. Vote on every finding below: `upheld`, `partial` (real but a different severity or scope), `refuted` (cite the code that disproves it) or `unverifiable`.";
+    let task = if closing {
+        "Closing review: verify the other reviewers' findings are fixed.\n\nEarlier reviews of this branch confirmed the findings below; the diff above is what changed since (the fixes). For each, vote `upheld` if the problem is still present at HEAD, `partial` if it is only partly fixed, `refuted` if it is fixed (cite the fixing code and the test that proves it) or `unverifiable`. A new finding must be in the diff above."
+    } else {
+        "verify the other reviewers' findings\n\nAssume each finding below is wrong until the code proves it right. Do not agree for its own sake and do not refute for its own sake. Vote on every finding below: `upheld`, `partial` (real but a different severity or scope), `refuted` (cite the code that disproves it) or `unverifiable`."
+    };
     let preamble = read(root, "gates/review/preamble.md")?;
     let angle = read(root, &format!("gates/review/personas/{persona}.md"))?;
     fit(subject, |text| {

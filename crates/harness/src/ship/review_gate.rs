@@ -4,7 +4,10 @@
 //! is posted and GitHub auto-merge is armed, so GitHub merges once every
 //! required check passes. No agent runs a merge command itself.
 use super::{Options, evidence::Evidence, gh, git};
-use crate::review::{self, Report, Tier};
+use crate::review::{
+    self, Plan, Report, Tier,
+    closing::{self, Next},
+};
 use std::{fs, path::Path};
 
 #[cfg(test)]
@@ -18,6 +21,7 @@ pub(crate) type Reviewer<'a> = dyn Fn(
         Tier,
         crate::agents::Runtime,
         &str,
+        &Plan,
     ) -> std::result::Result<Report, Box<dyn std::error::Error>>
     + 'a;
 
@@ -62,12 +66,25 @@ pub(crate) fn require(
         Some(path) => fs::read_to_string(path)?,
         None => String::new(),
     };
+    let history = review::history(root, &evidence.branch)?;
+    let plan = match closing::next(&history, &evidence.head, unix_now()) {
+        Next::Review(plan) => plan,
+        Next::FixFirst(why) | Next::Unavailable(why) => {
+            return Err(format!("ship: {why}; nothing was pushed").into());
+        }
+        Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
+    };
     eprintln!(
-        "ship: {} review on {}",
+        "ship: {}{} review on {}",
         tier.name(),
+        if matches!(plan, Plan::Closing { .. }) {
+            " closing"
+        } else {
+            ""
+        },
         crate::review::config::runtime_key(options.runtime)
     );
-    let report = reviewer(root, tier, options.runtime, &task)?;
+    let report = reviewer(root, tier, options.runtime, &task, &plan)?;
     eprintln!("{}", report.markdown());
     // A review takes minutes: only a review of the very commit the gates
     // passed, still checked out, unlocks the push.
@@ -84,18 +101,51 @@ pub(crate) fn require(
     if report.passes() {
         return Ok(report);
     }
-    let verdict = format!(
-        "review {}/10 (needs {}{})",
-        report.grade,
-        report.merge_grade,
-        if report.failures.is_empty() {
-            ""
-        } else {
-            ", and the review was incomplete"
-        }
-    );
-    let next = "fix the confirmed findings (never weaken a test or gate), commit, and ship again";
+    let verdict = if report.closing {
+        format!(
+            "closing review failed ({} blocking finding(s) left{})",
+            report.blocking().len(),
+            if report.complete() {
+                ""
+            } else {
+                ", incomplete"
+            }
+        )
+    } else {
+        format!(
+            "review {}/10 (needs {}{})",
+            report.grade,
+            report.merge_grade,
+            if report.complete() {
+                ""
+            } else {
+                ", and the review was incomplete"
+            }
+        )
+    };
+    let history = review::history(root, &evidence.branch)?;
+    let next = match closing::next(&history, "", unix_now()) {
+        _ if !report.complete() => "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".to_owned(),
+        Next::Split(why) => split(&evidence.branch, &why),
+        Next::Unavailable(why) => why,
+        Next::Review(Plan::Closing { .. }) => "fix and commit every confirmed finding, then ship again: the next review is a closing review of your fixes (docs/review.md)".to_owned(),
+        _ => "fix the confirmed findings (never weaken a test or gate), commit, and ship again".to_owned(),
+    };
     Err(format!("ship: {verdict}; nothing was pushed. Next: {next}").into())
+}
+
+/// The review budget is spent: the change is too big to fix by iteration,
+/// and the agent splits it (no person steps in).
+fn split(branch: &str, why: &str) -> String {
+    format!(
+        "{why}: the review budget of `{branch}` is spent. Split the change into smaller pull requests on new branches (each gets its own review budget), close this one, and file what is left as issues (docs/review.md)"
+    )
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn short(sha: &str) -> &str {
@@ -134,8 +184,15 @@ pub(crate) fn publish_calls(
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
     }
     let description = format!(
-        "grade {}/10 · {} tier · {} rounds",
-        report.grade, report.tier, report.rounds
+        "{}grade {}/10 · {} tier · {} rounds",
+        if report.closing {
+            "closing review passed · "
+        } else {
+            ""
+        },
+        report.grade,
+        report.tier,
+        report.rounds
     );
     let owned = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
     Ok(vec![

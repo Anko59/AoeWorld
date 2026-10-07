@@ -235,6 +235,12 @@ pub(crate) fn cap(findings: &[Finding]) -> u8 {
     cap
 }
 
+/// A standing finding that caps the grade below a passing one: confirmed
+/// critical or major, or disputed critical (after the downgrades), as `cap`.
+pub(crate) fn blocking(finding: &Finding) -> bool {
+    finding.status != Status::Refuted && cap(std::slice::from_ref(finding)) <= 7
+}
+
 /// Converged: the round changed no status and added no finding.
 pub(crate) fn converged(before: &[(String, Status)], after: &[Finding]) -> bool {
     before.len() == after.len()

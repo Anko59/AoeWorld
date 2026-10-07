@@ -3,19 +3,24 @@
 //! findings until no status changes or the tier's round cap; a grader writes a
 //! grade /10 and two lines, which confirmed findings cap. The report is stored
 //! next to the ship evidence, keyed by commit, where agents cannot write.
+pub(crate) mod closing;
 pub(crate) mod config;
 mod prompt;
 pub(crate) mod protocol;
 mod report;
 mod runner;
+mod session;
 #[cfg(test)]
 mod tests;
 
 use crate::{agents::Runtime, gates::registry::Registry, ship::git};
+pub(crate) use closing::Plan;
 use config::Config;
 pub(crate) use config::Tier;
 use protocol::{Answer, Cast, Finding, Grade, Status};
-pub(crate) use report::Report;
+pub(crate) use report::{Report, history};
+pub(crate) use session::Ask;
+use session::{Live, ask_checked, readable_answer, readable_grade};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -71,7 +76,15 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 Some(path) => fs::read_to_string(path)?,
                 None => String::new(),
             };
-            let report = review(&root, tier, runtime, &task)?;
+            // `make review` spends the same budget as `make ship`.
+            let head = git::git(&root, &["rev-parse", "HEAD"])?;
+            let plan = match closing::next(&history(&root, &git::branch(&root)?)?, &head, now()) {
+                closing::Next::Review(plan) => plan,
+                closing::Next::FixFirst(why)
+                | closing::Next::Split(why)
+                | closing::Next::Unavailable(why) => return Err(why.into()),
+            };
+            let report = review(&root, tier, runtime, &task, &plan)?;
             println!("{}", report.markdown());
             if report.passes() {
                 Ok(())
@@ -182,89 +195,21 @@ fn facts(root: &Path, merge_base: &str) -> Result<String> {
     ))
 }
 
-/// Asks reviewer sessions: the real runner, or scripted answers in tests.
-pub(crate) trait Ask: Sync {
-    fn all(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>>;
-}
-
-/// Ask every prompt; a session that answered but whose answer cannot be read
-/// is asked once more, told why (a crashed or timed-out session is not).
-/// Answers come back in prompt order.
-fn ask_checked(
-    ask: &dyn Ask,
-    prompts: Vec<String>,
-    readable: fn(&str) -> std::result::Result<(), String>,
-) -> Vec<std::result::Result<String, String>> {
-    let check = |answer: &std::result::Result<String, String>| match answer {
-        Ok(text) => readable(text),
-        Err(error) => Err(error.clone()),
-    };
-    let mut answers = ask.all(prompts.clone());
-    let retry: Vec<(usize, String)> = answers
-        .iter()
-        .enumerate()
-        .filter(|(_, answer)| match answer {
-            Ok(_) => true,
-            Err(error) => error.starts_with(runner::NO_ANSWER),
-        })
-        .filter_map(|(i, answer)| check(answer).err().map(|e| (i, e)))
-        .collect();
-    if retry.is_empty() {
-        return answers;
-    }
-    let again = ask.all(
-        retry
-            .iter()
-            .map(|(i, error)| {
-                let error: String = error.chars().take(300).collect();
-                format!(
-                    "{}\n\n## Your previous answer could not be read\n\n{error}\n\nAnswer again: end with exactly one valid JSON object between the markers.\n",
-                    prompts[*i]
-                )
-            })
-            .collect(),
-    );
-    for ((i, first), answer) in retry.into_iter().zip(again) {
-        answers[i] = match check(&answer) {
-            Ok(()) => answer,
-            Err(second) => Err(format!("{first}; asked again: {second}")),
-        };
-    }
-    answers
-}
-
-fn readable_answer(text: &str) -> std::result::Result<(), String> {
-    serde_json::from_str::<Answer>(text)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-fn readable_grade(text: &str) -> std::result::Result<(), String> {
-    serde_json::from_str::<Grade>(text)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-struct Live<'a> {
+pub(crate) fn review(
+    root: &Path,
+    tier: Tier,
     runtime: Runtime,
-    root: &'a Path,
-    model: config::Model,
-}
-
-impl Ask for Live<'_> {
-    fn all(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>> {
-        runner::ask_all(self.runtime, self.root, &self.model, prompts)
-    }
-}
-
-pub(crate) fn review(root: &Path, tier: Tier, runtime: Runtime, task: &str) -> Result<Report> {
+    task: &str,
+    plan: &Plan,
+) -> Result<Report> {
     let config = Config::load(root)?;
+    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
     let live = Live {
         runtime,
         root,
-        model: config.model(tier, runtime),
+        model,
     };
-    review_with(root, tier, runtime, task, &live)
+    review_with(root, tier, runtime, task, plan, &live)
 }
 
 pub(crate) fn review_with(
@@ -272,6 +217,7 @@ pub(crate) fn review_with(
     tier: Tier,
     runtime: Runtime,
     task: &str,
+    plan: &Plan,
     ask: &dyn Ask,
 ) -> Result<Report> {
     let config = Config::load(root)?;
@@ -302,47 +248,61 @@ pub(crate) fn review_with(
             task.to_owned()
         },
         stat: git::git(root, &["diff", "--stat", &merge_base, "HEAD"])?,
-        diff: git::git(root, &["diff", &merge_base, "HEAD"])?,
+        // A closing review audits the fixes since the last reviewed commit.
+        diff: match plan {
+            Plan::Full => git::git(root, &["diff", &merge_base, "HEAD"])?,
+            // Only the branch's own files: a rebase must not bring dev's changes in.
+            Plan::Closing { since, .. } => closing_diff(root, &merge_base, since)?,
+        },
         facts: facts(root, &merge_base)?,
     };
+    let closing = matches!(plan, Plan::Closing { .. });
     let tier_config = config.tiers[&tier].clone();
-    let model = config.model(tier, runtime);
+    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
     let personas = tier_config.personas.clone();
     let started = now();
     let mut findings: Vec<Finding> = Vec::new();
     let mut failures = Vec::new();
+    // A closing review needs at least two reviewers to cross-examine what it
+    // finds: a one-persona tier borrows the medium tier's.
+    let personas = if closing && personas.len() < 2 {
+        config.tiers[&Tier::Medium].personas.clone()
+    } else {
+        personas
+    };
     let reviewers = personas.len();
-    let prompts = personas
-        .iter()
-        .map(|p| prompt::first_round(root, p, &subject))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    for (reviewer, answer) in ask_checked(ask, prompts, readable_answer)
-        .into_iter()
-        .enumerate()
-    {
-        match answer
-            .and_then(|text| serde_json::from_str::<Answer>(&text).map_err(|e| e.to_string()))
-        {
-            Ok(answer) => add_findings(&mut findings, reviewer, 1, answer.findings),
-            Err(error) => failures.push(format!("round 1, {}: {error}", personas[reviewer])),
+    let first = match plan {
+        Plan::Closing { prior, .. } => {
+            findings = prior.clone();
+            1
         }
-    }
-    for finding in &mut findings {
-        finding.status = protocol::status(finding, reviewers);
-    }
+        Plan::Full => {
+            blind_round(root, &personas, &subject, ask, &mut findings, &mut failures)?;
+            for finding in &mut findings {
+                finding.status = protocol::status(finding, reviewers);
+            }
+            2
+        }
+    };
     let mut rounds = 1;
-    for round in 2..=tier_config.max_rounds {
-        if reviewers < 2 || findings.is_empty() {
+    // A closing review needs a round after the first to examine what it finds.
+    let max_rounds = if closing {
+        tier_config.max_rounds.max(2)
+    } else {
+        tier_config.max_rounds
+    };
+    for round in first..=max_rounds {
+        if (reviewers < 2 || findings.is_empty()) && !(closing && round == 1) {
             break;
         }
         let before: Vec<(String, Status)> =
             findings.iter().map(|f| (f.id.clone(), f.status)).collect();
         // A finding added in the last round could never be cross-examined.
-        let last = round == tier_config.max_rounds;
+        let last = round == max_rounds;
         let mut asked = Vec::new();
         let mut prompts = Vec::new();
         for (reviewer, persona) in personas.iter().enumerate() {
-            if prompt::has_work(&findings, reviewer) {
+            if closing || prompt::has_work(&findings, reviewer) {
                 asked.push(reviewer);
                 prompts.push(prompt::cross_round(
                     root,
@@ -353,6 +313,7 @@ pub(crate) fn review_with(
                     prompt::Round {
                         number: round,
                         last,
+                        closing,
                     },
                 )?);
             }
@@ -461,9 +422,50 @@ pub(crate) fn review_with(
         merge_grade: config.merge_grade,
         started,
         finished: now(),
+        closing,
     };
     report.store(root)?;
     Ok(report)
+}
+
+/// Round 1: every persona reviews the change blind.
+fn blind_round(
+    root: &Path,
+    personas: &[String],
+    subject: &prompt::Subject,
+    ask: &dyn Ask,
+    findings: &mut Vec<Finding>,
+    failures: &mut Vec<String>,
+) -> Result<()> {
+    let prompts = personas
+        .iter()
+        .map(|p| prompt::first_round(root, p, subject))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    for (reviewer, answer) in ask_checked(ask, prompts, readable_answer)
+        .into_iter()
+        .enumerate()
+    {
+        match answer
+            .and_then(|text| serde_json::from_str::<Answer>(&text).map_err(|e| e.to_string()))
+        {
+            Ok(answer) => add_findings(findings, reviewer, 1, answer.findings),
+            Err(error) => failures.push(format!("round 1, {}: {error}", personas[reviewer])),
+        }
+    }
+    Ok(())
+}
+
+/// The fixes since `since`, limited to the files the branch touches now or
+/// touched then (a fix may revert a file to dev), taken literally.
+fn closing_diff(root: &Path, merge_base: &str, since: &str) -> Result<String> {
+    let mut files = git::changed(root, merge_base)?;
+    let since_base = git::git(root, &["merge-base", merge_base, since])?;
+    files.extend(git::changed_between(root, &since_base, since)?);
+    files.sort();
+    files.dedup();
+    let mut args = vec!["--literal-pathspecs", "diff", since, "HEAD", "--"];
+    args.extend(files.iter().map(String::as_str));
+    Ok(git::git(root, &args)?)
 }
 
 fn add_findings(
