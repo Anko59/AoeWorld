@@ -96,7 +96,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             }
             Some((name, _)) if agent && !agent_make_variable(name) => {
                 return Err(format!(
-                    "agents set only `AOE_*`, `HARNESS_*` and `REVIEW_*` Make variables, not `{name}`"
+                    "agents set only `AOE_*`, `HARNESS_*`, `REVIEW_*` and `SHIP_*` Make variables, not `{name}`"
                 ));
             }
             Some(_) => {}
@@ -109,6 +109,12 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
                 "`make {target}` belongs to the main session or a person"
             ));
         }
+        if target == "ship" && context.role.duty_bound() {
+            return Err(format!(
+                "the {} does not ship; report back and the main session runs `make ship`",
+                context.role.name()
+            ));
+        }
         if context.role == Role::Reviewer && !reviewer_target(target) {
             return Err(format!(
                 "reviewers run checks only; `make {target}` is not a check"
@@ -119,7 +125,9 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
 }
 
 fn agent_make_variable(name: &str) -> bool {
-    name.starts_with("AOE_") || name.starts_with("HARNESS_") || name.starts_with("REVIEW_")
+    ["AOE_", "HARNESS_", "REVIEW_", "SHIP_"]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 fn reviewer_target(target: &str) -> bool {

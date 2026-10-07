@@ -26,6 +26,7 @@ mod release_promotion;
 mod release_publish;
 mod release_stack;
 mod repo_policy;
+mod ship;
 mod wasm_test;
 
 use clap::{Parser, Subcommand};
@@ -126,6 +127,8 @@ enum Command {
     HooksCheck,
     #[command(flatten)]
     Agents(agents::Commands),
+    #[command(flatten)]
+    Ship(ship::Commands),
     ReleaseBuild,
     ReleasePublish,
     ReleaseSourceCheck,
@@ -327,6 +330,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::HooksInstall => hooks::install(Path::new("."))?,
         Command::HooksCheck => hooks::check(Path::new("."))?,
         Command::Agents(command) => agents::execute(command)?,
+        Command::Ship(command) => ship::execute(command)?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,

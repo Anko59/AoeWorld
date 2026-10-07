@@ -1,0 +1,158 @@
+use super::{
+    Options,
+    evidence::{self, Verdict},
+    git, judge, ship,
+};
+use std::{fs, path::Path, process::Command};
+
+fn run(root: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .current_dir(root)
+        .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+        .args(args)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .status()
+        .expect("git");
+    assert!(status.success(), "git {args:?}");
+}
+
+fn registry() -> String {
+    serde_json::json!({
+        "version": 2,
+        "suites": [
+            {"id": "everything", "paths": ["gates/**"], "implies": ["static"], "review": true},
+            {"id": "static", "paths": ["**"], "implies": [], "review": false}
+        ],
+        "gates": [{
+            "id": "fmt-check", "command": "make fmt-check", "requires": [], "select": "fixture",
+            "evidence": "exit status", "suites": ["static"], "cadences": ["preflight", "ci"],
+            "budget_s": 30, "static": true, "capabilities": [], "blocks": ["preflight"]
+        }],
+        "jobs": {"static": ["fmt-check"]}
+    })
+    .to_string()
+}
+
+/// A checkout on `feature` whose `origin` is a local bare repository with `dev`.
+fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let temp = tempfile::tempdir().expect("temp");
+    let origin = temp.path().join("origin.git");
+    let root = temp.path().join("work");
+    run(
+        temp.path(),
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "dev",
+            origin.to_str().unwrap(),
+        ],
+    );
+    run(
+        temp.path(),
+        &["init", "-q", "-b", "dev", root.to_str().unwrap()],
+    );
+    fs::create_dir_all(root.join("gates")).unwrap();
+    fs::write(root.join("gates/registry.json"), registry()).unwrap();
+    // The registry runs `make <gate>`; the recipe is the fixture's behaviour.
+    fs::write(root.join("Makefile"), format!("fmt-check:\n\t@{gate}\n")).unwrap();
+    fs::write(root.join("README.md"), "x\n").unwrap();
+    run(&root, &["add", "-A"]);
+    run(&root, &["commit", "-q", "-m", "base"]);
+    run(
+        &root,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    run(&root, &["push", "-q", "origin", "dev"]);
+    run(&root, &["checkout", "-q", "-b", "feature"]);
+    fs::write(root.join("README.md"), "y\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "change"]);
+    (temp, root)
+}
+
+fn offline() -> Options {
+    Options {
+        no_pr: true,
+        no_fetch: true,
+        ..Options::default()
+    }
+}
+
+#[test]
+fn only_a_clean_feature_branch_ships() {
+    let (_temp, root) = fixture("true");
+    fs::write(root.join("README.md"), "dirty\n").unwrap();
+    let error = judge(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("commit first"), "{error}");
+    run(&root, &["checkout", "-q", "README.md"]);
+    fs::write(root.join("new.txt"), "untracked\n").unwrap();
+    assert!(judge(&root, &offline()).is_err());
+    fs::remove_file(root.join("new.txt")).unwrap();
+    run(&root, &["checkout", "-q", "dev"]);
+    let error = judge(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("moves only by merging"), "{error}");
+    run(&root, &["checkout", "-q", "--detach", "feature"]);
+    let error = judge(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("detached"), "{error}");
+    for branch in ["main", "release/1.0"] {
+        assert!(git::protected(branch));
+    }
+    assert!(!git::protected("feature/release"));
+}
+
+#[test]
+fn a_passing_commit_gets_its_own_evidence_and_is_pushed() {
+    let (_temp, root) = fixture("true");
+    let evidence = ship(&root, &offline()).expect("ship");
+    assert_eq!(evidence.verdict, Verdict::Pass);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert_eq!(evidence.head, head);
+    assert_eq!(evidence.changed, vec!["README.md".to_owned()]);
+    let stored = evidence::read(&root, &head).unwrap().expect("stored");
+    assert_eq!(stored.gates[0].gate, "fmt-check");
+    let remote = git::git(&root, &["ls-remote", "origin", "refs/heads/feature"]).unwrap();
+    assert!(remote.starts_with(&head), "{remote}");
+    // A new commit has no evidence of its own.
+    run(&root, &["commit", "-q", "--allow-empty", "-m", "next"]);
+    let next = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(evidence::read(&root, &next).unwrap().is_none());
+}
+
+#[test]
+fn a_failing_gate_records_evidence_and_pushes_nothing() {
+    let (_temp, root) = fixture("echo broken; false");
+    let error = ship(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("FAIL"), "{error}");
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let stored = evidence::read(&root, &head).unwrap().expect("stored");
+    assert_eq!(stored.verdict, Verdict::Fail);
+    assert!(
+        stored.gates[0].tail.contains("broken"),
+        "{}",
+        stored.gates[0].tail
+    );
+    let remote = git::git(&root, &["ls-remote", "origin", "refs/heads/feature"]).unwrap();
+    assert!(remote.is_empty(), "{remote}");
+}
+
+#[test]
+fn a_commit_during_the_gates_leaves_no_evidence() {
+    let gate = "git -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m sneaky";
+    let (_temp, root) = fixture(gate);
+    let before = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let error = ship(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("changed while the gates ran"), "{error}");
+    assert!(evidence::read(&root, &before).unwrap().is_none());
+}
+
+#[test]
+fn a_local_branch_named_origin_dev_does_not_move_the_base() {
+    let (_temp, root) = fixture("true");
+    run(&root, &["branch", "origin/dev", "feature"]);
+    let remote = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
+    let (base, _) = git::base(&root, "dev", false).unwrap();
+    assert_eq!(base, remote);
+}

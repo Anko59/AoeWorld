@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     gates::registry::{Cadence, Registry},
-    process::{Cancellation, CaptureExit, capture_command},
+    ship::run::{GateResult, GateVerdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,12 +19,11 @@ use std::{
     io::Write,
     path::Path,
     process::Command,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub(crate) const ROUNDS: u32 = 5;
 const KEPT_RUNS: usize = 8;
-const TAIL_LINES: usize = 40;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -332,64 +331,23 @@ fn execute(root: &Path, scope: Scope, fingerprint: String) -> Run {
         .filter_map(|id| registry.gates.iter().find(|g| &g.id == id))
         .filter(|g| g.r#static && (scope == Scope::Full || g.cadences.contains(&Cadence::Edit)))
         .collect();
-    let mut docker: Option<bool> = None;
-    let mut lines = Vec::new();
-    let mut logs = Vec::new();
-    let mut verdict = Verdict::Pass;
-    for gate in gates {
-        let needs_docker = gate
-            .capabilities
-            .contains(&crate::gates::registry::Capability::Docker);
-        if needs_docker && !*docker.get_or_insert_with(docker_available) {
-            lines.push(format!(
-                "  UNAVAILABLE {} (Docker is not reachable)",
-                gate.id
-            ));
-            if verdict == Verdict::Pass {
-                verdict = Verdict::Incomplete;
-            }
-            continue;
-        }
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(&gate.command).current_dir(root);
-        let captured = capture_command(
-            command,
-            Duration::from_secs(u64::from(gate.budget_s)),
-            &Cancellation::default(),
-        );
-        let mut output = String::from_utf8_lossy(&captured.stdout).into_owned();
-        output.push_str(&String::from_utf8_lossy(&captured.stderr));
-        let output = strip_ansi(&output);
-        let last = output
-            .lines()
-            .rev()
-            .find(|l| !l.trim().is_empty())
-            .unwrap_or_default()
-            .trim()
-            .to_owned();
-        let seconds = captured.duration.as_secs_f32();
-        let passed = matches!(captured.exit, CaptureExit::Success);
-        let label = match captured.exit {
-            CaptureExit::Success => "PASS",
-            CaptureExit::Deadline => "FAIL (over budget)",
-            _ => "FAIL",
-        };
-        lines.push(format!(
-            "  {label} {} {seconds:.1}s {}",
-            gate.id,
-            last.chars().take(120).collect::<String>()
-        ));
-        if !passed {
-            verdict = Verdict::Fail;
-            let tail: Vec<&str> = output.lines().collect();
-            let tail = &tail[tail.len().saturating_sub(TAIL_LINES)..];
-            logs.push(format!(
-                "--- {} (last {TAIL_LINES} lines) ---\n{}",
-                gate.id,
-                tail.join("\n")
-            ));
-        }
-    }
+    let results = crate::ship::run::run_gates(root, &gates);
+    let verdict = if results.iter().any(|r| r.verdict == GateVerdict::Fail) {
+        Verdict::Fail
+    } else if results
+        .iter()
+        .any(|r| r.verdict == GateVerdict::Unavailable)
+    {
+        Verdict::Incomplete
+    } else {
+        Verdict::Pass
+    };
+    let lines: Vec<String> = results.iter().map(GateResult::line).collect();
+    let logs: Vec<String> = results
+        .iter()
+        .filter(|r| r.verdict == GateVerdict::Fail)
+        .map(|r| format!("--- {} (last 40 lines) ---\n{}", r.gate, r.tail))
+        .collect();
     let header = format!(
         "check-fast: static stop-cadence gates from gates/registry.json ({} scope, base {}): {}",
         if scope == Scope::Full {
@@ -402,33 +360,6 @@ fn execute(root: &Path, scope: Scope, fingerprint: String) -> Run {
         verdict.label()
     );
     finish(verdict, [vec![header], lines, logs].concat().join("\n"))
-}
-
-fn docker_available() -> bool {
-    let mut command = Command::new("docker");
-    command.arg("info");
-    matches!(
-        capture_command(command, Duration::from_secs(10), &Cancellation::default()).exit,
-        CaptureExit::Success
-    )
-}
-
-fn strip_ansi(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\u{1b}' && chars.peek() == Some(&'[') {
-            chars.next();
-            for c in chars.by_ref() {
-                if c.is_ascii_alphabetic() {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
 }
 
 /// Read-modify-write `.cache/agent-hook/state.json` under an exclusive lock.

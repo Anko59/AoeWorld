@@ -21,6 +21,9 @@ pub(crate) fn gh(context: &Context, rest: &[Word]) -> Verdict {
         .collect();
     match positional.as_slice() {
         ["pr", "merge", ..] => return refuse("`gh pr merge`"),
+        ["pr", "create", ..] => {
+            return Err(format!("pull requests are opened by `make ship`; {SHIP}"));
+        }
         ["pr", "update-branch", ..] => return refuse("`gh pr update-branch`"),
         ["pr", "review", ..] => {
             let parsed = args::split(

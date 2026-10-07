@@ -8,7 +8,7 @@ canonical documentation and commands. Claude Code, Codex, DeepSeek Harness and p
 are judged by the same hooks; see [agent runtimes](docs/agent-runtimes.md).
 
 Before committing, run `make hooks-install`, `make hooks-check`, and the focused
-gate plus `make preflight`. Never bypass hooks or reduce a gate/baseline to obtain
+gate plus `make preflight`. Publish only with `make ship` ([shipping](docs/shipping.md)). Never bypass hooks or reduce a gate/baseline to obtain
 a pass. Human-authored text files must stay within 500 lines, and a directory
 may directly contain at most 14 code/config files. Place substantive command
 logic in Rust, not Make, shell, or workflow YAML.

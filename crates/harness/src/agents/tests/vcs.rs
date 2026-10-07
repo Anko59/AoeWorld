@@ -57,13 +57,19 @@ fn no_role_bypasses_hooks_merges_approves_or_moves_protected_branches() {
 fn the_main_session_and_other_agents_ship_feature_branches() {
     let fixture = Fixture::new();
     for role in [Role::Main, Role::Other] {
+        // Publishing goes through `make ship` only: direct pushes and PR creation are refused.
         for command in [
-            "git add -A && git commit -m 'Add claude hook'",
             "git push -u origin feature",
             "git push origin HEAD:refs/heads/harness/claude",
             "git push --force-with-lease origin feature",
             "git push -n origin feature",
             "gh pr create --base dev --title x --body y",
+        ] {
+            denied(&fixture, role, command);
+        }
+        for command in [
+            "git add -A && git commit -m 'Add claude hook'",
+            "make ship SHIP_TITLE=x SHIP_BODY=/tmp/body.md",
             "gh pr view 12 --json state",
             "gh api repos/o/r/pulls/12",
             "gh api graphql -f query='{ viewer { login } }'",
@@ -119,6 +125,7 @@ fn duty_bound_agents_only_read_git_and_github() {
             "git commit -m x",
             "git add -A",
             "git push -u origin feature",
+            "make ship",
             "git checkout -- crates/map/src/lib.rs",
             "git stash",
             "git reset --hard",
