@@ -25,9 +25,6 @@ pub(crate) type Reviewer<'a> = dyn Fn(
     ) -> std::result::Result<Report, Box<dyn std::error::Error>>
     + 'a;
 
-/// A final fix is the fixes only: at most this many changed lines.
-pub(crate) const FINAL_FIX_LINES: u64 = 150;
-
 const TIERS: [Tier; 5] = [Tier::Low, Tier::Medium, Tier::High, Tier::Xhigh, Tier::Max];
 
 /// The tier to run: the requested one, which may not be below the floor.
@@ -76,16 +73,6 @@ pub(crate) fn require(
             return Err(format!("ship: {why}; nothing was pushed").into());
         }
         Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
-        Next::FinalFix(reviewed) => {
-            final_fix_scope(root, &reviewed.head, &evidence.head)?;
-            let report = closing::final_fix(&reviewed, &evidence.head, unix_now());
-            report.store(root)?;
-            eprintln!(
-                "ship: final fix: the review budget is spent and converging; this commit ships on tests and gates. Open an issue asking for a post-merge review of {} (docs/review.md)",
-                short(&evidence.head)
-            );
-            return Ok(report);
-        }
     };
     eprintln!(
         "ship: {}{} review on {}",
@@ -141,47 +128,17 @@ pub(crate) fn require(
         _ if !report.complete() => "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".to_owned(),
         Next::Split(why) => split(&evidence.branch, &why),
         Next::Unavailable(why) => why,
-        Next::FinalFix(_) => format!("fix the last closing review's findings, each with a test that fails without the fix, in at most {FINAL_FIX_LINES} changed lines, commit, and ship again: that commit ships as the final fix, with no further model review (docs/review.md)"),
         Next::Review(Plan::Closing { .. }) => "fix and commit every confirmed finding, then ship again: the next review is a closing review of your fixes (docs/review.md)".to_owned(),
         _ => "fix the confirmed findings (never weaken a test or gate), commit, and ship again".to_owned(),
     };
     Err(format!("ship: {verdict}; nothing was pushed. Next: {next}").into())
 }
 
-/// A final fix carries only the fixes: few changed lines, and a test with them.
-fn final_fix_scope(root: &Path, reviewed: &str, head: &str) -> Result<()> {
-    let numstat = git::git(root, &["diff", "--numstat", reviewed, head])?;
-    let (mut lines, mut tests) = (0u64, false);
-    for line in numstat.lines() {
-        let mut parts = line.split('\t');
-        // Binary files show `-`: they count as over the cap.
-        let mut count = || {
-            parts
-                .next()
-                .and_then(|n| n.parse::<u64>().ok())
-                .unwrap_or(FINAL_FIX_LINES + 1)
-        };
-        lines += count() + count();
-        tests |= parts
-            .next()
-            .is_some_and(|path| crate::agents::is_test_path(&path.to_ascii_lowercase()));
-    }
-    if lines > FINAL_FIX_LINES || !tests {
-        return Err(format!(
-            "ship: a final fix is the fixes only, each with a test: at most {FINAL_FIX_LINES} changed lines including a test file since {} (found {lines} lines{}); nothing was pushed. Move anything else to a new pull request",
-            short(reviewed),
-            if tests { "" } else { ", no test" }
-        )
-        .into());
-    }
-    Ok(())
-}
-
-/// The findings are not converging: the change is too big to fix by
-/// iteration, and the agent splits it (no person steps in).
+/// The review budget is spent: the change is too big to fix by iteration,
+/// and the agent splits it (no person steps in).
 fn split(branch: &str, why: &str) -> String {
     format!(
-        "{why}: the reviews of `{branch}` are not converging. Split the change into smaller pull requests on new branches (each gets its own review budget), close this one, and file what is left as issues (docs/review.md)"
+        "{why}: the review budget of `{branch}` is spent. Split the change into smaller pull requests on new branches (each gets its own review budget), close this one, and file what is left as issues (docs/review.md)"
     )
 }
 
@@ -228,10 +185,10 @@ pub(crate) fn publish_calls(
     }
     let description = format!(
         "{}grade {}/10 · {} tier · {} rounds",
-        match (report.closing, report.final_fix) {
-            (true, _) => "closing review passed · ",
-            (_, true) => "final fix after the review budget · ",
-            _ => "",
+        if report.closing {
+            "closing review passed · "
+        } else {
+            ""
         },
         report.grade,
         report.tier,

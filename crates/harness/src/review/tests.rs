@@ -272,7 +272,6 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         started: 0,
         finished: 0,
         closing: false,
-        final_fix: false,
     };
     assert!(report.passes());
     assert!(

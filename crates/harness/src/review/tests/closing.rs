@@ -1,6 +1,6 @@
 use super::super::{
     Report,
-    closing::{BUDGET, CARRIED, CLOSING_BUDGET, Next, Plan, final_fix, next},
+    closing::{BUDGET, CARRIED, CLOSING_BUDGET, Next, Plan, next},
     protocol::{Severity, Status},
 };
 use super::super::{Tier, review_with};
@@ -46,7 +46,6 @@ fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report
         started: finished,
         finished,
         closing: false,
-        final_fix: false,
     }
 }
 
@@ -147,36 +146,8 @@ fn a_diverging_branch_is_split_without_a_person() {
     let mut reopened = three_converging();
     reopened.push(closing("d", 4, &[Severity::Major], &[]));
     assert!(
-        matches!(next(&reopened, "e", NOW), Next::Split(why) if why.contains("still open")),
+        matches!(next(&reopened, "e", NOW), Next::Split(why) if why.contains("not shown fixed")),
         "a fix that did not fix splits the branch"
-    );
-}
-
-#[test]
-fn closing_reviews_then_a_final_fix_end_a_converging_branch() {
-    assert_eq!(CLOSING_BUDGET, 2);
-    let mut history = three_converging();
-    history.push(closing("d", 4, &[], &[Severity::Major]));
-    assert!(
-        matches!(next(&history, "e", NOW), Next::Review(Plan::Closing { ref since, .. }) if since == "d"),
-        "a closing review that only finds new issues in the fixes earns another"
-    );
-    history.push(closing("e", 5, &[], &[Severity::Major]));
-    let Next::FinalFix(reviewed) = next(&history, "f", NOW) else {
-        panic!("the budget ends in a final fix");
-    };
-    assert_eq!(reviewed.head, "e");
-    let fixed = final_fix(&reviewed, "f", NOW);
-    assert!(
-        fixed.final_fix && fixed.passes(),
-        "a final fix ships on tests and gates"
-    );
-    assert!(fixed.markdown().contains("Final fix"));
-    assert!(fixed.summary.contains("no model reviewed this commit"));
-    history.push(fixed);
-    assert!(
-        matches!(next(&history, "g", NOW), Next::Review(Plan::Full)),
-        "a merged final fix settles the branch's budget"
     );
 }
 
@@ -276,17 +247,43 @@ fn reviewers_unavailable_lasts_an_hour_not_forever() {
 }
 
 #[test]
-fn a_final_fix_comes_after_the_review_it_closes() {
-    let reviewed = closing("e", 5, &[], &[Severity::Major]);
-    let fixed = final_fix(&reviewed, "f", NOW);
-    assert_eq!((fixed.started, fixed.finished), (NOW, NOW));
-}
-
-#[test]
 fn an_undecided_carried_finding_fails_the_closing_review() {
     let mut r = closing("d", 4, &[Severity::Major], &[]);
     r.findings[0].status = Status::Disputed;
     assert!(!r.passes(), "nobody showed it fixed");
     r.findings[0].status = Status::Refuted;
     assert!(r.passes(), "refuted: shown fixed");
+}
+
+#[test]
+fn closing_reviews_then_a_split_end_a_converging_branch() {
+    assert_eq!(CLOSING_BUDGET, 2);
+    let mut history = three_converging();
+    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
+    first.findings[0].status = Status::Refuted; // the carried one: shown fixed
+    history.push(first);
+    let Next::Review(Plan::Closing { since, prior }) = next(&history, "e", NOW) else {
+        panic!("a closing review that only finds new issues in the fixes earns another");
+    };
+    assert_eq!(since, "d");
+    assert!(
+        prior.iter().all(|f| f.reported.claim != "d claim 0"),
+        "a finding shown fixed is not carried again"
+    );
+    history.push(closing("e", 5, &[], &[Severity::Major]));
+    assert!(
+        matches!(next(&history, "f", NOW), Next::Split(why) if why.contains("2 closing reviews")),
+        "no unreviewed ending: the branch is split"
+    );
+}
+
+#[test]
+fn an_undecided_carried_finding_counts_as_open() {
+    let mut history = three_converging();
+    let mut undecided = closing("d", 4, &[Severity::Major], &[]);
+    undecided.findings[0].status = Status::Disputed;
+    history.push(undecided);
+    assert!(
+        matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
+    );
 }

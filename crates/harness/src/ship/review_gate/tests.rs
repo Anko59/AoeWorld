@@ -41,7 +41,6 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
             .unwrap()
             .as_nanos() as u64,
         closing: false,
-        final_fix: false,
     }
 }
 
@@ -275,7 +274,7 @@ fn the_review_budget_always_ends_without_a_person() {
         error.contains("already failed a review; fix and commit"),
         "{error}"
     );
-    for (closing, expected) in [(1, "closing review of your fixes"), (2, "final fix")] {
+    for (closing, expected) in [(1, "closing review of your fixes"), (2, "Split the change")] {
         commit(&root, &format!("fixes {closing}"));
         let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
             assert!(matches!(plan, Plan::Closing { .. }), "{plan:?}");
@@ -289,40 +288,15 @@ fn the_review_budget_always_ends_without_a_person() {
             "closing {closing}: {error}"
         );
     }
-    std::fs::create_dir_all(root.join("crates/x/src")).unwrap();
-    std::fs::write(root.join("crates/x/src/tests.rs"), "// the fix's test\n").unwrap();
-    run(&root, &["add", "-A"]);
-    commit(&root, "final fixes, with tests");
-    ship_with(&root, &reviewed(), &|_, _, _, _, _| {
-        panic!("a final fix has no model review")
+    commit(&root, "more fixes");
+    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| {
+        panic!("no more reviews")
     })
-    .expect("the final fix ships on tests and gates");
-    assert!(pushed(&root));
-}
-
-#[test]
-fn a_final_fix_must_be_small_and_tested() {
-    let (_temp, root) = fixture("true");
-    three_failed(&root);
-    for closing in 1..=2 {
-        commit(&root, &format!("fixes {closing}"));
-        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
-            Ok(failed_closing(root, tier))
-        });
-    }
-    std::fs::write(root.join("big.txt"), "x\n".repeat(400)).unwrap();
-    run(&root, &["add", "-A"]);
-    commit(&root, "not just the fixes");
-    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("a final fix is the fixes only") && error.contains("no test"),
-        "{error}"
-    );
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("Split the change"), "{error}");
     assert!(!pushed(&root));
 }
-
 #[test]
 fn incomplete_reviews_do_not_spend_the_budget() {
     let (_temp, root) = fixture("true");
@@ -389,24 +363,4 @@ fn rerunning_a_failed_commit_is_refused_and_every_attempt_is_kept() {
     assert!(error.contains("already failed"), "{error}");
     graded(&root, Tier::Low, 5);
     assert_eq!(crate::review::history(&root, "feature").unwrap().len(), 2);
-}
-
-#[test]
-fn a_final_fix_over_the_line_cap_is_refused_even_with_a_test() {
-    let (_temp, root) = fixture("true");
-    three_failed(&root);
-    for closing in 1..=2 {
-        commit(&root, &format!("fixes {closing}"));
-        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
-            Ok(failed_closing(root, tier))
-        });
-    }
-    std::fs::create_dir_all(root.join("crates/x/src")).unwrap();
-    std::fs::write(root.join("crates/x/src/tests.rs"), "// test\n".repeat(200)).unwrap();
-    run(&root, &["add", "-A"]);
-    commit(&root, "too big, though tested");
-    let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
-        .unwrap_err()
-        .to_string();
-    assert!(error.contains("found 200 lines)"), "{error}");
 }

@@ -93,7 +93,8 @@ none replaces another.
 ## When reviews do not converge
 
 Agents run this project without a person: no rule here ends in "ask a
-person", and every branch reaches either a merge or a split on its own.
+person". Every branch ends in a **reviewed merge or a split**, never in code
+that no review passed.
 
 Each full review reads the whole diff blind, so every fix adds new surface to
 find fault with, and grades vary by several points between identical runs.
@@ -111,31 +112,25 @@ has a budget, and `make ship` decides from the stored reports
 2. **Not converging: split.** If the last full review confirmed a finding
    that caps at 4 (critical, or a major test weakening), or more blocking
    findings (those capping below 8) than the full review before it, the change
-   is too big to fix by iteration. Split it into smaller pull requests on new
-   branches (each with its own budget), close this one, and file what is left
-   as issues.
-3. **Converging: up to two closing reviews.** Each runs at the same tier on
-   the **strong** models and skips the blind round. Every reviewer votes on
-   each blocking finding found so far (`upheld` = still there, `refuted` =
-   fixed, citing the fix) and audits only the diff since the last reviewed
-   commit; new findings must be in that diff. It always has at least two
-   rounds, so what it finds is cross-examined. A closing review **passes when
-   no blocking finding is left, every carried finding was shown fixed
-   (refuted)** and every session answered; its grade is reported, not gated. If it finds an earlier finding still open (a fix that
-   did not fix) or a critical one, split as in 2.
-4. **Final fix.** When both closing reviews failed only on new findings in
-   the fixes, fix those, each with a test that fails without the fix, and ship:
-   that commit merges on tests and gates (`Final fix` in the pull request), with
-   no further model review. `make ship` refuses a final fix of more than 150
-   changed lines since the last closing review (a binary file counts as over),
-   or one without a test file.
-   Open an issue asking for a post-merge review of it.
+   is too big to fix by iteration.
+3. **Converging: up to two closing reviews.** Each runs on the **strong**
+   models with at least two reviewers (a one-persona tier borrows the medium
+   tier's) and skips the blind round. Every reviewer votes on each blocking
+   finding not yet shown fixed (`upheld` = still there, `refuted` = fixed,
+   citing the fix) and audits only the branch's own changes since the last
+   reviewed commit; new findings must be in that diff and get a second round.
+   A closing review **passes when no blocking finding is left, every carried
+   finding was shown fixed (refuted)** and every session answered; its grade is
+   reported, not gated. A carried finding left standing or undecided, or a
+   critical one, means split.
+4. **Budget spent: split.** If both closing reviews failed, split.
 
-The budget bounds the cost at five reviews plus one small unreviewed fix, and
-each step looks at less code than the one before. Not allowed: another full
-review to fish for a grade, a lower tier or effort, or changing reviewer
-prompts or `gates/review.json` in the same branch (they are read from
-`origin/dev` anyway).
+To **split**: break the change into smaller pull requests on new branches
+(each with its own budget, smaller diffs review better), close the original,
+and file what is left as issues. Not allowed: another full review to fish for
+a grade, a lower tier or effort, or changing reviewer prompts or
+`gates/review.json` in the same branch (they are read from `origin/dev`
+anyway).
 
 Why this policy, and not the alternatives:
 
@@ -145,9 +140,9 @@ Why this policy, and not the alternatives:
 | Full reviews until a grade ≥ 8 | No: grades are noisy and each fix adds new surface, so it rewards luck and never has to end. |
 | Lower effort until convergence | No: a weaker review converges by seeing less. |
 | A higher tier, full scope | Costly, and it repeats the blind round over code already reviewed three times. |
-| **Strong models on the fixes plus the known findings** | Yes: bounded cost, the strongest check where the risk is (the fixes), and a criterion that does not depend on grade noise. |
-| **Final fix on tests and gates** | Yes, last: by then the findings are confined to small fix diffs, and a test per fix proves it; a post-merge review issue covers the rest. |
-| **Split a diverging change** | Yes: smaller diffs review better, and the split pieces start fresh. |
+| A final fix merged on tests alone | No: it is unreviewed code, and every bound on it (size, tests, files) proved gameable in review. |
+| **Strong models on the fixes plus the open findings** | Yes: bounded cost, the strongest check where the risk is (the fixes), and a criterion that does not depend on grade noise. |
+| **Split what still does not pass** | Yes: smaller diffs review better, and the pieces start fresh. |
 | Ask a person | No: agents work autonomously; the policy must end on its own. |
 
 ## Limits

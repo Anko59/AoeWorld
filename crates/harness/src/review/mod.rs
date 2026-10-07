@@ -243,7 +243,12 @@ pub(crate) fn review_with(
         // A closing review audits the fixes since the last reviewed commit.
         diff: match plan {
             Plan::Full => git::git(root, &["diff", &merge_base, "HEAD"])?,
-            Plan::Closing { since, .. } => git::git(root, &["diff", since, "HEAD"])?,
+            // Only the branch's own files: a rebase must not bring dev's changes in.
+            Plan::Closing { since, .. } => {
+                let mut args = vec!["diff".to_owned(), since.clone(), "HEAD".into(), "--".into()];
+                args.extend(git::changed(root, &merge_base)?);
+                git::git(root, &args.iter().map(String::as_str).collect::<Vec<_>>())?
+            }
         },
         facts: facts(root, &merge_base)?,
     };
@@ -254,12 +259,14 @@ pub(crate) fn review_with(
     let started = now();
     let mut findings: Vec<Finding> = Vec::new();
     let mut failures = Vec::new();
-    // Carried findings get every reviewer's vote, even a single reviewer's.
-    let reviewers = if closing {
-        personas.len().max(2)
+    // A closing review needs at least two reviewers to cross-examine what it
+    // finds: a one-persona tier borrows the medium tier's.
+    let personas = if closing && personas.len() < 2 {
+        config.tiers[&Tier::Medium].personas.clone()
     } else {
-        personas.len()
+        personas
     };
+    let reviewers = personas.len();
     let first = match plan {
         Plan::Closing { prior, .. } => {
             findings = prior.clone();
@@ -412,7 +419,6 @@ pub(crate) fn review_with(
         started,
         finished: now(),
         closing,
-        final_fix: false,
     };
     report.store(root)?;
     Ok(report)

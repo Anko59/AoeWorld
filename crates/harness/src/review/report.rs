@@ -35,10 +35,6 @@ pub(crate) struct Report {
     /// left", and its grade is reported, not gated.
     #[serde(default)]
     pub(crate) closing: bool,
-    /// A final fix after the whole review budget: it passes on tests and
-    /// gates, and no model reviewed this commit (docs/review.md).
-    #[serde(default)]
-    pub(crate) final_fix: bool,
 }
 
 pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
@@ -52,21 +48,19 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 impl Report {
     /// A review passes only when every session answered and the capped grade
     /// reaches the merge grade; a closing review when no confirmed finding
-    /// blocks; a final fix on its tests and gates.
+    /// blocks and every carried finding was shown fixed.
     pub(crate) fn passes(&self) -> bool {
-        self.final_fix
-            || self.failures.is_empty()
-                && if self.closing {
-                    // Every carried finding must be shown fixed (refuted), not
-                    // merely left undecided.
-                    !self.findings.iter().any(|f| {
-                        blocking(f)
-                            || (f.reporter == super::closing::CARRIED
-                                && f.status != Status::Refuted)
-                    })
-                } else {
-                    self.grade >= self.merge_grade
-                }
+        self.failures.is_empty()
+            && if self.closing {
+                // Every carried finding must be shown fixed (refuted), not
+                // merely left undecided.
+                !self.findings.iter().any(|f| {
+                    blocking(f)
+                        || (f.reporter == super::closing::CARRIED && f.status != Status::Refuted)
+                })
+            } else {
+                self.grade >= self.merge_grade
+            }
     }
 
     /// Every session answered: the review counts toward the branch's budget.
@@ -87,11 +81,7 @@ impl Report {
     pub(crate) fn store(&self, root: &Path) -> Result<PathBuf, String> {
         let directory = directory(root)?;
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-        let kind = match (self.closing, self.final_fix) {
-            (true, _) => "-closing",
-            (_, true) => "-final-fix",
-            _ => "",
-        };
+        let kind = if self.closing { "-closing" } else { "" };
         let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
         for attempt in 1.. {
             let path = directory.join(format!("{}-{}{kind}-{attempt}.json", self.head, self.tier));
@@ -135,7 +125,7 @@ impl Report {
 
     /// The emoji badge for the grade.
     pub(crate) fn badge(&self) -> &'static str {
-        if self.closing || self.final_fix {
+        if self.closing {
             return if self.passes() { "🟡" } else { "🔴" };
         }
         match self.grade {
@@ -149,10 +139,10 @@ impl Report {
         format!(
             "{} **{}: {}/10** ({} tier · {} reviewer{} · {} round{} · {} {}): {} confirmed · {} disputed · {} refuted",
             self.badge(),
-            match (self.closing, self.final_fix) {
-                (true, _) => "Closing review",
-                (_, true) => "Final fix",
-                _ => "Review",
+            if self.closing {
+                "Closing review"
+            } else {
+                "Review"
             },
             self.grade,
             self.tier,
