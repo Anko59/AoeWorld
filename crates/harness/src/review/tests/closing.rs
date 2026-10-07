@@ -287,3 +287,48 @@ fn an_undecided_carried_finding_counts_as_open() {
         matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
     );
 }
+
+#[test]
+fn a_new_disputed_critical_finding_fails_a_closing_review() {
+    let mut r = closing("d", 4, &[], &[Severity::Critical]);
+    r.findings[0].status = Status::Disputed;
+    assert!(!r.passes(), "a disputed critical still caps below 8");
+}
+
+#[test]
+fn the_closing_audit_shows_a_fix_that_reverts_a_file_to_dev() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    fs::write(root.join("added.txt"), "branch file\n").unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "add a file"]);
+    let since = {
+        let out = Command::new("git")
+            .current_dir(root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    };
+    // The fix removes the file the branch added: back to dev's content.
+    git(root, &["rm", "-q", "added.txt"]);
+    git(root, &["commit", "-q", "-m", "drop it"]);
+    let plan = Plan::Closing {
+        since,
+        prior: vec![],
+    };
+    let script = Script {
+        first: |_| unreachable!(),
+        cross: |p| {
+            assert!(
+                p.contains("-branch file"),
+                "the reverting fix is shown: {p}"
+            );
+            r#"{"verdicts": [], "findings": []}"#.into()
+        },
+        grade: r#"{"grade": 9, "summary": "x"}"#.into(),
+        sessions: Mutex::new(0),
+    };
+    let report = review_with(root, Tier::Low, Runtime::Claude, "", &plan, &script).unwrap();
+    assert!(report.passes(), "{}", report.markdown());
+}

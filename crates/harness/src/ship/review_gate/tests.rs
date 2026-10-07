@@ -319,10 +319,7 @@ fn incomplete_reviews_do_not_spend_the_budget() {
     let error = ship_with(&root, &reviewed(), &incomplete)
         .unwrap_err()
         .to_string();
-    assert!(
-        error.contains("unavailable") || error.contains("does not count"),
-        "{error}"
-    );
+    assert!(error.contains("does not count"), "{error}");
     let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("unavailable"))
         .unwrap_err()
         .to_string();

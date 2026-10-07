@@ -76,7 +76,15 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 Some(path) => fs::read_to_string(path)?,
                 None => String::new(),
             };
-            let report = review(&root, tier, runtime, &task, &Plan::Full)?;
+            // `make review` spends the same budget as `make ship`.
+            let head = git::git(&root, &["rev-parse", "HEAD"])?;
+            let plan = match closing::next(&history(&root, &git::branch(&root)?)?, &head, now()) {
+                closing::Next::Review(plan) => plan,
+                closing::Next::FixFirst(why)
+                | closing::Next::Split(why)
+                | closing::Next::Unavailable(why) => return Err(why.into()),
+            };
+            let report = review(&root, tier, runtime, &task, &plan)?;
             println!("{}", report.markdown());
             if report.passes() {
                 Ok(())
@@ -244,11 +252,7 @@ pub(crate) fn review_with(
         diff: match plan {
             Plan::Full => git::git(root, &["diff", &merge_base, "HEAD"])?,
             // Only the branch's own files: a rebase must not bring dev's changes in.
-            Plan::Closing { since, .. } => {
-                let mut args = vec!["diff".to_owned(), since.clone(), "HEAD".into(), "--".into()];
-                args.extend(git::changed(root, &merge_base)?);
-                git::git(root, &args.iter().map(String::as_str).collect::<Vec<_>>())?
-            }
+            Plan::Closing { since, .. } => closing_diff(root, &merge_base, since)?,
         },
         facts: facts(root, &merge_base)?,
     };
@@ -449,6 +453,19 @@ fn blind_round(
         }
     }
     Ok(())
+}
+
+/// The fixes since `since`, limited to the files the branch touches now or
+/// touched then (a fix may revert a file to dev), taken literally.
+fn closing_diff(root: &Path, merge_base: &str, since: &str) -> Result<String> {
+    let mut files = git::changed(root, merge_base)?;
+    let since_base = git::git(root, &["merge-base", merge_base, since])?;
+    files.extend(git::changed_between(root, &since_base, since)?);
+    files.sort();
+    files.dedup();
+    let mut args = vec!["--literal-pathspecs", "diff", since, "HEAD", "--"];
+    args.extend(files.iter().map(String::as_str));
+    Ok(git::git(root, &args)?)
 }
 
 fn add_findings(

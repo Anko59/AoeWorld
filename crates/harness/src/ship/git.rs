@@ -105,19 +105,19 @@ pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, Stri
     Ok((remote, merge_base))
 }
 
+/// The files that differ between `merge_base` and HEAD, unquoted (`-z`), so
+/// any file name comes back exactly as Git stores it.
 pub(crate) fn changed(root: &Path, merge_base: &str) -> Result<Vec<String>> {
+    changed_between(root, merge_base, "HEAD")
+}
+
+pub(crate) fn changed_between(root: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     Ok(git(
         root,
-        &[
-            "diff",
-            "--no-renames",
-            "--name-only",
-            merge_base,
-            "HEAD",
-            "--",
-        ],
+        &["diff", "--no-renames", "--name-only", "-z", from, to, "--"],
     )?
-    .lines()
+    .split('\0')
+    .filter(|name| !name.is_empty())
     .map(str::to_owned)
     .collect())
 }
