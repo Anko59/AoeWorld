@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "merge_grade": 8,
+  "tiers": {
+    "low": {
+      "personas": [
+        "quick"
+      ],
+      "max_rounds": 1,
+      "strength": "average",
+      "reasoning_bump": false
+    },
+    "medium": {
+      "personas": [
+        "correctness",
+        "spec",
+        "test-integrity"
+      ],
+      "max_rounds": 3,
+      "strength": "average",
+      "reasoning_bump": false
+    },
+    "high": {
+      "personas": [
+        "correctness",
+        "spec",
+        "test-integrity",
+        "hostile-input",
+        "performance"
+      ],
+      "max_rounds": 3,
+      "strength": "average",
+      "reasoning_bump": true
+    },
+    "xhigh": {
+      "personas": [
+        "correctness",
+        "spec",
+        "test-integrity"
+      ],
+      "max_rounds": 3,
+      "strength": "strong",
+      "reasoning_bump": false
+    },
+    "max": {
+      "personas": [
+        "correctness",
+        "spec",
+        "test-integrity",
+        "hostile-input",
+        "performance"
+      ],
+      "max_rounds": 5,
+      "strength": "strong",
+      "reasoning_bump": false
+    }
+  },
+  "models": {
+    "claude": {
+      "average": {
+        "model": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "strong": {
+        "model": "claude-opus-5-5",
+        "effort": "medium"
+      }
+    },
+    "codex": {
+      "average": {
+        "model": "gpt-6-luna",
+        "effort": "xhigh"
+      },
+      "strong": {
+        "model": "gpt-6.1-sol",
+        "effort": "medium"
+      }
+    },
+    "dsh": {
+      "average": {
+        "model": "litellm/glm-5.3-flash",
+        "effort": "high"
+      },
+      "strong": {
+        "model": "litellm/glm-5.3",
+        "effort": "medium"
+      }
+    },
+    "pi": {
+      "average": {
+        "model": "litellm/glm-5.3-flash",
+        "effort": "high"
+      },
+      "strong": {
+        "model": "litellm/glm-5.3",
+        "effort": "medium"
+      }
+    }
+  },
+  "floors": {
+    "docs": "low",
+    "static": "low",
+    "native": "medium",
+    "gameplay": "medium",
+    "browser": "medium",
+    "assets": "medium",
+    "performance": "medium",
+    "everything": "high"
+  }
+}

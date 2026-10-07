@@ -26,6 +26,7 @@ mod release_promotion;
 mod release_publish;
 mod release_stack;
 mod repo_policy;
+mod review;
 mod ship;
 mod wasm_test;
 
@@ -129,6 +130,8 @@ enum Command {
     Agents(agents::Commands),
     #[command(flatten)]
     Ship(ship::Commands),
+    #[command(flatten)]
+    Review(review::Commands),
     ReleaseBuild,
     ReleasePublish,
     ReleaseSourceCheck,
@@ -331,6 +334,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::HooksCheck => hooks::check(Path::new("."))?,
         Command::Agents(command) => agents::execute(command)?,
         Command::Ship(command) => ship::execute(command)?,
+        Command::Review(command) => review::execute(command)?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,

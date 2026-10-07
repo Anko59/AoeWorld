@@ -73,15 +73,20 @@ pub(crate) fn command(
     Ok(command)
 }
 
+/// The dsh patch that mounts the Claude hooks bridge, without a model.
+pub(crate) fn dsh_hooks(root: &Path) -> String {
+    format!(
+        "- insert:\n    - name: '@deepseek-ai/dsh-hooks-claude-code'\n      config:\n        configPath: {}\n",
+        // A JSON string is a valid YAML double-quoted scalar.
+        toml_string(&root.join(".dsh/hooks.json").display().to_string())
+    )
+}
+
 /// The DeepSeek bridge reads one absolute hook config per process. The model
 /// comes from the person's dsh setup unless `AOE_DSH_PROVIDER`/`AOE_DSH_MODEL`
 /// name one already authenticated there (for example `openai-codex`).
 pub(crate) fn dsh_patch(root: &Path) -> String {
-    let mut patch = format!(
-        "- insert:\n    - name: '@deepseek-ai/dsh-hooks-claude-code'\n      config:\n        configPath: {}\n",
-        // A JSON string is a valid YAML double-quoted scalar.
-        toml_string(&root.join(".dsh/hooks.json").display().to_string())
-    );
+    let mut patch = dsh_hooks(root);
     if let (Ok(provider), Ok(model)) = (
         std::env::var("AOE_DSH_PROVIDER"),
         std::env::var("AOE_DSH_MODEL"),

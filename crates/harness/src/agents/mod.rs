@@ -16,7 +16,7 @@ mod args;
 mod bash;
 mod context;
 mod edit;
-mod launch;
+pub(crate) mod launch;
 mod paths;
 mod role;
 mod rules;
@@ -30,6 +30,7 @@ mod tests;
 
 use context::{Access, Context};
 use role::Role;
+pub(crate) use role::is_test as is_test_path;
 use runtime::Call;
 pub(crate) use runtime::Runtime;
 use serde::Deserialize;
