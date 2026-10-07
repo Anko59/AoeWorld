@@ -99,6 +99,12 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
                     "agents set only `AOE_*`, `HARNESS_*`, `REVIEW_*` and `SHIP_*` Make variables, not `{name}`"
                 ));
             }
+            // Make expands `$(...)` in a command-line value, including `$(shell ...)`.
+            Some((name, value)) if agent && value.contains('$') => {
+                return Err(format!(
+                    "the value of `{name}` contains `$`, which Make would expand; pass a plain value"
+                ));
+            }
             Some(_) => {}
             None => targets.push(word.text.as_str()),
         }

@@ -14,11 +14,22 @@ pub(crate) fn gh(context: &Context, rest: &[Word]) -> Verdict {
             "{what} belongs to a person: an agent never merges, approves or rewrites GitHub state; {SHIP}"
         ))
     };
-    let positional: Vec<&str> = words
-        .iter()
-        .copied()
-        .filter(|w| !w.starts_with('-'))
-        .collect();
+    // Flags may precede the verb (`gh pr -R o/r merge`): drop them and the
+    // values they take, and fold gh's aliases onto the verbs the rules name.
+    let mut positional: Vec<&str> = Vec::new();
+    let mut skip = false;
+    for word in words.iter().copied() {
+        if skip {
+            skip = false;
+        } else if matches!(word, "-R" | "--repo" | "--hostname") {
+            skip = true;
+        } else if !word.starts_with('-') {
+            positional.push(match word {
+                "new" => "create",
+                other => other,
+            });
+        }
+    }
     match positional.as_slice() {
         ["pr", "merge", ..] => return refuse("`gh pr merge`"),
         ["pr", "create", ..] => {
@@ -27,7 +38,7 @@ pub(crate) fn gh(context: &Context, rest: &[Word]) -> Verdict {
         ["pr", "update-branch", ..] => return refuse("`gh pr update-branch`"),
         ["pr", "review", ..] => {
             let parsed = args::split(
-                &rest[2..],
+                rest,
                 &Spec {
                     short: "bF",
                     long: &["body", "body-file"],

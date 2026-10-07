@@ -39,14 +39,14 @@ pub(crate) struct Options {
     /// Push with `--force-with-lease`, after a rebase.
     #[arg(long)]
     pub(crate) force: bool,
-    /// Integration branch the change is judged against and targets.
-    #[arg(long, default_value = "dev")]
+    /// Always `dev`: not settable from the command line.
+    #[arg(skip = String::from("dev"))]
     pub(crate) base: String,
-    /// Push only; leave the pull request alone.
-    #[arg(long)]
+    /// Tests only: leave the pull request alone.
+    #[arg(skip)]
     pub(crate) no_pr: bool,
-    /// Use the already-fetched `origin/<base>` (tests, offline).
-    #[arg(long)]
+    /// Tests only: use the already-fetched `origin/dev`.
+    #[arg(skip)]
     pub(crate) no_fetch: bool,
 }
 
@@ -66,7 +66,16 @@ impl Default for Options {
 pub(crate) fn execute(command: Commands) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
-        Commands::Ship(options) => ship(&root, &options).map(|_| ()),
+        Commands::Ship(mut options) => {
+            // `make ship` passes these through the environment, never through shell text.
+            let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+            options.title = options.title.or_else(|| env("SHIP_TITLE"));
+            options.body_file = options
+                .body_file
+                .or_else(|| env("SHIP_BODY").map(PathBuf::from));
+            options.force |= env("SHIP_FORCE").as_deref() == Some("1");
+            ship(&root, &options).map(|_| ())
+        }
         Commands::ShipStatus => {
             let head = git::git(&root, &["rev-parse", "HEAD"])?;
             match evidence::read(&root, &head)? {
@@ -110,6 +119,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
     }
     let evidence = Evidence {
         version: 1,
+        cadence: "preflight".into(),
         verdict: evidence::verdict(&results),
         head: subject.head,
         tree: subject.tree,
@@ -127,6 +137,9 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
 }
 
 pub(crate) fn ship(root: &Path, options: &Options) -> Result<Evidence> {
+    if !options.no_pr {
+        preflight_pull_request(root, options)?;
+    }
     let evidence = judge(root, options)?;
     for result in &evidence.gates {
         eprintln!("{}", result.line());
@@ -190,35 +203,86 @@ fn gh(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<()> {
-    let branch = evidence.branch.as_str();
-    let body = options.body_file.as_ref().map(|p| p.display().to_string());
-    let existing = gh(
+/// The oldest `gh` with `--attach` for PR videos; older ones are refused.
+const GH_MINIMUM: (u32, u32) = (2, 100);
+
+fn gh_version(text: &str) -> Option<(u32, u32)> {
+    let version = text.split_whitespace().nth(2)?;
+    let mut parts = version.split('.');
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
+/// Before any gate runs: a usable `gh`, and a title and description when the
+/// branch has no open pull request yet, so nothing is pushed half-way.
+fn preflight_pull_request(root: &Path, options: &Options) -> Result<()> {
+    let version = gh(root, &["--version"])?;
+    match gh_version(&version) {
+        Some(found) if found >= GH_MINIMUM => {}
+        _ => {
+            return Err(format!(
+                "gh {}.{} or newer is required (found: {})",
+                GH_MINIMUM.0,
+                GH_MINIMUM.1,
+                version.lines().next().unwrap_or_default()
+            )
+            .into());
+        }
+    }
+    let branch = git::branch(root)?;
+    let repository = git::origin_repository(root)?;
+    let open = open_pull_request(root, &repository, &branch)?.is_some();
+    if !open && (options.title.is_none() || options.body_file.is_none()) {
+        return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
+    }
+    if let Some(body) = &options.body_file
+        && !body.is_file()
+    {
+        return Err(format!("SHIP_BODY {} is not a file", body.display()).into());
+    }
+    Ok(())
+}
+
+/// The open pull request whose head is `branch` (never a PR number that
+/// happens to equal a numeric branch name).
+fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<String>> {
+    let url = gh(
         root,
         &[
             "pr",
-            "view",
+            "list",
+            "--repo",
+            repository,
+            "--head",
             branch,
+            "--state",
+            "open",
             "--json",
-            "url,state",
+            "url",
             "--jq",
-            "select(.state == \"OPEN\") | .url",
+            ".[0].url // empty",
         ],
-    )
-    .ok();
-    let url = match existing.filter(|url| !url.is_empty()) {
+    )?;
+    Ok((!url.is_empty()).then_some(url))
+}
+
+fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<()> {
+    let branch = evidence.branch.as_str();
+    let repository = git::origin_repository(root)?;
+    let body = options.body_file.as_ref().map(|p| p.display().to_string());
+    let existing = open_pull_request(root, &repository, branch)?;
+    let url = match existing {
         Some(url) => {
-            let mut args = vec!["pr", "edit", branch];
+            let mut args = vec!["pr", "edit", url.as_str(), "--repo", repository.as_str()];
             if let Some(title) = options.title.as_deref() {
                 args.extend(["--title", title]);
             }
             if let Some(body) = body.as_deref() {
                 args.extend(["--body-file", body]);
             }
-            if args.len() > 3 {
+            if args.len() > 5 {
                 gh(root, &args)?;
             }
-            url
+            url.clone()
         }
         None => {
             let (Some(title), Some(body)) = (options.title.as_deref(), body.as_deref()) else {

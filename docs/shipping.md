@@ -13,8 +13,16 @@ not ship; the session that ran them reviews, commits and ships.
 
 ## What `make ship` does
 
-`aoe-harness ship` (`crates/harness/src/ship/`), run on the host:
+`aoe-harness ship` (`crates/harness/src/ship/`), run on the host by the same
+judge binary as the agent hooks (`.agents/hooks/harness.sh exec ship`, built
+from `origin/dev`, or from the committed HEAD while bootstrapping), never by a
+binary compiled from the checkout under judgment. `SHIP_TITLE`, `SHIP_BODY` and
+`SHIP_FORCE` reach it through the environment, never through shell text, and the
+agent policy refuses `$` in agent-set Make values.
 
+0. **Checks first** that `gh` is 2.100 or newer (PR video uploads) and, when
+   the branch has no open pull request, that a title and a description file
+   were given. Nothing runs or is pushed otherwise.
 1. **Refuses** a tree with uncommitted or untracked changes ("evidence is for a
    commit"), the protected branches `dev`, `main` and `release/*`, and a
    detached HEAD.
@@ -32,8 +40,8 @@ not ship; the session that ran them reviews, commits and ships.
 6. **Only on PASS**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make preflight` again.
-7. **Creates or updates** the pull request against `dev` with the title and
-   description. A new branch needs both `SHIP_TITLE` and `SHIP_BODY`.
+7. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
+   repository, found by head branch (never by a number).
 
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
@@ -41,6 +49,13 @@ pass. No agent runs a merge command.
 
 ## Limits
 
+- `ship` runs the `preflight` cadence (recorded as `cadence` in the evidence),
+  not every `pr`-cadence gate: browser, WASM, coverage, fuzz and target
+  performance gates run in CI, whose `required` check gates the merge.
+- Gates run in the checkout as written (`make <gate>`), not in an exported
+  commit snapshot: ignored files and caches take part, and an edit reverted
+  between the before and after checks is not seen.
+- `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the
   authoritative re-run.

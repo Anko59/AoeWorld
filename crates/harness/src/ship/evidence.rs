@@ -20,6 +20,8 @@ pub(crate) enum Verdict {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Evidence {
     pub(crate) version: u16,
+    /// The registry cadence that ran: `preflight` (CI re-runs the `pr`/`ci` gates).
+    pub(crate) cadence: String,
     pub(crate) head: String,
     pub(crate) tree: String,
     pub(crate) branch: String,

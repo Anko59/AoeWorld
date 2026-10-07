@@ -89,7 +89,8 @@ fn only_a_clean_feature_branch_ships() {
     assert!(error.contains("commit first"), "{error}");
     run(&root, &["checkout", "-q", "README.md"]);
     fs::write(root.join("new.txt"), "untracked\n").unwrap();
-    assert!(judge(&root, &offline()).is_err());
+    let error = judge(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("commit first"), "{error}");
     fs::remove_file(root.join("new.txt")).unwrap();
     run(&root, &["checkout", "-q", "dev"]);
     let error = judge(&root, &offline()).unwrap_err().to_string();
@@ -155,4 +156,72 @@ fn a_local_branch_named_origin_dev_does_not_move_the_base() {
     let remote = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
     let (base, _) = git::base(&root, "dev", false).unwrap();
     assert_eq!(base, remote);
+}
+
+#[test]
+fn incomplete_gates_never_count_as_a_pass() {
+    use super::run::{GateResult, GateVerdict};
+    let result = |verdict| GateResult {
+        gate: "g".into(),
+        verdict,
+        seconds: 0.0,
+        summary: String::new(),
+        tail: String::new(),
+    };
+    assert_eq!(evidence::verdict(&[]), Verdict::Incomplete);
+    assert_eq!(
+        evidence::verdict(&[result(GateVerdict::Pass), result(GateVerdict::Unavailable)]),
+        Verdict::Incomplete
+    );
+    assert_eq!(
+        evidence::verdict(&[result(GateVerdict::Unavailable), result(GateVerdict::Fail)]),
+        Verdict::Fail
+    );
+    assert_eq!(
+        evidence::verdict(&[result(GateVerdict::Pass)]),
+        Verdict::Pass
+    );
+}
+
+#[test]
+fn gh_versions_below_the_attach_release_are_refused() {
+    assert_eq!(
+        super::gh_version("gh version 2.102.0 (2026-09-30)"),
+        Some((2, 102))
+    );
+    assert!(
+        super::gh_version("gh version 2.46.0 (2025-12-13 Ubuntu 2.46.0-4)").unwrap()
+            < super::GH_MINIMUM
+    );
+    assert_eq!(super::gh_version("nonsense"), None);
+}
+
+#[test]
+fn the_branch_and_repository_come_from_full_refs_and_origin() {
+    let (_temp, root) = fixture("true");
+    run(&root, &["tag", "feature"]);
+    assert_eq!(git::branch(&root).unwrap(), "feature");
+    for (url, expected) in [
+        (
+            "git@github.com:Anko59/AoeWorld.git",
+            Some("Anko59/AoeWorld"),
+        ),
+        (
+            "https://github.com/Anko59/AoeWorld",
+            Some("Anko59/AoeWorld"),
+        ),
+        (
+            "ssh://git@github.com/Anko59/AoeWorld.git",
+            Some("Anko59/AoeWorld"),
+        ),
+        ("https://gitlab.com/x/y.git", None),
+        ("git@github.com:onlyowner", None),
+    ] {
+        run(&root, &["remote", "set-url", "origin", url]);
+        assert_eq!(
+            git::origin_repository(&root).ok().as_deref(),
+            expected,
+            "{url}"
+        );
+    }
 }

@@ -160,6 +160,9 @@ pub(crate) fn git(context: &Context, state: &mut State, rest: &[Word]) -> Verdic
     }
     match sub {
         "push" | "send-pack" => Err(format!("`git {sub}` is not run directly; {SHIP}")),
+        "subtree" if parsed.positionals.iter().any(|w| w.text == "push") => Err(format!(
+            "`git subtree push` publishes without evidence; {SHIP}"
+        )),
         "update-ref" | "symbolic-ref"
             if args
                 .iter()

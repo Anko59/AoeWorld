@@ -34,6 +34,32 @@ pub(crate) struct Subject {
     pub(crate) branch: String,
 }
 
+/// The checked-out branch from its full ref: `--short` can answer
+/// `heads/<name>` when a tag or remote ref shares the name.
+pub(crate) fn branch(root: &Path) -> Result<String> {
+    let full = git(root, &["symbolic-ref", "--quiet", "HEAD"])
+        .map_err(|_| "HEAD is detached; ship from a feature branch".to_owned())?;
+    full.strip_prefix("refs/heads/")
+        .map(str::to_owned)
+        .ok_or_else(|| format!("HEAD points at {full}, not a branch"))
+}
+
+/// `owner/name` of `origin` on GitHub, so the pull request targets the
+/// repository the branch is pushed to, whatever other remotes exist.
+pub(crate) fn origin_repository(root: &Path) -> Result<String> {
+    let url = git(root, &["remote", "get-url", "origin"])?;
+    let path = url
+        .strip_prefix("git@github.com:")
+        .or_else(|| url.strip_prefix("https://github.com/"))
+        .or_else(|| url.strip_prefix("ssh://git@github.com/"))
+        .ok_or_else(|| format!("origin is not a GitHub repository: {url}"))?;
+    let path = path.trim_end_matches('/').trim_end_matches(".git");
+    match path.split('/').collect::<Vec<_>>().as_slice() {
+        [owner, name] if !owner.is_empty() && !name.is_empty() => Ok(path.to_owned()),
+        _ => Err(format!("origin is not a GitHub repository: {url}")),
+    }
+}
+
 pub(crate) fn subject(root: &Path) -> Result<Subject> {
     let dirty = git(
         root,
@@ -45,8 +71,7 @@ pub(crate) fn subject(root: &Path) -> Result<Subject> {
                 .into(),
         );
     }
-    let branch = git(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
-        .map_err(|_| "HEAD is detached; ship from a feature branch".to_owned())?;
+    let branch = branch(root)?;
     if protected(&branch) {
         return Err(format!(
             "`{branch}` moves only by merging a pull request; ship from a feature branch"

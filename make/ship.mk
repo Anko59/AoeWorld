@@ -1,10 +1,12 @@
 # Publishing (docs/shipping.md). `make ship` is the only way agents publish:
-# preflight gates at the exact commit, evidence, push, pull request.
+# preflight gates at the exact commit, evidence, push, pull request. It runs the
+# same judge as the agent hooks (built from origin/dev), never one built from
+# the checkout under judgment. SHIP_TITLE, SHIP_BODY and SHIP_FORCE reach it
+# through the environment only; they are never pasted into shell text.
+export SHIP_TITLE SHIP_BODY SHIP_FORCE
 .PHONY: ship ship-status
 ship:
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' ship $(if $(SHIP_TITLE),--title '$(subst ','"'"',$(SHIP_TITLE))') $(if $(SHIP_BODY),--body-file '$(SHIP_BODY)') $(if $(filter 1,$(SHIP_FORCE)),--force)
+	@.agents/hooks/harness.sh exec ship
 
 ship-status:
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' ship-status
+	@.agents/hooks/harness.sh exec ship-status

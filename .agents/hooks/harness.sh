@@ -5,23 +5,29 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
+#   harness.sh exec ship|ship-status    (`make ship`: the same judge runs the publishing step)
 #   harness.sh build
 set -u
+probe=crates/harness/src/agents/runtime.rs
 case ${1:-} in
   build) runtime=claude event=build ;;
   claude|codex|dsh|pi) runtime=$1 event=${2:?usage: harness.sh <runtime> <event>} ;;
-  *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | build" >&2; exit 2 ;;
+  exec)
+    case ${2:-} in ship|ship-status) ;; *) echo "harness.sh exec: ship or ship-status only" >&2; exit 2 ;; esac
+    runtime=claude event=exec probe=crates/harness/src/ship/mod.rs ;;
+  *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) || exit 2
 common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir) || exit 2
-if git -C "$root" cat-file -e refs/remotes/origin/dev:crates/harness/src/agents/runtime.rs 2>/dev/null; then
+if git -C "$root" cat-file -e "refs/remotes/origin/dev:$probe" 2>/dev/null; then
   revision=$(git -C "$root" rev-parse refs/remotes/origin/dev) || exit 2
   key=$revision
   judge="origin/dev $revision"
 else
-  revision=
+  # Bootstrap: the committed HEAD, never uncommitted edits to the judge.
+  revision=$(git -C "$root" rev-parse HEAD) || exit 2
   key=bootstrap-$(git -C "$root" rev-parse HEAD:crates/harness) || exit 2
-  judge="bootstrap from this checkout (non-authoritative)"
+  judge="bootstrap from this checkout's HEAD (non-authoritative)"
 fi
 binary="$common/aoe-agent-hook/$key/aoe-harness"
 if [ ! -x "$binary" ] || [ "$event" = build ]; then
@@ -33,4 +39,8 @@ if [ ! -x "$binary" ] || [ "$event" = build ]; then
   fi
 fi
 [ "$event" = build ] && exit 0
+if [ "$event" = exec ]; then
+  echo "harness: judge $judge" >&2
+  cd "$root" && exec "$binary" "$2"
+fi
 AOE_AGENT_HOOK_ROOT=$root AOE_AGENT_HOOK_JUDGE=$judge exec "$binary" agent-hook --runtime "$runtime" "$event"

@@ -64,6 +64,11 @@ fn the_main_session_and_other_agents_ship_feature_branches() {
             "git push --force-with-lease origin feature",
             "git push -n origin feature",
             "gh pr create --base dev --title x --body y",
+            "gh pr new --base dev --title x --body y",
+            "gh pr -R owner/repo create --title x --body y",
+            "gh pr --repo owner/repo merge 12",
+            "gh pr -R owner/repo review 12 --approve",
+            "git subtree push --prefix=crates origin feature-x",
         ] {
             denied(&fixture, role, command);
         }
