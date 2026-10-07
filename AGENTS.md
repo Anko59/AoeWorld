@@ -13,6 +13,10 @@ a pass. Human-authored text files must stay within 500 lines, and a directory
 may directly contain at most 14 code/config files. Place substantive command
 logic in Rust, not Make, shell, or workflow YAML.
 
+Credentials (API keys, tokens) are in the keyring, never in the repository or
+the default environment: look them up with `secret-tool` before concluding you
+lack access ([credentials](docs/credentials.md)).
+
 Report the exact revision, commands, results, and limits. Keep the working tree
 clean and commit intended changes. Synthetic workloads do not demonstrate
 finished RTS performance or dedicated hardware qualification.
