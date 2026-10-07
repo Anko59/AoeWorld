@@ -11,7 +11,10 @@ use crate::{
 use aoe_core::TileCoord;
 
 mod helpers;
+mod history;
 mod water_model;
+
+pub(super) use history::sample_land_use_observation;
 
 use helpers::{elevation_value, load_page, page_index, source_coordinate};
 
@@ -416,29 +419,20 @@ fn sample_land_use(
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<(u8, u8, u16)>, EnvironmentPageError> {
-    let (source_x, source_y) = source_coordinate(tile.x, tile.y, samples, generator.width_tiles)?;
-    let page = load_page(
-        generator,
-        EnvironmentPageKey {
-            layer: PageLayer::HistoricalLandUse,
-            level: 0,
-            x: source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-            y: source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-        },
-        cancelled,
-    )?;
-    let page = match page.as_ref() {
-        EnvironmentPage::HistoricalLandUse(page) => page,
-        _ => return Err(EnvironmentPageError::Corrupt),
+    let Some(observation) = sample_land_use_observation(generator, samples, tile, cancelled)?
+    else {
+        return Ok(None);
     };
-    let index = page_index(page.width, page.height, source_x, source_y)?;
-    if !page.coverage.is_empty() && page.coverage[index].valid_land_percent == 0 {
+    if observation
+        .coverage
+        .is_some_and(|coverage| coverage.valid_land_percent == 0)
+    {
         return Ok(None);
     }
     Ok(Some((
-        page.crop_percent[index],
-        page.grazing_percent[index],
-        page.population_pressure_per_square_kilometer[index],
+        observation.crop_percent,
+        observation.grazing_percent,
+        observation.population_pressure,
     )))
 }
 
