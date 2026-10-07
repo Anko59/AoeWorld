@@ -19,19 +19,17 @@ secret-tool search --all service codex-api 2>/dev/null | grep '^attribute.name'
 | `OPENROUTER_API_KEY` | `service codex-api name OPENROUTER_API_KEY` | Narrated showcase videos (Gemini TTS on OpenRouter) |
 | `LITELLM_MASTER_KEY` | `service codex-api name LITELLM_MASTER_KEY` | The person's local LiteLLM gateway, which DeepSeek Harness and the GLM models go through |
 | `DEEPSEEK_API_KEY`, `ZAI_API_KEY`, `MISTRAL_API_KEY` | `service codex-api name <VAR>` | Model providers behind that gateway; configured outside this repository |
-| `GITHUB_TOKEN` | `gh auth token` (gh keeps its token in the keyring) | Commands that call the GitHub API themselves, such as `GITHUB_TOKEN=$(gh auth token) make repo-policy-check`; `gh` itself (`make ship`, issues) needs nothing |
+| `GITHUB_TOKEN` | `service gh:github.com username <GitHub login>` (gh's own keyring entry; `gh auth token` is refused by the hooks) | Commands that call the GitHub API themselves, such as `make repo-policy-check`; `gh` itself (`make ship`, issues) needs nothing |
 
 The variables above are read on the host. A Make target that runs its
 command in Docker only sees the variables its recipe forwards (`-e …`), so a
-secret exported for `make` does not reach it unless that target forwards it;
-harness commands that need a secret (for example narration) read it on the host
-from the environment or the keyring themselves.
+secret exported for `make` does not reach it unless that target forwards it.
 
 Rules:
 
-- Tester, implementer and reviewer subagents never handle credentials: the
-  hooks refuse `secret-tool` to them. A step that needs a secret is run by the
-  main session.
+- Tester, implementer and reviewer subagents never handle credentials:
+  `secret-tool` is not on their command allow-list, so the hooks refuse it. A
+  step that needs a secret is run by the main session.
 - Set a secret only in the environment of the command that needs it. Never
   print it, write it to a file, commit it, put it in a URL or paste it into a
   chat or pull request.
