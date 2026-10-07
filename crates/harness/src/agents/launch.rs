@@ -49,8 +49,10 @@ pub(crate) fn command(
             c
         }
         Runtime::Dsh => {
-            let patch = root.join(".cache/tmp/dsh-hooks.patch.yml");
-            fs::create_dir_all(root.join(".cache/tmp")).map_err(|e| e.to_string())?;
+            // In the harness records, which agents cannot rewrite before launch.
+            let records = root.join(super::context::RECORDS);
+            let patch = records.join("dsh-hooks.patch.yml");
+            fs::create_dir_all(&records).map_err(|e| e.to_string())?;
             fs::write(&patch, dsh_patch(root)).map_err(|e| e.to_string())?;
             let mut c = Command::new("npx");
             // Launcher flags (`--profile`, `--patch`) precede the app's (`--json`).
@@ -77,7 +79,8 @@ pub(crate) fn command(
 pub(crate) fn dsh_patch(root: &Path) -> String {
     let mut patch = format!(
         "- insert:\n    - name: '@deepseek-ai/dsh-hooks-claude-code'\n      config:\n        configPath: {}\n",
-        root.join(".dsh/hooks.json").display()
+        // A JSON string is a valid YAML double-quoted scalar.
+        toml_string(&root.join(".dsh/hooks.json").display().to_string())
     );
     if let (Ok(provider), Ok(model)) = (
         std::env::var("AOE_DSH_PROVIDER"),

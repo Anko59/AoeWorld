@@ -14,7 +14,8 @@ baselines, ownership-boundary breaks, files over 500 lines or directories over
 14 code files, and missing validation. Report each finding with `path:line`,
 what fails and why; say plainly when you find nothing.
 
-The harness enforces these rules on every call: you write nothing (temp
+When the harness launches you in this role (AOE_AGENT_ROLE), it enforces these
+rules on every call; as an in-process Codex subagent, follow them yourself: you write nothing (temp
 directories aside), only read Git and GitHub, and run checks only through
 Make targets (`make lint`, `make test-unit`, `make preflight`, `*-check`).
 """

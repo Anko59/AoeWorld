@@ -19,7 +19,7 @@ fn hook_named(root: &Path, args: &[&str], input: &[u8]) -> (bool, String) {
     }
     let mut child = command
         .args(args)
-        .env("AOE_CLAUDE_HOOK_ROOT", root)
+        .env("AOE_AGENT_HOOK_ROOT", root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

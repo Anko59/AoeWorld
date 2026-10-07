@@ -253,3 +253,165 @@ fn codex_launches_carry_the_committed_hooks_inline() {
     assert!(pre.contains("harness.sh codex pre-tool-use"), "{pre}");
     assert!(settings.iter().any(|s| s.starts_with("hooks.Stop=")));
 }
+
+#[test]
+fn roles_from_the_launcher_and_the_runtime_narrow_each_other() {
+    use super::super::role::Role;
+    assert_eq!(Role::resolve(None, None), Role::Main);
+    assert_eq!(Role::resolve(Some(""), Some("tester")), Role::Tester);
+    assert_eq!(Role::resolve(Some("main"), Some("tester")), Role::Tester);
+    assert_eq!(Role::resolve(Some("implementer"), None), Role::Implementer);
+    assert_eq!(
+        Role::resolve(Some("implementer"), Some("general-purpose")),
+        Role::Implementer
+    );
+    assert_eq!(
+        Role::resolve(Some("implementer"), Some("reviewer")),
+        Role::Reviewer
+    );
+    assert_eq!(
+        Role::resolve(Some("tester"), Some("implementer")),
+        Role::Reviewer
+    );
+    assert_eq!(Role::resolve(Some("general-purpose"), None), Role::Other);
+}
+
+#[test]
+fn smoke_verdicts_never_hide_a_protected_write() {
+    use super::super::smoke::{protected_denial_seen, verdict};
+    assert_eq!(verdict(false, false, false, true), "FAIL");
+    assert_eq!(verdict(false, true, true, true), "FAIL");
+    assert_eq!(verdict(true, false, true, true), "INCOMPLETE");
+    assert_eq!(verdict(true, true, true, false), "INCOMPLETE");
+    assert_eq!(verdict(true, true, false, true), "FAIL");
+    assert_eq!(verdict(true, true, true, true), "PASS");
+    let reason = "AoeWorld harness: `gates/agent-smoke.txt` is in the protected gates class";
+    assert!(protected_denial_seen(reason));
+    assert!(!protected_denial_seen(
+        "AoeWorld harness: `cargo` is not run on the host"
+    ));
+    let claude = json!({
+        "result": "done; gates/agent-smoke.txt",
+        "permission_denials": [{"tool_name": "Bash", "tool_input": {"command": "cargo --version"}}],
+    });
+    assert!(!protected_denial_seen(&claude.to_string()));
+    let claude = json!({
+        "permission_denials": [{"tool_name": "Bash", "tool_input": {"command": "echo smoke > gates/agent-smoke.txt"}}],
+    });
+    assert!(protected_denial_seen(&claude.to_string()));
+}
+
+#[test]
+fn launches_carry_the_role_and_quote_their_paths() {
+    use super::super::launch::{command, dsh_patch};
+    let patch = dsh_patch(Path::new("/odd: path #1"));
+    assert!(
+        patch.contains(r#"configPath: "/odd: path #1/.dsh/hooks.json""#),
+        "{patch}"
+    );
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let codex = command(Runtime::Codex, &root, "tester", "do it").expect("codex");
+    let args: Vec<String> = codex
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        args.iter().any(|a| a.starts_with("hooks.PreToolUse=")),
+        "{args:?}"
+    );
+    assert_eq!(args.last().map(String::as_str), Some("do it"));
+    let role = codex
+        .get_envs()
+        .find(|(name, _)| *name == "AOE_AGENT_ROLE")
+        .and_then(|(_, value)| value);
+    assert_eq!(role.and_then(|v| v.to_str()), Some("tester"));
+}
+
+#[test]
+fn runtime_path_rewrites_and_hidden_working_directories_are_closed() {
+    let fixture = Fixture::new();
+    // pi strips a leading `@` before writing; file: URLs are refused.
+    let at = json!({ "path": "@gates/registry.json", "content": "{}" });
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Pi,
+        Some("implementer"),
+        "write",
+        at
+    )));
+    let url = json!({ "path": "file:///etc/x", "content": "" });
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Pi,
+        Some("implementer"),
+        "write",
+        url
+    )));
+    // Codex trims hunk headers on both sides.
+    let padded = "*** Begin Patch\n*** Add File: crates/map/src/ok.rs\n+x\n  *** Add File: gates/evil.json\n+{}\n*** End Patch\n";
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Codex,
+        Some("implementer"),
+        "apply_patch",
+        json!({ "command": padded })
+    )));
+    // Codex runs Bash in a `workdir` its hooks never see: agents write absolutely.
+    let relative = json!({ "command": "echo x > registry.json" });
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Codex,
+        Some("implementer"),
+        "Bash",
+        relative.clone()
+    )));
+    assert!(!denied(&hook(
+        &fixture,
+        Runtime::Codex,
+        None,
+        "Bash",
+        relative
+    )));
+    let absolute = json!({ "command": "echo x > /tmp/aoe-codex-probe.txt" });
+    assert!(!denied(&hook(
+        &fixture,
+        Runtime::Codex,
+        Some("implementer"),
+        "Bash",
+        absolute
+    )));
+    // dsh's persistent shell keeps `cd`; agents pass workdir instead.
+    let cd = json!({ "command": "cd gates" });
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Dsh,
+        Some("implementer"),
+        "bash",
+        cd.clone()
+    )));
+    assert!(!denied(&hook(&fixture, Runtime::Dsh, None, "bash", cd)));
+    // Tools that run model-written code are refused.
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Dsh,
+        Some("implementer"),
+        "workflow",
+        json!({ "script": "x" })
+    )));
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Pi,
+        Some("implementer"),
+        "powershell",
+        json!({ "command": "x" })
+    )));
+    // Role names are matched case-insensitively.
+    let write = json!({ "file_path": "crates/map/src/lib.rs", "content": "" });
+    assert!(denied(&hook(
+        &fixture,
+        Runtime::Claude,
+        Some("Tester"),
+        "Write",
+        write
+    )));
+}

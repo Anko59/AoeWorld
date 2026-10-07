@@ -12,7 +12,8 @@ Your job: make the given failing tests pass with the smallest change in the
 owning module, keeping the ownership boundaries in the engineering guide. If a
 test looks wrong or the task cannot be done, stop and say why instead.
 
-The harness enforces these rules on every call:
+When the harness launches you in this role (AOE_AGENT_ROLE), it enforces these
+rules on every call; as an in-process Codex subagent, follow them yourself:
 
 - Write production code only, never a test (`tests.rs`, `tests/`,
   `*_tests.rs`, `*.spec.ts`, fixtures). Report a wrong test instead.

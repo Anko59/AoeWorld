@@ -61,6 +61,12 @@ stop rule judges the agent's whole working tree.
 
 ## The judge
 
+**Transition.** A branch created before this adapter carries the older
+`.claude/hooks/harness.sh`, which looks for `crates/harness/src/claude/` on
+`origin/dev`. Once that path is gone it builds a bootstrap judge from its own
+checkout (labelled non-authoritative) until it rebases onto `dev`. The new
+binary still answers to the old `claude-hook` name.
+
 `harness.sh` runs a cached `aoe-harness` binary built in the pinned
 `aoeworld/rust-tools` image by `make agent-hook-build`, under the Git common
 directory (`aoe-agent-hook/`, shared by worktrees, never committed). The judge
@@ -89,8 +95,11 @@ mismatched PreToolUse input is denied.
 
 ## Roles
 
-The role comes from the hook's `agent_type` alone, so each file in
-`.claude/agents/` is named after its role.
+A role comes from `AOE_AGENT_ROLE` (set by the harness when it launches an
+agent) and from Claude Code's `agent_type`, so each file in `.claude/agents/` is
+named after its role. When both are set, the narrower role applies; an empty or
+`main` value restricts nothing, and tester plus implementer together may write
+nothing.
 
 | Role | `agent_type` | May write | Git and GitHub |
 |---|---|---|---|
@@ -104,10 +113,10 @@ Every agent may also write temp directories, `.cache/tmp/` and
 `.cache/agent-hook/BLOCKED.md`.
 
 **Protected classes** are edited only by the main session, where a person is
-present: harness policy (`crates/harness/`, `.claude/`, `CLAUDE.md`, every
-`AGENTS.md`, `Makefile`, `docker/`, `skills/`, `docs/adr/`, this page, the root
-Cargo, toolchain, deny and ignore files), gates (`gates/`, `.github/`) and
-`baselines/`. `.github/CODEOWNERS` routes the same paths to a person.
+present: harness policy (`crates/harness/`, `.agents/`, `.claude/`, `.codex/`,
+`.dsh/`, `.pi/`, `make/`, `CLAUDE.md`, every `AGENTS.md`, `Makefile`, `docker/`,
+`skills/`, `docs/adr/`, this page, the root Cargo, toolchain, deny and ignore
+files), gates (`gates/`, `.github/`) and `baselines/`. `.github/CODEOWNERS` routes the same paths to a person.
 
 ## The Bash policy
 
@@ -193,8 +202,9 @@ of this is a hostile same-user boundary:
 - The policy reads shell text and the files commands name, never the code an
   interpreter or a Make target runs. Agents may not run interpreters; the main
   session may.
-- Role identity is Claude Code's `agent_type`, not an authenticated launcher
-  identity. Rust inline `#[cfg(test)]` modules inside production files are not
+- Role identity is `AOE_AGENT_ROLE` and Claude Code's `agent_type`, not an
+  authenticated launcher identity. In-process subagents of Codex, dsh and pi are
+  judged as the main session unless the harness launched them. Rust inline `#[cfg(test)]` modules inside production files are not
   separated by file ownership; keep tests in `tests.rs`/`tests/` modules.
 - Hidden (sealed) tests, the test-first workflow script, canaries for each
   rule, `make pr` with per-commit evidence and a review gate are not built yet.

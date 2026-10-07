@@ -139,8 +139,9 @@ fn deny(reason: impl Into<String>) -> Value {
 
 /// The hook's answer for one event, `None` meaning allow / nothing to add.
 /// `launched_role` is `AOE_AGENT_ROLE` from the process that launched the agent
-/// (the harness sets it for each role it starts); it wins over `agent_type`,
-/// which Codex and DeepSeek Harness do not report for subagents.
+/// (the harness sets it for each role it starts). Codex and DeepSeek Harness do
+/// not report subagent types, so it is their only role source; with Claude's
+/// `agent_type` the narrower role applies.
 pub(crate) fn respond(
     runtime: Runtime,
     event: Event,
@@ -155,7 +156,7 @@ pub(crate) fn respond(
             deny("the hook input was unreadable, oversized or for another event; retry the call")
         });
     };
-    let role = Role::from_agent(launched_role.or(input.agent_type.as_deref()));
+    let role = Role::resolve(launched_role, input.agent_type.as_deref());
     let context = match Context::new(root, role, input.scratchpad_dir.as_deref()) {
         Ok(context) => context,
         Err(error) if event == Event::PreToolUse => return Some(deny(error)),
@@ -213,7 +214,22 @@ fn pre_tool(
     cwd: Option<&Path>,
 ) -> context::Verdict {
     match tool_call(runtime, input, cwd) {
-        Call::Shell { command, cwd } => bash::judge(context, &command, cwd.as_deref()),
+        Call::Shell {
+            command,
+            cwd,
+            cwd_uncertain,
+            forbid_cd,
+        } => {
+            let agent = context.role.is_agent();
+            if agent && forbid_cd && bash::changes_directory(&command) {
+                return Err(
+                    "this runtime's shell may keep a `cd` across calls; pass `workdir` instead of changing directory"
+                        .into(),
+                );
+            }
+            let cwd = if agent && cwd_uncertain { None } else { cwd };
+            bash::judge(context, &command, cwd.as_deref())
+        }
         Call::Writes(files) if files.is_empty() && context.role.is_agent() => {
             Err("this edit names no files; edit named files".into())
         }

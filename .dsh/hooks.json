@@ -13,7 +13,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(bash|write|edit|str_replace_editor|pwsh|run_code)$",
         "hooks": [
           {
             "type": "command",

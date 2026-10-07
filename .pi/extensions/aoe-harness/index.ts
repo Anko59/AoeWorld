@@ -13,10 +13,11 @@ function checkout(cwd: string): string | undefined {
   return result.status === 0 ? result.stdout.trim() : undefined;
 }
 
-/** Runs the judge; `undefined` means allow, `{ unavailable }` means it could not run. */
+/** Runs the judge; `undefined` means allow, `{ unavailable }` means it could not
+ * run or answered unreadably, which a tool call treats as a refusal. */
 function judge(cwd: string, event: string, payload: object): Answer {
   const root = checkout(cwd);
-  if (!root) return undefined;
+  if (!root) return { unavailable: `${cwd} is not inside a Git checkout` };
   const result = spawnSync(join(root, ".agents/hooks/harness.sh"), ["pi", event], {
     input: JSON.stringify(payload),
     encoding: "utf8",
@@ -27,7 +28,12 @@ function judge(cwd: string, event: string, payload: object): Answer {
     return { unavailable: (result.stderr || String(result.error ?? "the judge failed")).trim() };
   }
   const out = (result.stdout || "").trim();
-  return out ? JSON.parse(out) : undefined;
+  if (!out) return undefined;
+  try {
+    return JSON.parse(out);
+  } catch {
+    return { unavailable: `unreadable judge answer: ${out.slice(0, 200)}` };
+  }
 }
 
 export default function (pi: ExtensionAPI) {

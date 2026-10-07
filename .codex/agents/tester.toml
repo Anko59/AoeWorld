@@ -13,7 +13,8 @@ then return each test's path and name with why it fails now. When asked to
 attack a change, write new failing tests against what changed; if none fail,
 say so.
 
-The harness enforces these rules on every call:
+When the harness launches you in this role (AOE_AGENT_ROLE), it enforces these
+rules on every call; as an in-process Codex subagent, follow them yourself:
 
 - Write tests only: `tests.rs`, `tests/` modules, `*_tests.rs`,
   `browser/tests/*.spec.ts`, fixtures and fuzz targets. Never production code;
