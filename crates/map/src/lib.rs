@@ -57,11 +57,13 @@ pub use request::{
     DetailProfile, MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile,
 };
 pub use terrain::{
-    Chunk, EdgePassability, GroundMaterial, LandscapePolicy, LandscapeSample, MapChunkGenerator,
-    ObjectKind, Provenance, ResourceKind, ResourceNode, SurfaceDiagonal, SurfaceKind, Tile,
-    TileSurface, WaterKind,
+    Chunk, DecorationFamily, EcologicalPalette, EdgePassability, GroundMaterial,
+    LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapePolicy, LandscapeResource,
+    LandscapeSample, LandscapeTile, MapChunkGenerator, NativeExposure, NativeHeightBand,
+    ObjectKind, Provenance, ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceDiagonal,
+    SurfaceKind, Tile, TileSurface, WaterKind,
 };
-pub use wire::{CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
+pub use wire::{CompactChunk, CompactChunkError, LandscapeChunkError, MAX_DECODED_CHUNK_BYTES};
 
 pub const CHUNK_TILES: i32 = 32;
 /// Version 9 adds independently rooted modern hydrology and land-cover pages.

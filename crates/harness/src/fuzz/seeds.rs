@@ -13,6 +13,7 @@ use std::{
     path::Path,
 };
 mod history;
+mod landscape;
 mod water_model;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -249,6 +250,7 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
             0xa9, 0xff, 0x65, 0xc3, 0x16, 0x00,
         ],
     )?);
+    landscape::prepare(root, &mut prepared_seeds)?;
     Ok(SeedInventory {
         prepared_seeds,
         verified_legacy_seeds: verify_legacy_seeds(root)?,

@@ -15,7 +15,9 @@ pub const MAX_DECODED_CHUNK_BYTES: usize = 128 * 1024;
 const MAX_CHUNK_TILES: usize = (CHUNK_TILES * CHUNK_TILES) as usize;
 
 mod evidence;
+mod landscape;
 use evidence::{pack_observation_properties, unpack_observation_properties};
+pub use landscape::LandscapeChunkError;
 
 /// Compact, immutable transport representation for one 32 by 32 map chunk.
 ///
