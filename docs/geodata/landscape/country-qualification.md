@@ -81,16 +81,13 @@ The original private package directory and default server/map remain unchanged.
 Each attempt retains a unique ignored run directory, actual native outcomes,
 input hash/revision/dirty status, original pack manifest and browser observations.
 
-The successful working capture was based on826c4a45 with dirty=true, not a
-claimed clean committed-source or CI/hardware qualification. Explicit WebGPU,
-forced WebGL2 and forced Canvas identities passed, all serving original pack
-`7e6fa0da194d13fcff0cd50e74fe92215fd11b5bcce4556e4dad3d34ff7447ce`.
-Normal and wide1280x720 source screenshots show the ordinary start glade and
-neighboring composed forest clusters. Actual hash-prefixed chunk responses,
-nontrivial source pixels, no page errors and residency<=512 were checked.
-Typecheck, lint and browser formatting passed. These bounded startup/camera
-captures do not qualify RSS growth, >512chunk eviction, moving armies, every
-water/coast/relief location or live controller arrival.
+The latest local capture used implementation revision `b77027fd2ff5854070c901973e59b54fff7bdafc` with `dirty=true`; it is not a claim of clean committed-source, CI or hardware qualification. Explicit WebGPU, forced WebGL2 and forced Canvas identities passed, all serving original pack `7e6fa0da194d13fcff0cd50e74fe92215fd11b5bcce4556e4dad3d34ff7447ce`. Normal and wide1280x720 source screenshots show the ordinary start glade and neighboring composed forest clusters. Actual hash-prefixed chunk responses, nontrivial source pixels, no page errors and residency<=512 were checked.
+
+The same disposable candidate run decoded the real binary protocol-v8 WebSocket stream. A browser controller issued one right-click order to source tile `(10000,9999)`; evidence retained the matching map hash, Controller role, one sequence-1 order, accepted acknowledgement, observed motion and idle arrival at the exact tile-center destination (19 authoritative position observations). This qualifies one short local live move only, not 20Hz timing, long-distance travel or army movement.
+
+A separate fixed 24-drag local sample observed 93 unique source chunks, maximum resident cache109/512 chunks, summed Chromium VmRSS peak890,560,512 bytes, final-four-sample spread9,584,640 bytes, and disposable server VmRSS peak29,487,104 bytes. The 512-chunk eviction threshold was **not exercised** (`eviction_limit_exercised=false`); this 20k-tile/30:1 candidate and route do not substitute for canonical50k/1:1 memory qualification. An exploratory 30,000-pixel sweep produced a map-chunk fetch error and is not counted as a pass. Typecheck, lint and browser formatting passed. Every screenshot still represents only the start region, not every water/coast/relief location.
+
+France is immutable real-source test data only: generator code remains location-agnostic, no map was hand-built, and no France-specific generation branch or default activation was added.
 
 ## Limits
 
@@ -98,8 +95,8 @@ The inspected local lines do not justify changing water-model semantics.
 A code audit separately identified coarse categorical hydrology amplification,
 NODATA shore-estimator assumptions and worst-case vector predicate costs; those
 are future representation/measurement risks, not observed causes of these lines.
-Real-source local native movement and three-backend start/forest captures are
-observed above. Longer/global traversal, broader water/coast/relief visuals,
-live controller movement, memory pressure and dedicated hardware remain
-unqualified. Candidate activation occurred only in the disposable qualification
-server; default France activation remains unchanged.
+Real-source local native and one live controller move plus three-backend
+start/forest captures are observed above. Longer/global traversal, army movement,
+broader water/coast/relief visuals, the canonical512-chunk eviction/memory gate
+and dedicated hardware remain unqualified. Candidate activation occurred only in
+the disposable qualification server; default France activation remains unchanged.
