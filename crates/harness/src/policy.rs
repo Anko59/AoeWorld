@@ -66,7 +66,7 @@ fn tracked(root: &Path) -> Result<Vec<PathBuf>, PolicyError> {
     }
 }
 
-fn is_text(path: &Path) -> bool {
+pub(crate) fn is_text(path: &Path) -> bool {
     if path
         .file_name()
         .and_then(|x| x.to_str())
@@ -107,7 +107,7 @@ fn is_text(path: &Path) -> bool {
     )
 }
 
-fn is_code_or_config(path: &Path) -> bool {
+pub(crate) fn is_code_or_config(path: &Path) -> bool {
     path.file_name().and_then(|x| x.to_str()).is_some_and(|x| {
         matches!(
             x,

@@ -23,7 +23,11 @@ pub(super) fn valid_pattern(pattern: &str) -> bool {
 }
 
 pub(super) fn instruction_path(path: &str) -> bool {
-    path == "docs/agent-engineering.md" || path == "AGENTS.md" || path.ends_with("/AGENTS.md")
+    path == "docs/agent-engineering.md"
+        || path == "AGENTS.md"
+        || path.ends_with("/AGENTS.md")
+        || path == "CLAUDE.md"
+        || path.starts_with(".claude/")
 }
 
 pub(super) fn duplicates<T: Ord>(values: &[T], owner: &str, problems: &mut Vec<String>) {

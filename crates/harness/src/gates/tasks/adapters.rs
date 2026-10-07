@@ -5,6 +5,7 @@ pub(super) enum Provider {
     Codex,
     PiDev,
     DeepSeekHarness,
+    ClaudeCode,
 }
 /// Task planning records provider unavailability; it never launches a provider.
 #[derive(Debug)]
