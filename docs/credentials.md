@@ -10,8 +10,8 @@ and never report "no credentials" before you have.
 # Run the one command that needs it with the variable set (never echo it):
 OPENROUTER_API_KEY=$(secret-tool lookup service codex-api name OPENROUTER_API_KEY) <command>
 
-# What is available (names only; the grep drops the secret values):
-secret-tool search --all service codex-api 2>/dev/null | grep '^attribute.name'
+# What is available (names only: secret-tool prints attributes on stderr, and the grep drops the secret values):
+secret-tool search --all --unlock service codex-api 2>&1 | grep '^attribute.name' | sort -u
 ```
 
 | Variable | Keyring lookup | Used for |
