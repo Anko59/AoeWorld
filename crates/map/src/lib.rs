@@ -7,6 +7,8 @@ mod page_root;
 pub use page_root::{PageLayer, PageRootBuilder};
 mod generator;
 mod land_use;
+#[path = "terrain/landscape/patches.rs"]
+pub mod landscape_patches;
 mod navigation;
 mod overlay;
 mod package;
