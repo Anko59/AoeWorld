@@ -28,10 +28,20 @@ pub(crate) enum PreparationMode {
     Detailed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct OverviewFieldAxes {
+    pub elevation: u16,
+    pub vegetation: u16,
+    pub water: u16,
+    pub historical: u16,
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct PreparationPlan {
     pub mode: PreparationMode,
     pub samples_per_axis: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_axes: Option<OverviewFieldAxes>,
     pub geographic_millimeters_per_sample: Option<u64>,
     pub explanation: &'static str,
 }
@@ -41,6 +51,7 @@ impl PreparationPlan {
         Self {
             mode: PreparationMode::ProceduralFallback,
             samples_per_axis: 0,
+            field_axes: None,
             geographic_millimeters_per_sample: None,
             explanation: "No geographic worker configured; terrain is procedural fallback.",
         }
@@ -72,6 +83,14 @@ impl PreparationPlan {
             PreparationPreference::Overview => false,
             PreparationPreference::Automatic => regional,
         };
+        let field_axes = (!detailed
+            && request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+            .then_some(OverviewFieldAxes {
+                elevation: 1024,
+                vegetation: 128,
+                water: 128,
+                historical: 1024,
+            });
         let samples = if detailed {
             estimate
                 .effective_side_meters
@@ -79,7 +98,7 @@ impl PreparationPlan {
                 .next_power_of_two()
                 .clamp(128, 4096) as u16
         } else {
-            128
+            field_axes.map_or(128, |axes| axes.elevation)
         };
         Ok(Self {
             mode: if detailed {
@@ -88,9 +107,12 @@ impl PreparationPlan {
                 PreparationMode::Overview
             },
             samples_per_axis: samples,
+            field_axes,
             geographic_millimeters_per_sample: Some(sample_spacing(estimate, samples)),
             explanation: if detailed {
                 "Regional elevation: modern Copernicus GLO30, with GLO90 only where GLO30 is absent. Modern WorldCover and European/Middle Eastern hydrography are stored as observations; mapped river corridors and lake extents only refine existing inland overview water. Vegetation and year-600 land use retain overview grids. Reservoirs and uncertain water remain evidence, not historical water. Source errors fail the job."
+            } else if field_axes.is_some() {
+                "Landscape overview: elevation and modeled year-600 land use on 1024-sample grids, potential vegetation and water on independent 128-sample grids. Fine vectors and real-source qualification are separate; source errors fail the job."
             } else {
                 "Overview: global elevation, water, potential vegetation and modeled year-600 land use on a 128-sample grid. Fine local detail is unavailable at this preparation level."
             },
@@ -178,6 +200,53 @@ mod tests {
                 .expect("overview")
                 .samples_per_axis,
             128
+        );
+    }
+
+    #[test]
+    fn independent_overview_is_explicit_and_legacy_metadata_is_unchanged() {
+        let mut input = input();
+        input.request.requested_side_meters = 1_200_000;
+        input.request.compression = aoe_map::Ratio::new(30, 1).expect("ratio");
+        let legacy = PreparationPlan::resolve(input, true).expect("legacy overview");
+        assert_eq!(legacy.samples_per_axis, 128);
+        assert!(legacy.field_axes.is_none());
+        let legacy_json = serde_json::to_value(legacy).expect("legacy plan");
+        assert!(legacy_json.get("field_axes").is_none());
+        input.request.detail_profile = aoe_map::DetailProfile::LandscapeV2;
+        let landscape = PreparationPlan::resolve(input, true).expect("landscape overview");
+        assert_eq!(landscape.mode, PreparationMode::Overview);
+        assert_eq!(landscape.samples_per_axis, 1024);
+        assert_eq!(landscape.geographic_millimeters_per_sample, Some(1_171_875));
+        assert_eq!(
+            landscape.field_axes,
+            Some(OverviewFieldAxes {
+                elevation: 1024,
+                vegetation: 128,
+                water: 128,
+                historical: 1024,
+            })
+        );
+        assert!(landscape.explanation.contains("independent"));
+        let json = serde_json::to_value(landscape).expect("landscape plan");
+        assert_eq!(
+            json["field_axes"],
+            serde_json::json!({
+                "elevation": 1024, "vegetation": 128, "water": 128, "historical": 1024,
+            })
+        );
+        assert!(
+            PreparationPlan::resolve(input, false)
+                .expect("fallback")
+                .field_axes
+                .is_none()
+        );
+        input.request.requested_side_meters = 30_000;
+        assert!(
+            PreparationPlan::resolve(input, true)
+                .expect("detailed")
+                .field_axes
+                .is_none()
         );
     }
 

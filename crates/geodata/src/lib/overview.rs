@@ -1,5 +1,8 @@
 //! Shared overview preparation with independent correction layers.
 use super::*;
+#[path = "overview/axes.rs"]
+mod axes;
+pub use axes::OverviewFieldAxes;
 
 pub fn prepare_overview(
     cache_root: PathBuf,
@@ -67,6 +70,43 @@ pub fn prepare_overview_with_all_corrections(
     historical_corrections: Option<&GeographicHistoricalCorrectionDocument>,
     vegetation_corrections: Option<&VegetationPatchDocument>,
 ) -> Result<PreparedOverview, GeodataError> {
+    prepare_overview_axes(
+        cache_root,
+        request,
+        OverviewFieldAxes::legacy(samples_per_axis, historical_samples_per_axis),
+        false,
+        historical_corrections,
+        vegetation_corrections,
+    )
+}
+
+/// Explicit bounded field-local overview preparation for LandscapeV2.
+pub fn prepare_overview_with_field_axes(
+    cache_root: PathBuf,
+    request: MapRequest,
+    axes: OverviewFieldAxes,
+    historical_corrections: Option<&GeographicHistoricalCorrectionDocument>,
+    vegetation_corrections: Option<&VegetationPatchDocument>,
+) -> Result<PreparedOverview, GeodataError> {
+    prepare_overview_axes(
+        cache_root,
+        request,
+        axes,
+        true,
+        historical_corrections,
+        vegetation_corrections,
+    )
+}
+
+fn prepare_overview_axes(
+    cache_root: PathBuf,
+    request: MapRequest,
+    axes: OverviewFieldAxes,
+    explicit: bool,
+    historical_corrections: Option<&GeographicHistoricalCorrectionDocument>,
+    vegetation_corrections: Option<&VegetationPatchDocument>,
+) -> Result<PreparedOverview, GeodataError> {
+    axes.validate(request, explicit)?;
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
@@ -74,20 +114,20 @@ pub fn prepare_overview_with_all_corrections(
         Some(document) => std::borrow::Cow::Borrowed(document),
         None => std::borrow::Cow::Owned(GeographicHistoricalCorrectionDocument::empty(
             request,
-            historical_samples_per_axis,
+            axes.historical,
             hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
         )?),
     };
     historical_corrections.validate_for(
         request,
-        historical_samples_per_axis,
+        axes.historical,
         hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
     )?;
     let vegetation_corrections = match vegetation_corrections {
         Some(document) => std::borrow::Cow::Borrowed(document),
-        None => std::borrow::Cow::Owned(VegetationPatchDocument::empty(request, samples_per_axis)?),
+        None => std::borrow::Cow::Owned(VegetationPatchDocument::empty(request, axes.vegetation)?),
     };
-    vegetation_corrections.validate_for(request, samples_per_axis)?;
+    vegetation_corrections.validate_for(request, axes.vegetation)?;
     let source = etopo_2022_60s_surface();
     let lock = source
         .cache_lock()
@@ -143,10 +183,10 @@ pub fn prepare_overview_with_all_corrections(
         acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
-    prepare_overview_from_verified_sources(
+    prepare_overview_fields_from_verified_sources(
         request,
-        samples_per_axis,
-        historical_samples_per_axis,
+        axes,
+        explicit,
         &historical_corrections,
         &vegetation_corrections,
         VerifiedOverviewSources {
@@ -195,6 +235,7 @@ struct VerifiedOverviewSources {
 
 /// Samples cache-verified overview inputs without performing source discovery
 /// or acquisition. The public entry point owns those verification steps.
+#[cfg(test)]
 fn prepare_overview_from_verified_sources(
     request: MapRequest,
     samples_per_axis: u16,
@@ -203,11 +244,42 @@ fn prepare_overview_from_verified_sources(
     vegetation_corrections: &VegetationPatchDocument,
     sources: VerifiedOverviewSources,
 ) -> Result<PreparedOverview, GeodataError> {
-    let total_pages = preparation_progress::pyramid_page_count(samples_per_axis) * 3
-        + preparation_progress::pyramid_page_count(historical_samples_per_axis);
+    prepare_overview_fields_from_verified_sources(
+        request,
+        OverviewFieldAxes::legacy(samples_per_axis, historical_samples_per_axis),
+        false,
+        historical_corrections,
+        vegetation_corrections,
+        sources,
+    )
+}
+
+fn prepare_overview_fields_from_verified_sources(
+    request: MapRequest,
+    axes: OverviewFieldAxes,
+    explicit: bool,
+    historical_corrections: &GeographicHistoricalCorrectionDocument,
+    vegetation_corrections: &VegetationPatchDocument,
+    sources: VerifiedOverviewSources,
+) -> Result<PreparedOverview, GeodataError> {
+    axes.validate(request, explicit)?;
+    historical_corrections.validate_for(
+        request,
+        axes.historical,
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )?;
+    vegetation_corrections.validate_for(request, axes.vegetation)?;
+    let total_pages = [axes.elevation, axes.water, axes.vegetation, axes.historical]
+        .into_iter()
+        .map(preparation_progress::pyramid_page_count)
+        .sum();
     let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = prepare_elevation(&sources.elevation.path, request, samples_per_axis)?;
+    let mut prepared = if explicit {
+        elevation::prepare_elevation_for_profile(&sources.elevation.path, request, axes.elevation)?
+    } else {
+        prepare_elevation(&sources.elevation.path, request, axes.elevation)?
+    };
     completed_pages += prepared.pages.len() as u64;
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
@@ -217,13 +289,8 @@ fn prepare_overview_from_verified_sources(
         preparation_progress::Unit::Pages,
     );
     let lake_coverage =
-        prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, samples_per_axis)?;
-    let water = prepare_ocean_coverage(
-        &sources.water.path,
-        request,
-        samples_per_axis,
-        lake_coverage,
-    )?;
+        prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, axes.water)?;
+    let water = prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)?;
     completed_pages += water.pages.len() as u64;
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
@@ -235,7 +302,7 @@ fn prepare_overview_from_verified_sources(
     let vegetation = prepare_potential_biomes_with_corrections(
         &sources.vegetation.path,
         request,
-        samples_per_axis,
+        axes.vegetation,
         vegetation_corrections,
     )?;
     completed_pages += vegetation.pages.len() as u64;
@@ -246,16 +313,21 @@ fn prepare_overview_from_verified_sources(
         total_pages,
         preparation_progress::Unit::Pages,
     );
-    let historical_preprocessing = format!(
-        "{};corrections-sha256={}",
-        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
-        historical_corrections.canonical_digest_hex(request)?
+    let historical_preprocessing = preprocessing_identity(
+        format!(
+            "{};corrections-sha256={}",
+            hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+            historical_corrections.canonical_digest_hex(request)?
+        ),
+        request,
+        axes,
+        explicit,
     );
     let historical_land_use = prepare_hyde_area_600_with_corrections(
         &sources.hyde_baseline.path,
         &sources.hyde_supplementary.path,
         request,
-        historical_samples_per_axis,
+        axes.historical,
         historical_corrections,
     )?;
     completed_pages += historical_land_use.pages.len() as u64;
@@ -270,22 +342,39 @@ fn prepare_overview_from_verified_sources(
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);
     prepared.environment.historical_land_use = Some(historical_land_use.field);
-    prepared.environment.validate()?;
+    prepared
+        .environment
+        .validate_for_profile(request.detail_profile)?;
     Ok(PreparedOverview {
-        source_lock: sources
-            .elevation
-            .lock
-            .to_map_source_lock(acquisition_marker(), "etopo-overview-gdal-0.19".to_owned())?,
+        source_lock: sources.elevation.lock.to_map_source_lock(
+            acquisition_marker(),
+            preprocessing_identity(
+                "etopo-overview-gdal-0.19".to_owned(),
+                request,
+                axes,
+                explicit,
+            ),
+        )?,
         water_source_lock: sources.water.lock.to_map_source_lock(
             acquisition_marker(),
-            "natural-earth-coastline-gdal-0.19".to_owned(),
+            preprocessing_identity(
+                "natural-earth-coastline-gdal-0.19".to_owned(),
+                request,
+                axes,
+                explicit,
+            ),
         )?,
         vegetation_source_lock: sources.vegetation.lock.to_map_source_lock(
             acquisition_marker(),
-            format!(
-                "{};corrections-sha256={}",
-                VEGETATION_PATCH_PREPROCESSING_IDENTITY,
-                vegetation_corrections.digest_hex(request)?
+            preprocessing_identity(
+                format!(
+                    "{};corrections-sha256={}",
+                    VEGETATION_PATCH_PREPROCESSING_IDENTITY,
+                    vegetation_corrections.digest_hex(request)?
+                ),
+                request,
+                axes,
+                explicit,
             ),
         )?,
         vegetation_classes_source_lock: sources.vegetation_classes.lock.to_map_source_lock(
@@ -332,6 +421,21 @@ fn prepare_overview_from_verified_sources(
         vegetation_pages: vegetation.pages,
         historical_land_use_pages: historical_land_use.pages,
     })
+}
+
+fn preprocessing_identity(
+    base: String,
+    request: MapRequest,
+    axes: OverviewFieldAxes,
+    explicit: bool,
+) -> String {
+    if !explicit {
+        return base;
+    }
+    format!(
+        "{base};profile={:?};axes={}/{}/{}/{}",
+        request.detail_profile, axes.elevation, axes.vegetation, axes.water, axes.historical
+    )
 }
 
 #[path = "overview/tests.rs"]

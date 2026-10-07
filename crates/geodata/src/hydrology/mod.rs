@@ -22,8 +22,11 @@ use hydrology_sampling::{Bounds, request_bounds, tile_latitude, tile_longitude};
 #[path = "sampler.rs"]
 mod sampler;
 use sampler::Sampler;
+#[path = "vectors.rs"]
+mod vectors;
 #[path = "model.rs"]
 mod water_model;
+pub use vectors::prepare_hydrology_vectors;
 
 pub const MAX_HYDROLOGY_SAMPLES_PER_AXIS: u16 = 1_024;
 const PAGE: u16 = 64;
@@ -273,6 +276,34 @@ pub(crate) fn prepare_hydrology_with_plan(
     plan: HydrologySourcePlan,
     overview_water_pages: &[aoe_map::WaterPage],
 ) -> Result<PreparedHydrology, GeodataError> {
+    prepare_with_plan(
+        cache_root,
+        request,
+        samples_per_axis,
+        plan,
+        overview_water_pages,
+        HydrologySelection::WorldCover,
+    )
+}
+
+enum HydrologySelection<'a> {
+    WorldCover,
+    Vectors(&'a AtomicBool),
+}
+
+fn prepare_with_plan(
+    cache_root: PathBuf,
+    request: MapRequest,
+    samples_per_axis: u16,
+    plan: HydrologySourcePlan,
+    overview_water_pages: &[aoe_map::WaterPage],
+    selection: HydrologySelection<'_>,
+) -> Result<PreparedHydrology, GeodataError> {
+    let legacy_cancelled = AtomicBool::new(false);
+    let (vectors_only, cancelled) = match selection {
+        HydrologySelection::WorldCover => (false, &legacy_cancelled),
+        HydrologySelection::Vectors(cancelled) => (true, cancelled),
+    };
     if !(2..=MAX_HYDROLOGY_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "hydrology preparation supports 2 through 1024 samples per axis",
@@ -294,14 +325,13 @@ pub(crate) fn prepare_hydrology_with_plan(
             "hydrology source batch exceeds the 2 GiB per-job transfer limit",
         ));
     }
-    let cancelled = AtomicBool::new(false);
     let mut locks = Vec::with_capacity(plan.sources.len());
     let mut paths = BTreeMap::new();
     for source in &plan.sources {
         if cancelled.load(Ordering::SeqCst) {
             return Err(crate::CacheError::Cancelled.into());
         }
-        let lock = cache.acquire_known(source, &cancelled)?;
+        let lock = cache.acquire_known(source, cancelled)?;
         let path = cache.object_path(&lock)?;
         paths.insert(source.id.clone(), path);
         locks.push(lock);
@@ -331,15 +361,23 @@ pub(crate) fn prepare_hydrology_with_plan(
     let ocean =
         hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
     crate::preparation_progress::stage(crate::preparation_progress::Phase::SamplingWater);
-    let mut sampler = Sampler::new(
-        request,
-        samples_per_axis,
-        worldcover_tiles,
-        ocean,
-        lakes,
-        rivers,
-    )?;
-    let (hydrology_pages, modern_land_cover_pages) = sampler.pages()?;
+    let mut sampler = if vectors_only {
+        Sampler::new_vectors(request, samples_per_axis, ocean, lakes, rivers)?
+    } else {
+        Sampler::new(
+            request,
+            samples_per_axis,
+            worldcover_tiles,
+            ocean,
+            lakes,
+            rivers,
+        )?
+    };
+    let (hydrology_pages, modern_land_cover_pages) = if vectors_only {
+        sampler.pages_cancelled(cancelled)?
+    } else {
+        sampler.pages()?
+    };
     let river_topology = sampler.take_river_topology()?;
     let evidence_index = HydrologyEvidenceIndex {
         samples_per_axis,
@@ -356,9 +394,16 @@ pub(crate) fn prepare_hydrology_with_plan(
     } else {
         "hydrorivers=unavailable-outside-western-europe"
     };
-    let preprocessing = format!(
-        "hydrology-gdal-page-v3;lake-surface-model-v2;river-topology-profile-v1;{river_coverage}"
-    );
+    let preprocessing = if vectors_only {
+        format!(
+            "hydrology-gdal-vectors-v1;lake-surface-model-v2;river-topology-profile-v1;{river_coverage};{}",
+            vectors::MODERN_NOT_REQUESTED,
+        )
+    } else {
+        format!(
+            "hydrology-gdal-page-v3;lake-surface-model-v2;river-topology-profile-v1;{river_coverage}"
+        )
+    };
     let source_locks = locks
         .iter()
         .map(|lock| lock.to_map_source_lock(acquisition_marker(), preprocessing.clone()))

@@ -114,7 +114,13 @@ fn map_generate() -> Result<(), String> {
         cache_root: cache_root(),
         output_directory: output,
         request,
-        samples_per_axis: OVERVIEW_SAMPLES_PER_AXIS,
+        samples_per_axis: if request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
+            aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation
+        } else {
+            OVERVIEW_SAMPLES_PER_AXIS
+        },
+        field_axes: (request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+            .then_some(aoe_geodata::OverviewFieldAxes::LANDSCAPE),
         historical_corrections: None,
         vegetation_corrections: None,
     })

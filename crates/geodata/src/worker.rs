@@ -1,8 +1,8 @@
 use super::{
     GeneratedMap, GeodataError, WorkerRequest, WorkerResponse, etopo_2022_60s_surface,
     hyde_sources, local_aeqd_definition, potential_biome_sources, prepare_elevation,
-    prepare_overview, prepare_overview_with_all_corrections, project_wgs84, projected_footprint,
-    projection_distortion, raster_dimensions, round_meters,
+    prepare_overview, prepare_overview_with_all_corrections, prepare_overview_with_field_axes,
+    project_wgs84, projected_footprint, projection_distortion, raster_dimensions, round_meters,
 };
 
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
@@ -19,17 +19,36 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             output_directory,
             request,
             samples_per_axis,
+            field_axes,
             historical_corrections,
             vegetation_corrections,
         } => {
-            let prepared = prepare_overview_with_all_corrections(
-                cache_root,
-                request,
-                samples_per_axis,
-                samples_per_axis,
-                historical_corrections.as_ref(),
-                vegetation_corrections.as_ref(),
-            )?;
+            if let Some(axes) = field_axes {
+                axes.validate(request, true)?;
+            }
+            if field_axes.is_some_and(|axes| axes.elevation != samples_per_axis) {
+                return Err(GeodataError::Preparation(
+                    "overview elevation axis does not match requested samples",
+                ));
+            }
+            let prepared = if let Some(axes) = field_axes {
+                prepare_overview_with_field_axes(
+                    cache_root,
+                    request,
+                    axes,
+                    historical_corrections.as_ref(),
+                    vegetation_corrections.as_ref(),
+                )?
+            } else {
+                prepare_overview_with_all_corrections(
+                    cache_root,
+                    request,
+                    samples_per_axis,
+                    samples_per_axis,
+                    historical_corrections.as_ref(),
+                    vegetation_corrections.as_ref(),
+                )?
+            };
             let generated = GeneratedMap::from_prepared(request, prepared)?;
             crate::preparation_progress::stage(
                 crate::preparation_progress::Phase::PublishingPackage,

@@ -331,7 +331,7 @@ revision-bound CI evidence. Keep screenshots and original art private.
   rendering paths consume bounded palette/floor/canopy metadata in reserved sprite
   word pages.w; instance layout and budgets stay unchanged. Healthy broadleaf art is
   an explicit generic species fallback. Dressing remains undrawn pending art review.
-- Latest full preflight PASS: 1,197 native tests passed, one existing skip.
+- Integration preflight PASS: 1,197 native tests passed, one existing skip.
   The 82-tile sparse-edge HTTP fixture and all authoritative queries pass. A full
   tile/edge/diagonal-corner probe proves all eight starting routes clear and optimal.
   Equal-f/lower-g search exhausted the budget despite that connectivity. Recipe9
@@ -397,7 +397,36 @@ revision-bound CI evidence. Keep screenshots and original art private.
   accidental public ceiling reduction; completed the fixture pyramid and restored
   the ceiling, retaining all rejection/budget assertions. Browser-check PASS after
   replacing nullable token/hash assertions with explicit guards and formatting.
-  Geodata acquisition still uses coupled DEM/water/PNV axes; independent overview
-  options, vectors-only hydrology and real France source preparation remain pending.
+  These integrated changes are committed as bafa16043a58232cbaaf56df9222c2e967972041.
   No active/qualified France map, finished visuals, real-source movement/memory,
   CI or dedicated-hardware claims.
+- Follow-up source preparation adds explicit OverviewFieldAxes options and native
+  worker JSON handoff, retaining absent-option legacy coupled behavior. Landscape
+  overview uses DEM/history 1024 and PNV/water 128; server creator planning and CLI
+  hand off all four axes, report DEM spacing, and reject worker field downgrades.
+  Mixed Standard fields, mismatched elevation counts and wrong correction axis/year
+  reject before acquisition. Direct legacy DEM/PNV/water ceilings remain 128;
+  the high DEM cap is profile-aware/opt-in, not a global source-cap increase.
+  Explicit preprocessing binds the selected axes; legacy strings stay unchanged.
+  Offline geodata gate PASS: 200 library, one binary and six integration cases,
+  including real varied GDAL 1024 elevation, nodata, complete field pyramids,
+  independent correction grids and legacy page/root comparisons. An initial
+  vector-flow assertion used a terminal reach; added a genuinely connected third
+  reach only to that new fixture, retaining East flow and asserting terminal
+  Unknown flow. Existing legacy fixture/production rejection logic stay unchanged.
+  New test leaf belongs under an explicit tests directory for policy classification;
+  production unwrap rejection and all strict lint checks remain enabled.
+  Opt-in PreparedHydrology::prepare_vectors uses supplied overview context plus
+  pinned HydroLAKES/HydroRIVERS, bypassing WorldCover catalog/HEAD/raster work.
+  It conservatively validates projected cell vertices/midpoints/centers inside the
+  existing Europe pilot, checks cancellation and malformed context before cache,
+  and retains mapped extents as modeled evidence, not observations at year 600.
+  Modern pages are class0 nodata, with explicit not-requested preprocessing;
+  the required 2021 field is a classification legend, not coverage evidence.
+  Offline vector fixtures exercise lake/river/regulation/topology/page roots;
+  successful real acquisition and source-lock counts are not qualified by mocks.
+  Worker vectors selection, public modern-layer absent-lock metadata and marker
+  propagation still need integration; this API is not yet selected by country CLI.
+  Final preflight/browser gate results for this follow-up are reported separately;
+  offline PASS is not real-source qualification. Real France acquisition/activation,
+  source traversal/visual/memory and hardware remain pending.

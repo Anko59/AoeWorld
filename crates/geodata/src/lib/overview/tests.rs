@@ -6,6 +6,7 @@ use gdal::{
     spatial_ref::SpatialRef,
     vector::{Geometry, LayerAccess, LayerOptions},
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
     io::Write,
@@ -142,11 +143,17 @@ impl OverviewFixture {
 
         let sources = VerifiedOverviewSources {
             elevation: VerifiedOverviewSource {
-                lock: fixture_lock("fixture-etopo", Provider::Noaa, "www.ngdc.noaa.gov"),
+                lock: fixture_lock(
+                    &elevation_path,
+                    "fixture-etopo",
+                    Provider::Noaa,
+                    "www.ngdc.noaa.gov",
+                ),
                 path: elevation_path,
             },
             water: VerifiedOverviewSource {
                 lock: fixture_lock(
+                    &water_path,
                     "fixture-natural-earth",
                     Provider::NaturalEarth,
                     "naciscdn.org",
@@ -154,15 +161,26 @@ impl OverviewFixture {
                 path: water_path,
             },
             vegetation: VerifiedOverviewSource {
-                lock: fixture_lock(POTENTIAL_BIOME_RASTER_ID, Provider::Zenodo, "zenodo.org"),
+                lock: fixture_lock(
+                    &vegetation_path,
+                    POTENTIAL_BIOME_RASTER_ID,
+                    Provider::Zenodo,
+                    "zenodo.org",
+                ),
                 path: vegetation_path,
             },
             vegetation_classes: VerifiedOverviewSource {
-                lock: fixture_lock(POTENTIAL_BIOME_CLASSES_ID, Provider::Zenodo, "zenodo.org"),
+                lock: fixture_lock(
+                    &vegetation_classes_path,
+                    POTENTIAL_BIOME_CLASSES_ID,
+                    Provider::Zenodo,
+                    "zenodo.org",
+                ),
                 path: vegetation_classes_path,
             },
             hyde_baseline: VerifiedOverviewSource {
                 lock: fixture_lock(
+                    &hyde_baseline_path,
                     HYDE_BASELINE_ID,
                     Provider::Dans,
                     "archaeology.datastations.nl",
@@ -171,6 +189,7 @@ impl OverviewFixture {
             },
             hyde_supplementary: VerifiedOverviewSource {
                 lock: fixture_lock(
+                    &hyde_supplementary_path,
                     HYDE_SUPPLEMENTARY_ID,
                     Provider::Dans,
                     "archaeology.datastations.nl",
@@ -178,6 +197,7 @@ impl OverviewFixture {
                 path: hyde_supplementary_path,
             },
             hyde_readme: fixture_lock(
+                &hyde_readme_path,
                 HYDE_README_ID,
                 Provider::Dans,
                 "archaeology.datastations.nl",
@@ -193,14 +213,15 @@ impl Drop for OverviewFixture {
     }
 }
 
-fn fixture_lock(id: &str, provider: Provider, host: &str) -> SourceLock {
+fn fixture_lock(path: &Path, id: &str, provider: Provider, host: &str) -> SourceLock {
+    let bytes = fs::read(path).expect("fixture source bytes");
     SourceLock {
         id: id.to_owned(),
         provider,
         release: "offline pipeline fixture".to_owned(),
         url: format!("https://{host}/fixture"),
-        sha256: "0".repeat(64),
-        bytes: 1,
+        sha256: digest_hex(&Sha256::digest(&bytes)),
+        bytes: bytes.len() as u64,
         native_resolution: "fixture".to_owned(),
         crs: "EPSG:4326".to_owned(),
         vertical_datum: "fixture".to_owned(),
@@ -302,3 +323,6 @@ fn compatible_legend() -> &'static str {
      temperate deciduous broadleaf forest\n\
      tropical savanna\nsteppe\ndesert\ngraminoid and forb tundra\n"
 }
+
+#[path = "tests/field_axes.rs"]
+mod field_axes_tests;

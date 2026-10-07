@@ -48,6 +48,27 @@ impl Sampler {
                 "no WorldCover tile intersects the request",
             ));
         }
+        Self::open(request, axis, tiles, ocean, lakes_path, rivers_path)
+    }
+
+    pub(super) fn new_vectors(
+        request: MapRequest,
+        axis: u16,
+        ocean: Vec<u8>,
+        lakes_path: &Path,
+        rivers_path: Option<&Path>,
+    ) -> Result<Self, GeodataError> {
+        Self::open(request, axis, Vec::new(), ocean, lakes_path, rivers_path)
+    }
+
+    fn open(
+        request: MapRequest,
+        axis: u16,
+        tiles: Vec<Tile>,
+        ocean: Vec<u8>,
+        lakes_path: &Path,
+        rivers_path: Option<&Path>,
+    ) -> Result<Self, GeodataError> {
         if ocean.len() != usize::from(axis).pow(2) {
             return Err(GeodataError::Preparation(
                 "resampled ocean coverage does not match the hydrology grid",
@@ -83,10 +104,20 @@ impl Sampler {
     pub(super) fn pages(
         &mut self,
     ) -> Result<(Vec<HydrologyPage>, Vec<ModernLandCoverPage>), GeodataError> {
+        self.pages_cancelled(&std::sync::atomic::AtomicBool::new(false))
+    }
+
+    pub(super) fn pages_cancelled(
+        &mut self,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<(Vec<HydrologyPage>, Vec<ModernLandCoverPage>), GeodataError> {
         let mut hydrology = Vec::new();
         let mut land_cover = Vec::new();
         for y in (0..self.axis).step_by(usize::from(PAGE)) {
             for x in (0..self.axis).step_by(usize::from(PAGE)) {
+                if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Err(crate::CacheError::Cancelled.into());
+                }
                 let (water, modern) = self.page(x, y)?;
                 hydrology.push(water);
                 land_cover.push(modern);
@@ -159,7 +190,12 @@ impl Sampler {
             north[0] + spacing / 2.0,
             spacing,
         )?;
-        let classes = sample_worldcover_page(&self.tiles, &longitude, &latitude)?;
+        let classes = if self.tiles.is_empty() {
+            // Explicit vector-only mode: zero is unobserved, never inferred land.
+            vec![WORLD_COVER_NODATA; longitude.len()]
+        } else {
+            sample_worldcover_page(&self.tiles, &longitude, &latitude)?
+        };
         let mut kinds = Vec::with_capacity(east.len());
         let mut methods = Vec::with_capacity(east.len());
         for (index, (&local_east, &local_north)) in east.iter().zip(&north).enumerate() {

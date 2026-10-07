@@ -23,6 +23,8 @@ pub enum WorkerRequest {
         request: MapRequest,
         samples_per_axis: u16,
         #[serde(default)]
+        field_axes: Option<OverviewFieldAxes>,
+        #[serde(default)]
         historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
         #[serde(default)]
         vegetation_corrections: Option<VegetationPatchDocument>,
@@ -257,6 +259,7 @@ mod tests {
             request,
             WorkerRequest::PrepareOverviewDirectory {
                 historical_corrections: None,
+                field_axes: None,
                 ..
             }
         ));

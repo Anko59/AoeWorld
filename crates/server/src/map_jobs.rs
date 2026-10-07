@@ -13,7 +13,9 @@ use std::{
 mod journal;
 mod preparation;
 mod submission;
-pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
+pub(super) use preparation::{
+    CreationRequest, OverviewFieldAxes, PreparationMode, PreparationPlan,
+};
 
 const MAX_QUEUED_JOBS: usize = 2;
 const MAX_RETAINED_JOBS: usize = 128;
