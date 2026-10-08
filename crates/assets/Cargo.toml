@@ -15,7 +15,7 @@ walkdir = "2.5"
 
 [dev-dependencies]
 criterion = "=0.8.2"
-gungraun = "=0.19.4"
+gungraun = "=0.20.0"
 tempfile = "3.27"
 
 [[bench]]
