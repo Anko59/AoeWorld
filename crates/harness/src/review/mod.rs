@@ -403,6 +403,8 @@ fn review_with_branch(
     let change_fingerprint = git::change_fingerprint(root, "dev", &head)
         .ok()
         .map(|(_, fingerprint)| fingerprint);
+    let policy_fingerprint =
+        Report::policy_fingerprint(root, tier.name(), config::runtime_key(runtime))?;
     let report = Report {
         version: 1,
         head,
@@ -426,6 +428,7 @@ fn review_with_branch(
         finished: now(),
         closing,
         change_fingerprint,
+        policy_fingerprint: Some(policy_fingerprint),
         reused_from: None,
     };
     report.store(root)?;

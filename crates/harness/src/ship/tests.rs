@@ -56,6 +56,20 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
         &["init", "-q", "-b", "dev", root.to_str().unwrap()],
     );
     fs::create_dir_all(root.join("gates")).unwrap();
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for file in [
+        "gates/review/preamble.md",
+        "gates/review/grader.md",
+        "gates/review/personas/quick.md",
+        "gates/review/personas/correctness.md",
+        "gates/review/personas/spec.md",
+        "gates/review/personas/test-integrity.md",
+        "gates/review/personas/hostile-input.md",
+        "gates/review/personas/performance.md",
+    ] {
+        fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
+        fs::copy(repo.join(file), root.join(file)).unwrap();
+    }
     fs::write(root.join("gates/registry.json"), registry()).unwrap();
     // The real review config, with floors for this fixture's two suites.
     let mut review: serde_json::Value =

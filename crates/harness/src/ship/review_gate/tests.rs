@@ -8,6 +8,7 @@ use super::super::{
 };
 
 mod reuse;
+mod reuse_policy;
 use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
@@ -46,6 +47,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
             .as_nanos() as u64,
         closing: false,
         change_fingerprint: None,
+        policy_fingerprint: Report::policy_fingerprint(root, tier.name(), "claude").ok(),
         reused_from: None,
     }
 }

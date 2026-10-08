@@ -4,7 +4,8 @@
 use super::protocol::{Finding, Status, blocking};
 use crate::ship::git;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path, path::PathBuf};
+use sha2::Digest as _;
+use std::{fs, path::Path, path::PathBuf, process::Command};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -40,6 +41,9 @@ pub(crate) struct Report {
     #[serde(default)]
     #[serde(alias = "patch_id")]
     pub(crate) change_fingerprint: Option<String>,
+    /// SHA-256 of the trusted reviewer policy used for this review.
+    #[serde(default)]
+    pub(crate) policy_fingerprint: Option<String>,
     /// Original commit whose review this report reuses, if any.
     #[serde(default)]
     pub(crate) reused_from: Option<String>,
@@ -54,6 +58,57 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 }
 
 impl Report {
+    /// Fingerprint the current trusted policy and prompts for one tier and
+    /// runtime. JSON object keys are sorted by serde_json before hashing.
+    pub(crate) fn policy_fingerprint(
+        root: &Path,
+        tier: &str,
+        runtime: &str,
+    ) -> Result<String, String> {
+        let text = super::trusted(root, "gates/review.json")?;
+        let config: serde_json::Value =
+            serde_json::from_str(&text).map_err(|error| format!("gates/review.json: {error}"))?;
+        let tier_policy = config["tiers"][tier].clone();
+        let models = config["models"][runtime].clone();
+        if tier_policy.is_null() || models.is_null() {
+            return Err(format!(
+                "gates/review.json: missing {tier}/{runtime} policy"
+            ));
+        }
+        let personas = tier_policy["personas"]
+            .as_array()
+            .ok_or_else(|| format!("gates/review.json: tier {tier} has no personas"))?;
+        let canonical = serde_json::to_vec(&serde_json::json!({
+            "tier": tier_policy,
+            "runtime": runtime,
+            "models": models,
+        }))
+        .map_err(|error| error.to_string())?;
+        let mut hash = sha2::Sha256::new();
+        hash.update((canonical.len() as u64).to_be_bytes());
+        hash.update(canonical);
+        for relative in std::iter::once("gates/review/preamble.md".to_owned())
+            .chain(personas.iter().map(|persona| {
+                format!(
+                    "gates/review/personas/{}.md",
+                    persona.as_str().unwrap_or_default()
+                )
+            }))
+            .chain(std::iter::once("gates/review/grader.md".to_owned()))
+        {
+            let bytes = trusted_bytes(root, &relative)?;
+            hash.update((relative.len() as u64).to_be_bytes());
+            hash.update(relative.as_bytes());
+            hash.update((bytes.len() as u64).to_be_bytes());
+            hash.update(bytes);
+        }
+        Ok(hash
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
     /// A review passes only when every session answered and the capped grade
     /// reaches the merge grade; a closing review when no finding blocks and no
     /// carried finding is left undecided (one confirmed only as minor passes).
@@ -194,6 +249,17 @@ impl Report {
             .collect();
         candidates.sort_by_key(|report| std::cmp::Reverse(report.finished));
         for mut source in candidates {
+            let Ok(current_policy) = Self::policy_fingerprint(root, &source.tier, &source.runtime)
+            else {
+                continue;
+            };
+            let configured_personas =
+                tier_from_name(&source.tier).and_then(|tier| config.tiers.get(&tier));
+            if source.policy_fingerprint.as_deref() != Some(current_policy.as_str())
+                || configured_personas.is_none_or(|tier| tier.personas != source.personas)
+            {
+                continue;
+            }
             let source_head = source.head.clone();
             let Ok((_, identity)) = git::change_identity(root, "dev", &source.head) else {
                 continue;
@@ -315,6 +381,27 @@ impl Report {
         }
         out
     }
+}
+
+fn trusted_bytes(root: &Path, relative: &str) -> Result<Vec<u8>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["show", &format!("refs/remotes/origin/dev:{relative}")])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        fs::read(root.join(relative)).map_err(|error| format!("{relative}: {error}"))
+    }
+}
+
+fn tier_from_name(name: &str) -> Option<super::config::Tier> {
+    use super::config::Tier;
+    [Tier::Low, Tier::Medium, Tier::High, Tier::Xhigh, Tier::Max]
+        .into_iter()
+        .find(|tier| tier.name() == name)
 }
 
 /// Every stored review of `branch`, oldest first.

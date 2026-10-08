@@ -273,6 +273,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         finished: 0,
         closing: false,
         change_fingerprint: None,
+        policy_fingerprint: None,
         reused_from: None,
     };
     assert!(report.passes());
