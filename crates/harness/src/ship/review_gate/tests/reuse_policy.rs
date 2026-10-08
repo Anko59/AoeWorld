@@ -123,3 +123,50 @@ fn a_report_without_a_policy_fingerprint_is_never_reused() {
             .is_none()
     );
 }
+
+#[test]
+fn another_branchs_closing_review_is_never_reused() {
+    let (_temp, root) = fixture("true");
+    let mut closing = unstored(&root, Tier::Low, 6);
+    closing.closing = true;
+    assert!(closing.passes());
+    closing.store(&root).unwrap();
+    // Branch `other` failed its own review, then reached the same change.
+    run(&root, &["checkout", "-q", "-b", "other", "origin/dev"]);
+    std::fs::write(root.join("README.md"), "unresolved\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "other change"]);
+    let mut failed = unstored(&root, Tier::Low, 3);
+    failed.branch = "other".into();
+    assert!(!failed.passes());
+    failed.store(&root).unwrap();
+    std::fs::write(root.join("README.md"), "y\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "same change as feature"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert_eq!(
+        git::change_identity(&root, "dev", &head).unwrap().1,
+        git::change_identity(&root, "dev", &closing.head).unwrap().1,
+        "the two branches hold the same change"
+    );
+    assert!(
+        Report::reuse_for_change(&root, &head, "other", &["low"])
+            .unwrap()
+            .is_none(),
+        "branch other must run its own closing review"
+    );
+
+    // The same branch after a rebase still reuses its own closing review.
+    run(&root, &["checkout", "-q", "dev"]);
+    std::fs::write(root.join("BASE.md"), "moved base\n").unwrap();
+    run(&root, &["add", "BASE.md"]);
+    run(&root, &["commit", "-q", "-m", "move dev"]);
+    run(&root, &["push", "-q", "origin", "dev"]);
+    run(&root, &["fetch", "-q", "origin", "dev"]);
+    run(&root, &["checkout", "-q", "feature"]);
+    run(&root, &["rebase", "-q", "origin/dev"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"])
+        .unwrap()
+        .expect("the same branch reuses its closing review after a rebase");
+    assert_eq!(reused.reused_from.as_deref(), Some(closing.head.as_str()));
+    assert!(reused.closing);
+}

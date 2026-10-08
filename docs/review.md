@@ -98,7 +98,10 @@ none replaces another.
   old blobs and modes to identical new blobs and modes; the report stores a
   SHA-256 fingerprint for information, while reuse recomputes both sides from
   Git. Any complete report for the target commit at the required tier or higher
-  blocks reuse, whether it passed or failed. Reuse writes a new harness report
+  blocks reuse, whether it passed or failed. Only a review recorded for the
+  same branch name is a source, under the reviewer policy that `origin/dev`
+  holds today: a review reads its policy from the one `origin/dev` commit it
+  started from and stores that commit's fingerprint. Reuse writes a new harness report
   for the rebased commit that points to the original full
   or closing review, and the status and PR description identify the reuse. A
   reuse report is never itself a source for another reuse. Failing reviews and

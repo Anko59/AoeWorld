@@ -59,14 +59,28 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 
 impl Report {
     /// Fingerprint the review engine tracked by `origin/dev` for one tier.
+    #[cfg(test)]
     pub(crate) fn policy_fingerprint(root: &Path, tier: &str) -> Result<String, String> {
+        let commit = git::git(
+            root,
+            &["rev-parse", "--verify", "refs/remotes/origin/dev^{commit}"],
+        )?;
+        Self::policy_fingerprint_at(root, &commit, tier)
+    }
+
+    /// Fingerprint the review engine at one origin/dev commit for one tier.
+    pub(crate) fn policy_fingerprint_at(
+        root: &Path,
+        commit: &str,
+        tier: &str,
+    ) -> Result<String, String> {
         let mut hash = sha2::Sha256::new();
         for path in [
             "gates/review.json",
             "gates/review",
             "crates/harness/src/review",
         ] {
-            let object = git::git(root, &["rev-parse", &format!("origin/dev:{path}")])?;
+            let object = git::git(root, &["rev-parse", &format!("{commit}:{path}")])?;
             hash.update((object.len() as u64).to_be_bytes());
             hash.update(object.as_bytes());
         }
@@ -180,8 +194,9 @@ impl Report {
 
     /// Copy an original passing review onto `head` when Git confirms the same
     /// change (identical file blobs) against the current origin/dev. Stored
-    /// fingerprints are never consulted, and a reuse report can never become
-    /// a source. Any complete report for this head at an eligible tier blocks
+    /// fingerprints are never consulted, a reuse report can never become a
+    /// source, and only a review recorded for this same branch is eligible:
+    /// another branch's closing review never answers this branch's findings. Any complete report for this head at an eligible tier blocks
     /// reuse, including a failing report.
     pub(crate) fn reuse_for_change(
         root: &Path,
@@ -208,6 +223,8 @@ impl Report {
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .filter(|report| {
                 report.head != head
+                    && !branch.is_empty()
+                    && report.branch == branch
                     && report.head.len() == 40
                     && report.head.bytes().all(|byte| byte.is_ascii_hexdigit())
                     && report.reused_from.is_none()
@@ -219,7 +236,7 @@ impl Report {
             .collect();
         candidates.sort_by_key(|report| std::cmp::Reverse(report.finished));
         for mut source in candidates {
-            let Ok(current_policy) = Self::policy_fingerprint(root, &source.tier) else {
+            let Ok(current_policy) = Self::policy_fingerprint_at(root, &base, &source.tier) else {
                 continue;
             };
             if source.policy_fingerprint.as_deref() != Some(current_policy.as_str()) {

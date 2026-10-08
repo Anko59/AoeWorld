@@ -13,6 +13,7 @@ mod runner;
 mod session;
 #[cfg(test)]
 mod tests;
+mod trusted;
 
 use crate::{agents::Runtime, gates::registry::Registry, ship::git};
 pub(crate) use closing::Plan;
@@ -28,6 +29,7 @@ use std::{
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+pub(crate) use trusted::trusted;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -108,20 +110,6 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::ReviewFloor => {
             println!("{}", floor(&root)?.name());
             Ok(())
-        }
-    }
-}
-
-/// A review input from origin/dev, so a branch never rewrites its own
-/// criteria; the working tree only while dev does not have it yet (bootstrap).
-pub(crate) fn trusted(root: &Path, relative: &str) -> std::result::Result<String, String> {
-    match git::git(
-        root,
-        &["show", &format!("refs/remotes/origin/dev:{relative}")],
-    ) {
-        Ok(text) => Ok(text),
-        Err(_) => {
-            std::fs::read_to_string(root.join(relative)).map_err(|e| format!("{relative}: {e}"))
         }
     }
 }
@@ -219,6 +207,10 @@ fn review_with_branch(
     plan: &Plan,
     ask: &dyn Ask,
 ) -> Result<Report> {
+    // Config, prompts and the policy fingerprint all come from one commit.
+    let (_pin, policy_base) = trusted::pin(root);
+    let policy_base = policy_base.ok_or("origin/dev is missing: fetch it first")?;
+    let policy_fingerprint = Report::policy_fingerprint_at(root, &policy_base, tier.name())?;
     let config = Config::load(root)?;
     let (base, merge_base, suites) = changed_suites(root)?;
     let minimum = config.floor(&suites);
@@ -403,7 +395,6 @@ fn review_with_branch(
     let change_fingerprint = git::change_fingerprint(root, "dev", &head)
         .ok()
         .map(|(_, fingerprint)| fingerprint);
-    let policy_fingerprint = Report::policy_fingerprint(root, tier.name())?;
     let report = Report {
         version: 1,
         head,

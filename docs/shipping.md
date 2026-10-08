@@ -49,7 +49,7 @@ agent policy refuses `$` in agent-set Make values.
    and modes to identical new blobs and modes. This is called the same change
    (identical file blobs); the report stores a SHA-256 fingerprint for
    information, while the harness recomputes both sides from Git. The old
-   review must meet the required tier, and any complete report already stored
+   review must meet the required tier and belong to the same branch, and any complete report already stored
    for the new commit at that tier or higher blocks reuse, whether it passed or
    failed. The harness stores a new report for the new commit that points to
    the original full or closing review; reuse reports are not reused again. CI
