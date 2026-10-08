@@ -20,7 +20,7 @@ fn advance_dev_with_policy(root: &Path, update: impl FnOnce(&mut serde_json::Val
 }
 
 #[test]
-fn reuse_requires_current_personas_and_prompt_bytes() {
+fn reuse_requires_the_current_review_config_fingerprint() {
     let (_temp, root) = fixture("true");
     let source = unstored(&root, Tier::Low, 9);
     source.store(&root).unwrap();
@@ -55,6 +55,41 @@ fn reuse_requires_current_personas_and_prompt_bytes() {
         Report::reuse_for_change(&root, &head, "feature", &["low"])
             .unwrap()
             .is_none()
+    );
+}
+
+#[test]
+fn a_rust_prompt_change_on_origin_dev_prevents_reuse() {
+    let (_temp, root) = fixture("true");
+    let source = unstored(&root, Tier::Low, 9);
+    source.store(&root).unwrap();
+    run(&root, &["checkout", "-q", "dev"]);
+    let prompt = root.join("crates/harness/src/review/prompt.rs");
+    let text = std::fs::read_to_string(&prompt).unwrap();
+    std::fs::write(
+        &prompt,
+        format!("{text}\n// changed reviewer instruction\n"),
+    )
+    .unwrap();
+    std::fs::write(root.join("BASE.md"), "moved base\n").unwrap();
+    run(
+        &root,
+        &["add", "crates/harness/src/review/prompt.rs", "BASE.md"],
+    );
+    run(
+        &root,
+        &["commit", "-q", "-m", "change Rust reviewer prompt"],
+    );
+    run(&root, &["push", "-q", "origin", "dev"]);
+    run(&root, &["fetch", "-q", "origin", "dev"]);
+    run(&root, &["checkout", "-q", "feature"]);
+    run(&root, &["rebase", "-q", "origin/dev"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change(&root, &head, "feature", &["low"])
+            .unwrap()
+            .is_none(),
+        "a changed Rust prompt means the review engine fingerprint changed"
     );
 }
 

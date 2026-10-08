@@ -33,6 +33,7 @@ fn source_report(root: &Path, tier: Tier, grade: u8) -> Report {
 fn closing_source_report(root: &Path) -> Report {
     let mut report = unstored(root, Tier::Low, 6);
     report.closing = true;
+    report.personas = vec!["correctness".into(), "spec".into(), "test-integrity".into()];
     report.findings.push(Finding {
         id: "F1".into(),
         reporter: CARRIED,

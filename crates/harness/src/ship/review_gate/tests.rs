@@ -47,7 +47,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
             .as_nanos() as u64,
         closing: false,
         change_fingerprint: None,
-        policy_fingerprint: Report::policy_fingerprint(root, tier.name(), "claude").ok(),
+        policy_fingerprint: Report::policy_fingerprint(root, tier.name()).ok(),
         reused_from: None,
     }
 }

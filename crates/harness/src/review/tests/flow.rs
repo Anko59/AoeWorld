@@ -36,6 +36,12 @@ pub(super) fn fixture(changed: &str) -> tempfile::TempDir {
         fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
         fs::copy(repo.join(file), root.join(file)).unwrap();
     }
+    fs::create_dir_all(root.join("crates/harness/src/review")).unwrap();
+    fs::copy(
+        repo.join("crates/harness/src/review/prompt.rs"),
+        root.join("crates/harness/src/review/prompt.rs"),
+    )
+    .unwrap();
     fs::write(root.join("README.md"), "base\n").unwrap();
     git(root, &["add", "-A"]);
     git(root, &["commit", "-q", "-m", "base"]);

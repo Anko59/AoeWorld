@@ -403,8 +403,7 @@ fn review_with_branch(
     let change_fingerprint = git::change_fingerprint(root, "dev", &head)
         .ok()
         .map(|(_, fingerprint)| fingerprint);
-    let policy_fingerprint =
-        Report::policy_fingerprint(root, tier.name(), config::runtime_key(runtime))?;
+    let policy_fingerprint = Report::policy_fingerprint(root, tier.name())?;
     let report = Report {
         version: 1,
         head,
