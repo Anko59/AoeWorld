@@ -1,9 +1,14 @@
 use super::*;
 
+#[path = "terrain_blend/readback.rs"]
+mod readback;
+use readback::PixelReadback;
+
 #[wasm_bindgen_test]
 async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_primary() {
     use crate::surface_mesh::floor as fixture;
     let mut renderer = surface_renderer_with_atlas(&fixture::forest_atlas()).await;
+    let mut readback = PixelReadback::<5>::new(&renderer);
     for material in [0, 2, 6] {
         for (floor, gradient) in [(0, false), (650, false), (1000, false), (650, true)] {
             let mut faces = fixture::forest_faces(material, floor, gradient);
@@ -11,7 +16,9 @@ async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_pri
                 renderer
                     .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
                     .unwrap();
-                let pixels = read_pixels(&renderer, 2, fixture::FOREST_PROBES).await;
+                let pixels = readback
+                    .read(&renderer, 2, fixture::FOREST_PROBES, wgpu::Color::BLACK)
+                    .await;
                 for ([x, _], pixel) in fixture::FOREST_PROBES.into_iter().zip(pixels) {
                     assert_pixel(
                         pixel,
@@ -22,6 +29,7 @@ async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_pri
             }
         }
     }
+    drop(readback);
     renderer.device.destroy();
 }
 
@@ -29,19 +37,23 @@ async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_pri
 async fn webgpu_shared_floor_gradient_seam_and_old_packet_fallback() {
     use crate::surface_mesh::floor as fixture;
     let mut renderer = surface_renderer().await;
+    let mut readback = PixelReadback::<3>::new(&renderer);
     for interpolated in [true, false] {
         let mut faces = fixture::faces(interpolated);
         for _ in 0..2 {
             renderer
                 .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
-            let pixels = read_pixels(&renderer, 2, fixture::PROBES).await;
+            let pixels = readback
+                .read(&renderer, 2, fixture::PROBES, wgpu::Color::BLACK)
+                .await;
             for ([x, _], pixel) in fixture::PROBES.into_iter().zip(pixels) {
                 assert_pixel(pixel, fixture::expected(x, interpolated));
             }
             faces.reverse();
         }
     }
+    drop(readback);
     renderer.device.destroy();
 }
 
@@ -71,6 +83,7 @@ async fn webgpu_procedural_rock_snow_ice_mud_and_shore_match_shared_kernel() {
 #[wasm_bindgen_test]
 async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_changes() {
     let mut renderer = surface_renderer().await;
+    let mut readback = PixelReadback::<2>::new(&renderer);
     let address = |page| crate::AtlasAddress {
         page,
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
@@ -103,16 +116,21 @@ async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_
         renderer
             .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
             .unwrap();
-        for pixel in read_pixels(&renderer, 1, [[48, 48], [32, 32]]).await {
+        for pixel in readback
+            .read(&renderer, 1, [[48, 48], [32, 32]], wgpu::Color::BLACK)
+            .await
+        {
             assert_pixel(pixel, expected);
         }
     }
+    drop(readback);
     renderer.device.destroy();
 }
 
 #[wasm_bindgen_test]
 async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignment() {
     let mut renderer = surface_renderer().await;
+    let mut readback = PixelReadback::<2>::new(&renderer);
     let frame = |page| crate::GameFrame {
         atlas: crate::AtlasAddress {
             page,
@@ -161,11 +179,15 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
             renderer
                 .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
-            for pixel in read_pixels(&renderer, 1, [[48, 48], [32, 32]]).await {
+            for pixel in readback
+                .read(&renderer, 1, [[48, 48], [32, 32]], wgpu::Color::BLACK)
+                .await
+            {
                 assert_pixel(pixel, expected);
             }
         }
     }
+    drop(readback);
     renderer.device.destroy();
 }
 
@@ -254,133 +276,6 @@ pub(super) async fn read_pixels_with_clear<const N: usize>(
     points: [[u32; 2]; N],
     clear: wgpu::Color,
 ) -> [[u8; 4]; N] {
-    assert!((1..=5).contains(&N), "bounded GPU readback probe count");
-    assert!(points.iter().all(|p| p[0] < 128 && p[1] < 128));
-    // One shared pass preserves instance/depth ordering for every requested pixel.
-    // Disjoint 256-byte-aligned copies use at most 1280 bytes and one mapped buffer.
-    // Read actual shader pixels without relying on compositor canvas lifetime.
-    let size = wgpu::Extent3d {
-        width: 128,
-        height: 128,
-        depth_or_array_layers: 1,
-    };
-    let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("splat pixel test"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: renderer.config.format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let output = renderer.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("splat pixel readback"),
-        size: N as u64 * 256,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let view = target.create_view(&Default::default());
-    let depth = renderer.depth.create_view(&Default::default());
-    let mut encoder = renderer.device.create_command_encoder(&Default::default());
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("splat test pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        pass.set_pipeline(&renderer.pipeline);
-        renderer.instances.set_on(&mut pass);
-        pass.draw(0..6, 0..count);
-    }
-    for (index, point) in points.iter().enumerate() {
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &target,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: point[0],
-                    y: point[1],
-                    z: 0,
-                },
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &output,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: index as u64 * 256,
-                    bytes_per_row: Some(256),
-                    rows_per_image: Some(1),
-                },
-            },
-            wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-        );
-    }
-    renderer.queue.submit([encoder.finish()]);
-    let ready = std::rc::Rc::new(std::cell::RefCell::new(None));
-    let wake = std::rc::Rc::new(std::cell::RefCell::new(None::<std::task::Waker>));
-    let (done, waiter) = (ready.clone(), wake.clone());
-    output
-        .slice(..)
-        .map_async(wgpu::MapMode::Read, move |result| {
-            // Resolve failures too: a panic inside the browser callback leaves
-            // the awaited test pending forever and hides the actual map error.
-            done.replace(Some(result));
-            if let Some(waker) = waiter.borrow_mut().take() {
-                waker.wake();
-            }
-        });
-    std::future::poll_fn(|context| {
-        if ready.borrow().is_some() {
-            std::task::Poll::Ready(())
-        } else {
-            *wake.borrow_mut() = Some(context.waker().clone());
-            std::task::Poll::Pending
-        }
-    })
-    .await;
-    ready
-        .borrow_mut()
-        .take()
-        .expect("GPU map callback completed")
-        .expect("GPU pixel readback map");
-    let data = output
-        .slice(..)
-        .get_mapped_range()
-        .expect("mapped GPU pixel bytes");
-    let pixels = std::array::from_fn(|index| {
-        let start = index * 256;
-        let sample = &data[start..start + 4];
-        match renderer.config.format {
-            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => {
-                [sample[2], sample[1], sample[0], sample[3]]
-            }
-            _ => [sample[0], sample[1], sample[2], sample[3]],
-        }
-    });
-    drop(data);
-    output.unmap();
-    output.destroy();
-    target.destroy();
-    pixels
+    let mut readback = PixelReadback::<N>::new(renderer);
+    readback.read(renderer, count, points, clear).await
 }

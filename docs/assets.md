@@ -76,3 +76,18 @@ Synthetic diagnostics are at `/diagnostics.html`. Stop an existing
 server with `make down` before changing the selected pack. Public builds do not
 contain trial files or local packs. Fixture tests run in public CI; actual trial
 import and visual inspection are reported separately.
+
+## Preparatory world-frame lookup
+
+The [CPU lookup codec](../crates/assets/src/catalog/packing/terrain_lookup/mod.rs)
+reserves page 2, row 1, which the existing packer never uses (all rectangles start
+at y ≥ 2). Its 128-byte versioned header and 12-byte records fit at most 672
+terrain addresses; this separate row capacity does not change the 2048 selected
+frame cap or the three-page allocation. Explicit topology, raw dimensions,
+rectangle bounds, gutters, reserved bytes and a layout-only checksum are
+validated before an atomic write. No artwork is moved, resized or resampled;
+97×49 forest frames remain 97×49, while 128×64 describes world projection.
+A borrowed validated view permits constant-time record reads without rechecking
+the entire table per sample. The codec is not yet called by the runtime loader
+or shaders: it alone does **not** fix zoom-dependent tiling, qualify forest
+seams, approve additional frames, or change generated ecosystems.

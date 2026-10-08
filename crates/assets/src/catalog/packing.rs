@@ -5,8 +5,13 @@
 //! initializes `WHITE_TEXEL` to opaque white. Nearest filtering, no mipmaps.
 //! Frames/masks/anchors remain in semantic input order; page IDs are runtime
 //! addresses, not source-manifest page IDs. No painter-order regrouping.
+//! Every native placement starts at x/y >= 2. Page 2 row 1 is therefore already
+//! reserved; the optional CPU terrain lookup codec does not change packing.
 
 use std::fmt;
+
+/// CPU-only descriptor codec for the already reserved page-2 row 1.
+pub mod terrain_lookup;
 
 pub const PAGE_SIDE: u16 = 2048;
 pub const PAGE_COUNT: usize = 3;

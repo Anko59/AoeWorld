@@ -1,3 +1,4 @@
+//! Frozen b87e955 emission and its dependencies, not the production emitter.
 use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
@@ -51,11 +52,6 @@ pub fn scene_resource_presentation(
     ))
 }
 
-pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
-    scene_resource_presentation(art, resource).map(|(frame, _)| frame)
-}
-
-#[cfg(test)]
 pub(super) fn world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -64,29 +60,16 @@ pub(super) fn world_sprite_frames(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, f64, u64)> {
-    let mut result = Vec::new();
-    emit_world_sprite_frames(art, terrain, resources, units, camera, animation, |entry| {
-        result.push(entry);
-    });
-    result
-}
-
-pub(super) fn emit_world_sprite_frames(
-    art: &GameArt,
-    terrain: &[SceneTerrain],
-    resources: &[SceneResource],
-    units: &[SceneUnit],
-    camera: SceneCamera,
-    animation: usize,
-    mut emit: impl FnMut((Sprite, GameFrame, f64, u64)),
-) {
-    if terrain.is_empty() {
-        // Retain the bounded legacy terrain helper, without collecting another
-        // object scene. Surfaces and selections have already been appended.
-        for (sprite, frame) in visible_terrain_frames(art, &[], camera) {
-            emit((sprite, frame, f64::NEG_INFINITY, 0));
-        }
-    }
+    let mut result = if terrain.is_empty() {
+        // The branch proves an empty scene; the literal slice lets the small
+        // compatibility wrapper specialize without removing its nonempty API.
+        visible_terrain_frames(art, &[], camera)
+            .into_iter()
+            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY, 0))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
@@ -116,7 +99,7 @@ pub(super) fn emit_world_sprite_frames(
                     resource.elevation_meters,
                     camera,
                 ) {
-                    emit((
+                    result.push((
                         sprite,
                         scaled(shadow_frame, camera.zoom as f32),
                         depth,
@@ -130,12 +113,12 @@ pub(super) fn emit_world_sprite_frames(
                 camera,
                 0.2,
             ) {
-                emit((sprite, shadow_frame, depth, object.stable_id()));
+                result.push((sprite, shadow_frame, depth, object.stable_id()));
             }
             if let Some(sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
-                emit((
+                result.push((
                     sprite,
                     scaled(frame, camera.zoom as f32),
                     depth,
@@ -199,10 +182,11 @@ pub(super) fn emit_world_sprite_frames(
         if let Some((shadow, shadow_frame)) =
             alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
         {
-            emit((shadow, shadow_frame, depth, object.stable_id()));
+            result.push((shadow, shadow_frame, depth, object.stable_id()));
         }
-        emit((sprite, scaled_frame, depth, object.stable_id()));
+        result.push((sprite, scaled_frame, depth, object.stable_id()));
     }
+    result
 }
 
 fn object_depth(object: WorldObject) -> f64 {
@@ -286,14 +270,6 @@ fn alpha_shadow(
     Some((sprite, scaled(shadow_frame, camera.zoom as f32)))
 }
 
-pub(super) fn resource_sprite_bounds(
-    resource: SceneResource,
-    frame: GameFrame,
-    camera: SceneCamera,
-) -> Option<[f64; 4]> {
-    sprite_screen_bounds(frame, resource.position, resource.elevation_meters, camera)
-}
-
 fn sprite_screen_bounds(
     frame: GameFrame,
     position: [f64; 2],
@@ -326,55 +302,6 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
     frame.size = [frame.size[0] * scale, frame.size[1] * scale];
     frame.anchor = [frame.anchor[0] * scale, frame.anchor[1] * scale];
     frame
-}
-
-#[cfg(test)]
-#[wasm_bindgen_test::wasm_bindgen_test]
-fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
-    use bytemuck::Zeroable;
-    let frame = GameFrame {
-        atlas: crate::AtlasAddress {
-            page: 0,
-            uv: [0.0; 4],
-        },
-        size: [1.0; 2],
-        anchor: [0.0; 2],
-    };
-    let camera = SceneCamera {
-        center: [0.0; 2],
-        zoom: 1.0,
-        viewport: [128.0; 2],
-        focus_elevation_meters: 0.0,
-    };
-    let objects = (0..96)
-        .map(|index| {
-            let mut sprite = Sprite::zeroed();
-            sprite.color[0] = index as f32;
-            let depth = [0.0, -0.0, 4.0, -1.0, f64::INFINITY, f64::NEG_INFINITY][index % 6];
-            (sprite, frame, depth, (index % 4) as u64)
-        })
-        .collect::<Vec<_>>();
-    // Original object pre-sort, followed by the old stable layer depth sort.
-    let mut expected = objects.clone();
-    expected.sort_by(|left, right| left.2.total_cmp(&right.2).then(left.3.cmp(&right.3)));
-    expected.sort_by(|left, right| left.2.total_cmp(&right.2));
-    let actual = ordered_world_layers([], objects, &[], camera);
-    let actual = actual
-        .iter()
-        .map(|layer| {
-            let WorldLayer::Sprite(sprite, _, _, _) = layer else {
-                panic!("unexpected layer")
-            };
-            sprite.color[0]
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        actual,
-        expected
-            .iter()
-            .map(|entry| entry.0.color[0])
-            .collect::<Vec<_>>()
-    );
 }
 
 fn sprite_direction(facing: u8) -> (usize, bool) {

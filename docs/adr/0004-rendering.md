@@ -197,3 +197,23 @@ approved by its semantic name. Decorations
 retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.
+
+## World-frequency groundwork and scene emission
+
+World-anchored sampling must resolve each filter tap's owning world tile and
+native frame, rather than stretch one origin-selected rectangle over an LOD
+patch. The preparatory asset lookup codec uses already-unused page 2, row 1;
+there is no new texture page, selected art frame or image resampling. Runtime
+capability ownership, upload/replacement/restoration, Sprite112 encoding and all
+three samplers are still unwired. Until those paths and real LOD captures are
+qualified, zoom-invariant texture frequency is **not established**.
+
+The production scene builder now appends the shared sprite emitter directly
+after surfaces and selection rings. It no longer materializes an intermediate
+object vector and then copies it into the WorldLayer vector. Resource-before-unit
+submission and the existing stable-index depth/type/id sort remain unchanged.
+The legacy terrain helper, selection temporaries, integer sort sidecar and GPU
+instance vector still allocate; this is not whole-renderer allocation reuse.
+A frozen old emitter/composer verifies every final scene/packet/frame bit across
+72 bounded cases, including missing art, source ties, mirrors, boundary cameras
+and NaN depths. Performance/size claims require measured unchanged gates.

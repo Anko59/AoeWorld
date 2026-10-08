@@ -14,7 +14,12 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
+#[cfg(test)]
 use world_sprites::world_sprite_frames;
+
+#[cfg(test)]
+#[path = "game_renderer/tests/direct_emission.rs"]
+mod direct_emission_tests;
 pub use world_sprites::{scene_resource_frame, scene_resource_presentation};
 
 pub fn resource_sprite_bounds(
@@ -259,8 +264,8 @@ impl GameRenderer {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
             triangle
         });
-        let object_sprites = world_sprite_frames(art, terrain, resources, units, camera, animation);
-        let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
+        let layers =
+            direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
         if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
             let depth_origin = surface_depth([
                 camera.center[0],
@@ -363,11 +368,56 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     Ok(atlas)
 }
 
+fn direct_world_layers(
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<WorldLayer> {
+    // Each eligible resource/unit emits at most a shadow and a body. Culling
+    // may reduce this bound; legacy terrain retains its own bounded helper.
+    let object_capacity = resources
+        .len()
+        .saturating_add(units.len())
+        .saturating_mul(2);
+    ordered_world_layers_with(surfaces, object_capacity, units, camera, |entries| {
+        world_sprites::emit_world_sprite_frames(
+            art,
+            terrain,
+            resources,
+            units,
+            camera,
+            animation,
+            |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
+        );
+    })
+}
+
+#[cfg(test)]
 fn ordered_world_layers(
     surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
     objects: Vec<(Sprite, GameFrame, f64, u64)>,
     units: &[SceneUnit],
     camera: SceneCamera,
+) -> Vec<WorldLayer> {
+    ordered_world_layers_with(surfaces, objects.len(), units, camera, |entries| {
+        entries.extend(
+            objects
+                .into_iter()
+                .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
+        );
+    })
+}
+
+fn ordered_world_layers_with(
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+    object_capacity: usize,
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    emit: impl FnOnce(&mut Vec<WorldLayer>),
 ) -> Vec<WorldLayer> {
     let surfaces = surfaces.into_iter();
     let selected_count = units.iter().filter(|unit| unit.selected).count();
@@ -375,7 +425,7 @@ fn ordered_world_layers(
         surfaces
             .size_hint()
             .0
-            .saturating_add(objects.len())
+            .saturating_add(object_capacity)
             .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
     );
     entries.extend(surfaces.map(WorldLayer::Surface));
@@ -386,11 +436,7 @@ fn ordered_world_layers(
                 .map(|(sprite, depth)| WorldLayer::Selection(sprite, depth)),
         );
     }
-    entries.extend(
-        objects
-            .into_iter()
-            .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
-    );
+    emit(&mut entries);
     // Original indices break all ties, preserving exact former stable order.
     // Sort a bounded integer sidecar and permute this scene in place, avoiding
     // a second large-layer scene or large-element stable-sort scratch buffer.
