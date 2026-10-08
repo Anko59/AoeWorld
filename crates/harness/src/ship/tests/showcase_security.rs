@@ -4,7 +4,7 @@ use std::{
     sync::Mutex,
 };
 
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+pub(super) static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn showcase_work_directory_is_random_private_and_ignores_legacy_pid_path_entries() {
@@ -50,7 +50,9 @@ fn showcase_work_directory_is_random_private_and_ignores_legacy_pid_path_entries
 
 #[test]
 fn narration_stub_stops_requests_when_the_five_minute_plan_is_impossible() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = tempfile::tempdir().unwrap();
     let bin = root.path().join("bin");
     std::fs::create_dir(&bin).unwrap();

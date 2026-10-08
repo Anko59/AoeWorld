@@ -264,4 +264,5 @@ mod describe;
 mod metrics;
 mod showcase;
 mod showcase_findings;
+mod showcase_pipeline;
 mod showcase_security;
