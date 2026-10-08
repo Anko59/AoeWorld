@@ -165,6 +165,31 @@ fn a_local_branch_named_origin_dev_does_not_move_the_base() {
 }
 
 #[test]
+fn the_low_tier_size_check_fetches_the_current_origin_dev() {
+    let (_temp, root) = fixture("true");
+    let old = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
+    run(&root, &["checkout", "-q", "dev"]);
+    std::fs::write(root.join("README.md"), "new remote base\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "remote advancement"]);
+    run(&root, &["push", "-q", "origin", "dev"]);
+    run(&root, &["checkout", "-q", "feature"]);
+    run(&root, &["update-ref", "refs/remotes/origin/dev", &old]);
+    let stale = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
+    let current = git::git(&root, &["ls-remote", "origin", "refs/heads/dev"])
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+    assert_ne!(stale, current);
+    super::github::changed_lines(&root).unwrap();
+    assert_eq!(
+        git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap(),
+        current
+    );
+}
+
+#[test]
 fn incomplete_gates_never_count_as_a_pass() {
     use super::run::{GateResult, GateVerdict};
     let result = |verdict| GateResult {
@@ -191,15 +216,18 @@ fn incomplete_gates_never_count_as_a_pass() {
 
 #[test]
 fn gh_versions_below_the_attach_release_are_refused() {
+    assert_eq!(super::github::GH_MINIMUM, (2, 100));
+    assert!(super::github::gh_version("gh version 2.99.0").unwrap() < super::github::GH_MINIMUM);
+    assert!(super::github::gh_version("gh version 2.100.0").unwrap() >= super::github::GH_MINIMUM);
     assert_eq!(
-        super::gh_version("gh version 2.102.0 (2026-09-30)"),
+        super::github::gh_version("gh version 2.102.0 (2026-09-30)"),
         Some((2, 102))
     );
     assert!(
-        super::gh_version("gh version 2.46.0 (2025-12-13 Ubuntu 2.46.0-4)").unwrap()
-            < super::GH_MINIMUM
+        super::github::gh_version("gh version 2.46.0 (2025-12-13 Ubuntu 2.46.0-4)").unwrap()
+            < super::github::GH_MINIMUM
     );
-    assert_eq!(super::gh_version("nonsense"), None);
+    assert_eq!(super::github::gh_version("nonsense"), None);
 }
 
 #[test]
@@ -231,3 +259,5 @@ fn the_branch_and_repository_come_from_full_refs_and_origin() {
         );
     }
 }
+
+mod describe;

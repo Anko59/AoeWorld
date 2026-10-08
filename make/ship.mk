@@ -9,8 +9,8 @@
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
-.PHONY: ship ship-status review review-floor review-pr
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
+.PHONY: ship ship-status review review-floor review-pr video-probe
 ship:
 	@.agents/hooks/harness.sh exec ship
 
@@ -29,3 +29,7 @@ review-floor:
 # through the environment and never interpolated into shell text.
 review-pr:
 	@.agents/hooks/harness.sh exec review-pr
+
+# Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
+video-probe:
+	@docker run --rm -v "$$SHIP_VIDEO":/video:ro $(BROWSER_IMAGE) sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'

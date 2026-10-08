@@ -28,7 +28,8 @@ Commit on a feature branch (the pre-commit hook runs `make pre-commit`), then
 publish with `make ship SHIP_TITLE=… SHIP_BODY=<description file> SHIP_TIER=<tier>`:
 it runs the preflight gates at that exact commit, records evidence, runs the
 tiered [adversarial review](docs/review.md) (choose the tier; `make
-review-floor` prints the minimum), and only at 8/10 or more pushes, opens the
+review-floor` prints the minimum), renders the two-part description from your
+`SHIP_BODY` (see `.github/pull_request_template.md`) with `SHIP_VIDEO`, and only at 8/10 or more pushes, opens the
 pull request against `dev` and arms auto-merge ([shipping](docs/shipping.md)). Direct `git push` and
 `gh pr create` are refused. GitHub merges when the required checks pass; never
 merge, approve, or push `dev` or `main`.

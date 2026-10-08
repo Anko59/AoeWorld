@@ -4,8 +4,10 @@
 //! evidence for that commit (whatever the verdict) where agents cannot write;
 //! and, only on PASS, pushes the branch and creates or updates its pull request.
 //! The agent policy denies `git push` and `gh pr create` to every role.
+mod describe;
 pub(crate) mod evidence;
 pub(crate) mod git;
+mod github;
 mod review_gate;
 mod review_pr;
 pub(crate) mod run;
@@ -15,6 +17,7 @@ mod tests;
 use crate::gates::registry::{Cadence, Registry};
 use evidence::{Evidence, Verdict};
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -61,6 +64,9 @@ pub(crate) struct Options {
     /// Tests only: skip the adversarial review.
     #[arg(skip)]
     pub(crate) no_review: bool,
+    /// Showcase video for the "What" section (SHIP_VIDEO).
+    #[arg(long)]
+    pub(crate) video: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -75,6 +81,7 @@ impl Default for Options {
             tier: None,
             runtime: crate::agents::Runtime::Claude,
             no_review: false,
+            video: None,
         }
     }
 }
@@ -90,6 +97,9 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 .body_file
                 .or_else(|| env("SHIP_BODY").map(PathBuf::from));
             options.force |= env("SHIP_FORCE").as_deref() == Some("1");
+            options.video = options
+                .video
+                .or_else(|| env("SHIP_VIDEO").map(PathBuf::from));
             if let Some(tier) = env("SHIP_TIER") {
                 options.tier = Some(clap::ValueEnum::from_str(&tier, true).map_err(|_| {
                     format!("SHIP_TIER={tier}: use low, medium, high, xhigh or max")
@@ -177,9 +187,11 @@ pub(crate) fn ship_with(
             "SHIP_BODY is required: the review is appended to the pull request description".into(),
         );
     }
-    if !options.no_pr {
-        preflight_pull_request(root, options)?;
-    }
+    let body_text = if !options.no_pr {
+        github::preflight_pull_request(root, options)?
+    } else {
+        None
+    };
     let evidence = judge(root, options)?;
     for result in &evidence.gates {
         eprintln!("{}", result.line());
@@ -207,10 +219,60 @@ pub(crate) fn ship_with(
     push(root, &evidence, options.force)?;
     if !options.no_pr {
         let mut options = options.clone();
-        if let Some(report) = &review {
-            options.body_file = review_gate::description(root, &options, report)?;
+        if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
+            options.body_file = Some(github::description(
+                root, &evidence, &options, report, body_text,
+            )?);
         }
-        let url = pull_request(root, &evidence, &options)?;
+        let url = github::pull_request(root, &evidence, &options)?;
+        if let (Some(video), Some(body)) = (&options.video, &options.body_file) {
+            let repository = git::origin_repository(root)?;
+            let body = body.display().to_string();
+            let video = video.display().to_string();
+            gh(
+                root,
+                &[
+                    "pr",
+                    "edit",
+                    &url,
+                    "--repo",
+                    &repository,
+                    "--body-file",
+                    &body,
+                    "--attach",
+                    &video,
+                ],
+            )?;
+            let remote_body = gh(
+                root,
+                &[
+                    "pr",
+                    "view",
+                    &url,
+                    "--repo",
+                    &repository,
+                    "--json",
+                    "body",
+                    "--jq",
+                    ".body",
+                ],
+            )?;
+            let submitted_body = fs::read_to_string(&body)?;
+            let body_with_video = describe::place_video_in_what(&submitted_body, &remote_body);
+            fs::write(&body, body_with_video)?;
+            gh(
+                root,
+                &[
+                    "pr",
+                    "edit",
+                    &url,
+                    "--repo",
+                    &repository,
+                    "--body-file",
+                    &body,
+                ],
+            )?;
+        }
         if let Some(report) = &review {
             review_gate::publish(root, &url, report)?;
         }
@@ -242,125 +304,4 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("gh").current_dir(root).args(args).output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "gh {}: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        )
-        .into());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-/// The oldest `gh` with `--attach` for PR videos; older ones are refused.
-const GH_MINIMUM: (u32, u32) = (2, 100);
-
-fn gh_version(text: &str) -> Option<(u32, u32)> {
-    let version = text.split_whitespace().nth(2)?;
-    let mut parts = version.split('.');
-    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
-}
-
-/// Before any gate runs: a usable `gh`, and a title and description when the
-/// branch has no open pull request yet, so nothing is pushed half-way.
-fn preflight_pull_request(root: &Path, options: &Options) -> Result<()> {
-    let version = gh(root, &["--version"])?;
-    match gh_version(&version) {
-        Some(found) if found >= GH_MINIMUM => {}
-        _ => {
-            return Err(format!(
-                "gh {}.{} or newer is required (found: {})",
-                GH_MINIMUM.0,
-                GH_MINIMUM.1,
-                version.lines().next().unwrap_or_default()
-            )
-            .into());
-        }
-    }
-    let branch = git::branch(root)?;
-    let repository = git::origin_repository(root)?;
-    let open = open_pull_request(root, &repository, &branch)?.is_some();
-    if !open && (options.title.is_none() || options.body_file.is_none()) {
-        return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
-    }
-    if let Some(body) = &options.body_file
-        && !body.is_file()
-    {
-        return Err(format!("SHIP_BODY {} is not a file", body.display()).into());
-    }
-    Ok(())
-}
-
-/// The open pull request whose head is `branch` (never a PR number that
-/// happens to equal a numeric branch name).
-fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<String>> {
-    let url = gh(
-        root,
-        &[
-            "pr",
-            "list",
-            "--repo",
-            repository,
-            "--head",
-            branch,
-            "--state",
-            "open",
-            "--json",
-            "url",
-            "--jq",
-            ".[0].url // empty",
-        ],
-    )?;
-    Ok((!url.is_empty()).then_some(url))
-}
-
-fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {
-    let branch = evidence.branch.as_str();
-    let repository = git::origin_repository(root)?;
-    let body = options.body_file.as_ref().map(|p| p.display().to_string());
-    let existing = open_pull_request(root, &repository, branch)?;
-    let url = match existing {
-        Some(url) => {
-            let mut args = vec!["pr", "edit", url.as_str(), "--repo", repository.as_str()];
-            if let Some(title) = options.title.as_deref() {
-                args.extend(["--title", title]);
-            }
-            if let Some(body) = body.as_deref() {
-                args.extend(["--body-file", body]);
-            }
-            if args.len() > 5 {
-                gh(root, &args)?;
-            }
-            url.clone()
-        }
-        None => {
-            let (Some(title), Some(body)) = (options.title.as_deref(), body.as_deref()) else {
-                return Err(
-                    "a new pull request needs SHIP_TITLE and SHIP_BODY (a description file)".into(),
-                );
-            };
-            gh(
-                root,
-                &[
-                    "pr",
-                    "create",
-                    "--repo",
-                    &repository,
-                    "--base",
-                    &options.base,
-                    "--head",
-                    branch,
-                    "--title",
-                    title,
-                    "--body-file",
-                    body,
-                ],
-            )?
-        }
-    };
-    println!("{url}");
-    Ok(url)
-}
+pub(crate) use github::gh;
