@@ -2,12 +2,12 @@
 //! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
 //! pipe and never written to disk.
 use super::super::describe::Level;
+use super::browser::{Plan, app_for, plan};
 use super::workdir::create_new;
 use super::{
-    Scene, Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
+    Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
     durations, measured_duration, resolve_out, track,
 };
-use serde::Serialize;
 use std::{
     fs,
     io::{Read, Write},
@@ -25,19 +25,6 @@ const STORYBOARD_LIMIT: u64 = 256 * 1024;
 #[cfg(test)]
 const TTS_RESPONSE_LIMIT: u64 = 32 * 1024 * 1024;
 const TTS_ERROR_LIMIT: u64 = 64 * 1024;
-
-#[derive(Serialize)]
-struct Plan<'a> {
-    title: &'a str,
-    scenes: Vec<Planned<'a>>,
-}
-
-#[derive(Serialize)]
-struct Planned<'a> {
-    #[serde(flatten)]
-    scene: &'a Scene,
-    duration_ms: u64,
-}
 
 fn env(name: &str) -> Result<String> {
     std::env::var(name)
@@ -206,6 +193,8 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<V
 }
 
 /// Record the plan in one Playwright take; returns the silent WebM and timings.
+/// The container has no network unless a browser scene films the app; then it
+/// shares the host's, and record.mjs aborts every request off the app origin.
 fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings)> {
     let browser = image_env("BROWSER_IMAGE")?;
     let modules = std::env::var_os("AOE_SHOWCASE_NODE_MODULES")
@@ -219,13 +208,14 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
     }
     create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
     create_new(&work.join("record.mjs"))?.write_all(RECORDER.as_bytes())?;
+    let network = if plan.app.is_some() { "host" } else { "none" };
     let status = Command::new("docker")
         .args([
             "run",
             "--rm",
             "--init",
             "--network",
-            "none",
+            network,
             "--ipc",
             "host",
             "--user",
@@ -242,7 +232,11 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         .args([browser.as_str(), "node", "record.mjs"])
         .status()?;
     if !status.success() {
-        return Err("the recorder failed".into());
+        return Err(match &plan.app {
+            Some(app) => format!("the recorder failed (is the app up at {}?)", app.http()),
+            None => "the recorder failed".into(),
+        }
+        .into());
     }
     let timings: Timings = serde_json::from_slice(&fs::read(work.join("timings.json"))?)?;
     Ok((work.join("silent.webm"), timings))
@@ -352,6 +346,7 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_OUT.into());
     let out = resolve_out(root, &requested_out)?;
+    app_for(&board)?;
     check_duration(level, &durations(&board, &vec![None; board.scenes.len()]))?;
     Ok((board, out, level))
 }
@@ -400,18 +395,7 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
         if !status.success() {
             return Err("building showcase images failed".into());
         }
-        let plan = Plan {
-            title: &board.title,
-            scenes: board
-                .scenes
-                .iter()
-                .zip(&planned)
-                .map(|(scene, ms)| Planned {
-                    scene,
-                    duration_ms: *ms,
-                })
-                .collect(),
-        };
+        let plan = plan(&board, &planned, app_for(&board)?)?;
         let (silent, timings) = record(root, work_path, &plan)?;
         let measured = measured_duration(level, &timings, board.scenes.len())?;
         let encoded = work_path.join("showcase.webm");

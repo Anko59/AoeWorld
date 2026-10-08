@@ -1,13 +1,17 @@
 // Records a showcase plan (plan.json, written by `aoe-harness showcase`) in one
-// Playwright take: title cards and scripted terminals are drawn in-page.
-// Each scene holds the screen for exactly
-// planned duration (longer only if a page is slow) so the voice-over lines
-// up. Writes silent.webm and timings.json: the blank lead-in and each scene's
-// actual length in milliseconds, which the audio track is padded to.
+// Playwright take: title cards and scripted terminals are drawn in-page;
+// browser scenes film the app under development at plan.app, the one origin
+// allowed: every other request and WebSocket is aborted (AppOrigin::allows).
+// Each scene holds the screen for exactly its planned duration, counted from
+// after its page has loaded (longer only if a step is slow), so steps are
+// counted once. Writes silent.webm and timings.json: the blank lead-in and each
+// scene's actual on-screen length, page loading included, in milliseconds,
+// which the audio track is padded to.
 import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
+const app = plan.app ?? null;
 const dir = process.cwd();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -60,6 +64,34 @@ async function terminal(page, scene) {
   }
 }
 
+function within(value, prefix) {
+  try {
+    return new URL(value).href.startsWith(prefix);
+  } catch {
+    return false;
+  }
+}
+
+// Load the app, then caption it; loading is measured, not planned.
+async function open(page, scene) {
+  await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
+  await page.evaluate((text) => {
+    const el = document.createElement("div");
+    el.textContent = text;
+    Object.assign(el.style, { position: "fixed", left: 0, right: 0, bottom: 0, padding: "12px 24px", background: "rgba(13,17,23,.85)", color: "#e6edf3", font: '24px "DejaVu Sans",sans-serif', zIndex: 2147483647, pointerEvents: "none" });
+    document.body.appendChild(el);
+  }, scene.caption);
+}
+
+async function steps(page, scene) {
+  for (const step of scene.steps ?? []) {
+    if ("click" in step) await page.click(step.click, { timeout: 10_000 });
+    else if ("key" in step) await page.keyboard.press(step.key);
+    else if ("text" in step) await page.keyboard.type(step.text, { delay: 22 });
+    else if ("wait_ms" in step) await sleep(step.wait_ms);
+  }
+}
+
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1280, height: 720 },
@@ -69,7 +101,12 @@ const context = await browser.newContext({
 await context.route("**/*", async (route) => {
   const url = route.request().url();
   if (url === "about:blank" || url.startsWith("data:")) await route.continue();
+  else if (app !== null && within(url, app.http)) await route.continue();
   else await route.abort("blockedbyclient");
+});
+await context.routeWebSocket(/.*/, async (ws) => {
+  if (app !== null && within(ws.url(), app.ws)) ws.connectToServer();
+  else await ws.close();
 });
 const started = Date.now();
 const page = await context.newPage();
@@ -77,9 +114,12 @@ const timings = { lead_in_ms: null, scenes_ms: [] };
 for (const scene of plan.scenes) {
   const sceneStart = Date.now();
   if (timings.lead_in_ms === null) timings.lead_in_ms = sceneStart - started;
+  if (scene.kind === "browser") await open(page, scene);
+  else if (page.url() !== "about:blank") await page.goto("about:blank");
   const begin = Date.now();
   if (scene.kind === "card") await card(page, scene);
-  else await terminal(page, scene);
+  else if (scene.kind === "terminal") await terminal(page, scene);
+  else await steps(page, scene);
   const left = scene.duration_ms - (Date.now() - begin);
   if (left > 0) await sleep(left);
   timings.scenes_ms.push(Date.now() - sceneStart);

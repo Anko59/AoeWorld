@@ -27,7 +27,7 @@ fn a_storyboard_parses_with_defaults() {
     assert_eq!(board.scenes[0].narration(), None);
     assert!(board.scenes[1].narration().is_some());
     assert!(
-        Storyboard::parse(&BOARD.replace("\"kind\": \"terminal\"", "\"kind\": \"browser\""))
+        Storyboard::parse(&BOARD.replace("\"kind\": \"terminal\"", "\"kind\": \"video\""))
             .unwrap_err()
             .contains("unknown variant")
     );
@@ -285,16 +285,26 @@ fn recorder_aborts_every_request_except_inline_document_urls() {
     assert!(script.contains("context.route(\"**/*\""));
     assert!(script.contains("route.abort(\"blockedbyclient\")"));
     assert!(script.contains("url === \"about:blank\" || url.startsWith(\"data:\")"));
-    assert!(!script.contains("routeWebSocket"));
+    // Browser scenes (showcase_browser.rs) add exactly one other origin, the
+    // app's, for HTTP and WebSockets alike; nothing else is ever navigated to.
+    assert!(
+        script.contains("else if (app !== null && within(url, app.http)) await route.continue();")
+    );
+    assert!(script.contains("if (app !== null && within(ws.url(), app.ws)) ws.connectToServer();"));
     assert!(!script.contains("browserScene"));
-    assert!(!script.contains("page.goto"));
+    assert_eq!(script.matches("page.goto(").count(), 2);
+    assert!(script.contains("page.goto(scene.url,"));
+    assert!(script.contains("page.goto(\"about:blank\")"));
 }
 
 #[test]
 fn recorder_runs_without_container_network() {
+    // Only a browser scene gives the recorder the host network (filtered to
+    // the app origin); the take itself is checked in showcase_browser.rs.
     let media = include_str!("../showcase/media.rs");
-    assert!(media.contains("\"--network\",\n            \"none\""));
-    assert!(!media.contains("\"--network\",\n            \"host\""));
+    assert!(media.contains("let network = if plan.app.is_some() { \"host\" } else { \"none\" };"));
+    assert!(media.contains("\"--network\",\n            network,"));
+    assert_eq!(media.matches("\"--network\"").count(), 1);
 }
 
 #[test]
