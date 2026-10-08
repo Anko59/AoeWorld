@@ -1,6 +1,7 @@
 //! The side-effecting half of `make showcase`: speech requests, the recording
 //! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
 //! pipe and never written to disk.
+use super::super::describe::Level;
 use super::workdir::create_new;
 use super::{
     Scene, Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
@@ -43,6 +44,12 @@ fn env(name: &str) -> Result<String> {
         .ok()
         .filter(|v| !v.is_empty())
         .ok_or_else(|| format!("{name} is unset: run through `make showcase`").into())
+}
+
+fn image_env(name: &str) -> Result<String> {
+    let image = env(name)?;
+    super::check::validate_image_value(&image).map_err(|error| format!("{name} {error}"))?;
+    Ok(image)
 }
 
 /// A secret from the environment, else from the keyring, where every
@@ -89,7 +96,7 @@ fn path(p: &Path) -> &str {
 pub(crate) fn tts_command(request: &Path) -> Command {
     let mut command = Command::new("curl");
     command
-        .args(["-sS", "--fail-with-body", "--max-time", "120"])
+        .args(["-q", "-sS", "--fail-with-body", "--max-time", "120"])
         .args(["-X", "POST", TTS_URL, "-H", "@-", "--data-binary"])
         .arg(format!("@{}", request.display()))
         .stdin(Stdio::piped());
@@ -143,7 +150,7 @@ pub(crate) fn concat_entry(file: &Path) -> String {
 }
 
 /// Voice each narrated scene; returns each voice-over's length.
-pub(crate) fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
+pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<Vec<Option<u64>>> {
     if board.scenes.iter().all(|s| s.narration().is_none()) {
         return Ok(vec![None; board.scenes.len()]);
     }
@@ -188,7 +195,7 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>
         lengths.push(Some((seconds * 1000.0).ceil() as u64));
         if lengths.len() == index + 1 {
             let planned = durations(board, &lengths);
-            if let Err(error) = check_duration(&planned) {
+            if let Err(error) = check_duration(level, &planned) {
                 return Err(
                     format!("narration exceeds the showcase duration budget: {error}").into(),
                 );
@@ -200,7 +207,7 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>
 
 /// Record the plan in one Playwright take; returns the silent WebM and timings.
 fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings)> {
-    let browser = env("AOE_BROWSER_IMAGE")?;
+    let browser = image_env("BROWSER_IMAGE")?;
     let modules = std::env::var_os("AOE_SHOWCASE_NODE_MODULES")
         .map_or_else(|| root.join("browser/node_modules"), PathBuf::from);
     if !modules.join("playwright").is_dir() {
@@ -334,7 +341,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
 
 /// `make showcase`: SHOWCASE_STORYBOARD in, SHOWCASE_OUT (default
 /// `.cache/showcase/showcase.webm`) out, ready for SHIP_VIDEO.
-fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput)> {
+fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
     super::check::validate_manifest_root(root)?;
     let level = super::check::showcase_level(root)?;
     let storyboard = env("SHOWCASE_STORYBOARD")?;
@@ -345,8 +352,8 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput)> {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_OUT.into());
     let out = resolve_out(root, &requested_out)?;
-    check_duration(&durations(&board, &vec![None; board.scenes.len()]))?;
-    Ok((board, out))
+    check_duration(level, &durations(&board, &vec![None; board.scenes.len()]))?;
+    Ok((board, out, level))
 }
 
 pub(crate) fn read_storyboard(path: &Path) -> Result<String> {
@@ -367,7 +374,7 @@ pub(crate) fn read_storyboard(path: &Path) -> Result<String> {
 /// Validate the storyboard, output path and unvoiced duration without starting
 /// a Docker build, recorder or speech request.
 pub(crate) fn check(root: &Path) -> Result<()> {
-    let (board, out) = inputs(root)?;
+    let (board, out, _) = inputs(root)?;
     println!(
         "showcase-check: {} scene(s), output {}",
         board.scenes.len(),
@@ -377,14 +384,15 @@ pub(crate) fn check(root: &Path) -> Result<()> {
 }
 
 pub(crate) fn make(root: &Path) -> Result<PathBuf> {
-    let (board, out) = inputs(root)?;
-    let tools = env("AOE_SHIP_TOOLS_IMAGE")?;
+    let (board, out, level) = inputs(root)?;
+    let _browser = image_env("BROWSER_IMAGE")?;
+    let tools = image_env("SHIP_TOOLS_IMAGE")?;
     let work = super::workdir::create_work_dir(root)?;
     let work_path = work.path();
     (|| -> Result<PathBuf> {
-        let voices = narrate(work_path, &board)?;
+        let voices = narrate(work_path, &board, level)?;
         let planned = durations(&board, &voices);
-        check_duration(&planned)?;
+        check_duration(level, &planned)?;
         let make = env("MAKE")?;
         let status = Command::new(make)
             .args(["--no-print-directory", "ship-tools", "browser-deps"])
@@ -405,7 +413,7 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
                 .collect(),
         };
         let (silent, timings) = record(root, work_path, &plan)?;
-        let measured = measured_duration(&timings, board.scenes.len())?;
+        let measured = measured_duration(level, &timings, board.scenes.len())?;
         let encoded = work_path.join("showcase.webm");
         let publish = if voices.iter().any(Option::is_some) {
             mix(

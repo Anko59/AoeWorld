@@ -4,6 +4,17 @@ use std::{os::unix::ffi::OsStrExt, path::Path};
 
 pub(crate) use super::media::check;
 
+pub(crate) fn validate_image_value(image: &str) -> Result<(), String> {
+    if image.is_empty()
+        || !image.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"./_:-".contains(&byte)
+        })
+    {
+        return Err("must match [a-z0-9./_:-]+".into());
+    }
+    Ok(())
+}
+
 pub(super) fn showcase_level(root: &Path) -> Result<super::super::describe::Level, String> {
     let selected = std::env::var("SHOWCASE_LEVEL")
         .ok()

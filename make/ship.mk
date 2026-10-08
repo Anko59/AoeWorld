@@ -42,15 +42,15 @@ next:
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:
-	@docker run --rm -v "$$SHIP_VIDEO":/video:ro $(BROWSER_IMAGE) sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
+	@docker run --rm -v "$$SHIP_VIDEO":/video:ro "$$BROWSER_IMAGE" sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
 
 ship-tools:
-	@docker build -q -f docker/ship-tools.Dockerfile -t $(SHIP_TOOLS_IMAGE) . >/dev/null
+	@docker build -q -f docker/ship-tools.Dockerfile -t "$$SHIP_TOOLS_IMAGE" . >/dev/null
 
 # The showcase video of SHOWCASE_STORYBOARD (docs/showcase.md); Rust checks the
 # voiced plan before invoking Make to build the pinned recording images.
 showcase: showcase-check
-	@AOE_BROWSER_IMAGE=$(BROWSER_IMAGE) AOE_SHIP_TOOLS_IMAGE=$(SHIP_TOOLS_IMAGE) .agents/hooks/harness.sh exec showcase
+	@.agents/hooks/harness.sh exec showcase
 
 showcase-check:
 	@.agents/hooks/harness.sh exec showcase-check

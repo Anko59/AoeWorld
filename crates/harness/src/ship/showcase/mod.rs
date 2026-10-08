@@ -8,9 +8,10 @@ mod check;
 mod media;
 mod workdir;
 
+use super::describe::Level;
 pub(crate) use check::check;
 #[cfg(test)]
-pub(crate) use check::{check_voice_requirement, validate_manifest_root};
+pub(crate) use check::{check_voice_requirement, validate_image_value, validate_manifest_root};
 pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
@@ -182,20 +183,28 @@ pub(crate) fn durations(board: &Storyboard, voices: &[Option<u64>]) -> Vec<u64> 
         .collect()
 }
 
-pub(crate) fn check_duration(durations: &[u64]) -> Result<(), String> {
+pub(crate) fn check_duration(level: Level, durations: &[u64]) -> Result<(), String> {
+    let limit = level
+        .video_limit()
+        .ok_or_else(|| format!("{} PRs have no showcase video", level.name()))?;
     let total = durations
         .iter()
         .fold(0_u64, |sum, duration| sum.saturating_add(*duration));
-    if total > MAX_SECONDS * 1000 {
+    if total > u64::from(limit) * 1000 {
         return Err(format!(
-            "the storyboard runs {}s; the longest level allows {MAX_SECONDS}s: cut it",
-            total / 1000
+            "the storyboard runs {:.1}s; a {} PR allows {limit}s: cut it",
+            total as f64 / 1000.0,
+            level.name()
         ));
     }
     Ok(())
 }
 
-pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result<u64, String> {
+pub(crate) fn measured_duration(
+    level: Level,
+    timings: &Timings,
+    scene_count: usize,
+) -> Result<u64, String> {
     if timings.scenes_ms.len() != scene_count {
         return Err(format!(
             "the recorder measured {} scene(s) for a storyboard of {scene_count}",
@@ -208,11 +217,14 @@ pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result
         .fold(timings.lead_in_ms, |sum, duration| {
             sum.saturating_add(*duration)
         });
-    if total > MAX_SECONDS * 1000 {
+    let limit = level
+        .video_limit()
+        .ok_or_else(|| format!("{} PRs have no showcase video", level.name()))?;
+    if total > u64::from(limit) * 1000 {
         return Err(format!(
-            "the recorded showcase runs {}s; the longest level allows {}s: cut it",
-            total / 1000,
-            MAX_SECONDS
+            "the recorded showcase runs {:.1}s; a {} PR allows {limit}s: cut it",
+            total as f64 / 1000.0,
+            level.name()
         ));
     }
     Ok(total)

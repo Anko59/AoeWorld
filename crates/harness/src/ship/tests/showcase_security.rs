@@ -49,7 +49,7 @@ fn showcase_work_directory_is_random_private_and_ignores_legacy_pid_path_entries
 }
 
 #[test]
-fn narration_stub_stops_requests_when_the_five_minute_plan_is_impossible() {
+fn narration_stub_stops_requests_when_the_selected_level_plan_is_impossible() {
     let _guard = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -86,9 +86,11 @@ fn narration_stub_stops_requests_when_the_five_minute_plan_is_impossible() {
     .unwrap();
     let work = root.path().join("work");
     std::fs::create_dir(&work).unwrap();
-    let error = narrate(&work, &board).unwrap_err().to_string();
+    let error = narrate(&work, &board, super::super::describe::Level::High)
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("showcase duration budget"), "{error}");
-    assert_eq!(std::fs::read_to_string(&calls).unwrap().len(), 2);
+    assert_eq!(std::fs::read_to_string(&calls).unwrap().len(), 1);
     std::fs::write(&calls, "").unwrap();
     unsafe { std::env::set_var("SHOWCASE_TTS_BYTES", "33554432") };
     let scenes = (0..100)
@@ -103,7 +105,9 @@ fn narration_stub_stops_requests_when_the_five_minute_plan_is_impossible() {
         Storyboard::parse(&format!(r#"{{"title":"aggregate","scenes":[{scenes}]}}"#)).unwrap();
     let aggregate_work = root.path().join("aggregate-work");
     std::fs::create_dir(&aggregate_work).unwrap();
-    let error = narrate(&aggregate_work, &board).unwrap_err().to_string();
+    let error = narrate(&aggregate_work, &board, super::super::describe::Level::Max)
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("14448000-byte limit"), "{error}");
     assert_eq!(
         std::fs::metadata(aggregate_work.join("voice-0.pcm"))

@@ -1,3 +1,4 @@
+use super::super::describe::Level;
 use super::super::showcase::{
     Scene, Segment, Storyboard, Style, Timings, Tone, check_duration, durations, measured_duration,
     resolve_out, track,
@@ -73,24 +74,27 @@ fn scenes_last_long_enough_for_their_voice() {
 
 #[test]
 fn planned_and_measured_duration_checks_enforce_five_minutes() {
-    assert!(check_duration(&[299_000, 1_000]).is_ok());
-    assert!(check_duration(&[300_001]).is_err());
+    assert!(check_duration(Level::Max, &[299_000, 1_000]).is_ok());
+    assert!(check_duration(Level::Max, &[300_001]).is_err());
     let at_limit = Timings {
         lead_in_ms: 1_000,
         scenes_ms: vec![299_000],
     };
-    assert_eq!(measured_duration(&at_limit, 1).unwrap(), 300_000);
+    assert_eq!(
+        measured_duration(Level::Max, &at_limit, 1).unwrap(),
+        300_000
+    );
     let over_limit = Timings {
         lead_in_ms: 1_000,
         scenes_ms: vec![299_001],
     };
     assert!(
-        measured_duration(&over_limit, 1)
+        measured_duration(Level::Max, &over_limit, 1)
             .unwrap_err()
-            .contains("recorded showcase runs 300s")
+            .contains("recorded showcase runs 300.0s")
     );
     assert!(
-        measured_duration(&at_limit, 2)
+        measured_duration(Level::Max, &at_limit, 2)
             .unwrap_err()
             .contains("measured 1 scene(s)")
     );
@@ -107,7 +111,33 @@ fn narration_stretch_can_put_the_planned_showcase_over_five_minutes() {
     .unwrap();
     let planned = durations(&board, &[Some(150_000), Some(150_000)]);
     assert_eq!(planned, [150_600, 150_600]);
-    assert!(check_duration(&planned).is_err());
+    assert!(check_duration(Level::Max, &planned).is_err());
+}
+
+#[test]
+fn showcase_duration_uses_the_selected_shipping_level_limit() {
+    let board = Storyboard::parse(&format!(
+        r#"{{"title":"medium limit","scenes":[{{"kind":"card","heading":"long","lines":[{}]}}]}}"#,
+        vec!["\"line\""; 144].join(",")
+    ))
+    .unwrap();
+    let planned = durations(&board, &[None]);
+    assert_eq!(planned, [61_100]);
+    assert!(check_duration(Level::Medium, &planned).is_err());
+    assert!(check_duration(Level::High, &planned).is_ok());
+}
+
+#[test]
+fn showcase_container_images_accept_only_the_documented_name_characters() {
+    use super::super::showcase::validate_image_value;
+
+    assert!(validate_image_value("aoeworld/browser:5.1.9").is_ok());
+    for invalid in ["", "x; touch /tmp/pwned #", "Upper/Image", "image name"] {
+        assert!(
+            validate_image_value(invalid).is_err(),
+            "accepted {invalid:?}"
+        );
+    }
 }
 
 #[test]
@@ -275,13 +305,15 @@ fn showcase_target_checks_before_building_its_docker_images() {
     assert!(target < execute);
     assert!(!makefile.contains("$(MAKE) --no-print-directory ship-tools browser-deps"));
     assert!(makefile.contains("export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE"));
+    assert!(!makefile.contains("$(BROWSER_IMAGE)"));
+    assert!(!makefile.contains("$(SHIP_TOOLS_IMAGE)"));
     assert!(makefile.contains("harness.sh exec showcase-check"));
     let hook = include_str!("../../../../../.agents/hooks/harness.sh");
     assert!(hook.contains("showcase-check) probe=crates/harness/src/ship/showcase/check.rs"));
 
     let media = include_str!("../showcase/media.rs");
     assert!(media.contains("pub(crate) fn check(root: &Path)"));
-    assert!(media.contains("let (board, out) = inputs(root)?;"));
+    assert!(media.contains("let (board, out, _) = inputs(root)?;"));
     let check = media.find("pub(crate) fn check(root: &Path)").unwrap();
     let make = media.find("pub(crate) fn make(root: &Path)").unwrap();
     assert!(check < make);
@@ -332,6 +364,7 @@ fn tts_command_reads_authorization_from_stdin_and_bounds_bodies() {
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
+    assert_eq!(args.first().map(String::as_str), Some("-q"));
     assert!(args.windows(2).any(|pair| pair == ["-H", "@-"]));
     assert!(!args.iter().any(|arg| arg == "--max-filesize"));
     assert!(!args.iter().any(|arg| arg == "33554432"));
@@ -365,11 +398,11 @@ fn tts_stream_limit_stops_a_stubbed_unknown_length_body() {
 #[test]
 fn showcase_preflights_both_plans_before_starting_the_recorder() {
     let source = include_str!("../showcase/media.rs");
-    let preflight = source.find("check_duration(&durations(").unwrap();
-    let narration = source.find("narrate(work_path, &board)").unwrap();
+    let preflight = source.find("check_duration(level, &durations(").unwrap();
+    let narration = source.find("narrate(work_path, &board, level)").unwrap();
     let stretched_check = narration
         + source[narration..]
-            .find("check_duration(&planned)")
+            .find("check_duration(level, &planned)")
             .unwrap();
     let recording = source.find("record(root, work_path, &plan)").unwrap();
     assert!(preflight < narration);

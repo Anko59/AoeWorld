@@ -16,8 +16,8 @@ const ENV: &[&str] = &[
     "SHOWCASE_OUT",
     "SHOWCASE_LEVEL",
     "SHIP_LEVEL",
-    "AOE_BROWSER_IMAGE",
-    "AOE_SHIP_TOOLS_IMAGE",
+    "BROWSER_IMAGE",
+    "SHIP_TOOLS_IMAGE",
     "AOE_SHOWCASE_NODE_MODULES",
     "OPENROUTER_API_KEY",
     "SHOWCASE_LOG",
@@ -110,8 +110,8 @@ case "$SHOWCASE_MAKE_MODE" in fail) exit 3;; esac
             std::env::set_var("SHOWCASE_OUT", ".cache/showcase/final.webm");
             std::env::set_var("SHOWCASE_LEVEL", "high");
             std::env::remove_var("SHIP_LEVEL");
-            std::env::set_var("AOE_BROWSER_IMAGE", "browser:test");
-            std::env::set_var("AOE_SHIP_TOOLS_IMAGE", "tools:test");
+            std::env::set_var("BROWSER_IMAGE", "browser:test");
+            std::env::set_var("SHIP_TOOLS_IMAGE", "tools:test");
             std::env::set_var("AOE_SHOWCASE_NODE_MODULES", modules);
             std::env::set_var("OPENROUTER_API_KEY", "stub-key");
             std::env::set_var("SHOWCASE_LOG", temp.path().join("invocations.log"));
