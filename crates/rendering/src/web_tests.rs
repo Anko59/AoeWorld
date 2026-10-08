@@ -7,6 +7,8 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 mod atlas_pages;
 #[path = "web/tests/grid.rs"]
 mod grid;
+#[path = "web/tests/species.rs"]
+mod species;
 #[path = "web/tests/terrain_blend.rs"]
 mod terrain_blend;
 #[path = "web/tests/terrain_filter.rs"]

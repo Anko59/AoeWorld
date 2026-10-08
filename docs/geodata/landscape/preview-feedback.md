@@ -133,6 +133,61 @@ Focused V2 filter verification on the working tree based on796360c:
   This remains compressed20k candidate evidence, not canonical50k/global/hardware
   qualification. Read-only independent sampler review found no actionable defect.
 
+## Reviewed species promotion (working tree based on 8243267)
+
+Catalog v5 appends optional conifer/palm roles without changing prior role numbers,
+resource kinds, IDs, amounts, passability, generator bytes or package identities.
+Full raw prefixes 4654/9 and 4653/13 load strictly; only healthy conifer singles
+[1,2,3,4,7,8] and palm singles [0,1,2,3,5,6,8,10,11,12] become wood presentations.
+Native bodies use their own alpha silhouette, never broadleaf 2296 or unqualified
+2304/2300. Empty optional families retain the exact healthy broadleaf fallback;
+nonempty malformed groups are unavailable. Signed/outside anchors are preserved.
+Culling and drawing share one body/shadow selection; body-only culling remains a
+known limit for shadow-only edge visibility.
+
+- `make GID=117 assets-verify`: pass for the unchanged original pack. Explicit
+  Docker native private-manifest packing test: pass, all 678 actual extents
+  (510 terrain/168 objects) on the existing three 2048² pages/50,331,648 bytes,
+  with source/output bounds and overlap checks. Portable synthetic packing and
+  an ignored private test alone are not this proof; missing explicit input fails.
+- `make GID=117 fmt test-wasm perf-ci`: pass, actual 2 core/66 client/134 rendering
+  WASM tests. All three backend pixel tests cover native selection/alpha/shadows;
+  valid even-ID overlay snapshot/delta tests hide depleted native bodies and shadows.
+  Lazy resource-then-unit submission is bit-for-bit compared with the previous
+  materialized order across absent/present/malformed families and equal-depth ties.
+- Initial gzip 228,194 exceeded the unchanged 228,102 cap. Compact index tables
+  alone reached 228,187; an inlining annotation had no effect and was removed.
+  Removing the unnecessary per-frame unsorted object-vector allocation retained
+  exact submission semantics and reached 228,084 (18 bytes below cap). No baseline,
+  profile, deadline, ABI, atlas, memory cap or test requirement was relaxed.
+- Explicit original-art browser proof: pass on WebGPU, WebGL2 and Canvas2D with
+  visible pixel removal and empty errors. Private captures were inspected: broadleaf,
+  conifer and palm bodies fully visible. This uses synthetic flat fixture terrain,
+  not a generated ecosystem or a hand-built production map. First capture failed
+  visual qualification despite no JS errors: old source altitude focus and excessive
+  wheel zoom projected bodies outside the viewport. The test now resets altitude
+  focus after fixture binding and asserts visible pixel removal, not errors alone.
+- Read-only independent source review found no actionable semantic defect.
+  `make GID=117 browser-check fuzz-smoke hooks-install hooks-check`: pass.
+  `make GID=117 fmt test-wasm preflight`: pass; 1,240 native tests/2 skips in
+  233.187 seconds plus static/doctest/build/performance-smoke checks. One skip is
+  the explicit private proof separately run above, not a packing success claim.
+  The first attempt rejected stale source identity; an unchanged serialized retry
+  caught a new fixture's banned unwrap. The fixture now explicitly asserts missing
+  presentation failure, and the native helper lives in a proper test-only directory;
+  no policy or production cache/protocol change was made.
+- Pinned source qualification: pass with `make GID=117 test-country-source`,
+  explicitly setting `AOE_SOURCE_QUAL_PACKAGE_DIRECTORY`,
+  `AOE_SOURCE_QUAL_CONTENT_HASH` and `AOE_ASSET_PACK` to the unchanged inputs.
+  An omitted package-directory invocation failed before running qualification;
+  the first explicit attempt captured real Chromium `net::ERR_NETWORK_CHANGED`
+  failures. An unchanged serialized retry passed, with all three backend error
+  arrays empty. Local run-SBmaFD records 505 unique source chunks, peak summed
+  Chromium RSS 952,934,400 bytes and final-four spread 4,055,040 bytes. Eviction
+  qualification remains false; compressed candidate evidence is not canonical
+  50k, global ecosystem, severe-zoom or hardware qualification. Commit/full E2E
+  verification remain pending.
+
 ## Representation issues to address, not conceal
 
 The candidate has real river evidence, but its 1024-axis hydrology grid spans

@@ -176,10 +176,21 @@ transparent/partial-alpha behavior, rectangle/page isolation and unchanged depth
 bits/picking. This is not a full mip pyramid, severe-zoom antialiasing guarantee,
 coarse-LOD world-frequency fix, frame-cadence or dedicated-hardware qualification.
 
-Resource family zero keeps exact legacy variant selection. Families 1–4 explicitly
-fall back to healthy approved broadleaf 4652 frames, paired with 2296 shadows;
-client culling and renderer selection share scene_resource_frame. No conifer,
-dry-scrub, tropical or cliff sheet is approved by its semantic name. Decorations
+Resource family zero keeps exact legacy variant selection. Wood family 2 uses
+reviewed conifer 4654 healthy indices [1,2,3,4,7,8]; family 4 uses reviewed palm 4653
+single indices [0,1,2,3,5,6,8,10,11,12]. Full raw prefixes 9/13 live in optional
+GameArt tree_families, separate from the four economic resource kinds. Only an
+empty species group falls back to healthy broadleaf 4652 with matching 2296; a
+nonempty malformed prefix is unavailable, not absence. Other families retain
+healthy broadleaf fallback and nonwood ignores family metadata. Central
+scene_resource_presentation chooses body and shadow together; culling's body
+wrapper and drawing share that selection. Native species use the existing selected
+body alpha silhouette, never 2296 or unqualified 2304/2300. Signed/outside anchors
+are preserved. Culling remains body-only: shadow-only edge envelopes are not fixed.
+No IDs, kinds, amounts, passability, generator bytes or source identities change.
+Present species may move atlas UVs through repacking; exact old atlas addresses
+are promised only when both new sources are absent. No dry-scrub or cliff art is
+approved by its semantic name. Decorations
 retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.

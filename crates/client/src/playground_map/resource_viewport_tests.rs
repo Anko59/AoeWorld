@@ -1,6 +1,89 @@
 use super::*;
 use aoe_rendering::{GameArt, GameFrame, SceneCamera, resource_sprite_bounds};
 
+#[wasm_bindgen_test]
+fn native_species_resource_state_depletion_precedes_actual_viewport_selection() {
+    use aoe_protocol::{ResourceAmount, ResourceState};
+    let (camera, scene) = test_camera();
+    let mut art = resource_art(frame());
+    let conifer = frame();
+    let palm = GameFrame {
+        anchor: [20.0, 175.0],
+        size: [88.0, 168.0],
+        atlas: aoe_rendering::AtlasAddress {
+            uv: [0.1, 0.0, 0.1, 0.1],
+            ..conifer.atlas
+        },
+    };
+    art.tree_families = [vec![conifer; 9], vec![palm; 13]];
+    let resources = [(12, 2, conifer), (14, 4, palm)].map(|(id, family, native)| SceneResource {
+        kind: 1,
+        visual_family: family,
+        ..resource_at_sprite_center(camera, native, id, [640.0, 360.0])
+    });
+    let mut cache = crate::resource_state::ResourceStateCache::default();
+    assert!(cache.apply(ResourceState {
+        subscription_revision: 1,
+        from_revision: None,
+        revision: 2,
+        changes: vec![
+            ResourceAmount {
+                id: 12,
+                remaining: 100
+            },
+            ResourceAmount {
+                id: 14,
+                remaining: 100
+            }
+        ]
+    }));
+    let select = |cache: &crate::resource_state::ResourceStateCache| {
+        super::super::resources::select_visible_resources(
+            resources
+                .into_iter()
+                .filter(|resource| cache.visible(resource.id)),
+            &art,
+            scene,
+        )
+    };
+    let selected = select(&cache);
+    assert_eq!(selected.len(), 2);
+    for (resource, native) in selected.iter().zip([conifer, palm]) {
+        let Some((body, paired_shadow)) =
+            aoe_rendering::scene_resource_presentation(&art, *resource)
+        else {
+            assert!(false, "visible native species must have a presentation");
+            return;
+        };
+        assert_eq!(body.atlas, native.atlas);
+        assert_eq!(body.anchor, native.anchor);
+        assert!(
+            paired_shadow.is_none(),
+            "the matching native silhouette replaces broadleaf2296"
+        );
+    }
+    assert!(cache.apply(ResourceState {
+        subscription_revision: 1,
+        from_revision: Some(2),
+        revision: 3,
+        changes: vec![
+            ResourceAmount {
+                id: 12,
+                remaining: 0
+            },
+            ResourceAmount {
+                id: 14,
+                remaining: 0
+            }
+        ]
+    }));
+    assert!(!cache.visible(12) && !cache.visible(14));
+    assert!(
+        select(&cache).is_empty(),
+        "depleted native tree DTOs never reach body/shadow drawing"
+    );
+}
+
 fn resource_art(frame: GameFrame) -> GameArt {
     GameArt {
         walking: Vec::new(),
@@ -10,6 +93,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
         terrain_topology: [None; 7],
         resources: std::array::from_fn(|index| if index == 0 { vec![frame] } else { Vec::new() }),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     }
 }
 

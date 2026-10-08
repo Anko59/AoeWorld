@@ -14,8 +14,8 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
-pub use world_sprites::scene_resource_frame;
 use world_sprites::world_sprite_frames;
+pub use world_sprites::{scene_resource_frame, scene_resource_presentation};
 
 pub fn resource_sprite_bounds(
     resource: SceneResource,
@@ -35,6 +35,10 @@ use webgl::WebGlRenderer;
 #[path = "game_renderer/tests/filter_fixture.rs"]
 #[cfg(test)]
 pub(crate) mod filter_fixture;
+
+#[path = "game_renderer/tests/species/fixture.rs"]
+#[cfg(test)]
+pub(crate) mod species_fixture;
 
 #[cfg(test)]
 mod tests;

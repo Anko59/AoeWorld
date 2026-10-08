@@ -1,4 +1,6 @@
 #![cfg(test)]
+#[path = "species/canvas.rs"]
+mod species_pixels;
 #[path = "terrain_blend.rs"]
 mod terrain_blend;
 #[path = "terrain_filter.rs"]

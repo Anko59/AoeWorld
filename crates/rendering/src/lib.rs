@@ -31,7 +31,7 @@ mod world_key_index;
 pub use game_renderer::{
     GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
     SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, resource_sprite_bounds,
-    scene_resource_frame,
+    scene_resource_frame, scene_resource_presentation,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

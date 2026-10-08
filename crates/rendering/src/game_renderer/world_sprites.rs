@@ -2,22 +2,57 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
-/// Only approved broadleaf frames exist. New ecological families explicitly
-/// fall back to healthy broadleaf art; no family name promotes another sheet.
+/// Legacy/fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
     if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
-        const HEALTHY: [usize; 11] = [0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13];
-        Some(HEALTHY[usize::from(resource.visual_variant) % HEALTHY.len()])
+        // The legacy table's first eleven entries are the reviewed healthy set.
+        resource_frame_index(1, resource.visual_variant % 11, count)
     } else {
         resource_frame_index(resource.kind, resource.visual_variant, count)
     }
 }
 
-pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
+pub fn scene_resource_presentation(
+    art: &GameArt,
+    resource: SceneResource,
+) -> Option<(GameFrame, Option<GameFrame>)> {
+    if resource.kind == 1 {
+        let family = match resource.visual_family {
+            2 => Some((&art.tree_families[0], 9, &[1_u8, 2, 3, 4, 7, 8][..])),
+            4 => Some((
+                &art.tree_families[1],
+                13,
+                &[0_u8, 1, 2, 3, 5, 6, 8, 10, 11, 12][..],
+            )),
+            _ => None,
+        };
+        if let Some((frames, expected, approved)) = family {
+            if !frames.is_empty() {
+                if frames.len() != expected {
+                    return None;
+                }
+                let index = approved[usize::from(resource.visual_variant) % approved.len()];
+                return frames
+                    .get(usize::from(index))
+                    .copied()
+                    .map(|frame| (frame, None));
+            }
+        }
+    }
     let frames = art.resources.get(usize::from(resource.kind))?;
-    frames
-        .get(scene_resource_index(resource, frames.len())?)
-        .copied()
+    let index = scene_resource_index(resource, frames.len())?;
+    Some((
+        *frames.get(index)?,
+        if resource.kind == 1 {
+            art.tree_shadows.get(index).copied()
+        } else {
+            None
+        },
+    ))
+}
+
+pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
+    scene_resource_presentation(art, resource).map(|(frame, _)| frame)
 }
 
 pub(super) fn world_sprite_frames(
@@ -44,26 +79,15 @@ pub(super) fn world_sprite_frames(
         viewport: camera.viewport,
         focus_elevation_meters: camera.focus_elevation_meters,
     };
-    let mut objects = Vec::new();
-    for resource in resources {
-        let Some(frames) = art.resources.get(usize::from(resource.kind)) else {
-            continue;
-        };
-        if frames.is_empty() {
-            continue;
-        }
-        let Some(frame_index) = scene_resource_index(*resource, frames.len()) else {
-            continue;
-        };
-        let Some(frame) = frames.get(frame_index) else {
-            continue;
-        };
-        let shadow = (resource.kind == 1)
-            .then(|| art.tree_shadows.get(frame_index).copied())
-            .flatten();
-        objects.push(WorldObject::Resource(*resource, *frame, shadow));
-    }
-    objects.extend(units.iter().copied().map(WorldObject::Unit));
+    // Preserve resource-before-unit submission without allocating/copying an
+    // unsorted intermediate object vector on every frame.
+    let objects = resources
+        .iter()
+        .filter_map(|resource| {
+            scene_resource_presentation(art, *resource)
+                .map(|(frame, shadow)| WorldObject::Resource(*resource, frame, shadow))
+        })
+        .chain(units.iter().copied().map(WorldObject::Unit));
 
     for object in objects {
         let WorldObject::Unit(unit) = object else {

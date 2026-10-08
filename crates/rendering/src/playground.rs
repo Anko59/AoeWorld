@@ -8,7 +8,7 @@ pub use atlas::{
     TerrainTopology,
 };
 
-const TREE_VISUAL_VARIANTS: [usize; 40] = [
+const TREE_VISUAL_VARIANTS: [u8; 40] = [
     0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9,
     10, 11, 12, 13, 0, 1, 2, 4, 3, 5, 8,
 ];
@@ -19,7 +19,7 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
         return None;
     }
     Some(if kind == 1 && frame_count >= 14 {
-        TREE_VISUAL_VARIANTS[usize::from(variant) % TREE_VISUAL_VARIANTS.len()]
+        usize::from(TREE_VISUAL_VARIANTS[usize::from(variant) % TREE_VISUAL_VARIANTS.len()])
     } else {
         usize::from(variant) % frame_count
     })
@@ -49,6 +49,8 @@ pub struct GameArt {
     pub resources: [Vec<GameFrame>; 4],
     /// Frame-for-frame shadow masks paired with the broadleaf tree group.
     pub tree_shadows: Vec<GameFrame>,
+    /// Optional raw conifer and palm prefixes; empty alone means unavailable.
+    pub tree_families: [Vec<GameFrame>; 2],
 }
 
 impl Renderer {

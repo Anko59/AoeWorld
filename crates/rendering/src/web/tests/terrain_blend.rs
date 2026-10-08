@@ -105,6 +105,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     };
     art.terrain[2] = vec![frame(1)];
     art.terrain[6] = vec![frame(2)];
@@ -198,6 +199,15 @@ pub(super) fn assert_pixel(pixel: [u8; 4], expected: [u8; 4]) {
 }
 
 pub(super) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2]) -> [u8; 4] {
+    read_pixel_with_clear(renderer, count, point, wgpu::Color::BLACK).await
+}
+
+pub(super) async fn read_pixel_with_clear(
+    renderer: &Renderer,
+    count: u32,
+    point: [u32; 2],
+    clear: wgpu::Color,
+) -> [u8; 4] {
     // Execute the same pipeline/instances into an explicit GPU attachment. A
     // buffer copy reads actual shader pixels without compositor canvas expiry.
     let size = wgpu::Extent3d {
@@ -232,7 +242,7 @@ pub(super) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2])
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(clear),
                     store: wgpu::StoreOp::Store,
                 },
             })],

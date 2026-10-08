@@ -27,6 +27,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     }
 }
 
