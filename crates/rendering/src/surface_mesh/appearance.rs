@@ -114,11 +114,12 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
                 0
             };
             let a = terrain_texture_frame(art, primary, triangle.texture_tile).map(|f| f.atlas);
-            // Forest15011 is nonperiodic authored accent art, not a seamless
-            // floor sheet. Coherent dirt is the V2 bed; legacy None keeps its
-            // original forest-art selection below.
-            let b = terrain_texture_frame(art, 2, triangle.texture_tile).map(|f| f.atlas);
-            triangle.texture_materials = Some([primary, 2, primary]);
+            // Restore reviewed native leaf litter, retaining its coordinate-stable
+            // accent selection, not claiming periodic seams. Older packs without
+            // forest art keep the exact previous V2 dirt-bed fallback.
+            let bed = if art.terrain[6].is_empty() { 2 } else { 6 };
+            let b = terrain_texture_frame(art, bed, triangle.texture_tile).map(|f| f.atlas);
+            triangle.texture_materials = Some([primary, bed, primary]);
             triangle.texture_uv = a;
             // Identical coherent addresses need one sample, not three reads of
             // the same bed (especially once each minified read is filtered).

@@ -1,6 +1,46 @@
 use super::*;
 
 #[wasm_bindgen_test]
+fn canvas_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_primary() {
+    use crate::surface_mesh::floor as fixture;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = fixture::forest_atlas();
+    for material in [0, 2, 6] {
+        for (floor, gradient) in [(0, false), (650, false), (1000, false), (650, true)] {
+            let mut faces = fixture::forest_faces(material, floor, gradient);
+            for _ in 0..2 {
+                canvas_depth::render_canvas_world(
+                    &canvas,
+                    &context,
+                    &atlas,
+                    &mut presentation,
+                    &faces.map(WorldLayer::Surface),
+                    test_camera(),
+                    false,
+                )
+                .unwrap();
+                // One 512-byte presented row retains every original GPU/CPU
+                // probe without repeating the synchronous browser readback.
+                let presented = context
+                    .get_image_data(0.0, 48.0, 128.0, 1.0)
+                    .unwrap()
+                    .data()
+                    .0;
+                for [x, y] in fixture::FOREST_PROBES {
+                    assert_eq!(y, 48);
+                    let expected = fixture::forest_expected(material, floor, gradient, x);
+                    assert_eq!(pixel(&presentation.color_buffer, x, y), expected);
+                    let offset = x as usize * 4;
+                    assert_eq!(&presented[offset..offset + 4], &expected);
+                }
+                faces.reverse();
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn canvas_shared_floor_gradient_seam_and_old_packet_fallback() {
     use crate::surface_mesh::floor as fixture;
     let (canvas, context) = target_canvas().expect("browser Canvas target");
@@ -134,7 +174,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
         tree_families: Default::default(),
     };
     for palette in 0..6 {
-        for floor_strength in [0, 650] {
+        for floor_strength in [0, 650, 1000] {
             let mut face = blended_triangle();
             face.material = 2;
             face.tint = 1;
@@ -148,9 +188,9 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
                 }));
             apply_terrain_textures(std::slice::from_mut(&mut face), &art);
             assert_eq!(face.texture_uv, Some(frame(1).atlas));
-            assert_eq!(face.texture_blend, None);
+            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
             let expected = crate::surface_mesh::landscape::texel(
-                [[0, 255, 0, 255]; 3],
+                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
                 crate::surface_mesh::landscape::floor_weights(face.appearance),
                 1,
                 face.appearance,

@@ -36,8 +36,10 @@ neighboring source edges meet. Catalog v5 retains the removal of paved 15018 fro
 rock role: natural rock requires procedural neutral ground, not paving. The
 renderer owns that fallback's appearance. Frame count alone is never topology. The map client selects those groups from
 semantic terrain chunks. Optional native Forest/g_for terrain 15011 contributes
-frames 0–9 as nonperiodic coordinate-stable accents, not seamless V2 floor sheets.
-V2 forest beds use coherent dirt; legacy material 6 keeps its original selection.
+frames 0–9 as nonperiodic coordinate-stable forest-soil frames. V2 forest beds
+blend this native leaf litter with grass, dry grass or authoritative dirt; only
+absent optional forest art retains the prior dirt fallback. These reviewed frames
+are not qualified as a seamless periodic sheet. Legacy material 6 selection is unchanged.
 The five periodic groups retain all 100 frames. Catalog v5 selects at most 678 frames:
 510 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.

@@ -120,13 +120,16 @@ rock/snow/ice/mud/water, sand and skirts retain their existing kernels and zero
 packet word; their raw scene/triangle metadata is not discarded. Exposure and
 height are carried semantic evidence, not species/art selection permissions.
 
-New vegetative faces blend coherent grass (dry grass in dry/savanna regions) or
-authoritative dirt with a coherent dirt forest bed. Nonperiodic15011 accent art
-is no longer treated as a full V2 floor sheet; legacy None material6 selection
-remains exact. Missing dirt does not promote those accents: the primary alone is
-the explicit fallback. Identical primary/bed addresses use one sampler rather
-than three duplicate reads; their appearance transform remains active without
-an interpolated blend flag. Canonical displayed integer vertices gather a rounded mean of
+New vegetative faces blend grass (dry grass in dry/savanna regions) or
+authoritative dirt with native15011 forest-soil leaf litter when its reviewed
+optional frames are present. The earlier coherent-dirt substitution was rejected
+in live visual feedback: dirt is not forest soil. The ten coordinate-stable native
+frames restore the intended material, not seamless periodic-sheet qualification.
+Absent optional forest frames retain the previous V2 dirt-bed fallback exactly;
+legacy None material6 selection remains exact. Native forest soil is available
+even if the dirt group is absent. Identical primary/bed addresses still use one
+sampler rather than three duplicate reads; their appearance transform remains
+active without an interpolated blend flag. Canonical displayed integer vertices gather a rounded mean of
 up to four incident V2 vegetative cells, excluding missing, legacy, cliff and water
 support; no support falls back to zero. Duplicate cell records cannot reweight the
 mean, and conflicting duplicates conservatively choose the lower floor. Shared

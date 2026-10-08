@@ -1,6 +1,31 @@
 use super::*;
 
 #[wasm_bindgen_test]
+async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_primary() {
+    use crate::surface_mesh::floor as fixture;
+    let mut renderer = surface_renderer_with_atlas(&fixture::forest_atlas()).await;
+    for material in [0, 2, 6] {
+        for (floor, gradient) in [(0, false), (650, false), (1000, false), (650, true)] {
+            let mut faces = fixture::forest_faces(material, floor, gradient);
+            for _ in 0..2 {
+                renderer
+                    .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+                    .unwrap();
+                let pixels = read_pixels(&renderer, 2, fixture::FOREST_PROBES).await;
+                for ([x, _], pixel) in fixture::FOREST_PROBES.into_iter().zip(pixels) {
+                    assert_pixel(
+                        pixel,
+                        fixture::forest_expected(material, floor, gradient, x),
+                    );
+                }
+                faces.reverse();
+            }
+        }
+    }
+    renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
 async fn webgpu_shared_floor_gradient_seam_and_old_packet_fallback() {
     use crate::surface_mesh::floor as fixture;
     let mut renderer = surface_renderer().await;
@@ -10,11 +35,9 @@ async fn webgpu_shared_floor_gradient_seam_and_old_packet_fallback() {
             renderer
                 .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
-            for [x, y] in fixture::PROBES {
-                assert_pixel(
-                    read_pixel(&renderer, 2, [x, y]).await,
-                    fixture::expected(x, interpolated),
-                );
+            let pixels = read_pixels(&renderer, 2, fixture::PROBES).await;
+            for ([x, _], pixel) in fixture::PROBES.into_iter().zip(pixels) {
+                assert_pixel(pixel, fixture::expected(x, interpolated));
             }
             faces.reverse();
         }
@@ -80,8 +103,9 @@ async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_
         renderer
             .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
             .unwrap();
-        assert_pixel(read_pixel(&renderer, 1, [48, 48]).await, expected);
-        assert_pixel(read_pixel(&renderer, 1, [32, 32]).await, expected);
+        for pixel in read_pixels(&renderer, 1, [[48, 48], [32, 32]]).await {
+            assert_pixel(pixel, expected);
+        }
     }
     renderer.device.destroy();
 }
@@ -110,7 +134,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
     art.terrain[2] = vec![frame(1)];
     art.terrain[6] = vec![frame(2)];
     for palette in 0..6 {
-        for floor_strength in [0, 650] {
+        for floor_strength in [0, 650, 1000] {
             let mut face = capacity_surface();
             face.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
             face.material = 2;
@@ -126,10 +150,10 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
             crate::surface_mesh::apply_terrain_textures(std::slice::from_mut(&mut face), &art);
             let packet = surface_instance(&face, [128.0; 2], 0.0);
             assert_eq!(face.texture_uv, Some(frame(1).atlas));
-            assert_eq!(face.texture_blend, None);
-            assert_eq!(packet.pages[..3], [1, 0, 0]);
+            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
+            assert_eq!(packet.pages[..3], [1, 2, 1]);
             let expected = crate::surface_mesh::landscape::texel(
-                [[0, 255, 0, 255]; 3],
+                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
                 crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
                 1,
                 packet.pages[3],
@@ -137,14 +161,25 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
             renderer
                 .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
-            assert_pixel(read_pixel(&renderer, 1, [48, 48]).await, expected);
-            assert_pixel(read_pixel(&renderer, 1, [32, 32]).await, expected);
+            for pixel in read_pixels(&renderer, 1, [[48, 48], [32, 32]]).await {
+                assert_pixel(pixel, expected);
+            }
         }
     }
     renderer.device.destroy();
 }
 
 pub(super) async fn surface_renderer() -> Renderer {
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
+    atlas[..12].copy_from_slice(&[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
+    let page_bytes = crate::GAME_ATLAS_PAGE_BYTES;
+    atlas[page_bytes..page_bytes + 4].copy_from_slice(&[0, 255, 0, 255]);
+    atlas[page_bytes * 2..page_bytes * 2 + 12]
+        .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
+    surface_renderer_with_atlas(&atlas).await
+}
+
+pub(super) async fn surface_renderer_with_atlas(atlas: &[u8]) -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document
         .create_element("canvas")
@@ -159,13 +194,7 @@ pub(super) async fn surface_renderer() -> Renderer {
     let diagnostic = renderer.render_sprites(&[]).unwrap();
     assert_eq!(diagnostic.atlas_pages, 1);
     assert_eq!(diagnostic.atlas_bytes, 8 * 8 * 4);
-    let mut atlas = vec![0; (3 * crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize];
-    atlas[..12].copy_from_slice(&[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
-    let page_bytes = (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize;
-    atlas[page_bytes..page_bytes + 4].copy_from_slice(&[0, 255, 0, 255]);
-    atlas[page_bytes * 2..page_bytes * 2 + 12]
-        .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
-    renderer.upload_game_atlas(&atlas).unwrap();
+    renderer.upload_game_atlas(atlas).unwrap();
     renderer
 }
 
@@ -208,8 +237,28 @@ pub(super) async fn read_pixel_with_clear(
     point: [u32; 2],
     clear: wgpu::Color,
 ) -> [u8; 4] {
-    // Execute the same pipeline/instances into an explicit GPU attachment. A
-    // buffer copy reads actual shader pixels without compositor canvas expiry.
+    read_pixels_with_clear(renderer, count, [point], clear).await[0]
+}
+
+pub(super) async fn read_pixels<const N: usize>(
+    renderer: &Renderer,
+    count: u32,
+    points: [[u32; 2]; N],
+) -> [[u8; 4]; N] {
+    read_pixels_with_clear(renderer, count, points, wgpu::Color::BLACK).await
+}
+
+pub(super) async fn read_pixels_with_clear<const N: usize>(
+    renderer: &Renderer,
+    count: u32,
+    points: [[u32; 2]; N],
+    clear: wgpu::Color,
+) -> [[u8; 4]; N] {
+    assert!((1..=5).contains(&N), "bounded GPU readback probe count");
+    assert!(points.iter().all(|p| p[0] < 128 && p[1] < 128));
+    // One shared pass preserves instance/depth ordering for every requested pixel.
+    // Disjoint 256-byte-aligned copies use at most 1280 bytes and one mapped buffer.
+    // Read actual shader pixels without relying on compositor canvas lifetime.
     let size = wgpu::Extent3d {
         width: 128,
         height: 128,
@@ -227,7 +276,7 @@ pub(super) async fn read_pixel_with_clear(
     });
     let output = renderer.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("splat pixel readback"),
-        size: 256,
+        size: N as u64 * 256,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
@@ -260,46 +309,49 @@ pub(super) async fn read_pixel_with_clear(
         renderer.instances.set_on(&mut pass);
         pass.draw(0..6, 0..count);
     }
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: &target,
-            mip_level: 0,
-            origin: wgpu::Origin3d {
-                x: point[0],
-                y: point[1],
-                z: 0,
+    for (index, point) in points.iter().enumerate() {
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &target,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: point[0],
+                    y: point[1],
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
             },
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &output,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(256),
-                rows_per_image: Some(1),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &output,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: index as u64 * 256,
+                    bytes_per_row: Some(256),
+                    rows_per_image: Some(1),
+                },
             },
-        },
-        wgpu::Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        },
-    );
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     renderer.queue.submit([encoder.finish()]);
-    let ready = std::rc::Rc::new(std::cell::Cell::new(false));
+    let ready = std::rc::Rc::new(std::cell::RefCell::new(None));
     let wake = std::rc::Rc::new(std::cell::RefCell::new(None::<std::task::Waker>));
     let (done, waiter) = (ready.clone(), wake.clone());
     output
         .slice(..)
         .map_async(wgpu::MapMode::Read, move |result| {
-            result.expect("GPU pixel readback map");
-            done.set(true);
+            // Resolve failures too: a panic inside the browser callback leaves
+            // the awaited test pending forever and hides the actual map error.
+            done.replace(Some(result));
             if let Some(waker) = waiter.borrow_mut().take() {
                 waker.wake();
             }
         });
     std::future::poll_fn(|context| {
-        if ready.get() {
+        if ready.borrow().is_some() {
             std::task::Poll::Ready(())
         } else {
             *wake.borrow_mut() = Some(context.waker().clone());
@@ -307,19 +359,28 @@ pub(super) async fn read_pixel_with_clear(
         }
     })
     .await;
+    ready
+        .borrow_mut()
+        .take()
+        .expect("GPU map callback completed")
+        .expect("GPU pixel readback map");
     let data = output
         .slice(..)
         .get_mapped_range()
         .expect("mapped GPU pixel bytes");
-    let pixel = match renderer.config.format {
-        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => {
-            [data[2], data[1], data[0], data[3]]
+    let pixels = std::array::from_fn(|index| {
+        let start = index * 256;
+        let sample = &data[start..start + 4];
+        match renderer.config.format {
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => {
+                [sample[2], sample[1], sample[0], sample[3]]
+            }
+            _ => [sample[0], sample[1], sample[2], sample[3]],
         }
-        _ => [data[0], data[1], data[2], data[3]],
-    };
+    });
     drop(data);
     output.unmap();
     output.destroy();
     target.destroy();
-    pixel
+    pixels
 }
