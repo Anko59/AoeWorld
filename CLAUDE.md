@@ -8,6 +8,9 @@ Codex, DeepSeek Harness and pi get the same rules.
 
 For work outside this PR's scope, notice it, file it with `make issue`, and
 don't fix it in this PR. Use `make next` to select an unblocked task.
+Provide issue text on standard input, such as
+`printf '%s' 'Follow-up details' | make issue ISSUE_TITLE='Follow-up'`;
+Make assignments for issue titles and labels must not contain `$`.
 
 ## What the hooks do
 

@@ -1,7 +1,12 @@
 //! `make issue` records out-of-scope work; `make next` selects the next task.
-use super::{gh, git};
+use super::git;
 use serde::Deserialize;
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::HashSet,
+    io::{Read, Write},
+    path::Path,
+    process::{Command, Stdio},
+};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -9,6 +14,7 @@ const AGENT_LABEL: &str = "agent-found";
 const MARKER: &str = "<!-- aoe-fingerprint: ";
 const TITLE_LIMIT: usize = 256;
 const BODY_LIMIT: usize = 60_000;
+const ISSUE_CAP: usize = 10_000;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +29,8 @@ struct Issue {
     created_at: String,
     #[serde(default)]
     url: String,
+    #[serde(default, rename = "pull_request")]
+    pull_request: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -88,6 +96,7 @@ fn labels_from(value: Option<String>) -> Result<Vec<String>> {
 }
 
 fn marked_body(body: &str, title: &str) -> Result<String> {
+    validate_text("ISSUE_BODY", body, BODY_LIMIT)?;
     let marked = format!(
         "{}\n\n{MARKER}{} -->\n",
         body.trim_end(),
@@ -97,23 +106,74 @@ fn marked_body(body: &str, title: &str) -> Result<String> {
     Ok(marked)
 }
 
-fn open_issues(root: &Path, repository: &str) -> Result<Vec<Issue>> {
-    let json = gh(
+fn gh_call(root: &Path, _host: &str, args: &[&str], input: Option<&[u8]>) -> Result<String> {
+    let mut command = Command::new("gh");
+    command
+        .current_dir(root)
+        .args(args)
+        .env_remove("GH_HOST")
+        .env_remove("GH_REPO");
+    if input.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Some(input) = input {
+        child
+            .stdin
+            .take()
+            .ok_or("gh stdin was not piped")?
+            .write_all(input)?;
+    }
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        return Err(format!(
+            "gh {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )
+        .into());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn open_issues(root: &Path, host: &str, repository: &str) -> Result<Vec<Issue>> {
+    let endpoint = format!("repos/{repository}/issues?state=open&per_page=100");
+    let json = gh_call(
         root,
+        host,
         &[
-            "issue",
-            "list",
-            "--repo",
-            repository,
-            "--state",
-            "open",
-            "--limit",
-            "500",
-            "--json",
-            "number,title,body,labels,createdAt,url",
+            "api",
+            "--hostname",
+            host,
+            "--paginate",
+            "--slurp",
+            &endpoint,
         ],
+        None,
     )?;
-    Ok(serde_json::from_str(&json)?)
+    parse_issue_pages(&json)
+}
+
+fn parse_issue_pages(json: &str) -> Result<Vec<Issue>> {
+    let pages: Vec<Vec<Issue>> = serde_json::from_str(json)?;
+    let mut issues = Vec::new();
+    for issue in pages
+        .into_iter()
+        .flatten()
+        .filter(|issue| issue.pull_request.is_none())
+    {
+        if issues.len() == ISSUE_CAP {
+            return Err(format!(
+                "origin has more than {ISSUE_CAP} open issues; refusing incomplete issue selection"
+            )
+            .into());
+        }
+        issues.push(issue);
+    }
+    Ok(issues)
 }
 
 fn duplicate_index(issues: &[Issue], title: &str) -> Option<usize> {
@@ -147,22 +207,44 @@ fn rank(issues: &[Issue]) -> Vec<&Issue> {
     ready
 }
 
-fn repository(root: &Path) -> Result<String> {
-    Ok(git::origin_repository(root)?)
+fn repository(root: &Path) -> Result<(String, String)> {
+    let (host, path) = git::origin_host_repository(root)?;
+    Ok((host.clone(), format!("{host}/{path}")))
 }
 
 pub(super) fn issue(root: &Path) -> Result<()> {
+    issue_with_input(root, std::io::stdin().lock())
+}
+
+fn issue_with_input<R: Read>(root: &Path, input: R) -> Result<()> {
+    if !crate::agents::issue_commands_allowed() {
+        return Err(
+            "make issue is available only to the main session, testers and implementers".into(),
+        );
+    }
     let title = std::env::var("ISSUE_TITLE").map_err(|_| "set ISSUE_TITLE")?;
-    let body = std::env::var("ISSUE_BODY").map_err(|_| "set ISSUE_BODY to the body text")?;
     validate_text("ISSUE_TITLE", &title, TITLE_LIMIT)?;
+    let mut bytes = Vec::new();
+    input
+        .take((BODY_LIMIT * 4 + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > BODY_LIMIT * 4 {
+        return Err("ISSUE_BODY exceeds the maximum UTF-8 byte size".into());
+    }
+    let body = String::from_utf8(bytes).map_err(|_| "ISSUE_BODY is not valid UTF-8")?;
     let body = marked_body(&body, &title)?;
     let labels = labels_from(std::env::var("ISSUE_LABELS").ok())?;
-    let repo = repository(root)?;
-    let issues = open_issues(root, &repo)?;
+    let (host, repo) = repository(root)?;
+    let issues = open_issues(
+        root,
+        &host,
+        repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
+    )?;
     if let Some(index) = duplicate_index(&issues, &title) {
         let number = issues[index].number.to_string();
-        gh(
+        gh_call(
             root,
+            &host,
             &[
                 "issue",
                 "comment",
@@ -172,32 +254,51 @@ pub(super) fn issue(root: &Path) -> Result<()> {
                 "--body",
                 "Duplicate request filed; keeping this issue as the shared task.",
             ],
+            None,
         )?;
         println!("issue: already open, commented on {}", issues[index].url);
         return Ok(());
     }
     for label in &labels {
-        gh(
+        gh_call(
             root,
+            &host,
             &[
                 "label", "create", label, "--repo", &repo, "--force", "--color", "BFD4F2",
             ],
+            None,
         )?;
     }
     let mut args = vec![
-        "issue", "create", "--repo", &repo, "--title", &title, "--body", &body,
+        "issue",
+        "create",
+        "--repo",
+        &repo,
+        "--title",
+        &title,
+        "--body-file",
+        "-",
     ];
     for label in &labels {
         args.extend(["--label", label]);
     }
-    let url = gh(root, &args)?;
+    let url = gh_call(root, &host, &args, Some(body.as_bytes()))?;
     println!("issue: opened {url}");
     Ok(())
 }
 
 pub(super) fn next(root: &Path) -> Result<()> {
-    let repo = repository(root)?;
-    let issues = open_issues(root, &repo)?;
+    if !crate::agents::issue_commands_allowed() {
+        return Err(
+            "make next is available only to the main session, testers and implementers".into(),
+        );
+    }
+    let (host, repo) = repository(root)?;
+    let issues = open_issues(
+        root,
+        &host,
+        repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
+    )?;
     match rank(&issues).first() {
         Some(issue) => println!("#{} {}\n{}", issue.number, issue.title, issue.url),
         None => println!("no open issue is ready"),

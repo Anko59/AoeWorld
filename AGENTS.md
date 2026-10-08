@@ -19,6 +19,8 @@ lack access ([credentials](docs/credentials.md)).
 
 For work outside this PR's scope, notice it, file it with `make issue`, and
 don't fix it in this PR. Use `make next` to select an unblocked task.
+File an issue body through standard input, for example:
+`printf '%s' 'Follow-up details' | make issue ISSUE_TITLE='Follow-up'`.
 
 Report the exact revision, commands, results, and limits. Keep the working tree
 clean and commit intended changes. Synthetic workloads do not demonstrate

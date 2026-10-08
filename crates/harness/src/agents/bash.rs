@@ -78,7 +78,20 @@ pub(crate) fn line(context: &Context, text: &str, cwd: Option<PathBuf>, depth: u
 }
 
 fn simple_command(context: &Context, state: &mut State, simple: &Simple, join: Join) -> Verdict {
+    let command_is_make = simple
+        .words
+        .first()
+        .is_some_and(|word| matches!(word.text.as_str(), "make" | "gmake"));
     for (name, value) in &simple.assignments {
+        if context.role.is_agent()
+            && command_is_make
+            && matches!(name.as_str(), "ISSUE_TITLE" | "ISSUE_LABELS")
+            && value.text.contains('$')
+        {
+            return Err(format!(
+                "the environment value of `{name}` contains `$`, which Make would expand; pass a plain value"
+            ));
+        }
         tools::assignment(context, name, value)?;
         if name == "CDPATH" {
             state.cwd = None;
@@ -288,6 +301,21 @@ fn env(context: &Context, state: &mut State, rest: &[Word], join: Join) -> Verdi
                 }
                 _ => break,
             },
+        }
+    }
+    let command_is_make = rest
+        .get(index)
+        .is_some_and(|word| matches!(word.text.as_str(), "make" | "gmake"));
+    if context.role.is_agent() && command_is_make {
+        for word in &rest[..index] {
+            if let Some((name, value)) = word.text.split_once('=')
+                && matches!(name, "ISSUE_TITLE" | "ISSUE_LABELS")
+                && value.contains('$')
+            {
+                return Err(format!(
+                    "the environment value of `{name}` contains `$`, which Make would expand; pass a plain value"
+                ));
+            }
         }
     }
     match rest.get(index..) {

@@ -5,14 +5,14 @@ When you notice out-of-scope work, file it and leave it for a follow-up:
 **notice it, file it, don't fix it in this PR.**
 
 ```sh
-make issue ISSUE_TITLE='Flaky perf-smoke timeout' \
-  ISSUE_BODY='The timeout reproduces under load; investigate the worker queue.' \
-  ISSUE_LABELS=priority:medium,area:harness
+printf '%s' 'The timeout reproduces under load; investigate the worker queue.' |
+  make issue ISSUE_TITLE='Flaky perf-smoke timeout' \
+    ISSUE_LABELS=priority:medium,area:harness
 make next
 ```
 
-`ISSUE_BODY` is the body text itself, supplied through the environment; it is
-never treated as a file path. Titles are limited to 256 characters and bodies
+The issue body is read from standard input, never from a Make variable or file
+path. Titles are limited to 256 characters and bodies
 to 60,000 characters including the harness fingerprint marker. Newlines and
 tabs are allowed; other control characters are refused. Optional labels are
 limited to `priority:critical`, `priority:high`, `priority:medium`,
