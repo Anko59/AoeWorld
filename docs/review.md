@@ -99,6 +99,24 @@ none replaces another.
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.
 
+## Pull requests the harness did not open
+
+`make review-pr PR=<n>` (main session only) reviews a **Dependabot** pull
+request based on `dev`, which needs the required `harness/review` status. It
+reviews that exact head commit in a temporary detached worktree, with the
+normal per-branch review budget and `REVIEW_RUNTIME` family; dependency
+major-version changes need at least `medium`. Because the reviewers run in the
+PR's own tree, only a change that touches nothing but dependency manifests,
+lockfiles, `docker/*.Dockerfile` and `.github/workflows/` is reviewed: it
+cannot alter agent, hook or harness configuration. Other authors, forks and
+other bases are refused.
+
+A passing review is published only if the PR still has the reviewed head and
+base: the report as a PR comment, `harness/review` = success, and squash
+auto-merge pinned to that commit (`--match-head-commit`). A failed or
+incomplete review publishes nothing. `REVIEW_PR` reaches the harness through
+Make's environment, never shell text.
+
 ## When reviews do not converge
 
 Agents run this project without a person: no rule here ends in "ask a

@@ -5,6 +5,7 @@
 //! next to the ship evidence, keyed by commit, where agents cannot write.
 pub(crate) mod closing;
 pub(crate) mod config;
+mod entry;
 mod prompt;
 pub(crate) mod protocol;
 mod report;
@@ -17,6 +18,7 @@ use crate::{agents::Runtime, gates::registry::Registry, ship::git};
 pub(crate) use closing::Plan;
 use config::Config;
 pub(crate) use config::Tier;
+pub(crate) use entry::{review, review_for_branch};
 use protocol::{Answer, Cast, Finding, Grade, Status};
 pub(crate) use report::{Report, history};
 pub(crate) use session::Ask;
@@ -195,25 +197,22 @@ fn facts(root: &Path, merge_base: &str) -> Result<String> {
     ))
 }
 
-pub(crate) fn review(
+#[cfg(test)]
+pub(crate) fn review_with(
     root: &Path,
     tier: Tier,
     runtime: Runtime,
     task: &str,
     plan: &Plan,
+    ask: &dyn Ask,
 ) -> Result<Report> {
-    let config = Config::load(root)?;
-    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
-    let live = Live {
-        runtime,
-        root,
-        model,
-    };
-    review_with(root, tier, runtime, task, plan, &live)
+    let branch = git::branch(root).unwrap_or_default();
+    review_with_branch(root, &branch, tier, runtime, task, plan, ask)
 }
 
-pub(crate) fn review_with(
+fn review_with_branch(
     root: &Path,
+    branch: &str,
     tier: Tier,
     runtime: Runtime,
     task: &str,
@@ -404,7 +403,7 @@ pub(crate) fn review_with(
     let report = Report {
         version: 1,
         head,
-        branch: git::branch(root).unwrap_or_default(),
+        branch: branch.to_owned(),
         base,
         merge_base,
         tier: tier.name().into(),

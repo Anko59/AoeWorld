@@ -7,6 +7,7 @@
 pub(crate) mod evidence;
 pub(crate) mod git;
 mod review_gate;
+mod review_pr;
 pub(crate) mod run;
 #[cfg(test)]
 mod tests;
@@ -27,6 +28,8 @@ pub(crate) enum Commands {
     Ship(Options),
     /// Print the evidence recorded for HEAD, if any.
     ShipStatus,
+    /// Review an existing same-repository pull request without opening it.
+    ReviewPr,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -106,6 +109,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
             }
             Ok(())
         }
+        Commands::ReviewPr => review_pr::execute(&root),
     }
 }
 

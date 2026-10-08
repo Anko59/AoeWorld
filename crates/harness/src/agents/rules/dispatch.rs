@@ -15,6 +15,8 @@ const PERSON_TARGETS: &[&str] = &[
     "release-publish",
     "release-build",
     "repo-policy-check",
+    // It posts a status and arms auto-merge: GitHub writes, main session only.
+    "review-pr",
 ];
 /// Variables that redirect what a Make target runs.
 fn dangerous_make_variable(name: &str) -> bool {

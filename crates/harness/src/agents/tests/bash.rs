@@ -58,6 +58,24 @@ fn the_main_session_may_work_normally() {
 }
 
 #[test]
+fn only_the_main_session_reviews_existing_pull_requests() {
+    // review-pr posts a status and arms auto-merge: GitHub writes.
+    let fixture = Fixture::new();
+    for role in AGENTS {
+        denied(
+            &fixture,
+            role,
+            "make review-pr REVIEW_PR=161 REVIEW_RUNTIME=codex",
+        );
+    }
+    allowed(
+        &fixture,
+        Role::Main,
+        "make review-pr REVIEW_PR=161 REVIEW_RUNTIME=codex",
+    );
+}
+
+#[test]
 fn agents_are_held_to_an_allow_list() {
     let fixture = Fixture::new();
     for role in AGENTS {
