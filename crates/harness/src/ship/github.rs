@@ -236,6 +236,7 @@ pub(super) fn description(
         report,
         evidence,
         &describe::footer(options.runtime),
+        &super::metrics::table(root)?,
     );
     // A private directory in the git common dir, never a guessable /tmp path.
     let path = super::evidence::directory(root)?

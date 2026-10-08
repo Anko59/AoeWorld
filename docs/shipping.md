@@ -59,7 +59,10 @@ link, an HTTPS URL, a screenshot or a sampled metric, plus at most two lines), `
 the PR") and renders two parts:
 
 - **🧑 For humans:** Why, What with the showcase video (`SHIP_VIDEO`, uploaded
-  inline with `gh --attach`), and How with the review headline and summary.
+  inline with `gh --attach`), and How with the review headline, summary, and a
+  metrics table comparing the merge base with this PR. It reports changed lines
+  by class, unit and integration `#[test]` attributes, production comment
+  density, and production line counts.
 - **🤖 For AI:** the agent's notes, gate evidence and the
   full adversarial review.
 
@@ -75,6 +78,12 @@ video: film a terminal or agent session, a before/after timing or an API diff.
 Duration and audio-stream presence are checked with ffmpeg from the pinned
 browser image. High and max levels require an audio stream; reviewers decide
 whether that track contains speech.
+
+Metrics read tracked Rust blobs from the named commit or merge base. Blobs over
+1 MiB and binary blobs are omitted. Comment density uses a small Rust lexical
+scanner that ignores markers inside ordinary and raw strings and handles nested
+block comments; it does not parse macro-generated tokens or languages embedded
+inside strings.
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.

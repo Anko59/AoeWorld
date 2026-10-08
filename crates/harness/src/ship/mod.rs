@@ -8,6 +8,7 @@ mod describe;
 pub(crate) mod evidence;
 pub(crate) mod git;
 mod github;
+mod metrics;
 mod review_gate;
 mod review_pr;
 pub(crate) mod run;
