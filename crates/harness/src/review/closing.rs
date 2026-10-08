@@ -135,11 +135,16 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
             "{CLOSING_BUDGET} closing reviews still found new blocking findings in the fixes"
         ));
     }
-    // Carry every blocking finding not yet shown fixed by a closing review.
+    // Carry every blocking finding a closing review has not settled: settled
+    // means shown fixed (refuted) or confirmed only at a non-blocking severity.
     let fixed: Vec<&Finding> = closing
         .iter()
         .flat_map(|r| r.findings.iter())
-        .filter(|f| f.reporter == CARRIED && f.status == Status::Refuted)
+        .filter(|f| {
+            f.reporter == CARRIED
+                && (f.status == Status::Refuted
+                    || (f.status != Status::Disputed && !super::protocol::blocking(f)))
+        })
         .collect();
     let mut prior: Vec<Finding> = Vec::new();
     for finding in failing.iter().flat_map(|r| blocking(r)) {

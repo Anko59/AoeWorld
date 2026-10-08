@@ -333,6 +333,42 @@ fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
 }
 
 #[test]
+fn a_carried_finding_settled_as_minor_is_not_carried_again() {
+    // The first closing review confirms carried P1 only as minor (partial
+    // votes) but fails on a new major: the next plan must not reopen P1.
+    let mut history = three_converging();
+    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
+    first.findings[0].votes = finding(
+        "P1",
+        CARRIED,
+        Severity::Major,
+        "correctness",
+        &[
+            (0, 2, Vote::Partial),
+            (1, 2, Vote::Partial),
+            (2, 2, Vote::Refuted),
+        ],
+    )
+    .votes;
+    first.findings[0].status = Status::Confirmed;
+    // P1 is the last full review's major finding, carried into this review.
+    first.findings[0].reported = history[2].findings[0].reported.clone();
+    assert!(
+        !first.passes(),
+        "the new major still fails the first closing review"
+    );
+    let settled = first.findings[0].reported.claim.clone();
+    history.push(first);
+    let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
+        panic!("a converging branch with one closing review left gets it");
+    };
+    assert!(
+        prior.iter().all(|f| f.reported.claim != settled),
+        "a finding settled as minor is not carried again"
+    );
+}
+
+#[test]
 fn a_new_disputed_critical_finding_fails_a_closing_review() {
     let mut r = closing("d", 4, &[], &[Severity::Critical]);
     r.findings[0].status = Status::Disputed;

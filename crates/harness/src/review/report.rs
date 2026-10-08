@@ -47,8 +47,8 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 
 impl Report {
     /// A review passes only when every session answered and the capped grade
-    /// reaches the merge grade; a closing review when no confirmed finding
-    /// blocks and every carried finding was shown fixed.
+    /// reaches the merge grade; a closing review when no finding blocks and no
+    /// carried finding is left undecided (one confirmed only as minor passes).
     pub(crate) fn passes(&self) -> bool {
         self.failures.is_empty()
             && if self.closing {
