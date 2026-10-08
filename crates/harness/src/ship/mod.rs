@@ -8,6 +8,7 @@ mod describe;
 pub(crate) mod evidence;
 pub(crate) mod git;
 mod github;
+mod issues;
 mod metrics;
 mod review_gate;
 mod review_pr;
@@ -34,6 +35,10 @@ pub(crate) enum Commands {
     ShipStatus,
     /// Review an existing same-repository pull request without opening it.
     ReviewPr,
+    /// File an out-of-scope task as a deduplicated GitHub issue.
+    Issue,
+    /// Print the highest-priority unblocked open issue.
+    Next,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -121,6 +126,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
             Ok(())
         }
         Commands::ReviewPr => review_pr::execute(&root),
+        Commands::Issue => issues::issue(&root),
+        Commands::Next => issues::next(&root),
     }
 }
 

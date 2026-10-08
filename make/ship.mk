@@ -10,7 +10,8 @@
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
-.PHONY: ship ship-status review review-floor review-pr video-probe
+export ISSUE_TITLE ISSUE_BODY ISSUE_LABELS
+.PHONY: ship ship-status review review-floor review-pr issue next video-probe
 ship:
 	@.agents/hooks/harness.sh exec ship
 
@@ -29,6 +30,14 @@ review-floor:
 # through the environment and never interpolated into shell text.
 review-pr:
 	@.agents/hooks/harness.sh exec review-pr
+
+# File out-of-scope work; ISSUE_BODY is the body text passed through env.
+issue:
+	@.agents/hooks/harness.sh exec issue
+
+# Print the next open, unblocked issue by priority and age.
+next:
+	@.agents/hooks/harness.sh exec next
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:

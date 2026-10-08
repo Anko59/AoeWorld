@@ -1,4 +1,5 @@
 mod bash;
+mod dispatch;
 mod hooks;
 mod runtimes;
 mod stop;

@@ -17,6 +17,9 @@ Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you
 lack access ([credentials](docs/credentials.md)).
 
+For work outside this PR's scope, notice it, file it with `make issue`, and
+don't fix it in this PR. Use `make next` to select an unblocked task.
+
 Report the exact revision, commands, results, and limits. Keep the working tree
 clean and commit intended changes. Synthetic workloads do not demonstrate
 finished RTS performance or dedicated hardware qualification.
