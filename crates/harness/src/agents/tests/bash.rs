@@ -76,6 +76,19 @@ fn only_the_main_session_reviews_existing_pull_requests() {
 }
 
 #[test]
+fn showcase_and_ship_tools_are_main_session_only() {
+    let fixture = Fixture::new();
+    for role in AGENTS {
+        denied(&fixture, role, "make showcase");
+        denied(&fixture, role, "make showcase-check");
+        denied(&fixture, role, "make ship-tools");
+    }
+    allowed(&fixture, Role::Main, "make showcase");
+    allowed(&fixture, Role::Main, "make showcase-check");
+    allowed(&fixture, Role::Main, "make ship-tools");
+}
+
+#[test]
 fn agents_are_held_to_an_allow_list() {
     let fixture = Fixture::new();
     for role in AGENTS {

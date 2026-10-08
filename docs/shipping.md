@@ -75,8 +75,8 @@ the PR") and renders two parts:
 
 The agent picks the level. Not being a frontend change is never a reason for no
 video: film a terminal or agent session, a before/after timing or an API diff.
-Duration and audio-stream presence are checked with ffmpeg from the pinned
-browser image. High and max levels require an audio stream; reviewers decide
+Record it with `make showcase` ([showcase videos](showcase.md)). Duration and
+audio-stream presence are checked with ffmpeg from the pinned browser image. High and max levels require an audio stream; reviewers decide
 whether that track contains speech.
 
 Metrics read tracked Rust blobs from the named commit or merge base. Blobs over
@@ -84,6 +84,7 @@ Metrics read tracked Rust blobs from the named commit or merge base. Blobs over
 scanner that ignores markers inside ordinary and raw strings and handles nested
 block comments; it does not parse macro-generated tokens or languages embedded
 inside strings.
+
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.

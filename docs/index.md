@@ -6,6 +6,7 @@
 - [Adversarial review](review.md)
 - [Credentials (keyring)](credentials.md)
 - [Issues](issues.md)
+- [Showcase videos](showcase.md)
 - [Architecture](architecture.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)

@@ -9,8 +9,10 @@
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
-.PHONY: ship ship-status review review-floor review-pr issue next video-probe
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
+export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
+.PHONY: ship ship-status review review-floor review-pr issue next video-probe ship-tools showcase showcase-check
+SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 ship:
 	@.agents/hooks/harness.sh exec ship
 
@@ -40,4 +42,15 @@ next:
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:
-	@docker run --rm -v "$$SHIP_VIDEO":/video:ro $(BROWSER_IMAGE) sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
+	@docker run --rm -v "$$SHIP_VIDEO":/video:ro "$$BROWSER_IMAGE" sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
+
+ship-tools:
+	@docker build -q -f docker/ship-tools.Dockerfile -t "$$SHIP_TOOLS_IMAGE" . >/dev/null
+
+# The showcase video of SHOWCASE_STORYBOARD (docs/showcase.md); Rust checks the
+# voiced plan before invoking Make to build the pinned recording images.
+showcase: showcase-check
+	@.agents/hooks/harness.sh exec showcase
+
+showcase-check:
+	@.agents/hooks/harness.sh exec showcase-check

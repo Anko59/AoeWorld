@@ -26,7 +26,7 @@ pub(crate) enum Level {
 }
 
 impl Level {
-    fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         match text.trim() {
             "low" => Some(Self::Low),
             "medium" => Some(Self::Medium),
