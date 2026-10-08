@@ -6,18 +6,23 @@
 //! pinned ship-tools image. Each scene lasts at least as long as its voice.
 mod check;
 mod media;
+mod workdir;
 
 pub(crate) use check::check;
 pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
 #[cfg(test)]
-pub(crate) use media::{concat_entry, publish_temp_output, save_tts_response, tts_command};
+pub(crate) use media::{
+    concat_entry, narrate, publish_temp_output, save_tts_response, tts_command,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     os::unix::ffi::OsStrExt,
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
 };
+#[cfg(test)]
+pub(crate) use workdir::create_work_dir;
 
 /// The validated output parent held open for the complete showcase run.
 /// Publication uses only this directory descriptor, so replacing a path
@@ -33,6 +38,9 @@ pub(crate) const TTS_MODEL: &str = "google/gemini-3.8-flash-lite-tts";
 pub(crate) const TTS_MAX_CHARS: usize = 3000;
 /// Gemini TTS on OpenRouter answers raw PCM only: 16-bit mono at 24 kHz.
 pub(crate) const PCM_RATE: u32 = 24_000;
+/// Narration may exceed the video cap by at most one second while rounding
+/// PCM response durations to whole milliseconds.
+pub(crate) const TTS_PCM_BUDGET: u64 = PCM_RATE as u64 * 2 * (MAX_SECONDS + 1);
 
 /// Seconds of speech in `bytes` of that PCM.
 pub(crate) fn pcm_seconds(bytes: u64) -> f64 {
@@ -211,6 +219,13 @@ pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result
 /// Resolve the requested video path beneath `.cache/showcase`, refusing
 /// symlinks in every component and multiply-linked existing files.
 pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<ShowcaseOutput, String> {
+    if !Path::new(requested)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".webm"))
+    {
+        return Err("SHOWCASE_OUT must end in `.webm`".into());
+    }
     let root = root
         .canonicalize()
         .map_err(|error| format!("cannot resolve repository root: {error}"))?;
@@ -295,6 +310,27 @@ pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<ShowcaseOutput
     })
 }
 
+/// Create and open the private temporary parent used by showcase runs.
+pub(crate) fn showcase_tmp(root: &Path) -> Result<PathBuf, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve repository root: {error}"))?;
+    let root_fd =
+        open_directory(&root).map_err(|error| format!("cannot open repository root: {error}"))?;
+    let cache_fd = open_or_create_child(&root_fd, ".cache")
+        .map_err(|error| format!("cannot open .cache: {error}"))?;
+    let tmp_fd = open_or_create_private_child(&cache_fd, "tmp")
+        .map_err(|error| format!("cannot open .cache/tmp: {error}"))?;
+    nix::sys::stat::fchmod(&tmp_fd, nix::sys::stat::Mode::S_IRWXU)
+        .map_err(|error| format!("cannot secure .cache/tmp: {error}"))?;
+    let stat = nix::sys::stat::fstat(&tmp_fd)
+        .map_err(|error| format!("cannot inspect .cache/tmp: {error}"))?;
+    if stat.st_uid != nix::unistd::getuid().as_raw() {
+        return Err(".cache/tmp must be owned by the current user".into());
+    }
+    Ok(root.join(".cache/tmp"))
+}
+
 fn open_directory(path: &Path) -> nix::Result<std::fs::File> {
     let fd = nix::fcntl::open(
         path,
@@ -339,6 +375,36 @@ fn open_or_create_child(parent: &std::fs::File, name: &str) -> nix::Result<std::
                     | nix::fcntl::OFlag::O_DIRECTORY
                     | nix::fcntl::OFlag::O_NOFOLLOW
                     | nix::fcntl::OFlag::O_CLOEXEC,
+                nix::sys::stat::Mode::empty(),
+            )?;
+            Ok(std::fs::File::from(fd))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn open_or_create_private_child(parent: &std::fs::File, name: &str) -> nix::Result<std::fs::File> {
+    let name = std::ffi::CString::new(name).expect("validated component has no NUL");
+    let flags = nix::fcntl::OFlag::O_RDONLY
+        | nix::fcntl::OFlag::O_DIRECTORY
+        | nix::fcntl::OFlag::O_NOFOLLOW
+        | nix::fcntl::OFlag::O_CLOEXEC;
+    match nix::fcntl::openat(
+        parent,
+        name.as_c_str(),
+        flags,
+        nix::sys::stat::Mode::empty(),
+    ) {
+        Ok(fd) => Ok(std::fs::File::from(fd)),
+        Err(nix::errno::Errno::ENOENT) => {
+            match nix::sys::stat::mkdirat(parent, name.as_c_str(), nix::sys::stat::Mode::S_IRWXU) {
+                Ok(()) | Err(nix::errno::Errno::EEXIST) => {}
+                Err(error) => return Err(error),
+            }
+            let fd = nix::fcntl::openat(
+                parent,
+                name.as_c_str(),
+                flags,
                 nix::sys::stat::Mode::empty(),
             )?;
             Ok(std::fs::File::from(fd))

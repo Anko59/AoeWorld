@@ -1,9 +1,10 @@
 //! The side-effecting half of `make showcase`: speech requests, the recording
 //! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
 //! pipe and never written to disk.
+use super::workdir::create_new;
 use super::{
-    Scene, Segment, ShowcaseOutput, Storyboard, TTS_MODEL, Timings, check_duration, durations,
-    measured_duration, resolve_out, track,
+    Scene, Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
+    durations, measured_duration, resolve_out, track,
 };
 use serde::Serialize;
 use std::{
@@ -20,6 +21,7 @@ const TTS_URL: &str = "https://openrouter.ai/api/v1/audio/speech";
 const RECORDER: &str = include_str!("record.mjs");
 pub(crate) const DEFAULT_OUT: &str = ".cache/showcase/showcase.webm";
 const STORYBOARD_LIMIT: u64 = 256 * 1024;
+#[cfg(test)]
 const TTS_RESPONSE_LIMIT: u64 = 32 * 1024 * 1024;
 const TTS_ERROR_LIMIT: u64 = 64 * 1024;
 
@@ -95,10 +97,19 @@ pub(crate) fn tts_command(request: &Path) -> Command {
     command
 }
 
+#[cfg(test)]
 pub(crate) fn save_tts_response(child: &mut std::process::Child, audio: &Path) -> Result<u64> {
+    save_tts_response_limited(child, audio, TTS_RESPONSE_LIMIT)
+}
+
+fn save_tts_response_limited(
+    child: &mut std::process::Child,
+    audio: &Path,
+    limit: u64,
+) -> Result<u64> {
     let mut stdout = child.stdout.take().ok_or("curl stdout was not piped")?;
-    let mut limited = (&mut stdout).take(TTS_RESPONSE_LIMIT + 1);
-    let mut file = fs::File::create(audio)?;
+    let mut limited = (&mut stdout).take(limit + 1);
+    let mut file = create_new(audio)?;
     let mut total = 0_u64;
     let mut buffer = [0_u8; 8192];
     loop {
@@ -106,16 +117,14 @@ pub(crate) fn save_tts_response(child: &mut std::process::Child, audio: &Path) -
         if count == 0 {
             break;
         }
-        let remaining = TTS_RESPONSE_LIMIT.saturating_sub(total) as usize;
+        let remaining = limit.saturating_sub(total) as usize;
         let accepted = count.min(remaining);
         file.write_all(&buffer[..accepted])?;
         total += accepted as u64;
         if accepted != count {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(
-                format!("speech response exceeds the {TTS_RESPONSE_LIMIT}-byte limit").into(),
-            );
+            return Err(format!("speech response exceeds the {limit}-byte limit").into());
         }
     }
     let status = child.wait()?;
@@ -134,7 +143,7 @@ pub(crate) fn concat_entry(file: &Path) -> String {
 }
 
 /// Voice each narrated scene; returns each voice-over's length.
-fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
+pub(crate) fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
     if board.scenes.iter().all(|s| s.narration().is_none()) {
         return Ok(vec![None; board.scenes.len()]);
     }
@@ -142,6 +151,7 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
         "the storyboard has narration, but OPENROUTER_API_KEY is neither set nor in the keyring (docs/credentials.md)",
     )?;
     let mut lengths = vec![];
+    let mut total_bytes = 0_u64;
     for (index, scene) in board.scenes.iter().enumerate() {
         let Some(text) = scene.narration() else {
             lengths.push(None);
@@ -151,8 +161,15 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
         let body = serde_json::json!({
             "model": TTS_MODEL, "input": text, "voice": board.voice, "response_format": "pcm",
         });
-        fs::write(&request, body.to_string())?;
+        create_new(&request)?.write_all(body.to_string().as_bytes())?;
         let audio = work.join(format!("voice-{index}.pcm"));
+        let remaining = TTS_PCM_BUDGET.saturating_sub(total_bytes);
+        if remaining == 0 {
+            return Err(format!(
+                "narration exceeds the {TTS_PCM_BUDGET}-byte aggregate PCM budget"
+            )
+            .into());
+        }
         let mut child = tts_command(&request).spawn()?;
         child
             .stdin
@@ -161,13 +178,22 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
             .write_all(
                 format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
             )?;
-        let bytes = save_tts_response(&mut child, &audio)
+        let bytes = save_tts_response_limited(&mut child, &audio, remaining)
             .map_err(|error| format!("speech for scene {} failed: {error}", index + 1))?;
         if bytes == 0 {
             return Err(format!("speech for scene {}: no audio", index + 1).into());
         }
+        total_bytes = total_bytes.saturating_add(bytes);
         let seconds = super::pcm_seconds(bytes);
         lengths.push(Some((seconds * 1000.0).ceil() as u64));
+        if lengths.len() == index + 1 {
+            let planned = durations(board, &lengths);
+            if let Err(error) = check_duration(&planned) {
+                return Err(
+                    format!("narration exceeds the showcase duration budget: {error}").into(),
+                );
+            }
+        }
     }
     Ok(lengths)
 }
@@ -184,8 +210,8 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         )
         .into());
     }
-    fs::write(work.join("plan.json"), serde_json::to_vec(plan)?)?;
-    fs::write(work.join("record.mjs"), RECORDER)?;
+    create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
+    create_new(&work.join("record.mjs"))?.write_all(RECORDER.as_bytes())?;
     let status = Command::new("docker")
         .args([
             "run",
@@ -222,7 +248,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
         "ffmpeg".to_owned(),
         "-loglevel".into(),
         "error".into(),
-        "-y".into(),
+        "-n".into(),
     ];
     for (index, segment) in segments.iter().enumerate() {
         let file = work.join(format!("segment-{index}.wav"));
@@ -264,7 +290,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     docker(&[work], tools, &args)?;
     let concat = work.join("segments.txt");
-    fs::write(&concat, list)?;
+    create_new(&concat)?.write_all(list.as_bytes())?;
     let narration = work.join("narration.wav");
     docker(
         &[work],
@@ -273,7 +299,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
             "ffmpeg",
             "-loglevel",
             "error",
-            "-y",
+            "-n",
             "-f",
             "concat",
             "-safe",
@@ -290,7 +316,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
             "ffmpeg",
             "-loglevel",
             "error",
-            "-y",
+            "-n",
             "-i",
             path(video),
             "-i",
@@ -350,10 +376,10 @@ pub(crate) fn check(root: &Path) -> Result<()> {
 pub(crate) fn make(root: &Path) -> Result<PathBuf> {
     let (board, out) = inputs(root)?;
     let tools = env("AOE_SHIP_TOOLS_IMAGE")?;
-    let work = root.join(format!(".cache/tmp/showcase-{}", std::process::id()));
-    fs::create_dir_all(&work)?;
-    let result = (|| -> Result<PathBuf> {
-        let voices = narrate(&work, &board)?;
+    let work = super::workdir::create_work_dir(root)?;
+    let work_path = work.path();
+    (|| -> Result<PathBuf> {
+        let voices = narrate(work_path, &board)?;
         let planned = durations(&board, &voices);
         check_duration(&planned)?;
         let make = env("MAKE")?;
@@ -375,16 +401,26 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
                 })
                 .collect(),
         };
-        let (silent, timings) = record(root, &work, &plan)?;
+        let (silent, timings) = record(root, work_path, &plan)?;
         let measured = measured_duration(&timings, board.scenes.len())?;
-        let encoded = work.join("showcase.webm");
+        let encoded = work_path.join("showcase.webm");
         let publish = if voices.iter().any(Option::is_some) {
-            mix(&work, &tools, &track(&timings, &voices)?, &silent, &encoded)
+            mix(
+                work_path,
+                &tools,
+                &track(&timings, &voices)?,
+                &silent,
+                &encoded,
+            )
         } else {
-            fs::copy(&silent, &encoded).map(|_| ()).map_err(Into::into)
+            let mut source = fs::File::open(&silent)?;
+            let mut target = create_new(&encoded)?;
+            std::io::copy(&mut source, &mut target)
+                .map(|_| ())
+                .map_err(Into::into)
         };
         publish?;
-        publish_temp_output(&encoded, &out)?;
+        publish_temp_output(&encoded, &out, work_path)?;
         let seconds = measured / 1000;
         println!(
             "showcase: {} ({seconds}s, {} scene(s){})",
@@ -397,13 +433,19 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
             }
         );
         Ok(out.path.clone())
-    })();
-    let _ = fs::remove_dir_all(&work);
-    result
+    })()
 }
 
-pub(crate) fn publish_temp_output(source: &Path, out: &ShowcaseOutput) -> Result<()> {
-    let temp = std::ffi::CString::new(format!(".showcase-{}.tmp.webm", std::process::id()))?;
+pub(crate) fn publish_temp_output(source: &Path, out: &ShowcaseOutput, work: &Path) -> Result<()> {
+    let seed = tempfile::Builder::new()
+        .prefix("publish-")
+        .tempfile_in(work)?;
+    let temp_name = seed
+        .path()
+        .file_name()
+        .ok_or("temporary publish filename is missing")?;
+    let temp = std::ffi::CString::new(temp_name.as_encoded_bytes())?;
+    drop(seed);
     let fd = nix::fcntl::openat(
         &out.directory,
         temp.as_c_str(),

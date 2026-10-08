@@ -5,7 +5,7 @@
 // up. Writes silent.webm and timings.json: the blank lead-in and each scene's
 // actual length in milliseconds, which the audio track is padded to.
 import { chromium } from "playwright";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
 const dir = process.cwd();
@@ -87,5 +87,7 @@ for (const scene of plan.scenes) {
 const video = page.video();
 await context.close();
 await browser.close();
-renameSync(await video.path(), `${dir}/silent.webm`);
-writeFileSync(`${dir}/timings.json`, JSON.stringify(timings));
+const videoPath = await video.path();
+copyFileSync(videoPath, `${dir}/silent.webm`, constants.COPYFILE_EXCL);
+unlinkSync(videoPath);
+writeFileSync(`${dir}/timings.json`, JSON.stringify(timings), { flag: "wx" });

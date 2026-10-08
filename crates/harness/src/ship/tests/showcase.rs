@@ -119,6 +119,8 @@ fn showcase_output_is_created_and_confined_to_its_cache_directory() {
     assert!(resolve_out(root.path(), ".git/config").is_err());
     assert!(resolve_out(root.path(), "video.webm").is_err());
     assert!(resolve_out(root.path(), ".cache/showcase/../escape.webm").is_err());
+    assert!(resolve_out(root.path(), ".cache/showcase/take.mp4").is_err());
+    assert!(resolve_out(root.path(), ".cache/showcase/take.WEBM").is_err());
 }
 
 #[test]
@@ -203,7 +205,8 @@ fn atomic_showcase_publish_replaces_a_hard_link_without_writing_through_it() {
     let source = root.path().join("encoded.webm");
     std::fs::write(&source, b"new video").unwrap();
 
-    publish_temp_output(&source, &output).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    publish_temp_output(&source, &output, work.path()).unwrap();
 
     assert_eq!(std::fs::read(protected).unwrap(), b"protected registry");
     assert_eq!(std::fs::read(output_path).unwrap(), b"new video");
@@ -222,7 +225,7 @@ fn showcase_publish_uses_the_validated_directory_fd_after_path_swap() {
     use std::os::unix::fs::symlink;
 
     let root = tempfile::tempdir().unwrap();
-    let output = resolve_out(root.path(), ".cache/showcase/Cargo.toml").unwrap();
+    let output = resolve_out(root.path(), ".cache/showcase/take.webm").unwrap();
     let source = root.path().join("encoded.webm");
     std::fs::write(&source, b"showcase bytes").unwrap();
     std::fs::write(root.path().join("Cargo.toml"), b"repository manifest").unwrap();
@@ -232,14 +235,15 @@ fn showcase_publish_uses_the_validated_directory_fd_after_path_swap() {
     std::fs::rename(&showcase, &original).unwrap();
     symlink(root.path(), &showcase).unwrap();
 
-    publish_temp_output(&source, &output).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    publish_temp_output(&source, &output, work.path()).unwrap();
 
     assert_eq!(
         std::fs::read(root.path().join("Cargo.toml")).unwrap(),
         b"repository manifest"
     );
     assert_eq!(
-        std::fs::read(original.join("Cargo.toml")).unwrap(),
+        std::fs::read(original.join("take.webm")).unwrap(),
         b"showcase bytes"
     );
 }
@@ -335,7 +339,7 @@ fn tts_command_reads_authorization_from_stdin_and_bounds_bodies() {
     assert!(!args.iter().any(|arg| arg.contains("DUMMY_OPENROUTER_KEY")));
     let source = include_str!("../showcase/media.rs");
     assert!(source.contains("command.stdout(Stdio::piped())"));
-    assert!(source.contains("take(TTS_RESPONSE_LIMIT + 1)"));
+    assert!(source.contains("take(limit + 1)"));
     assert!(!source.contains("work.join(\"headers\")"));
     assert!(source.contains("file.take(TTS_ERROR_LIMIT).read_to_string"));
 }
@@ -362,9 +366,12 @@ fn tts_stream_limit_stops_a_stubbed_unknown_length_body() {
 fn showcase_preflights_both_plans_before_starting_the_recorder() {
     let source = include_str!("../showcase/media.rs");
     let preflight = source.find("check_duration(&durations(").unwrap();
-    let narration = source.find("narrate(&work, &board)").unwrap();
-    let stretched_check = source.find("check_duration(&planned)").unwrap();
-    let recording = source.find("record(root, &work, &plan)").unwrap();
+    let narration = source.find("narrate(work_path, &board)").unwrap();
+    let stretched_check = narration
+        + source[narration..]
+            .find("check_duration(&planned)")
+            .unwrap();
+    let recording = source.find("record(root, work_path, &plan)").unwrap();
     assert!(preflight < narration);
     assert!(narration < stretched_check);
     assert!(stretched_check < recording);
