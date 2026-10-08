@@ -6,6 +6,12 @@ The rules above are canonical; this file only adds what is specific to Claude
 Code. [Agent runtimes](docs/agent-runtimes.md) explains every hook and how
 Codex, DeepSeek Harness and pi get the same rules.
 
+For work outside this PR's scope, notice it and don't fix it in this PR. The
+main session, testers and implementers may file it with `make issue`; review
+findings are filed later by `make ship` (#174). Use `make next` to select an
+unblocked task. `make issue` takes a title, optional `labels: a, b` line, a
+blank line and the body on standard input.
+
 ## What the hooks do
 
 `.claude/settings.json` sends every hook event to `aoe-harness agent-hook`

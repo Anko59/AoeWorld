@@ -33,6 +33,15 @@ use role::Role;
 pub(crate) use role::is_test as is_test_path;
 use runtime::Call;
 pub(crate) use runtime::Runtime;
+
+/// Issue writes and task selection are available only to the person and the
+/// two agent roles that own implementation work.
+pub(crate) fn issue_commands_allowed() -> bool {
+    matches!(
+        Role::from_agent(std::env::var("AOE_AGENT_ROLE").ok().as_deref()),
+        Role::Main | Role::Tester | Role::Implementer
+    )
+}
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{

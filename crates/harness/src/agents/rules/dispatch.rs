@@ -82,6 +82,18 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
         return Err("do not pretend Make targets are up to date; run them".into());
     }
     let agent = context.role.is_agent();
+    if agent
+        && !matches!(context.role, Role::Tester | Role::Implementer)
+        && parsed
+            .positionals
+            .iter()
+            .any(|word| matches!(word.text.as_str(), "issue" | "next"))
+    {
+        return Err(
+            "issue commands are available only to the main session, testers and implementers"
+                .into(),
+        );
+    }
     let mut targets = Vec::new();
     for word in &parsed.positionals {
         if !word.plain() && agent {
@@ -111,11 +123,32 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             None => targets.push(word.text.as_str()),
         }
     }
+    if agent
+        && targets
+            .iter()
+            .any(|target| matches!(*target, "issue" | "next"))
+        && parsed
+            .positionals
+            .iter()
+            .any(|word| word.text.split_once('=').is_some())
+    {
+        return Err(
+            "agents run `make issue` and `make next` without Make variable assignments".into(),
+        );
+    }
     for target in targets {
         if agent && PERSON_TARGETS.contains(&target) {
             return Err(format!(
                 "`make {target}` belongs to the main session or a person"
             ));
+        }
+        if matches!(target, "issue" | "next")
+            && !matches!(context.role, Role::Main | Role::Tester | Role::Implementer)
+        {
+            return Err(
+                "issue commands are available only to the main session, testers and implementers"
+                    .into(),
+            );
         }
         if target == "ship" && context.role.duty_bound() {
             return Err(format!(

@@ -60,6 +60,40 @@ pub(crate) fn origin_repository(root: &Path) -> Result<String> {
     }
 }
 
+/// GitHub host and repository path encoded by origin, for host-qualified gh calls.
+pub(crate) fn origin_host_repository(root: &Path) -> Result<(String, String)> {
+    let url = git(root, &["remote", "get-url", "origin"])?;
+    let (host, path) = if let Some((user_host, path)) = url.split_once(':') {
+        if user_host.contains('@') && !user_host.contains('/') {
+            (
+                user_host.rsplit('@').next().unwrap_or_default().to_owned(),
+                path.to_owned(),
+            )
+        } else {
+            let parsed = url::Url::parse(&url)
+                .map_err(|_| format!("origin is not a GitHub repository: {url}"))?;
+            (
+                parsed.host_str().unwrap_or_default().to_owned(),
+                parsed.path().trim_start_matches('/').to_owned(),
+            )
+        }
+    } else {
+        let parsed = url::Url::parse(&url)
+            .map_err(|_| format!("origin is not a GitHub repository: {url}"))?;
+        (
+            parsed.host_str().unwrap_or_default().to_owned(),
+            parsed.path().trim_start_matches('/').to_owned(),
+        )
+    };
+    let path = path.trim_end_matches('/').trim_end_matches(".git");
+    match (host, path.split('/').collect::<Vec<_>>().as_slice()) {
+        (host, [owner, name]) if !host.is_empty() && !owner.is_empty() && !name.is_empty() => {
+            Ok((host.to_owned(), format!("{owner}/{name}")))
+        }
+        _ => Err(format!("origin is not a GitHub repository: {url}")),
+    }
+}
+
 pub(crate) fn subject(root: &Path) -> Result<Subject> {
     let dirty = git(
         root,
