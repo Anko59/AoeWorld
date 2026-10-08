@@ -5,7 +5,7 @@ use super::{
     args::{self, Spec},
     context::{Access, Context, Verdict},
     paths,
-    rules::{dispatch, git, github, tools},
+    rules::{dispatch, git, github, tools, variables},
     shell::{self, Item, Join, Simple, Word},
 };
 use std::path::{Path, PathBuf};
@@ -62,6 +62,12 @@ pub(crate) fn line(context: &Context, text: &str, cwd: Option<PathBuf>, depth: u
     if let (Some(reason), true) = (parsed.opaque, agent) {
         return Err(format!("{reason}; write it plainly"));
     }
+    let mut items = parsed.items.iter().peekable();
+    while let Some(item) = items.next() {
+        if agent && matches!((item, items.peek()), (Item::Open, Some(Item::Close))) {
+            return Err("agents do not define shell functions; write plain commands".into());
+        }
+    }
     for substitution in &parsed.substitutions {
         line(context, substitution, cwd.clone(), depth + 1)?;
     }
@@ -78,16 +84,33 @@ pub(crate) fn line(context: &Context, text: &str, cwd: Option<PathBuf>, depth: u
 }
 
 fn simple_command(context: &Context, state: &mut State, simple: &Simple, join: Join) -> Verdict {
-    for (name, value) in &simple.assignments {
+    let agent = context.role.is_agent();
+    let mut words = strip_keywords(&simple.words);
+    let mut assignments: Vec<(&str, Word)> = simple
+        .assignments
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.clone()))
+        .collect();
+    // After a keyword (`then FOO=1 make`) the assignment is still a prefix.
+    while let (true, Some((name, value))) = (agent, words.first().and_then(Word::split_assignment))
+    {
+        assignments.push((name, value));
+        words = &words[1..];
+    }
+    if agent && words.is_empty() && !assignments.is_empty() {
+        return Err(
+            "agents do not set shell variables that persist; prefix `NAME=value` to the command that needs it".into(),
+        );
+    }
+    for (name, value) in &assignments {
         tools::assignment(context, name, value)?;
-        if name == "CDPATH" {
+        if *name == "CDPATH" {
             state.cwd = None;
         }
     }
     for redirect in simple.redirects.iter().filter(|r| r.write) {
         context.write(state.cwd.as_deref(), &redirect.target, Access::Put)?;
     }
-    let words = strip_keywords(&simple.words);
     if words.is_empty() {
         return Ok(());
     }
@@ -146,7 +169,13 @@ pub(crate) fn dispatch(
             "agents do not run scripts or binaries by path (`{name}`); use a Make target or ask the main session"
         ));
     }
+    if agent && head.split_assignment().is_some() {
+        return Err(format!(
+            "`{name}` assigns a variable where a command belongs; prefix `NAME=value` to a plain command"
+        ));
+    }
     let rest = &words[1..];
+    variables::shell_state(context, base, rest)?;
     match base {
         "sudo" | "doas" | "su" | "pkexec" | "run0" => Err(
             "privileged commands are never run by a Claude session; ask the person to run it in their own terminal".into(),
@@ -156,9 +185,7 @@ pub(crate) fn dispatch(
         | "command" => wrapped(context, state, base, rest, join),
         "xargs" => xargs(context, state, rest, join),
         "sh" | "bash" | "zsh" | "dash" | "ksh" => shell_wrapper(context, state, base, rest),
-        "eval" if agent => Err("agents do not use `eval`; write the command plainly".into()),
         "eval" => line(context, &joined(rest), state.cwd.clone(), state.depth + 1),
-        "source" | "." if agent => Err("agents do not source scripts; run a Make target".into()),
         "watch" => {
             let spec = Spec { short: "n", long: &["interval"], stop_at_positional: true };
             let at = args::split(rest, &spec).stop;
@@ -181,11 +208,7 @@ pub(crate) fn dispatch(
             }
             Ok(())
         }
-        "alias" | "trap" | "function" | "case" | "select" | "coproc" | "enable" | "shopt"
-            if agent =>
-        {
-            Err(format!("agents do not use `{base}`; write plain commands"))
-        }
+        "case" if agent => Err("agents do not use `case`; write plain commands".into()),
         "git" => git::git(context, state, rest),
         "gh" => github::gh(context, rest),
         "make" | "gmake" => dispatch::make(context, rest),

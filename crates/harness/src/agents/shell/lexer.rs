@@ -28,6 +28,16 @@ pub(super) struct Lexer<'a> {
 }
 
 const OPERATOR: &str = ";&|()<>\n";
+const ARITHMETIC: &str = "arithmetic `(( ))`, `$(( ))` or `$[ ]` can assign shell variables";
+const EXPANSION: &str = "agents expand parameters only as `$NAME`, `${NAME}`, `$1`…`$9`, `$?`, `$$`, `$#`, `$@` or `$*` (other forms can assign, run commands or hide them)";
+const HEREDOC: &str =
+    "agents do not use here-documents or here-strings; write files with the editor tools";
+const CONTINUATION: &str = "agents do not continue lines with a backslash-newline";
+
+/// The parameter forms agents may expand: a name, `1`…`9` or `?$#@*`.
+fn plain_parameter(name: &str) -> bool {
+    valid_name(name) || (name.len() == 1 && "123456789?$#@*".contains(name))
+}
 
 impl<'a> Lexer<'a> {
     pub(super) fn new(source: &str, parsed: &'a mut Parsed) -> Self {
@@ -45,6 +55,9 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn tokens(mut self) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
+        if self.chars.windows(2).any(|pair| pair == ['\\', '\n']) {
+            self.parsed.opaque = Some(CONTINUATION);
+        }
         while let Some(c) = self.peek(0) {
             match c {
                 ' ' | '\t' | '\r' => self.at += 1,
@@ -77,6 +90,9 @@ impl<'a> Lexer<'a> {
                     tokens.push(Token::Join(join));
                 }
                 '(' => {
+                    if self.peek(1) == Some('(') {
+                        self.parsed.opaque = Some(ARITHMETIC);
+                    }
                     self.at += 1;
                     tokens.push(Token::Open);
                 }
@@ -103,6 +119,14 @@ impl<'a> Lexer<'a> {
                 }
                 _ => {
                     let word = self.word()?;
+                    let text = &word.text;
+                    if text.starts_with('{')
+                        && text.ends_with('}')
+                        && matches!(self.peek(0), Some('<' | '>'))
+                    {
+                        self.parsed.opaque =
+                            Some("a `{name}` redirection assigns a shell variable");
+                    }
                     tokens.push(Token::Word(word));
                 }
             }
@@ -148,6 +172,9 @@ impl<'a> Lexer<'a> {
             .find(|op| rest.starts_with(op))
             .ok_or("invalid redirection")?;
         self.at += op.chars().count();
+        if op.starts_with("<<") {
+            self.parsed.opaque = Some(HEREDOC);
+        }
         if op == "<<" || op == "<<-" {
             while matches!(self.peek(0), Some(' ' | '\t')) {
                 self.at += 1;
@@ -293,7 +320,12 @@ impl<'a> Lexer<'a> {
                 if self.peek(0) == Some(')') {
                     self.at += 1;
                 }
+                self.parsed.opaque = Some(ARITHMETIC);
                 word.computed = true;
+            }
+            Some('[') => {
+                self.parsed.opaque = Some(ARITHMETIC);
+                word.text.push('$');
             }
             Some('(') => {
                 self.at += 1;
@@ -303,7 +335,9 @@ impl<'a> Lexer<'a> {
             }
             Some('{') => {
                 self.at += 1;
-                self.balanced('}')?;
+                if !plain_parameter(&self.balanced('}')?) {
+                    self.parsed.opaque = Some(EXPANSION);
+                }
                 word.computed = true;
             }
             Some('\'') => {
@@ -320,6 +354,9 @@ impl<'a> Lexer<'a> {
             }
             Some(c) if c.is_ascii_alphanumeric() || "_@*#?$!-".contains(c) => {
                 let special = !(c.is_ascii_alphabetic() || c == '_');
+                if special && !plain_parameter(&c.to_string()) {
+                    self.parsed.opaque = Some(EXPANSION);
+                }
                 self.at += 1;
                 while !special
                     && self

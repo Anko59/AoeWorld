@@ -156,11 +156,12 @@ fn agents_may_read_and_use_temp_space() {
             "curl -s http://localhost:8080/health",
             "docker ps",
             "make lint",
-            "cat <<EOF > /tmp/x\nplain\nEOF",
             "jq '.gates[].id' gates/registry.json",
         ] {
             allowed(&fixture, role, command);
         }
+        // Allowed before; agents now write files with their editor tools.
+        denied(&fixture, role, "cat <<EOF > /tmp/x\nplain\nEOF");
     }
 }
 
