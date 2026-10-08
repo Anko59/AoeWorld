@@ -125,10 +125,10 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
             crate::surface_mesh::apply_terrain_textures(std::slice::from_mut(&mut face), &art);
             let packet = surface_instance(&face, [128.0; 2], 0.0);
             assert_eq!(face.texture_uv, Some(frame(1).atlas));
-            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
-            assert_eq!(packet.pages[..3], [1, 2, 1]);
+            assert_eq!(face.texture_blend, None);
+            assert_eq!(packet.pages[..3], [1, 0, 0]);
             let expected = crate::surface_mesh::landscape::texel(
-                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                [[0, 255, 0, 255]; 3],
                 crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
                 1,
                 packet.pages[3],

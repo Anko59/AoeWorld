@@ -5,6 +5,8 @@ use crate::web::surface_instance;
 use aoe_core::ScreenPoint;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::wasm_bindgen_test;
+#[path = "webgl_filter.rs"]
+mod filter_pixels;
 #[path = "webgl_floor.rs"]
 mod floor_pixels;
 
@@ -83,10 +85,10 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
             apply_terrain_textures(std::slice::from_mut(&mut dirt), &art);
             let packet = instance(&dirt);
             assert_eq!(dirt.texture_uv, Some(address(1)));
-            assert_eq!(dirt.texture_blend, Some([address(2), address(1)]));
-            assert_eq!(packet.pages[..3], [1, 2, 1]);
+            assert_eq!(dirt.texture_blend, None);
+            assert_eq!(packet.pages[..3], [1, 0, 0]);
             let expected = crate::surface_mesh::landscape::texel(
-                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                [[0, 255, 0, 255]; 3],
                 crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
                 1,
                 packet.pages[3],

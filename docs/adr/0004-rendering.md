@@ -121,8 +121,12 @@ packet word; their raw scene/triangle metadata is not discarded. Exposure and
 height are carried semantic evidence, not species/art selection permissions.
 
 New vegetative faces blend coherent grass (dry grass in dry/savanna regions) or
-authoritative dirt with forest detail, uniformly falling back to dirt when forest
-frames are absent. Canonical displayed integer vertices gather a rounded mean of
+authoritative dirt with a coherent dirt forest bed. Nonperiodic15011 accent art
+is no longer treated as a full V2 floor sheet; legacy None material6 selection
+remains exact. Missing dirt does not promote those accents: the primary alone is
+the explicit fallback. Identical primary/bed addresses use one sampler rather
+than three duplicate reads; their appearance transform remains active without
+an interpolated blend flag. Canonical displayed integer vertices gather a rounded mean of
 up to four incident V2 vegetative cells, excluding missing, legacy, cliff and water
 support; no support falls back to zero. Duplicate cell records cannot reweight the
 mean, and conflicting duplicates conservatively choose the lower floor. Shared
@@ -150,6 +154,27 @@ atlas allocations or draw-order regrouping. Restrained palette channel
 multipliers and canopy shading (at most 12%) follow face lighting, with shared
 byte rounding in Canvas, WGSL and GLSL. This does not qualify forest accent sheets
 as seamless full-sheet art; that review limitation above remains in force.
+
+Eligible V2 vegetative terrain alone uses a bounded minification kernel when
+source footprint exceeds1.25 texels per backing pixel. Four symmetric pixel-quadrant
+RGB samples stay clamped to the same atlas rectangle's texel centers; their RGB
+is alpha-weighted and byte-rounded before tint/appearance. The original nearest
+center alpha stays exact, preserving coverage and depth; zero summed sample alpha
+or nonfinite rect/UV/derivatives falls back to that center. GPU derivatives are
+evaluated before branches/discards, and three additional flat rectangle varyings
+travel within the existing interstage limits. No Sprite112 or atlas allocation changes.
+Canvas computes gradients and offsets per surface, not per fragment: at most two
+64-byte offset payloads, plus Option tags/padding and32-byte gradient storage;
+compiler stack/register layout and call arguments are additional real storage.
+
+A filtered single layer costs up to5 atlas reads (center plus four quadrants),
+V2 blends up to10; their zero third weight avoids a third sampler. Legacy None,
+manual zero-word, protected faces and every sprite/shadow/selection retain their
+original nearest sampling (one read, or three for legacy material blends). New
+cross-backend pixels pin contrast attenuation, nearest/magnified controls,
+transparent/partial-alpha behavior, rectangle/page isolation and unchanged depth
+bits/picking. This is not a full mip pyramid, severe-zoom antialiasing guarantee,
+coarse-LOD world-frequency fix, frame-cadence or dedicated-hardware qualification.
 
 Resource family zero keeps exact legacy variant selection. Families 1–4 explicitly
 fall back to healthy approved broadleaf 4652 frames, paired with 2296 shadows;

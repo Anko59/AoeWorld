@@ -84,10 +84,67 @@ Focused follow-up verification (working tree based on a0c29cdc):
   compact vector, with stable-reference tests including unsorted duplicate inputs.
   No deadline, source identity, baseline, atlas, instance or cache cap was relaxed.
 
+The appearance/request stage is committed as
+`796360cbd4d526a6c0ac09ad8d291564427c5a53`. Required hooks and corrected preflight
+passed1239 native tests with1 existing skip; an initial test-module attribute-order
+policy failure was fixed in the declaration, not in the policy. The unchanged full
+`make GID=117 test-e2e` now passes81 tests with9 environment-specific skips in3.9m;
+the earlier timed-out run remains a failed historical attempt, not a prior pass.
+The refreshed8081 preview reports this exact revision and its separate explicit
+original-source three-backend capture passes (local evidence under ignored
+`reports/france-live-preview-796360c/`). External memory/hardware limits still apply.
+
+## Zoom soil follow-up
+
+The V2 forest bed now selects coherent periodic dirt rather than rendering
+nonperiodic15011 forest accents as full-floor sheets. Legacy None/material6 keeps
+its exact original art selection. Missing dirt leaves the primary alone rather
+than silently promoting an accent. This is presentation policy only: generator
+bytes, resources, topology and source identity are unchanged. The shared floor
+field still only smooths floor strength, not canopy/palette ownership.
+
+A bounded V2 vegetative terrain-only minification kernel is the next
+implementation: preserve original center alpha/coverage, alpha-weight and
+byte-round four rect-clamped RGB taps only when the source footprint is minified.
+Legacy None/manual zero-word/protected faces and all sprites retain nearest
+sampling. No whole-atlas mip allocation and no claim that four sparse samples
+solve severe zoom or coarse-LOD world-frequency stretch. Validate actual
+three-backend contrast, transparency, atlas/page-edge and depth pixels and the
+unchanged WASM budget. Initial testing caught an unintended legacy filtering
+change; restore that exact old reference contract rather than weakening its test.
+
+Focused V2 filter verification on the working tree based on796360c:
+
+- `make GID=117 fmt test-wasm perf-wasm-size`: pass after fixing explicit
+  nested-module paths, restoring exact legacy nearest behavior, correcting unused
+  single-layer page assertions and using a real two-address floor-packet fixture.
+  Actual WASM tests2 core/63 client/128 rendering. New Canvas tests compare the
+  entire depth buffer bit-for-bit with identical unfiltered geometry; no tolerance
+  was introduced. Rect-edge tests use a wider synthetic sheet with robust interior
+  coverage, retaining exact red-neighbor rejection rather than lowering thresholds.
+- `make GID=117 browser-check perf-ci fuzz-smoke`: pass. Optimized gzip227,948
+  against unchanged cap228,102/baseline217,240+5% (154 bytes remaining). No budget,
+  profile, deadline, baseline or hook/test policy was relaxed.
+- Same pinned sources with `make GID=117 test-country-source`: pass; all3 backend
+  observations have empty errors. Ignored local evidence `reports/country-source/run-EDndry/`
+  captures508 unique chunks, peak summed Chromium RSS954,634,240 bytes and final-four
+  spread9,031,680 bytes. Eviction limit still not exercised. The captured grass/forest
+  view was inspected; relief improvement at every zoom/location is not established.
+  This remains compressed20k candidate evidence, not canonical50k/global/hardware
+  qualification. Read-only independent sampler review found no actionable defect.
+
 ## Representation issues to address, not conceal
 
 The candidate has real river evidence, but its 1024-axis hydrology grid spans
-1200km: about1171.875m per cell versus modeled river buffer radii4..100m.
+1200km: about1171.875m per cell versus modeled river buffer radii4..100m
+(full corridor8..200m). A read-only code audit also confirms a separate registration
+mismatch: preprocessing uses (i+0.5)L/N cell centers, but runtime hydrology uses
+rounded endpoints x(N-1)/(W-1). At W20000/N1024/x10 it chooses1 instead of the
+containing center-cell0; the first boundary is displaced about555m at60m/tile.
+This arithmetic is not an executed fixture or attribution to a particular lake.
+Any correction needs a new explicitly registered model/recipe and regenerated
+identity while retaining old model1/2 readers; merely bumping the existing version
+constant would reject model2. Do not alter the shared categorical helper in place.
 Center-hit preprocessing loses narrow reaches; nearest-cell runtime lookup
 expands retained cells into squares. Coarse128-axis inland fractions persist
 beneath fine NoEvidence. Increasing cell occupancy or inventing a river path

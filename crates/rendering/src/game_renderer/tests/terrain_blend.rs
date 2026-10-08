@@ -147,9 +147,9 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
                 }));
             apply_terrain_textures(std::slice::from_mut(&mut face), &art);
             assert_eq!(face.texture_uv, Some(frame(1).atlas));
-            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
+            assert_eq!(face.texture_blend, None);
             let expected = crate::surface_mesh::landscape::texel(
-                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                [[0, 255, 0, 255]; 3],
                 crate::surface_mesh::landscape::floor_weights(face.appearance),
                 1,
                 face.appearance,

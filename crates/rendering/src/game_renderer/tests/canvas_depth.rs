@@ -1,6 +1,8 @@
 #![cfg(test)]
 #[path = "terrain_blend.rs"]
 mod terrain_blend;
+#[path = "terrain_filter.rs"]
+mod terrain_filter;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};

@@ -32,6 +32,10 @@ use canvas_depth::{CanvasPresentation, render_canvas_world};
 mod webgl;
 use webgl::WebGlRenderer;
 
+#[path = "game_renderer/tests/filter_fixture.rs"]
+#[cfg(test)]
+pub(crate) mod filter_fixture;
+
 #[cfg(test)]
 mod tests;
 

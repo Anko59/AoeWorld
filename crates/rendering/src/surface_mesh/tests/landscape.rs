@@ -116,19 +116,32 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
                     let address = art.terrain[primary][0].atlas;
                     assert_eq!(
                         triangle.texture_materials,
-                        Some([primary as u8, 6, primary as u8])
+                        Some([primary as u8, 2, primary as u8])
                     );
                     assert_eq!(triangle.texture_uv, Some(address));
+                    let bed = art.terrain[2][0].atlas;
                     assert_eq!(
                         triangle.texture_blend,
-                        Some([art.terrain[6][0].atlas, address])
+                        (address != bed).then_some([bed, address])
                     );
                     assert_eq!(triangle.appearance, landscape::pack(Some(metadata)));
                     let packet = crate::web::surface_instance(&triangle, [256.0, 128.0], 0.0);
-                    assert_eq!(packet.pages[..3], [address.page, 1, address.page]);
+                    assert_eq!(
+                        packet.pages[..3],
+                        if address != bed {
+                            [address.page, 1, address.page]
+                        } else {
+                            [address.page, 0, 0]
+                        }
+                    );
                     assert_eq!(
                         packet.pages[3],
-                        triangle.appearance | landscape::INTERPOLATED_FLOOR
+                        triangle.appearance
+                            | if address != bed {
+                                landscape::INTERPOLATED_FLOOR
+                            } else {
+                                0
+                            }
                     );
                 }
             }
@@ -137,7 +150,7 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
 }
 
 #[wasm_bindgen_test]
-fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recoloring() {
+fn landscape_floor_uses_coherent_dirt_and_preserves_legacy_accent_selection() {
     let frame = |page| GameFrame {
         atlas: crate::AtlasAddress {
             page,
@@ -147,7 +160,7 @@ fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recolori
         anchor: [48.0, 24.0],
     };
     let mut art = test_art(frame(0));
-    art.terrain[6].clear();
+    art.terrain[6] = vec![frame(2)];
     art.terrain[2] = vec![frame(1)];
     let sample = SceneTerrain {
         position: [0.5; 2],
@@ -170,6 +183,26 @@ fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recolori
             .iter()
             .all(|t| t.texture_uv == Some(frame(0).atlas)
                 && t.texture_blend == Some([frame(1).atlas, frame(0).atlas]))
+    );
+    let mut legacy = projected_surface_triangles(
+        &[SceneTerrain {
+            appearance: None,
+            ..sample
+        }],
+        camera([0.5; 2], 1.0, [256.0, 128.0]),
+    );
+    apply_terrain_textures(&mut legacy, &art);
+    assert!(legacy.iter().all(|t| t.texture_uv == Some(frame(2).atlas)
+        && t.texture_blend.is_none()
+        && t.appearance == 0));
+    // A missing coherent bed does not silently promote nonperiodic accent art.
+    art.terrain[2].clear();
+    let mut missing = projected_surface_triangles(&[sample], camera([0.5; 2], 1.0, [256.0, 128.0]));
+    apply_terrain_textures(&mut missing, &art);
+    assert!(
+        missing
+            .iter()
+            .all(|t| t.texture_uv == Some(frame(0).atlas) && t.texture_blend.is_none())
     );
     for material in [4, 5, 7, 8, 9, 10] {
         let mut raw = projected_surface_triangles(

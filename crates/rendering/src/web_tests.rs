@@ -9,6 +9,8 @@ mod atlas_pages;
 mod grid;
 #[path = "web/tests/terrain_blend.rs"]
 mod terrain_blend;
+#[path = "web/tests/terrain_filter.rs"]
+mod terrain_filter;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
