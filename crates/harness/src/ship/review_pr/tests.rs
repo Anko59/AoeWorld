@@ -88,7 +88,9 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
             "--repo",
             "owner/repo",
             "--auto",
-            "--squash"
+            "--squash",
+            "--match-head-commit",
+            "abc123"
         ]
     );
     assert_eq!(&calls[2][..2], ["pr", "comment"]);
@@ -125,4 +127,61 @@ fn a_major_bump_in_a_workspace_member_manifest_raises_the_floor() {
     .unwrap();
     git(&["commit", "-q", "-am", "bump"]);
     assert!(dependency_major_bump(root, "HEAD~1", "HEAD").unwrap());
+}
+
+#[test]
+fn only_dependabot_dependency_updates_are_reviewed() {
+    let mut human = metadata("dev", false);
+    human.author = serde_json::json!({"login": "someone"});
+    assert!(
+        validate_metadata(&human)
+            .unwrap_err()
+            .to_string()
+            .contains("Dependabot only")
+    );
+    let ok: Vec<String> = [
+        "Cargo.lock",
+        "crates/x/Cargo.toml",
+        "browser/package.json",
+        "browser/package-lock.json",
+        "docker/rust-tools.Dockerfile",
+        ".github/workflows/ci.yml",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect();
+    assert!(dependency_paths_only(&ok).is_ok());
+    for bad in [
+        ".claude/settings.json",
+        ".agents/hooks/harness.sh",
+        "crates/harness/src/main.rs",
+        "gates/review.json",
+        "AGENTS.md",
+    ] {
+        let error = dependency_paths_only(&[bad.to_owned()])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(bad), "{error}");
+    }
+}
+
+#[test]
+fn auto_merge_is_pinned_to_the_reviewed_commit() {
+    let report: review::Report = serde_json::from_value(serde_json::json!({
+        "version": 1, "head": "b".repeat(40), "branch": "dependabot/x", "base": "", "merge_base": "",
+        "tier": "low", "floor": "low", "runtime": "codex", "model": "m", "effort": "high",
+        "personas": ["quick"], "rounds": 1, "findings": [], "written_grade": 9, "grade": 9,
+        "summary": "", "failures": [], "merge_grade": 8, "started": 0, "finished": 0
+    })).unwrap();
+    let calls = publication_calls("o/r", "https://github.com/o/r/pull/1", &report).unwrap();
+    let merge = calls
+        .iter()
+        .find(|c| c[0] == "pr" && c[1] == "merge")
+        .unwrap();
+    assert!(
+        merge
+            .windows(2)
+            .any(|w| w[0] == "--match-head-commit" && w[1] == "b".repeat(40)),
+        "{merge:?}"
+    );
 }

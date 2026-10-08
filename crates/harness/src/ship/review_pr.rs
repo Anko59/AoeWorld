@@ -42,6 +42,14 @@ pub(super) fn execute(root: &Path) -> Result<()> {
     validate_metadata(&metadata)?;
     git::git(root, &["check-ref-format", "--branch", &metadata.head_name])?;
     git::git(root, &["fetch", "origin", &metadata.head_name])?;
+    // Reviewers run in the PR's tree, under its hook configuration: only a
+    // change that cannot touch any agent, hook or harness file is reviewed.
+    let merge_base = git::git(root, &["merge-base", "origin/dev", &metadata.head_oid])?;
+    dependency_paths_only(&git::changed_between(
+        root,
+        &merge_base,
+        &metadata.head_oid,
+    )?)?;
 
     let worktree = Worktree::create(root, &metadata.head_oid)?;
     let task = gh(
@@ -94,6 +102,17 @@ pub(super) fn execute(root: &Path) -> Result<()> {
         }
         .into());
     }
+    // The PR may have moved during the review: publish only for what was reviewed.
+    let now = read_metadata(root, number, &repository)?;
+    validate_metadata(&now)?;
+    if now.head_oid != metadata.head_oid {
+        return Err(format!(
+            "the pull request moved during the review ({} → {}); review it again",
+            &metadata.head_oid[..12],
+            &now.head_oid[..12]
+        )
+        .into());
+    }
     let url = format!("https://github.com/{repository}/pull/{number}");
     for call in publication_calls(&repository, &url, &report)? {
         gh(root, &call.iter().map(String::as_str).collect::<Vec<_>>())?;
@@ -136,6 +155,17 @@ fn validate_metadata(metadata: &PrMetadata) -> Result<()> {
         return Err(format!(
             "review-pr only reviews pull requests based on dev (found {})",
             metadata.base_name
+        )
+        .into());
+    }
+    let author = metadata
+        .author
+        .get("login")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if !matches!(author, "dependabot[bot]" | "app/dependabot") {
+        return Err(format!(
+            "review-pr reviews dependency updates by Dependabot only (author: {author})"
         )
         .into());
     }
@@ -204,6 +234,14 @@ fn publication_calls(
     report: &review::Report,
 ) -> Result<Vec<Vec<String>>> {
     let mut calls = review_gate::publish_calls(repository, url, report)?;
+    // Auto-merge only the reviewed commit, whatever is pushed later.
+    for call in &mut calls {
+        if call.first().map(String::as_str) == Some("pr")
+            && call.get(1).map(String::as_str) == Some("merge")
+        {
+            call.extend(["--match-head-commit".into(), report.head.clone()]);
+        }
+    }
     calls.push(vec![
         "pr".into(),
         "comment".into(),
@@ -342,3 +380,24 @@ fn unix_now() -> u64 {
 
 #[cfg(test)]
 mod tests;
+
+/// The only files a reviewed dependency update may change: manifests,
+/// lockfiles, Dockerfiles and workflow files; never agent, hook or harness
+/// configuration, since its reviewers run under the PR's own tree.
+pub(super) fn dependency_paths_only(paths: &[String]) -> Result<()> {
+    let allowed = |path: &str| {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        matches!(
+            name,
+            "Cargo.toml" | "Cargo.lock" | "package.json" | "package-lock.json"
+        ) || (path.starts_with("docker/") && name.ends_with(".Dockerfile"))
+            || path.starts_with(".github/workflows/")
+    };
+    match paths.iter().find(|p| !allowed(p)) {
+        Some(path) => Err(format!(
+            "review-pr reviews dependency updates only; this pull request changes `{path}`"
+        )
+        .into()),
+        None => Ok(()),
+    }
+}
