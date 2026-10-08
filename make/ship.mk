@@ -6,7 +6,9 @@
 # through the environment only; they are never pasted into shell text.
 # PR is the public Make argument; REVIEW_PR is the process environment value
 # consumed by the harness. Neither is embedded in recipe shell text.
-REVIEW_PR ?= $(PR)
+# PR= on the command line wins over a REVIEW_PR already in the environment;
+# it reaches the harness through the exported variable, never shell text.
+override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
 .PHONY: ship ship-status review review-floor review-pr
 ship:

@@ -185,3 +185,19 @@ fn auto_merge_is_pinned_to_the_reviewed_commit() {
         "{merge:?}"
     );
 }
+
+#[test]
+fn a_docker_image_major_bump_counts() {
+    let before = image_dependencies("FROM rust:1.93.1-bookworm@sha256:abc AS build\nRUN x\n");
+    let after = image_dependencies("FROM rust:2.0.0-bookworm@sha256:def AS build\n");
+    assert_eq!(
+        before.get("rust").map(String::as_str),
+        Some("1.93.1-bookworm")
+    );
+    assert!(has_major_bump(&before, &after));
+    let docker = image_dependencies("FROM docker:29.1.3-cli@sha256:x\n");
+    assert!(!has_major_bump(
+        &docker,
+        &image_dependencies("FROM docker:29.8.2-cli\n")
+    ));
+}

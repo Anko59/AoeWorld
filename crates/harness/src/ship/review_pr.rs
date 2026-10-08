@@ -41,10 +41,12 @@ pub(super) fn execute(root: &Path) -> Result<()> {
     let metadata = read_metadata(root, number, &repository)?;
     validate_metadata(&metadata)?;
     git::git(root, &["check-ref-format", "--branch", &metadata.head_name])?;
-    git::git(root, &["fetch", "origin", &metadata.head_name])?;
+    git::git(root, &["fetch", "origin", &metadata.head_name, "dev"])?;
+    // The base this review compares against, rechecked before publishing.
+    let dev = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
     // Reviewers run in the PR's tree, under its hook configuration: only a
     // change that cannot touch any agent, hook or harness file is reviewed.
-    let merge_base = git::git(root, &["merge-base", "origin/dev", &metadata.head_oid])?;
+    let merge_base = git::git(root, &["merge-base", &dev, &metadata.head_oid])?;
     dependency_paths_only(&git::changed_between(
         root,
         &merge_base,
@@ -102,7 +104,12 @@ pub(super) fn execute(root: &Path) -> Result<()> {
         }
         .into());
     }
-    // The PR may have moved during the review: publish only for what was reviewed.
+    // The PR or dev may have moved during the review: publish only for what
+    // was reviewed.
+    git::git(root, &["fetch", "origin", "dev"])?;
+    if git::git(root, &["rev-parse", "refs/remotes/origin/dev"])? != dev {
+        return Err("dev moved during the review; review the pull request again".into());
+    }
     let now = read_metadata(root, number, &repository)?;
     validate_metadata(&now)?;
     if now.head_oid != metadata.head_oid {
@@ -261,6 +268,7 @@ fn dependency_major_bump(root: &Path, base: &str, head: &str) -> Result<bool> {
         .filter(|p| {
             let name = p.rsplit('/').next().unwrap_or(p);
             matches!(name, "Cargo.toml" | "Cargo.lock" | "package.json")
+                || name.ends_with(".Dockerfile")
         })
         .collect();
     for path in &manifests {
@@ -273,6 +281,9 @@ fn dependency_major_bump(root: &Path, base: &str, head: &str) -> Result<bool> {
         let (before, after) = match path.rsplit('/').next().unwrap_or(path) {
             "package.json" => (json_dependencies(&old), json_dependencies(&new)),
             "Cargo.toml" => (cargo_dependencies(&old), cargo_dependencies(&new)),
+            name if name.ends_with(".Dockerfile") => {
+                (image_dependencies(&old), image_dependencies(&new))
+            }
             _ => (lock_dependencies(&old), lock_dependencies(&new)),
         };
         if has_major_bump(&before, &after) {
@@ -280,6 +291,18 @@ fn dependency_major_bump(root: &Path, base: &str, head: &str) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// `FROM image:tag` lines as image → tag (a digest suffix is ignored).
+pub(super) fn image_dependencies(text: &str) -> BTreeMap<String, String> {
+    text.lines()
+        .filter_map(|line| line.trim().strip_prefix("FROM "))
+        .filter_map(|rest| {
+            let image = rest.split_whitespace().next()?.split('@').next()?;
+            let (name, tag) = image.rsplit_once(':')?;
+            Some((name.to_owned(), tag.to_owned()))
+        })
+        .collect()
 }
 
 fn major(version: &str) -> Option<u64> {
