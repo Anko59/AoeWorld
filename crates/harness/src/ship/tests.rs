@@ -261,3 +261,4 @@ fn the_branch_and_repository_come_from_full_refs_and_origin() {
 }
 
 mod describe;
+mod metrics;

@@ -329,6 +329,7 @@ pub(crate) fn render(
     report: &Report,
     evidence: &Evidence,
     footer: &str,
+    metrics: &str,
 ) -> String {
     let mut out = format!(
         "# 🧑 For humans\n\n### 🎯 Why\n\n{}\n\n### 🛠️ What\n\n{}\n",
@@ -338,9 +339,10 @@ pub(crate) fn render(
         out.push_str(&format!("\n🎬 ![Showcase](./{name})\n"));
     }
     out.push_str(&format!(
-        "\n### ✅ How\n\n{}\n\n> {}\n\n---\n\n# 🤖 For AI\n\n",
+        "\n### ✅ How\n\n{}\n\n> {}\n\n{}\n\n---\n\n# 🤖 For AI\n\n",
         report.headline(),
-        report.summary.trim().replace('\n', "\n> ")
+        report.summary.trim().replace('\n', "\n> "),
+        metrics,
     ));
     if !template.for_ai.is_empty() {
         out.push_str(&format!("{}\n\n", template.for_ai));

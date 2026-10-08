@@ -1,7 +1,8 @@
 <!-- level: medium -->
 <!-- Grounding may be a quote, issue/reference link, HTTPS URL, screenshot or sampled metric.
      `make ship` renders the final description from this file (SHIP_BODY):
-     it adds the review headline and summary, gate evidence and the review.
+     it adds the review headline and summary, the merge-base metrics table,
+     gate evidence and the full review.
      low: tiny PRs, no video · medium: ≤ 1 min video · high: ≤ 2 min, voiced · max: ≤ 5 min, voiced.
      If a section needs more than two lines, split the PR. -->
 ## Why
