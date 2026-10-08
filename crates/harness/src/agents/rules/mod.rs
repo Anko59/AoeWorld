@@ -4,6 +4,7 @@ pub(crate) mod git;
 pub(crate) mod github;
 mod network;
 pub(crate) mod tools;
+pub(crate) mod variables;
 pub(crate) mod writers;
 
 /// How a change ships; every Git and GitHub denial ends with it.

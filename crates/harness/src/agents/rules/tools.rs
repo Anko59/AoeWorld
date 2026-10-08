@@ -1,5 +1,6 @@
 //! Command rules other than Git, GitHub, Make and Docker: the environment, the
 //! host toolchain, `find`, and the agents' read-mostly allow-list.
+use super::variables;
 use super::writers;
 use crate::agents::{
     bash::{self, State},
@@ -60,7 +61,10 @@ const AGENT: &[&str] = &[
 ];
 
 pub(crate) fn assignment(context: &Context, name: &str, value: &Word) -> Verdict {
-    if ALWAYS.contains(&name) || name.starts_with("GIT_CONFIG") {
+    if ALWAYS.contains(&name)
+        || (context.role.is_agent() && variables::dangerous_make_variable(name, true))
+        || name.starts_with("GIT_CONFIG")
+    {
         return Err(format!(
             "setting `{name}` reconfigures Git, gh or Make around the gates; run the command without it"
         ));
@@ -157,12 +161,9 @@ const AGENT_ALLOWED: &[&str] = &[
     "locale",
     "getconf",
     "dirs",
-    "unset",
-    "set",
     "wait",
     "exit",
     "return",
-    "read",
     "for",
     "base64",
     "shuf",

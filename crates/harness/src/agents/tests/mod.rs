@@ -2,6 +2,7 @@ mod bash;
 mod dispatch;
 mod hooks;
 mod runtimes;
+mod shell_state;
 mod stop;
 mod vcs;
 

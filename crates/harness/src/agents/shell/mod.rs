@@ -30,6 +30,11 @@ impl Word {
             assignment: None,
         }
     }
+    /// `NAME` and the value of an assignment-shaped word (`NAME=value`).
+    pub(crate) fn split_assignment(&self) -> Option<(&str, Word)> {
+        let split = self.assignment?;
+        Some((&self.text[..split], self.with_text(&self.text[split + 1..])))
+    }
     pub(crate) fn plain(&self) -> bool {
         !self.computed && !self.glob
     }

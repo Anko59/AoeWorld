@@ -1,4 +1,5 @@
 //! Make and Docker, the dispatchers every check runs through.
+use super::variables;
 use crate::agents::{
     args::{self, Spec},
     context::{Context, Verdict},
@@ -24,19 +25,6 @@ const PERSON_TARGETS: &[&str] = &[
     // It opens, comments on and closes nightly issues: CI and the main session.
     "nightly-triage",
 ];
-/// Variables that redirect what a Make target runs.
-fn dangerous_make_variable(name: &str) -> bool {
-    matches!(
-        name,
-        "SHELL" | "MAKEFLAGS" | "MAKEFILES" | "ROOT" | "UID" | "GID" | ".SHELLFLAGS"
-    ) || name.ends_with("_IMAGE")
-        || name.ends_with("_RUN")
-        || name.ends_with("_MOUNTS")
-        || name.ends_with("_MOUNT")
-        || name.starts_with("GIT_")
-        || name.ends_with("_REAL")
-}
-
 pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
     let spec = Spec {
         short: "CfIjlWoO",
@@ -109,7 +97,12 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             ));
         }
         match word.text.split_once('=') {
-            Some((name, _)) if dangerous_make_variable(name.trim_end_matches([':', '+', '?'])) => {
+            Some((name, _))
+                if variables::dangerous_make_variable(
+                    name.trim_end_matches([':', '+', '?']),
+                    agent,
+                ) =>
+            {
                 return Err(format!(
                     "overriding `{name}` changes what the gates run; use the Makefile's own value"
                 ));

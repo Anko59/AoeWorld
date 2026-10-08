@@ -163,7 +163,30 @@ no-op, sed `w`/`e` and awk redirection or `system()`, writers behind `xargs` or
 `find -exec`, whole-tree unpacking or recursive copies into the checkout, Make
 targets that belong to a person (`hooks-install`, `bootstrap`, releases) and
 Make variables other than `AOE_*`, `HARNESS_*`, `REVIEW_*`, `SHIP_*`. Every other command
-must be on a short read-mostly allow-list. Tester, Implementer and Reviewer
+must be on a short read-mostly allow-list.
+
+Agents do not program the shell. The only shell state an agent may set is a
+`NAME=value` prefix on a command (`FOO=1 make lint`) whose name is literal and
+unprotected, plus the directory (`cd`, `pushd`) and a `for` loop over a literal,
+unprotected name. Refused outright: builtins that assign, export or unset
+variables or change options, functions, aliases, traps or command lookup
+(`export`, `declare`, `typeset`, `local`, `readonly`, `unset`, `read`,
+`mapfile`, `readarray`, `getopts`, `let`, `set`, `shopt`, `enable`, `hash`,
+`alias`, `trap`, `eval`, `source`, `select`, `coproc`, function definitions);
+`exec` in every form (it replaces the shell or keeps its redirections);
+`printf` with options (`-v`) or a `%n` conversion; `wait` with options;
+arithmetic `(( ))`, `$(( ))` and `$[ ]`; every parameter expansion except
+`$NAME`, `${NAME}`, `$1`…`$9`, `$?`, `$$`, `$#`, `$@`, `$*` and their braced
+forms (so no defaults, operators, `@P`/`@E`/`@Q` transforms, indirection,
+substrings or pattern operations, which can assign or hide a command);
+here-documents (`<<`, `<<-`, any delimiter) and here-strings (`<<<`), since
+agents write files with their editor tools; backslash-newline line
+continuations; `{name}>` redirections; and assignments that stand alone
+(`NAME=value` with no command persists in the shell). Agents may also not set
+`GNUMAKEFLAGS` or `MFLAGS`, as a prefix or a Make argument. None of this binds
+the main session, whose shell rules are unchanged. `$(…)`, backticks and
+`<(…)`/`>(…)` are judged as lines of their own. Quoted text is literal:
+`echo '(( X=1 ))'` is allowed. Tester, Implementer and Reviewer
 only read Git and GitHub, except testers and implementers may create an issue
 through `make issue` using its bounded standard-input document (title, optional
 labels line, blank line and body). They cannot pass `ISSUE_*` Make variables.
