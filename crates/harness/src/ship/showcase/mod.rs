@@ -11,9 +11,12 @@ pub(crate) use check::check;
 pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
+#[cfg(test)]
+pub(crate) use media::{concat_entry, publish_temp_output, tts_command};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    os::unix::fs::MetadataExt,
     path::{Component, Path, PathBuf},
 };
 
@@ -198,7 +201,7 @@ pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result
 }
 
 /// Resolve the requested video path beneath `.cache/showcase`, refusing
-/// symlinks in every component even when they point back inside the repository.
+/// symlinks in every component and multiply-linked existing files.
 pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<PathBuf, String> {
     let root = root
         .canonicalize()
@@ -251,9 +254,10 @@ pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<PathBuf, Strin
     let output = parent.join(file);
     match fs::symlink_metadata(&output) {
         Ok(metadata) => {
-            if metadata.file_type().is_symlink() || !metadata.is_file() {
+            if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.nlink() > 1 {
                 return Err(
-                    "SHOWCASE_OUT must be a regular file, not a symlink or directory".into(),
+                    "SHOWCASE_OUT must be a single-link regular file, not a symlink or directory"
+                        .into(),
                 );
             }
             let resolved = output

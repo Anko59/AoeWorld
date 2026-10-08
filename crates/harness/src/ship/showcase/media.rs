@@ -1,7 +1,6 @@
 //! The side-effecting half of `make showcase`: speech requests, the recording
-//! container and the ffmpeg mix. The OpenRouter key is read from the
-//! environment, written only to a private request-header file for curl, and
-//! deleted with the work directory.
+//! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
+//! pipe and never written to disk.
 use super::{
     Scene, Segment, Storyboard, TTS_MODEL, Timings, check_duration, durations, measured_duration,
     resolve_out, track,
@@ -10,9 +9,8 @@ use serde::Serialize;
 use std::{
     fs,
     io::{Read, Write},
-    os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -22,6 +20,8 @@ const TTS_URL: &str = "https://openrouter.ai/api/v1/audio/speech";
 const RECORDER: &str = include_str!("record.mjs");
 pub(crate) const DEFAULT_OUT: &str = ".cache/showcase/showcase.webm";
 const STORYBOARD_LIMIT: u64 = 256 * 1024;
+const TTS_RESPONSE_LIMIT: u64 = 32 * 1024 * 1024;
+const TTS_ERROR_LIMIT: u64 = 64 * 1024;
 
 #[derive(Serialize)]
 struct Plan<'a> {
@@ -84,6 +84,30 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap_or_default()
 }
 
+pub(crate) fn tts_command(request: &Path, audio: &Path) -> Command {
+    let mut command = Command::new("curl");
+    command
+        .args([
+            "-sS",
+            "--fail-with-body",
+            "--max-time",
+            "120",
+            "--max-filesize",
+        ])
+        .arg(TTS_RESPONSE_LIMIT.to_string())
+        .args(["-X", "POST", TTS_URL, "-H", "@-", "--data-binary"])
+        .arg(format!("@{}", request.display()))
+        .arg("-o")
+        .arg(audio)
+        .stdin(Stdio::piped());
+    command
+}
+
+pub(crate) fn concat_entry(file: &Path) -> String {
+    let escaped = path(file).replace('\'', "'\\''");
+    format!("file '{escaped}'\n")
+}
+
 /// Voice each narrated scene; returns each voice-over's length.
 fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
     if board.scenes.iter().all(|s| s.narration().is_none()) {
@@ -92,15 +116,6 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
     let key = credential("OPENROUTER_API_KEY").ok_or(
         "the storyboard has narration, but OPENROUTER_API_KEY is neither set nor in the keyring (docs/credentials.md)",
     )?;
-    let headers = work.join("headers");
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&headers)?
-        .write_all(
-            format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
-        )?;
     let mut lengths = vec![];
     for (index, scene) in board.scenes.iter().enumerate() {
         let Some(text) = scene.narration() else {
@@ -113,25 +128,20 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
         });
         fs::write(&request, body.to_string())?;
         let audio = work.join(format!("voice-{index}.pcm"));
-        let status = Command::new("curl")
-            .args([
-                "-sS",
-                "--fail-with-body",
-                "--max-time",
-                "120",
-                "-X",
-                "POST",
-                TTS_URL,
-            ])
-            .arg("-H")
-            .arg(format!("@{}", headers.display()))
-            .arg("--data-binary")
-            .arg(format!("@{}", request.display()))
-            .arg("-o")
-            .arg(&audio)
-            .status()?;
+        let mut child = tts_command(&request, &audio).spawn()?;
+        child
+            .stdin
+            .take()
+            .ok_or("curl stdin was not piped")?
+            .write_all(
+                format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
+            )?;
+        let status = child.wait()?;
         if !status.success() {
-            let reason = fs::read_to_string(&audio).unwrap_or_default();
+            let mut reason = String::new();
+            if let Ok(file) = fs::File::open(&audio) {
+                file.take(TTS_ERROR_LIMIT).read_to_string(&mut reason)?;
+            }
             return Err(format!("speech for scene {} failed: {}", index + 1, reason.trim()).into());
         }
         let bytes = fs::metadata(&audio)?.len();
@@ -231,7 +241,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
             "1".into(),
             path(&file).into(),
         ]);
-        list.push_str(&format!("file '{}'\n", file.display()));
+        list.push_str(&concat_entry(&file));
     }
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     docker(&[work], tools, &args)?;
@@ -327,9 +337,15 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
     fs::create_dir_all(&work)?;
     let result = (|| -> Result<PathBuf> {
         let voices = narrate(&work, &board)?;
-        let _ = fs::remove_file(work.join("headers"));
         let planned = durations(&board, &voices);
         check_duration(&planned)?;
+        let make = env("MAKE")?;
+        let status = Command::new(make)
+            .args(["--no-print-directory", "ship-tools", "browser-deps"])
+            .status()?;
+        if !status.success() {
+            return Err("building showcase images failed".into());
+        }
         let plan = Plan {
             title: &board.title,
             scenes: board
@@ -343,20 +359,27 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
                 .collect(),
         };
         let (silent, timings) = record(root, &work, &plan)?;
-        let measured = match measured_duration(&timings, board.scenes.len()) {
-            Ok(measured) => measured,
-            Err(error) => {
-                if error.starts_with("the recorded showcase runs ") {
-                    let _ = fs::remove_file(&out);
-                }
-                return Err(error.into());
-            }
-        };
+        let measured = measured_duration(&timings, board.scenes.len())?;
         fs::create_dir_all(out.parent().ok_or("the output has no directory")?)?;
-        if voices.iter().any(Option::is_some) {
-            mix(&work, &tools, &track(&timings, &voices)?, &silent, &out)?;
+        let temp_out = reserve_temp_output(&out)?;
+        let publish = if voices.iter().any(Option::is_some) {
+            mix(
+                &work,
+                &tools,
+                &track(&timings, &voices)?,
+                &silent,
+                &temp_out,
+            )
         } else {
-            fs::copy(&silent, &out)?;
+            fs::copy(&silent, &temp_out).map(|_| ()).map_err(Into::into)
+        };
+        if let Err(error) = publish {
+            let _ = fs::remove_file(&temp_out);
+            return Err(error);
+        }
+        if let Err(error) = publish_temp_output(&temp_out, &out) {
+            let _ = fs::remove_file(&temp_out);
+            return Err(error);
         }
         let seconds = measured / 1000;
         println!(
@@ -373,4 +396,22 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
     })();
     let _ = fs::remove_dir_all(&work);
     result
+}
+
+fn reserve_temp_output(out: &Path) -> Result<PathBuf> {
+    let name = out
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .ok_or("SHOWCASE_OUT must have a UTF-8 filename")?;
+    let temp = out.with_file_name(format!(".{name}-{}.tmp.webm", std::process::id()));
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
+    Ok(temp)
+}
+
+pub(crate) fn publish_temp_output(temp: &Path, out: &Path) -> Result<()> {
+    fs::rename(temp, out)?;
+    Ok(())
 }

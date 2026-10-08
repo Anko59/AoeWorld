@@ -9,8 +9,10 @@ make showcase SHOWCASE_STORYBOARD=.cache/showcase/storyboard.json   # → .cache
 make ship … SHIP_VIDEO=.cache/showcase/showcase.webm
 ```
 
-`make showcase-check` validates the storyboard, output path and five-minute
-limit before `make showcase` builds either Docker image.
+`make showcase-check` validates the storyboard, output path and natural
+five-minute limit without building either Docker image. `make showcase` voices
+the scenes first, checks the narration-stretched plan against five minutes,
+then builds the recording images and records the take.
 
 Keep the storyboard outside the repository (or under `.cache/`): it is not
 committed. `SHOWCASE_OUT` may select a path inside `.cache/showcase/`; paths
@@ -50,11 +52,12 @@ protocols, a filmed agent session for developer experience.
 `high` and `max` videos need a voice-over. Any scene may carry `narration`
 (≤ 3000 characters); it is spoken by `google/gemini-3.8-flash-lite-tts` on
 OpenRouter with the storyboard's `voice` (Kore, Puck, Charon, …), which answers
-raw PCM (24 kHz, 16-bit mono) that the harness converts and measures.
+raw PCM (24 kHz, 16-bit mono) that the harness converts and measures. The
+authorization header is sent to curl over a pipe and is never written to disk;
+each response is limited to 32 MiB and error details to 64 KiB.
 `OPENROUTER_API_KEY` comes from the environment or, when unset, from the
-keyring (`secret-tool lookup service codex-api name OPENROUTER_API_KEY`); the
-harness keeps it in a private header file for the request only and never
-writes it to the output. Speech requests use only OpenRouter's fixed endpoint.
+keyring (`secret-tool lookup service codex-api name OPENROUTER_API_KEY`). Speech
+requests use only OpenRouter's fixed endpoint.
 A scene lasts at least as long as its voice-over.
 
 ## How it is made
@@ -66,7 +69,8 @@ browser image (`record.mjs`) plays every card and terminal scene for its
 planned length and records the actual timings. The ship-tools image (`docker/ship-tools.Dockerfile`,
 ffmpeg) pads each voice to its scene's measured length and muxes the track into
 the WebM. Narration can stretch a scene; plans over 5 minutes are rejected
-before speech requests or containers start.
-The stretched plan is checked again after narration, and a take whose measured
-duration exceeds 5 minutes is rejected with its output removed. `make ship`
+before image builds. A take whose
+measured duration exceeds 5 minutes is rejected. The final WebM is written to
+a temporary file beside the destination and atomically renamed into place.
+Existing multiply linked output files are refused. `make ship`
 then checks the level's limit and the sound track.

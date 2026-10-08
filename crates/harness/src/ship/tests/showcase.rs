@@ -97,6 +97,20 @@ fn planned_and_measured_duration_checks_enforce_five_minutes() {
 }
 
 #[test]
+fn narration_stretch_can_put_the_planned_showcase_over_five_minutes() {
+    let board = Storyboard::parse(
+        r#"{"title":"long","scenes":[
+          {"kind":"card","heading":"one","narration":"first"},
+          {"kind":"card","heading":"two","narration":"second"}
+        ]}"#,
+    )
+    .unwrap();
+    let planned = durations(&board, &[Some(150_000), Some(150_000)]);
+    assert_eq!(planned, [150_600, 150_600]);
+    assert!(check_duration(&planned).is_err());
+}
+
+#[test]
 fn showcase_output_is_created_and_confined_to_its_cache_directory() {
     let root = tempfile::tempdir().unwrap();
     let output = resolve_out(root.path(), ".cache/showcase/nested/take.webm").unwrap();
@@ -162,6 +176,40 @@ fn showcase_output_rejects_existing_non_regular_files() {
 }
 
 #[test]
+fn showcase_output_rejects_hard_links() {
+    let root = tempfile::tempdir().unwrap();
+    let showcase = root.path().join(".cache/showcase");
+    std::fs::create_dir_all(&showcase).unwrap();
+    let protected = root.path().join("protected.json");
+    let output = showcase.join("showcase.webm");
+    std::fs::write(&protected, b"protected registry").unwrap();
+    std::fs::hard_link(&protected, &output).unwrap();
+    assert!(resolve_out(root.path(), ".cache/showcase/showcase.webm").is_err());
+    assert_eq!(std::fs::read(protected).unwrap(), b"protected registry");
+}
+
+#[test]
+fn atomic_showcase_publish_replaces_a_hard_link_without_writing_through_it() {
+    use super::super::showcase::publish_temp_output;
+
+    let root = tempfile::tempdir().unwrap();
+    let showcase = root.path().join(".cache/showcase");
+    std::fs::create_dir_all(&showcase).unwrap();
+    let protected = root.path().join("protected.json");
+    let output = showcase.join("showcase.webm");
+    let temp = showcase.join(".showcase.tmp.webm");
+    std::fs::write(&protected, b"protected registry").unwrap();
+    std::fs::hard_link(&protected, &output).unwrap();
+    std::fs::write(&temp, b"new video").unwrap();
+
+    publish_temp_output(&temp, &output).unwrap();
+
+    assert_eq!(std::fs::read(protected).unwrap(), b"protected registry");
+    assert_eq!(std::fs::read(output).unwrap(), b"new video");
+    assert!(!temp.exists());
+}
+
+#[test]
 fn recorder_aborts_every_request_except_inline_document_urls() {
     let script = include_str!("../showcase/record.mjs");
     assert!(script.contains("serviceWorkers: \"block\""));
@@ -184,12 +232,10 @@ fn recorder_runs_without_container_network() {
 fn showcase_target_checks_before_building_its_docker_images() {
     let makefile = include_str!("../../../../../make/ship.mk");
     let target = makefile.find("showcase: showcase-check").unwrap();
-    let build = makefile
-        .find("$(MAKE) --no-print-directory ship-tools browser-deps")
-        .unwrap();
     let execute = makefile.find("harness.sh exec showcase\n").unwrap();
-    assert!(target < build);
-    assert!(build < execute);
+    assert!(target < execute);
+    assert!(!makefile.contains("$(MAKE) --no-print-directory ship-tools browser-deps"));
+    assert!(makefile.contains("export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE"));
     assert!(makefile.contains("harness.sh exec showcase-check"));
     let hook = include_str!("../../../../../.agents/hooks/harness.sh");
     assert!(hook.contains("showcase-check) probe=crates/harness/src/ship/showcase/check.rs"));
@@ -227,6 +273,39 @@ fn ffmpeg_voice_and_segment_conversions_are_batched() {
 }
 
 #[test]
+fn concat_manifest_escapes_apostrophes_in_segment_paths() {
+    use super::super::showcase::concat_entry;
+    use std::path::Path;
+
+    assert_eq!(
+        concat_entry(Path::new("/tmp/O'Brien/AoeWorld/.cache/tmp/segment-0.wav")),
+        "file '/tmp/O'\\''Brien/AoeWorld/.cache/tmp/segment-0.wav'\n"
+    );
+}
+
+#[test]
+fn tts_command_reads_authorization_from_stdin_and_bounds_bodies() {
+    use super::super::showcase::tts_command;
+    use std::path::Path;
+
+    let command = tts_command(Path::new("request.json"), Path::new("response.pcm"));
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.windows(2).any(|pair| pair == ["-H", "@-"]));
+    assert!(
+        args.windows(2)
+            .any(|pair| pair == ["--max-filesize", "33554432"])
+    );
+    assert!(args.contains(&"--fail-with-body".into()));
+    assert!(!args.iter().any(|arg| arg.contains("DUMMY_OPENROUTER_KEY")));
+    let source = include_str!("../showcase/media.rs");
+    assert!(!source.contains("work.join(\"headers\")"));
+    assert!(source.contains("file.take(TTS_ERROR_LIMIT).read_to_string"));
+}
+
+#[test]
 fn showcase_preflights_both_plans_before_starting_the_recorder() {
     let source = include_str!("../showcase/media.rs");
     let preflight = source.find("check_duration(&durations(").unwrap();
@@ -236,6 +315,9 @@ fn showcase_preflights_both_plans_before_starting_the_recorder() {
     assert!(preflight < narration);
     assert!(narration < stretched_check);
     assert!(stretched_check < recording);
+    let build = source.find("ship-tools\", \"browser-deps").unwrap();
+    assert!(stretched_check < build);
+    assert!(build < recording);
     assert!(
         source.contains("const TTS_URL: &str = \"https://openrouter.ai/api/v1/audio/speech\";")
     );
