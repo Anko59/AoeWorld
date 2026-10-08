@@ -92,9 +92,9 @@ none replaces another.
 - **Pass:** `make ship` pushes, appends the review to the pull request, posts
   the commit status `harness/review` = success and arms GitHub auto-merge. A
   passing review is reused by a later `make ship` of the same commit. Branch
-  protection on `dev` requires `required` (CI) today; adding `harness/review` to
-  the required checks is a pending repository setting, to be made once every
-  agent session ships through `make ship`.
+  protection on `dev` requires both `required` (CI) and `harness/review`, so
+  nothing merges without a passing review (Dependabot PRs need a review path:
+  #161).
 - **Fail:** nothing is pushed. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.

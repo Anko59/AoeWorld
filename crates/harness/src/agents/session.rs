@@ -10,7 +10,7 @@ const RULES: &str = "\
 Rules this harness enforces in every Bash/Edit/Write call (see CLAUDE.md and docs/agent-runtimes.md):
 - Compile and check only through Dockerized Make targets (`make help`); host cargo/npm are refused.
 - Never bypass hooks (`--no-verify`, `git -c`, hook config) and never weaken a gate, baseline or test to pass.
-- Ship by committing on a feature branch (pre-commit runs `make pre-commit`), pushing it (pre-push runs `make preflight`) and opening a PR against `dev`. A person merges; no session merges, approves or pushes `dev`/`main`.
+- Ship by committing on a feature branch (pre-commit runs `make pre-commit`) and running `make ship` (gates, adversarial review, push, PR against `dev`); `git push` and `gh pr create` are refused. GitHub auto-merges once the review passes (8/10) and CI is green; no session merges, approves or pushes `dev`/`main`.
 - Subagents keep to their role: tester writes tests only, implementer writes code only, reviewer only reads.
 - Stopping runs check-fast (static stop gates from gates/registry.json); fix red results before handing off.
 - Report the exact revision, commands, results and limits.";
