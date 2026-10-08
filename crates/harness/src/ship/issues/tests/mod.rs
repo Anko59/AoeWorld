@@ -1,12 +1,13 @@
 use super::*;
 use std::{fs, os::unix::fs::PermissionsExt, process::Command, sync::Mutex};
 
-static ENVIRONMENT: Mutex<()> = Mutex::new(());
+pub(super) static ENVIRONMENT: Mutex<()> = Mutex::new(());
 
 fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
     Issue {
         number,
         title: title.into(),
+        author: String::new(),
         fingerprint_marker: None,
         labels: labels
             .iter()

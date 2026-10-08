@@ -49,6 +49,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Commands that act for the repository as a whole (nightly triage) belong to
+/// the person's main session and CI only.
+pub(crate) fn main_session() -> bool {
+    Role::from_agent(std::env::var("AOE_AGENT_ROLE").ok().as_deref()) == Role::Main
+}
+
 const INPUT_LIMIT: usize = 4 << 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]

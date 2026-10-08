@@ -1,4 +1,7 @@
 //! `make issue` records out-of-scope work; `make next` selects the next task.
+//! `make ship` files a passing review's leftovers ([`followups`]) and the
+//! nightly workflow triages its failing jobs ([`triage`]) through the same
+//! listing, fingerprint and deduplication.
 use super::git;
 use serde::Deserialize;
 use std::{
@@ -16,10 +19,14 @@ const TITLE_LIMIT: usize = 256;
 const BODY_LIMIT: usize = 60_000;
 const ISSUE_CAP: usize = 10_000;
 
+pub(super) mod followups;
+pub(super) mod triage;
+
 #[derive(Clone, Debug)]
 struct Issue {
     number: u64,
     title: String,
+    author: String,
     fingerprint_marker: Option<String>,
     labels: Vec<Label>,
     created_at: String,
@@ -40,6 +47,13 @@ struct IssueResponse {
     url: String,
     #[serde(default, rename = "pull_request")]
     pull_request: Option<serde_json::Value>,
+    #[serde(default)]
+    user: Option<User>,
+}
+
+#[derive(Deserialize)]
+struct User {
+    login: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -124,13 +138,13 @@ fn labels_from(value: &str) -> Result<Vec<String>> {
     Ok(labels)
 }
 
+fn marker_line(title: &str) -> String {
+    format!("\n\n{MARKER}{} -->\n", fingerprint(title))
+}
+
 fn marked_body(body: &str, title: &str) -> Result<String> {
     validate_text("ISSUE_BODY", body, BODY_LIMIT)?;
-    let marked = format!(
-        "{}\n\n{MARKER}{} -->\n",
-        body.trim_end(),
-        fingerprint(title)
-    );
+    let marked = format!("{}{}", body.trim_end(), marker_line(title));
     validate_text("ISSUE_BODY", &marked, BODY_LIMIT)?;
     Ok(marked)
 }
@@ -210,6 +224,7 @@ fn parse_issue_pages<R: Read>(reader: R) -> Result<Vec<Issue>> {
             issues.push(Issue {
                 number: response.number,
                 title: response.title,
+                author: response.user.map(|user| user.login).unwrap_or_default(),
                 fingerprint_marker,
                 labels: response.labels,
                 created_at: response.created_at,
@@ -255,6 +270,74 @@ fn repository(root: &Path) -> Result<(String, String)> {
     Ok((host.clone(), format!("{host}/{path}")))
 }
 
+/// The origin repository and its open issues, listed once per command.
+struct Target {
+    host: String,
+    repo: String,
+    issues: Vec<Issue>,
+}
+
+impl Target {
+    fn load(root: &Path) -> Result<Self> {
+        let (host, repo) = repository(root)?;
+        let issues = open_issues(
+            root,
+            &host,
+            repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
+        )?;
+        Ok(Self { host, repo, issues })
+    }
+
+    fn gh(&self, root: &Path, args: &[&str], input: Option<&[u8]>) -> Result<String> {
+        let mut full = args.to_vec();
+        full.extend(["--repo", &self.repo]);
+        gh_call(root, &self.host, &full, input)
+    }
+
+    /// Comment `note` on the agent-found duplicate of `title`, or open a new
+    /// issue with `labels` and `body` (marked here, sent on standard input).
+    fn file(
+        &self,
+        root: &Path,
+        title: &str,
+        labels: &[String],
+        body: &str,
+        note: &str,
+    ) -> Result<String> {
+        marked_body(body, title)?;
+        if let Some(index) = duplicate_index(&self.issues, title) {
+            let number = self.issues[index].number.to_string();
+            self.gh(root, &["issue", "comment", &number, "--body", note], None)?;
+            return Ok(format!(
+                "already open, commented on {}",
+                self.issues[index].url
+            ));
+        }
+        self.create(root, title, labels, body)
+    }
+
+    /// Open an issue whose body is marked with the title's fingerprint.
+    fn create(&self, root: &Path, title: &str, labels: &[String], body: &str) -> Result<String> {
+        validate_text("ISSUE_TITLE", title, TITLE_LIMIT)?;
+        let body = marked_body(body, title)?;
+        for label in labels {
+            self.gh(
+                root,
+                &["label", "create", label, "--force", "--color", "BFD4F2"],
+                None,
+            )?;
+        }
+        let mut args = vec!["issue", "create", "--title", title, "--body-file", "-"];
+        for label in labels {
+            args.extend(["--label", label]);
+        }
+        Ok(format!(
+            "opened {}",
+            self.gh(root, &args, Some(body.as_bytes()))?
+        ))
+    }
+}
+
 pub(super) fn issue(root: &Path) -> Result<()> {
     issue_with_input(root, std::io::stdin().lock())
 }
@@ -278,57 +361,16 @@ fn issue_with_input<R: Read>(root: &Path, input: R) -> Result<()> {
     if contains_marker_prefix(&title) || contains_marker_prefix(&body) {
         return Err("issue title and body must not contain the reserved fingerprint marker".into());
     }
-    let body = marked_body(&body, &title)?;
-    let (host, repo) = repository(root)?;
-    let issues = open_issues(
+    // Refuse an oversized body before any GitHub call.
+    marked_body(&body, &title)?;
+    let outcome = Target::load(root)?.file(
         root,
-        &host,
-        repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
-    )?;
-    if let Some(index) = duplicate_index(&issues, &title) {
-        let number = issues[index].number.to_string();
-        gh_call(
-            root,
-            &host,
-            &[
-                "issue",
-                "comment",
-                &number,
-                "--repo",
-                &repo,
-                "--body",
-                "Duplicate request filed; keeping this issue as the shared task.",
-            ],
-            None,
-        )?;
-        println!("issue: already open, commented on {}", issues[index].url);
-        return Ok(());
-    }
-    for label in &labels {
-        gh_call(
-            root,
-            &host,
-            &[
-                "label", "create", label, "--repo", &repo, "--force", "--color", "BFD4F2",
-            ],
-            None,
-        )?;
-    }
-    let mut args = vec![
-        "issue",
-        "create",
-        "--repo",
-        &repo,
-        "--title",
         &title,
-        "--body-file",
-        "-",
-    ];
-    for label in &labels {
-        args.extend(["--label", label]);
-    }
-    let url = gh_call(root, &host, &args, Some(body.as_bytes()))?;
-    println!("issue: opened {url}");
+        &labels,
+        &body,
+        "Duplicate request filed; keeping this issue as the shared task.",
+    )?;
+    println!("issue: {outcome}");
     Ok(())
 }
 
@@ -338,13 +380,8 @@ pub(super) fn next(root: &Path) -> Result<()> {
             "make next is available only to the main session, testers and implementers".into(),
         );
     }
-    let (host, repo) = repository(root)?;
-    let issues = open_issues(
-        root,
-        &host,
-        repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
-    )?;
-    match rank(&issues).first() {
+    let target = Target::load(root)?;
+    match rank(&target.issues).first() {
         Some(issue) => println!("#{} {}\n{}", issue.number, issue.title, issue.url),
         None => println!("no open issue is ready"),
     }
@@ -371,6 +408,9 @@ fn parse_issue_input(input: &str) -> Result<(String, Vec<String>, String)> {
     Ok((title, labels, body.to_owned()))
 }
 
+#[cfg(test)]
+#[path = "issues/tests/stub.rs"]
+mod test_stub;
 #[cfg(test)]
 #[path = "issues/tests/mod.rs"]
 mod tests;
