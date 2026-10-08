@@ -10,7 +10,6 @@
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
-export ISSUE_TITLE ISSUE_LABELS
 .PHONY: ship ship-status review review-floor review-pr issue next video-probe
 ship:
 	@.agents/hooks/harness.sh exec ship
@@ -31,7 +30,7 @@ review-floor:
 review-pr:
 	@.agents/hooks/harness.sh exec review-pr
 
-# File out-of-scope work; its body is read from standard input.
+# File out-of-scope work; title, optional labels and body arrive on standard input.
 issue:
 	@.agents/hooks/harness.sh exec issue
 

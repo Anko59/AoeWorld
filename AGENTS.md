@@ -17,10 +17,12 @@ Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you
 lack access ([credentials](docs/credentials.md)).
 
-For work outside this PR's scope, notice it, file it with `make issue`, and
-don't fix it in this PR. Use `make next` to select an unblocked task.
-File an issue body through standard input, for example:
-`printf '%s' 'Follow-up details' | make issue ISSUE_TITLE='Follow-up'`.
+For work outside this PR's scope, notice it and don't fix it in this PR.
+The main session, testers and implementers may file it with `make issue`; review
+findings are filed later by `make ship` (#174). Use `make next` to select an
+unblocked task. `make issue` takes one bounded document on standard input:
+title, optional `labels: a, b` line, a blank line, then the body. For example:
+`printf 'Follow-up title\n\nFollow-up details\n' | make issue`.
 
 Report the exact revision, commands, results, and limits. Keep the working tree
 clean and commit intended changes. Synthetic workloads do not demonstrate

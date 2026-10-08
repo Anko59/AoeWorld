@@ -110,7 +110,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             }
             Some((name, _)) if agent && !agent_make_variable(name) => {
                 return Err(format!(
-                    "agents set only `AOE_*`, `HARNESS_*`, `REVIEW_*`, `SHIP_*` and `ISSUE_*` Make variables, not `{name}`"
+                    "agents set only `AOE_*`, `HARNESS_*`, `REVIEW_*` and `SHIP_*` Make variables, not `{name}`"
                 ));
             }
             // Make expands `$(...)` in a command-line value, including `$(shell ...)`.
@@ -153,7 +153,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
 }
 
 fn agent_make_variable(name: &str) -> bool {
-    ["AOE_", "HARNESS_", "REVIEW_", "SHIP_", "ISSUE_"]
+    ["AOE_", "HARNESS_", "REVIEW_", "SHIP_"]
         .iter()
         .any(|prefix| name.starts_with(prefix))
 }

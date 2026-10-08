@@ -8,6 +8,7 @@ fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
         number,
         title: title.into(),
         body: String::new(),
+        has_duplicate_marker: false,
         labels: labels
             .iter()
             .map(|name| Label {
@@ -43,8 +44,6 @@ fn issue_labels_are_limited_to_priorities_blocked_and_area_labels() {
         "blocked",
         "area:harness",
         "area:game-core",
-        "area:game core",
-        "area:review/testing.v2",
     ] {
         assert!(allowed_label(label), "{label}");
     }
@@ -53,15 +52,33 @@ fn issue_labels_are_limited_to_priorities_blocked_and_area_labels() {
         "review-follow-up",
         "area:",
         "area:\t",
+        "area:Upper",
+        "area:area2",
+        "area:two--parts",
+        "area:review/testing",
         "priority:urgent",
     ] {
         assert!(!allowed_label(label), "{label}");
     }
     assert_eq!(
-        labels_from(Some("priority:high,area:harness,blocked".into())).unwrap(),
+        labels_from("priority:high,area:harness,blocked").unwrap(),
         ["agent-found", "priority:high", "area:harness", "blocked"]
     );
-    assert!(labels_from(Some("bug".into())).is_err());
+    assert!(labels_from("bug").is_err());
+    assert_eq!(
+        parse_issue_input("Task title\nlabels: priority:high, area:harness\n\nDetails").unwrap(),
+        (
+            "Task title".to_owned(),
+            vec![
+                "agent-found".to_owned(),
+                "priority:high".to_owned(),
+                "area:harness".to_owned()
+            ],
+            "Details".to_owned()
+        )
+    );
+    assert!(parse_issue_input("Task title\n\nDetails").is_ok());
+    assert!(parse_issue_input("Task title\nlabels: area:bad_name\n\nDetails").is_err());
 }
 
 #[test]
@@ -74,7 +91,7 @@ fn only_matching_title_fingerprint_marker_and_agent_label_deduplicates() {
     decoy.title = title.into();
     decoy.body.clear();
     assert_eq!(duplicate_index(&[decoy.clone()], title), None);
-    decoy.body = marker;
+    decoy.has_duplicate_marker = true;
     assert_eq!(duplicate_index(&[decoy.clone()], title), Some(0));
     decoy.labels.clear();
     assert_eq!(duplicate_index(&[decoy], title), None);
@@ -101,6 +118,42 @@ fn next_ranks_priority_then_oldest_and_skips_blocked() {
         ranked.iter().map(|issue| issue.number).collect::<Vec<_>>(),
         [2, 1, 3, 4, 5, 7]
     );
+}
+
+#[test]
+fn github_api_issue_url_is_not_used_when_browser_url_is_available() {
+    let page = serde_json::json!([{
+        "number": 12,
+        "title": "Browser URL",
+        "url": "https://api.github.com/repos/o/r/issues/12",
+        "html_url": "https://github.com/o/r/issues/12"
+    }]);
+    let parsed = parse_issue_pages(page.to_string().as_bytes(), None).unwrap();
+    assert_eq!(parsed[0].url, "https://github.com/o/r/issues/12");
+}
+
+#[test]
+fn issue_page_retains_only_the_duplicate_marker_not_the_response_body() {
+    let title = "Retain marker only";
+    let marker = format!("{MARKER}{} -->", fingerprint(title));
+    let page = serde_json::json!([{
+        "number": 12,
+        "title": title,
+        "body": format!("large response body\n\n{marker}"),
+        "labels": [{"name": AGENT_LABEL}],
+        "url": "https://api.github.com/repos/o/r/issues/12",
+        "html_url": "https://github.com/o/r/issues/12"
+    }]);
+    let parsed = parse_issue_pages(page.to_string().as_bytes(), Some(title)).unwrap();
+    assert!(parsed[0].has_duplicate_marker);
+    assert!(parsed[0].body.is_empty());
+}
+
+#[test]
+fn issue_and_next_hook_routes_select_the_issue_module_probe() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let launcher = fs::read_to_string(root.join(".agents/hooks/harness.sh")).unwrap();
+    assert!(launcher.contains("issue|next) probe=crates/harness/src/ship/issues.rs"));
 }
 
 #[test]
@@ -135,21 +188,20 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
     let old_log = std::env::var_os("GH_LOG");
     let old_body_log = std::env::var_os("GH_BODY_LOG");
     let old_repo = std::env::var_os("GITHUB_REPOSITORY");
-    let old_title = std::env::var_os("ISSUE_TITLE");
-    let old_labels = std::env::var_os("ISSUE_LABELS");
     let old_host = std::env::var_os("GH_HOST");
     let old_repo_env = std::env::var_os("GH_REPO");
     let old_role = std::env::var_os("AOE_AGENT_ROLE");
     let title = "Do useful work";
     let print = fingerprint(title);
-    let decoy_json = serde_json::json!([[{
+    let decoy_json = serde_json::json!([{
         "number": 4,
         "title": "Completely different title",
         "body": format!("{MARKER}{print} -->"),
         "labels": [{"name": "agent-found"}],
         "createdAt": "2026-01-01T00:00:00Z",
-        "url": "https://github.com/project/checkout/issues/4"
-    }]]);
+        "url": "https://api.github.com/repos/project/checkout/issues/4",
+        "html_url": "https://github.com/project/checkout/issues/4"
+    }]);
     unsafe {
         std::env::set_var(
             "PATH",
@@ -159,13 +211,14 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
         std::env::set_var("GH_BODY_LOG", temp.path().join("body.log"));
         std::env::set_var("GH_LIST_JSON", decoy_json.to_string());
         std::env::set_var("GITHUB_REPOSITORY", "wrong/override");
-        std::env::set_var("ISSUE_TITLE", title);
-        std::env::set_var("ISSUE_LABELS", "priority:medium");
         std::env::set_var("GH_HOST", "enterprise.example");
         std::env::set_var("GH_REPO", "wrong/override");
         std::env::remove_var("AOE_AGENT_ROLE");
     }
-    let result = issue_with_input(&root, std::io::Cursor::new(b"Body text from stdin"));
+    let result = issue_with_input(
+        &root,
+        std::io::Cursor::new(b"Do useful work\nlabels: priority:medium\n\nBody text from stdin"),
+    );
     result.unwrap();
     let args = fs::read_to_string(&log).unwrap();
     assert!(!args.contains("<wrong/override>"));
@@ -181,17 +234,18 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
         "marker on a different title is not a duplicate"
     );
 
-    let matching = serde_json::json!([[{
+    let matching = serde_json::json!([{
         "number": 12,
         "title": title,
         "body": format!("{}\n\n{MARKER}{print} -->", "Body text"),
         "labels": [{"name": "agent-found"}],
         "createdAt": "2026-01-01T00:00:00Z",
-        "url": "https://github.com/project/checkout/issues/12"
-    }]]);
+        "url": "https://api.github.com/repos/project/checkout/issues/12",
+        "html_url": "https://github.com/project/checkout/issues/12"
+    }]);
     fs::write(&log, "").unwrap();
     unsafe { std::env::set_var("GH_LIST_JSON", matching.to_string()) };
-    issue_with_input(&root, std::io::Cursor::new(b"Body text")).unwrap();
+    issue_with_input(&root, std::io::Cursor::new(b"Do useful work\n\nBody text")).unwrap();
     let duplicate_args = fs::read_to_string(&log).unwrap();
     assert!(duplicate_args.contains("<comment>"));
     assert!(!duplicate_args.contains("<create>"));
@@ -208,18 +262,24 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
         "number": 600, "title": title,
         "body": format!("Body\n\n{MARKER}{print} -->"),
         "labels": [{"name": "agent-found"}], "createdAt": "2026-01-01T00:00:00Z",
-        "url": "https://github.com/project/checkout/issues/600"
+        "url": "https://api.github.com/repos/project/checkout/issues/600",
+        "html_url": "https://github.com/project/checkout/issues/600"
     });
     unsafe {
         std::env::set_var(
             "GH_LIST_JSON",
-            serde_json::json!([old_page, [late_duplicate]]).to_string(),
+            format!(
+                "{}\n{}",
+                serde_json::json!(old_page),
+                serde_json::json!([late_duplicate])
+            ),
         );
     }
     fs::write(&log, "").unwrap();
-    issue_with_input(&root, std::io::Cursor::new(b"Body text")).unwrap();
+    issue_with_input(&root, std::io::Cursor::new(b"Do useful work\n\nBody text")).unwrap();
     let paged_args = fs::read_to_string(&log).unwrap();
     assert!(paged_args.contains("<--paginate>"));
+    assert!(!paged_args.contains("<--slurp>"));
     assert!(paged_args.contains("<--hostname>\n<github.com>"));
     assert!(paged_args.contains("<comment>"));
     assert!(!paged_args.contains("<create>"));
@@ -229,8 +289,6 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
     restore("GH_LOG", old_log);
     restore("GH_BODY_LOG", old_body_log);
     restore("GITHUB_REPOSITORY", old_repo);
-    restore("ISSUE_TITLE", old_title);
-    restore("ISSUE_LABELS", old_labels);
     restore("GH_HOST", old_host);
     restore("GH_REPO", old_repo_env);
     restore("AOE_AGENT_ROLE", old_role);
@@ -246,7 +304,7 @@ fn pagination_keeps_all_issues_and_fails_above_the_safety_cap() {
             })
         })
         .collect();
-    let parsed = parse_issue_pages(&serde_json::json!([many]).to_string()).unwrap();
+    let parsed = parse_issue_pages(serde_json::json!(many).to_string().as_bytes(), None).unwrap();
     assert_eq!(parsed.len(), 501);
     assert_eq!(rank(&parsed).first().unwrap().number, 1);
     let over_cap: Vec<_> = (0..=ISSUE_CAP)
@@ -256,7 +314,8 @@ fn pagination_keeps_all_issues_and_fails_above_the_safety_cap() {
             })
         })
         .collect();
-    let error = parse_issue_pages(&serde_json::json!([over_cap]).to_string()).unwrap_err();
+    let error =
+        parse_issue_pages(serde_json::json!(over_cap).to_string().as_bytes(), None).unwrap_err();
     assert!(error.to_string().contains("more than 10000"));
 }
 

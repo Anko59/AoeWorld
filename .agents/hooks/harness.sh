@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec ship|ship-status|review|review-floor    (the same judge publishes and reviews)
+#   harness.sh exec ship|ship-status|review|review-floor|review-pr|issue|next
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -18,7 +18,8 @@ case ${1:-} in
       ship|ship-status) probe=crates/harness/src/ship/mod.rs ;;
       review|review-floor) probe=crates/harness/src/review/mod.rs ;;
       review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
-      *) echo "harness.sh exec: ship, ship-status, review, review-floor or review-pr only" >&2; exit 2 ;;
+      issue|next) probe=crates/harness/src/ship/issues.rs ;;
+      *) echo "harness.sh exec: ship, ship-status, review, review-floor, review-pr, issue or next only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

@@ -23,11 +23,13 @@ struct Issue {
     title: String,
     #[serde(default)]
     body: String,
+    #[serde(skip)]
+    has_duplicate_marker: bool,
     #[serde(default)]
     labels: Vec<Label>,
     #[serde(default)]
     created_at: String,
-    #[serde(default)]
+    #[serde(default, rename = "html_url")]
     url: String,
     #[serde(default, rename = "pull_request")]
     pull_request: Option<serde_json::Value>,
@@ -73,15 +75,20 @@ fn allowed_label(label: &str) -> bool {
     matches!(
         label,
         "priority:critical" | "priority:high" | "priority:medium" | "priority:low" | "blocked"
-    ) || label
-        .strip_prefix("area:")
-        .is_some_and(|area| !area.trim().is_empty() && !area.chars().any(char::is_control))
+    ) || label.strip_prefix("area:").is_some_and(area_label)
 }
 
-fn labels_from(value: Option<String>) -> Result<Vec<String>> {
+fn area_label(area: &str) -> bool {
+    !area.is_empty()
+        && area
+            .split('-')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_lowercase()))
+}
+
+fn labels_from(value: &str) -> Result<Vec<String>> {
     let mut labels = vec![AGENT_LABEL.to_owned()];
     let mut seen = HashSet::from([AGENT_LABEL.to_owned()]);
-    for label in value.unwrap_or_default().split(',').map(str::trim) {
+    for label in value.split(',').map(str::trim) {
         if label.is_empty() {
             continue;
         }
@@ -139,49 +146,65 @@ fn gh_call(root: &Path, _host: &str, args: &[&str], input: Option<&[u8]>) -> Res
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-fn open_issues(root: &Path, host: &str, repository: &str) -> Result<Vec<Issue>> {
+fn open_issues(
+    root: &Path,
+    host: &str,
+    repository: &str,
+    duplicate_title: Option<&str>,
+) -> Result<Vec<Issue>> {
     let endpoint = format!("repos/{repository}/issues?state=open&per_page=100");
-    let json = gh_call(
-        root,
-        host,
-        &[
-            "api",
-            "--hostname",
-            host,
-            "--paginate",
-            "--slurp",
-            &endpoint,
-        ],
-        None,
-    )?;
-    parse_issue_pages(&json)
+    let mut child = Command::new("gh")
+        .current_dir(root)
+        .args(["api", "--hostname", host, "--paginate", &endpoint])
+        .env_remove("GH_HOST")
+        .env_remove("GH_REPO")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+    let stdout = child.stdout.take().ok_or("gh stdout was not piped")?;
+    let parsed = parse_issue_pages(stdout, duplicate_title);
+    if parsed.is_err() {
+        let _ = child.kill();
+    }
+    let status = child.wait()?;
+    let issues = parsed?;
+    if !status.success() {
+        return Err(
+            format!("gh api --hostname {host} --paginate {endpoint} failed with {status}").into(),
+        );
+    }
+    Ok(issues)
 }
 
-fn parse_issue_pages(json: &str) -> Result<Vec<Issue>> {
-    let pages: Vec<Vec<Issue>> = serde_json::from_str(json)?;
+fn parse_issue_pages<R: Read>(reader: R, duplicate_title: Option<&str>) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
-    for issue in pages
-        .into_iter()
-        .flatten()
-        .filter(|issue| issue.pull_request.is_none())
-    {
-        if issues.len() == ISSUE_CAP {
-            return Err(format!(
-                "origin has more than {ISSUE_CAP} open issues; refusing incomplete issue selection"
-            )
-            .into());
+    let marker = duplicate_title.map(|title| format!("{MARKER}{} -->", fingerprint(title)));
+    for page in serde_json::Deserializer::from_reader(reader).into_iter::<Vec<Issue>>() {
+        for mut issue in page? {
+            if issue.pull_request.is_some() {
+                continue;
+            }
+            if issues.len() == ISSUE_CAP {
+                return Err(format!(
+                    "origin has more than {ISSUE_CAP} open issues; refusing incomplete issue selection"
+                )
+                .into());
+            }
+            issue.has_duplicate_marker = marker
+                .as_ref()
+                .is_some_and(|marker| issue.body.contains(marker));
+            issue.body.clear();
+            issues.push(issue);
         }
-        issues.push(issue);
     }
     Ok(issues)
 }
 
 fn duplicate_index(issues: &[Issue], title: &str) -> Option<usize> {
     let digest = fingerprint(title);
-    let marker = format!("{MARKER}{digest} -->");
     issues.iter().position(|issue| {
         fingerprint(&issue.title) == digest
-            && issue.body.contains(&marker)
+            && issue.has_duplicate_marker
             && issue.has_label(AGENT_LABEL)
     })
 }
@@ -222,23 +245,23 @@ fn issue_with_input<R: Read>(root: &Path, input: R) -> Result<()> {
             "make issue is available only to the main session, testers and implementers".into(),
         );
     }
-    let title = std::env::var("ISSUE_TITLE").map_err(|_| "set ISSUE_TITLE")?;
-    validate_text("ISSUE_TITLE", &title, TITLE_LIMIT)?;
     let mut bytes = Vec::new();
     input
-        .take((BODY_LIMIT * 4 + 1) as u64)
+        .take(((BODY_LIMIT + TITLE_LIMIT + 1_024) * 4 + 1) as u64)
         .read_to_end(&mut bytes)?;
-    if bytes.len() > BODY_LIMIT * 4 {
-        return Err("ISSUE_BODY exceeds the maximum UTF-8 byte size".into());
+    if bytes.len() > (BODY_LIMIT + TITLE_LIMIT + 1_024) * 4 {
+        return Err("issue input exceeds the maximum UTF-8 byte size".into());
     }
-    let body = String::from_utf8(bytes).map_err(|_| "ISSUE_BODY is not valid UTF-8")?;
+    let input = String::from_utf8(bytes).map_err(|_| "issue input is not valid UTF-8")?;
+    let (title, labels, body) = parse_issue_input(&input)?;
+    validate_text("ISSUE_TITLE", &title, TITLE_LIMIT)?;
     let body = marked_body(&body, &title)?;
-    let labels = labels_from(std::env::var("ISSUE_LABELS").ok())?;
     let (host, repo) = repository(root)?;
     let issues = open_issues(
         root,
         &host,
         repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
+        Some(&title),
     )?;
     if let Some(index) = duplicate_index(&issues, &title) {
         let number = issues[index].number.to_string();
@@ -298,12 +321,33 @@ pub(super) fn next(root: &Path) -> Result<()> {
         root,
         &host,
         repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
+        None,
     )?;
     match rank(&issues).first() {
         Some(issue) => println!("#{} {}\n{}", issue.number, issue.title, issue.url),
         None => println!("no open issue is ready"),
     }
     Ok(())
+}
+
+fn parse_issue_input(input: &str) -> Result<(String, Vec<String>, String)> {
+    let (header, body) = input
+        .split_once("\n\n")
+        .ok_or("issue input must have a blank line between its header and body")?;
+    let mut lines = header.lines();
+    let title = lines.next().ok_or("issue title is required")?.to_owned();
+    if title.is_empty() {
+        return Err("issue title is required".into());
+    }
+    let labels = match lines.next() {
+        Some(line) if line.starts_with("labels: ") => labels_from(&line[8..])?,
+        Some(_) => return Err("the second header line must be `labels: a, b`".into()),
+        None => labels_from("")?,
+    };
+    if lines.next().is_some() {
+        return Err("issue input has too many header lines".into());
+    }
+    Ok((title, labels, body.to_owned()))
 }
 
 #[cfg(test)]

@@ -162,9 +162,13 @@ computed command names and write targets, network tools and non-localhost
 no-op, sed `w`/`e` and awk redirection or `system()`, writers behind `xargs` or
 `find -exec`, whole-tree unpacking or recursive copies into the checkout, Make
 targets that belong to a person (`hooks-install`, `bootstrap`, releases) and
-Make variables other than `AOE_*`, `HARNESS_*`, `REVIEW_*`. Every other command
+Make variables other than `AOE_*`, `HARNESS_*`, `REVIEW_*`, `SHIP_*`. Every other command
 must be on a short read-mostly allow-list. Tester, Implementer and Reviewer
-only read Git and GitHub; the Reviewer runs checks, not `make fmt`.
+only read Git and GitHub, except testers and implementers may create an issue
+through `make issue` using its bounded standard-input document (title, optional
+labels line, blank line and body). They cannot pass `ISSUE_*` Make variables.
+Reviewers cannot file issues; `make ship` files their findings later (#174).
+The Reviewer runs checks, not `make fmt`.
 
 ## The stop rule
 
