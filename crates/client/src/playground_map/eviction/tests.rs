@@ -1,5 +1,6 @@
 use super::*;
 use aoe_map::{Chunk, MapChunkGenerator};
+use std::collections::BTreeSet;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 fn stable_reference(
@@ -61,14 +62,16 @@ fn eviction_retains_exact_stable_reference_suffix_for_512_unique_keys() {
             viewport: [800.0, 600.0],
             focus_elevation_meters: 0.0,
         };
-        for preferred in [&[][..], &[(0, 0), (31, 15), (15, 7)][..]] {
+        for preferred in [
+            &[][..],
+            &[(0, 0), (31, 15), (15, 7)][..],
+            &[(31, 15), (0, 0), (31, 15), (15, 7)][..],
+        ] {
             let order = stable_reference(&keys, camera, config, preferred);
             for capacity in [0, 1, 64, 511, 512] {
                 let mut chunks = source.clone();
-                let mut discovered: BTreeSet<_> = keys.iter().copied().collect();
                 let (removed, _) = evict_distant_chunks_with_limits(
                     &mut chunks,
-                    &mut discovered,
                     camera,
                     config,
                     capacity,
@@ -77,7 +80,6 @@ fn eviction_retains_exact_stable_reference_suffix_for_512_unique_keys() {
                 );
                 let expected: BTreeSet<_> = order[512 - capacity..].iter().copied().collect();
                 assert_eq!(chunks.keys().copied().collect::<BTreeSet<_>>(), expected);
-                assert_eq!(discovered, expected);
                 assert_eq!(removed, capacity < 512);
             }
         }
@@ -111,19 +113,18 @@ fn one_at_a_time_eviction_matches_old_stable_sequence_including_distance_ties() 
     };
     let preferred = [(0, 0), (7, 7)];
     let order = stable_reference(&keys, camera, config, &preferred);
-    let mut discovered: BTreeSet<_> = keys.iter().copied().collect();
     for (index, expected) in order.into_iter().enumerate() {
-        let before = discovered.clone();
+        let before: BTreeSet<_> = chunks.keys().copied().collect();
         evict_distant_chunks_with_limits(
             &mut chunks,
-            &mut discovered,
             camera,
             config,
             63 - index,
             usize::MAX,
             &preferred,
         );
-        let removed: Vec<_> = before.difference(&discovered).copied().collect();
+        let after: BTreeSet<_> = chunks.keys().copied().collect();
+        let removed: Vec<_> = before.difference(&after).copied().collect();
         assert_eq!(removed, vec![expected]);
     }
 }

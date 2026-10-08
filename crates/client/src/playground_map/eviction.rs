@@ -1,6 +1,6 @@
 use super::{CachedChunk, Camera, chunk_distance_for, chunk_resident_bytes, heights};
 use aoe_core::WorldConfig;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 #[path = "eviction/tests.rs"]
 #[cfg(test)]
@@ -8,7 +8,6 @@ mod tests;
 
 pub(crate) fn evict_distant_chunks_with_limits(
     chunks: &mut BTreeMap<(i32, i32), CachedChunk>,
-    discovered: &mut BTreeSet<(i32, i32)>,
     camera: Camera,
     config: WorldConfig,
     maximum_chunks: usize,
@@ -19,15 +18,19 @@ pub(crate) fn evict_distant_chunks_with_limits(
     if chunks.len() <= maximum_chunks && cached_bytes <= maximum_bytes {
         return (false, None);
     }
-    let preferred = preferred.iter().copied().collect::<BTreeSet<_>>();
+    // Membership only: a sorted compact list avoids a second coordinate tree.
+    let mut preferred = preferred.to_vec();
+    preferred.sort_unstable();
+    preferred.dedup();
     let mut coordinates = chunks.keys().copied().collect::<Vec<_>>();
     // Unique map keys and the final coordinate tie-break define a strict order.
     coordinates.sort_unstable_by(|left, right| {
         let left_distance = chunk_distance_for(*left, camera, config);
         let right_distance = chunk_distance_for(*right, camera, config);
         preferred
-            .contains(left)
-            .cmp(&preferred.contains(right))
+            .binary_search(left)
+            .is_ok()
+            .cmp(&preferred.binary_search(right).is_ok())
             .then_with(|| right_distance.total_cmp(&left_distance))
             .then(right.cmp(left))
     });
@@ -38,7 +41,6 @@ pub(crate) fn evict_distant_chunks_with_limits(
         }
         if let Some(chunk) = chunks.remove(&coordinate) {
             cached_bytes = cached_bytes.saturating_sub(chunk_resident_bytes(&chunk));
-            discovered.remove(&coordinate);
             removed = true;
         }
     }

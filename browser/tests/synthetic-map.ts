@@ -40,7 +40,7 @@ export async function activateSyntheticMap(
   return contentHash;
 }
 
-function syntheticChunk(
+export function syntheticChunk(
   x: number,
   y: number,
   denseResources = false,

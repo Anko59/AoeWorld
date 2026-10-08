@@ -1,5 +1,35 @@
 use super::*;
 
+#[wasm_bindgen_test]
+fn canvas_shared_floor_gradient_seam_and_old_packet_fallback() {
+    use crate::surface_mesh::floor as fixture;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = fixture::atlas();
+    for interpolated in [true, false] {
+        let mut faces = fixture::faces(interpolated);
+        for _ in 0..2 {
+            canvas_depth::render_canvas_world(
+                &canvas,
+                &context,
+                &atlas,
+                &mut presentation,
+                &faces.map(WorldLayer::Surface),
+                test_camera(),
+                false,
+            )
+            .unwrap();
+            for [x, y] in fixture::PROBES {
+                assert_eq!(
+                    pixel(&presentation.color_buffer, x, y),
+                    fixture::expected(x, interpolated)
+                );
+            }
+            faces.reverse();
+        }
+    }
+}
+
 fn blended_triangle() -> ProjectedSurfaceTriangle {
     let mut triangle = triangle(
         [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]],

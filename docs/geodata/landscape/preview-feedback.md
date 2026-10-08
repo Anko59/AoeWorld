@@ -37,6 +37,53 @@ initialization (350.203ms including chunk420,310 in one run;1275.097ms including
 start-region chunk312,312 in another); that startup/activation work is not fixed
 by this memo.
 
+## Follow-up appearance and request stage
+
+Forest-floor strengths now gather at shared displayed world vertices and
+interpolate through Canvas, WebGPU and WebGL2 with a tagged reserved packet word.
+The112-byte Sprite layout and legacy/manual constant-floor fallback remain pinned;
+see the rendering ADR for exact field/storage accounting. This smooths floor
+strength only, not palette/canopy discontinuities, nonperiodic accent seams or
+zoom minification. Gradient/shared-edge/order/fallback pixels run on all backends.
+
+Camera demand uses a bounded64-request window with per-request identity and
+AbortController signals. Retired success/error cannot remove a replacement slot,
+insert stale terrain or trigger the normal5-second error backoff. Cache reset
+aborts pending requests without resetting identity. If abort support is unavailable,
+obsolete requests retain slots until completion rather than dropping accounting.
+Native race/cap tests and real browser tests hold an entire old64-request window,
+jump the camera, and verify new terrain arrives before the old window is released,
+with at most64 live non-aborted signals and connected status preserved.
+
+Additional user review confirmed the chunk optimization improved streaming and
+average-zoom elevation rendering works. Remaining priorities include zoom-out soil
+filtering (currently obscures relief), a cleaner grid overlay, varied tree types,
+and reviewed cliffs/boulders/rocks. Larger lakes are still square and unbeached.
+Existing private original images support reviewing conifer4654 and palms4653;
+family/shadow/runtime/packing promotion is separate work, not implied by names.
+Authored cliff sources contain placeholders and directional/anchor hazards;
+use on existing physical faces needs placement/depth qualification. No source
+pixels or local inspection captures enter Git or public build artifacts.
+
+Focused follow-up verification (working tree based on a0c29cdc):
+
+- `make GID=117 browser-check test-wasm perf-ci fuzz-smoke`: pass;
+  actual WASM tests2 core/63 client/124 rendering, including all3 backend pixels.
+- Real Playwright camera cancellation regression:2 projects pass against8081;
+  intentionally held old requests remain unreleased until new terrain progresses.
+- Same pinned actual-source/asset inputs with `make GID=117 test-country-source`:
+  pass, all3 backend observations have empty error lists. Local evidence is in
+  ignored `reports/country-source/run-6szgPm/`:498 unique captured chunks,
+  Chromium RSS peak947,974,144 bytes, final-four spread3,354,624 bytes. Cache reaches
+  its512 count, but `eviction_limit_exercised=false`; this is not canonical50k,
+  1:1 global-traversal, memory-eviction or dedicated-hardware qualification.
+- Initial gzip WASM234,350 bytes failed the unchanged217,240+5% cap228,102.
+  Bounded request-vector scans, canonical once-per-vertex quantization and removal
+  of an unused duplicate discovery set reduced measured gzip to226,052: pass.
+  Eviction keeps its exact old comparator; preferred membership uses a sorted
+  compact vector, with stable-reference tests including unsorted duplicate inputs.
+  No deadline, source identity, baseline, atlas, instance or cache cap was relaxed.
+
 ## Representation issues to address, not conceal
 
 The candidate has real river evidence, but its 1024-axis hydrology grid spans

@@ -1,6 +1,28 @@
 use super::*;
 
 #[wasm_bindgen_test]
+async fn webgpu_shared_floor_gradient_seam_and_old_packet_fallback() {
+    use crate::surface_mesh::floor as fixture;
+    let mut renderer = surface_renderer().await;
+    for interpolated in [true, false] {
+        let mut faces = fixture::faces(interpolated);
+        for _ in 0..2 {
+            renderer
+                .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+                .unwrap();
+            for [x, y] in fixture::PROBES {
+                assert_pixel(
+                    read_pixel(&renderer, 2, [x, y]).await,
+                    fixture::expected(x, interpolated),
+                );
+            }
+            faces.reverse();
+        }
+    }
+    renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
 async fn webgpu_crossfades_the_same_native_material_pixel_as_canvas() {
     let mut renderer = surface_renderer().await;
     check_surface_pixel(&mut renderer, 0, true, [82, 86, 86, 255]).await;

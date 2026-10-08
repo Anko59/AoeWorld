@@ -113,17 +113,40 @@ fine visibility rejection; geometry still applies its existing visibility test.
 No resident-world appearance map is cloned and no geometry/picking budget changes.
 
 Vegetative terrain packets use pages.w: presence bit 0, palette bits 1–3, floor
-strength bits 4–13, canopy bits 14–23, exposure bits 24–25, height band bits 26–28;
-29–31 remain zero. Some zero strength still has presence set. Protected procedural
+strength bits 4–13, canopy bits 14–23, exposure bits 24–25, height band bits 26–28.
+Bit29 opts into interpolated floor endpoints; bits30–31 remain zero. Some zero
+strength still has presence set. Protected procedural
 rock/snow/ice/mud/water, sand and skirts retain their existing kernels and zero
 packet word; their raw scene/triangle metadata is not discarded. Exposure and
 height are carried semantic evidence, not species/art selection permissions.
 
-New vegetative faces blend coherent grass (dry grass in dry/savanna regions) with
-forest detail, uniformly falling back to dirt when forest frames are absent.
-Weights are (1-floor/1000, floor/1000, 0), not legacy barycentric weights. The
-primary and both secondary page addresses still travel together without extra
-geometry, atlas allocations or draw-order regrouping. Restrained palette channel
+New vegetative faces blend coherent grass (dry grass in dry/savanna regions) or
+authoritative dirt with forest detail, uniformly falling back to dirt when forest
+frames are absent. Canonical displayed integer vertices gather a rounded mean of
+up to four incident V2 vegetative cells, excluding missing, legacy, cliff and water
+support; no support falls back to zero. Duplicate cell records cannot reweight the
+mean, and conflicting duplicates conservatively choose the lower floor. Shared
+vertices agree across input order and triangulation; later loaded source support
+can refine an incomplete halo. Only floor strength is continuous here: palette,
+canopy and authored accent texture seams are not solved by this field.
+
+The triangle endpoint sidecar stores three quantized u8 values and costs4 bytes
+per face (98,304 nominal field bytes at24,576 faces). On the pinned WASM target,
+the enclosing triangle remains240 bytes because alignment absorbs the reduction
+from the former8-byte sidecar; this is not retained triangle-vector byte savings.
+Four u16 support slots with an explicit missing sentinel cost8 bytes per unique
+displayed vertex, at most73,728 vertices/589,824 live payload bytes; vector capacity
+growth and the world-key index are additional real CPU storage. Each shared mean
+is computed and quantized once per canonical vertex. Canvas normalizes endpoints
+once per surface rather than quantizing them in every fragment.
+No resident-world terrain map is cloned. The112-byte Sprite ABI is unchanged.
+For bit29 packets, reserved surface depths.w carries three rounded u8 endpoints
+as an exact24-bit numeric f32; depth normalization explicitly preserves that word.
+GPU vertex stages and Canvas interpolate the same quantized endpoint strengths.
+Weights are (1-floor, floor, 0), not legacy material barycentric weights. Old/manual
+packets without bit29 retain the face-constant floor/1000 fallback. The primary
+and both secondary page addresses still travel together without extra geometry,
+atlas allocations or draw-order regrouping. Restrained palette channel
 multipliers and canopy shading (at most 12%) follow face lighting, with shared
 byte rounding in Canvas, WGSL and GLSL. This does not qualify forest accent sheets
 as seamless full-sheet art; that review limitation above remains in force.

@@ -61,7 +61,6 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
                 map::install_fixture_chunk(&mut client, &chunk);
                 let coordinate = chunk.coordinate();
                 client.terrain_chunks.insert(coordinate, chunk);
-                client.terrain_discovered.insert(coordinate);
             }
         }
         Ok(())

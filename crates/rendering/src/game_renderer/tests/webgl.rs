@@ -5,6 +5,8 @@ use crate::web::surface_instance;
 use aoe_core::ScreenPoint;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::wasm_bindgen_test;
+#[path = "webgl_floor.rs"]
+mod floor_pixels;
 
 #[wasm_bindgen_test]
 fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
@@ -337,6 +339,7 @@ fn triangle(
 ) -> ProjectedSurfaceTriangle {
     ProjectedSurfaceTriangle {
         appearance: 0,
+        floor_strengths: None,
         points: std::array::from_fn(|index| SurfacePoint {
             world: [0.0, 0.0, elevation[index]],
             screen: ScreenPoint {

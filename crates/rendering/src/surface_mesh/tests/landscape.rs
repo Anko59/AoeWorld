@@ -126,7 +126,10 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
                     assert_eq!(triangle.appearance, landscape::pack(Some(metadata)));
                     let packet = crate::web::surface_instance(&triangle, [256.0, 128.0], 0.0);
                     assert_eq!(packet.pages[..3], [address.page, 1, address.page]);
-                    assert_eq!(packet.pages[3], triangle.appearance);
+                    assert_eq!(
+                        packet.pages[3],
+                        triangle.appearance | landscape::INTERPOLATED_FLOOR
+                    );
                 }
             }
         }

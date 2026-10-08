@@ -444,7 +444,17 @@ pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
     let (minimum, maximum) = range.unwrap_or((0.0, 0.0));
     let span = maximum - minimum;
     for sprite in instances {
-        for depth in &mut sprite.depths {
+        // Variant-tagged surface w carries an exact numeric 24-bit floor packet,
+        // not geometry depth. Legacy/manual/object packets keep old normalization.
+        let count = if sprite.color[3] < 0.0
+            && sprite.pages[3] & (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
+                == (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
+        {
+            3
+        } else {
+            4
+        };
+        for depth in &mut sprite.depths[..count] {
             *depth = if *depth == f32::NEG_INFINITY {
                 1.0
             } else if !depth.is_finite() {
