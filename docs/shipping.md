@@ -49,6 +49,11 @@ agent policy refuses `$` in agent-set Make values.
 8. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
    repository, found by head branch (never by a number), with the review
    appended; posts the `harness/review` status and arms auto-merge.
+9. **Files the review's leftovers** as issues: one per confirmed or disputed
+   critical or major finding, and one `Review follow-ups for #<pr>` checklist
+   for the minor and nit ones, deduplicated across ships
+   ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
+   reported and does not fail the ship.
 
 ## The pull request description
 

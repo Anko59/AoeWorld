@@ -44,6 +44,8 @@ pub(crate) enum Commands {
     Showcase,
     /// Validate a showcase storyboard without starting Docker or speech requests.
     ShowcaseCheck,
+    /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
+    NightlyTriage,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -135,6 +137,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),
         Commands::Next => issues::next(&root),
+        Commands::NightlyTriage => issues::triage::execute(&root),
     }
 }
 
@@ -290,6 +293,12 @@ pub(crate) fn ship_with(
         }
         if let Some(report) = &review {
             review_gate::publish(root, &url, report)?;
+            // The review passed: a leftover that cannot be filed is reported, not fatal.
+            for problem in issues::followups::file(root, &url, report) {
+                eprintln!(
+                    "ship: review follow-up not filed ({problem}); file it with `make issue`"
+                );
+            }
         }
     }
     Ok(evidence)

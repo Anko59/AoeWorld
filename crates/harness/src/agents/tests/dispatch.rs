@@ -39,3 +39,12 @@ fn unknown_agents_cannot_file_or_select_issues() {
     );
     denied(&fixture, Role::Other, "make next");
 }
+
+#[test]
+fn only_the_main_session_runs_nightly_triage() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer, Role::Other] {
+        denied(&fixture, role, "make nightly-triage");
+    }
+    allowed(&fixture, Role::Main, "make nightly-triage");
+}

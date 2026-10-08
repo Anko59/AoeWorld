@@ -21,6 +21,8 @@ const PERSON_TARGETS: &[&str] = &[
     "ship-tools",
     // It posts a status and arms auto-merge: GitHub writes, main session only.
     "review-pr",
+    // It opens, comments on and closes nightly issues: CI and the main session.
+    "nightly-triage",
 ];
 /// Variables that redirect what a Make target runs.
 fn dangerous_make_variable(name: &str) -> bool {

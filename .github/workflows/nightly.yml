@@ -107,3 +107,23 @@ jobs:
             reports/perf/soak-10.md
           retention-days: 30
           if-no-files-found: ignore
+
+  # Runs last: one issue per failing job, closed when it passes again
+  # (docs/issues.md). The logic is `aoe-harness nightly-triage`.
+  triage:
+    if: always()
+    needs: [full-functional, parser-fuzz, critical-mutation, target-performance, network-soak]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - run: make tools
+      - run: make nightly-triage
+        env:
+          NIGHTLY_RESULTS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}

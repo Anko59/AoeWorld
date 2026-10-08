@@ -9,9 +9,9 @@
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: ship ship-status review review-floor review-pr issue next video-probe ship-tools showcase showcase-check
+.PHONY: ship ship-status review review-floor review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 ship:
 	@.agents/hooks/harness.sh exec ship
@@ -39,6 +39,11 @@ issue:
 # Print the next open, unblocked issue by priority and age.
 next:
 	@.agents/hooks/harness.sh exec next
+
+# The nightly workflow's last job (docs/issues.md): NIGHTLY_RESULTS, its
+# `needs` context JSON, reaches the harness through the environment only.
+nightly-triage:
+	@.agents/hooks/harness.sh exec nightly-triage
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:
