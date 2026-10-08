@@ -123,6 +123,19 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             None => targets.push(word.text.as_str()),
         }
     }
+    if agent
+        && targets
+            .iter()
+            .any(|target| matches!(*target, "issue" | "next"))
+        && parsed
+            .positionals
+            .iter()
+            .any(|word| word.text.split_once('=').is_some())
+    {
+        return Err(
+            "agents run `make issue` and `make next` without Make variable assignments".into(),
+        );
+    }
     for target in targets {
         if agent && PERSON_TARGETS.contains(&target) {
             return Err(format!(

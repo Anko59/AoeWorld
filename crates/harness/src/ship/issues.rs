@@ -16,18 +16,25 @@ const TITLE_LIMIT: usize = 256;
 const BODY_LIMIT: usize = 60_000;
 const ISSUE_CAP: usize = 10_000;
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 struct Issue {
     number: u64,
     title: String,
-    #[serde(default)]
-    body: String,
-    #[serde(skip)]
-    has_duplicate_marker: bool,
+    fingerprint_marker: Option<String>,
+    labels: Vec<Label>,
+    created_at: String,
+    url: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IssueResponse {
+    number: u64,
+    title: String,
+    body: Option<String>,
     #[serde(default)]
     labels: Vec<Label>,
-    #[serde(default)]
+    #[serde(default, rename = "created_at")]
     created_at: String,
     #[serde(default, rename = "html_url")]
     url: String,
@@ -56,6 +63,12 @@ fn fingerprint(title: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     blake3::hash(normalized.as_bytes()).to_hex()[..16].to_owned()
+}
+
+fn fingerprint_marker(body: &str) -> Option<String> {
+    let marker = body.split_once(MARKER)?.1.split_once(" -->")?.0;
+    (marker.len() == 16 && marker.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| marker.to_owned())
 }
 
 fn validate_text(field: &str, value: &str, limit: usize) -> Result<()> {
@@ -146,12 +159,7 @@ fn gh_call(root: &Path, _host: &str, args: &[&str], input: Option<&[u8]>) -> Res
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-fn open_issues(
-    root: &Path,
-    host: &str,
-    repository: &str,
-    duplicate_title: Option<&str>,
-) -> Result<Vec<Issue>> {
+fn open_issues(root: &Path, host: &str, repository: &str) -> Result<Vec<Issue>> {
     let endpoint = format!("repos/{repository}/issues?state=open&per_page=100");
     let mut child = Command::new("gh")
         .current_dir(root)
@@ -162,7 +170,7 @@ fn open_issues(
         .stderr(Stdio::inherit())
         .spawn()?;
     let stdout = child.stdout.take().ok_or("gh stdout was not piped")?;
-    let parsed = parse_issue_pages(stdout, duplicate_title);
+    let parsed = parse_issue_pages(stdout);
     if parsed.is_err() {
         let _ = child.kill();
     }
@@ -176,12 +184,12 @@ fn open_issues(
     Ok(issues)
 }
 
-fn parse_issue_pages<R: Read>(reader: R, duplicate_title: Option<&str>) -> Result<Vec<Issue>> {
+fn parse_issue_pages<R: Read>(reader: R) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
-    let marker = duplicate_title.map(|title| format!("{MARKER}{} -->", fingerprint(title)));
-    for page in serde_json::Deserializer::from_reader(reader).into_iter::<Vec<Issue>>() {
-        for mut issue in page? {
-            if issue.pull_request.is_some() {
+    for page in serde_json::Deserializer::from_reader(reader).into_iter::<Vec<IssueResponse>>() {
+        for response in page? {
+            let fingerprint_marker = response.body.as_deref().and_then(fingerprint_marker);
+            if response.pull_request.is_some() {
                 continue;
             }
             if issues.len() == ISSUE_CAP {
@@ -190,11 +198,14 @@ fn parse_issue_pages<R: Read>(reader: R, duplicate_title: Option<&str>) -> Resul
                 )
                 .into());
             }
-            issue.has_duplicate_marker = marker
-                .as_ref()
-                .is_some_and(|marker| issue.body.contains(marker));
-            issue.body.clear();
-            issues.push(issue);
+            issues.push(Issue {
+                number: response.number,
+                title: response.title,
+                fingerprint_marker,
+                labels: response.labels,
+                created_at: response.created_at,
+                url: response.url,
+            });
         }
     }
     Ok(issues)
@@ -204,7 +215,7 @@ fn duplicate_index(issues: &[Issue], title: &str) -> Option<usize> {
     let digest = fingerprint(title);
     issues.iter().position(|issue| {
         fingerprint(&issue.title) == digest
-            && issue.has_duplicate_marker
+            && issue.fingerprint_marker.as_deref() == Some(digest.as_str())
             && issue.has_label(AGENT_LABEL)
     })
 }
@@ -261,7 +272,6 @@ fn issue_with_input<R: Read>(root: &Path, input: R) -> Result<()> {
         root,
         &host,
         repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
-        Some(&title),
     )?;
     if let Some(index) = duplicate_index(&issues, &title) {
         let number = issues[index].number.to_string();
@@ -321,7 +331,6 @@ pub(super) fn next(root: &Path) -> Result<()> {
         root,
         &host,
         repo.split_once('/').map(|(_, r)| r).unwrap_or(&repo),
-        None,
     )?;
     match rank(&issues).first() {
         Some(issue) => println!("#{} {}\n{}", issue.number, issue.title, issue.url),

@@ -7,8 +7,7 @@ fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
     Issue {
         number,
         title: title.into(),
-        body: String::new(),
-        has_duplicate_marker: false,
+        fingerprint_marker: None,
         labels: labels
             .iter()
             .map(|name| Label {
@@ -17,7 +16,6 @@ fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
             .collect(),
         created_at: created_at.into(),
         url: format!("https://github.com/o/r/issues/{number}"),
-        pull_request: None,
     }
 }
 
@@ -84,14 +82,11 @@ fn issue_labels_are_limited_to_priorities_blocked_and_area_labels() {
 #[test]
 fn only_matching_title_fingerprint_marker_and_agent_label_deduplicates() {
     let title = "Repair queue ordering";
-    let marker = format!("{MARKER}{} -->", fingerprint(title));
     let mut decoy = item(9, "A different task", &[AGENT_LABEL], "2026-01-01");
-    decoy.body = marker.clone();
     assert_eq!(duplicate_index(&[decoy.clone()], title), None);
     decoy.title = title.into();
-    decoy.body.clear();
     assert_eq!(duplicate_index(&[decoy.clone()], title), None);
-    decoy.has_duplicate_marker = true;
+    decoy.fingerprint_marker = Some(fingerprint(title));
     assert_eq!(duplicate_index(&[decoy.clone()], title), Some(0));
     decoy.labels.clear();
     assert_eq!(duplicate_index(&[decoy], title), None);
@@ -128,7 +123,7 @@ fn github_api_issue_url_is_not_used_when_browser_url_is_available() {
         "url": "https://api.github.com/repos/o/r/issues/12",
         "html_url": "https://github.com/o/r/issues/12"
     }]);
-    let parsed = parse_issue_pages(page.to_string().as_bytes(), None).unwrap();
+    let parsed = parse_issue_pages(page.to_string().as_bytes()).unwrap();
     assert_eq!(parsed[0].url, "https://github.com/o/r/issues/12");
 }
 
@@ -144,9 +139,39 @@ fn issue_page_retains_only_the_duplicate_marker_not_the_response_body() {
         "url": "https://api.github.com/repos/o/r/issues/12",
         "html_url": "https://github.com/o/r/issues/12"
     }]);
-    let parsed = parse_issue_pages(page.to_string().as_bytes(), Some(title)).unwrap();
-    assert!(parsed[0].has_duplicate_marker);
-    assert!(parsed[0].body.is_empty());
+    let parsed = parse_issue_pages(page.to_string().as_bytes()).unwrap();
+    assert_eq!(
+        parsed[0].fingerprint_marker.as_deref(),
+        Some(fingerprint(title).as_str())
+    );
+}
+
+#[test]
+fn null_and_missing_issue_bodies_parse_as_empty() {
+    let page = serde_json::json!([
+        {"number": 12, "title": "Null body", "body": null},
+        {"number": 13, "title": "Missing body"}
+    ]);
+    let parsed = parse_issue_pages(page.to_string().as_bytes()).unwrap();
+    assert_eq!(
+        parsed.iter().map(|issue| issue.number).collect::<Vec<_>>(),
+        [12, 13]
+    );
+    assert!(
+        parsed
+            .iter()
+            .all(|issue| issue.fingerprint_marker.is_none())
+    );
+}
+
+#[test]
+fn api_created_at_orders_by_age_even_when_issue_numbers_disagree() {
+    let page = serde_json::json!([
+        {"number": 15, "title": "Older", "created_at": "2020-01-01T00:00:00Z", "labels": [{"name": "priority:high"}]},
+        {"number": 8, "title": "Newer", "created_at": "2021-01-01T00:00:00Z", "labels": [{"name": "priority:high"}]}
+    ]);
+    let parsed = parse_issue_pages(page.to_string().as_bytes()).unwrap();
+    assert_eq!(rank(&parsed).first().unwrap().number, 15);
 }
 
 #[test]
@@ -254,7 +279,7 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
         .map(|number| {
             serde_json::json!({
                 "number": number, "title": format!("Older task {number}"), "body": "", "labels": [],
-                "createdAt": format!("2026-01-{number:02}"), "url": "url"
+                "created_at": format!("2026-01-{number:02}"), "url": "url"
             })
         })
         .collect();
@@ -304,18 +329,17 @@ fn pagination_keeps_all_issues_and_fails_above_the_safety_cap() {
             })
         })
         .collect();
-    let parsed = parse_issue_pages(serde_json::json!(many).to_string().as_bytes(), None).unwrap();
+    let parsed = parse_issue_pages(serde_json::json!(many).to_string().as_bytes()).unwrap();
     assert_eq!(parsed.len(), 501);
     assert_eq!(rank(&parsed).first().unwrap().number, 1);
     let over_cap: Vec<_> = (0..=ISSUE_CAP)
         .map(|number| {
             serde_json::json!({
-                "number": number, "title": "x", "body": "", "labels": [], "createdAt": "", "url": ""
+                "number": number, "title": "x", "body": "", "labels": [], "created_at": "", "url": ""
             })
         })
         .collect();
-    let error =
-        parse_issue_pages(serde_json::json!(over_cap).to_string().as_bytes(), None).unwrap_err();
+    let error = parse_issue_pages(serde_json::json!(over_cap).to_string().as_bytes()).unwrap_err();
     assert!(error.to_string().contains("more than 10000"));
 }
 

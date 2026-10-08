@@ -9,6 +9,12 @@ fn issue_and_next_are_available_to_main_testers_and_implementers() {
     }
     for role in [Role::Tester, Role::Implementer] {
         denied(&fixture, role, "make issue ISSUE_TITLE=x");
+        denied(
+            &fixture,
+            role,
+            "printf 'task\\n\\nbody\\n' | make issue SHIP_TITLE=x",
+        );
+        denied(&fixture, role, "make next SHIP_TITLE=x");
     }
 }
 
