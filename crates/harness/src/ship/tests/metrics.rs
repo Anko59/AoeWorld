@@ -1,5 +1,5 @@
 use super::{
-    super::metrics::{self, class, comment_lines},
+    super::metrics::{self, class, comment_lines, scan_rust},
     fixture, run,
 };
 
@@ -24,6 +24,46 @@ let raw_hashes = r###"src/* and // markers"###;
 let done = true;
 "####;
     assert_eq!(comment_lines(source), 1);
+}
+
+#[test]
+fn lexer_handles_lifetimes_chars_and_attributes_only_in_code() {
+    let source = r####"fn f<'a, /* note */ 'b>() { let s = "it's"; }
+const FIXTURE: &str = r#"
+#[test]
+fn fake() {}
+"#;
+// #[test]
+/*
+#[test]
+*/
+#[test]
+fn real() {}
+let apostrophe = '\'';
+"####;
+    let (_, comments, attributes) = scan_rust(source);
+    assert_eq!(comments, 5);
+    assert_eq!(attributes, 1);
+    assert_eq!(
+        comment_lines("fn f<'a>() { /* comment */ let s = \"it's\"; }"),
+        1
+    );
+    assert_eq!(comment_lines("fn f<'a, /* note */ 'b>() {}"), 1);
+    let escaped_newline = scan_rust("let text = \"body\\\n#[test]\n\";\n");
+    assert_eq!(escaped_newline.0, 3);
+    assert_eq!(escaped_newline.2, 0);
+}
+
+#[test]
+fn raw_string_with_large_delimiter_is_scanned_without_delimiter_allocations() {
+    let hashes = "#".repeat(200_000);
+    let mut source = format!("let value = r{hashes}\"");
+    source.push_str(&"\" body ".repeat(20_000));
+    source.push('"');
+    source.push_str(&hashes);
+    source.push_str(";\n// counted\n");
+    assert_eq!(comment_lines(&source), 1);
+    assert_eq!(scan_rust(&source).2, 0);
 }
 
 #[test]
@@ -57,7 +97,7 @@ fn metrics_are_revision_bound_and_the_table_uses_merge_base() {
 
     let table = metrics::table(&root).unwrap();
     assert!(
-        table.contains("| Lines changed: production | | +8 / −0 | |"),
+        table.contains("| Lines changed: production | | +— / −— | |"),
         "{table}"
     );
     assert!(
@@ -94,5 +134,42 @@ fn cat_file_drains_a_large_blob_while_feeding_thousands_of_ids() {
     assert!(
         head.lines.get("production").copied().unwrap_or_default() > 4000,
         "all ordinary source blobs should be consumed: {head:?}"
+    );
+}
+
+#[test]
+fn integration_test_paths_are_only_crate_top_level_tests_and_missing_values_are_dashes() {
+    let (_temp, root) = fixture("true");
+    std::fs::create_dir_all(root.join("crates/x/src/ship/tests")).unwrap();
+    std::fs::create_dir_all(root.join("crates/x/tests")).unwrap();
+    std::fs::write(
+        root.join("crates/x/src/ship/tests/unit.rs"),
+        "#[test]\nfn unit() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("crates/x/tests/integration.rs"),
+        "#[test]\nfn integration() {}\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("config.bin"), [0, 1, 2]).unwrap();
+    run(&root, &["add", "-A"]);
+    run(&root, &["commit", "-q", "-m", "metrics inputs"]);
+
+    let head = metrics::repository(&root, "HEAD").unwrap();
+    assert_eq!(head.tests.get("unit"), Some(&1));
+    assert_eq!(head.tests.get("integration"), Some(&1));
+    let table = metrics::table(&root).unwrap();
+    assert!(
+        table.contains("| Lines changed: config | | +— / −— | |"),
+        "{table}"
+    );
+    assert!(
+        table.contains("| Comment density in production code (%) | — | — | |"),
+        "{table}"
+    );
+    assert!(
+        table.contains("| Production lines | — | — (—) | |"),
+        "{table}"
     );
 }
