@@ -50,6 +50,31 @@ agent policy refuses `$` in agent-set Make values.
    repository, found by head branch (never by a number), with the review
    appended; posts the `harness/review` status and arms auto-merge.
 
+## The pull request description
+
+`SHIP_BODY` follows `.github/pull_request_template.md`: a level, `## Why` (one
+grounding element, such as a quote from the human request, an issue or reference
+link, an HTTPS URL, a screenshot or a sampled metric, plus at most two lines), `## What` (at most two lines) and
+`## For AI`. `make ship` refuses a description that breaks those limits ("split
+the PR") and renders two parts:
+
+- **🧑 For humans:** Why, What with the showcase video (`SHIP_VIDEO`, uploaded
+  inline with `gh --attach`), and How with the review headline and summary.
+- **🤖 For AI:** the agent's notes, gate evidence and the
+  full adversarial review.
+
+| Level | For | Video (`SHIP_VIDEO`) | Voice |
+|---|---|---|---|
+| low | the smallest PRs (≤ 60 changed lines) | none | none |
+| medium | most PRs | ≤ 1 min | none |
+| high | important PRs | ≤ 2 min | required |
+| max | the most critical PRs | ≤ 5 min | required |
+
+The agent picks the level. Not being a frontend change is never a reason for no
+video: film a terminal or agent session, a before/after timing or an API diff.
+Duration and audio-stream presence are checked with ffmpeg from the pinned
+browser image. High and max levels require an audio stream; reviewers decide
+whether that track contains speech.
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.

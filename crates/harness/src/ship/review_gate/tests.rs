@@ -1,6 +1,8 @@
 use super::super::{
     Options, git,
-    review_gate::{description, publish_calls},
+    github::description,
+    judge,
+    review_gate::publish_calls,
     ship_with,
     tests::{fixture, offline, run},
 };
@@ -181,26 +183,43 @@ fn a_passing_review_posts_its_status_and_arms_auto_merge() {
 }
 
 #[test]
-fn the_review_is_appended_to_the_description_privately() {
+fn the_review_is_rendered_into_a_private_description() {
     let (_temp, root) = fixture("true");
+    let evidence = judge(&root, &offline()).unwrap();
     let report = graded(&root, Tier::Low, 9);
     let body = root.join("body.md");
-    std::fs::write(&body, "## Why\nBecause.\n").unwrap();
+    std::fs::write(
+        &body,
+        "<!-- level: low -->\n## Why\n> \"I don't review code\" — the user\nBecause.\n## What\nA README edit.\n",
+    )
+    .unwrap();
     let options = Options {
-        body_file: Some(body),
+        body_file: Some(body.clone()),
         ..offline()
     };
-    let path = description(&root, &options, &report).unwrap().unwrap();
+    let template = std::fs::read_to_string(&body).unwrap();
+    std::fs::write(&body, "mutated after validation").unwrap();
+    let path = description(&root, &evidence, &options, &report, &template).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(text.starts_with("## Why\nBecause."));
-    assert!(text.contains("## Adversarial review"));
-    assert!(text.contains("9/10"));
+    assert!(text.contains("# 🧑 For humans"), "{text}");
     assert!(
-        path.to_string_lossy().contains("aoe-ship/bodies"),
+        text.contains("> \"I don't review code\" — the user"),
+        "{text}"
+    );
+    assert!(text.contains("Because."), "Why prose was lost: {text}");
+    assert!(text.contains("A README edit."), "{text}");
+    assert!(text.contains("9/10"), "{text}");
+    assert!(text.contains("## Adversarial review"), "{text}");
+    let common = git::git(
+        &root,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .unwrap();
+    assert!(
+        path.starts_with(std::path::Path::new(&common).join("aoe-ship/bodies")),
         "{}",
         path.display()
     );
-    assert!(!path.starts_with(std::env::temp_dir()) || path.starts_with(&root));
 }
 
 #[test]

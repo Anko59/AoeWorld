@@ -152,27 +152,6 @@ fn short(sha: &str) -> &str {
     &sha[..12.min(sha.len())]
 }
 
-/// The description file plus the review, for the pull request.
-pub(crate) fn description(
-    root: &Path,
-    options: &Options,
-    report: &Report,
-) -> Result<Option<std::path::PathBuf>> {
-    let Some(body) = &options.body_file else {
-        return Ok(None);
-    };
-    let mut text = fs::read_to_string(body)?;
-    text.push_str("\n\n## Adversarial review\n\n");
-    text.push_str(&report.markdown());
-    // A private directory in the git common dir, never a guessable /tmp path.
-    let path = super::evidence::directory(root)?
-        .with_file_name("bodies")
-        .join(format!("{}.md", report.head));
-    fs::create_dir_all(path.parent().ok_or("no body directory")?)?;
-    fs::write(&path, text)?;
-    Ok(Some(path))
-}
-
 /// The `gh` calls that publish a passing review: the `harness/review`
 /// success status on the reviewed commit, then GitHub auto-merge (squash).
 pub(crate) fn publish_calls(
