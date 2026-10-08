@@ -16,6 +16,17 @@ Rules every finding must meet:
 
 **An empty findings list is a good result.** Prefer no finding to a weak one.
 
+Threat model (CLAUDE.md): the harness's guards (hooks, `make ship`, `make red`,
+the review) must hold against **subagents** (tester, implementer, reviewer and
+other launched agents): a way for a subagent to escape or fool a guard is in
+scope at full severity. Against the **main session** the guards catch skipped
+steps and honest mistakes; a main session that deliberately builds something
+to defeat a guard on purpose (forging a test, a record or a file it is allowed
+to write) is a documented limit, backstopped by this review and CI. Such a
+finding is at most `minor`, and only if a cheap check would catch it. Do not
+ask for ever more mechanism against a deliberate local forger: no local check
+can win that, and every addition is more code to get wrong.
+
 Severity:
 
 - `critical`: a crash, panic, data loss, desync or security hole on a normal

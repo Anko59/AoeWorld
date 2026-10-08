@@ -34,6 +34,15 @@ Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset and performance changes need `medium`; the harness, gates, instructions,
 `.github/` and the map/geodata crates (`everything`) need `high`.
 
+## Threat model
+
+Reviewers judge against [CLAUDE.md's threat model](../CLAUDE.md#threat-model),
+which the shared preamble states: an escape by a subagent is in scope at full
+severity; a main session deliberately defeating a guard is a documented limit,
+reported at most as `minor`. Without it, reviewers ask for ever more mechanism
+against a local forger that no local check can stop, and reviews stop
+converging.
+
 ## Protocol
 
 The personas, preamble and grader prompts live in `gates/review/`. They, the
