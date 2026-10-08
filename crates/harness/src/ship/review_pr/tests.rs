@@ -94,3 +94,35 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
     assert_eq!(&calls[2][..2], ["pr", "comment"]);
     assert!(calls[2][6].contains("clean"));
 }
+
+#[test]
+fn a_major_bump_in_a_workspace_member_manifest_raises_the_floor() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .current_dir(root)
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["init", "-q", "-b", "dev"]);
+    std::fs::create_dir_all(root.join("crates/x")).unwrap();
+    std::fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[dependencies]\nsyn = \"2.0.1\"\n",
+    )
+    .unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "base"]);
+    std::fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[dependencies]\nsyn = \"3.0.6\"\n",
+    )
+    .unwrap();
+    git(&["commit", "-q", "-am", "bump"]);
+    assert!(dependency_major_bump(root, "HEAD~1", "HEAD").unwrap());
+}

@@ -17,7 +17,8 @@ case ${1:-} in
     case ${2:-} in
       ship|ship-status) probe=crates/harness/src/ship/mod.rs ;;
       review|review-floor) probe=crates/harness/src/review/mod.rs ;;
-      *) echo "harness.sh exec: ship, ship-status, review or review-floor only" >&2; exit 2 ;;
+      review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
+      *) echo "harness.sh exec: ship, ship-status, review, review-floor or review-pr only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

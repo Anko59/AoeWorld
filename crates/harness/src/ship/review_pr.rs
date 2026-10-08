@@ -217,13 +217,22 @@ fn publication_calls(
 }
 
 fn dependency_major_bump(root: &Path, base: &str, head: &str) -> Result<bool> {
-    for path in ["Cargo.toml", "Cargo.lock", "package.json"] {
+    // Every manifest the PR touches, workspace members included.
+    let manifests: Vec<String> = git::changed_between(root, base, head)?
+        .into_iter()
+        .filter(|p| {
+            let name = p.rsplit('/').next().unwrap_or(p);
+            matches!(name, "Cargo.toml" | "Cargo.lock" | "package.json")
+        })
+        .collect();
+    for path in &manifests {
+        let path = path.as_str();
         let old = git::git(root, &["show", &format!("{base}:{path}")]).unwrap_or_default();
         let new = git::git(root, &["show", &format!("{head}:{path}")]).unwrap_or_default();
         if old == new {
             continue;
         }
-        let (before, after) = match path {
+        let (before, after) = match path.rsplit('/').next().unwrap_or(path) {
             "package.json" => (json_dependencies(&old), json_dependencies(&new)),
             "Cargo.toml" => (cargo_dependencies(&old), cargo_dependencies(&new)),
             _ => (lock_dependencies(&old), lock_dependencies(&new)),
