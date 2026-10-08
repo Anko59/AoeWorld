@@ -44,6 +44,8 @@ pub struct GameArt {
     pub terrain: [Vec<GameFrame>; 7],
     /// Authored sheet topology; never infer a repeating sheet from frame count.
     pub terrain_topology: [Option<TerrainTopology>; 7],
+    /// Layout key of the validated native lookup row; absent for raw/legacy art.
+    pub terrain_world: Option<u32>,
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],

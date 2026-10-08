@@ -169,6 +169,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
             })]
         }),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

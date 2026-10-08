@@ -97,7 +97,7 @@ void main() {
         } else {
             uint code = uint(color.z);
             vec2 local = terrainUv(code % 8u, corner);
-            vUv = terrainAtlasUv(uv, local);
+            vUv = (pages.w & 1073741824u) != 0u ? local : terrainAtlasUv(uv, local);
             vColor = vec4(terrainTint(code / 8u), 1);
             vSolid = 1u;
             vTint = code / 8u;
@@ -160,6 +160,45 @@ vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     if (sum.a == 0.0) return center;
     return vec4(floor(sum.rgb / sum.a + .5) / 255.0, center.a);
 }
+// CPU-qualified TLUT words are raw RGBA8; no filtered metadata or new varying.
+struct WorldGroup { uvec2 range; uvec2 grid; uint kind; };
+struct WorldFrame { vec4 rect; uint page; };
+uint lookupWord(uint x) {
+    uvec4 b=uvec4(floor(texelFetch(atlas,ivec3(int(x),1,2),0)*255.0+.5));
+    return b.x|(b.y<<8u)|(b.z<<16u)|(b.w<<24u);
+}
+WorldGroup lookupGroup(uint id) {
+    uint a=lookupWord(4u+3u*id), b=lookupWord(5u+3u*id);
+    return WorldGroup(uvec2(a&65535u,a>>16u),uvec2(b&65535u,b>>16u),lookupWord(6u+3u*id));
+}
+bool worldGroupValid(WorldGroup g) {
+    return g.range.y>0u && g.range.x+g.range.y<=672u && ((g.kind==1u && all(greaterThan(g.grid,uvec2(0))) && g.grid.x*g.grid.y==g.range.y) || (g.kind==2u && all(equal(g.grid,uvec2(0)))));
+}
+uint euclideanPhase(int x,uint period) { int p=int(period); return uint((x%p+p)%p); }
+// Shared coordinate precision contract: owner seams, not alpha filtering.
+vec2 worldPhase(vec2 q) { return floor(q*65536.0+.5)/65536.0; }
+WorldFrame worldFrame(WorldGroup g,uvec2 origin,vec2 q) {
+    ivec2 owner=ivec2(origin+uvec2(ivec2(floor(worldPhase(q))))); uint local;
+    if (g.kind==1u) local=euclideanPhase(owner.x,g.grid.x)*g.grid.y+(g.grid.y-euclideanPhase(owner.y,g.grid.y))%g.grid.y;
+    else { uint h=uint(owner.x)*7u+uint(owner.y)*13u; local=((h&0x80000000u)!=0u ? 0u-h : h)%g.range.y; }
+    uint first=32u+3u*(g.range.x+local), a=lookupWord(first), b=lookupWord(first+1u);
+    return WorldFrame(vec4(float(a&65535u),float(a>>16u),float(b&65535u),float(b>>16u))/vec4(vec2(textureSize(atlas,0).xy),vec2(textureSize(atlas,0).xy)),lookupWord(first+2u)&255u);
+}
+vec2 worldDiamond(vec2 q) { vec2 r=fract(worldPhase(q)); return vec2(.5+.5*(r.x-r.y),.5*(r.x+r.y)); }
+vec2 diamondDelta(vec2 q) { return vec2(.5*(q.x-q.y),.5*(q.x+q.y)); }
+vec2 terrainAtlasUv(vec4 rect,vec2 local) { vec2 pixel=1.0/vec2(textureSize(atlas,0).xy); return rect.xy+pixel*.5+local*max(rect.zw-pixel,vec2(0)); }
+vec4 worldTap(WorldGroup g,uvec2 origin,vec2 q) {
+    WorldFrame f=worldFrame(g,origin,q); return textureLod(atlas,vec3(terrainAtlasUv(f.rect,worldDiamond(q)),float(f.page)),0.0);
+}
+vec4 worldSample(WorldGroup g,uvec2 origin,vec2 q,vec2 dx,vec2 dy) {
+    WorldFrame f=worldFrame(g,origin,q); vec4 center=textureLod(atlas,vec3(terrainAtlasUv(f.rect,worldDiamond(q)),float(f.page)),0.0);
+    vec2 intervals=max(f.rect.zw*vec2(textureSize(atlas,0).xy)-1.0,vec2(0)), px=diamondDelta(dx)*intervals, py=diamondDelta(dy)*intervals;
+    float footprint=max(dot(px,px),dot(py,py));
+    if (!(all(lessThanEqual(abs(q),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint>1.5625 && footprint<=3.402823e38)) return center;
+    vec2 offsets[4]=vec2[4](-dx-dy,-dx+dy,dx-dy,dx+dy); vec4 sum=vec4(0);
+    for (int i=0;i<4;i++) { vec4 tap=floor(worldTap(g,origin,q+.25*offsets[i])*255.0+.5); sum+=vec4(tap.rgb*tap.a,tap.a); }
+    if (sum.a==0.0) return center; return vec4(floor(sum.rgb/sum.a+.5)/255.0,center.a);
+}
 void main() {
     vec2 dx=dFdx(vUv), dy=dFdy(vUv);
     vec2 dx2=dFdx(vUv2), dy2=dFdy(vUv2);
@@ -169,9 +208,27 @@ void main() {
         return;
     }
     vec4 texel;
-    if (vSolid == 0u || (vPages.w & 1u) == 0u) texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
+    if ((vPages.w&1073741824u)!=0u && (vSolid==1u || vSolid==3u)) {
+        uint primary=uint(vRect3.z)&7u, secondary=uint(vRect3.w)&7u;
+        bool valid=lookupWord(0u)==0x54554c54u && lookupWord(1u)==0x07030001u && lookupWord(3u)==vPages.z;
+        WorldGroup g,g2;
+        if (valid) {
+            g=lookupGroup(primary); valid=primary<7u && worldGroupValid(g);
+            if (vSolid==3u && secondary!=primary) { g2=lookupGroup(secondary); valid=valid && secondary<7u && worldGroupValid(g2); }
+        }
+        if (valid) {
+            vec2 q=vec2(vUv.x+vUv.y-.5,vUv.y-vUv.x+.5)*vRect3.xy;
+            vec2 qx=vec2(dx.x+dx.y,dx.y-dx.x)*vRect3.xy, qy=vec2(dy.x+dy.y,dy.y-dy.x)*vRect3.xy;
+            texel=worldSample(g,vPages.xy,q,qx,qy);
+            if (vSolid==3u && secondary!=primary) texel=texel*vWeights.x+worldSample(g2,vPages.xy,q,qx,qy)*vWeights.y;
+        } else {
+            vec2 pixel=1.0/vec2(textureSize(atlas,0).xy), span=max(vRect.zw-pixel,vec2(0));
+            texel=terrainSample(terrainAtlasUv(vRect,vUv),uint(vRect3.z)>>3u,vRect,dx*span,dy*span);
+            if (vSolid==3u) { vec2 span2=max(vRect2.zw-pixel,vec2(0)); texel=texel*vWeights.x+terrainSample(terrainAtlasUv(vRect2,vUv),uint(vRect3.w)>>3u,vRect2,dx*span2,dy*span2)*vWeights.y; }
+        }
+    } else if (vSolid == 0u || (vPages.w & 1u) == 0u) texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
     else texel = terrainSample(vUv, vPages.x, vRect, dx, dy);
-    if (vSolid == 3u) {
+    if (vSolid == 3u && (vPages.w&1073741824u)==0u) {
         if ((vPages.w & 1u) != 0u) {
             texel = texel * vWeights.x
                   + terrainSample(vUv2, vPages.y, vRect2, dx2, dy2) * vWeights.y

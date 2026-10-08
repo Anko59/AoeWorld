@@ -16,3 +16,4 @@ wasm-bindgen = "0.2"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "=0.3.78"
+aoe-assets = { path = "../assets" }

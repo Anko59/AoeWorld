@@ -193,7 +193,7 @@ pub(crate) fn surface_instance(
     };
     let second = points[1];
     let third = points[2];
-    match triangle.texture_uv {
+    let mut sprite = match triangle.texture_uv {
         Some(uv) => Sprite {
             position: points[0],
             radius: second,
@@ -250,5 +250,24 @@ pub(crate) fn surface_instance(
             terrain_blend: [[0.0; 4]; 2],
             pages: [0; 4],
         },
+    };
+    if let Some(world) = triangle
+        .world_texture()
+        .filter(|_| landscape && triangle.texture_uv.is_some())
+    {
+        let pages = sprite.pages;
+        sprite.terrain_blend[1] = [
+            world.footprint[0],
+            world.footprint[1],
+            f32::from(world.groups[0]) + (pages[0] * 8) as f32,
+            f32::from(world.groups[1]) + (pages[1] * 8) as f32,
+        ];
+        sprite.pages = [
+            triangle.texture_tile[0] as u32,
+            triangle.texture_tile[1] as u32,
+            world.checksum,
+            pages[3] | (1 << 30),
+        ];
     }
+    sprite
 }

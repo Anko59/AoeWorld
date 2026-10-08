@@ -115,6 +115,35 @@ pub fn write_table(
     if old.is_some() && existing == ExistingTable::Reject {
         return Err(LookupError::ExistingTable);
     }
+    write_validated_inputs(atlas, groups)
+}
+
+/// Construct a new table only in an exactly sized atlas with an all-zero row.
+/// Unlike the general replacement API, any nonzero row is ExistingTable;
+/// no untrusted existing table is decoded or accepted by this constructor.
+/// Every input is validated before a single atomic copy, with one 8 KiB scratch.
+pub fn write_new_table(
+    atlas: &mut [u8],
+    groups: &[TerrainGroup<'_>; GROUP_COUNT],
+) -> Result<Metadata, LookupError> {
+    if atlas.len() != ATLAS_BYTES {
+        return Err(LookupError::AtlasLength);
+    }
+    if atlas[ROW_OFFSET..ROW_OFFSET + ROW_BYTES]
+        .iter()
+        .any(|&byte| byte != 0)
+    {
+        return Err(LookupError::ExistingTable);
+    }
+    write_validated_inputs(atlas, groups)
+}
+
+// Both entry points establish row ownership and exact atlas size first. This
+// helper validates inputs and constructs metadata without linking the decoder.
+fn write_validated_inputs(
+    atlas: &mut [u8],
+    groups: &[TerrainGroup<'_>; GROUP_COUNT],
+) -> Result<Metadata, LookupError> {
     let mut total = 0_usize;
     for group in groups {
         total = total
@@ -153,9 +182,23 @@ pub fn write_table(
     row[7] = 7;
     let total = u16::try_from(total).map_err(|_| LookupError::Capacity)?;
     put16(&mut row, 8, total);
+    let mut metadata = Metadata {
+        groups: [GroupMetadata {
+            base: 0,
+            count: 0,
+            topology: None,
+        }; GROUP_COUNT],
+        total,
+        layout_checksum: 0,
+    };
     let mut base = 0_u16;
     for (index, group) in groups.iter().enumerate() {
         let count = u16::try_from(group.placements.len()).map_err(|_| LookupError::Capacity)?;
+        metadata.groups[index] = GroupMetadata {
+            base,
+            count,
+            topology: group.topology,
+        };
         let offset = 16 + index * 12;
         put16(&mut row, offset, base);
         put16(&mut row, offset + 2, count);
@@ -180,7 +223,7 @@ pub fn write_table(
     }
     let checksum = layout_checksum(&row);
     row[12..16].copy_from_slice(&checksum.to_le_bytes());
-    let metadata = decode_row(&row)?.ok_or(LookupError::Header)?;
+    metadata.layout_checksum = checksum;
     atlas[ROW_OFFSET..ROW_OFFSET + ROW_BYTES].copy_from_slice(&row);
     Ok(metadata)
 }
