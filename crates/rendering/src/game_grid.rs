@@ -2,7 +2,9 @@ use crate::{GAME_ATLAS_SIDE, SceneCamera, surface_mesh::surface_depth, web::Spri
 use aoe_core::{Camera, MAX_WORLD_DIMENSION_TILES, ScreenPoint, TileRect, WorldConfig};
 use web_sys::CanvasRenderingContext2d;
 
-const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
+const GRID_COLOR: [f32; 4] = [31.0 / 255.0, 38.0 / 255.0, 31.0 / 255.0, 0.2];
+const GRID_STROKE: &str = "rgba(31,38,31,.2)";
+const GRID_WIDTH: f64 = 1.0;
 pub(crate) const SELECTION_RING_SPRITES: usize = 32;
 
 pub(crate) fn selection_ring(
@@ -47,21 +49,55 @@ pub(crate) fn viewport_bounds(camera: SceneCamera) -> TileRect {
 
 pub(crate) fn grid_sprites(camera: SceneCamera, bounds: TileRect) -> Vec<Sprite> {
     let lines = grid_lines(camera, bounds);
-    let mut sprites = Vec::new();
+    let mut sprites = Vec::with_capacity(lines.len() * 2);
     for (start, end) in lines {
         add_line(&mut sprites, start, end, camera.viewport);
     }
     sprites
 }
 
-pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, camera: SceneCamera, bounds: TileRect) {
-    context.begin_path();
-    context.set_stroke_style_str("rgba(220,235,170,.22)");
-    for (start, end) in grid_lines(camera, bounds) {
+pub(crate) fn draw_grid(
+    context: &CanvasRenderingContext2d,
+    backing: [u32; 2],
+    camera: SceneCamera,
+    bounds: TileRect,
+) {
+    // The renderer already owns the backing dimensions; avoid a DOM lookup on
+    // every frame and keep the CSS/backing relationship explicit for tests.
+    let scale = [
+        f64::from(backing[0]) / camera.viewport[0],
+        f64::from(backing[1]) / camera.viewport[1],
+    ];
+    if scale
+        .into_iter()
+        .any(|value| !value.is_finite() || value <= 0.0)
+    {
+        return;
+    }
+    let lines = grid_lines(camera, bounds);
+    if lines.is_empty() {
+        return;
+    }
+    context.save();
+    if context
+        .set_transform(scale[0], 0.0, 0.0, scale[1], 0.0, 0.0)
+        .is_err()
+    {
+        context.restore();
+        return;
+    }
+    context.set_stroke_style_str(GRID_STROKE);
+    context.set_line_width(GRID_WIDTH);
+    context.set_line_cap("butt");
+    // Independently composite each of the <=256 strips, like the GPU packets.
+    // A combined path unions crossings and would apply alpha only once there.
+    for (start, end) in lines {
+        context.begin_path();
         context.move_to(start.x, start.y);
         context.line_to(end.x, end.y);
+        context.stroke();
     }
-    context.stroke();
+    context.restore();
 }
 
 fn camera_projection(camera: SceneCamera) -> Camera {
@@ -73,8 +109,19 @@ fn camera_projection(camera: SceneCamera) -> Camera {
     }
 }
 
+#[inline(never)]
 fn grid_lines(camera: SceneCamera, visible: TileRect) -> Vec<(ScreenPoint, ScreenPoint)> {
-    if !camera.zoom.is_finite() || camera.zoom <= 0.0 {
+    if !camera.zoom.is_finite()
+        || camera.zoom <= 0.0
+        || !camera.focus_elevation_meters.is_finite()
+        || camera.center.into_iter().any(|value| !value.is_finite())
+        || camera
+            .viewport
+            .into_iter()
+            .any(|value| !value.is_finite() || value <= 0.0)
+        || visible.min.x >= visible.max.x
+        || visible.min.y >= visible.max.y
+    {
         return Vec::new();
     }
     let projection = camera_projection(camera);
@@ -82,47 +129,48 @@ fn grid_lines(camera: SceneCamera, visible: TileRect) -> Vec<(ScreenPoint, Scree
     let max_x = visible.max.x;
     let min_y = visible.min.y;
     let max_y = visible.max.y;
-    // At most 128 lines per axis, even if a caller supplies the whole world.
-    let step_x = (i64::from(max_x) - i64::from(min_x)).max(0) / 127 + 1;
-    let step_y = (i64::from(max_y) - i64::from(min_y)).max(0) / 127 + 1;
-    let mut lines = Vec::new();
-    for index in 0..128 {
-        let x = i64::from(min_x) + i64::from(index) * step_x;
-        if x > i64::from(max_x) {
-            break;
-        }
-        let x = x as i32;
-        add_clipped_line(
-            &mut lines,
-            projection.world_to_screen_at_height(
-                [f64::from(x), f64::from(min_y)],
-                camera.focus_elevation_meters,
-            ),
-            projection.world_to_screen_at_height(
-                [f64::from(x), f64::from(max_y)],
-                camera.focus_elevation_meters,
-            ),
-            camera.viewport,
-        );
+    // Perpendicular separation of projected world-coordinate lines, not distance
+    // along either diagonal. A single power-of-two step keeps both axes aligned
+    // to absolute world integer multiples, independent of the visible minimum.
+    let spacing = aoe_core::ISO_TILE_WIDTH * aoe_core::ISO_TILE_HEIGHT
+        / (aoe_core::ISO_TILE_WIDTH * aoe_core::ISO_TILE_WIDTH
+            + aoe_core::ISO_TILE_HEIGHT * aoe_core::ISO_TILE_HEIGHT)
+            .sqrt()
+        * camera.zoom;
+    if !spacing.is_finite() || spacing <= 0.0 {
+        return Vec::new();
     }
-    for index in 0..128 {
-        let y = i64::from(min_y) + i64::from(index) * step_y;
-        if y > i64::from(max_y) {
-            break;
+    let extent = (i64::from(max_x) - i64::from(min_x)).max(i64::from(max_y) - i64::from(min_y));
+    let mut step = 1_i64;
+    while spacing * (step as f64) < 24.0 || extent / step + 1 > 128 {
+        if step > i64::MAX / 2 {
+            return Vec::new();
         }
-        let y = y as i32;
-        add_clipped_line(
-            &mut lines,
-            projection.world_to_screen_at_height(
-                [f64::from(min_x), f64::from(y)],
-                camera.focus_elevation_meters,
-            ),
-            projection.world_to_screen_at_height(
-                [f64::from(max_x), f64::from(y)],
-                camera.focus_elevation_meters,
-            ),
-            camera.viewport,
-        );
+        step *= 2;
+    }
+    let min = [min_x, min_y];
+    let max = [max_x, max_y];
+    let mut lines = Vec::new();
+    for axis in 0..2 {
+        // Exact signed ceil-to-multiple: step is a positive power of two.
+        // i32 endpoints plus step <= 2^62 cannot overflow this i64 sum.
+        let first = (i64::from(min[axis]) + step - 1) & -step;
+        for index in 0..128 {
+            let coordinate = first + i64::from(index) * step;
+            if coordinate > i64::from(max[axis]) {
+                break;
+            }
+            let mut start = min.map(f64::from);
+            let mut end = max.map(f64::from);
+            start[axis] = coordinate as f64;
+            end[axis] = coordinate as f64;
+            add_clipped_line(
+                &mut lines,
+                projection.world_to_screen_at_height(start, camera.focus_elevation_meters),
+                projection.world_to_screen_at_height(end, camera.focus_elevation_meters),
+                camera.viewport,
+            );
+        }
     }
     lines
 }
@@ -143,8 +191,20 @@ fn clip_line(
     end: ScreenPoint,
     viewport: [f64; 2],
 ) -> Option<(ScreenPoint, ScreenPoint)> {
+    if viewport
+        .into_iter()
+        .any(|value| !value.is_finite() || value <= 0.0)
+        || [start.x, start.y, end.x, end.y]
+            .into_iter()
+            .any(|value| !value.is_finite())
+    {
+        return None;
+    }
     let dx = end.x - start.x;
     let dy = end.y - start.y;
+    if !dx.is_finite() || !dy.is_finite() || (dx == 0.0 && dy == 0.0) {
+        return None;
+    }
     let mut first: f64 = 0.0;
     let mut last: f64 = 1.0;
     for (p, q) in [
@@ -172,6 +232,9 @@ fn clip_line(
             last = last.min(ratio);
         }
     }
+    if first >= last {
+        return None;
+    }
     Some((
         ScreenPoint {
             x: start.x + dx * first,
@@ -185,23 +248,50 @@ fn clip_line(
 }
 
 fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, viewport: [f64; 2]) {
-    let distance = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
-    // 256 lines * 256 dots bounds temporary overlay instances to 65,536.
-    let steps = (distance / 8.0).ceil().clamp(1.0, 255.0) as usize;
-    for step in 0..=steps {
-        let amount = f64::from(step as u32) / f64::from(steps as u32);
-        let point = ScreenPoint {
-            x: start.x + (end.x - start.x) * amount,
-            y: start.y + (end.y - start.y) * amount,
-        };
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    // Normalize before squaring: finite extreme or subnormal segments cannot
+    // overflow/underflow their length, and no general-purpose hypot is needed.
+    let scale = dx.abs().max(dy.abs());
+    if !scale.is_finite() || scale <= 0.0 {
+        return;
+    }
+    let [x, y] = [dx / scale, dy / scale];
+    let radius = GRID_WIDTH * 0.5 / (x * x + y * y).sqrt();
+    let normal = [-y * radius, x * radius];
+    let edge = |point: ScreenPoint, sign: f64| {
+        to_clip(
+            ScreenPoint {
+                x: point.x + normal[0] * sign,
+                y: point.y + normal[1] * sign,
+            },
+            viewport,
+        )
+    };
+    let [a, b, c, d] = [
+        edge(start, 1.0),
+        edge(end, 1.0),
+        edge(end, -1.0),
+        edge(start, -1.0),
+    ];
+    if [a, b, c, d]
+        .into_iter()
+        .flatten()
+        .any(|value| !value.is_finite())
+    {
+        return;
+    }
+    // Exactly two existing procedural triangle packets per continuous CSS-pixel
+    // strip: at most 512 instances, no atlas lookup or new packet allocation.
+    for [first, second, third] in [[a, b, c], [a, c, d]] {
         sprites.push(Sprite {
-            position: to_clip(point, viewport),
-            radius: pixel_radius(viewport, 2.0),
-            color: GRID_COLOR,
-            uv: solid_uv(),
+            position: first,
+            radius: second,
+            color: [third[0], third[1], 0.0, -2.0],
+            uv: GRID_COLOR,
             depths: [f32::INFINITY; 4],
             terrain_blend: [[0.0; 4]; 2],
-            pages: [2, 0, 0, 0],
+            pages: [0; 4],
         });
     }
 }
@@ -264,6 +354,10 @@ const RING_POINTS: [[f64; 2]; 32] = [
     [0.9238795325112865, -0.3826834323650904],
     [0.9807852804032303, -0.19509032201612872],
 ];
+
+#[path = "game_grid/tests.rs"]
+#[cfg(test)]
+mod tests;
 
 #[cfg(test)]
 #[wasm_bindgen_test::wasm_bindgen_test]

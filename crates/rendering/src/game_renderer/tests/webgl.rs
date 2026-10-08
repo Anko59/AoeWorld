@@ -9,6 +9,8 @@ use wasm_bindgen_test::wasm_bindgen_test;
 mod filter_pixels;
 #[path = "webgl_floor.rs"]
 mod floor_pixels;
+#[path = "grid/webgl.rs"]
+mod grid_pixels;
 #[path = "species/webgl.rs"]
 mod species_pixels;
 

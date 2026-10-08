@@ -90,7 +90,7 @@ void main() {
         vec2 points[3] = vec2[3](positionRadius.xy, positionRadius.zw, color.xy);
         gl_Position = vec4(points[corner], 2.0 * depths[corner] - 1.0, 1);
         if (color.w == -2.0) {
-            vColor = vec4(uv.xyz, 1);
+            vColor = uv;
             vUv = vec2(0);
             vSolid = 2u;
             vTint = 0u;

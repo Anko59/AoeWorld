@@ -1,6 +1,8 @@
 use super::*;
 use aoe_core::{Seed, TileRect, WorldConfig};
 use wasm_bindgen::JsCast;
+#[path = "grid/continuous.rs"]
+mod continuous;
 
 fn camera() -> SceneCamera {
     SceneCamera {
@@ -30,16 +32,24 @@ fn source_grid_geometry_is_focus_relative_and_bounded() {
     let camera = camera();
     let sprites = game_grid::grid_sprites(camera, bounds(camera));
     assert!(!sprites.is_empty());
-    assert!(
-        sprites
-            .iter()
-            .any(|sprite| sprite.position[0].abs() < 0.02 && sprite.position[1].abs() < 0.02)
-    );
+    assert!(sprites.iter().any(|sprite| {
+        let points = [
+            sprite.position,
+            sprite.radius,
+            [sprite.color[0], sprite.color[1]],
+        ];
+        let signs = std::array::from_fn::<_, 3, _>(|index| {
+            let a = points[index];
+            let b = points[(index + 1) % 3];
+            a[0] * b[1] - a[1] * b[0]
+        });
+        signs.iter().all(|value| *value >= -0.00001) || signs.iter().all(|value| *value <= 0.00001)
+    }));
     let mut overview = camera;
     overview.zoom = 0.0001;
     let sprites = game_grid::grid_sprites(overview, TileRect::from_xywh(0, 0, 70_000, 70_000));
     assert!(!sprites.is_empty());
-    assert!(sprites.len() <= 65_536);
+    assert!(sprites.len() <= 512);
 }
 
 #[wasm_bindgen_test]

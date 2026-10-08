@@ -133,7 +133,7 @@ Focused V2 filter verification on the working tree based on796360c:
   This remains compressed20k candidate evidence, not canonical50k/global/hardware
   qualification. Read-only independent sampler review found no actionable defect.
 
-## Reviewed species promotion (working tree based on 8243267)
+## Reviewed species promotion (3871d87187ae664e968489fb5ce665e011a59e0c)
 
 Catalog v5 appends optional conifer/palm roles without changing prior role numbers,
 resource kinds, IDs, amounts, passability, generator bytes or package identities.
@@ -185,8 +185,14 @@ known limit for shadow-only edge visibility.
   arrays empty. Local run-SBmaFD records 505 unique source chunks, peak summed
   Chromium RSS 952,934,400 bytes and final-four spread 4,055,040 bytes. Eviction
   qualification remains false; compressed candidate evidence is not canonical
-  50k, global ecosystem, severe-zoom or hardware qualification. Commit/full E2E
-  verification remain pending.
+  50k, global ecosystem, severe-zoom or hardware qualification.
+- Guarded commit 3871d87187ae664e968489fb5ce665e011a59e0c: clean, staged
+  preflight and commit hooks passed unchanged after snapshot-preparation retries.
+  `make GID=117 test-e2e`: 81 passed/11 environment skips (92 total, 4.5 minutes).
+  Existing previews were retired, and the same localhost:8081 URL was refreshed:
+  health reports this exact build and the original candidate passed real source
+  capture on WebGPU, WebGL2 and Canvas2D with no backend errors. The independent
+  explicit synthetic/original-art proof is separate from ecosystem qualification.
 
 ## Representation issues to address, not conceal
 

@@ -313,7 +313,12 @@ impl GameRenderer {
                     false,
                 )?;
                 if let Some(bounds) = grid {
-                    game_grid::draw_grid(context, camera, bounds);
+                    game_grid::draw_grid(
+                        context,
+                        [canvas.width(), canvas.height()],
+                        camera,
+                        bounds,
+                    );
                 }
                 Ok(true)
             }

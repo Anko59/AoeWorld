@@ -1,5 +1,7 @@
 use super::*;
 use crate::{GameArt, GameRenderer, SceneCamera, SceneTerrain, SceneTerrainSurface, game_grid};
+#[path = "grid/continuous.rs"]
+mod continuous;
 
 #[wasm_bindgen_test]
 async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {

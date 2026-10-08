@@ -98,7 +98,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         let corner = min(vertex, 2u);
         out.clip = vec4<f32>(surface_points[corner], sprite.depths[corner], 1.0);
         if sprite.color.w == -2.0 {
-            out.color = vec4<f32>(sprite.uv.xyz, 1.0);
+            out.color = sprite.uv;
             out.uv = vec2<f32>(0.0);
             out.solid = 2u;
             out.tint_kind = 0u;

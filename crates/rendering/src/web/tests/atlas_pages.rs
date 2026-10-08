@@ -86,7 +86,7 @@ async fn webgpu_array_same_uv_primary_blends_and_page_two_body_shadow_pixels() {
 }
 
 #[wasm_bindgen_test]
-fn gameplay_grid_and_selection_use_page_two_white_and_reserved_zero() {
+fn gameplay_grid_is_procedural_and_selection_keeps_page_two_white_and_reserved_zero() {
     let camera = crate::SceneCamera {
         center: [0.5; 2],
         zoom: 1.0,
@@ -97,7 +97,22 @@ fn gameplay_grid_and_selection_use_page_two_white_and_reserved_zero() {
     let ring = crate::game_grid::selection_ring(camera, [0.5; 2], 0.0);
     assert!(!grid.is_empty());
     assert_eq!(ring.len(), crate::game_grid::SELECTION_RING_SPRITES);
-    for sprite in grid.iter().chain(ring.iter().map(|(sprite, _)| sprite)) {
+    for sprite in &grid {
+        assert_eq!(sprite.pages, [0; 4], "grid has no atlas dependency");
+        assert_eq!(sprite.color[3], -2.0, "existing procedural triangle ABI");
+        assert_eq!(sprite.uv, [31.0 / 255.0, 38.0 / 255.0, 31.0 / 255.0, 0.2]);
+        assert_eq!(sprite.terrain_blend, [[0.0; 4]; 2]);
+    }
+    for (sprite, _) in &ring {
         assert_eq!(sprite.pages, [2, 0, 0, 0]);
+        assert_eq!(
+            sprite.uv,
+            [
+                0.0,
+                0.0,
+                1.0 / crate::GAME_ATLAS_SIDE as f32,
+                1.0 / crate::GAME_ATLAS_SIDE as f32
+            ]
+        );
     }
 }
