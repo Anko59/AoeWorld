@@ -184,3 +184,35 @@ fn ship_video_extensions_match_github_attachment_formats() {
         assert!(!super::super::github::attachable_video(Path::new(path)));
     }
 }
+
+#[test]
+fn an_empty_what_or_an_empty_quote_is_refused() {
+    let empty_what = GOOD.replace("make ship gates every publish.\n", "");
+    assert!(
+        Template::parse(&empty_what)
+            .unwrap_err()
+            .contains("`## What` is empty")
+    );
+    let empty_quote = GOOD.replace("> \"I don't review code\" — the user", ">");
+    assert!(
+        Template::parse(&empty_quote)
+            .unwrap_err()
+            .contains("grounding element")
+    );
+}
+
+#[test]
+fn only_safely_named_videos_are_attached() {
+    use super::super::github::attachable_video;
+    use std::path::Path;
+    assert!(attachable_video(Path::new("/tmp/showcase-1.webm")));
+    assert!(attachable_video(Path::new("demo.MP4")));
+    for bad in [
+        "demo#alt.mp4",
+        "my demo.mp4",
+        "x.mp4)\n\n### How.mp4",
+        "clip.gif",
+    ] {
+        assert!(!attachable_video(Path::new(bad)), "{bad:?}");
+    }
+}

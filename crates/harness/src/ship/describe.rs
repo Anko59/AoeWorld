@@ -71,9 +71,14 @@ pub(crate) struct Template {
 fn section(text: &str, name: &str) -> Option<String> {
     let normalized = text.replace("\r\n", "\n");
     let start = normalized.find(&format!("## {name}\n"))? + name.len() + 4;
-    let end = normalized[start..]
-        .find("\n## ")
-        .map_or(normalized.len(), |i| start + i + 1);
+    // The section ends at the next `## ` heading, even one right after it.
+    let rest = &normalized[start..];
+    let end = if rest.starts_with("## ") {
+        start
+    } else {
+        rest.find("\n## ")
+            .map_or(normalized.len(), |i| start + i + 1)
+    };
     Some(normalized[start..end].trim().to_owned())
 }
 
@@ -112,7 +117,7 @@ fn is_element(line: &str) -> bool {
                 "ms" | "s" | "sec" | "seconds" | "fps" | "mb" | "gb" | "kb" | "bytes" | "entities"
             )
     });
-    line.starts_with('>')
+    (line.starts_with('>') && !line.trim_start_matches('>').trim().is_empty())
         || line.starts_with("![")
         || markdown_link
         || issue
@@ -134,6 +139,9 @@ impl Template {
         let why = section(text, "Why").ok_or("the description needs a `## Why` section")?;
         let what = section(text, "What").ok_or("the description needs a `## What` section")?;
         let for_ai = section(text, "For AI").unwrap_or_default();
+        if what.trim().is_empty() {
+            return Err("`## What` is empty: say in one or two lines what was implemented".into());
+        }
         let grounding_lines = why.lines().filter(|line| is_element(line)).count();
         if grounding_lines == 0 {
             return Err("`## Why` needs one grounding element: a > quote from a human, an issue/reference link or HTTPS URL, a screenshot or a sampled metric".into());

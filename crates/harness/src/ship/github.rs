@@ -11,14 +11,26 @@ use std::{
 /// The oldest `gh` with `pr edit --attach` (2.100) for PR videos; older ones are refused.
 pub(super) const GH_MINIMUM: (u32, u32) = (2, 100);
 
+/// A video GitHub can attach, whose file name is safe to pass to
+/// `gh --attach` and to show in Markdown (no `#`, spaces, brackets or newlines).
 pub(super) fn attachable_video(path: &Path) -> bool {
-    matches!(
-        path.extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_ascii_lowercase)
-            .as_deref(),
-        Some("mp4" | "mov" | "webm")
-    )
+    let safe_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| {
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        });
+    safe_name
+        && matches!(
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("mp4" | "mov" | "webm")
+        )
 }
 
 pub(super) fn gh_version(text: &str) -> Option<(u32, u32)> {
@@ -34,7 +46,7 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<O
         && !attachable_video(video)
     {
         return Err(format!(
-            "SHIP_VIDEO {} has an unsupported attachment extension; use .mp4, .mov, or .webm",
+            "SHIP_VIDEO {} must be a .mp4, .mov or .webm file named with letters, digits, `.`, `_` or `-` only",
             video.display()
         )
         .into());
@@ -160,7 +172,8 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Lines added plus removed against the merge base with dev.
+/// Lines added plus removed against the merge base with dev; a binary file
+/// (`-` in numstat) counts as larger than any `low` PR.
 pub(super) fn changed_lines(root: &Path) -> Result<u64> {
     let (_, merge_base) = git::base(root, "dev", true)?;
     let numstat = git::git(root, &["diff", "--numstat", &merge_base, "HEAD"])?;
@@ -169,7 +182,10 @@ pub(super) fn changed_lines(root: &Path) -> Result<u64> {
         .map(|l| {
             l.split('\t')
                 .take(2)
-                .filter_map(|n| n.parse::<u64>().ok())
+                .map(|n| {
+                    n.parse::<u64>()
+                        .unwrap_or(super::describe::LOW_MAX_CHANGED_LINES + 1)
+                })
                 .sum::<u64>()
         })
         .sum())
@@ -179,7 +195,7 @@ pub(super) fn changed_lines(root: &Path) -> Result<u64> {
 fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
     if !attachable_video(video) {
         return Err(format!(
-            "SHIP_VIDEO {} has an unsupported attachment extension; use .mp4, .mov, or .webm",
+            "SHIP_VIDEO {} must be a .mp4, .mov or .webm file named with letters, digits, `.`, `_` or `-` only",
             video.display()
         )
         .into());
