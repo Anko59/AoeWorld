@@ -55,13 +55,15 @@ fn severe(report: &Report) -> bool {
         .any(|f| cap(std::slice::from_ref(*f)) <= 4)
 }
 
-/// Carried findings a closing review did not show fixed (refuted): still
-/// there, or undecided.
+/// Carried findings a closing review did not show fixed: still blocking, or
+/// undecided. One confirmed only as minor (partial votes) is not open.
 fn still_open(report: &Report) -> usize {
     report
         .findings
         .iter()
-        .filter(|f| f.reporter == CARRIED && f.status != Status::Refuted)
+        .filter(|f| {
+            f.reporter == CARRIED && (f.status == Status::Disputed || super::protocol::blocking(f))
+        })
         .count()
 }
 

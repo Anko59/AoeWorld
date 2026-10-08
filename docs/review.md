@@ -146,10 +146,11 @@ has a budget, and `make ship` decides from the stored reports
    finding not yet shown fixed (`upheld` = still there, `refuted` = fixed,
    citing the fix) and audits only the branch's own changes since the last
    reviewed commit; new findings must be in that diff and get a second round.
-   A closing review **passes when no blocking finding is left, every carried
-   finding was shown fixed (refuted)** and every session answered; its grade is
-   reported, not gated. A carried finding left standing or undecided, or a
-   critical one, means split.
+   A closing review **passes when no blocking finding is left, no carried
+   finding is left undecided (disputed)** and every session answered; its grade
+   is reported, not gated. A carried finding confirmed only as minor (`partial`
+   votes count one severity lower) no longer blocks, as in a full review. A
+   carried finding still blocking or undecided, or a critical one, means split.
 4. **Budget spent: split.** If both closing reviews failed, split.
 
 To **split**: break the change into smaller pull requests on new branches

@@ -1,7 +1,7 @@
 use super::super::{
     Report,
     closing::{BUDGET, CARRIED, CLOSING_BUDGET, Next, Plan, next},
-    protocol::{Severity, Status},
+    protocol::{Severity, Status, Vote},
 };
 use super::super::{Tier, review_with};
 use super::{
@@ -283,6 +283,50 @@ fn an_undecided_carried_finding_counts_as_open() {
     let mut undecided = closing("d", 4, &[Severity::Major], &[]);
     undecided.findings[0].status = Status::Disputed;
     history.push(undecided);
+    assert!(
+        matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
+    );
+}
+
+#[test]
+fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
+    // Partial votes confirm a carried major one severity lower: a minor
+    // finding never blocks a full review, so it does not block a closing one.
+    let partial = || {
+        let mut f = finding(
+            "P1",
+            CARRIED,
+            Severity::Major,
+            "correctness",
+            &[
+                (0, 2, Vote::Partial),
+                (1, 2, Vote::Partial),
+                (2, 2, Vote::Partial),
+                (3, 2, Vote::Refuted),
+                (4, 2, Vote::Refuted),
+            ],
+        );
+        f.status = Status::Confirmed;
+        f
+    };
+    let mut r = closing("d", 4, &[], &[]);
+    r.findings.push(partial());
+    assert!(
+        r.passes(),
+        "a carried finding left at minor passes the closing review"
+    );
+    let mut history = three_converging();
+    history.push(r);
+    assert!(
+        !matches!(next(&history, "e", NOW), Next::Split(_)),
+        "a minor carried finding is not left open"
+    );
+
+    let mut upheld = closing("d", 4, &[Severity::Major], &[]);
+    upheld.findings[0].status = Status::Confirmed;
+    assert!(!upheld.passes(), "a carried major still confirmed blocks");
+    let mut history = three_converging();
+    history.push(upheld);
     assert!(
         matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
     );

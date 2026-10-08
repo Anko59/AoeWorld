@@ -52,11 +52,12 @@ impl Report {
     pub(crate) fn passes(&self) -> bool {
         self.failures.is_empty()
             && if self.closing {
-                // Every carried finding must be shown fixed (refuted), not
-                // merely left undecided.
+                // No finding may still block, and no carried finding may be
+                // left undecided: a carried finding confirmed only as minor
+                // (partial votes) no longer blocks, as in a full review.
                 !self.findings.iter().any(|f| {
                     blocking(f)
-                        || (f.reporter == super::closing::CARRIED && f.status != Status::Refuted)
+                        || (f.reporter == super::closing::CARRIED && f.status == Status::Disputed)
                 })
             } else {
                 self.grade >= self.merge_grade
