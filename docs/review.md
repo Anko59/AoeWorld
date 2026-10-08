@@ -91,7 +91,20 @@ none replaces another.
 
 - **Pass:** `make ship` pushes, appends the review to the pull request, posts
   the commit status `harness/review` = success and arms GitHub auto-merge. A
-  passing review is reused by a later `make ship` of the same commit. Branch
+  passing review is reused by a later `make ship` of the same commit. After a
+  clean rebase, it may also be reused when Git's raw
+  `diff --raw --no-abbrev -z --no-renames <merge-base>..<commit>` output is
+  byte-identical for both commits. This means the same paths go from identical
+  old blobs and modes to identical new blobs and modes; the report stores a
+  SHA-256 fingerprint for information, while reuse recomputes both sides from
+  Git. Any complete report for the target commit at the required tier or higher
+  blocks reuse, whether it passed or failed. Reuse writes a new harness report
+  for the rebased commit that points to the original full
+  or closing review, and the status and PR description identify the reuse. A
+  reuse report is never itself a source for another reuse. Failing reviews and
+  reviews below the required tier are not reused. This is a local review
+  equivalence check: a patch can behave differently on a new base, so CI
+  re-runs every gate on the new commit. Branch
   protection on `dev` requires both `required` (CI) and `harness/review`, so
   nothing merges without a passing review (Dependabot PRs need a review path:
   #161).
@@ -114,8 +127,9 @@ other bases are refused.
 A passing review is published only if the PR still has the reviewed head and
 base: the report as a PR comment, `harness/review` = success, and squash
 auto-merge pinned to that commit (`--match-head-commit`). A failed or
-incomplete review publishes nothing. `REVIEW_PR` reaches the harness through
-Make's environment, never shell text.
+incomplete review publishes nothing. Reuse after a rebase for `make review-pr`
+is planned in issue #146. `REVIEW_PR` reaches the harness through Make's
+environment, never shell text.
 
 ## When reviews do not converge
 

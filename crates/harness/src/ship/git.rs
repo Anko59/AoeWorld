@@ -139,6 +139,69 @@ pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, Stri
     Ok((remote, merge_base))
 }
 
+/// SHA-256 of Git's raw file identity diff for a commit relative to the
+/// current remote base. Both fingerprints are recomputed from Git, never
+/// trusted from report data.
+pub(crate) fn change_fingerprint(
+    root: &Path,
+    base: &str,
+    commit: &str,
+) -> Result<(String, String)> {
+    let (merge_base, raw) = change_identity(root, base, commit)?;
+    use sha2::Digest as _;
+    let fingerprint = sha2::Sha256::digest(&raw)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok((merge_base, fingerprint))
+}
+
+/// Git's exact raw identity diff, kept as bytes so reuse can compare it
+/// directly. Paths may contain arbitrary bytes and must never be decoded.
+pub(crate) fn change_identity(root: &Path, base: &str, commit: &str) -> Result<(String, Vec<u8>)> {
+    let base = git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            &format!("refs/remotes/origin/{base}^{{commit}}"),
+        ],
+    )?;
+    let commit = git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            &format!("{commit}^{{commit}}"),
+        ],
+    )?;
+    let merge_base = git(root, &["merge-base", &base, &commit])?;
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "diff",
+            "--raw",
+            "--no-abbrev",
+            "-z",
+            "--no-renames",
+            &format!("{merge_base}..{commit}"),
+        ])
+        .output()
+        .map_err(|e| format!("git diff: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git diff --raw --no-abbrev -z --no-renames: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok((merge_base, output.stdout))
+}
+
 /// The files that differ between `merge_base` and HEAD, unquoted (`-z`), so
 /// any file name comes back exactly as Git stores it.
 pub(crate) fn changed(root: &Path, merge_base: &str) -> Result<Vec<String>> {

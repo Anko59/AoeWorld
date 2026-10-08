@@ -42,7 +42,20 @@ agent policy refuses `$` in agent-set Make values.
    family). Below 8/10, or incomplete, nothing is pushed: fix and ship again.
    A branch has a review budget (three full reviews, then up to two closing
    reviews of the fixes); when it is spent `make ship` says to split the change
-   ([review](review.md#when-reviews-do-not-converge)).
+   ([review](review.md#when-reviews-do-not-converge)). A stored passing review
+   may also be reused after a clean rebase when Git's raw
+   `diff --raw --no-abbrev -z --no-renames <merge-base>..<commit>` output is
+   byte-identical for both commits: the same paths go from identical old blobs
+   and modes to identical new blobs and modes. This is called the same change
+   (identical file blobs); the report stores a SHA-256 fingerprint for
+   information, while the harness recomputes both sides from Git. The old
+   review must meet the required tier, and any complete report already stored
+   for the new commit at that tier or higher blocks reuse, whether it passed or
+   failed. The harness stores a new report for the new commit that points to
+   the original full or closing review; reuse reports are not reused again. CI
+   re-runs every gate on the new commit.
+   Reuse after a rebase for `make review-pr` is planned in issue #146
+   ([review](review.md#pull-requests-the-harness-did-not-open)).
 7. **Only then**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make preflight` again.

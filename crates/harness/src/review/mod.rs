@@ -400,6 +400,9 @@ fn review_with_branch(
         }
     };
     let cap = protocol::cap(&findings);
+    let change_fingerprint = git::change_fingerprint(root, "dev", &head)
+        .ok()
+        .map(|(_, fingerprint)| fingerprint);
     let report = Report {
         version: 1,
         head,
@@ -422,6 +425,8 @@ fn review_with_branch(
         started,
         finished: now(),
         closing,
+        change_fingerprint,
+        reused_from: None,
     };
     report.store(root)?;
     Ok(report)

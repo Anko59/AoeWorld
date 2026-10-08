@@ -36,7 +36,6 @@ const GIT_READS: &[&str] = &[
     "show-ref",
     "for-each-ref",
     "name-rev",
-    "patch-id",
     "diff-tree",
     "diff-files",
     "diff-index",

@@ -339,8 +339,16 @@ pub(crate) fn render(
         out.push_str(&format!("\n🎬 ![Showcase](./{name})\n"));
     }
     out.push_str(&format!(
-        "\n### ✅ How\n\n{}\n\n> {}\n\n{}\n\n---\n\n# 🤖 For AI\n\n",
+        "\n### ✅ How\n\n{}\n\n{}> {}\n\n{}\n\n---\n\n# 🤖 For AI\n\n",
         report.headline(),
+        report
+            .reused_from
+            .as_deref()
+            .map(|source| format!(
+                "Review of `{}` reused (same change, identical file blobs).\n\n",
+                &source[..12.min(source.len())]
+            ))
+            .unwrap_or_default(),
         report.summary.trim().replace('\n', "\n> "),
         metrics,
     ));
