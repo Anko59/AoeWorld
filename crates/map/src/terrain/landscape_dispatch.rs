@@ -138,37 +138,21 @@ impl MapChunkGenerator {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        let ox = x
-            .checked_mul(CHUNK_TILES)
-            .ok_or(EnvironmentPageError::Invalid)?;
-        let oy = y
-            .checked_mul(CHUNK_TILES)
-            .ok_or(EnvironmentPageError::Invalid)?;
-        let mut chunk = LandscapeChunk {
-            x,
-            y,
-            tiles: Vec::with_capacity(1024),
-            resources: Vec::new(),
-            decorations: Vec::new(),
-        };
-        for ly in 0..CHUNK_TILES {
-            for lx in 0..CHUNK_TILES {
-                let tile = TileCoord::new(
-                    ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
-                    oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
-                );
-                if let Some(point) = self.landscape_point_with_cancel(tile, cancelled)? {
-                    chunk.tiles.push(point.tile);
-                    if let Some(resource) = point.resource {
-                        chunk.resources.push(resource);
-                    }
-                    if let Some(decoration) = point.decoration {
-                        chunk.decorations.push(decoration);
-                    }
-                }
-            }
-        }
-        Ok(chunk)
+        Ok(self
+            .evaluate_landscape_chunk_with_cancel(
+                x,
+                y,
+                &default_policy,
+                &|position| self.landscape_reservations_at(position),
+                cancelled,
+            )?
+            .unwrap_or_else(|| LandscapeChunk {
+                x,
+                y,
+                tiles: Vec::new(),
+                resources: Vec::new(),
+                decorations: Vec::new(),
+            }))
     }
 
     // Byte/semantic-compatible recipes 3..8 loop, moved without changing order,

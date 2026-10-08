@@ -74,6 +74,80 @@ fn canvas_v2_floor_pixels_are_uniform_and_distinct_from_legacy() {
     }
 }
 
+#[wasm_bindgen_test]
+fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignment() {
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = blend_atlas();
+    let frame = |page| GameFrame {
+        atlas: crate::AtlasAddress {
+            page,
+            uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        },
+        size: [1.0; 2],
+        anchor: [0.0; 2],
+    };
+    let art = GameArt {
+        walking: Vec::new(),
+        standing: Vec::new(),
+        grass: vec![frame(0)],
+        terrain: std::array::from_fn(|material| {
+            vec![frame(match material {
+                2 => 1,
+                6 => 2,
+                _ => 0,
+            })]
+        }),
+        terrain_topology: [None; 7],
+        resources: std::array::from_fn(|_| Vec::new()),
+        tree_shadows: Vec::new(),
+    };
+    for palette in 0..6 {
+        for floor_strength in [0, 650] {
+            let mut face = blended_triangle();
+            face.material = 2;
+            face.tint = 1;
+            face.appearance =
+                crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
+                    floor_strength,
+                    canopy_strength: 650,
+                    palette,
+                    exposure: 1,
+                    height_band: 2,
+                }));
+            apply_terrain_textures(std::slice::from_mut(&mut face), &art);
+            assert_eq!(face.texture_uv, Some(frame(1).atlas));
+            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
+            let expected = crate::surface_mesh::landscape::texel(
+                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                crate::surface_mesh::landscape::floor_weights(face.appearance),
+                1,
+                face.appearance,
+            );
+            canvas_depth::render_canvas_world(
+                &canvas,
+                &context,
+                &atlas,
+                &mut presentation,
+                &[WorldLayer::Surface(face)],
+                test_camera(),
+                false,
+            )
+            .unwrap();
+            assert_eq!(pixel(&presentation.color_buffer, 48, 48), expected);
+            assert_eq!(pixel(&presentation.color_buffer, 32, 32), expected);
+            assert_eq!(
+                context
+                    .get_image_data(48.0, 48.0, 1.0, 1.0)
+                    .unwrap()
+                    .data()
+                    .0,
+                expected
+            );
+        }
+    }
+}
+
 fn blend_atlas() -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     for (page, texel) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]

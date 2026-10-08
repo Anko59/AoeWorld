@@ -105,7 +105,14 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         {
             let palette = (triangle.appearance >> 1) & 7;
             let dry = triangle.material == 1 || matches!(palette, 3 | 4);
-            let primary = if dry { 1 } else { 0 };
+            // Ecological palettes must not replace authoritative dirt with grass.
+            let primary = if triangle.material == 2 {
+                2
+            } else if dry {
+                1
+            } else {
+                0
+            };
             let a = terrain_texture_frame(art, primary, triangle.texture_tile).map(|f| f.atlas);
             let b = terrain_texture_frame(art, 6, triangle.texture_tile).map(|f| f.atlas);
             triangle.texture_materials = Some([primary, 6, primary]);

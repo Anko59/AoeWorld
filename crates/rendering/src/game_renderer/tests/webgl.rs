@@ -29,7 +29,23 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
     face.texture_uv = Some(address(0));
     face.texture_blend = Some([address(1), address(2)]);
     assert_eq!(instance(&face).pages[3], 0);
-    for palette in 0..4 {
+    let frame = |page| GameFrame {
+        atlas: address(page),
+        size: [1.0; 2],
+        anchor: [0.0; 2],
+    };
+    let mut art = GameArt {
+        walking: Vec::new(),
+        standing: Vec::new(),
+        grass: vec![frame(0)],
+        terrain: std::array::from_fn(|_| vec![frame(0)]),
+        terrain_topology: [None; 7],
+        resources: std::array::from_fn(|_| Vec::new()),
+        tree_shadows: Vec::new(),
+    };
+    art.terrain[2] = vec![frame(1)];
+    art.terrain[6] = vec![frame(2)];
+    for palette in 0..6 {
         face.appearance =
             crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
                 floor_strength: 650,
@@ -51,6 +67,32 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         assert_pixel(&canvas, 48, 48, expected);
         assert_pixel(&canvas, 32, 32, expected);
         assert_ne!(expected, [82, 86, 86, 255]);
+        for floor_strength in [0, 650] {
+            let mut dirt = face;
+            dirt.material = 2;
+            dirt.appearance =
+                crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
+                    floor_strength,
+                    canopy_strength: 650,
+                    palette,
+                    exposure: 1,
+                    height_band: 2,
+                }));
+            apply_terrain_textures(std::slice::from_mut(&mut dirt), &art);
+            let packet = instance(&dirt);
+            assert_eq!(dirt.texture_uv, Some(address(1)));
+            assert_eq!(dirt.texture_blend, Some([address(2), address(1)]));
+            assert_eq!(packet.pages[..3], [1, 2, 1]);
+            let expected = crate::surface_mesh::landscape::texel(
+                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
+                1,
+                packet.pages[3],
+            );
+            render(&mut renderer, &mut [packet]);
+            assert_pixel(&canvas, 48, 48, expected);
+            assert_pixel(&canvas, 32, 32, expected);
+        }
     }
 }
 

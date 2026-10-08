@@ -64,6 +64,63 @@ async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_
     renderer.device.destroy();
 }
 
+#[wasm_bindgen_test]
+async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignment() {
+    let mut renderer = surface_renderer().await;
+    let frame = |page| crate::GameFrame {
+        atlas: crate::AtlasAddress {
+            page,
+            uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        },
+        size: [1.0; 2],
+        anchor: [0.0; 2],
+    };
+    let mut art = crate::GameArt {
+        walking: Vec::new(),
+        standing: Vec::new(),
+        grass: vec![frame(0)],
+        terrain: std::array::from_fn(|_| vec![frame(0)]),
+        terrain_topology: [None; 7],
+        resources: std::array::from_fn(|_| Vec::new()),
+        tree_shadows: Vec::new(),
+    };
+    art.terrain[2] = vec![frame(1)];
+    art.terrain[6] = vec![frame(2)];
+    for palette in 0..6 {
+        for floor_strength in [0, 650] {
+            let mut face = capacity_surface();
+            face.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
+            face.material = 2;
+            face.tint = 1;
+            face.appearance =
+                crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
+                    floor_strength,
+                    canopy_strength: 650,
+                    palette,
+                    exposure: 1,
+                    height_band: 2,
+                }));
+            crate::surface_mesh::apply_terrain_textures(std::slice::from_mut(&mut face), &art);
+            let packet = surface_instance(&face, [128.0; 2], 0.0);
+            assert_eq!(face.texture_uv, Some(frame(1).atlas));
+            assert_eq!(face.texture_blend, Some([frame(2).atlas, frame(1).atlas]));
+            assert_eq!(packet.pages[..3], [1, 2, 1]);
+            let expected = crate::surface_mesh::landscape::texel(
+                [[0, 255, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]],
+                crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
+                1,
+                packet.pages[3],
+            );
+            renderer
+                .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
+                .unwrap();
+            assert_pixel(read_pixel(&renderer, 1, [48, 48]).await, expected);
+            assert_pixel(read_pixel(&renderer, 1, [32, 32]).await, expected);
+        }
+    }
+    renderer.device.destroy();
+}
+
 pub(super) async fn surface_renderer() -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document
