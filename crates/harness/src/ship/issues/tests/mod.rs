@@ -134,7 +134,7 @@ fn issue_page_retains_only_the_duplicate_marker_not_the_response_body() {
     let page = serde_json::json!([{
         "number": 12,
         "title": title,
-        "body": format!("large response body\n\n{marker}"),
+        "body": format!("large response body\n\n{MARKER}not-a-digest -->\n{marker}"),
         "labels": [{"name": AGENT_LABEL}],
         "url": "https://api.github.com/repos/o/r/issues/12",
         "html_url": "https://github.com/o/r/issues/12"
@@ -144,6 +144,43 @@ fn issue_page_retains_only_the_duplicate_marker_not_the_response_body() {
         parsed[0].fingerprint_marker.as_deref(),
         Some(fingerprint(title).as_str())
     );
+}
+
+#[test]
+fn last_marker_wins_after_malformed_or_copied_markers() {
+    let title = "Follow up task";
+    let digest = fingerprint(title);
+    let copied = fingerprint("Source task");
+    for earlier in ["not-a-digest".to_owned(), copied] {
+        let body = format!("quoted marker: {MARKER}{earlier} -->\n\n{MARKER}{digest} -->");
+        assert_eq!(fingerprint_marker(&body).as_deref(), Some(digest.as_str()));
+    }
+}
+
+#[test]
+fn issue_input_refuses_reserved_marker_prefixes_in_title_or_body() {
+    assert!(contains_marker_prefix("<!-- AOE-FINGERPRINT : copied -->"));
+    assert!(contains_marker_prefix("<!-- aoe- fingerprint: copied -->"));
+    assert!(!contains_marker_prefix("ordinary body text"));
+
+    let _guard = ENVIRONMENT.lock().unwrap();
+    let previous = std::env::var_os("AOE_AGENT_ROLE");
+    unsafe { std::env::set_var("AOE_AGENT_ROLE", "main") };
+    assert!(
+        issue_with_input(
+            Path::new("."),
+            std::io::Cursor::new(b"Task\n\n<!-- aoe-fingerprint: copied-marker -->\n")
+        )
+        .is_err()
+    );
+    assert!(
+        issue_with_input(
+            Path::new("."),
+            std::io::Cursor::new(b"<!-- aoe-fingerprint: copied --> title\n\nbody")
+        )
+        .is_err()
+    );
+    restore("AOE_AGENT_ROLE", previous);
 }
 
 #[test]

@@ -66,9 +66,18 @@ fn fingerprint(title: &str) -> String {
 }
 
 fn fingerprint_marker(body: &str) -> Option<String> {
-    let marker = body.split_once(MARKER)?.1.split_once(" -->")?.0;
+    let marker = body.rsplit_once(MARKER)?.1.split_once(" -->")?.0;
     (marker.len() == 16 && marker.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .then(|| marker.to_owned())
+}
+
+fn contains_marker_prefix(value: &str) -> bool {
+    let normalized = value
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    normalized.contains("<!--aoe-fingerprint:")
 }
 
 fn validate_text(field: &str, value: &str, limit: usize) -> Result<()> {
@@ -266,6 +275,9 @@ fn issue_with_input<R: Read>(root: &Path, input: R) -> Result<()> {
     let input = String::from_utf8(bytes).map_err(|_| "issue input is not valid UTF-8")?;
     let (title, labels, body) = parse_issue_input(&input)?;
     validate_text("ISSUE_TITLE", &title, TITLE_LIMIT)?;
+    if contains_marker_prefix(&title) || contains_marker_prefix(&body) {
+        return Err("issue title and body must not contain the reserved fingerprint marker".into());
+    }
     let body = marked_body(&body, &title)?;
     let (host, repo) = repository(root)?;
     let issues = open_issues(
