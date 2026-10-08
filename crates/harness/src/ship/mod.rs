@@ -13,6 +13,7 @@ mod metrics;
 mod review_gate;
 mod review_pr;
 pub(crate) mod run;
+mod showcase;
 #[cfg(test)]
 mod tests;
 
@@ -39,6 +40,10 @@ pub(crate) enum Commands {
     Issue,
     /// Print the highest-priority unblocked open issue.
     Next,
+    /// Record the showcase video of SHOWCASE_STORYBOARD (docs/showcase.md).
+    Showcase,
+    /// Validate a showcase storyboard without starting Docker or speech requests.
+    ShowcaseCheck,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -117,6 +122,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
             }
             ship(&root, &options).map(|_| ())
         }
+        Commands::Showcase => showcase::make(&root).map(|_| ()),
+        Commands::ShowcaseCheck => showcase::check(&root),
         Commands::ShipStatus => {
             let head = git::git(&root, &["rev-parse", "HEAD"])?;
             match evidence::read(&root, &head)? {

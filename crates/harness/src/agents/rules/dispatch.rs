@@ -15,6 +15,10 @@ const PERSON_TARGETS: &[&str] = &[
     "release-publish",
     "release-build",
     "repo-policy-check",
+    // Showcase and ship-tools can make external requests or start containers.
+    "showcase",
+    "showcase-check",
+    "ship-tools",
     // It posts a status and arms auto-merge: GitHub writes, main session only.
     "review-pr",
 ];
