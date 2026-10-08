@@ -4,8 +4,11 @@
 # non-authoritative) from this checkout's committed HEAD while bootstrapping;
 # never from uncommitted edits. SHIP_TITLE, SHIP_BODY and SHIP_FORCE reach it
 # through the environment only; they are never pasted into shell text.
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK
-.PHONY: ship ship-status review review-floor
+# PR is the public Make argument; REVIEW_PR is the process environment value
+# consumed by the harness. Neither is embedded in recipe shell text.
+REVIEW_PR ?= $(PR)
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR
+.PHONY: ship ship-status review review-floor review-pr
 ship:
 	@.agents/hooks/harness.sh exec ship
 
@@ -19,3 +22,8 @@ review:
 
 review-floor:
 	@.agents/hooks/harness.sh exec review-floor
+
+# Review a same-repository PR the harness did not open. REVIEW_PR is passed
+# through the environment and never interpolated into shell text.
+review-pr:
+	@.agents/hooks/harness.sh exec review-pr

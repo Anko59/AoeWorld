@@ -58,6 +58,18 @@ fn the_main_session_may_work_normally() {
 }
 
 #[test]
+fn agents_can_review_existing_pull_requests_through_make() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer] {
+        allowed(
+            &fixture,
+            role,
+            "make review-pr REVIEW_PR=161 REVIEW_RUNTIME=codex",
+        );
+    }
+}
+
+#[test]
 fn agents_are_held_to_an_allow_list() {
     let fixture = Fixture::new();
     for role in AGENTS {

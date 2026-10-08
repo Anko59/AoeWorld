@@ -99,6 +99,20 @@ none replaces another.
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.
 
+## Pull requests the harness did not open
+
+Use `make review-pr PR=<n>` for an existing same-repository pull request based
+on `dev` that needs the required `harness/review` status. The command reads the
+PR description, fetches its head, and reviews that exact commit in a temporary
+detached worktree using the normal per-branch review budget and
+`REVIEW_RUNTIME` family. Dependency major-version changes require at least a
+`medium` tier. Fork PRs and PRs targeting another base are refused.
+
+A passing review posts the report as a PR comment, sets `harness/review` to
+success, and arms squash auto-merge. A failed or incomplete review publishes
+nothing. `REVIEW_PR` reaches the harness through Make's environment; the PR
+number is not embedded in shell text.
+
 ## When reviews do not converge
 
 Agents run this project without a person: no rule here ends in "ask a

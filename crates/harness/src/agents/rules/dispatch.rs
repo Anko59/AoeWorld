@@ -149,6 +149,7 @@ fn reviewer_target(target: &str) -> bool {
                 | "test-wasm"
                 | "pre-commit"
                 | "preflight"
+                | "review-pr"
                 | "gate-plan"
                 | "scope-check"
                 | "ci-select"
