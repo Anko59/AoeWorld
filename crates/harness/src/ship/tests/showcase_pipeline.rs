@@ -77,6 +77,7 @@ if [ "$is_recorder" = 1 ]; then
       previous=$arg
     done
     case "$SHOWCASE_DOCKER_MODE" in no-video) exit 0;; esac
+    if [ -S "$work/app.sock" ]; then printf 'bridge socket app.sock\n' >> "$SHOWCASE_LOG"; fi
     cat "$work/plan.json" >> "$SHOWCASE_LOG"
     printf '\n' >> "$SHOWCASE_LOG"
     printf '{"lead_in_ms":10,"scenes_ms":[20,30]}' > "$work/timings.json"

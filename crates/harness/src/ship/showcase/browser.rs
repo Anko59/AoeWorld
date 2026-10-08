@@ -145,6 +145,15 @@ impl AppOrigin {
         &self.http
     }
 
+    /// The app's loopback host and port, which the recorder's bridge dials.
+    pub(crate) fn address(&self) -> Result<(String, u16), String> {
+        let url = url::Url::parse(&self.http).map_err(|error| error.to_string())?;
+        match (url.host_str(), url.port()) {
+            (Some(host), Some(port)) => Ok((host.to_owned(), port)),
+            _ => Err(format!("{} names no host and port", self.http)),
+        }
+    }
+
     /// SHOWCASE_APP_URL, defaulting to the `make dev` address.
     pub(crate) fn from_env() -> Result<Self, String> {
         let value = std::env::var("SHOWCASE_APP_URL")

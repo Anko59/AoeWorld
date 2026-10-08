@@ -5,12 +5,15 @@
 //! records them in one take; narration is voiced
 //! with Gemini Flash Lite TTS on OpenRouter and mixed in with ffmpeg from the
 //! pinned ship-tools image. Each scene lasts at least as long as its voice.
+mod bridge;
 mod browser;
 mod check;
 mod media;
 mod timing;
 mod workdir;
 
+#[cfg(test)]
+pub(crate) use bridge::{Bridge, SOCKET};
 pub(crate) use browser::Step;
 #[cfg(test)]
 pub(crate) use browser::{AppOrigin, DEFAULT_APP_URL, plan};

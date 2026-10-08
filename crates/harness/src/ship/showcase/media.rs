@@ -2,6 +2,7 @@
 //! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
 //! pipe and never written to disk.
 use super::super::describe::Level;
+use super::bridge::Bridge;
 use super::browser::{Plan, app_for, plan};
 use super::workdir::create_new;
 use super::{
@@ -193,8 +194,9 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<V
 }
 
 /// Record the plan in one Playwright take; returns the silent WebM and timings.
-/// The container has no network unless a browser scene films the app; then it
-/// shares the host's, and record.mjs aborts every request off the app origin.
+/// The container never has a network. When a browser scene films the app, the
+/// bridge forwards the work directory's Unix socket to the app's port alone
+/// (bridge.rs), and record.mjs still aborts every request off the app origin.
 fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings)> {
     let browser = image_env("BROWSER_IMAGE")?;
     let modules = std::env::var_os("AOE_SHOWCASE_NODE_MODULES")
@@ -208,14 +210,20 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
     }
     create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
     create_new(&work.join("record.mjs"))?.write_all(RECORDER.as_bytes())?;
-    let network = if plan.app.is_some() { "host" } else { "none" };
+    let bridge = match &plan.app {
+        Some(app) => {
+            let (host, port) = app.address()?;
+            Some(Bridge::start(work, &host, port)?)
+        }
+        None => None,
+    };
     let status = Command::new("docker")
         .args([
             "run",
             "--rm",
             "--init",
             "--network",
-            network,
+            "none",
             "--ipc",
             "host",
             "--user",
@@ -231,6 +239,7 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         ))
         .args([browser.as_str(), "node", "record.mjs"])
         .status()?;
+    drop(bridge);
     if !status.success() {
         return Err(match &plan.app {
             Some(app) => format!("the recorder failed (is the app up at {}?)", app.http()),

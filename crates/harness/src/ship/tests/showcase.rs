@@ -299,12 +299,13 @@ fn recorder_aborts_every_request_except_inline_document_urls() {
 
 #[test]
 fn recorder_runs_without_container_network() {
-    // Only a browser scene gives the recorder the host network (filtered to
-    // the app origin); the take itself is checked in showcase_browser.rs.
+    // Every take, browser scenes included, has no network; the app's port
+    // alone is bridged through a Unix socket (showcase_bridge.rs).
     let media = include_str!("../showcase/media.rs");
-    assert!(media.contains("let network = if plan.app.is_some() { \"host\" } else { \"none\" };"));
-    assert!(media.contains("\"--network\",\n            network,"));
+    assert!(media.contains("\"--network\",\n            \"none\","));
     assert_eq!(media.matches("\"--network\"").count(), 1);
+    assert!(!media.contains("\"host\" } else"));
+    assert!(media.contains("Bridge::start(work, &host, port)?"));
 }
 
 #[test]

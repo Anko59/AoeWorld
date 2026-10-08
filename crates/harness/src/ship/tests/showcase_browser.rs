@@ -208,7 +208,7 @@ fn the_recorder_holds_after_loading_and_steps_but_measures_the_whole_scene() {
 }
 
 #[test]
-fn only_a_browser_take_gets_the_host_network_and_the_app_origin() {
+fn a_browser_take_has_no_network_but_the_bridged_app_origin() {
     let _lock = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -219,8 +219,11 @@ fn only_a_browser_take_gets_the_host_network_and_the_app_origin() {
     check(temp.path()).unwrap();
     make(temp.path()).unwrap();
     let log = std::fs::read_to_string(temp.path().join("invocations.log")).unwrap();
-    assert!(log.contains("--network host"), "{log}");
-    assert!(!log.contains("--network none"), "{log}");
+    // Replaces the former host-network assertions: the browser take has no
+    // network, and the app's bridge socket exists while the recorder runs.
+    assert!(log.contains("--network none"), "{log}");
+    assert!(!log.contains("--network host"), "{log}");
+    assert!(log.contains("bridge socket app.sock"), "{log}");
     assert!(log.contains(r#""app":{"http":"http://127.0.0.1:8080/","ws":"ws://127.0.0.1:8080/"}"#));
     assert!(log.contains(r#""url":"http://127.0.0.1:8080/lab""#));
     assert!(log.contains(r#""steps":[{"wait_ms":10}]"#));
@@ -239,6 +242,7 @@ fn only_a_browser_take_gets_the_host_network_and_the_app_origin() {
     let log = std::fs::read_to_string(temp.path().join("invocations.log")).unwrap();
     assert!(log.contains("--network none"), "{log}");
     assert!(!log.contains("--network host"), "{log}");
+    assert!(!log.contains("bridge socket"), "{log}");
     assert!(log.contains(r#""app":null"#));
 }
 

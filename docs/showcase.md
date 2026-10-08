@@ -49,10 +49,11 @@ Existing outputs must be regular files. The directory is created when needed.
   `dim`. Show real output: paste it from the commands you ran.
 
 - **browser:** the app under development, filmed live. `path` (starting with
-  one `/`) opens on the app's origin; `caption` is overlaid; `steps` run in
-  order (`click` a Playwright selector, press a `key`, type `text` at 22 ms a
-  character, or `wait_ms` up to 60 000), then the page is held for `seconds`
-  (1–300). At most 64 steps. Start the app first (`make dev`).
+  one `/`) opens on the app's origin; `caption` is overlaid, again after every
+  navigation; `steps` run in order (`click` a Playwright selector, press a
+  `key`, type `text` at 22 ms a character, or `wait_ms` up to 60 000), then the
+  page is held for `seconds` (1–300) after the last step, however long the
+  steps took. At most 64 steps. Start the app first (`make dev`).
 
 The app's origin is `SHOWCASE_APP_URL`, default `http://127.0.0.1:8080/` (the
 `make dev` address). It must be plain `http` on `127.0.0.1` or `localhost`
@@ -62,18 +63,26 @@ scene.
 
 ## Network
 
-A take of cards and terminals runs with `--network none` and aborts every
-request except `about:blank` and `data:`. A take with a browser scene runs with
-`--network host` so that Chromium can reach the app on the host's loopback;
-the origin filter is then the enforcement. Every HTTP(S) request
-(`context.route`) and every WebSocket (`context.routeWebSocket`) must start
-with the app's `http://<host>:<port>/` or `ws://<host>:<port>/` prefix; all
-others, including other loopback ports such as `http://localhost:631/`, other
-hosts, `https`/`wss` and URLs with credentials, are aborted, and service
-workers are blocked. The rule is `AppOrigin::allows` in `browser.rs`, which
-`record.mjs` mirrors. Limit: the filter acts inside Chromium; the container
-itself could reach any host service, so the recorder runs only the fixed
-`record.mjs`, never storyboard code.
+Every take runs with `--network none`: the recorder's container has no
+network, so WebRTC/STUN, DNS and every address but one reach nothing. A take
+with a browser scene gets exactly one way out, the app's port. On the host,
+the harness's bridge (`bridge.rs`) listens on `app.sock` in the run's private
+0700 work directory and forwards each connection to the app's loopback
+`<host>:<port>` (SHOWCASE_APP_URL) and nowhere else; inside the container,
+`record.mjs` listens on `127.0.0.1:<port>` and pipes every connection to that
+socket, so Chromium reaches the app at its usual URL. The bridge allows 64
+open and 4096 total connections and stops, closing them all, when the
+recording ends.
+
+The origin filter inside Chromium stays as a second layer. Every HTTP(S)
+request (`context.route`) and every WebSocket (`context.routeWebSocket`) must
+start with the app's `http://<host>:<port>/` or `ws://<host>:<port>/` prefix;
+all others, including other loopback ports such as `http://localhost:631/`,
+other hosts, `https`/`wss` and URLs with credentials, are aborted, and service
+workers are blocked; cards and terminals allow only `about:blank` and `data:`.
+The rule is `AppOrigin::allows` in `browser.rs`, which `record.mjs` mirrors.
+Limit: the app itself is reachable without restriction, so a page can drive
+any endpoint the app serves.
 
 Not being a frontend change is never a reason for no video: use before/after
 terminal scenes for the harness, timings for performance, request/response for
