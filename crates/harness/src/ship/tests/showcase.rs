@@ -207,6 +207,12 @@ fn atomic_showcase_publish_replaces_a_hard_link_without_writing_through_it() {
 
     assert_eq!(std::fs::read(protected).unwrap(), b"protected registry");
     assert_eq!(std::fs::read(output_path).unwrap(), b"new video");
+    // No temporary file is left next to the published video.
+    let left: Vec<_> = std::fs::read_dir(&showcase)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(left, vec![std::ffi::OsString::from("showcase.webm")]);
 }
 
 #[cfg(unix)]
