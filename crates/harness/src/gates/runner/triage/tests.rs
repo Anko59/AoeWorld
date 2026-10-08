@@ -371,7 +371,7 @@ fn incomplete_eof_marks_aggregate_truncation_without_changing_success() {
     // Escape the supervised group so its normal cleanup cannot close these
     // inherited descriptors. Kill only the fixture's distinct session below.
     let (owner, root) = root(
-        "setsid sh -c 'echo $$$$ > holder.pid; sleep 5' & sleep 0.05; printf 'incomplete-eof'",
+        "setsid sh -c 'echo $$$$ > holder.pid; sleep 5' & until [ -s holder.pid ]; do sleep 0.01; done; printf 'incomplete-eof'",
     );
     let destination = tempfile::tempdir().unwrap();
     let output = PrivateOutput::new(destination.path(), &[owner.path().into()]).unwrap();
