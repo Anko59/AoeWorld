@@ -53,6 +53,7 @@ baselines, `.claude/`, instructions), which only the main session edits.
 
 Against subagents every rule must hold; an escape is a bug. Against the main
 session the rules catch mistakes and shortcuts, while a construction built on
-purpose to defeat them is a documented limit backstopped by the Git hooks, CI and
-the person who merges. The policy reads shell text and the files commands name,
+purpose to defeat them is a documented limit backstopped by the Git hooks, the
+adversarial review and CI: `dev` merges only when both the `required` CI check
+and the `harness/review` status pass, and no session merges. The policy reads shell text and the files commands name,
 never the code an interpreter runs.

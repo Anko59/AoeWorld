@@ -176,7 +176,11 @@ fn session_start_gives_context_and_compaction_progress_comes_back() {
         "{context}"
     );
     assert!(context.contains("make hooks-install"), "{context}");
-    assert!(context.contains("A person merges"), "{context}");
+    assert!(
+        context.contains("GitHub auto-merges once the review passes"),
+        "{context}"
+    );
+    assert!(!context.contains("A person merges"), "{context}");
 }
 
 #[test]
