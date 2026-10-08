@@ -12,13 +12,21 @@ pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
 #[cfg(test)]
-pub(crate) use media::{concat_entry, publish_temp_output, tts_command};
+pub(crate) use media::{concat_entry, publish_temp_output, save_tts_response, tts_command};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
-    os::unix::fs::MetadataExt,
-    path::{Component, Path, PathBuf},
+    os::unix::ffi::OsStrExt,
+    path::{Component, Path},
 };
+
+/// The validated output parent held open for the complete showcase run.
+/// Publication uses only this directory descriptor, so replacing a path
+/// component after validation cannot redirect the final write.
+pub(crate) struct ShowcaseOutput {
+    pub(crate) directory: std::fs::File,
+    pub(crate) name: std::ffi::CString,
+    pub(crate) path: std::path::PathBuf,
+}
 
 pub(crate) const TTS_MODEL: &str = "google/gemini-3.8-flash-lite-tts";
 /// OpenRouter's limit on one speech request.
@@ -202,12 +210,17 @@ pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result
 
 /// Resolve the requested video path beneath `.cache/showcase`, refusing
 /// symlinks in every component and multiply-linked existing files.
-pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<ShowcaseOutput, String> {
     let root = root
         .canonicalize()
         .map_err(|error| format!("cannot resolve repository root: {error}"))?;
-    let cache = ensure_directory(&root, &root.join(".cache"), &root)?;
-    let base = ensure_directory(&root, &cache.join("showcase"), &root)?;
+    let root_fd =
+        open_directory(&root).map_err(|error| format!("cannot open repository root: {error}"))?;
+    let cache_fd = open_or_create_child(&root_fd, ".cache")
+        .map_err(|error| format!("cannot open .cache: {error}"))?;
+    let base_fd = open_or_create_child(&cache_fd, "showcase")
+        .map_err(|error| format!("cannot open .cache/showcase: {error}"))?;
+    let base = root.join(".cache/showcase");
     let requested = Path::new(requested);
     if requested
         .components()
@@ -237,67 +250,101 @@ pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<PathBuf, Strin
     if relative.as_os_str().is_empty() {
         return Err("SHOWCASE_OUT must name a file inside `<repo>/.cache/showcase/`".into());
     }
-    let mut parent = base.clone();
+    let mut parent_path = base.clone();
+    let mut parent_fd = base_fd;
     let mut file = None;
     let parts: Vec<_> = relative.components().collect();
     for (index, part) in parts.iter().enumerate() {
         match part {
             Component::Normal(name) if index + 1 == parts.len() => file = Some(name),
             Component::Normal(name) => {
-                parent = ensure_directory(&base, &parent.join(name), &base)?;
+                let component = name.to_str().ok_or("SHOWCASE_OUT path must be UTF-8")?;
+                parent_fd = open_or_create_child(&parent_fd, component)
+                    .map_err(|error| format!("cannot open output directory: {error}"))?;
+                parent_path.push(name);
             }
             Component::CurDir => {}
             _ => return Err("SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`".into()),
         }
     }
     let file = file.ok_or("SHOWCASE_OUT must name a file inside `<repo>/.cache/showcase/`")?;
-    let output = parent.join(file);
-    match fs::symlink_metadata(&output) {
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.nlink() > 1 {
-                return Err(
-                    "SHOWCASE_OUT must be a single-link regular file, not a symlink or directory"
-                        .into(),
-                );
-            }
-            let resolved = output
-                .canonicalize()
-                .map_err(|error| format!("cannot resolve SHOWCASE_OUT: {error}"))?;
-            if !resolved
-                .parent()
-                .is_some_and(|parent| parent.starts_with(&base))
-            {
-                return Err("SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`".into());
-            }
-            Ok(resolved)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(output),
-        Err(error) => Err(format!("cannot inspect SHOWCASE_OUT: {error}")),
-    }
-}
-
-fn ensure_directory(scope: &Path, path: &Path, repository: &Path) -> Result<PathBuf, String> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(format!(
-                "SHOWCASE_OUT path component {} is a symlink",
-                path.display()
-            ));
+    let name = std::ffi::CString::new(file.as_bytes())
+        .map_err(|_| "SHOWCASE_OUT filename contains a NUL byte")?;
+    match nix::sys::stat::fstatat(
+        &parent_fd,
+        name.as_c_str(),
+        nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW,
+    ) {
+        Ok(metadata)
+            if metadata.st_mode & nix::libc::S_IFMT != nix::libc::S_IFREG
+                || metadata.st_nlink > 1 =>
+        {
+            return Err(
+                "SHOWCASE_OUT must be a single-link regular file, not a symlink or directory"
+                    .into(),
+            );
         }
         Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir(path)
-                .map_err(|error| format!("cannot create {}: {error}", path.display()))?;
+        Err(nix::errno::Errno::ENOENT) => {}
+        Err(error) => return Err(format!("cannot inspect SHOWCASE_OUT: {error}")),
+    }
+    Ok(ShowcaseOutput {
+        directory: parent_fd,
+        name,
+        path: parent_path.join(file),
+    })
+}
+
+fn open_directory(path: &Path) -> nix::Result<std::fs::File> {
+    let fd = nix::fcntl::open(
+        path,
+        nix::fcntl::OFlag::O_RDONLY
+            | nix::fcntl::OFlag::O_DIRECTORY
+            | nix::fcntl::OFlag::O_NOFOLLOW
+            | nix::fcntl::OFlag::O_CLOEXEC,
+        nix::sys::stat::Mode::empty(),
+    )?;
+    Ok(std::fs::File::from(fd))
+}
+
+fn open_or_create_child(parent: &std::fs::File, name: &str) -> nix::Result<std::fs::File> {
+    let name = std::ffi::CString::new(name).expect("validated component has no NUL");
+    match nix::fcntl::openat(
+        parent,
+        name.as_c_str(),
+        nix::fcntl::OFlag::O_RDONLY
+            | nix::fcntl::OFlag::O_DIRECTORY
+            | nix::fcntl::OFlag::O_NOFOLLOW
+            | nix::fcntl::OFlag::O_CLOEXEC,
+        nix::sys::stat::Mode::empty(),
+    ) {
+        Ok(fd) => Ok(std::fs::File::from(fd)),
+        Err(nix::errno::Errno::ENOENT) => {
+            match nix::sys::stat::mkdirat(
+                parent,
+                name.as_c_str(),
+                nix::sys::stat::Mode::S_IRWXU
+                    | nix::sys::stat::Mode::S_IRGRP
+                    | nix::sys::stat::Mode::S_IXGRP
+                    | nix::sys::stat::Mode::S_IROTH
+                    | nix::sys::stat::Mode::S_IXOTH,
+            ) {
+                Ok(()) | Err(nix::errno::Errno::EEXIST) => {}
+                Err(error) => return Err(error),
+            }
+            let fd = nix::fcntl::openat(
+                parent,
+                name.as_c_str(),
+                nix::fcntl::OFlag::O_RDONLY
+                    | nix::fcntl::OFlag::O_DIRECTORY
+                    | nix::fcntl::OFlag::O_NOFOLLOW
+                    | nix::fcntl::OFlag::O_CLOEXEC,
+                nix::sys::stat::Mode::empty(),
+            )?;
+            Ok(std::fs::File::from(fd))
         }
-        Err(error) => return Err(format!("cannot inspect {}: {error}", path.display())),
+        Err(error) => Err(error),
     }
-    let resolved = path
-        .canonicalize()
-        .map_err(|error| format!("cannot resolve {}: {error}", path.display()))?;
-    if !resolved.starts_with(scope) || !resolved.starts_with(repository) || !resolved.is_dir() {
-        return Err("SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`".into());
-    }
-    Ok(resolved)
 }
 
 /// What the recorder measured: blank video before the first scene, then the

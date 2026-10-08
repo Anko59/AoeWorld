@@ -2,8 +2,8 @@
 //! container and the ffmpeg mix. The OpenRouter key is passed to curl over a
 //! pipe and never written to disk.
 use super::{
-    Scene, Segment, Storyboard, TTS_MODEL, Timings, check_duration, durations, measured_duration,
-    resolve_out, track,
+    Scene, Segment, ShowcaseOutput, Storyboard, TTS_MODEL, Timings, check_duration, durations,
+    measured_duration, resolve_out, track,
 };
 use serde::Serialize;
 use std::{
@@ -84,23 +84,48 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap_or_default()
 }
 
-pub(crate) fn tts_command(request: &Path, audio: &Path) -> Command {
+pub(crate) fn tts_command(request: &Path) -> Command {
     let mut command = Command::new("curl");
     command
-        .args([
-            "-sS",
-            "--fail-with-body",
-            "--max-time",
-            "120",
-            "--max-filesize",
-        ])
-        .arg(TTS_RESPONSE_LIMIT.to_string())
+        .args(["-sS", "--fail-with-body", "--max-time", "120"])
         .args(["-X", "POST", TTS_URL, "-H", "@-", "--data-binary"])
         .arg(format!("@{}", request.display()))
-        .arg("-o")
-        .arg(audio)
         .stdin(Stdio::piped());
+    command.stdout(Stdio::piped());
     command
+}
+
+pub(crate) fn save_tts_response(child: &mut std::process::Child, audio: &Path) -> Result<u64> {
+    let mut stdout = child.stdout.take().ok_or("curl stdout was not piped")?;
+    let mut limited = (&mut stdout).take(TTS_RESPONSE_LIMIT + 1);
+    let mut file = fs::File::create(audio)?;
+    let mut total = 0_u64;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = limited.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        let remaining = TTS_RESPONSE_LIMIT.saturating_sub(total) as usize;
+        let accepted = count.min(remaining);
+        file.write_all(&buffer[..accepted])?;
+        total += accepted as u64;
+        if accepted != count {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(
+                format!("speech response exceeds the {TTS_RESPONSE_LIMIT}-byte limit").into(),
+            );
+        }
+    }
+    let status = child.wait()?;
+    if !status.success() {
+        let mut reason = String::new();
+        let file = fs::File::open(audio)?;
+        file.take(TTS_ERROR_LIMIT).read_to_string(&mut reason)?;
+        return Err(format!("speech request failed: {}", reason.trim()).into());
+    }
+    Ok(total)
 }
 
 pub(crate) fn concat_entry(file: &Path) -> String {
@@ -128,7 +153,7 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
         });
         fs::write(&request, body.to_string())?;
         let audio = work.join(format!("voice-{index}.pcm"));
-        let mut child = tts_command(&request, &audio).spawn()?;
+        let mut child = tts_command(&request).spawn()?;
         child
             .stdin
             .take()
@@ -136,15 +161,8 @@ fn narrate(work: &Path, board: &Storyboard) -> Result<Vec<Option<u64>>> {
             .write_all(
                 format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
             )?;
-        let status = child.wait()?;
-        if !status.success() {
-            let mut reason = String::new();
-            if let Ok(file) = fs::File::open(&audio) {
-                file.take(TTS_ERROR_LIMIT).read_to_string(&mut reason)?;
-            }
-            return Err(format!("speech for scene {} failed: {}", index + 1, reason.trim()).into());
-        }
-        let bytes = fs::metadata(&audio)?.len();
+        let bytes = save_tts_response(&mut child, &audio)
+            .map_err(|error| format!("speech for scene {} failed: {error}", index + 1))?;
         if bytes == 0 {
             return Err(format!("speech for scene {}: no audio", index + 1).into());
         }
@@ -265,9 +283,8 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
             path(&narration),
         ],
     )?;
-    let out_dir = out.parent().ok_or("the output has no directory")?;
     docker(
-        &[work, out_dir],
+        &[work],
         tools,
         &[
             "ffmpeg",
@@ -291,7 +308,7 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
 
 /// `make showcase`: SHOWCASE_STORYBOARD in, SHOWCASE_OUT (default
 /// `.cache/showcase/showcase.webm`) out, ready for SHIP_VIDEO.
-fn inputs(root: &Path) -> Result<(Storyboard, PathBuf)> {
+fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput)> {
     let storyboard = env("SHOWCASE_STORYBOARD")?;
     let board = Storyboard::parse(&read_storyboard(Path::new(&storyboard))?)?;
     let requested_out = std::env::var("SHOWCASE_OUT")
@@ -325,7 +342,7 @@ pub(crate) fn check(root: &Path) -> Result<()> {
     println!(
         "showcase-check: {} scene(s), output {}",
         board.scenes.len(),
-        out.display()
+        out.path.display()
     );
     Ok(())
 }
@@ -360,31 +377,18 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
         };
         let (silent, timings) = record(root, &work, &plan)?;
         let measured = measured_duration(&timings, board.scenes.len())?;
-        fs::create_dir_all(out.parent().ok_or("the output has no directory")?)?;
-        let temp_out = reserve_temp_output(&out)?;
+        let encoded = work.join("showcase.webm");
         let publish = if voices.iter().any(Option::is_some) {
-            mix(
-                &work,
-                &tools,
-                &track(&timings, &voices)?,
-                &silent,
-                &temp_out,
-            )
+            mix(&work, &tools, &track(&timings, &voices)?, &silent, &encoded)
         } else {
-            fs::copy(&silent, &temp_out).map(|_| ()).map_err(Into::into)
+            fs::copy(&silent, &encoded).map(|_| ()).map_err(Into::into)
         };
-        if let Err(error) = publish {
-            let _ = fs::remove_file(&temp_out);
-            return Err(error);
-        }
-        if let Err(error) = publish_temp_output(&temp_out, &out) {
-            let _ = fs::remove_file(&temp_out);
-            return Err(error);
-        }
+        publish?;
+        publish_temp_output(&encoded, &out)?;
         let seconds = measured / 1000;
         println!(
             "showcase: {} ({seconds}s, {} scene(s){})",
-            out.display(),
+            out.path.display(),
             board.scenes.len(),
             if voices.iter().any(Option::is_some) {
                 ", voiced"
@@ -392,26 +396,48 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
                 ""
             }
         );
-        Ok(out.clone())
+        Ok(out.path.clone())
     })();
     let _ = fs::remove_dir_all(&work);
     result
 }
 
-fn reserve_temp_output(out: &Path) -> Result<PathBuf> {
-    let name = out
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .ok_or("SHOWCASE_OUT must have a UTF-8 filename")?;
-    let temp = out.with_file_name(format!(".{name}-{}.tmp.webm", std::process::id()));
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)?;
-    Ok(temp)
-}
-
-pub(crate) fn publish_temp_output(temp: &Path, out: &Path) -> Result<()> {
-    fs::rename(temp, out)?;
+pub(crate) fn publish_temp_output(source: &Path, out: &ShowcaseOutput) -> Result<()> {
+    let temp = std::ffi::CString::new(format!(".showcase-{}.tmp.webm", std::process::id()))?;
+    let fd = nix::fcntl::openat(
+        &out.directory,
+        temp.as_c_str(),
+        nix::fcntl::OFlag::O_CREAT
+            | nix::fcntl::OFlag::O_EXCL
+            | nix::fcntl::OFlag::O_WRONLY
+            | nix::fcntl::OFlag::O_NOFOLLOW
+            | nix::fcntl::OFlag::O_CLOEXEC,
+        nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+    )?;
+    let mut target = fs::File::from(fd);
+    let copy_result = (|| -> Result<()> {
+        let mut input = fs::File::open(source)?;
+        std::io::copy(&mut input, &mut target)?;
+        target.sync_all()?;
+        Ok(())
+    })();
+    drop(target);
+    let publish_result = copy_result.and_then(|()| {
+        nix::fcntl::renameat(
+            &out.directory,
+            temp.as_c_str(),
+            &out.directory,
+            out.name.as_c_str(),
+        )
+        .map_err(Into::into)
+    });
+    if let Err(error) = publish_result {
+        let _ = nix::unistd::unlinkat(
+            &out.directory,
+            temp.as_c_str(),
+            nix::unistd::UnlinkatFlags::NoRemoveDir,
+        );
+        return Err(error);
+    }
     Ok(())
 }

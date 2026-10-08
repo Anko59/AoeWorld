@@ -114,8 +114,8 @@ fn narration_stretch_can_put_the_planned_showcase_over_five_minutes() {
 fn showcase_output_is_created_and_confined_to_its_cache_directory() {
     let root = tempfile::tempdir().unwrap();
     let output = resolve_out(root.path(), ".cache/showcase/nested/take.webm").unwrap();
-    assert!(output.starts_with(root.path().join(".cache/showcase")));
-    assert!(output.parent().unwrap().is_dir());
+    assert!(output.path.starts_with(root.path().join(".cache/showcase")));
+    assert!(output.path.parent().unwrap().is_dir());
     assert!(resolve_out(root.path(), ".git/config").is_err());
     assert!(resolve_out(root.path(), "video.webm").is_err());
     assert!(resolve_out(root.path(), ".cache/showcase/../escape.webm").is_err());
@@ -196,17 +196,46 @@ fn atomic_showcase_publish_replaces_a_hard_link_without_writing_through_it() {
     let showcase = root.path().join(".cache/showcase");
     std::fs::create_dir_all(&showcase).unwrap();
     let protected = root.path().join("protected.json");
-    let output = showcase.join("showcase.webm");
-    let temp = showcase.join(".showcase.tmp.webm");
+    let output = resolve_out(root.path(), ".cache/showcase/showcase.webm").unwrap();
+    let output_path = showcase.join("showcase.webm");
     std::fs::write(&protected, b"protected registry").unwrap();
-    std::fs::hard_link(&protected, &output).unwrap();
-    std::fs::write(&temp, b"new video").unwrap();
+    std::fs::hard_link(&protected, &output_path).unwrap();
+    let source = root.path().join("encoded.webm");
+    std::fs::write(&source, b"new video").unwrap();
 
-    publish_temp_output(&temp, &output).unwrap();
+    publish_temp_output(&source, &output).unwrap();
 
     assert_eq!(std::fs::read(protected).unwrap(), b"protected registry");
-    assert_eq!(std::fs::read(output).unwrap(), b"new video");
-    assert!(!temp.exists());
+    assert_eq!(std::fs::read(output_path).unwrap(), b"new video");
+}
+
+#[cfg(unix)]
+#[test]
+fn showcase_publish_uses_the_validated_directory_fd_after_path_swap() {
+    use super::super::showcase::publish_temp_output;
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let output = resolve_out(root.path(), ".cache/showcase/Cargo.toml").unwrap();
+    let source = root.path().join("encoded.webm");
+    std::fs::write(&source, b"showcase bytes").unwrap();
+    std::fs::write(root.path().join("Cargo.toml"), b"repository manifest").unwrap();
+
+    let showcase = root.path().join(".cache/showcase");
+    let original = root.path().join(".cache/showcase-original");
+    std::fs::rename(&showcase, &original).unwrap();
+    symlink(root.path(), &showcase).unwrap();
+
+    publish_temp_output(&source, &output).unwrap();
+
+    assert_eq!(
+        std::fs::read(root.path().join("Cargo.toml")).unwrap(),
+        b"repository manifest"
+    );
+    assert_eq!(
+        std::fs::read(original.join("Cargo.toml")).unwrap(),
+        b"showcase bytes"
+    );
 }
 
 #[test]
@@ -288,21 +317,39 @@ fn tts_command_reads_authorization_from_stdin_and_bounds_bodies() {
     use super::super::showcase::tts_command;
     use std::path::Path;
 
-    let command = tts_command(Path::new("request.json"), Path::new("response.pcm"));
+    let command = tts_command(Path::new("request.json"));
     let args: Vec<String> = command
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     assert!(args.windows(2).any(|pair| pair == ["-H", "@-"]));
-    assert!(
-        args.windows(2)
-            .any(|pair| pair == ["--max-filesize", "33554432"])
-    );
+    assert!(!args.iter().any(|arg| arg == "--max-filesize"));
+    assert!(!args.iter().any(|arg| arg == "33554432"));
     assert!(args.contains(&"--fail-with-body".into()));
     assert!(!args.iter().any(|arg| arg.contains("DUMMY_OPENROUTER_KEY")));
     let source = include_str!("../showcase/media.rs");
+    assert!(source.contains("command.stdout(Stdio::piped())"));
+    assert!(source.contains("take(TTS_RESPONSE_LIMIT + 1)"));
     assert!(!source.contains("work.join(\"headers\")"));
     assert!(source.contains("file.take(TTS_ERROR_LIMIT).read_to_string"));
+}
+
+#[cfg(unix)]
+#[test]
+fn tts_stream_limit_stops_a_stubbed_unknown_length_body() {
+    use super::super::showcase::save_tts_response;
+    use std::process::{Command, Stdio};
+
+    let root = tempfile::tempdir().unwrap();
+    let audio = root.path().join("response.pcm");
+    let mut child = Command::new("sh")
+        .args(["-c", "head -c 33554433 /dev/zero"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let error = save_tts_response(&mut child, &audio).unwrap_err();
+    assert!(error.to_string().contains("33554432-byte limit"));
+    assert_eq!(std::fs::metadata(audio).unwrap().len(), 32 * 1024 * 1024);
 }
 
 #[test]
