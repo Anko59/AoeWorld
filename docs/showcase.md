@@ -10,13 +10,19 @@ make ship … SHIP_VIDEO=.cache/showcase/showcase.webm
 ```
 
 `make showcase-check` validates the storyboard, output path and natural
-five-minute limit without building either Docker image. `make showcase` voices
+five-minute limit without building either Docker image. `SHOWCASE_LEVEL` sets
+the pull request level for the check; it defaults to `SHIP_LEVEL`, then the
+level in `.github/pull_request_template.md`. The accepted values are `low`,
+`medium`, `high` and `max`. High and max levels require at least one narrated
+scene, which the check rejects before any build or speech request. `make showcase` voices
 the scenes first, checks the narration-stretched plan against five minutes,
 then builds the recording images and records the take.
 
 Keep the storyboard outside the repository (or under `.cache/`): it is not
-committed. `SHOWCASE_OUT` may select a path inside `.cache/showcase/`; paths
-outside it, `..` components, and any symlinked path component are refused.
+committed. `SHOWCASE_OUT` may select a path inside `.cache/showcase/`; its
+filename must use only letters, digits, `.`, `_` and `-`, so `make ship`
+accepts it for attachment. Paths outside it, `..` components, and any
+symlinked path component are refused.
 Existing outputs must be regular files. The directory is created when needed.
 
 ## Storyboard

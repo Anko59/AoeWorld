@@ -9,6 +9,8 @@ mod media;
 mod workdir;
 
 pub(crate) use check::check;
+#[cfg(test)]
+pub(crate) use check::{check_voice_requirement, validate_manifest_root};
 pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
@@ -219,12 +221,16 @@ pub(crate) fn measured_duration(timings: &Timings, scene_count: usize) -> Result
 /// Resolve the requested video path beneath `.cache/showcase`, refusing
 /// symlinks in every component and multiply-linked existing files.
 pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<ShowcaseOutput, String> {
-    if !Path::new(requested)
+    let requested_path = Path::new(requested);
+    if !requested_path
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with(".webm"))
     {
         return Err("SHOWCASE_OUT must end in `.webm`".into());
+    }
+    if !super::github::attachable_video(requested_path) {
+        return Err("SHOWCASE_OUT filename must use only letters, digits, `.`, `_` or `-`".into());
     }
     let root = root
         .canonicalize()

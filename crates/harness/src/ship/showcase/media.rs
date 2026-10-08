@@ -335,8 +335,11 @@ fn mix(work: &Path, tools: &str, segments: &[Segment], video: &Path, out: &Path)
 /// `make showcase`: SHOWCASE_STORYBOARD in, SHOWCASE_OUT (default
 /// `.cache/showcase/showcase.webm`) out, ready for SHIP_VIDEO.
 fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput)> {
+    super::check::validate_manifest_root(root)?;
+    let level = super::check::showcase_level(root)?;
     let storyboard = env("SHOWCASE_STORYBOARD")?;
     let board = Storyboard::parse(&read_storyboard(Path::new(&storyboard))?)?;
+    super::check::check_voice_requirement(level, &board)?;
     let requested_out = std::env::var("SHOWCASE_OUT")
         .ok()
         .filter(|v| !v.is_empty())
