@@ -193,6 +193,7 @@ dependencies = [
  "gungraun",
  "postcard",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
