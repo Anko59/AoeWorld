@@ -163,3 +163,37 @@ fn a_merge_is_judged_against_its_first_parent() {
     assert!(report.applicable());
     assert!(report.markdown().contains(" merge (product)\n"));
 }
+
+#[test]
+fn binary_and_mode_only_changes_are_product_commits() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    commit(root, &[("crates/sim/data.bin", "\0\u{1}\0")], "binary");
+    run(root, &["update-index", "--chmod=+x", LIB]);
+    run(root, &["commit", "-q", "-m", "mode"]);
+    let report = report(root, &base, "HEAD").unwrap();
+    assert_eq!(kinds(&report), [Kind::Product, Kind::Product]);
+}
+
+#[test]
+fn custom_build_script_paths_are_normalized() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    commit(
+        root,
+        &[
+            (
+                "crates/sim/Cargo.toml",
+                "[package]\nname = \"sim\"\nbuild = \"./src/../../gen/./make.rs\"\n",
+            ),
+            ("crates/gen/make.rs", "fn main() {}\n"),
+        ],
+        "custom build",
+    );
+    let report = report(root, &base, "HEAD").unwrap();
+    assert!(
+        report.build.iter().any(|p| p == "crates/gen/make.rs"),
+        "{:?}",
+        report.build
+    );
+}

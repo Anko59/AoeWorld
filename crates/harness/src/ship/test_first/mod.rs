@@ -12,7 +12,10 @@ mod inline_tests;
 mod tests;
 
 use crate::ship::git;
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 const TRAILER: &str = "Harness-Test-First";
 
@@ -205,7 +208,22 @@ fn manifests(root: &Path, revision: &str) -> git::Result<Vec<(String, toml::Tabl
 fn custom_script((manifest, parsed): &(String, toml::Table)) -> Option<String> {
     let script = parsed.get("package")?.get("build")?.as_str()?;
     let directory = manifest.strip_suffix("Cargo.toml").unwrap_or_default();
-    Some(format!("{directory}{}", script.trim_start_matches("./")))
+    Some(normalize(&format!("{directory}{script}")))
+}
+
+/// `path` with `.` and `..` resolved lexically, as git names files.
+pub(crate) fn normalize(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|p| *p != "..") => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+    parts.join("/")
 }
 
 fn build_files(root: &Path, base: &str, head: &str) -> git::Result<Vec<String>> {
@@ -246,8 +264,24 @@ fn classify(root: &Path, sha: &str, parent: Option<&str>) -> git::Result<(Base, 
     }
     args.extend([sha, "--", "crates/", ":(exclude)crates/harness/"]);
     let patch = git::git(root, &args)?;
+    let mut lines: BTreeMap<String, inline::Changes> =
+        inline::changes(&patch).into_iter().collect();
+    // Paths come from the name-status list, which names binary and mode-only
+    // changes that a patch gives no `+++` header.
+    args.retain(|arg| !matches!(*arg, "-p" | "-U0"));
+    args.insert(1, "--name-status");
+    args.insert(2, "-z");
+    let names = git::git(root, &args)?;
+    let paths: Vec<String> = names
+        .split('\0')
+        .collect::<Vec<_>>()
+        .chunks(2)
+        .filter_map(|pair| pair.get(1).filter(|p| !p.is_empty()))
+        .map(|p| (*p).to_owned())
+        .collect();
     let (mut tests, mut product, mut inline) = (false, false, Vec::new());
-    for (path, changes) in inline::changes(&patch) {
+    for path in paths {
+        let changes = lines.remove(&path).unwrap_or_default();
         if !in_scope(&path) {
             continue;
         }
