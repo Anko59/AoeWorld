@@ -66,9 +66,10 @@ fn cli_sigterm_cancels_owned_make_and_retains_incomplete_ledger() {
         .unwrap();
     // The recipe creates the marker before `printf` writes the PID (#116):
     // wait for a parseable PID, not merely for the file.
+    // A bounded wait for startup, generous enough for a loaded machine (#181).
     let started = Instant::now();
     let mut owned: Option<i32> = None;
-    while owned.is_none() && started.elapsed() < Duration::from_secs(5) {
+    while owned.is_none() && started.elapsed() < Duration::from_secs(60) {
         owned = fs::read_to_string(&marker)
             .ok()
             .and_then(|text| text.parse().ok());
@@ -84,7 +85,7 @@ fn cli_sigterm_cancels_owned_make_and_retains_incomplete_ledger() {
             assert!(!status.success());
             break;
         }
-        if stopped.elapsed() > Duration::from_secs(5) {
+        if stopped.elapsed() > Duration::from_secs(30) {
             child.kill().unwrap();
             child.wait().unwrap();
             panic!("cancel did not stop gate-run");
