@@ -51,6 +51,10 @@ pub(super) fn raster_surface(
     } else {
         None
     };
+    // Cache only immutable address arithmetic on this primitive's stack.
+    let primary_sampler = texture.map(|address| TerrainSampler::new(atlas, address));
+    let blend_samplers =
+        blend.map(|addresses| addresses.map(|address| TerrainSampler::new(atlas, address)));
     let mut vertex_depths = [0.0; 3];
     for index in 0..3 {
         vertex_depths[index] = surface_render_depth(triangle.points[index].world, triangle.skirt);
@@ -77,7 +81,7 @@ pub(super) fn raster_surface(
                 second += plane.x[1];
                 continue;
             }
-            let source = if let Some(sampler) = texture {
+            let source = if let Some(sampler) = primary_sampler.as_ref() {
                 let local = [
                     local_uv[0][0] * weights[0]
                         + local_uv[1][0] * weights[1]
@@ -86,15 +90,15 @@ pub(super) fn raster_surface(
                         + local_uv[1][1] * weights[1]
                         + local_uv[2][1] * weights[2],
                 ];
-                let mut sample = filter::sample(atlas, sampler, local, primary_filter);
-                if let Some([second, third]) = blend {
+                let mut sample = filter::sample_prepared(atlas, sampler, local, primary_filter);
+                if let Some([second, third]) = blend_samplers.as_ref() {
                     let samples = [
                         sample,
-                        filter::sample(atlas, second, local, secondary_filter),
+                        filter::sample_prepared(atlas, second, local, secondary_filter),
                         if landscape {
                             sample
                         } else {
-                            sample_terrain_atlas(atlas, third, local)
+                            third.sample(atlas, local)
                         },
                     ];
                     if landscape {
@@ -144,6 +148,53 @@ pub(super) fn raster_surface(
     }
 }
 
+/// Per-primitive metadata only: never owns or retains atlas pixels.
+#[derive(Clone, Copy)]
+struct TerrainSampler {
+    origin: [f64; 2],
+    extent: [f64; 2],
+    page_base: Option<usize>,
+}
+
+impl TerrainSampler {
+    fn new(atlas: &[u8], address: crate::AtlasAddress) -> Self {
+        let side = f64::from(GAME_ATLAS_SIDE);
+        Self {
+            origin: [address.uv[0], address.uv[1]].map(|v| f64::from(v) * side + 0.5),
+            extent: [address.uv[2], address.uv[3]].map(|v| (f64::from(v) * side - 1.0).max(0.0)),
+            page_base: (address.page as usize)
+                .checked_mul(crate::GAME_ATLAS_PAGE_BYTES)
+                .filter(|base| *base <= atlas.len().saturating_sub(4)),
+        }
+    }
+
+    #[inline(never)]
+    fn sample(&self, atlas: &[u8], local: [f64; 2]) -> [u8; 4] {
+        let Some(base) = self.page_base else {
+            return [0; 4];
+        };
+        let side = GAME_ATLAS_SIDE as usize;
+        // Keep (origin + local * extent), without reassociation or fused arithmetic.
+        let x = ((self.origin[0] + local[0] * self.extent[0]) as usize).min(side - 1);
+        let y = ((self.origin[1] + local[1] * self.extent[1]) as usize).min(side - 1);
+        // Preserve the original per-texel bound, including partial-page slices.
+        let Some(start) = base
+            .checked_add((y * side + x) * 4)
+            .filter(|start| *start <= atlas.len().saturating_sub(4))
+        else {
+            return [0; 4];
+        };
+        [
+            atlas[start],
+            atlas[start + 1],
+            atlas[start + 2],
+            atlas[start + 3],
+        ]
+    }
+}
+
+// Frozen scalar oracle, not an alternative production renderer.
+#[cfg(test)]
 #[inline(never)]
 fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64; 2]) -> [u8; 4] {
     let rect = address.uv;

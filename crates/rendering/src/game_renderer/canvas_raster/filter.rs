@@ -33,14 +33,24 @@ pub(super) fn offsets(
     )
 }
 
-#[inline(never)]
+#[cfg(test)]
 pub(super) fn sample(
     atlas: &[u8],
     address: crate::AtlasAddress,
     local: [f64; 2],
     offsets: Option<[[f64; 2]; 4]>,
 ) -> [u8; 4] {
-    let center = sample_terrain_atlas(atlas, address, local);
+    sample_prepared(atlas, &TerrainSampler::new(atlas, address), local, offsets)
+}
+
+#[inline(never)]
+pub(super) fn sample_prepared(
+    atlas: &[u8],
+    sampler: &TerrainSampler,
+    local: [f64; 2],
+    offsets: Option<[[f64; 2]; 4]>,
+) -> [u8; 4] {
+    let center = sampler.sample(atlas, local);
     let Some(offsets) = offsets else {
         return center;
     };
@@ -50,7 +60,7 @@ pub(super) fn sample(
     let mut sums = [0_u32; 4];
     for offset in offsets {
         let uv = std::array::from_fn(|axis| (local[axis] + offset[axis]).clamp(0.0, 1.0));
-        let tap = sample_terrain_atlas(atlas, address, uv);
+        let tap = sampler.sample(atlas, uv);
         for channel in 0..3 {
             sums[channel] += u32::from(tap[channel]) * u32::from(tap[3]);
         }
