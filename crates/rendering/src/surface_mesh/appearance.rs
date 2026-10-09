@@ -123,7 +123,26 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
             triangle.texture_uv = a;
             // Identical coherent addresses need one sample, not three reads of
             // the same bed (especially once each minified read is filtered).
-            triangle.texture_blend = a.zip(b).filter(|(a, b)| a != b).map(|(a, b)| [b, a]);
+            let world = a
+                .zip(b)
+                .and_then(|_| super::world::qualify(triangle, art, [primary, bed]));
+            triangle.texture_blend = a
+                .zip(b)
+                .filter(|(a, b)| world.is_some() || a != b)
+                .map(|(a, b)| [b, a]);
+            if let (Some(world), Some(addresses)) = (world, triangle.texture_blend.as_mut()) {
+                // Reuse V2's redundant third layer; preserve the 240-byte mesh ABI.
+                triangle.texture_materials = Some([primary, bed, primary | 128]);
+                addresses[1] = AtlasAddress {
+                    page: world.checksum,
+                    uv: [
+                        world.footprint[0],
+                        world.footprint[1],
+                        f32::from(primary),
+                        f32::from(bed),
+                    ],
+                };
+            }
             continue;
         }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);

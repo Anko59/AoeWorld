@@ -29,16 +29,19 @@ extern "C" {
 
 pub struct WebGlRenderer {
     bridge: GlBridge,
+    pub(super) world_atlas: Option<u32>,
 }
 
 impl WebGlRenderer {
     pub(super) fn new(canvas: &HtmlCanvasElement) -> Result<Self, String> {
         Ok(Self {
             bridge: GlBridge::create(canvas).map_err(error)?,
+            world_atlas: None,
         })
     }
 
     pub(super) fn upload(&mut self, pixels: &[u8]) -> Result<(), String> {
+        self.world_atlas = None;
         if pixels.len() != crate::GAME_ATLAS_BYTES {
             return Err("Invalid WebGL2 game atlas size".to_owned());
         }
@@ -63,6 +66,9 @@ impl WebGlRenderer {
             .checked_mul(INSTANCE_BYTES)
             .filter(|bytes| *bytes <= MAX_INSTANCE_BYTES)
             .ok_or_else(|| "WebGL2 instance buffer exceeds 64 MiB".to_owned())?;
+        for sprite in sprites.iter_mut() {
+            crate::web::retain_world_packet(sprite, self.world_atlas);
+        }
         normalize_depths(sprites);
         // wasm-bindgen borrows a memory view for this synchronous import.
         // The bridge uploads immediately and never retains the packet or awaits.

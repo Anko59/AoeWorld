@@ -7,6 +7,8 @@ use crate::{
 const WATER_TINT: [u8; 3] = [38, 113, 190];
 #[path = "canvas_raster/filter.rs"]
 mod filter;
+#[path = "canvas_raster/world.rs"]
+mod world;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
@@ -38,6 +40,11 @@ pub(super) fn raster_surface(
         filter::gradients(&plane, local_uv)
     } else {
         [[0.0; 2]; 2]
+    };
+    let world = if landscape && triangle.texture_mode <= 3 {
+        world::WorldSampler::new(atlas, triangle, gradient)
+    } else {
+        None
     };
     let primary_filter = if landscape {
         texture.and_then(|address| filter::offsets(address, gradient))
@@ -86,11 +93,16 @@ pub(super) fn raster_surface(
                         + local_uv[1][1] * weights[1]
                         + local_uv[2][1] * weights[2],
                 ];
-                let mut sample = filter::sample(atlas, sampler, local, primary_filter);
+                let world_samples = world.as_ref().and_then(|world| world.sample(atlas, local));
+                let mut sample = world_samples
+                    .map(|samples| samples[0])
+                    .unwrap_or_else(|| filter::sample(atlas, sampler, local, primary_filter));
                 if let Some([second, third]) = blend {
                     let samples = [
                         sample,
-                        filter::sample(atlas, second, local, secondary_filter),
+                        world_samples.map(|samples| samples[1]).unwrap_or_else(|| {
+                            filter::sample(atlas, second, local, secondary_filter)
+                        }),
                         if landscape {
                             sample
                         } else {

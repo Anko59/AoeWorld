@@ -1,4 +1,5 @@
 //! Loads only the local pack pages needed by the first map and compacts them.
+use aoe_assets::catalog::packing::terrain_lookup::ConstructedTerrainAtlas;
 use aoe_assets::catalog::{
     AssetRole, TerrainFrameTopology,
     packing::{AtlasDomain, FrameExtent, MAX_SELECTED_FRAMES, Placement, pack_frames},
@@ -135,7 +136,7 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     order
 }
 
-pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
+pub async fn load() -> Result<(GameArt, ConstructedTerrainAtlas), JsValue> {
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(error)?;
     // The DTO owns its used strings; release raw JSON before PNG decode awaits.
@@ -234,6 +235,26 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             .unwrap_or_default()
     };
     let terrain = TERRAIN_ROLES.map(group);
+    use aoe_assets::catalog::packing::terrain_lookup::TerrainGroup;
+    let groups = std::array::from_fn(|slot| {
+        let placements = ranges[TERRAIN_ROLES[slot] as usize]
+            .as_ref()
+            .map_or(&[][..], |range| &placements[range.clone()]);
+        let topology = terrain_topology[slot].map(|t| match t {
+            TerrainTopology::PeriodicXMajorReversedY { columns, rows } => {
+                TerrainFrameTopology::PeriodicXMajorReversedY { columns, rows }
+            }
+            TerrainTopology::CoordinateStableAccents => {
+                TerrainFrameTopology::CoordinateStableAccents
+            }
+        });
+        TerrainGroup {
+            placements,
+            topology,
+        }
+    });
+    let atlas = ConstructedTerrainAtlas::new(pixels, &groups).map_err(error)?;
+    let terrain_world = Some(atlas.table().metadata().layout_checksum);
     Ok((
         GameArt {
             walking: group(AssetRole::CavalryWalking),
@@ -241,6 +262,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,
+            terrain_world,
             resources: [
                 group(AssetRole::ForageBush),
                 group(AssetRole::WoodTree),
@@ -250,6 +272,6 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             tree_shadows: group(AssetRole::WoodTreeShadow),
             tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
         },
-        pixels,
+        atlas,
     ))
 }

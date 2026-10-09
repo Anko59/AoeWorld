@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "terrain_blend/readback.rs"]
 mod readback;
+#[path = "terrain_blend/world.rs"]
+mod world;
 use readback::PixelReadback;
 
 #[wasm_bindgen_test]
@@ -145,6 +147,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         grass: vec![frame(0)],
         terrain: std::array::from_fn(|_| vec![frame(0)]),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

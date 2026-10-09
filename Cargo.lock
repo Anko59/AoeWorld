@@ -193,6 +193,7 @@ dependencies = [
  "gungraun",
  "postcard",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -200,6 +201,7 @@ dependencies = [
 name = "aoe-rendering"
 version = "0.1.0"
 dependencies = [
+ "aoe-assets",
  "aoe-core",
  "aoe-protocol",
  "bytemuck",

@@ -66,6 +66,27 @@ pub(super) fn sample(
     result
 }
 
+/// Shared integer kernel; tap addressing remains specific to each sampler.
+#[cfg(test)]
+pub(super) fn add_tap(sums: &mut [u32; 4], tap: [u8; 4]) {
+    for channel in 0..3 {
+        sums[channel] += u32::from(tap[channel]) * u32::from(tap[3]);
+    }
+    sums[3] += u32::from(tap[3]);
+}
+
+#[cfg(test)]
+pub(super) fn finish(center: [u8; 4], sums: [u32; 4]) -> [u8; 4] {
+    let mut result = center;
+    if sums[3] != 0 {
+        for channel in 0..3 {
+            result[channel] = ((sums[channel] + sums[3] / 2) / sums[3]) as u8;
+        }
+    }
+    // Nearest center alpha alone determines coverage and depth.
+    result
+}
+
 #[path = "filter/tests.rs"]
 #[cfg(test)]
 mod tests;
