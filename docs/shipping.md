@@ -83,8 +83,8 @@ the PR") and renders two parts:
   metrics table comparing the merge base with this PR. It reports changed lines
   by class, unit and integration `#[test]` attributes, production comment
   density, and production line counts.
-- **🤖 For AI:** the agent's notes, gate evidence and the
-  full adversarial review.
+- **🤖 For AI:** the agent's notes, the [test-first report](#test-first), gate
+  evidence and the full adversarial review.
 
 | Level | For | Video (`SHIP_VIDEO`) | Voice |
 |---|---|---|---|
@@ -108,6 +108,28 @@ inside strings.
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.
+
+## Test-first
+
+Test-first is reported, never enforced: `make ship` proceeds whatever the
+report says. From Git alone (merge base..HEAD), `aoe-harness`
+(`crates/harness/src/ship/test_first/`) writes a short report into the
+description's "For AI" part and into the facts every reviewer reads:
+
+- each commit classified as tests-only, product, mixed or other, where product
+  code is any non-test file under `crates/` except `crates/harness/`;
+- the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
+  `#[rstest]`…, never a `cfg`) added before the first product commit;
+- build-time files changed: `build.rs` or a custom `package.build` script,
+  `.cargo/`, `rust-toolchain*`, `.config/nextest.toml`, and a manifest's
+  `build`, `links`, build dependencies or profiles, parsed with `toml`;
+- an exemption trailer, `Harness-Test-First: exempt — <reason>`, if any.
+
+A change to the harness, gates, docs or CI alone is "not applicable". The
+test-integrity reviewer judges the report: product code with no failing test
+before it, a build-time change or a weak exemption is a finding, not a refusal.
+Proving in CI that the tests ran red then green remains
+[#167](https://github.com/Anko59/AoeWorld/issues/167).
 
 ## Limits
 
