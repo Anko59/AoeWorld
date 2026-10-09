@@ -89,3 +89,17 @@ mod tests {
         );
     }
 }
+
+/// Rows of one RGBA page up to its last non-zero byte. Uploads stop there:
+/// WebGPU and WebGL zero-initialize textures, and packed pages are mostly
+/// empty, so trailing rows never need staging.
+pub fn occupied_rows(page: &[u8]) -> u32 {
+    let row = GAME_ATLAS_SIDE as usize * 4;
+    page.chunks(row)
+        .rposition(|bytes| bytes.iter().any(|&byte| byte != 0))
+        .map_or(0, |last| last as u32 + 1)
+}
+
+#[cfg(test)]
+#[path = "atlas/occupied_rows_tests.rs"]
+mod occupied_rows_tests;
