@@ -269,3 +269,48 @@ revision-bound CI evidence. Keep screenshots and original art private.
   hash inputs: advancing latest schema aliases changes generator identity, and
   current geography hashing includes detail. Preserve schema9/recipe8 identities
   and reject mixed old/new profile-contract combinations explicitly.
+
+### Candidate scene contract and compact format 3
+
+- Typed landscape scenes now carry explicit tile coordinates/base terrain,
+  paired integer canopy/floor strengths, ecological palette, exposure/height
+  bands, resource visual families and separate nonblocking decorations. Existing
+  `Tile`, `ResourceNode`, `Chunk` and compact 1/2 bodies remain unchanged. Species
+  families are semantic intent, not approval of conifer/scrub/tropical artwork.
+- New explicit candidate chunk query produces source-based floors/trees with
+  one pre-singleton mask including routes/starts and potential resource clusters'
+  full adjacent approach ring. Non-tree resources require a free cardinal base
+  neighbor satisfying existing physical height/passability rules; no decorated
+  callbacks or tree-only removals. Dressing cannot refill historical crop/grazing/
+  nonland or reserved cells. Default published dispatch remains unchanged.
+- Explicit temperate-summer modeling uses source-height bands (1000/1800/2500/
+  3500 m) and temperate/boreal/woodland treeline at 2300 m. It changes candidate
+  surface appearance, never source heights/corners/passability/provenance. These
+  are provisional model policies, not local-climate or France qualification.
+- `encode_landscape`/`decode_landscape` implements strict compact3: 7-byte header,
+  37-byte tiles (20-byte old base + explicit coords + 9-byte metadata), 22-byte
+  resources and 12-byte decorations. Maximum 1024 tiles + 1024 resources + 1024
+  decorations is 72,711 decoded bytes, below unchanged 128 KiB. Reject invalid
+  counts/lengths/enums/reserved bytes/strengths/orientations, duplicate cells,
+  unsorted/outside tiles and resources/dressing without a present tile. Savanna/
+  treeless modes require zero forest strengths. No parallel extension arrays.
+- Explicit coordinates fix new sparse/partial-edge representation; 18-wide rows
+  are NOT silently treated as 32-wide. Legacy projection keeps implied original
+  coordinates without extra parser rejection; client must retain wire-format
+  provenance and its existing world-aware legacy chunk-width layout. Appearance
+  none is allowed in compact3, so it cannot identify the original format.
+- Old `decode` rejects3 rather than discard metadata; new reader projects1/2
+  with no inferred appearance/species/dressing. Twelve codec cases and five
+  source/candidate cases PASS, including dense species/floor coherence, unchanged
+  published chunks, geometry/provenance, shared exclusions, sparse edges/order,
+  summer treeline and separate savanna. Valid v2/v3 ASCII-hex fuzz seeds reach
+  their real readers; existing binary/name corpus entries are retained verbatim.
+- `make fmt`; `make GID=117 preflight perf-ci fuzz-smoke`: PASS, 1,152 native /
+  1 existing skip, doctests/static/WASM-build/smoke and unchanged performance
+  budgets. Initial alias-loaded test module corrected to explicit path (no lint
+  allowances); an isolated snapshot preparation reported source changed and the
+  verified frozen staged inputs were retried successfully (root cause unassessed).
+- Limits: inactive candidate contracts; client/shared-scene/backend consumption,
+  profile/package/creator dispatch and opt-in UI still required. New source-query
+  cost/real resource access and open-space composition need dedicated evidence;
+  no source France activation, captures, movement, memory, CI or hardware claims.
