@@ -352,3 +352,8 @@ fn material(base: Tile, appearance: LandscapeAppearance) -> GroundMaterial {
 #[path = "chunks/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+// Pure future-policy qualification only; no recipe/profile/provider activation.
+#[path = "chunks/family_candidate.rs"]
+#[cfg(test)]
+mod family_candidate;
