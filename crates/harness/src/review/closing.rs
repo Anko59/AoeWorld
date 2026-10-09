@@ -67,8 +67,12 @@ fn still_open(report: &Report) -> usize {
         .count()
 }
 
+/// The same finding: same file, line and claim. Two findings that differ only
+/// by line are distinct, so settling one never hides the other.
 fn same(a: &Finding, b: &Finding) -> bool {
-    a.reported.file == b.reported.file && a.reported.claim == b.reported.claim
+    a.reported.file == b.reported.file
+        && a.reported.line == b.reported.line
+        && a.reported.claim == b.reported.claim
 }
 
 /// What `make ship` does next on a branch, from its stored reviews (oldest

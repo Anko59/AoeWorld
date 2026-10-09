@@ -369,6 +369,38 @@ fn a_carried_finding_settled_as_minor_is_not_carried_again() {
 }
 
 #[test]
+fn settling_a_finding_never_hides_another_at_a_different_line() {
+    // Closing review 1 settles carried P1 as minor and confirms a new major N
+    // with the same file and claim at another line: N is carried next time.
+    let mut history = three_converging();
+    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
+    first.findings[0].reported = history[2].findings[0].reported.clone();
+    first.findings[0].votes = finding(
+        "P1",
+        CARRIED,
+        Severity::Major,
+        "correctness",
+        &[
+            (0, 2, Vote::Partial),
+            (1, 2, Vote::Partial),
+            (2, 2, Vote::Refuted),
+        ],
+    )
+    .votes;
+    first.findings[0].status = Status::Confirmed;
+    first.findings[1].reported = first.findings[0].reported.clone();
+    first.findings[1].reported.line = Some(80);
+    history.push(first);
+    let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
+        panic!("a converging branch with one closing review left gets it");
+    };
+    assert!(
+        prior.iter().any(|f| f.reported.line == Some(80)),
+        "the new major at line 80 is carried"
+    );
+}
+
+#[test]
 fn a_new_disputed_critical_finding_fails_a_closing_review() {
     let mut r = closing("d", 4, &[], &[Severity::Critical]);
     r.findings[0].status = Status::Disputed;
