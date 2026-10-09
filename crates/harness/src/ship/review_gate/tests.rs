@@ -172,7 +172,9 @@ fn a_passing_review_posts_its_status_and_arms_auto_merge() {
             "--repo",
             "o/r",
             "--auto",
-            "--squash"
+            "--squash",
+            "--match-head-commit",
+            report.head.as_str()
         ]
     );
     let failing = graded(&root, Tier::Low, 7);
@@ -379,4 +381,49 @@ fn rerunning_a_failed_commit_is_refused_and_every_attempt_is_kept() {
     assert!(error.contains("already failed"), "{error}");
     graded(&root, Tier::Low, 5);
     assert_eq!(crate::review::history(&root, "feature").unwrap().len(), 2);
+}
+
+#[test]
+fn a_clean_pull_request_is_merged_directly_and_still_pinned() {
+    use super::super::github::direct_merge;
+    let call: Vec<String> = [
+        "pr",
+        "merge",
+        "u",
+        "--repo",
+        "o/r",
+        "--auto",
+        "--squash",
+        "--match-head-commit",
+        "abc",
+    ]
+    .iter()
+    .map(|a| (*a).to_owned())
+    .collect();
+    let refused = "gh pr merge …: GraphQL: Pull request Pull request is in clean status (enablePullRequestAutoMerge)";
+    let direct = direct_merge(&call, refused).expect("a clean PR is merged directly");
+    assert!(!direct.iter().any(|a| a == "--auto"));
+    assert!(
+        direct
+            .windows(2)
+            .any(|w| w[0] == "--match-head-commit" && w[1] == "abc")
+    );
+    assert!(
+        direct_merge(&call, "some other failure").is_none(),
+        "other errors still fail"
+    );
+    let unpinned: Vec<String> = call
+        .iter()
+        .filter(|a| *a != "--match-head-commit" && *a != "abc")
+        .cloned()
+        .collect();
+    assert!(
+        direct_merge(&unpinned, refused).is_none(),
+        "never merge an unpinned call directly"
+    );
+    let status: Vec<String> = ["api", "--method", "POST"]
+        .iter()
+        .map(|a| (*a).to_owned())
+        .collect();
+    assert!(direct_merge(&status, refused).is_none());
 }
