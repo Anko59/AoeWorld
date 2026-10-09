@@ -56,9 +56,17 @@ impl Renderer {
         if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
         }
-        // Borrowed WASM bytes are synchronously snapshotted by queue.writeTexture.
+        // Borrowed WASM bytes are synchronously snapshotted by queue.writeTexture;
+        // only each page's occupied rows are staged.
+        let mut rows = [0; GAME_ATLAS_PAGES as usize];
+        for (rows, page) in rows
+            .iter_mut()
+            .zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES))
+        {
+            *rows = atlas::occupied_rows(page);
+        }
         self.device
-            .upload_atlas(pixels)
+            .upload_atlas(pixels, &rows)
             .map_err(crate::web::gpu_bridge::error)?;
         self.atlas_side = GAME_ATLAS_SIDE;
         self.atlas_pages = GAME_ATLAS_PAGES;

@@ -158,15 +158,19 @@ export class AoeWebGpu {
       mipLevelCount: 1, sampleCount: 1, dimension: "2d", format: "rgba8unorm",
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST, viewFormats: [] });
   }
-  #writeAtlas(texture, pixels, side, pages) {
-    // One layer per write bounds browser staging to a single page.
-    const page = side * side * 4;
+  #writeAtlas(texture, pixels, side, pages, rows) {
+    // One layer per write bounds browser staging to a single page; Rust's
+    // occupied row counts stop each write early (textures start zeroed).
+    const row = side * 4, page = row * side;
     for (let layer = 0; layer < pages; layer++) {
+      const height = rows ? rows[layer] : side;
+      if (height === 0) continue;
       this.#device.queue.writeTexture({ texture, mipLevel: 0, origin: [0, 0, layer] },
-        pixels.subarray(layer * page, (layer + 1) * page),
-        { offset: 0, bytesPerRow: side * 4, rowsPerImage: side }, [side, side, 1]);
+        pixels.subarray(layer * page, layer * page + height * row),
+        { offset: 0, bytesPerRow: row, rowsPerImage: side }, [side, height, 1]);
     }
   }
+
   #newSampler() {
     return this.#device.createSampler({ magFilter: "nearest", minFilter: "nearest",
       mipmapFilter: "nearest", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge",
@@ -193,10 +197,14 @@ export class AoeWebGpu {
     this.#buffer.destroy(); this.#buffer = buffer;
     this.#bindGroup = group; this.#capacity = required;
   }
-  uploadAtlas(pixels) {
+  uploadAtlas(pixels, rows) {
     this.#live();
     if (!(pixels instanceof Uint8Array) || pixels.byteLength !== GAME_BYTES) {
       throw "Invalid game atlas size";
+    }
+    if (!(rows instanceof Uint32Array) || rows.length !== GAME_PAGES
+        || rows.some((height) => height > GAME_SIDE)) {
+      throw "Invalid game atlas rows";
     }
     const limits = this.#device.limits;
     if (limits.maxTextureDimension2D < GAME_SIDE || limits.maxTextureArrayLayers < GAME_PAGES) {
@@ -206,7 +214,7 @@ export class AoeWebGpu {
     let view, sampler, group;
     try {
       // Synchronous API snapshot: no retained caller view, copy, or await.
-      this.#writeAtlas(texture, pixels, GAME_SIDE, GAME_PAGES);
+      this.#writeAtlas(texture, pixels, GAME_SIDE, GAME_PAGES, rows);
       view = texture.createView({ dimension: "2d-array" }); sampler = this.#newSampler();
       group = this.#newBindGroup(this.#buffer, view, sampler);
     } catch (error) { texture.destroy(); throw error; }

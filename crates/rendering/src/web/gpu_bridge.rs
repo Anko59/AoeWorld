@@ -21,7 +21,11 @@ extern "C" {
     #[wasm_bindgen(method, catch, js_name = ensureCapacity)]
     pub(crate) fn ensure_capacity(this: &GpuBridge, required: u32) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch, js_name = uploadAtlas)]
-    pub(crate) fn upload_atlas(this: &GpuBridge, pixels: &[u8]) -> Result<(), JsValue>;
+    pub(crate) fn upload_atlas(
+        this: &GpuBridge,
+        pixels: &[u8],
+        rows: &[u32],
+    ) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch)]
     pub(crate) fn resize(this: &GpuBridge, width: u32, height: u32) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch, js_name = renderPreparedInstances)]
