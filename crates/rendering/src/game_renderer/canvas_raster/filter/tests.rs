@@ -1,6 +1,9 @@
 use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[path = "tests/prepared.rs"]
+mod prepared;
+
 #[wasm_bindgen_test]
 fn threshold_nonfinite_and_quadrants_keep_nearest_ieee_fallback() {
     let address = crate::AtlasAddress {
@@ -53,4 +56,5 @@ fn threshold_nonfinite_and_quadrants_keep_nearest_ieee_fallback() {
         sample(&atlas, address, local, Some(kernel)),
         [128, 128, 128, 255]
     );
+    prepared::assert_equivalence(atlas);
 }
