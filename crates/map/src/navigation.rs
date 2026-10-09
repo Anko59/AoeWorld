@@ -88,16 +88,55 @@ fn find_path_with<F>(
 where
     F: Fn(TileCoord) -> bool,
 {
-    let outcome = search_path(origin, destination, max_expansions, &passable, |tile| {
-        neighbors(terrain, tile, &passable)
-    });
+    let outcome = search_path_with_priority(
+        origin,
+        destination,
+        max_expansions,
+        terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
+        &passable,
+        |tile| neighbors(terrain, tile, &passable),
+    );
     segment_path(terrain, outcome, segment_tiles)
 }
 
+#[cfg(test)]
 fn search_path<P, N>(
     origin: TileCoord,
     destination: TileCoord,
     max_expansions: u32,
+    passable: P,
+    neighbors: N,
+) -> MovementOutcome
+where
+    P: Fn(TileCoord) -> bool,
+    N: FnMut(TileCoord) -> Vec<(TileCoord, u32)>,
+{
+    search_path_with_priority(
+        origin,
+        destination,
+        max_expansions,
+        false,
+        passable,
+        neighbors,
+    )
+}
+
+// Encode only the secondary queue key. Primary f, actual g records, edge costs,
+// heuristic, caps and tie coordinates remain unchanged. Complementing instead
+// of adding a field preserves per-node memory and a total Ord/Eq-consistent key.
+fn priority_cost(actual: u64, prefer_progress: bool) -> u64 {
+    if prefer_progress {
+        u64::MAX - actual
+    } else {
+        actual
+    }
+}
+
+fn search_path_with_priority<P, N>(
+    origin: TileCoord,
+    destination: TileCoord,
+    max_expansions: u32,
+    prefer_progress: bool,
     passable: P,
     mut neighbors: N,
 ) -> MovementOutcome
@@ -117,7 +156,11 @@ where
     let mut open = BTreeSet::new();
     let mut g_scores = BTreeMap::new();
     let mut parents = BTreeMap::new();
-    open.insert(OpenNode::new(heuristic(origin, destination), 0, origin));
+    open.insert(OpenNode::new(
+        heuristic(origin, destination),
+        priority_cost(0, prefer_progress),
+        origin,
+    ));
     g_scores.insert(origin, 0_u64);
     let mut expansions = 0;
     while let Some(current) = open.pop_first() {
@@ -125,7 +168,7 @@ where
         let Some(cost) = g_scores.get(&tile).copied() else {
             continue;
         };
-        if current.cost != cost {
+        if current.cost != priority_cost(cost, prefer_progress) {
             continue;
         }
         if tile == destination {
@@ -147,7 +190,7 @@ where
             parents.insert(neighbor, tile);
             open.insert(OpenNode::new(
                 next_cost + heuristic(neighbor, destination),
-                next_cost,
+                priority_cost(next_cost, prefer_progress),
                 neighbor,
             ));
         }
@@ -264,6 +307,13 @@ where
 }
 
 fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
+    if terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
+        return terrain
+            .tile_and_node_with_cancel(tile, &|| false)
+            .is_ok_and(|pair| {
+                pair.is_some_and(|(sample, node)| sample.passable && node.is_none())
+            });
+    }
     terrain.tile_at(tile).is_some_and(|sample| sample.passable)
         && terrain
             .object_at_with_cancel(tile, &|| false)
@@ -275,6 +325,15 @@ fn walkable_with_overlay(
     overlay: &ResourceOverlay,
     tile: TileCoord,
 ) -> bool {
+    if terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
+        return terrain
+            .tile_and_node_with_cancel(tile, &|| false)
+            .is_ok_and(|pair| {
+                pair.is_some_and(|(sample, node)| {
+                    sample.passable && node.is_none_or(|node| !overlay.blocks_node(node))
+                })
+            });
+    }
     terrain.tile_at(tile).is_some_and(|sample| sample.passable)
         && terrain
             .object_at_with_cancel(tile, &|| false)
@@ -426,3 +485,7 @@ mod resumable_tests;
 #[cfg(test)]
 #[path = "navigation/tests/long_routes.rs"]
 mod long_routes_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/priority.rs"]
+mod priority_tests;

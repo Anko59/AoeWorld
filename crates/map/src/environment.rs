@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+mod axes;
 mod hydrology;
 mod pages;
 mod provider;
@@ -31,8 +32,8 @@ pub struct PreparedEnvironment {
     pub geographic_millimeters_per_sample: u64,
     pub page_samples: u8,
     pub elevation: FieldPyramid,
-    /// Optional independently prepared water coverage. Its page grid is
-    /// aligned with elevation but may be absent while a source is unavailable.
+    /// Optional prepared water coverage. Legacy grids align with elevation;
+    /// LandscapeV2 may declare an independent axis in its first level.
     pub water: Option<FieldPyramid>,
     /// Optional potential-natural-vegetation classification. Values retain the
     /// source's published class identifiers and are mapped to game biomes only
@@ -94,6 +95,10 @@ pub struct PotentialBiomePage {
 
 impl PreparedEnvironment {
     pub fn validate(&self) -> Result<(), EnvironmentError> {
+        self.validate_axes(false)
+    }
+
+    fn validate_axes(&self, independent: bool) -> Result<(), EnvironmentError> {
         if self.samples_per_axis == 0 {
             return (self.elevation.levels.is_empty()
                 && self.water.is_none()
@@ -109,13 +114,16 @@ impl PreparedEnvironment {
         {
             return Err(EnvironmentError::InvalidIndex);
         }
-        self.elevation.validate(self.samples_per_axis)?;
-        self.water
-            .as_ref()
-            .map_or(Ok(()), |water| water.validate(self.samples_per_axis))?;
-        self.vegetation.as_ref().map_or(Ok(()), |vegetation| {
-            vegetation.validate(self.samples_per_axis)
-        })?;
+        self.elevation
+            .validate_axis(self.samples_per_axis, independent)?;
+        for field in [&self.water, &self.vegetation].into_iter().flatten() {
+            let axis = if independent {
+                field.axis().ok_or(EnvironmentError::InvalidPyramid)?
+            } else {
+                self.samples_per_axis
+            };
+            field.validate_axis(axis, independent)?;
+        }
         if let Some(land_use) = &self.historical_land_use {
             let axis = land_use
                 .levels
@@ -125,21 +133,11 @@ impl PreparedEnvironment {
             if axis == 0 || axis > MAX_ENVIRONMENT_SAMPLES_PER_AXIS {
                 return Err(EnvironmentError::InvalidPyramid);
             }
-            land_use.validate(axis)?;
+            land_use.validate_axis(axis, independent)?;
         }
         self.hydrology_evidence
             .as_ref()
             .map_or(Ok(()), HydrologyEvidenceIndex::validate)
-    }
-
-    /// History has its own prepared axis. Legacy packages use the same axis
-    /// for history and elevation.
-    pub fn historical_samples_per_axis(&self) -> Option<u16> {
-        self.historical_land_use
-            .as_ref()?
-            .levels
-            .first()
-            .map(|level| level.samples_per_axis)
     }
 
     pub(crate) fn hash_into(&self, hash: &mut blake3::Hasher) {

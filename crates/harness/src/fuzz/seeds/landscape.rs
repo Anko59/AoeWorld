@@ -47,6 +47,26 @@ pub(super) fn prepare(root: &Path, seeds: &mut Vec<Seed>) -> Result<()> {
         "legacy-v2-hex",
         CompactChunk::encode(&legacy)?.payload_hex.as_bytes(),
     )?);
+    // Exercise the strict schema-10 branch with actual JSON, while all earlier
+    // prepared/discovered corpus names and bytes remain retained unchanged.
+    let request = MapRequest {
+        detail_profile: aoe_map::DetailProfile::LandscapeV2,
+        ..MapRequest::default()
+    };
+    let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())?;
+    package.validate()?;
+    seeds.push(write(
+        root,
+        "map_package",
+        "landscape-schema10-package",
+        &serde_json::to_vec(&package)?,
+    )?);
+    seeds.push(write(
+        root,
+        "map_package",
+        "landscape-v2-request",
+        &serde_json::to_vec(&request)?,
+    )?);
     Ok(())
 }
 

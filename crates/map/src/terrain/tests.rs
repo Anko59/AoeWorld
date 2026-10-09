@@ -4,6 +4,7 @@ mod base_sampling;
 mod published_recipes;
 
 mod elevation_interpolation;
+mod field_local_axes;
 mod forest_clearing;
 mod historical_field_axis;
 

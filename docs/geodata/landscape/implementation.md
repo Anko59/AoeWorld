@@ -314,3 +314,88 @@ revision-bound CI evidence. Keep screenshots and original art private.
   profile/package/creator dispatch and opt-in UI still required. New source-query
   cost/real resource access and open-space composition need dedicated evidence;
   no source France activation, captures, movement, memory, CI or hardware claims.
+
+### Opt-in integration qualification in progress
+
+- Added explicit LandscapeV2/schema10/recipe9 dispatch; default StandardV1 stays
+  schema9/recipe8/compact2. New content retains the original source geography key,
+  including normalized correction-document request detail. Strict schema10 parsing
+  rejects unknown nested fields; legacy parsing and invalid-recipe precedence stay
+  compatible. No published package or geography is reseeded.
+- Authoritative typed/scalar/chunk/resource/blocking queries share one composer.
+  A lazy 25-cell stack memo reuses base/potential-resource samples, without eager
+  fetching, shared mutable generator caches or world arrays. Cancellation is
+  checked on cached hits. Start/route exclusions clear every appearance channel.
+- Client cache retains explicit transport provenance, sparse coordinates, resource
+  families and separate decorations, with all vector capacities accounted. Three
+  rendering paths consume bounded palette/floor/canopy metadata in reserved sprite
+  word pages.w; instance layout and budgets stay unchanged. Healthy broadleaf art is
+  an explicit generic species fallback. Dressing remains undrawn pending art review.
+- Latest full preflight PASS: 1,197 native tests passed, one existing skip.
+  The 82-tile sparse-edge HTTP fixture and all authoritative queries pass. A full
+  tile/edge/diagonal-corner probe proves all eight starting routes clear and optimal.
+  Equal-f/lower-g search exhausted the budget despite that connectivity. Recipe9
+  now prefers higher-g on equal-f only; recipes3..8 keep their ordering, with
+  unchanged heuristics, actual costs, node layouts and work/expansion budgets.
+  The unchanged recipe9 start/route/movement/replay case PASSED in 23.263 seconds.
+  The incremental-planner fixture now supplies page_samples=64 and passes its
+  unchanged bounded-work assertion. Synthetic results do not qualify source movement
+  or 20 Hz.
+- Shared parsing/iterators, packed triangle metadata, canonical index sorting and
+  bounded heap selection keep the optimized WASM within its budget. Feature/parity
+  qualification is still pending; no renderer/feature removal.
+- Real-browser gate PASS: two integration, 63 client and 116 rendering cases,
+  including six compact3 cache cases, four bounded-heap/eviction reference cases,
+  canonical ordering, three-page and V2 palette/floor/shadow pixels on GPU and Canvas.
+  Buffer accounting checks the same owned chunk rather than a clone with different
+  spare capacity. The missing test-only EntityId import was corrected. Preflight
+  caught a build-wrapper production expect; replaced with ordinary error propagation.
+  Performance CI and parser fuzz smoke PASS again after traversal reuse. Hook
+  installation/check PASS. Recipe9 physical crossings use bounded BASE sampling;
+  combined tile/node queries reuse one authoritative composition. Five new native
+  parity/error tests pass, including legacy access order, provider recovery,
+  cancellation, water/cliffs/height gaps and depleted overlays. Geometry, actual
+  movement costs, forests and work/memory limits are unchanged.
+  The exact no-provider Paris 512-tile request returned LimitReached in 13.188s:
+  the unchanged certificate cannot establish a playable start. Its negative
+  regression passes; no scout or flattened relief is fabricated.
+  A separately labelled synthetic prepared 512-tile Temperate forest has complete
+  constant-field pyramids, empty source locks and Fallback layer metadata. Runtime
+  prepared-tile SourceDerived labels mean synthetic page input, not observations.
+  The canonical disposable E2E server stages it alongside read-only validated
+  existing packages in an ignored temporary root; private inputs are not overwritten.
+  Four new native tests pass, including real production HTTP activation/provider
+  reuse, valid start/clearance and authoritative movement. Native HTTP initially
+  used a nonexistent activation suffix (405); corrected to POST /maps/{hash}.
+  Browser cases initially omitted the documented replacement-world reconnect,
+  then used a 35px target still inside the starting tile. Both test errors are
+  corrected without production changes, assertions removed or deadlines increased.
+  All six prepared play cases PASS: preferred/WebGL2/Canvas under both browser
+  projects, compact3 metadata/chunks, actual scout pixels and authoritative
+  movement across a certified tile boundary. Both creator cases also PASS.
+  Initial full make test-e2e runs exceeded the unchanged 300s Docker deadline
+  later in the 86-test suite. Traces showed progressing tests, not a frozen render.
+  Repeated identical three-image 2048-square PNG fixture generation measured 951ms
+  for one page setup. Worker-local caching now retains only generated manifest/PNG
+  outputs; local-pack probes and routes remain per call/page. Static Git diff proves
+  texel/manifest generation unchanged. A new cached/uncached consistency test checks
+  every PNG byte and manifest plus forced/unforced per-page routing. This is not an
+  independently frozen pre-refactor byte oracle. All assertions, diagnostics,
+  browser projects and deadlines remain unchanged.
+  Full make GID=117 test-e2e now PASS: 79 passed / 8 existing source-only skips,
+  87 cases in 4.1m, including six prepared play cases and both creator cases.
+- Schema10 validates and samples field-local DEM/water/PNV/history axes using
+  existing pyramid metadata: no new wire fields or page roots. Legacy coupling,
+  validation precedence and the published 16,384-sample ceiling remain unchanged;
+  future country acquisition limits are separate, not a global ceiling reduction.
+  Seven new native tests PASS, covering 1024/128/128/1024 and odd partial pages,
+  canonical complete pyramids, strict roundtrips/identities, nodata, cancellations,
+  provider/eager parity, missing/duplicate/outside pages and legacy maximum axes.
+  Early preflight caught three incomplete positive modeled-water fixtures and an
+  accidental public ceiling reduction; completed the fixture pyramid and restored
+  the ceiling, retaining all rejection/budget assertions. Browser-check PASS after
+  replacing nullable token/hash assertions with explicit guards and formatting.
+  Geodata acquisition still uses coupled DEM/water/PNV axes; independent overview
+  options, vectors-only hydrology and real France source preparation remain pending.
+  No active/qualified France map, finished visuals, real-source movement/memory,
+  CI or dedicated-hardware claims.
