@@ -71,6 +71,33 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
+        // Natural rock/cliffs and snow are procedural dirt-derived appearances,
+        // never imported paving or ice. Keep their low-contrast transform local
+        // to the whole face until per-material splat transforms are supported.
+        if matches!(triangle.material, 4 | 7..=10) {
+            triangle.texture_materials = None;
+            let ramp = triangle.tint == 1 || matches!(triangle.tint, 21..=26);
+            triangle.tint = match triangle.material {
+                7 => 6,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                _ if triangle.skirt || matches!(triangle.tint, 7 | 23) => 7,
+                _ if matches!(triangle.tint, 2 | 12) => 12,
+                _ => 5,
+            };
+            if ramp {
+                // Reserve base+16 codes without changing the surface packet ABI.
+                triangle.tint += 16;
+            }
+        }
+        if triangle.texture_materials.is_some_and(|materials| {
+            materials
+                .into_iter()
+                .any(|material| matches!(material, 4 | 7..=10))
+        }) {
+            triangle.texture_materials = None;
+        }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
         let mut frames = [None; 3];
         for index in 0..3 {
@@ -85,19 +112,44 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
     }
 }
 
+/// Procedural appearance kernel mirrored by both GPU fragment shaders.
+/// Dirt/water luminance supplies bounded detail; no source-art identity changes.
+pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
+    let ramp = matches!(tint, 21..=26);
+    let tint = if ramp { tint - 16 } else { tint };
+    let detail = (f32::from(texel[0]) + f32::from(texel[1]) + f32::from(texel[2])) / 3.0;
+    let (base, amount, shade) = match tint {
+        5 => ([0.18; 3], 0.55, 1.0),
+        6 => ([0.78, 0.79, 0.78], 0.12, 1.0),
+        7 => ([0.18; 3], 0.55, 0.72),
+        8 => ([0.42, 0.57, 0.65], 0.20, 1.0),
+        9 => ([0.10, 0.08, 0.05], 0.35, 1.0),
+        10 => ([0.22, 0.36, 0.33], 0.25, 1.0),
+        12 => ([0.18; 3], 0.55, 0.78),
+        _ => return texel,
+    };
+    // Combine face lighting before the sole byte rounding, not after tinting.
+    let shade = shade * if ramp { 0.92 } else { 1.0 };
+    [
+        ((base[0] * 255.0 + detail * amount) * shade).round() as u8,
+        ((base[1] * 255.0 + detail * amount) * shade).round() as u8,
+        ((base[2] * 255.0 + detail * amount) * shade).round() as u8,
+        texel[3],
+    ]
+}
+
 pub(crate) fn terrain_texture_frame(
     art: &GameArt,
     material: u8,
     tile: [i32; 2],
 ) -> Option<GameFrame> {
-    // Forest accents are bounded native variants, not a full periodic grid.
-    // Mix with the existing complete dirt texture, identically in both backends.
-    let material = if material == 6
-        && (art.terrain[6].is_empty() || (tile[0].div_euclid(8) ^ tile[1].div_euclid(8)) & 1 == 0)
-    {
-        2
-    } else {
-        material
+    // Rock and snow deliberately reuse dirt detail, not paving or ice art.
+    // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
+    let material = match material {
+        4 | 7 | 9 => 2,
+        8 | 10 => 5,
+        6 if art.terrain[6].is_empty() => 2,
+        _ => material,
     };
     let frames = art
         .terrain

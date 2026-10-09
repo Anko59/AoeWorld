@@ -1,6 +1,10 @@
 //! Loads only the local pack pages needed by the first map and compacts them.
 use aoe_assets::catalog::{
-    AssetRole, OPTIONAL_RESOURCE_SOURCES, OPTIONAL_TERRAIN_SOURCES, REQUIRED_RENDER_SOURCES,
+    AssetRole,
+    runtime::{
+        OPTIONAL_RESOURCES as OPTIONAL_RESOURCE_SOURCES,
+        OPTIONAL_TERRAIN as OPTIONAL_TERRAIN_SOURCES, REQUIRED as REQUIRED_RENDER_SOURCES,
+    },
 };
 #[path = "game_assets/manifest.rs"]
 mod manifest;
@@ -11,6 +15,9 @@ use std::collections::BTreeMap;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
+
+const ROLE_SLOTS: usize = AssetRole::StoneDeposit as usize + 1;
+type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
@@ -38,7 +45,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (756 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (656 total).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -80,6 +87,10 @@ fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<us
         .then_some(frames)
 }
 
+fn source_present(manifest: &Manifest, source: &str) -> bool {
+    manifest.frames.iter().any(|frame| frame.source == source)
+}
+
 fn packing_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     let mut order = (0..selected.len()).collect::<Vec<_>>();
     // An explicit semantic index keeps the former stable order on size ties.
@@ -103,7 +114,9 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         return Err(JsValue::from_str("Unsupported asset pack version"));
     }
     let mut selected = Vec::new();
-    let mut ranges = BTreeMap::new();
+    // Catalog roles are bounded, not a dynamic startup search tree. The browser
+    // oracle covers every selected role and the intentionally absent rock role.
+    let mut ranges: RoleRanges = std::array::from_fn(|_| None);
     for (sources, required) in [
         (REQUIRED_RENDER_SOURCES.as_slice(), true),
         (OPTIONAL_RESOURCE_SOURCES.as_slice(), false),
@@ -112,17 +125,18 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         for selection in sources {
             let source = selection.manifest_source();
             let Some(frames) = source_frames(&manifest, &source, selection.frames) else {
-                if required {
+                // Optional means absent art may use a semantic fallback. A
+                // present but incomplete/duplicate source is corrupt, not absent.
+                if required || source_present(&manifest, &source) {
                     return Err(JsValue::from_str(&format!(
-                        "Local pack is missing reviewed {:?} art ({})",
-                        selection.role, selection.id
+                        "Local pack has missing or corrupt reviewed art ({source})"
                     )));
                 }
                 continue;
             };
             let start = selected.len();
             selected.extend(frames);
-            ranges.insert(selection.role, start..selected.len());
+            ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
     let side = GAME_ATLAS_SIDE as usize;
@@ -212,9 +226,10 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             }
         }
     }
-    let group = |role| {
+    let group = |role: AssetRole| {
         ranges
-            .get(&role)
+            .get(role as usize)
+            .and_then(Option::as_ref)
             .map(|range| records[range.clone()].to_vec())
             .unwrap_or_default()
     };
@@ -249,6 +264,44 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
 mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    #[wasm_bindgen_test]
+    fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
+        let mut ranges: RoleRanges = std::array::from_fn(|_| None);
+        let mut reference = BTreeMap::new();
+        let sources = REQUIRED_RENDER_SOURCES
+            .iter()
+            .chain(&OPTIONAL_RESOURCE_SOURCES)
+            .chain(&OPTIONAL_TERRAIN_SOURCES);
+        for source in sources.clone() {
+            assert!((source.role as usize) < ROLE_SLOTS);
+            assert_eq!(ranges[source.role as usize], None);
+            for range in [0..source.frames as usize, 2..source.frames as usize + 2] {
+                reference.insert(source.role, range.clone());
+                ranges[source.role as usize] = Some(range);
+                assert_eq!(
+                    ranges[source.role as usize].as_ref(),
+                    reference.get(&source.role)
+                );
+            }
+        }
+        for role in sources.map(|source| source.role).chain([AssetRole::Rock]) {
+            assert_eq!(
+                ranges.get(role as usize).and_then(Option::as_ref),
+                reference.get(&role)
+            );
+        }
+        assert_eq!(ranges[AssetRole::Rock as usize], None);
+    }
+
+    #[wasm_bindgen_test]
+    fn optional_source_absence_is_distinct_from_corrupt_present_frames() {
+        let manifest: Manifest = serde_json::from_value(manifest::fixture()).unwrap();
+        assert!(!source_present(&manifest, "absent"));
+        assert_eq!(source_frames(&manifest, "absent", 2), None);
+        assert!(source_present(&manifest, "fixture"));
+        assert_eq!(source_frames(&manifest, "fixture", 2), None);
+    }
 
     #[wasm_bindgen_test]
     fn source_indices_preserve_frame_order_and_reject_missing_or_duplicate_frames() {

@@ -39,3 +39,30 @@ surfaces, transparent occluders, depth ties, native material blending/tints,
 mirrored units, and real movement, plus bound-context initialization failure and
 context loss/restoration. Synthetic pixel tests do not establish real-source
 frame cadence or dedicated-hardware performance; measure those separately.
+
+## Immediate natural-surface appearance corrections
+
+Scene material 4 is explicitly procedural neutral rock, using native dirt detail
+with desaturated bounded luminance; imported paving is not natural rock art.
+Non-water cliff tops and edge faces use this appearance at every mesh LOD.
+Materials 7–10 are respectively restrained procedural snow, interim cool ice,
+wet mud, and subdued shallow/shore water. Snow uses dirt detail and is not ice.
+These appearances share the same fragment transform in WebGPU, WebGL2, and
+Canvas; source recipes, heights, picking, and simulation remain unchanged.
+Missing forest art uses dirt uniformly; present forest variants never alternate
+with dirt on an 8×8 grid. No atlas allocation or source-art editing is involved.
+
+Procedural boundaries temporarily disable three-material splatting because the
+existing packet carries one transform per face, not one per material. Native
+materials still splat normally elsewhere. The 100-frame periodic selection
+heuristic remains until explicit catalog topology is carried through GameArt.
+Forest accent selection is intermediate: removing parity does not establish
+seamless full-sheet suitability. Stage 2 needs full-sheet review or accents with
+edge masking over a coherent base. All procedural ramp appearances preserve
+0.92 face shading through reserved tint codes 21–26 (base codes 5–10 plus 16).
+Cliff tops retain 0.78 shading with code 12, distinct from skirt code 7's 0.72;
+flat rock remains code 5. Unknown code 11 retains its original passthrough.
+The CPU and both GPU shaders combine shading before their single output rounding;
+alpha, atlas allocation, and the Sprite ABI remain unchanged. Coarse cliff
+geometry still shares averaged heights and omits skirts; this stage changes its
+appearance, not its geometry or dedicated-source qualification.
