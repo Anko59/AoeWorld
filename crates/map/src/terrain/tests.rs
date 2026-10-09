@@ -1,5 +1,7 @@
 use super::*;
 
+mod published_recipes;
+
 mod elevation_interpolation;
 mod forest_clearing;
 mod historical_field_axis;

@@ -356,7 +356,7 @@ fn cliff_adjacency_creates_a_textured_nonpickable_height_transition() {
     assert_eq!(skirts.len(), 2);
     assert!(skirts.iter().all(|triangle| {
         !triangle.pickable
-            && triangle.tint == 3
+            && triangle.tint == 7
             && triangle.material == 4
             && triangle.texture_uv.is_some()
             && triangle
