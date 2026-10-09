@@ -7,7 +7,7 @@ use web_sys::HtmlCanvasElement;
 
 const MAX_INSTANCE_BYTES: usize = 64 * 1024 * 1024;
 const INSTANCE_BYTES: usize = std::mem::size_of::<Sprite>();
-const _: () = assert!(INSTANCE_BYTES == 96);
+const _: () = assert!(INSTANCE_BYTES == 112);
 
 // Local modules are copied by wasm-bindgen into pkg/snippets, served by the
 // existing web static-file service. No wgpu GL feature or web-sys GL features.
@@ -39,10 +39,15 @@ impl WebGlRenderer {
     }
 
     pub(super) fn upload(&mut self, pixels: &[u8]) -> Result<(), String> {
-        if pixels.len() != (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize {
+        if pixels.len() != crate::GAME_ATLAS_BYTES {
             return Err("Invalid WebGL2 game atlas size".to_owned());
         }
         self.bridge.upload(&Uint8Array::from(pixels)).map_err(error)
+    }
+
+    #[cfg(test)]
+    pub(super) fn test_bridge(&self) -> &JsValue {
+        self.bridge.as_ref()
     }
 
     pub(super) fn resize(&mut self, width: u32, height: u32) -> Result<(), String> {

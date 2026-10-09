@@ -33,7 +33,7 @@ fn canvas_integer_alpha_preserves_all_source_target_and_alpha_bytes() {
 #[wasm_bindgen_test]
 fn canvas_texel_coordinates_preserve_floor_clamp_for_ieee_values() {
     let side = GAME_ATLAS_SIDE as usize;
-    let mut pixels = vec![0; side * side * 4];
+    let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
     for (index, texel) in pixels.chunks_exact_mut(4).enumerate() {
         let (x, y) = (index % side, index / side);
         texel.copy_from_slice(&[x as u8, (x >> 8) as u8, y as u8, (y >> 8) as u8]);
@@ -62,8 +62,8 @@ fn canvas_texel_coordinates_preserve_floor_clamp_for_ieee_values() {
     for x in values {
         for y in values {
             assert_eq!(
-                sample_atlas(&pixels, x, y),
-                reference::sample_atlas(&pixels, x, y)
+                sample_atlas(&pixels, 0, x, y),
+                reference::sample_atlas(&pixels, 0, x, y)
             );
         }
     }
@@ -74,8 +74,8 @@ fn canvas_texel_coordinates_preserve_floor_clamp_for_ieee_values() {
         seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         let y = f64::from_bits(seed);
         assert_eq!(
-            sample_atlas(&pixels, x, y),
-            reference::sample_atlas(&pixels, x, y)
+            sample_atlas(&pixels, 0, x, y),
+            reference::sample_atlas(&pixels, 0, x, y)
         );
     }
 }
@@ -85,7 +85,7 @@ const HEIGHT: u32 = 32;
 const BOUNDS: [u32; 4] = [0, 0, WIDTH, HEIGHT];
 
 fn atlas() -> Vec<u8> {
-    (0..GAME_ATLAS_SIDE as usize * GAME_ATLAS_SIDE as usize * 4)
+    (0..crate::GAME_ATLAS_BYTES)
         .map(|index| {
             if index % 4 == 3 {
                 [0, 1, 127, 254, 255][(index / 4) % 5]
@@ -144,10 +144,19 @@ fn triangle(mode: u8, tint: u8, textured: bool, blend: bool) -> ProjectedSurface
         material: 0,
         texture_mode: mode,
         tint,
-        texture_uv: textured.then_some([0.03125, 0.0625, 97.0 / 2048.0, 49.0 / 2048.0]),
+        texture_uv: textured.then_some(crate::AtlasAddress {
+            page: 0,
+            uv: [0.03125, 0.0625, 97.0 / 2048.0, 49.0 / 2048.0],
+        }),
         texture_blend: blend.then_some([
-            [0.5, 0.125, 97.0 / 2048.0, 49.0 / 2048.0],
-            [1.0, -0.001, 1.0 / 2048.0, 0.0],
+            crate::AtlasAddress {
+                page: 1,
+                uv: [0.5, 0.125, 97.0 / 2048.0, 49.0 / 2048.0],
+            },
+            crate::AtlasAddress {
+                page: 2,
+                uv: [1.0, -0.001, 1.0 / 2048.0, 0.0],
+            },
         ]),
         texture_tile: [0, 0],
         texture_materials: None,
@@ -222,9 +231,13 @@ fn canvas_sprite_kernel_preserves_flip_tint_alpha_equal_depth_and_background() {
                     ],
                     depths: [0.0; 4],
                     terrain_blend: [[0.0; 4]; 2],
+                    pages: [0; 4],
                 };
                 let frame = crate::GameFrame {
-                    uv: sprite.uv,
+                    atlas: crate::AtlasAddress {
+                        page: sprite.pages[0],
+                        uv: sprite.uv,
+                    },
                     size: [43.25, 29.75],
                     anchor: [20.0, 27.0],
                 };

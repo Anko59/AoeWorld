@@ -265,9 +265,10 @@ fn terrain_sprite(
                 (height / camera.viewport[1]) as f32,
             ],
             color: [1.0; 4],
-            uv: frame.uv,
+            uv: frame.atlas.uv,
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [frame.atlas.page, 0, 0, 0],
         },
         frame,
     ))

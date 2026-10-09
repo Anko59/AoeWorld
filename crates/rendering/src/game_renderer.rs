@@ -48,7 +48,7 @@ pub enum GameRenderer {
     Canvas {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
-        atlas: HtmlCanvasElement,
+        atlas: [Option<HtmlCanvasElement>; 3],
         source_atlas: Vec<u8>,
         presentation: CanvasPresentation,
     },
@@ -161,7 +161,7 @@ impl GameRenderer {
             Self::Canvas {
                 canvas: replacement.clone(),
                 context: main_context,
-                atlas: new_atlas(&replacement)?,
+                atlas: [None, None, None],
                 source_atlas: Vec::new(),
                 presentation: CanvasPresentation::new(replacement.width(), replacement.height()),
             },
@@ -177,28 +177,22 @@ impl GameRenderer {
         }
     }
 
-    pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
+    /// Takes the only WASM copy of the atlas. GPU tiers release it after
+    /// upload; Canvas keeps it as its raster source without duplicating it.
+    pub fn upload_game_atlas(&mut self, pixels: Vec<u8>) -> Result<(), String> {
         match self {
-            Self::WebGpu(renderer) => renderer.upload_game_atlas(pixels),
-            Self::WebGl(renderer) => renderer.upload(pixels),
+            Self::WebGpu(renderer) => renderer.upload_game_atlas(&pixels),
+            Self::WebGl(renderer) => renderer.upload(&pixels),
             Self::Canvas {
                 atlas,
                 source_atlas,
                 ..
             } => {
-                if pixels.len() != (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize {
+                if pixels.len() != crate::GAME_ATLAS_BYTES {
                     return Err("Invalid game atlas size".into());
                 }
-                let data = ImageData::new_with_u8_clamped_array_and_sh(
-                    Clamped(pixels),
-                    GAME_ATLAS_SIDE,
-                    GAME_ATLAS_SIDE,
-                )
-                .map_err(error)?;
-                context(atlas)?
-                    .put_image_data(&data, 0.0, 0.0)
-                    .map_err(error)?;
-                *source_atlas = pixels.to_vec();
+                *atlas = [None, None, None];
+                *source_atlas = pixels;
                 Ok(())
             }
         }
@@ -236,6 +230,7 @@ impl GameRenderer {
                 canvas,
                 context,
                 atlas,
+                source_atlas,
                 ..
             } => {
                 let width = f64::from(canvas.width());
@@ -268,7 +263,8 @@ impl GameRenderer {
                     } else {
                         context.translate(x, y).map_err(error)?;
                     }
-                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(atlas, sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
+                    let page = legacy_page(canvas, atlas, source_atlas, sprite.pages[0])?;
+                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(page, sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
                     context.restore();
                     result?;
                 }
@@ -376,6 +372,34 @@ impl GameRenderer {
             _ => unreachable!(),
         }
     }
+}
+
+fn legacy_page<'a>(
+    canvas: &HtmlCanvasElement,
+    pages: &'a mut [Option<HtmlCanvasElement>; 3],
+    pixels: &[u8],
+    page: u32,
+) -> Result<&'a HtmlCanvasElement, String> {
+    let slot = pages.get_mut(page as usize).ok_or("Invalid atlas page")?;
+    if slot.is_none() {
+        let start = page as usize * crate::GAME_ATLAS_PAGE_BYTES;
+        let source = pixels
+            .get(start..start + crate::GAME_ATLAS_PAGE_BYTES)
+            .ok_or("Game atlas is not uploaded")?;
+        let atlas = new_atlas(canvas)?;
+        let data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(source),
+            GAME_ATLAS_SIDE,
+            GAME_ATLAS_SIDE,
+        )
+        .map_err(error)?;
+        context(&atlas)?
+            .put_image_data(&data, 0.0, 0.0)
+            .map_err(error)?;
+        *slot = Some(atlas);
+    }
+    slot.as_ref()
+        .ok_or_else(|| "Atlas canvas unavailable".into())
 }
 
 fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {

@@ -198,9 +198,22 @@ pub(crate) fn surface_instance(
                     -1.0
                 },
             ],
-            uv,
+            uv: uv.uv,
             depths: [depths[0], depths[1], depths[2], 0.0],
-            terrain_blend: triangle.texture_blend.unwrap_or([[0.0; 4]; 2]),
+            terrain_blend: triangle
+                .texture_blend
+                .map(|addresses| addresses.map(|address| address.uv))
+                .unwrap_or([[0.0; 4]; 2]),
+            pages: [
+                uv.page,
+                triangle
+                    .texture_blend
+                    .map_or(0, |addresses| addresses[0].page),
+                triangle
+                    .texture_blend
+                    .map_or(0, |addresses| addresses[1].page),
+                0,
+            ],
         },
         None => Sprite {
             position: points[0],
@@ -209,6 +222,7 @@ pub(crate) fn surface_instance(
             uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
             depths: [depths[0], depths[1], depths[2], 0.0],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [0; 4],
         },
     }
 }

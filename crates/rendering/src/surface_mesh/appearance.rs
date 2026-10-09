@@ -102,7 +102,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         let mut frames = [None; 3];
         for index in 0..3 {
             frames[index] = terrain_texture_frame(art, materials[index], triangle.texture_tile)
-                .map(|frame| frame.uv);
+                .map(|frame| frame.atlas);
         }
         triangle.texture_uv = frames[0];
         triangle.texture_blend = match frames {
@@ -151,23 +151,21 @@ pub(crate) fn terrain_texture_frame(
         6 if art.terrain[6].is_empty() => 2,
         _ => material,
     };
-    let frames = art
-        .terrain
-        .get(usize::from(material))
-        .filter(|frames| !frames.is_empty())
-        .unwrap_or(&art.grass);
+    let (frames, topology) = match art.terrain.get(usize::from(material)) {
+        Some(frames) if !frames.is_empty() => (frames, art.terrain_topology[usize::from(material)]),
+        _ => (&art.grass, art.terrain_topology[0]),
+    };
     if frames.is_empty() {
         return None;
     }
-    let index = if frames.len() == 100 {
-        let y = (10 - tile[1].rem_euclid(10)).rem_euclid(10) as usize;
-        tile[0].rem_euclid(10) as usize * 10 + y
-    } else {
-        tile[0]
-            .wrapping_mul(7)
-            .wrapping_add(tile[1].wrapping_mul(13))
-            .unsigned_abs() as usize
-            % frames.len()
-    };
+    let index = topology
+        .and_then(|topology| topology.periodic_frame(tile[0], tile[1], frames.len()))
+        .unwrap_or_else(|| {
+            tile[0]
+                .wrapping_mul(7)
+                .wrapping_add(tile[1].wrapping_mul(13))
+                .unsigned_abs() as usize
+                % frames.len()
+        });
     frames.get(index).copied()
 }

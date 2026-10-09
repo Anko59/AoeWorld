@@ -154,6 +154,36 @@ revision-bound CI evidence. Keep screenshots and original art private.
   explicitly identifies missing/corrupt reviewed archive and ID without Debug
   formatting. Native projection and browser BTreeMap-reference oracles added.
   `make fmt perf-wasm-size`: 227,152 bytes, below clean dev and existing ceiling;
-  full performance/browser/native/parser gates must rerun before committing.
-- Captures, full-sheet seamlessness, multi-atlas addressing, terrain topology
-  propagation and source-backed France qualification remain open.
+  subsequent full performance and fuzz smoke PASS. Full WASM PASS (147), E2E
+  PASS (70 / 8 source-only skips), preflight PASS (1,089 native plus doctests,
+  static/dependency/WASM-build/smoke). One preflight preparation rejected changed
+  source; exact retry succeeded, root cause unassessed. Hooks and indexed static
+  validation PASS. Foundation committed `c658a8354da06b59db450c7a54601f40be897954`;
+  working tree clean immediately afterward. No CI/source/hardware qualification.
+
+### Multi-atlas working implementation
+
+- Pure packer validates count (2,048 max) and all extents before placement
+  allocation/sort, fixed 4 KiB scratch, deterministic shelf first-fit with
+  transactional cursor trials. Terrain uses pages 0/1; all objects and units use
+  page 2. Overflow fails; semantic frame order, masks and signed anchors survive.
+- Page-major 50,331,648-byte loader decodes source pages sequentially, uses bounded
+  semantic-index source grouping, and rejects malformed present optional art.
+  Explicit catalog topology now reaches shared scene selection; 100 frames alone
+  no longer imply a periodic sheet. No additional art has been promoted.
+- Shared page/UV addresses carry all three terrain samples. Sprite ABI is 112
+  bytes, selectors at byte 96. WebGPU D2Array and WebGL2 integer attribute/array
+  texture preserve one ordered draw; Canvas sampling uses the same addresses.
+  Diagnostic texture remains one 8-square page / 256 bytes, not three game pages.
+- WebGL owns one additional 48 MiB restoration source, reused without cloning on
+  restoration. Canvas retains one 48 MiB source plus zero to three lazy 16 MiB
+  legacy canvases and presentation buffers. GL/Canvas GPU counters remain
+  unavailable through the existing API; 48 MiB is not total process memory.
+- `make fmt build-wasm`: PASS. `make GID=117 test-wasm perf-ci`: PASS (2 integration,
+  53 client, 108 renderer). Actual pixels cover equal UVs on different pages,
+  three-page blends, mirrored page-2 bodies/shadows, depth ties and restoration;
+  restoration unit fixture invokes the actual callback, not a real loss event.
+  Optimized gzip 227,958, below unchanged 228,102 ceiling. Twelve packer native
+  cases, full E2E, preflight and parser smoke still need current-stage execution.
+- Full-sheet seamlessness, expanded-art/shadow review, source activation, France
+  capture/movement/memory, CI and dedicated hardware qualification remain open.

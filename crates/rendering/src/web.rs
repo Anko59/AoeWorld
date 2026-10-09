@@ -27,6 +27,8 @@ pub(crate) struct Sprite {
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
+    /// Primary, secondary, tertiary atlas layers, followed by reserved zero.
+    pub(crate) pages: [u32; 4],
 }
 pub struct Renderer {
     adapter_label: String,
@@ -141,7 +143,10 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
-        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("synthetic sprite sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -166,7 +171,7 @@ impl Renderer {
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
                         multisampled: false,
                     },
                     count: None,
@@ -280,6 +285,7 @@ impl Renderer {
                 uv: [0.0, 0.0, 1.0, 1.0],
                 depths: [0.0; 4],
                 terrain_blend: [[0.0; 4]; 2],
+                pages: [0; 4],
             });
         }
         self.render_sprites(&sprites)
@@ -328,9 +334,12 @@ impl Renderer {
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
                     persistent_gpu_resources: 7,
-                    atlas_pages: 1,
+                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
                     atlas_uploads: 1,
-                    atlas_bytes: ATLAS_BYTES,
+                    atlas_bytes: self._atlas.width() as usize
+                        * self._atlas.height() as usize
+                        * self._atlas.size().depth_or_array_layers as usize
+                        * 4,
                 });
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
@@ -341,9 +350,12 @@ impl Renderer {
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
                     persistent_gpu_resources: 7,
-                    atlas_pages: 1,
+                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
                     atlas_uploads: 1,
-                    atlas_bytes: ATLAS_BYTES,
+                    atlas_bytes: self._atlas.width() as usize
+                        * self._atlas.height() as usize
+                        * self._atlas.size().depth_or_array_layers as usize
+                        * 4,
                 });
             }
             wgpu::CurrentSurfaceTexture::Lost => {
@@ -405,9 +417,12 @@ impl Renderer {
             draw_calls: usize::from(!instances.is_empty()),
             gpu_buffer_bytes: self.instances.bytes(),
             persistent_gpu_resources: 7,
-            atlas_pages: 1,
+            atlas_pages: self._atlas.size().depth_or_array_layers as usize,
             atlas_uploads: 1,
-            atlas_bytes: ATLAS_BYTES,
+            atlas_bytes: self._atlas.width() as usize
+                * self._atlas.height() as usize
+                * self._atlas.size().depth_or_array_layers as usize
+                * 4,
         })
     }
 }

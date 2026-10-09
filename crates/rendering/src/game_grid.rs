@@ -28,6 +28,7 @@ pub(crate) fn selection_ring(
                 uv: solid_uv(),
                 depths: [0.0; 4],
                 terrain_blend: [[0.0; 4]; 2],
+                pages: [2, 0, 0, 0],
             },
             surface_depth([world[0], world[1], elevation_meters]),
         ));
@@ -200,6 +201,7 @@ fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, vie
             uv: solid_uv(),
             depths: [f32::INFINITY; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [2, 0, 0, 0],
         });
     }
 }

@@ -7,6 +7,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
         standing: Vec::new(),
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
+        terrain_topology: [None; 7],
         resources: std::array::from_fn(|index| if index == 0 { vec![frame] } else { Vec::new() }),
         tree_shadows: Vec::new(),
     }
@@ -14,7 +15,10 @@ fn resource_art(frame: GameFrame) -> GameArt {
 
 fn frame() -> GameFrame {
     GameFrame {
-        uv: [0.0, 0.0, 1.0, 1.0],
+        atlas: aoe_rendering::AtlasAddress {
+            page: 2,
+            uv: [0.0, 0.0, 1.0, 1.0],
+        },
         size: [80.0, 100.0],
         anchor: [40.0, 80.0],
     }
