@@ -265,6 +265,7 @@ pub(super) fn description(
         evidence,
         &describe::footer(options.runtime),
         &super::metrics::table(root)?,
+        &super::test_first::summary(root, &evidence.merge_base, &evidence.head),
     );
     // A private directory in the git common dir, never a guessable /tmp path.
     let path = super::evidence::directory(root)?

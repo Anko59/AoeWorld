@@ -145,7 +145,7 @@ fn now() -> u64 {
 
 /// Facts every reviewer gets, computed without a model. A git failure stops
 /// the review: reviewers must never be told "no tests changed" by mistake.
-fn facts(root: &Path, merge_base: &str) -> Result<String> {
+pub(crate) fn facts(root: &Path, merge_base: &str) -> Result<String> {
     let diff = git::git(root, &["diff", merge_base, "HEAD", "--", "."])?;
     let added: Vec<&str> = diff
         .lines()
@@ -172,7 +172,7 @@ fn facts(root: &Path, merge_base: &str) -> Result<String> {
         }
     }
     Ok(format!(
-        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n",
+        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n{}",
         count("#[ignore]"),
         count("unsafe"),
         count(".unwrap("),
@@ -181,7 +181,8 @@ fn facts(root: &Path, merge_base: &str) -> Result<String> {
             "none".to_owned()
         } else {
             sensitive.join(", ")
-        }
+        },
+        crate::ship::test_first::summary(root, merge_base, "HEAD"),
     ))
 }
 

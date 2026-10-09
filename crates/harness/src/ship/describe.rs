@@ -2,7 +2,8 @@
 //! `SHIP_BODY` with a level and three sections; the harness checks the limits
 //! a human reader relies on and renders two parts: "For humans" (Why, What with
 //! the video, How with the review grade and summary) and "For AI"
-//! (the agent's notes, gate evidence and the full review).
+//! (the agent's notes, the test-first report, gate evidence and the full
+//! review).
 //!
 //! ```markdown
 //! <!-- level: medium -->
@@ -330,6 +331,7 @@ pub(crate) fn render(
     evidence: &Evidence,
     footer: &str,
     metrics: &str,
+    test_first: &str,
 ) -> String {
     let mut out = format!(
         "# 🧑 For humans\n\n### 🎯 Why\n\n{}\n\n### 🛠️ What\n\n{}\n",
@@ -355,6 +357,9 @@ pub(crate) fn render(
     if !template.for_ai.is_empty() {
         out.push_str(&format!("{}\n\n", template.for_ai));
     }
+    out.push_str(&format!(
+        "## Test-first report\n\nReported, never enforced: the test-integrity reviewer judges it.\n\n{test_first}\n"
+    ));
     out.push_str(&format!(
         "## Gate evidence (`{}`, level {})\n\n| Gate | Verdict | Time |\n|---|---|---|\n",
         &evidence.head[..12],

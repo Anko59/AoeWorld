@@ -224,6 +224,10 @@ fn the_review_is_rendered_into_a_private_description() {
     assert!(text.contains("9/10"), "{text}");
     assert!(text.contains("### ✅ How\n\n"), "{text}");
     assert!(
+        text.contains("## Test-first report\n\n") && text.contains("- test-first: not applicable"),
+        "{text}"
+    );
+    assert!(
         text.contains("Review of `aaaaaaaaaaaa` reused (same change, identical file blobs)"),
         "{text}"
     );

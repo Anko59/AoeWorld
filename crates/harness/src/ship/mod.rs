@@ -14,6 +14,7 @@ mod review_gate;
 mod review_pr;
 pub(crate) mod run;
 mod showcase;
+pub(crate) mod test_first;
 #[cfg(test)]
 mod tests;
 
@@ -214,6 +215,11 @@ pub(crate) fn ship_with(
     for result in &evidence.gates {
         eprintln!("{}", result.line());
     }
+    // Reported to the reviewers and in the description; never a refusal.
+    eprint!(
+        "ship: test-first report\n{}",
+        test_first::summary(root, &evidence.merge_base, &evidence.head)
+    );
     match evidence.verdict {
         Verdict::Pass => {}
         Verdict::Fail => {
