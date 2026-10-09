@@ -29,7 +29,7 @@ fn reuse_requires_the_current_review_config_fingerprint() {
     });
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -52,7 +52,7 @@ fn reuse_requires_the_current_review_config_fingerprint() {
     run(&root, &["rebase", "-q", "origin/dev"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -86,7 +86,7 @@ fn a_rust_prompt_change_on_origin_dev_prevents_reuse() {
     run(&root, &["rebase", "-q", "origin/dev"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none(),
         "a changed Rust prompt means the review engine fingerprint changed"
@@ -103,7 +103,7 @@ fn reuse_requires_the_current_runtime_model_policy() {
     });
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -118,7 +118,7 @@ fn a_report_without_a_policy_fingerprint_is_never_reused() {
     advance_dev_with_policy(&root, |_| {});
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -148,7 +148,7 @@ fn another_branchs_closing_review_is_never_reused() {
         "the two branches hold the same change"
     );
     assert!(
-        Report::reuse_for_change(&root, &head, "other", &["low"])
+        Report::reuse_for_change(&root, &head, "other", &["low"], "")
             .unwrap()
             .is_none(),
         "branch other must run its own closing review"
@@ -164,9 +164,140 @@ fn another_branchs_closing_review_is_never_reused() {
     run(&root, &["checkout", "-q", "feature"]);
     run(&root, &["rebase", "-q", "origin/dev"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"])
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"], "")
         .unwrap()
         .expect("the same branch reuses its closing review after a rebase");
     assert_eq!(reused.reused_from.as_deref(), Some(closing.head.as_str()));
     assert!(reused.closing);
+}
+
+/// Commit `contents` at `path` on origin/dev and rebase `feature` onto it.
+fn advance_dev_with_file(root: &Path, path: &str, contents: &str) {
+    run(root, &["checkout", "-q", "dev"]);
+    std::fs::write(root.join(path), contents).unwrap();
+    std::fs::write(root.join("BASE.md"), "moved base\n").unwrap();
+    run(root, &["add", path, "BASE.md"]);
+    run(root, &["commit", "-q", "-m", "move dev"]);
+    run(root, &["push", "-q", "origin", "dev"]);
+    run(root, &["fetch", "-q", "origin", "dev"]);
+    run(root, &["checkout", "-q", "feature"]);
+    run(root, &["rebase", "-q", "origin/dev"]);
+}
+
+fn all_tiers() -> Vec<&'static str> {
+    vec!["low", "medium", "high", "xhigh", "max"]
+}
+
+#[test]
+fn a_changed_description_gets_a_fresh_review() {
+    let (temp, root) = fixture("true");
+    let mut source = unstored(&root, Tier::Low, 9);
+    source.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
+    source.store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "changed description\n")
+            .unwrap()
+            .is_none(),
+        "a review of one description never answers for another"
+    );
+
+    let body = temp.path().join("body.md");
+    std::fs::write(&body, "changed description\n").unwrap();
+    let evidence = crate::ship::judge(&root, &crate::ship::tests::offline()).unwrap();
+    let options = crate::ship::Options {
+        no_review: false,
+        body_file: Some(body.clone()),
+        ..crate::ship::tests::offline()
+    };
+    let calls = std::cell::Cell::new(0);
+    let report =
+        crate::ship::review_gate::require(&root, &evidence, &options, &|root, tier, _, task, _| {
+            calls.set(calls.get() + 1);
+            assert_eq!(task, "changed description\n");
+            Ok(unstored(root, tier, 9))
+        })
+        .unwrap();
+    assert_eq!(calls.get(), 1, "the changed description was reviewed");
+    assert!(report.reused_from.is_none());
+
+    // The same description still reuses the review after a rebase.
+    let (temp, root) = fixture("true");
+    let mut source = unstored(&root, Tier::Low, 9);
+    source.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
+    source.store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    let body = temp.path().join("body.md");
+    std::fs::write(&body, "first description\n").unwrap();
+    let evidence = crate::ship::judge(&root, &crate::ship::tests::offline()).unwrap();
+    let options = crate::ship::Options {
+        no_review: false,
+        body_file: Some(body),
+        ..crate::ship::tests::offline()
+    };
+    let reused = crate::ship::review_gate::require(&root, &evidence, &options, &|_, _, _, _, _| {
+        panic!("the same description should reuse")
+    })
+    .unwrap();
+    assert_eq!(reused.reused_from.as_deref(), Some(source.head.as_str()));
+}
+
+#[test]
+fn a_registry_change_on_origin_dev_prevents_reuse() {
+    let (_temp, root) = fixture("true");
+    let before = Report::policy_fingerprint(&root, "high").unwrap();
+    let source = unstored(&root, Tier::High, 9);
+    source.store(&root).unwrap();
+    // Only the registry moves: README.md now belongs to the high-floor suite.
+    let mut registry: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.join("gates/registry.json")).unwrap()).unwrap();
+    registry["suites"][0]["paths"] = serde_json::json!(["gates/**", "README.md"]);
+    advance_dev_with_file(&root, "gates/registry.json", &registry.to_string());
+    assert_ne!(
+        Report::policy_fingerprint(&root, "high").unwrap(),
+        before,
+        "the registry is part of the policy fingerprint"
+    );
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change(&root, &head, "feature", &all_tiers(), "")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn reuse_refuses_a_tier_below_the_pinned_floor() {
+    let (_temp, root) = fixture("true");
+    // The floor of this change is high; a low review is offered as eligible.
+    std::fs::write(root.join("gates/extra.md"), "gated\n").unwrap();
+    run(&root, &["add", "gates/extra.md"]);
+    run(&root, &["commit", "-q", "-m", "gated change"]);
+    unstored(&root, Tier::Low, 9).store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change(&root, &head, "feature", &all_tiers(), "")
+            .unwrap()
+            .is_none(),
+        "reuse recomputes the floor from the pinned policy commit"
+    );
+}
+
+#[test]
+fn a_reused_report_records_the_real_floor() {
+    let (_temp, root) = fixture("true");
+    let source = unstored(&root, Tier::High, 9);
+    source.store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["high", "xhigh", "max"], "")
+        .unwrap()
+        .expect("a high review reuses for a low-floor change");
+    assert_eq!(reused.tier, "high");
+    assert_eq!(
+        reused.floor, "low",
+        "the floor is the change's, not the request"
+    );
 }

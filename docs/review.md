@@ -98,12 +98,17 @@ none replaces another.
   old blobs and modes to identical new blobs and modes; the report stores a
   SHA-256 fingerprint for information, while reuse recomputes both sides from
   Git. Any complete report for the target commit at the required tier or higher
-  blocks reuse, whether it passed or failed. Only a review recorded for the
-  same branch name is a source, under the reviewer policy that `origin/dev`
-  holds today: before loading its model, a review pins one policy commit
-  (the judge's own, `AOE_JUDGE_REV` from `.agents/hooks/harness.sh`, else
-  `origin/dev` once), reads config, model and prompts from it and stores its
-  fingerprint. Reuse writes a new harness report
+  blocks reuse, whether it passed or failed. By design only a review recorded
+  for the same branch name is a source, even when another branch holds a
+  byte-identical change: another branch's review never answers this branch's
+  findings. The source must also have been given the same description (the
+  SHA-256 of the `SHIP_BODY` text is stored), and it must hold under the
+  reviewer policy that `origin/dev` holds today: before loading its model, a
+  review pins one policy commit (the judge's own, `AOE_JUDGE_REV` from
+  `.agents/hooks/harness.sh`, else `origin/dev` once), reads config, registry,
+  model and prompts from it and stores its fingerprint. Reuse pins the same
+  way and takes the floor, eligible tiers and merge grade from that commit;
+  the reuse report records the change's real floor. Reuse writes a new harness report
   for the rebased commit that points to the original full
   or closing review, and the status and PR description identify the reuse. A
   reuse report is never itself a source for another reuse. Failing reviews and

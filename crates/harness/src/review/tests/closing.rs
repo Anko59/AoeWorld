@@ -49,6 +49,7 @@ fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report
         change_fingerprint: None,
         policy_fingerprint: None,
         reused_from: None,
+        task_fingerprint: None,
     }
 }
 

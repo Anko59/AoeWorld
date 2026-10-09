@@ -419,6 +419,7 @@ fn review_with_branch(
         change_fingerprint,
         policy_fingerprint: Some(policy_fingerprint),
         reused_from: None,
+        task_fingerprint: Some(Report::task_fingerprint(task)),
     };
     report.store(root)?;
     Ok(report)

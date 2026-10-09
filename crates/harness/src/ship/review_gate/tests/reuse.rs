@@ -88,7 +88,7 @@ fn refuses_alternate_change(reviewed: &[u8], candidate: &[u8]) {
     let (_temp, root) = fixture("true");
     let head = alternate_change(&root, reviewed, candidate);
     assert!(
-        Report::reuse_for_change(&root, &head, "candidate", &["low"])
+        Report::reuse_for_change(&root, &head, "candidate", &["low"], "")
             .unwrap()
             .is_none(),
         "distinct file blobs must receive a fresh review"
@@ -109,7 +109,7 @@ fn reuses_a_passing_review_after_rebase_onto_a_moved_base() {
     let reviewed = source_report(&root, Tier::Low, 9);
     advance_dev(&root);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let reused = Report::reuse_for_change(&root, &head, "feature", &eligible(Tier::Low))
+    let reused = Report::reuse_for_change(&root, &head, "feature", &eligible(Tier::Low), "")
         .unwrap()
         .expect("same change should reuse");
     assert_eq!(reused.head, head);
@@ -167,7 +167,7 @@ fn reuse_requires_the_current_merge_grade_and_records_it() {
     advance_dev_with_grade(&root, 9);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none(),
         "grade 8 must not be reused under today's grade 9 threshold"
@@ -178,7 +178,7 @@ fn reuse_requires_the_current_merge_grade_and_records_it() {
     let reviewed = source_report(&root, Tier::Low, 8);
     advance_dev_with_grade(&root, 8);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"])
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"], "")
         .unwrap()
         .expect("grade 8 should be reusable under today's grade 8 threshold");
     assert_eq!(reused.reused_from.as_deref(), Some(reviewed.head.as_str()));
@@ -192,7 +192,7 @@ fn reuses_a_passing_closing_review_below_the_merge_grade() {
     let reviewed = closing_source_report(&root);
     advance_dev(&root);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"])
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"], "")
         .unwrap()
         .expect("a passing closing review is reusable regardless of its grade");
     assert_eq!(reviewed.grade, 6);
@@ -213,7 +213,7 @@ fn source_must_have_passed_its_stored_merge_grade() {
     advance_dev_with_grade(&root, 8);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none(),
         "a historically failed report cannot become reusable under a lower current threshold"
@@ -258,7 +258,7 @@ fn a_one_line_patch_change_does_not_reuse() {
     run(&root, &["commit", "-q", "-am", "different patch"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -319,7 +319,7 @@ fn a_rebase_that_changes_the_same_file_refuses_reuse() {
     run(&root, &["rebase", "-q", "origin/dev"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -335,7 +335,7 @@ fn complete_failing_report_for_head_blocks_reuse() {
     assert!(!failure.passes());
     assert!(Report::has_complete(&root, &head, &["low"]).unwrap());
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -371,7 +371,7 @@ fn failing_and_reused_reports_are_never_reuse_sources() {
     advance_dev(&root);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["low"])
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -382,7 +382,7 @@ fn failing_and_reused_reports_are_never_reuse_sources() {
     let original = source_report(&second, Tier::Low, 9);
     advance_dev(&second);
     let rebased = git::git(&second, &["rev-parse", "HEAD"]).unwrap();
-    Report::reuse_for_change(&second, &rebased, "feature", &["low"])
+    Report::reuse_for_change(&second, &rebased, "feature", &["low"], "")
         .unwrap()
         .expect("first reuse");
     let common = git::git(
@@ -413,7 +413,7 @@ fn failing_and_reused_reports_are_never_reuse_sources() {
     let next = git::git(&second, &["rev-parse", "HEAD"]).unwrap();
     // Check the fresh repo's store, where only the reused report remains.
     assert!(
-        Report::reuse_for_change(&second, &next, "feature", &["low"])
+        Report::reuse_for_change(&second, &next, "feature", &["low"], "")
             .unwrap()
             .is_none()
     );
@@ -427,7 +427,7 @@ fn reuse_respects_the_required_tier_floor() {
     advance_dev(&root);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
-        Report::reuse_for_change(&root, &head, "feature", &["high"])
+        Report::reuse_for_change(&root, &head, "feature", &["high"], "")
             .unwrap()
             .is_none()
     );

@@ -47,6 +47,18 @@ pub(crate) struct Report {
     /// Original commit whose review this report reuses, if any.
     #[serde(default)]
     pub(crate) reused_from: Option<String>,
+    /// SHA-256 of the task (the `SHIP_BODY` text) the reviewers were given:
+    /// a review of one description never answers for another.
+    #[serde(default)]
+    pub(crate) task_fingerprint: Option<String>,
+}
+
+fn hex(digest: impl AsRef<[u8]>) -> String {
+    digest
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
@@ -58,6 +70,11 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 }
 
 impl Report {
+    /// Fingerprint the task text exactly as the reviewers receive it.
+    pub(crate) fn task_fingerprint(task: &str) -> String {
+        hex(sha2::Sha256::digest(task.as_bytes()))
+    }
+
     /// Fingerprint the review engine tracked by `origin/dev` for one tier.
     #[cfg(test)]
     pub(crate) fn policy_fingerprint(root: &Path, tier: &str) -> Result<String, String> {
@@ -77,6 +94,7 @@ impl Report {
         let mut hash = sha2::Sha256::new();
         for path in [
             "gates/review.json",
+            "gates/registry.json",
             "gates/review",
             "crates/harness/src/review",
         ] {
@@ -86,11 +104,7 @@ impl Report {
         }
         hash.update((tier.len() as u64).to_be_bytes());
         hash.update(tier.as_bytes());
-        Ok(hash
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect())
+        Ok(hex(hash.finalize()))
     }
 
     /// A review passes only when every session answered and the capped grade
@@ -193,24 +207,39 @@ impl Report {
     }
 
     /// Copy an original passing review onto `head` when Git confirms the same
-    /// change (identical file blobs) against the current origin/dev. Stored
-    /// fingerprints are never consulted, a reuse report can never become a
-    /// source, and only a review recorded for this same branch is eligible:
-    /// another branch's closing review never answers this branch's findings. Any complete report for this head at an eligible tier blocks
-    /// reuse, including a failing report.
+    /// change (identical file blobs) against the current origin/dev and the
+    /// reviewers were given the same `task`. The stored change fingerprint is
+    /// never consulted, and a reuse report can never become a source. By
+    /// design only a review recorded for this same branch name is eligible,
+    /// even when another branch holds an identical change: another branch's
+    /// review (closing or full) never answers this branch's findings. One
+    /// policy commit is pinned first: the floor, the eligible tiers, the merge
+    /// grade and the policy fingerprint all come from it. Any complete report
+    /// for this head at an eligible tier blocks reuse, including a failing one.
     pub(crate) fn reuse_for_change(
         root: &Path,
         head: &str,
         branch: &str,
         tiers: &[&str],
+        task: &str,
     ) -> Result<Option<Self>, String> {
-        if Self::has_complete(root, head, tiers)? {
+        let judge = std::env::var(super::trusted::JUDGE_REV).ok();
+        let (_pin, policy) = super::trusted::pin(root, judge.as_deref())?;
+        let floor = super::floor(root).map_err(|e| e.to_string())?;
+        let tiers: Vec<&str> = tiers
+            .iter()
+            .copied()
+            .filter(|name| {
+                <super::Tier as clap::ValueEnum>::value_variants()
+                    .iter()
+                    .any(|tier| tier.name() == *name && *tier >= floor)
+            })
+            .collect();
+        if tiers.is_empty() || Self::has_complete(root, head, &tiers)? {
             return Ok(None);
         }
         let config = super::config::Config::load(root)?;
-        let Some(floor) = tiers.first() else {
-            return Ok(None);
-        };
+        let wanted_task = Self::task_fingerprint(task);
         let (merge_base, wanted_identity) = git::change_identity(root, "dev", head)?;
         let wanted_fingerprint = git::change_fingerprint(root, "dev", head)?.1;
         let base = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
@@ -229,6 +258,7 @@ impl Report {
                     && report.head.bytes().all(|byte| byte.is_ascii_hexdigit())
                     && report.reused_from.is_none()
                     && tiers.contains(&report.tier.as_str())
+                    && report.task_fingerprint.as_deref() == Some(wanted_task.as_str())
                     && report.complete()
                     && report.passes()
                     && (report.closing || report.grade >= config.merge_grade)
@@ -236,7 +266,8 @@ impl Report {
             .collect();
         candidates.sort_by_key(|report| std::cmp::Reverse(report.finished));
         for mut source in candidates {
-            let Ok(current_policy) = Self::policy_fingerprint_at(root, &base, &source.tier) else {
+            let Ok(current_policy) = Self::policy_fingerprint_at(root, &policy, &source.tier)
+            else {
                 continue;
             };
             if source.policy_fingerprint.as_deref() != Some(current_policy.as_str()) {
@@ -253,7 +284,7 @@ impl Report {
             source.branch = branch.to_owned();
             source.base = base.clone();
             source.merge_base = merge_base;
-            source.floor = (*floor).to_owned();
+            source.floor = floor.name().to_owned();
             source.merge_grade = config.merge_grade;
             source.change_fingerprint = Some(wanted_fingerprint);
             source.reused_from = Some(source_head);

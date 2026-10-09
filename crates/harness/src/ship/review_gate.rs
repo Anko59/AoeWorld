@@ -62,12 +62,17 @@ pub(crate) fn require(
         );
         return Ok(report);
     }
+    // The description is part of what was reviewed: reuse needs the same.
+    let task = match &options.body_file {
+        Some(path) => fs::read_to_string(path)?,
+        None => String::new(),
+    };
     let has_complete = Report::has_complete(root, &evidence.head, &eligible)?;
     // A complete failing review is an explicit verdict for this commit. It
     // must not be replaced by a review of another commit's change.
     if !has_complete
         && let Some(report) =
-            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible)?
+            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible, &task)?
     {
         eprintln!(
             "ship: review of {} reused (same change, identical file blobs)",
@@ -75,10 +80,6 @@ pub(crate) fn require(
         );
         return Ok(report);
     }
-    let task = match &options.body_file {
-        Some(path) => fs::read_to_string(path)?,
-        None => String::new(),
-    };
     let history = review::history(root, &evidence.branch)?;
     let plan = match closing::next(&history, &evidence.head, unix_now()) {
         Next::Review(plan) => plan,
