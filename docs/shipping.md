@@ -117,15 +117,22 @@ report says. From Git alone (merge base..HEAD), `aoe-harness`
 description's "For AI" part and into the facts every reviewer reads:
 
 - each commit classified as tests-only, product, mixed or other, where product
-  code is any non-test file under `crates/` except `crates/harness/`;
+  code is any non-test file under `crates/` except `crates/harness/`; changed
+  lines that all lie inside `#[cfg(test)]` items of a product file count as
+  test changes (brace counting, not parsing), and such files are listed, since
+  the rule is tests in test files; a merge is listed as `merge (<kind>)` from
+  its diff against its first parent;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
   `#[rstest]`…, never a `cfg`) added before the first product commit;
 - build-time files changed: `build.rs` or a custom `package.build` script,
   `.cargo/`, `rust-toolchain*`, `.config/nextest.toml`, and a manifest's
-  `build`, `links`, build dependencies or profiles, parsed with `toml`;
+  `build`, `links`, build dependencies (target tables with their selector) or
+  profiles, and the `[workspace.dependencies]` entries that build dependencies
+  inherit, parsed with `toml`;
 - an exemption trailer, `Harness-Test-First: exempt — <reason>`, if any.
 
-A change to the harness, gates, docs or CI alone is "not applicable". The
+A change to the harness, gates, docs or CI alone, with no build-time file, is
+"not applicable". The
 test-integrity reviewer judges the report: product code with no failing test
 before it, a build-time change or a weak exemption is a finding, not a refusal.
 Proving in CI that the tests ran red then green remains

@@ -7,7 +7,7 @@ use crate::ship::{
 use std::{fs, path::Path};
 
 /// A repository on `feature` from a `dev` base with a product crate.
-fn repo() -> (tempfile::TempDir, String) {
+pub(super) fn repo() -> (tempfile::TempDir, String) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     run(root, &["init", "-q", "-b", "dev"]);
@@ -30,7 +30,7 @@ fn write(root: &Path, path: &str, text: &str) {
     fs::write(root.join(path), text).unwrap();
 }
 
-fn commit(root: &Path, files: &[(&str, &str)], message: &str) {
+pub(super) fn commit(root: &Path, files: &[(&str, &str)], message: &str) {
     for (path, text) in files {
         write(root, path, text);
     }
