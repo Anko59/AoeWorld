@@ -228,6 +228,10 @@ pub fn decode_server(bytes: &[u8]) -> Result<ServerMessage, Error> {
 }
 
 #[cfg(test)]
+#[path = "gameplay/tests/byte_array.rs"]
+mod byte_array_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use aoe_core::{Seed, TileCoord, WorldConfig};
