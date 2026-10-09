@@ -11,7 +11,7 @@ cargo-fuzz = true
 aoe-assets = { path = "../crates/assets" }
 aoe-map = { path = "../crates/map" }
 serde_json = "1.0"
-libfuzzer-sys = "=0.4.10"
+libfuzzer-sys = "=0.4.13"
 
 [workspace]
 
