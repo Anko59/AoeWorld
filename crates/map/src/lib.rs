@@ -71,6 +71,12 @@ pub const CHUNK_TILES: i32 = 32;
 pub const MAP_SCHEMA_VERSION: u16 = 9;
 pub const LANDSCAPE_MAP_SCHEMA_VERSION: u16 = 10;
 pub const LANDSCAPE_GENERATION_RECIPE_VERSION: u16 = 9;
+/// Explicit source-family opt-in; never changes published recipe-nine defaults.
+pub const SOURCE_FAMILY_GENERATION_RECIPE_VERSION: u16 = 10;
+
+pub const fn is_landscape_recipe(version: u16) -> bool {
+    matches!(version, LANDSCAPE_GENERATION_RECIPE_VERSION | SOURCE_FAMILY_GENERATION_RECIPE_VERSION)
+}
 /// Version 8 packages remain readable when they contain no typed evidence.
 pub const LEGACY_MAP_SCHEMA_VERSION: u16 = 8;
 pub const GAME_TILE_METERS: u32 = 2;

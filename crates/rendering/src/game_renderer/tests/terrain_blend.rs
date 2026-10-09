@@ -169,6 +169,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
             })]
         }),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -264,7 +265,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         canvas: canvas.clone(),
         context,
         atlas: [None, None, None],
-        source_atlas: Vec::new(),
+        source_atlas: CanvasAtlas::default(),
         presentation: CanvasPresentation::new(128, 128),
     };
     renderer.upload_game_atlas(&blend_atlas()).unwrap();

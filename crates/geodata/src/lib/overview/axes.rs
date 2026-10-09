@@ -1,5 +1,4 @@
 use super::*;
-use aoe_map::DetailProfile;
 use serde::{Deserialize, Serialize};
 
 /// Native preparation options, not part of the map request or package wire schema.
@@ -30,14 +29,14 @@ impl OverviewFieldAxes {
     }
 
     pub(crate) fn validate(self, request: MapRequest, explicit: bool) -> Result<(), GeodataError> {
-        if request.detail_profile == DetailProfile::StandardV1
+        if !request.detail_profile.uses_landscape_axes()
             && (self.water != self.elevation || self.vegetation != self.elevation)
         {
             return Err(GeodataError::Preparation(
                 "independent overview axes require LandscapeV2",
             ));
         }
-        let elevation_cap = if explicit && request.detail_profile == DetailProfile::LandscapeV2 {
+        let elevation_cap = if explicit && request.detail_profile.uses_landscape_axes() {
             elevation::MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS
         } else {
             MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS

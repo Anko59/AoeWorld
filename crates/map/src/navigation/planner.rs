@@ -196,8 +196,7 @@ impl RoutePlanner {
                 self.search = Some(SearchState::new(
                     self.origin,
                     self.destination,
-                    terrain.generation_recipe_version()
-                        == crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
+                    crate::is_landscape_recipe(terrain.generation_recipe_version()),
                 ));
                 self.update_peak_retained_entries();
             }

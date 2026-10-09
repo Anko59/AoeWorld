@@ -112,7 +112,7 @@ fn map_generate() -> Result<(), String> {
         _ => return Err("AOE_MAP_HYDROLOGY_MODE must be none or vectors".to_owned()),
     };
     if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
-        if request.detail_profile != aoe_map::DetailProfile::LandscapeV2 {
+        if !request.detail_profile.uses_landscape_axes() {
             return Err("overview vectors require LandscapeV2".to_owned());
         }
         let corrections = aoe_map::WaterCorrectionDocument::empty(request, 1024)
@@ -136,12 +136,12 @@ fn map_generate() -> Result<(), String> {
         cache_root: cache_root(),
         output_directory: output,
         request,
-        samples_per_axis: if request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
+        samples_per_axis: if request.detail_profile.uses_landscape_axes() {
             aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation
         } else {
             OVERVIEW_SAMPLES_PER_AXIS
         },
-        field_axes: (request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+        field_axes: (request.detail_profile.uses_landscape_axes())
             .then_some(aoe_geodata::OverviewFieldAxes::LANDSCAPE),
         hydrology_mode,
         water_corrections: None,

@@ -12,10 +12,13 @@ pub(crate) mod gpu_bridge;
 mod instance_buffer;
 mod submission;
 use gpu_bridge::{GpuBridge, error};
-pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
+pub(crate) use instance_buffer::{retain_world_packet, surface_instance};
 use wasm_bindgen::JsCast;
 
+#[cfg(test)]
+#[path = "web/tests/bridge.rs"]
+mod bridge_tests;
 #[cfg(test)]
 #[path = "web_tests.rs"]
 mod tests;
@@ -38,6 +41,7 @@ pub struct Renderer {
     pub(crate) device: GpuBridge,
     config: Configuration,
     pub(crate) instances: InstanceBuffer,
+    pub(crate) world_atlas: Option<u32>,
     pub(crate) atlas_side: u32,
     pub(crate) atlas_pages: u32,
     resize_error: Option<String>,
@@ -95,6 +99,7 @@ impl Renderer {
             },
             device,
             instances: InstanceBuffer::new(),
+            world_atlas: None,
             atlas_side: ATLAS_SIDE,
             atlas_pages: 1,
             resize_error: None,

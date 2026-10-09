@@ -92,7 +92,7 @@ where
         origin,
         destination,
         max_expansions,
-        terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
+        crate::is_landscape_recipe(terrain.generation_recipe_version()),
         &passable,
         |tile| neighbors(terrain, tile, &passable),
     );
@@ -307,7 +307,7 @@ where
 }
 
 fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
+    if crate::is_landscape_recipe(terrain.generation_recipe_version()) {
         return terrain
             .tile_and_node_with_cancel(tile, &|| false)
             .is_ok_and(|pair| {
@@ -325,7 +325,7 @@ fn walkable_with_overlay(
     overlay: &ResourceOverlay,
     tile: TileCoord,
 ) -> bool {
-    if terrain.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
+    if crate::is_landscape_recipe(terrain.generation_recipe_version()) {
         return terrain
             .tile_and_node_with_cancel(tile, &|| false)
             .is_ok_and(|pair| {

@@ -5,6 +5,8 @@ mod species_pixels;
 mod terrain_blend;
 #[path = "terrain_filter.rs"]
 mod terrain_filter;
+#[path = "canvas_depth/world.rs"]
+mod world;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};

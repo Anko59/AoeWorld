@@ -84,7 +84,7 @@ impl PreparationPlan {
         let estimate = request.estimate().map_err(|error| error.to_string())?;
         if input.hydrology_mode == HydrologyMode::Vectors
             && (!worker_available
-                || request.detail_profile != aoe_map::DetailProfile::LandscapeV2
+                || !request.detail_profile.uses_landscape_axes()
                 || input.preparation != PreparationPreference::Overview
                 || !(-119_900_000..=249_900_000).contains(&request.center_longitude_e7)
                 || !(360_100_000..=599_900_000).contains(&request.center_latitude_e7))
@@ -112,7 +112,7 @@ impl PreparationPlan {
             PreparationPreference::Automatic => regional,
         };
         let field_axes = (!detailed
-            && request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+            && request.detail_profile.uses_landscape_axes())
             .then_some(OverviewFieldAxes {
                 elevation: 1024,
                 vegetation: 128,

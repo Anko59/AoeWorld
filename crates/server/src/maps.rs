@@ -396,7 +396,7 @@ pub(super) async fn chunk(
         } else {
             package.generator()
         };
-        if package.request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
+        if package.request.detail_profile.uses_landscape_axes() {
             let scene = generator
                 .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
                 .map_err(|_| StatusCode::NOT_FOUND)?;

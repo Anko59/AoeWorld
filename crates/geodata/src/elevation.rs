@@ -30,13 +30,13 @@ pub fn prepare_elevation(
     prepare_elevation_dataset(&dataset, request, samples_per_axis)
 }
 
-/// High direct cap is restricted to explicit native LandscapeV2 preparation.
+/// High direct cap is restricted to explicit native landscape-axis preparation.
 pub fn prepare_elevation_for_profile(
     path: &Path,
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedElevation, GeodataError> {
-    let cap = if request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
+    let cap = if request.detail_profile.uses_landscape_axes() {
         MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS
     } else {
         MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS

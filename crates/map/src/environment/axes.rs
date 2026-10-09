@@ -7,7 +7,7 @@ impl PreparedEnvironment {
     /// Landscape packages allow each field to declare its own canonical axis.
     /// Standard packages retain legacy validation and its error precedence.
     pub fn validate_for_profile(&self, profile: DetailProfile) -> Result<(), EnvironmentError> {
-        self.validate_axes(profile == DetailProfile::LandscapeV2)
+        self.validate_axes(profile.uses_landscape_axes())
     }
 
     pub fn water_samples_per_axis(&self) -> Option<u16> {

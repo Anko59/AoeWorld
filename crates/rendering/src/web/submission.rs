@@ -2,6 +2,16 @@
 use super::*;
 
 impl Renderer {
+    pub(crate) fn render_owned_sprites(
+        &mut self,
+        sprites: &mut [Sprite],
+        clear: [f64; 4],
+    ) -> Result<Counters, String> {
+        let visible_count = sprites.len();
+        self.reserve_packets(required_capacity(&[], sprites)?)?;
+        self.submit_packets(sprites, visible_count, clear)
+    }
+
     pub(super) fn reserve_packets(&mut self, required: usize) -> Result<(), String> {
         self.instances.ensure_capacity(required, &self.device)
     }
@@ -12,6 +22,9 @@ impl Renderer {
         visible_count: usize,
         clear: [f64; 4],
     ) -> Result<Counters, String> {
+        for sprite in instances.iter_mut() {
+            retain_world_packet(sprite, self.world_atlas);
+        }
         normalize_depths(instances);
         if let Some(message) = &self.resize_error {
             return Err(message.clone());

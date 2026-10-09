@@ -137,8 +137,11 @@ pub fn run_source_country_probe(
 }
 
 fn supported_country(package: &MapPackage) -> bool {
-    package.request.detail_profile == DetailProfile::LandscapeV2
-        && package.generation_recipe_version == 9
+    matches!(
+        (package.request.detail_profile, package.generation_recipe_version),
+        (DetailProfile::LandscapeV2, aoe_map::LANDSCAPE_GENERATION_RECIPE_VERSION)
+            | (DetailProfile::LandscapeEcologyV1, aoe_map::SOURCE_FAMILY_GENERATION_RECIPE_VERSION)
+    )
         && package.request.year_ce == 600
         && package.request.compression.numerator == 30
         && package.request.compression.denominator == 1

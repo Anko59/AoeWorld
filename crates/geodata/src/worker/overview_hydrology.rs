@@ -1,7 +1,7 @@
 use crate::{
     GeneratedMap, GeodataError, OverviewFieldAxes, OverviewHydrologyMode, PreparedHydrology,
 };
-use aoe_map::{DetailProfile, MapPackage, MapRequest, WaterCorrectionDocument};
+use aoe_map::{MapPackage, MapRequest, WaterCorrectionDocument};
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn preflight(
@@ -19,7 +19,7 @@ pub(super) fn preflight(
         }
         return Ok(None);
     }
-    if request.detail_profile != DetailProfile::LandscapeV2
+    if !request.detail_profile.uses_landscape_axes()
         || axes != Some(OverviewFieldAxes::LANDSCAPE)
     {
         return Err(GeodataError::Preparation(
@@ -44,7 +44,7 @@ impl GeneratedMap {
     ) -> Result<Self, GeodataError> {
         self.validate()?;
         let environment = &self.package.environment;
-        if self.package.request.detail_profile != DetailProfile::LandscapeV2
+        if !self.package.request.detail_profile.uses_landscape_axes()
             || environment.samples_per_axis != 1024
             || environment.water_samples_per_axis() != Some(128)
             || environment.vegetation_samples_per_axis() != Some(128)
