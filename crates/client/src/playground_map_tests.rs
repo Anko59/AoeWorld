@@ -4,6 +4,26 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[wasm_bindgen_test]
+fn snow_ice_mud_and_shallows_have_distinct_scene_materials() {
+    let materials = [
+        GroundMaterial::DryGrass,
+        GroundMaterial::Sand,
+        GroundMaterial::Water,
+        GroundMaterial::Snow,
+        GroundMaterial::Ice,
+        GroundMaterial::Mud,
+        GroundMaterial::Shore,
+    ];
+    for (index, material) in materials.iter().enumerate() {
+        for other in &materials[..index] {
+            assert_ne!(terrain_material(*material), terrain_material(*other));
+        }
+    }
+    assert_eq!(terrain_material(GroundMaterial::Snow), 7);
+    assert_eq!(terrain_material(GroundMaterial::Rock), 4);
+}
+
 #[path = "playground_map/resource_viewport_tests.rs"]
 mod resource_viewport;
 

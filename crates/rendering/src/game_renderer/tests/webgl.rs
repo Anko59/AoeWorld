@@ -142,6 +142,29 @@ extern "C" {
     ) -> Result<(), JsValue>;
 }
 
+#[wasm_bindgen_test]
+fn webgl_procedural_materials_match_shared_canvas_kernel() {
+    let source = [170, 85, 40, 255];
+    let (canvas, mut renderer) = target(&atlas(&[source]));
+    for tint in (5..=10).chain([12]).chain(21..=26) {
+        let mut face = triangle(
+            [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]],
+            [0.0; 3],
+            [0.0; 3],
+        );
+        face.texture_uv = Some(rect(0.0));
+        face.tint = tint;
+        let mut packet = [surface_instance(&face, [128.0; 2], 0.0)];
+        render(&mut renderer, &mut packet);
+        assert_pixel(
+            &canvas,
+            48,
+            48,
+            crate::surface_mesh::procedural_tint(source, tint),
+        );
+    }
+}
+
 fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
     let canvas = web_sys::window()
         .expect("browser window")

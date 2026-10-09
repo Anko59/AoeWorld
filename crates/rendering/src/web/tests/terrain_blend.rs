@@ -2,6 +2,28 @@ use super::*;
 
 #[wasm_bindgen_test]
 async fn webgpu_crossfades_the_same_native_material_pixel_as_canvas() {
+    let mut renderer = surface_renderer().await;
+    check_surface_pixel(&mut renderer, 0, true, [82, 86, 86, 255]).await;
+    renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
+async fn webgpu_procedural_rock_snow_ice_mud_and_shore_match_shared_kernel() {
+    // One device/atlas for every probe: context churn is not this pixel contract.
+    let mut renderer = surface_renderer().await;
+    for tint in (5..=10).chain([12]).chain(21..=26) {
+        check_surface_pixel(
+            &mut renderer,
+            tint,
+            false,
+            crate::surface_mesh::procedural_tint([255, 0, 0, 255], tint),
+        )
+        .await;
+    }
+    renderer.device.destroy();
+}
+
+async fn surface_renderer() -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document
         .create_element("canvas")
@@ -16,14 +38,18 @@ async fn webgpu_crossfades_the_same_native_material_pixel_as_canvas() {
     let mut atlas = vec![0; (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize];
     atlas[..12].copy_from_slice(&[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
     renderer.upload_game_atlas(&atlas).unwrap();
+    renderer
+}
+
+async fn check_surface_pixel(renderer: &mut Renderer, tint: u8, blend: bool, expected: [u8; 4]) {
     let rect = |x: f32| [x / 2048.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0];
     let mut triangle = capacity_surface();
     triangle.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
     triangle.texture_uv = Some(rect(0.0));
-    triangle.texture_blend = Some([rect(1.0), rect(2.0)]);
+    triangle.tint = tint;
+    triangle.texture_blend = blend.then_some([rect(1.0), rect(2.0)]);
     let instance = surface_instance(&triangle, [128.0; 2], 0.0);
-    assert_eq!(instance.color[3], -3.0);
-    assert_eq!(instance.terrain_blend, triangle.texture_blend.unwrap());
+    assert_eq!(instance.color[3], if blend { -3.0 } else { -1.0 });
     renderer
         .render_world_layers(&[triangle], &[], [0.0, 0.0, 0.0, 1.0])
         .unwrap();
@@ -133,7 +159,7 @@ async fn webgpu_crossfades_the_same_native_material_pixel_as_canvas() {
         }
         _ => [data[0], data[1], data[2], data[3]],
     };
-    for (actual, expected) in pixel.into_iter().zip([82_u8, 86, 86, 255]) {
+    for (actual, expected) in pixel.into_iter().zip(expected) {
         assert!(
             actual.abs_diff(expected) <= 1,
             "unexpected GPU blend pixel: {pixel:?}"

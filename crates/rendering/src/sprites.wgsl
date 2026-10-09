@@ -141,5 +141,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let water = vec3<f32>(0.14901961, 0.44313726, 0.74509805);
         return vec4<f32>(mix(texel.rgb, water, 0.14), texel.a);
     }
+    let ramp = in.tint_kind >= 21u && in.tint_kind <= 26u;
+    let kind = select(in.tint_kind, in.tint_kind - 16u, ramp);
+    if (kind >= 5u && kind <= 10u) || kind == 12u {
+        let detail = dot(texel.rgb, vec3<f32>(1.0 / 3.0));
+        var base = vec3<f32>(0.18);
+        var amount = 0.55;
+        var shade = 1.0;
+        switch kind {
+            case 6u: { base = vec3<f32>(0.78, 0.79, 0.78); amount = 0.12; }
+            case 7u: { shade = 0.72; }
+            case 12u: { shade = 0.78; }
+            case 8u: { base = vec3<f32>(0.42, 0.57, 0.65); amount = 0.20; }
+            case 9u: { base = vec3<f32>(0.10, 0.08, 0.05); amount = 0.35; }
+            case 10u: { base = vec3<f32>(0.22, 0.36, 0.33); amount = 0.25; }
+            default: {}
+        }
+        shade *= select(1.0, 0.92, ramp);
+        return vec4<f32>((base + detail * amount) * shade, texel.a);
+    }
     return texel * in.color;
 }
