@@ -6,13 +6,15 @@ use crate::{
         projected_surface_triangles, surface_depth_at,
     },
 };
-use aoe_core::ScreenPoint;
+use aoe_core::{EntityId, ScreenPoint};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "tests/grid.rs"]
 mod grid;
+#[path = "tests/landscape.rs"]
+mod landscape;
 
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
@@ -43,12 +45,14 @@ fn frontmost_surface_depth_includes_elevation_and_cliff_faces() {
         focus_elevation_meters: 0.0,
     };
     let ground = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
         surface: SceneTerrainSurface::flat(0.0),
     };
     let high = SceneTerrain {
+        appearance: None,
         position: [1.5, 1.5],
         material: 4,
         elevation_meters: 2.0,
@@ -74,6 +78,7 @@ fn pickable_elevated_plateau_wins_over_overlapping_lower_ground() {
         focus_elevation_meters: 0.0,
     };
     let tile = |position, heights: [i16; 4]| SceneTerrain {
+        appearance: None,
         position,
         material: 0,
         elevation_meters: f64::from(heights[0]),
@@ -142,6 +147,7 @@ fn pickable_ground_wins_an_exact_tie_against_an_unpickable_skirt() {
         },
     ];
     let triangle = |skirt, pickable| ProjectedSurfaceTriangle {
+        appearance: 0,
         points,
         color: [0.2, 0.3, 0.4],
         tile: [7, 11],
@@ -185,6 +191,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
         y: (1.0 - f64::from(marker.position[1])) * camera.viewport[1] * 0.5,
     };
     let cliff = ProjectedSurfaceTriangle {
+        appearance: 0,
         points: [
             SurfacePoint {
                 world: [0.0, 0.0, 8.0],
@@ -247,6 +254,7 @@ fn units_order_behind_and_in_front_of_a_raised_surface_at_contact_height() {
         focus_elevation_meters: 2.0,
     };
     let raised = SceneTerrain {
+        appearance: None,
         position: [1.5, 1.5],
         material: 4,
         elevation_meters: 4.0,
@@ -304,6 +312,7 @@ fn depleted_resource_disappears_from_both_backend_draw_lists() {
         focus_elevation_meters: 0.0,
     };
     let resource = SceneResource {
+        visual_family: 0,
         id: 9,
         position: [0.5, 0.5],
         kind: 2,
@@ -311,6 +320,7 @@ fn depleted_resource_disappears_from_both_backend_draw_lists() {
         elevation_meters: 0.0,
     };
     let terrain = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
@@ -363,6 +373,7 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
     art.resources[1] = (0..14).map(make_frame).collect();
     art.tree_shadows = (0..14).map(make_frame).collect();
     let terrain = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
@@ -370,6 +381,7 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
     };
     let trees = (0..256_u16)
         .map(|variant| SceneResource {
+            visual_family: 0,
             id: u64::from(variant),
             position: [0.5, 0.5],
             kind: 1,
@@ -404,6 +416,7 @@ fn zoomed_out_covering_lod_reaches_every_viewport_border() {
     let terrain = (0..256)
         .flat_map(|y| {
             (0..256).map(move |x| SceneTerrain {
+                appearance: None,
                 position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                 material: 0,
                 elevation_meters: 0.0,
@@ -439,6 +452,7 @@ fn high_elevation_moves_an_offscreen_tile_into_the_projected_viewport() {
         focus_elevation_meters: 0.0,
     };
     let high = SceneTerrain {
+        appearance: None,
         position: [3.5, 3.5],
         material: 4,
         elevation_meters: 7.0,

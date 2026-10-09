@@ -5,6 +5,8 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 mod appearance_tests;
 #[path = "tests/equivalence.rs"]
 mod equivalence_tests;
+#[path = "tests/landscape.rs"]
+mod landscape_tests;
 #[path = "tests/native_canvas.rs"]
 mod native_canvas_tests;
 #[path = "tests/shore.rs"]
@@ -37,6 +39,7 @@ fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
     art.terrain[3] = vec![frame([0.2, 0.3, 0.04, 0.06])];
     art.terrain[4] = vec![frame([0.4, 0.5, 0.03, 0.02])];
     let sample = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 3,
         elevation_meters: 0.0,
@@ -99,6 +102,7 @@ fn flat_zero_height_ground_is_textured_contiguous_and_pickable() {
         focus_elevation_meters: 0.0,
     };
     let sample = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
@@ -141,6 +145,7 @@ fn both_ramp_orientations_keep_matching_uvs_on_the_shared_diagonal() {
     };
     for triangulation in 0..=1_u8 {
         let sample = SceneTerrain {
+            appearance: None,
             position: [0.5, 0.5],
             material: 1,
             elevation_meters: 1.5,
@@ -259,6 +264,7 @@ fn cliff_adjacency_creates_a_textured_nonpickable_height_transition() {
         focus_elevation_meters: 2.0,
     };
     let cliff = |position: [f64; 2], heights| SceneTerrain {
+        appearance: None,
         position,
         material: 4,
         elevation_meters: 2.0,
@@ -326,6 +332,7 @@ fn adjacent_chunks_share_boundary_geometry_and_deterministic_texture_placement()
         focus_elevation_meters: 0.0,
     };
     let tile = |x| SceneTerrain {
+        appearance: None,
         position: [x, 0.5],
         material: 3,
         elevation_meters: 0.0,
@@ -368,6 +375,7 @@ fn water_beside_raised_land_shares_a_shore_edge_without_a_cliff_skirt() {
         focus_elevation_meters: 2.0,
     };
     let tile = |x, water| SceneTerrain {
+        appearance: None,
         position: [x, 0.5],
         material: if water == 0 { 3 } else { 5 },
         elevation_meters: 2.0,

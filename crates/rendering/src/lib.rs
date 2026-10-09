@@ -1,3 +1,5 @@
+#[cfg(any(target_arch = "wasm32", test))]
+mod stable_index_sort;
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]
@@ -24,8 +26,9 @@ mod terrain;
 mod world_key_index;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
-    GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneTerrainSurface, SceneUnit,
-    resource_sprite_bounds,
+    GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
+    SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, resource_sprite_bounds,
+    scene_resource_frame,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

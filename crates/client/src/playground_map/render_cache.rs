@@ -141,6 +141,7 @@ mod tests {
             position: [3.5, 4.5],
             kind: 1,
             visual_variant: 0,
+            visual_family: 0,
             elevation_meters: 1.0,
         }
     }

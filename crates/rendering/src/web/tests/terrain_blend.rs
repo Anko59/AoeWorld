@@ -23,6 +23,47 @@ async fn webgpu_procedural_rock_snow_ice_mud_and_shore_match_shared_kernel() {
     renderer.device.destroy();
 }
 
+#[wasm_bindgen_test]
+async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_changes() {
+    let mut renderer = surface_renderer().await;
+    let address = |page| crate::AtlasAddress {
+        page,
+        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+    };
+    let mut face = capacity_surface();
+    face.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
+    face.texture_uv = Some(address(0));
+    face.texture_blend = Some([address(1), address(2)]);
+    assert_eq!(surface_instance(&face, [128.0; 2], 0.0).pages[3], 0);
+    for palette in 0..4 {
+        face.appearance =
+            crate::surface_mesh::landscape::pack(Some(crate::SceneTerrainAppearance {
+                floor_strength: 650,
+                canopy_strength: 650,
+                palette,
+                exposure: 1,
+                height_band: 2,
+            }));
+        face.tint = 1;
+        let packet = surface_instance(&face, [128.0; 2], 0.0);
+        assert_eq!(packet.pages[..3], [0, 1, 2]);
+        assert_eq!(packet.pages[3] >> 29, 0);
+        let expected = crate::surface_mesh::landscape::texel(
+            [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+            crate::surface_mesh::landscape::floor_weights(packet.pages[3]),
+            1,
+            packet.pages[3],
+        );
+        assert_ne!(expected, [82, 86, 86, 255]);
+        renderer
+            .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        assert_pixel(read_pixel(&renderer, 1, [48, 48]).await, expected);
+        assert_pixel(read_pixel(&renderer, 1, [32, 32]).await, expected);
+    }
+    renderer.device.destroy();
+}
+
 pub(super) async fn surface_renderer() -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document

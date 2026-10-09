@@ -1,5 +1,9 @@
 use super::*;
 
+#[path = "heights/tests.rs"]
+#[cfg(test)]
+mod tests;
+
 const INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 40.0;
 // Compact height metadata is independent of the 512 decoded-chunk cache.
 // At a 16K viewport and minimum zoom, even the complete i16 height sweep
@@ -28,12 +32,12 @@ pub(super) fn visible_tiles_for_height_bounds(
     .clamp(config.width_tiles, config.height_tiles)
 }
 
-pub(super) fn include_chunk_height_bounds(client: &mut Client, chunk: &Chunk) {
+pub(super) fn include_chunk_height_bounds(client: &mut Client, chunk: &CachedChunk) {
     if let Some(bounds) = merge_chunk_height_bounds(&mut client.terrain_height_bounds, chunk) {
         remember_probe(
             &mut client.terrain_bounds.probes,
             &mut client.terrain_bounds.probe_order,
-            (chunk.x, chunk.y),
+            chunk.coordinate(),
             bounds,
             MAX_HEIGHT_PROBES,
         );
@@ -47,7 +51,7 @@ pub(super) fn refresh_chunk_height_bounds(client: &mut Client) {
 
 pub(super) fn merge_chunk_height_bounds(
     target: &mut Option<(i16, i16)>,
-    chunk: &Chunk,
+    chunk: &CachedChunk,
 ) -> Option<(i16, i16)> {
     let bounds = chunk_height_bounds(chunk)?;
     merge_height_bounds(target, bounds);
@@ -63,7 +67,7 @@ pub(super) fn merge_height_bounds(target: &mut Option<(i16, i16)>, (minimum, max
 }
 
 pub(super) fn resident_height_bounds<'a>(
-    chunks: impl Iterator<Item = &'a Chunk>,
+    chunks: impl Iterator<Item = &'a CachedChunk>,
 ) -> Option<(i16, i16)> {
     chunks
         .filter_map(chunk_height_bounds)
@@ -73,10 +77,9 @@ pub(super) fn resident_height_bounds<'a>(
         })
 }
 
-pub(super) fn chunk_height_bounds(chunk: &Chunk) -> Option<(i16, i16)> {
+pub(super) fn chunk_height_bounds(chunk: &CachedChunk) -> Option<(i16, i16)> {
     let mut corners = chunk
-        .tiles
-        .iter()
+        .base_tiles()
         .flat_map(|tile| tile.surface.corner_game_height_levels);
     let first = corners.next()?;
     Some(corners.fold((first, first), |(minimum, maximum), height| {
@@ -212,7 +215,8 @@ pub(super) fn candidate_chunks(
         camera.center[0].round() as i64,
         camera.center[1].round() as i64,
     ];
-    let mut nearest = std::collections::BTreeSet::new();
+    // Each grid coordinate occurs once; a max-heap retains the same top K.
+    let mut nearest = std::collections::BinaryHeap::with_capacity(capacity + 1);
     for y in visible.min.y.div_euclid(CHUNK_TILES)
         ..=visible.max.y.saturating_sub(1).div_euclid(CHUNK_TILES)
     {
@@ -225,13 +229,17 @@ pub(super) fn candidate_chunks(
         for x in minimum..=maximum {
             let dx = i64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - center[0];
             let dy = i64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - center[1];
-            nearest.insert((dx * dx + dy * dy, x, y));
+            nearest.push((dx * dx + dy * dy, x, y));
             if nearest.len() > capacity {
-                nearest.pop_last();
+                nearest.pop();
             }
         }
     }
-    nearest.into_iter().map(|(_, x, y)| (x, y)).collect()
+    nearest
+        .into_sorted_vec()
+        .into_iter()
+        .map(|(_, x, y)| (x, y))
+        .collect()
 }
 
 pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32, i32)> {

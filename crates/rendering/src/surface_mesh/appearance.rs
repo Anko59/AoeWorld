@@ -98,6 +98,21 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }) {
             triangle.texture_materials = None;
         }
+        if triangle.appearance & 1 != 0
+            && matches!(triangle.material, 0 | 1 | 2 | 6)
+            && triangle.tint <= 3
+            && !triangle.skirt
+        {
+            let palette = (triangle.appearance >> 1) & 7;
+            let dry = triangle.material == 1 || matches!(palette, 3 | 4);
+            let primary = if dry { 1 } else { 0 };
+            let a = terrain_texture_frame(art, primary, triangle.texture_tile).map(|f| f.atlas);
+            let b = terrain_texture_frame(art, 6, triangle.texture_tile).map(|f| f.atlas);
+            triangle.texture_materials = Some([primary, 6, primary]);
+            triangle.texture_uv = a;
+            triangle.texture_blend = a.zip(b).map(|(a, b)| [b, a]);
+            continue;
+        }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
         let mut frames = [None; 3];
         for index in 0..3 {
