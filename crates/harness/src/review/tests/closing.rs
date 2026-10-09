@@ -1,7 +1,7 @@
 use super::super::{
     Report,
     closing::{BUDGET, CARRIED, CLOSING_BUDGET, Next, Plan, next},
-    protocol::{Severity, Status},
+    protocol::{Severity, Status, Vote},
 };
 use super::super::{Tier, review_with};
 use super::{
@@ -285,6 +285,118 @@ fn an_undecided_carried_finding_counts_as_open() {
     history.push(undecided);
     assert!(
         matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
+    );
+}
+
+#[test]
+fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
+    // Partial votes confirm a carried major one severity lower: a minor
+    // finding never blocks a full review, so it does not block a closing one.
+    let partial = || {
+        let mut f = finding(
+            "P1",
+            CARRIED,
+            Severity::Major,
+            "correctness",
+            &[
+                (0, 2, Vote::Partial),
+                (1, 2, Vote::Partial),
+                (2, 2, Vote::Partial),
+                (3, 2, Vote::Refuted),
+                (4, 2, Vote::Refuted),
+            ],
+        );
+        f.status = Status::Confirmed;
+        f
+    };
+    let mut r = closing("d", 4, &[], &[]);
+    r.findings.push(partial());
+    assert!(
+        r.passes(),
+        "a carried finding left at minor passes the closing review"
+    );
+    let mut history = three_converging();
+    history.push(r);
+    assert!(
+        !matches!(next(&history, "e", NOW), Next::Split(_)),
+        "a minor carried finding is not left open"
+    );
+
+    let mut upheld = closing("d", 4, &[Severity::Major], &[]);
+    upheld.findings[0].status = Status::Confirmed;
+    assert!(!upheld.passes(), "a carried major still confirmed blocks");
+    let mut history = three_converging();
+    history.push(upheld);
+    assert!(
+        matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
+    );
+}
+
+#[test]
+fn a_carried_finding_settled_as_minor_is_not_carried_again() {
+    // The first closing review confirms carried P1 only as minor (partial
+    // votes) but fails on a new major: the next plan must not reopen P1.
+    let mut history = three_converging();
+    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
+    first.findings[0].votes = finding(
+        "P1",
+        CARRIED,
+        Severity::Major,
+        "correctness",
+        &[
+            (0, 2, Vote::Partial),
+            (1, 2, Vote::Partial),
+            (2, 2, Vote::Refuted),
+        ],
+    )
+    .votes;
+    first.findings[0].status = Status::Confirmed;
+    // P1 is the last full review's major finding, carried into this review.
+    first.findings[0].reported = history[2].findings[0].reported.clone();
+    assert!(
+        !first.passes(),
+        "the new major still fails the first closing review"
+    );
+    let settled = first.findings[0].reported.claim.clone();
+    history.push(first);
+    let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
+        panic!("a converging branch with one closing review left gets it");
+    };
+    assert!(
+        prior.iter().all(|f| f.reported.claim != settled),
+        "a finding settled as minor is not carried again"
+    );
+}
+
+#[test]
+fn settling_a_finding_never_hides_another_at_a_different_line() {
+    // Closing review 1 settles carried P1 as minor and confirms a new major N
+    // with the same file and claim at another line: N is carried next time.
+    let mut history = three_converging();
+    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
+    first.findings[0].reported = history[2].findings[0].reported.clone();
+    first.findings[0].votes = finding(
+        "P1",
+        CARRIED,
+        Severity::Major,
+        "correctness",
+        &[
+            (0, 2, Vote::Partial),
+            (1, 2, Vote::Partial),
+            (2, 2, Vote::Refuted),
+        ],
+    )
+    .votes;
+    first.findings[0].status = Status::Confirmed;
+    first.findings[1].reported = first.findings[0].reported.clone();
+    first.findings[1].reported.line = Some(80);
+    history.push(first);
+    let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
+        panic!("a converging branch with one closing review left gets it");
+    };
+    assert!(
+        prior.iter().any(|f| f.reported.line == Some(80)),
+        "the new major at line 80 is carried"
     );
 }
 

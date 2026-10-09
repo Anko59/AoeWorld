@@ -55,18 +55,24 @@ fn severe(report: &Report) -> bool {
         .any(|f| cap(std::slice::from_ref(*f)) <= 4)
 }
 
-/// Carried findings a closing review did not show fixed (refuted): still
-/// there, or undecided.
+/// Carried findings a closing review did not show fixed: still blocking, or
+/// undecided. One confirmed only as minor (partial votes) is not open.
 fn still_open(report: &Report) -> usize {
     report
         .findings
         .iter()
-        .filter(|f| f.reporter == CARRIED && f.status != Status::Refuted)
+        .filter(|f| {
+            f.reporter == CARRIED && (f.status == Status::Disputed || super::protocol::blocking(f))
+        })
         .count()
 }
 
+/// The same finding: same file, line and claim. Two findings that differ only
+/// by line are distinct, so settling one never hides the other.
 fn same(a: &Finding, b: &Finding) -> bool {
-    a.reported.file == b.reported.file && a.reported.claim == b.reported.claim
+    a.reported.file == b.reported.file
+        && a.reported.line == b.reported.line
+        && a.reported.claim == b.reported.claim
 }
 
 /// What `make ship` does next on a branch, from its stored reviews (oldest
@@ -133,11 +139,16 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
             "{CLOSING_BUDGET} closing reviews still found new blocking findings in the fixes"
         ));
     }
-    // Carry every blocking finding not yet shown fixed by a closing review.
+    // Carry every blocking finding a closing review has not settled: settled
+    // means shown fixed (refuted) or confirmed only at a non-blocking severity.
     let fixed: Vec<&Finding> = closing
         .iter()
         .flat_map(|r| r.findings.iter())
-        .filter(|f| f.reporter == CARRIED && f.status == Status::Refuted)
+        .filter(|f| {
+            f.reporter == CARRIED
+                && (f.status == Status::Refuted
+                    || (f.status != Status::Disputed && !super::protocol::blocking(f)))
+        })
         .collect();
     let mut prior: Vec<Finding> = Vec::new();
     for finding in failing.iter().flat_map(|r| blocking(r)) {
