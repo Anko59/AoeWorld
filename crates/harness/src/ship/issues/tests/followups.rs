@@ -50,6 +50,10 @@ fn report(findings: Vec<Finding>) -> Report {
         started: 0,
         finished: 0,
         closing: false,
+        change_fingerprint: None,
+        policy_fingerprint: None,
+        reused_from: None,
+        task_fingerprint: None,
     }
 }
 

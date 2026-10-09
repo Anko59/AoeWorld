@@ -13,6 +13,7 @@ mod runner;
 mod session;
 #[cfg(test)]
 mod tests;
+mod trusted;
 
 use crate::{agents::Runtime, gates::registry::Registry, ship::git};
 pub(crate) use closing::Plan;
@@ -28,6 +29,7 @@ use std::{
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+pub(crate) use trusted::trusted;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -108,20 +110,6 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::ReviewFloor => {
             println!("{}", floor(&root)?.name());
             Ok(())
-        }
-    }
-}
-
-/// A review input from origin/dev, so a branch never rewrites its own
-/// criteria; the working tree only while dev does not have it yet (bootstrap).
-pub(crate) fn trusted(root: &Path, relative: &str) -> std::result::Result<String, String> {
-    match git::git(
-        root,
-        &["show", &format!("refs/remotes/origin/dev:{relative}")],
-    ) {
-        Ok(text) => Ok(text),
-        Err(_) => {
-            std::fs::read_to_string(root.join(relative)).map_err(|e| format!("{relative}: {e}"))
         }
     }
 }
@@ -207,19 +195,22 @@ pub(crate) fn review_with(
     ask: &dyn Ask,
 ) -> Result<Report> {
     let branch = git::branch(root).unwrap_or_default();
-    review_with_branch(root, &branch, tier, runtime, task, plan, ask)
+    let policy = entry::Policy::pin(root, None, tier, runtime, plan)?;
+    review_with_branch(root, &branch, tier, &policy, task, plan, ask)
 }
 
+/// Review under `policy`, pinned by the caller before it chose the model.
 fn review_with_branch(
     root: &Path,
     branch: &str,
     tier: Tier,
-    runtime: Runtime,
+    policy: &entry::Policy,
     task: &str,
     plan: &Plan,
     ask: &dyn Ask,
 ) -> Result<Report> {
-    let config = Config::load(root)?;
+    let policy_fingerprint = Report::policy_fingerprint_at(root, &policy.commit, tier.name())?;
+    let (config, runtime) = (&policy.config, policy.runtime);
     let (base, merge_base, suites) = changed_suites(root)?;
     let minimum = config.floor(&suites);
     if tier < minimum {
@@ -238,14 +229,7 @@ fn review_with_branch(
     let subject = prompt::Subject {
         head: head.clone(),
         merge_base: merge_base.clone(),
-        task: if task.trim().is_empty() {
-            git::git(
-                root,
-                &["log", "--format=%B", &format!("{merge_base}..HEAD")],
-            )?
-        } else {
-            task.to_owned()
-        },
+        task: Report::effective_task(root, &head, task)?,
         stat: git::git(root, &["diff", "--stat", &merge_base, "HEAD"])?,
         // A closing review audits the fixes since the last reviewed commit.
         diff: match plan {
@@ -257,7 +241,7 @@ fn review_with_branch(
     };
     let closing = matches!(plan, Plan::Closing { .. });
     let tier_config = config.tiers[&tier].clone();
-    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
+    let model = policy.model.clone();
     let personas = tier_config.personas.clone();
     let started = now();
     let mut findings: Vec<Finding> = Vec::new();
@@ -400,6 +384,9 @@ fn review_with_branch(
         }
     };
     let cap = protocol::cap(&findings);
+    let change_fingerprint = git::change_fingerprint(root, "dev", &head)
+        .ok()
+        .map(|(_, fingerprint)| fingerprint);
     let report = Report {
         version: 1,
         head,
@@ -422,6 +409,11 @@ fn review_with_branch(
         started,
         finished: now(),
         closing,
+        change_fingerprint,
+        policy_fingerprint: Some(policy_fingerprint),
+        reused_from: None,
+        // What the reviewers saw: the commit log stands in for an empty task.
+        task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
     };
     report.store(root)?;
     Ok(report)

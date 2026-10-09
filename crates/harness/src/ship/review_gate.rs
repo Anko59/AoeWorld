@@ -55,17 +55,31 @@ pub(crate) fn require(
         .filter(|t| **t >= tier)
         .map(|t| t.name())
         .collect();
-    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible)? {
+    // The description is part of what was reviewed: reuse needs the same.
+    let task = match &options.body_file {
+        Some(path) => fs::read_to_string(path)?,
+        None => String::new(),
+    };
+    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible, &task)? {
         eprintln!(
             "ship: reusing the passing {} review of this commit",
             report.tier
         );
         return Ok(report);
     }
-    let task = match &options.body_file {
-        Some(path) => fs::read_to_string(path)?,
-        None => String::new(),
-    };
+    let has_complete = Report::has_complete(root, &evidence.head, &eligible)?;
+    // A complete failing review is an explicit verdict for this commit. It
+    // must not be replaced by a review of another commit's change.
+    if !has_complete
+        && let Some(report) =
+            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible, &task)?
+    {
+        eprintln!(
+            "ship: review of {} reused (same change, identical file blobs)",
+            short(report.reused_from.as_deref().unwrap_or_default())
+        );
+        return Ok(report);
+    }
     let history = review::history(root, &evidence.branch)?;
     let plan = match closing::next(&history, &evidence.head, unix_now()) {
         Next::Review(plan) => plan,
@@ -162,17 +176,24 @@ pub(crate) fn publish_calls(
     if !report.passes() {
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
     }
-    let description = format!(
-        "{}grade {}/10 · {} tier · {} rounds",
-        if report.closing {
-            "closing review passed · "
-        } else {
-            ""
-        },
-        report.grade,
-        report.tier,
-        report.rounds
-    );
+    let description = if let Some(source) = &report.reused_from {
+        format!(
+            "review of {} reused (same change, identical file blobs)",
+            short(source)
+        )
+    } else {
+        format!(
+            "{}grade {}/10 · {} tier · {} rounds",
+            if report.closing {
+                "closing review passed · "
+            } else {
+                ""
+            },
+            report.grade,
+            report.tier,
+            report.rounds
+        )
+    };
     let owned = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
     Ok(vec![
         owned(&[

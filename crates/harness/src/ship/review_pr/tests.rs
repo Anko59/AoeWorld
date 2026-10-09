@@ -63,6 +63,10 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
         started: 0,
         finished: 1,
         closing: false,
+        change_fingerprint: None,
+        policy_fingerprint: None,
+        reused_from: None,
+        task_fingerprint: None,
     };
     let calls = publication_calls(
         "owner/repo",

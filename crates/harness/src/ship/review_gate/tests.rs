@@ -6,6 +6,9 @@ use super::super::{
     ship_with,
     tests::{fixture, offline, run},
 };
+
+mod reuse;
+mod reuse_policy;
 use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
@@ -43,6 +46,13 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
             .unwrap()
             .as_nanos() as u64,
         closing: false,
+        change_fingerprint: None,
+        policy_fingerprint: Report::policy_fingerprint(root, tier.name()).ok(),
+        reused_from: None,
+        // An empty task: the reviewers saw the commit log.
+        task_fingerprint: Report::effective_task(root, "HEAD", "")
+            .ok()
+            .map(|task| Report::task_fingerprint(&task)),
     }
 }
 
@@ -188,7 +198,8 @@ fn a_passing_review_posts_its_status_and_arms_auto_merge() {
 fn the_review_is_rendered_into_a_private_description() {
     let (_temp, root) = fixture("true");
     let evidence = judge(&root, &offline()).unwrap();
-    let report = graded(&root, Tier::Low, 9);
+    let mut report = graded(&root, Tier::Low, 9);
+    report.reused_from = Some("a".repeat(40));
     let body = root.join("body.md");
     std::fs::write(
         &body,
@@ -211,6 +222,15 @@ fn the_review_is_rendered_into_a_private_description() {
     assert!(text.contains("Because."), "Why prose was lost: {text}");
     assert!(text.contains("A README edit."), "{text}");
     assert!(text.contains("9/10"), "{text}");
+    assert!(text.contains("### ✅ How\n\n"), "{text}");
+    assert!(
+        text.contains("Review of `aaaaaaaaaaaa` reused (same change, identical file blobs)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("# 🤖 For AI") && text.contains("same change, identical file blobs"),
+        "{text}"
+    );
     assert!(text.contains("## Adversarial review"), "{text}");
     let common = git::git(
         &root,
