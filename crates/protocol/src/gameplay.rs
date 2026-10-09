@@ -5,6 +5,7 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
+mod byte_array;
 mod resources;
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 
@@ -17,7 +18,7 @@ pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 1_024;
 pub const MAX_ACK_HISTORY: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ResumeToken(pub [u8; 24]);
+pub struct ResumeToken(#[serde(deserialize_with = "byte_array::token")] pub [u8; 24]);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Role {
