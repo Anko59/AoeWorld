@@ -15,6 +15,9 @@ mod clearing;
 mod elevation;
 mod fallback;
 pub(crate) mod landscape;
+#[path = "terrain/landscape/queries.rs"]
+mod landscape_queries;
+pub use landscape_queries::{LandscapePolicy, LandscapeSample};
 mod provider;
 mod resources;
 mod surface;

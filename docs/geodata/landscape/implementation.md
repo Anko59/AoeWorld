@@ -183,7 +183,89 @@ revision-bound CI evidence. Keep screenshots and original art private.
   53 client, 108 renderer). Actual pixels cover equal UVs on different pages,
   three-page blends, mirrored page-2 bodies/shadows, depth ties and restoration;
   restoration unit fixture invokes the actual callback, not a real loss event.
-  Optimized gzip 227,958, below unchanged 228,102 ceiling. Twelve packer native
-  cases, full E2E, preflight and parser smoke still need current-stage execution.
+  Optimized gzip 227,958, below unchanged 228,102 ceiling. Subsequent browser-check
+  PASS; E2E PASS (70 / 8 source-only skips); preflight PASS (1,101 native including
+  12 packer cases / 1 existing skip, plus doctests/static/WASM-build/smoke); fuzz
+  smoke PASS. Module naming/attribute layout and integer-equivalent gutter lint
+  corrections resolved strict policy failures, without changing gates. Strict
+  snapshot preparation also rejected changing inputs; exact retries succeeded,
+  root cause unassessed. Final WASM rerun and hooks PASS. Indexed commit
+  `0a467a6ff12f32ea4f84404f60f65a07a37bff2d`; tree clean immediately afterward.
 - Full-sheet seamlessness, expanded-art/shadow review, source activation, France
   capture/movement/memory, CI and dedicated hardware qualification remain open.
+
+### Ecological patch precursor (not map activation)
+
+- Base terrain sampling separated from legacy appearance decoration in dense and
+  fallible provider paths. Future shared-mask neighbor callbacks cannot recurse
+  through decorated tile/object queries. Four regression cases and published
+  recipe 3–8 semantic goldens PASS; heights, provenance, water, passability,
+  resources and error/cancellation forwarding unchanged. `make fmt` PASS;
+  undocumented `test-native` target rejected and replaced with documented gates.
+  `make GID=117 preflight perf-ci fuzz-smoke` PASS (1,105 native / 1 existing skip,
+  doctests/static/WASM-build/smoke, unchanged budgets). Hooks/indexed validation
+  PASS after strict snapshot retry. Commit `9e0aad2211a52e1c099d1ea824d1f4a5d333d2d8`.
+- First analytic candidate met numeric area/occupancy but review rejected its
+  regular equal-radius macrocell pattern. Revised bounded library uses jittered
+  centres/radii, asymmetric overlapping lobes/eight orientations, coarse cluster
+  propensity and smooth integer warp. No allocation/world-size array/float/unsafe;
+  world-key/seed stable, 25-cell lookup. Shared masks remove canopy AND floor;
+  fallible neighbor callbacks preserve caller errors. Sparse savanna is separate.
+- Standalone pinned Docker Rust compilation/execution PASS (9 tests, 33.69 s),
+  then integrated library `make fmt` and `make GID=117 preflight perf-ci fuzz-smoke`
+  PASS (1,114 native / 1 existing skip, plus doctests/static/WASM-build/smoke,
+  unchanged budgets). Explicit test paths fixed a Rust alias-path collision with
+  legacy landscape tests; no assertions removed. All 16 seeds on 256/512 native
+  homogeneous suitable-land fixtures meet sparse/moderate/heavy/exceptional
+  area 10–20/25–40/45–60/65–80%; core 85–95%; exterior <=1%; singletons <1%.
+  Exact mirror counts, seams/query order, parity classes, source-mask fractions,
+  integer extremes, error forwarding and parameter bounds pass actual Rust.
+- These are analytical fixture results, not geographic composition acceptance.
+  Source crop/grazing denominator remains SOURCE VALID LAND, distinct from forest
+  or ecology-suitable area; post-mask metrics report both original and eligible
+  domains. Actual source masks/eco-region transitions, routes/resource approaches,
+  shape/pixel review and runtime cost still require integration and measurement.
+  No profile/recipe/schema/package activation: published defaults remain unchanged.
+
+### Shared historical/physical masks and source evaluation
+
+- Coherent integer historical parcels now realize crop/grazing over source-valid
+  land, without biome/forest/placed-tree input. Individually invalid percentages
+  reject; combined fractions cap at 100 retaining crop first (explicit model
+  policy, not a repair of observations). Integer area-preserving shears bend
+  16-tile cells; locally oriented cyclic Hilbert intervals and coarse ranking
+  avoid pixel clearing. All 16 seeds on native 512-square homogeneous fields
+  pass fraction tolerance 2 percentage points (0/25/50/100, mixed 20+30, grazing
+  100), spatial coherence, neutral-domain/forest-subtype separation, deterministic
+  seams/extremes and bijection checks. Correlated clipping explicitly cannot
+  promise source ratios; evidence/partial coverage must be retained and reported.
+- Raw dense/provider historical observations expose all six coverage bytes,
+  crop/grazing/population without dropping valid-land-zero cells. Legacy wrappers
+  retain the exact old filtering, coordinates, values, load ordering and source
+  errors. Five raw observation cases and recipes 3–8 semantic goldens PASS.
+- Shared ecological assessment uses undecorated water, passability/surface and
+  material suitability plus one history/routes/resource-approaches/start mask;
+  canopy/floor/trees clear together before singleton filtering. Explicit
+  region/support are model policy, not modern-cover or inferred PNV evidence;
+  no-data/unobserved history status survives. Savanna remains a separate sparse
+  mode. Support >1000 rejects. Five assessment cases PASS.
+- Explicit `evaluate_landscape_with_cancel` queries dense or lazy BASE source
+  inputs with that same neighbor mask; raw historical coverage remains in the
+  response. Missing/corrupt pages/cancellation propagate, outside bounds returns
+  none; three query cases PASS. Queries demonstrably do not mutate published
+  tile/resource/chunk results. This is candidate evaluation, not active gameplay.
+- `make fmt` and `make GID=117 preflight perf-ci fuzz-smoke`: PASS (1,134 native /
+  1 existing skip; doctests/static/WASM-build/smoke and unchanged performance
+  budgets). Initial fixture lint corrected without allowance; a nodata fixture
+  wrongly assigned positive population and was rejected by unchanged page
+  validation. Fixture corrected to zero pressure for valid-land-zero cells;
+  no source validation or assertion weakened. Test sidecars use recognized paths.
+- Limits: 64-tile local motifs/directional shear and cyclic interval splitting
+  need shape review. Heterogeneous fields/partial coverage and geography require
+  area-aware qualification; candidate query/page-cache cost is not measured by
+  the existing performance scenarios. No activated profile/recipe/schema/compact
+  format, new source package, France captures/movement/memory, CI or hardware
+  qualification. Before activation, pin old StandardV1 generator/schema/recipe
+  hash inputs: advancing latest schema aliases changes generator identity, and
+  current geography hashing includes detail. Preserve schema9/recipe8 identities
+  and reject mixed old/new profile-contract combinations explicitly.

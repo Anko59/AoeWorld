@@ -8,6 +8,19 @@ use aoe_core::TileCoord;
 
 impl MapChunkGenerator {
     pub(super) fn sample_tile(&self, tile: TileCoord) -> Tile {
+        let mut sample = self.sample_base_tile(tile);
+        if sample.water == WaterKind::None && sample.surface.walkable() {
+            sample.material =
+                super::landscape::material_for_tile(self, tile, sample.biome, sample.material);
+        }
+        sample.passable = sample.water == WaterKind::None
+            && sample.material != GroundMaterial::Ice
+            && sample.surface.walkable();
+        sample
+    }
+
+    /// Undecorated terrain for neighbor queries; never samples landscape or objects.
+    pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
         let broad = signed_noise(
             self.geography_key,
             b"relief",
@@ -121,11 +134,6 @@ impl MapChunkGenerator {
             WaterKind::None => material_for(biome, geographic_height_centimeters),
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
             WaterKind::Shallow => GroundMaterial::Shore,
-        };
-        let material = if water == WaterKind::None && surface.walkable() {
-            super::landscape::material_for_tile(self, tile, biome, material)
-        } else {
-            material
         };
         Tile {
             geographic_height_centimeters,

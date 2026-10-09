@@ -3,6 +3,9 @@ use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod observation;
+pub use observation::HistoricalLandUseObservation;
+
 /// One bounded historical land-use page. Crop and grazing are fractions of
 /// valid land area, while population remains a pressure signal only.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -282,30 +285,17 @@ impl HistoricalLandUse {
     }
 
     pub(crate) fn at(&self, tile: TileCoord, width_tiles: i32) -> Option<LandUseSample> {
-        let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
-        let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
-        let x =
-            u16::try_from((u64::try_from(tile.x).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
-        let y =
-            u16::try_from((u64::try_from(tile.y).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
-        let page_size = u16::from(ENVIRONMENT_PAGE_SAMPLES);
-        let page = self.pages.get(&(x / page_size, y / page_size))?;
-        let local_x = usize::from(x % page_size);
-        let local_y = usize::from(y % page_size);
-        if local_x >= usize::from(page.width) || local_y >= usize::from(page.height) {
-            return None;
-        }
-        let index = local_y * usize::from(page.width) + local_x;
-        if !page.coverage.is_empty() && page.coverage[index].valid_land_percent == 0 {
+        let observation = self.at_observation(tile, width_tiles)?;
+        if observation
+            .coverage
+            .is_some_and(|coverage| coverage.valid_land_percent == 0)
+        {
             return None;
         }
         Some(LandUseSample {
-            crop_percent: page.crop_percent[index],
-            grazing_percent: page.grazing_percent[index],
-            population_pressure_per_square_kilometer: page.population_pressure_per_square_kilometer
-                [index],
+            crop_percent: observation.crop_percent,
+            grazing_percent: observation.grazing_percent,
+            population_pressure_per_square_kilometer: observation.population_pressure,
         })
     }
 }
