@@ -204,25 +204,25 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     while start < source_order.len() {
         let source_page = manifest.frames[selected[source_order[start]]].page;
         let atlas = &manifest.pages[usize::from(source_page)];
-        let color = page(&atlas.color).await?;
-        let player = page(&atlas.player).await?;
-        let shadow = page(&atlas.shadow).await?;
         let mut end = start;
-        while end < source_order.len() {
-            let semantic = source_order[end];
-            let frame = &manifest.frames[selected[semantic]];
-            if frame.page != source_page {
-                break;
-            }
-            placement::copy(
-                frame,
-                placements[semantic],
-                &color,
-                &player,
-                &shadow,
-                &mut pixels,
-            )?;
+        while end < source_order.len()
+            && manifest.frames[selected[source_order[end]]].page == source_page
+        {
             end += 1;
+        }
+        // Decode one source sheet at a time: the transient peak beside the
+        // runtime atlas is one page plus its decoder, not all three sheets.
+        let group = &source_order[start..end];
+        for (plane, name) in [
+            (placement::Plane::Color, &atlas.color),
+            (placement::Plane::Player, &atlas.player),
+            (placement::Plane::Shadow, &atlas.shadow),
+        ] {
+            let source = page(name).await?;
+            for &semantic in group {
+                let frame = &manifest.frames[selected[semantic]];
+                placement::copy_plane(frame, placements[semantic], plane, &source, &mut pixels)?;
+            }
         }
         start = end;
     }

@@ -196,3 +196,53 @@ fn reviewed_catalog_is_exactly_656_in_original_source_and_frame_order() {
     assert_eq!(actual, expected);
     assert_eq!(TERRAIN_ROLES[4], AssetRole::Rock);
 }
+
+#[wasm_bindgen_test]
+fn sequential_plane_passes_match_single_pass_precedence_for_every_alpha_case() {
+    let mut manifest = fixture();
+    let frame = &mut manifest.frames[0];
+    (frame.x, frame.y, frame.width, frame.height) = (0, 0, 8, 1);
+    let mut color = vec![0; GAME_ATLAS_PAGE_BYTES];
+    let mut player = vec![0; GAME_ATLAS_PAGE_BYTES];
+    let mut shadow = vec![0; GAME_ATLAS_PAGE_BYTES];
+    // Bits select visible player, colour and shadow alpha; hidden texels keep
+    // nonzero RGB so a partial-texel merge would be observable.
+    for case in 0..8_u8 {
+        let at = usize::from(case) * 4;
+        player[at..at + 4].copy_from_slice(&[case, 9, 9, case & 1]);
+        color[at..at + 4].copy_from_slice(&[40 + case, 41, 42, (case >> 1) & 1]);
+        shadow[at..at + 4].copy_from_slice(&[80 + case, 81, 82, ((case >> 2) & 1) * 90]);
+    }
+    let placed = Placement {
+        page: 1,
+        x: 5,
+        y: 7,
+        width: 8,
+        height: 1,
+    };
+    let mut pixels = vec![77; GAME_ATLAS_BYTES];
+    copy(frame, placed, &color, &player, &shadow, &mut pixels).unwrap();
+    let origin = GAME_ATLAS_PAGE_BYTES + (7 * GAME_ATLAS_SIDE as usize + 5) * 4;
+    for case in 0..8_usize {
+        let at = case * 4;
+        let expected = if player[at + 3] > 0 {
+            let shade = 0.65 + f32::from(player[at].min(7)) / 7.0 * 0.35;
+            [
+                (65.0 * shade) as u8,
+                (145.0 * shade) as u8,
+                (245.0 * shade) as u8,
+                255,
+            ]
+        } else if color[at + 3] > 0 {
+            color[at..at + 4].try_into().unwrap()
+        } else {
+            shadow[at..at + 4].try_into().unwrap()
+        };
+        assert_eq!(
+            pixels[origin + at..origin + at + 4],
+            expected,
+            "case {case}"
+        );
+    }
+    assert_eq!(pixels[origin + 32..origin + 36], [77; 4]);
+}

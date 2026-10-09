@@ -55,18 +55,29 @@ pub(super) fn record(frame: &FrameRecord, placed: Placement) -> GameFrame {
     }
 }
 
-pub(super) fn copy(
+/// Source sheets that compose one runtime texel, decoded one at a time so only
+/// one 16 MiB source page is resident beside the runtime atlas.
+#[derive(Clone, Copy)]
+pub(super) enum Plane {
+    /// Copied unconditionally; transparent texels are replaced by `Shadow`.
+    Color,
+    /// Overrides any texel whose player mask is visible.
+    Player,
+    /// Fills only texels that are still transparent after colour and player.
+    Shadow,
+}
+
+/// Applies one plane. Running `Color`, `Player`, then `Shadow` reproduces the
+/// per-texel precedence player mask, visible colour, then shadow.
+pub(super) fn copy_plane(
     frame: &FrameRecord,
     placed: Placement,
-    color: &[u8],
-    player: &[u8],
-    shadow: &[u8],
+    plane: Plane,
+    source: &[u8],
     pixels: &mut [u8],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
-    if color.len() != GAME_ATLAS_PAGE_BYTES
-        || player.len() != GAME_ATLAS_PAGE_BYTES
-        || shadow.len() != GAME_ATLAS_PAGE_BYTES
+    if source.len() != GAME_ATLAS_PAGE_BYTES
         || pixels.len() != GAME_ATLAS_BYTES
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
         || placed.width != frame.width
@@ -81,36 +92,48 @@ pub(super) fn copy(
     let base = usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
     for row in 0..usize::from(frame.height) {
         for col in 0..usize::from(frame.width) {
-            let source = ((usize::from(frame.y) + row) * side + usize::from(frame.x) + col) * 4;
-            let output =
+            let from = ((usize::from(frame.y) + row) * side + usize::from(frame.x) + col) * 4;
+            let to =
                 base + ((usize::from(placed.y) + row) * side + usize::from(placed.x) + col) * 4;
-            let value = if player[source + 3] > 0 {
-                let shade = 0.65 + f32::from(player[source].min(7)) / 7.0 * 0.35;
-                [
-                    (65.0 * shade) as u8,
-                    (145.0 * shade) as u8,
-                    (245.0 * shade) as u8,
-                    255,
-                ]
-            } else if color[source + 3] > 0 {
-                [
-                    color[source],
-                    color[source + 1],
-                    color[source + 2],
-                    color[source + 3],
-                ]
-            } else {
-                [
-                    shadow[source],
-                    shadow[source + 1],
-                    shadow[source + 2],
-                    shadow[source + 3],
-                ]
-            };
-            pixels[output..output + 4].copy_from_slice(&value);
+            let mut value = [
+                source[from],
+                source[from + 1],
+                source[from + 2],
+                source[from + 3],
+            ];
+            match plane {
+                Plane::Color => {}
+                Plane::Player if value[3] > 0 => {
+                    let shade = 0.65 + f32::from(value[0].min(7)) / 7.0 * 0.35;
+                    value = [
+                        (65.0 * shade) as u8,
+                        (145.0 * shade) as u8,
+                        (245.0 * shade) as u8,
+                        255,
+                    ];
+                }
+                Plane::Shadow if pixels[to + 3] == 0 => {}
+                Plane::Player | Plane::Shadow => continue,
+            }
+            pixels[to..to + 4].copy_from_slice(&value);
         }
     }
     Ok(())
+}
+
+/// Test composition of the production plane passes in loader order.
+#[cfg(test)]
+pub(super) fn copy(
+    frame: &FrameRecord,
+    placed: Placement,
+    color: &[u8],
+    player: &[u8],
+    shadow: &[u8],
+    pixels: &mut [u8],
+) -> Result<(), JsValue> {
+    copy_plane(frame, placed, Plane::Color, color, pixels)?;
+    copy_plane(frame, placed, Plane::Player, player, pixels)?;
+    copy_plane(frame, placed, Plane::Shadow, shadow, pixels)
 }
 
 #[cfg(test)]

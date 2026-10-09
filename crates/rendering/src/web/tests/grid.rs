@@ -23,7 +23,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     );
     assert_eq!(cleared.draw_calls, 0);
     let mut game = GameRenderer::WebGpu(Box::new(renderer));
-    game.upload_game_atlas(&vec![
+    game.upload_game_atlas(vec![
         255;
         (3 * crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4)
             as usize

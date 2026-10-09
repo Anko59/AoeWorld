@@ -16,7 +16,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         .map_err(|error| JsValue::from_str(&error))?;
     let (art, pixels) = load().await?;
     renderer
-        .upload_game_atlas(&pixels)
+        .upload_game_atlas(pixels)
         .map_err(|error| JsValue::from_str(&error))?;
     if let Some(element) = document.get_element_by_id("playground") {
         let _ = element.set_attribute("data-renderer", renderer.backend());

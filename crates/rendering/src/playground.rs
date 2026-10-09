@@ -77,20 +77,31 @@ impl Renderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        self.queue.write_texture(
-            texture.as_image_copy(),
-            pixels,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(side * 4),
-                rows_per_image: Some(side),
-            },
-            wgpu::Extent3d {
-                width: side,
-                height: side,
-                depth_or_array_layers: GAME_ATLAS_PAGES,
-            },
-        );
+        // One layer per write bounds browser/GPU staging to one 16 MiB page
+        // instead of a transient copy of the whole three-page atlas.
+        for (layer, page) in (0..).zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES)) {
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: layer,
+                    },
+                    ..texture.as_image_copy()
+                },
+                page,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(side * 4),
+                    rows_per_image: Some(side),
+                },
+                wgpu::Extent3d {
+                    width: side,
+                    height: side,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..Default::default()

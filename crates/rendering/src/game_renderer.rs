@@ -177,10 +177,12 @@ impl GameRenderer {
         }
     }
 
-    pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
+    /// Takes the only WASM copy of the atlas. GPU tiers release it after
+    /// upload; Canvas keeps it as its raster source without duplicating it.
+    pub fn upload_game_atlas(&mut self, pixels: Vec<u8>) -> Result<(), String> {
         match self {
-            Self::WebGpu(renderer) => renderer.upload_game_atlas(pixels),
-            Self::WebGl(renderer) => renderer.upload(pixels),
+            Self::WebGpu(renderer) => renderer.upload_game_atlas(&pixels),
+            Self::WebGl(renderer) => renderer.upload(&pixels),
             Self::Canvas {
                 atlas,
                 source_atlas,
@@ -190,7 +192,7 @@ impl GameRenderer {
                     return Err("Invalid game atlas size".into());
                 }
                 *atlas = [None, None, None];
-                *source_atlas = pixels.to_vec();
+                *source_atlas = pixels;
                 Ok(())
             }
         }

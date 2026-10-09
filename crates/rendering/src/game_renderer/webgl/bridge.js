@@ -252,7 +252,7 @@ export class AoeWebGl {
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, SIDE, SIDE, PAGES, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, PAGES);
             gl.useProgram(this.program);
             gl.uniform1i(gl.getUniformLocation(this.program, 'atlas'), 0);
             this.resize(this.canvas.width, this.canvas.height);
@@ -299,10 +299,14 @@ export class AoeWebGl {
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, SIDE, SIDE, PAGES, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        // Layer-sized uploads bound browser transfer staging to one page.
+        for (let layer = 0; layer < PAGES; layer++) {
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, SIDE, SIDE, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, layer * SIDE * SIDE * 4);
+        }
         this.check();
         this.atlasReady = true;
-        // One bounded 48 MiB source atlas permits device-context restoration.
+        // The only retained atlas copy (48 MiB) permits device-context
+        // restoration; the WASM source vector is released after upload.
         this.atlasPixels = pixels;
     }
 
