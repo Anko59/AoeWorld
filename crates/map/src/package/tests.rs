@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "tests/landscape.rs"]
+mod landscape;
 #[path = "tests/water_model.rs"]
 mod water_model;
 

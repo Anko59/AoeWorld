@@ -22,7 +22,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
-GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_PATHS := $(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)
 SOURCE_QUAL_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(SOURCE_QUAL_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 SOURCE_QUAL_MOUNTS := $(foreach directory,$(SOURCE_QUAL_EXTERNAL_DIRS),-v $(directory):$(directory))
@@ -78,7 +78,7 @@ HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
 HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
 override SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify map-country-probe coverage coverage-check ci-select ci-check pre-commit preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
 help:
 	@echo 'AoeWorld'
@@ -300,6 +300,14 @@ map-verify:
 
 map-source-qualify:
 	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_GEOGRAPHIC_ARGS) $(SOURCE_QUAL_SCALE_ARGS)
+
+map-country-probe:
+	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)'
+
+.PHONY: test-country-source
+test-country-source: build-wasm browser-deps orchestrator-tools
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+	@docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' --browser
 
 map-source-scale-qualify:
 	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)

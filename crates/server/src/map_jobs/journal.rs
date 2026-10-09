@@ -30,6 +30,8 @@ struct Record {
     id: u64,
     request: MapRequest,
     mode: PreparationMode,
+    #[serde(default, skip_serializing_if = "super::HydrologyMode::is_none")]
+    hydrology_mode: super::HydrologyMode,
     state: JobState,
     content_hash: Option<String>,
     error: Option<String>,
@@ -137,6 +139,7 @@ impl Manager {
             let preparation = PreparationPlan::resolve(
                 CreationRequest {
                     request: normalized,
+                    hydrology_mode: record.hydrology_mode,
                     preparation: match record.mode {
                         PreparationMode::ProceduralFallback => PreparationPreference::Automatic,
                         PreparationMode::Overview => PreparationPreference::Overview,
@@ -203,6 +206,7 @@ pub(super) async fn persist(directory: Option<&Path>, manager: &Manager) -> Resu
                 id: entry.job.id,
                 request: entry.job.request,
                 mode: entry.job.preparation.mode,
+                hydrology_mode: entry.job.preparation.hydrology_mode,
                 state: entry.job.state,
                 content_hash: entry.job.content_hash.clone(),
                 error: entry.job.error.clone(),

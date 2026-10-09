@@ -8,6 +8,26 @@ use aoe_core::TileCoord;
 
 impl MapChunkGenerator {
     pub(super) fn sample_tile(&self, tile: TileCoord) -> Tile {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            // Dense defaults cannot produce page errors; source-backed callers
+            // always use the fallible dispatcher, never this compatibility path.
+            return self
+                .landscape_tile_required(tile, &|| false)
+                .unwrap_or_else(|_| self.sample_base_tile(tile));
+        }
+        let mut sample = self.sample_base_tile(tile);
+        if sample.water == WaterKind::None && sample.surface.walkable() {
+            sample.material =
+                super::landscape::material_for_tile(self, tile, sample.biome, sample.material);
+        }
+        sample.passable = sample.water == WaterKind::None
+            && sample.material != GroundMaterial::Ice
+            && sample.surface.walkable();
+        sample
+    }
+
+    /// Undecorated terrain for neighbor queries; never samples landscape or objects.
+    pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
         let broad = signed_noise(
             self.geography_key,
             b"relief",
@@ -122,11 +142,6 @@ impl MapChunkGenerator {
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
             WaterKind::Shallow => GroundMaterial::Shore,
         };
-        let material = if water == WaterKind::None && surface.walkable() {
-            super::landscape::material_for_tile(self, tile, biome, material)
-        } else {
-            material
-        };
         Tile {
             geographic_height_centimeters,
             game_height_level,
@@ -146,6 +161,12 @@ impl MapChunkGenerator {
     }
 
     pub(super) fn resource_at(&self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            return self
+                .landscape_node_with_cancel(tile, &|| false)
+                .ok()
+                .flatten();
+        }
         if !sample.passable {
             return None;
         }
@@ -159,6 +180,11 @@ impl MapChunkGenerator {
     }
 
     pub(super) fn occupied_without_access(&self, tile: TileCoord, sample: Tile) -> bool {
+        if self.uses_landscape_v2() && self.provider.is_none() {
+            return self
+                .landscape_occupied_with_cancel(tile, &|| false)
+                .unwrap_or(true);
+        }
         if !sample.passable {
             return true;
         }

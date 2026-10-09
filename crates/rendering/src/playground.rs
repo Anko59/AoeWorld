@@ -1,9 +1,14 @@
 //! Local AoE II atlas rendering through the shared WebGPU sprite pipeline.
 use crate::{Counters, Renderer, web::Sprite};
 
-pub const GAME_ATLAS_SIDE: u32 = 2048;
+#[path = "playground/atlas.rs"]
+mod atlas;
+pub use atlas::{
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    TerrainTopology,
+};
 
-const TREE_VISUAL_VARIANTS: [usize; 40] = [
+const TREE_VISUAL_VARIANTS: [u8; 40] = [
     0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13, 0, 1, 2, 4, 6, 7, 9,
     10, 11, 12, 13, 0, 1, 2, 4, 3, 5, 8,
 ];
@@ -14,7 +19,7 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
         return None;
     }
     Some(if kind == 1 && frame_count >= 14 {
-        TREE_VISUAL_VARIANTS[usize::from(variant) % TREE_VISUAL_VARIANTS.len()]
+        usize::from(TREE_VISUAL_VARIANTS[usize::from(variant) % TREE_VISUAL_VARIANTS.len()])
     } else {
         usize::from(variant) % frame_count
     })
@@ -22,7 +27,7 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
 
 #[derive(Clone, Copy)]
 pub struct GameFrame {
-    pub uv: [f32; 4],
+    pub atlas: AtlasAddress,
     pub size: [f32; 2],
     pub anchor: [f32; 2],
 }
@@ -32,63 +37,33 @@ pub struct GameArt {
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
     /// Local terrain groups in this order: temperate grass, dry grass, dirt,
-    /// sand, rock, water, and optional forest accents. Map binding stays in the client so the
-    /// renderer remains independent from geographic map contracts.
+    /// sand, legacy rock (unused for natural surfaces), water, and optional
+    /// forest accents. Procedural scene materials reuse dirt/water detail.
+    /// Map binding stays in the client so the renderer remains independent
+    /// from geographic map contracts.
     pub terrain: [Vec<GameFrame>; 7],
+    /// Authored sheet topology; never infer a repeating sheet from frame count.
+    pub terrain_topology: [Option<TerrainTopology>; 7],
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
     /// Frame-for-frame shadow masks paired with the broadleaf tree group.
     pub tree_shadows: Vec<GameFrame>,
+    /// Optional raw conifer and palm prefixes; empty alone means unavailable.
+    pub tree_families: [Vec<GameFrame>; 2],
 }
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
-        let side = GAME_ATLAS_SIDE;
-        if pixels.len() != (side * side * 4) as usize {
+        if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
         }
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("local AoE II game atlas"),
-            size: wgpu::Extent3d {
-                width: side,
-                height: side,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        self.queue.write_texture(
-            texture.as_image_copy(),
-            pixels,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(side * 4),
-                rows_per_image: Some(side),
-            },
-            wgpu::Extent3d {
-                width: side,
-                height: side,
-                depth_or_array_layers: 1,
-            },
-        );
-        let view = texture.create_view(&Default::default());
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        self.instances.rebind_resources(
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-            &view,
-            &sampler,
-        );
-        self._atlas = texture;
+        // Borrowed WASM bytes are synchronously snapshotted by queue.writeTexture.
+        self.device
+            .upload_atlas(pixels)
+            .map_err(crate::web::gpu_bridge::error)?;
+        self.atlas_side = GAME_ATLAS_SIDE;
+        self.atlas_pages = GAME_ATLAS_PAGES;
         Ok(())
     }
 
@@ -102,9 +77,7 @@ impl Renderer {
         facing: (usize, bool),
     ) -> Result<Counters, String> {
         let sprites = game_sprites(art, unit, target, moving, animation, facing);
-        let mut counters = self.render_sprites(&sprites)?;
-        counters.atlas_bytes = (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize;
-        Ok(counters)
+        self.render_sprites(&sprites)
     }
 }
 
@@ -154,7 +127,7 @@ fn push(
     let [ax, ay] = frame.anchor.map(|n| n * scale);
     let x = position[0] - if flipped { w - ax } else { ax };
     let y = position[1] - ay;
-    let mut uv = frame.uv;
+    let mut uv = frame.atlas.uv;
     if flipped {
         uv[0] += uv[2];
         uv[2] = -uv[2];
@@ -166,6 +139,7 @@ fn push(
         uv,
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [frame.atlas.page, 0, 0, 0],
     });
 }
 
@@ -185,6 +159,7 @@ fn ring(sprites: &mut Vec<Sprite>, p: [f32; 2], color: [f32; 4], radius: f32) {
             ],
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [AtlasAddress::WHITE.page, 0, 0, 0],
         });
     }
 }

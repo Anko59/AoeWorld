@@ -31,8 +31,7 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
     let mut chunks = Vec::with_capacity(compact.len());
     for chunk in compact {
         chunks.push(
-            chunk
-                .decode()
+            map::CachedChunk::decode(&chunk)
                 .map_err(|error| JsValue::from_str(&format!("surface fixture chunk: {error}")))?,
         );
     }
@@ -60,9 +59,8 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
             });
             for chunk in chunks {
                 map::install_fixture_chunk(&mut client, &chunk);
-                let coordinate = (chunk.x, chunk.y);
+                let coordinate = chunk.coordinate();
                 client.terrain_chunks.insert(coordinate, chunk);
-                client.terrain_discovered.insert(coordinate);
             }
         }
         Ok(())

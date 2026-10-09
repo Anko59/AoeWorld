@@ -5,6 +5,8 @@ use crate::{
     },
 };
 const WATER_TINT: [u8; 3] = [38, 113, 190];
+#[path = "canvas_raster/filter.rs"]
+mod filter;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
@@ -19,9 +21,35 @@ pub(super) fn raster_surface(
         return; // Every sampled alpha would be zero, including water/blend tint.
     }
     let blend = triangle.texture_blend;
+    let appearance = triangle.appearance;
+    let landscape = appearance != 0
+        && triangle.tint <= 3
+        && matches!(triangle.material, 0 | 1 | 2 | 6)
+        && !triangle.skirt;
+    // Canonical endpoints are already quantized; normalize once per Canvas surface.
+    let floor_endpoints = triangle
+        .floor_strengths
+        .map(|values| values.map(|value| f32::from(value) / 255.0));
     let local_uv = triangle_texture_coordinates(triangle.texture_mode);
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
+    };
+    let gradient = if landscape {
+        filter::gradients(&plane, local_uv)
+    } else {
+        [[0.0; 2]; 2]
+    };
+    let primary_filter = if landscape {
+        texture.and_then(|address| filter::offsets(address, gradient))
+    } else {
+        None
+    };
+    // V2's third weight is zero; legacy never filters. Keep only the two
+    // offset payloads that can actually be consumed, not a duplicate third.
+    let secondary_filter = if landscape {
+        blend.and_then(|addresses| filter::offsets(addresses[0], gradient))
+    } else {
+        None
     };
     let mut vertex_depths = [0.0; 3];
     for index in 0..3 {
@@ -58,21 +86,49 @@ pub(super) fn raster_surface(
                         + local_uv[1][1] * weights[1]
                         + local_uv[2][1] * weights[2],
                 ];
-                let mut sample = sample_terrain_atlas(atlas, sampler, local);
+                let mut sample = filter::sample(atlas, sampler, local, primary_filter);
                 if let Some([second, third]) = blend {
                     let samples = [
                         sample,
-                        sample_terrain_atlas(atlas, second, local),
-                        sample_terrain_atlas(atlas, third, local),
+                        filter::sample(atlas, second, local, secondary_filter),
+                        if landscape {
+                            sample
+                        } else {
+                            sample_terrain_atlas(atlas, third, local)
+                        },
                     ];
-                    for channel in 0..4 {
-                        sample[channel] = (f64::from(samples[0][channel]) * first
-                            + f64::from(samples[1][channel]) * weights[1]
-                            + f64::from(samples[2][channel]) * weights[2])
-                            .round() as u8;
+                    if landscape {
+                        sample = crate::surface_mesh::landscape::texel(
+                            samples,
+                            crate::surface_mesh::landscape::interpolated_floor_weights(
+                                floor_endpoints,
+                                appearance,
+                                weights,
+                            ),
+                            triangle.tint,
+                            appearance,
+                        );
+                    } else {
+                        for channel in 0..4 {
+                            sample[channel] = (f64::from(samples[0][channel]) * first
+                                + f64::from(samples[1][channel]) * weights[1]
+                                + f64::from(samples[2][channel]) * weights[2])
+                                .round() as u8;
+                        }
                     }
+                } else if landscape {
+                    sample = crate::surface_mesh::landscape::texel(
+                        [sample; 3],
+                        [1.0, 0.0, 0.0],
+                        triangle.tint,
+                        appearance,
+                    );
                 }
-                tint_sample(sample, triangle.tint)
+                if landscape {
+                    sample
+                } else {
+                    tint_sample(sample, triangle.tint)
+                }
             } else {
                 [
                     (triangle.color[0] * 255.0).round() as u8,
@@ -89,11 +145,13 @@ pub(super) fn raster_surface(
 }
 
 #[inline(never)]
-fn sample_terrain_atlas(atlas: &[u8], rect: [f32; 4], local: [f64; 2]) -> [u8; 4] {
+fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64; 2]) -> [u8; 4] {
+    let rect = address.uv;
     let side = f64::from(GAME_ATLAS_SIDE);
     // Preserve the reference add/multiply order at texel boundaries.
     sample_atlas(
         atlas,
+        address.page,
         (f64::from(rect[0]) * side + 0.5) + local[0] * (f64::from(rect[2]) * side - 1.0).max(0.0),
         (f64::from(rect[1]) * side + 0.5) + local[1] * (f64::from(rect[3]) * side - 1.0).max(0.0),
     )
@@ -155,6 +213,7 @@ pub(super) fn raster_sprite(
             let texture_u = u + source_width * horizontal;
             let mut source = sample_atlas(
                 atlas,
+                sprite.pages[0],
                 texture_u * f64::from(GAME_ATLAS_SIDE),
                 texture_v * f64::from(GAME_ATLAS_SIDE),
             );
@@ -205,17 +264,23 @@ pub(super) fn raster_selection(
 }
 
 fn valid_atlas(atlas: &[u8]) -> bool {
-    atlas.len() == GAME_ATLAS_SIDE as usize * GAME_ATLAS_SIDE as usize * 4
+    atlas.len() == crate::GAME_ATLAS_BYTES
 }
 
-fn sample_atlas(atlas: &[u8], x: f64, y: f64) -> [u8; 4] {
+fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {
     // All callers validate once per primitive, not once per sampled texel.
     let side = GAME_ATLAS_SIDE as usize;
     // Saturating float-to-integer casts floor nonnegative coordinates and map
     // negative/NaN values to zero; integer min also handles positive infinity.
     let x = (x as usize).min(side - 1);
     let y = (y as usize).min(side - 1);
-    let start = (y * side + x) * 4;
+    let Some(start) = (page as usize)
+        .checked_mul(crate::GAME_ATLAS_PAGE_BYTES)
+        .and_then(|base| base.checked_add((y * side + x) * 4))
+        .filter(|start| *start <= atlas.len().saturating_sub(4))
+    else {
+        return [0; 4];
+    };
     [
         atlas[start],
         atlas[start + 1],
@@ -240,6 +305,7 @@ fn tint_sample(texel: [u8; 4], tint: u8) -> [u8; 4] {
                 0.0,
             ],
         ),
+        5..=10 | 12 | 21..=26 => crate::surface_mesh::procedural_tint(texel, tint),
         _ => texel,
     }
 }

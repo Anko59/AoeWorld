@@ -11,6 +11,32 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+pub(super) fn offline_vector_pages(
+    request: MapRequest,
+    axis: u16,
+    ocean: Vec<u8>,
+) -> (
+    Vec<HydrologyPage>,
+    Vec<ModernLandCoverPage>,
+    Option<RiverTopologyGrid>,
+) {
+    let directory = TestDirectory::new();
+    let mut sampler = Sampler {
+        request,
+        axis,
+        tiles: Vec::new(),
+        ocean,
+        lakes: lake_dataset(&directory),
+        rivers: Some(river_dataset_with_terminal_connection(&directory, true)),
+        river_reaches: Default::default(),
+        river_cells: vec![None; usize::from(axis).pow(2)],
+        river_topology: None,
+    };
+    let (water, modern) = sampler.pages().expect("offline vector sampling");
+    assert!(!directory.path("worldcover.tif").exists());
+    (water, modern, sampler.take_river_topology().unwrap())
+}
+
 const AXIS: u16 = 16;
 const SAMPLE_SPACING_METERS: f64 = 1_875.0;
 
@@ -162,6 +188,10 @@ fn lake_dataset(directory: &TestDirectory) -> Dataset {
 }
 
 fn river_dataset(directory: &TestDirectory) -> Dataset {
+    river_dataset_with_terminal_connection(directory, false)
+}
+
+fn river_dataset_with_terminal_connection(directory: &TestDirectory, connect: bool) -> Dataset {
     let path = directory.path("rivers.gpkg");
     let dataset = vector_dataset(&path, "rivers", OGRwkbGeometryType::wkbLineString);
     {
@@ -174,10 +204,18 @@ fn river_dataset(directory: &TestDirectory) -> Dataset {
                 ("DIS_AV_CMS", OGRFieldType::OFTReal),
             ])
             .expect("river topology fields");
-        for (id, downstream_id, distance_to_sink_km, start, end) in [
+        let mut reaches = vec![
             (10, 20, 10.0, (-8_000.0, 937.5), (0.0, 937.5)),
             (20, 0, 0.0, (0.0, 937.5), (8_000.0, 937.5)),
-        ] {
+        ];
+        if connect {
+            // Reach 20 needs an actual downstream endpoint to establish orientation.
+            // Keep the original two-reach legacy fixture unchanged otherwise.
+            reaches[1].1 = 30;
+            reaches[1].2 = 4.0;
+            reaches.push((30, 0, 0.0, (8_000.0, 937.5), (12_000.0, 937.5)));
+        }
+        for (id, downstream_id, distance_to_sink_km, start, end) in reaches {
             let mut feature = Feature::new(layer.defn()).expect("river feature");
             feature.set_field_integer64(0, id).expect("set reach id");
             feature
@@ -250,6 +288,124 @@ fn sampler_pages_classify_vector_evidence_and_resolve_connected_river_reaches() 
     assert_eq!((upstream.reach_id, upstream.next_down_id), (10, 20));
     assert_eq!((downstream.reach_id, downstream.next_down_id), (10, 20));
     assert!(upstream.distance_to_sink_centimeters > downstream.distance_to_sink_centimeters);
+}
+
+#[test]
+fn vector_only_pages_never_open_worldcover_and_keep_unobserved_cells() {
+    let directory = TestDirectory::new();
+    let length = usize::from(AXIS).pow(2);
+    let mut sampler = Sampler {
+        request: request(),
+        axis: AXIS,
+        tiles: Vec::new(),
+        ocean: vec![0; length],
+        lakes: lake_dataset(&directory),
+        rivers: Some(river_dataset_with_terminal_connection(&directory, true)),
+        river_reaches: Default::default(),
+        river_cells: vec![None; length],
+        river_topology: None,
+    };
+    let (mut water, modern) = sampler.pages().expect("vector-only sampling");
+    assert!(!directory.path("worldcover.tif").exists());
+    assert!(modern[0].worldcover_class.iter().all(|class| *class == 0));
+    let index = |row: usize, column: usize| row * usize::from(AXIS) + column;
+    assert_eq!(water[0].kind[index(1, 1)], HydrologyKind::NoEvidence as u8);
+    assert_eq!(
+        water[0].method[index(1, 1)],
+        HydrologyEvidenceMethod::None as u8
+    );
+    assert_eq!(water[0].kind[index(7, 5)], HydrologyKind::Lake as u8);
+    assert_eq!(water[0].kind[index(7, 10)], HydrologyKind::Reservoir as u8);
+    assert_eq!(
+        water[0].kind[index(5, 7)],
+        HydrologyKind::RegulatedLake as u8
+    );
+    assert_eq!(water[0].kind[index(7, 4)], HydrologyKind::River as u8);
+    let topology = sampler
+        .river_topology
+        .as_ref()
+        .expect("connected vector topology");
+    let reach20 = topology.cells[index(7, 8)].expect("oriented reach 20");
+    assert_eq!((reach20.reach_id, reach20.next_down_id), (20, 30));
+    assert!(
+        topology.cells[index(7, 9)]
+            .expect("downstream cell")
+            .distance_to_sink_centimeters
+            < reach20.distance_to_sink_centimeters
+    );
+    assert_eq!(water[0].kind[index(7, 12)], HydrologyKind::River as u8);
+    assert!(
+        topology.cells[index(7, 12)].is_none(),
+        "terminal reach has no proven orientation"
+    );
+    let original_kind = water[0].kind.clone();
+    let original_method = water[0].method.clone();
+    let elevation = vec![aoe_map::ElevationPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: AXIS as u8,
+        height: AXIS as u8,
+        geographic_height_centimeters: vec![12_000; length],
+    }];
+    let model_index = super::super::water_model::prepare_water_model_with_river_topology(
+        request(),
+        &mut water,
+        &elevation,
+        aoe_map::WaterCorrectionDocument::empty(request(), AXIS).expect("corrections"),
+        sampler.river_topology.as_ref(),
+    )
+    .expect("model vector-only water");
+    assert_eq!(water[0].kind, original_kind);
+    assert_eq!(water[0].method, original_method);
+    let model = water[0].water_model.as_ref().expect("model");
+    assert_eq!(model.kind[index(1, 1)], HydrologyKind::NoEvidence as u8);
+    assert_eq!(model.surface_level_centimeters[index(1, 1)], None);
+    assert_eq!(
+        model.provenance[index(1, 1)],
+        aoe_map::WaterModelProvenance::EvidenceOnly as u8
+    );
+    assert_eq!(
+        model.flow_direction[index(7, 8)],
+        aoe_map::WaterFlowDirection::East as u8
+    );
+    assert_eq!(
+        model.provenance[index(7, 8)],
+        aoe_map::WaterModelProvenance::ModelledRiverSurface as u8
+    );
+    assert_eq!(
+        model.flow_direction[index(7, 12)],
+        aoe_map::WaterFlowDirection::Unknown as u8
+    );
+    assert_eq!(model.kind[index(7, 10)], HydrologyKind::Reservoir as u8);
+    assert_eq!(model.surface_level_centimeters[index(7, 10)], None);
+    assert_eq!(
+        model.flow_direction[index(7, 10)],
+        aoe_map::WaterFlowDirection::Unknown as u8
+    );
+    assert_eq!(model.kind[index(5, 7)], HydrologyKind::RegulatedLake as u8);
+    assert_eq!(model.surface_level_centimeters[index(5, 7)], None);
+    assert_eq!(
+        model.provenance[index(7, 5)],
+        aoe_map::WaterModelProvenance::ModelledLakeSurface as u8
+    );
+    let evidence_index = aoe_map::HydrologyEvidenceIndex {
+        samples_per_axis: AXIS,
+        page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: aoe_map::WORLD_COVER_OBSERVATION_YEAR,
+        policy: aoe_map::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: aoe_map::ordered_hydrology_page_root(&water).expect("vector root"),
+        modern_land_cover_page_root: aoe_map::ordered_modern_land_cover_page_root(&modern)
+            .expect("nodata root"),
+        water_model: Some(model_index),
+    };
+    evidence_index
+        .validate_pages(&water, &modern)
+        .expect("nodata evidence pages");
+    assert!(matches!(
+        sampler.pages_cancelled(&std::sync::atomic::AtomicBool::new(true)),
+        Err(GeodataError::Cache(crate::CacheError::Cancelled))
+    ));
 }
 
 #[test]

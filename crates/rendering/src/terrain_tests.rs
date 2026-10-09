@@ -6,14 +6,19 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[path = "terrain/tests/empty.rs"]
+mod empty;
+
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
+        terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     }
 }
 
@@ -47,13 +52,17 @@ fn sprites_cover_viewport(frames: &[(Sprite, GameFrame)], viewport: [f64; 2]) ->
 #[wasm_bindgen_test]
 fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     };
     let art = test_art(frame);
     let terrain = (0..8_192)
         .map(|x| SceneTerrain {
+            appearance: None,
             position: [f64::from(x * 2), 0.0],
             material: 0,
             elevation_meters: 0.0,
@@ -88,7 +97,10 @@ fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
 #[wasm_bindgen_test]
 fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
     let frame = terrain_frame(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -101,7 +113,10 @@ fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
 #[wasm_bindgen_test]
 fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -112,12 +127,14 @@ fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
         focus_elevation_meters: 6.0,
     };
     let elevated = [SceneTerrain {
+        appearance: None,
         position: [0.0, 0.0],
         material: 0,
         elevation_meters: 6.0,
         surface: SceneTerrainSurface::flat(6.0),
     }];
     let ground = [SceneTerrain {
+        appearance: None,
         position: [0.0, 0.0],
         material: 0,
         elevation_meters: 0.0,
@@ -130,7 +147,10 @@ fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
 #[wasm_bindgen_test]
 fn offscreen_cached_tiles_do_not_change_visible_terrain() {
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [1.0, 1.0],
         anchor: [0.0, 0.0],
     };
@@ -142,6 +162,7 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
         focus_elevation_meters: 0.0,
     };
     let visible = [SceneTerrain {
+        appearance: None,
         position: [0.0, 0.0],
         material: 0,
         elevation_meters: 0.0,
@@ -149,6 +170,7 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
     }];
     let mut populated = visible.to_vec();
     populated.extend((0..10_000).map(|x| SceneTerrain {
+        appearance: None,
         position: [10_000.0 + f64::from(x), 0.0],
         material: 0,
         elevation_meters: 0.0,
@@ -164,7 +186,10 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
 #[wasm_bindgen_test]
 fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -195,13 +220,17 @@ fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
 #[wasm_bindgen_test]
 fn flat_map_terrain_uses_covering_lod_at_translated_camera() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
     let terrain = (0..256)
         .flat_map(|y| {
             (0..256).map(move |x| SceneTerrain {
+                appearance: None,
                 position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                 material: 0,
                 elevation_meters: 0.0,
@@ -237,6 +266,7 @@ fn projected_surface_uses_corner_heights_and_shared_diagonal() {
         focus_elevation_meters: 0.0,
     };
     let sample = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
@@ -277,6 +307,7 @@ fn cliff_skirt_requires_a_loaded_neighbor_height_discontinuity() {
         focus_elevation_meters: 3.0,
     };
     let cliff = |position: [f64; 2], heights: [i16; 4]| SceneTerrain {
+        appearance: None,
         position,
         material: 4,
         elevation_meters: f64::from(heights[0]),
@@ -304,6 +335,7 @@ fn south_skirt_compares_shared_corners_in_the_same_order() {
         focus_elevation_meters: 0.0,
     };
     let cliff = |position: [f64; 2], heights: [i16; 4]| SceneTerrain {
+        appearance: None,
         position,
         material: 4,
         elevation_meters: 0.0,
@@ -333,6 +365,7 @@ fn mesh_lod_covers_a_translated_viewport_without_first_tile_truncation() {
     let terrain = (0..256)
         .flat_map(|y| {
             (0..256).map(move |x| SceneTerrain {
+                appearance: None,
                 position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                 material: 0,
                 elevation_meters: 0.0,
@@ -365,6 +398,7 @@ fn mesh_lod_covers_a_translated_viewport_without_first_tile_truncation() {
     }
     let mut with_offscreen = terrain;
     with_offscreen.extend((0..1_000).map(|offset| SceneTerrain {
+        appearance: None,
         position: [10_000.5 + f64::from(offset), 10_000.5],
         material: 2,
         elevation_meters: 0.0,
@@ -385,6 +419,7 @@ fn overlapping_surface_pick_uses_interpolated_world_depth() {
         focus_elevation_meters: 0.0,
     };
     let tile = |position: [f64; 2], height: i16| SceneTerrain {
+        appearance: None,
         position,
         material: 0,
         elevation_meters: f64::from(height),
@@ -417,6 +452,7 @@ fn water_mesh_keeps_the_authoritative_surface_height() {
         focus_elevation_meters: 4.0,
     };
     let water = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 5,
         elevation_meters: 0.0,

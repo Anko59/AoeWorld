@@ -13,7 +13,9 @@ use std::{
 mod journal;
 mod preparation;
 mod submission;
-pub(super) use preparation::{CreationRequest, PreparationMode, PreparationPlan};
+pub(super) use preparation::{
+    CreationRequest, HydrologyMode, OverviewFieldAxes, PreparationMode, PreparationPlan,
+};
 
 const MAX_QUEUED_JOBS: usize = 2;
 const MAX_RETAINED_JOBS: usize = 128;
@@ -201,8 +203,11 @@ pub(super) async fn start(
     input: CreationRequest,
     key: Option<String>,
 ) -> Result<Job, StartError> {
-    let identity =
+    let mut identity =
         submission::Identity::new(key, input.preparation).map_err(StartError::Invalid)?;
+    if let Some(identity) = &mut identity {
+        identity.hydrology_mode = input.hydrology_mode;
+    }
     let request = input
         .request
         .normalized()

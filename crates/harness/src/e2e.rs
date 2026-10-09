@@ -1,5 +1,7 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+mod country;
+mod landscape;
 mod matrix;
 mod source;
 mod visual;
@@ -71,6 +73,22 @@ fn ready(address: SocketAddr) -> bool {
     stream.read_exact(&mut prefix).is_ok() && &prefix == b"HTTP/1.1 200"
 }
 
+pub fn country_probe(
+    directory: &std::path::Path,
+    hash: &str,
+    browser: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if browser {
+        country::run(directory, hash)
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&aoe_server::run_source_country_probe(directory, hash)?)?
+        );
+        Ok(())
+    }
+}
+
 pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {
     source::run()
 }
@@ -94,10 +112,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !binary.is_file() {
         return Err(format!("test server binary missing: {}", binary.display()).into());
     }
+    let existing_maps =
+        match std::env::var_os("AOE_MAP_PACKAGE_DIRECTORY").filter(|value| !value.is_empty()) {
+            Some(path) => std::path::PathBuf::from(path).canonicalize()?,
+            None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
+        };
+    let fixture = landscape::prepare(&root, Some(&existing_maps))?;
     let server = Command::new(binary)
         .current_dir(&root)
         .env("AOE_BIND", address.to_string())
         .env("AOE_SCENARIO", "smoke")
+        .env("AOE_MAP_PACKAGE_DIRECTORY", fixture.directory.path())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
@@ -140,6 +165,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         home,
         "-e".to_owned(),
         url,
+        "-e".to_owned(),
+        format!("AOE_E2E_LANDSCAPE_HASH={}", fixture.hash),
         "-v".to_owned(),
         mount,
         "-w".to_owned(),
@@ -198,6 +225,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "asset_source": if asset_pack.is_some() { "local AoE II pack" } else { "generated CI fixtures" },
         "asset_pack": asset_pack.unwrap_or_default(),
         "renderer_evidence": renderer_evidence,
+        "landscape_fixture": {
+            "kind": "synthetic-prepared-flat-temperate",
+            "content_hash": fixture.hash,
+            "schema_version": 10,
+            "generation_recipe_version": 9,
+            "real_source_qualification": false
+        },
         "result": "PASS"
     });
     std::fs::create_dir_all("reports/e2e")?;

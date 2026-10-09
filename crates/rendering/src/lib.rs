@@ -1,3 +1,8 @@
+#[cfg(test)]
+#[path = "../build/shader.rs"]
+mod shader_compactor;
+#[cfg(any(target_arch = "wasm32", test))]
+mod stable_index_sort;
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]
@@ -7,7 +12,10 @@ pub use web::*;
 mod playground;
 
 #[cfg(target_arch = "wasm32")]
-pub use playground::{GAME_ATLAS_SIDE, GameArt, GameFrame, resource_frame_index};
+pub use playground::{
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    GameArt, GameFrame, TerrainTopology, resource_frame_index,
+};
 
 #[cfg(target_arch = "wasm32")]
 mod game_grid;
@@ -21,8 +29,9 @@ mod terrain;
 mod world_key_index;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
-    GameRenderer, SceneCamera, SceneResource, SceneTerrain, SceneTerrainSurface, SceneUnit,
-    resource_sprite_bounds,
+    GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
+    SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, resource_sprite_bounds,
+    scene_resource_frame, scene_resource_presentation,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

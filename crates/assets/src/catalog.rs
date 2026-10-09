@@ -4,7 +4,20 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 3;
+pub const VERSION: u8 = 5;
+
+pub mod candidates;
+pub mod packing;
+pub mod runtime;
+mod topology;
+pub use topology::TerrainFrameTopology;
+
+/// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
+pub const MAX_REVIEWED_FRAMES: u32 = 678;
+
+/// Paving 15018 is not natural rock. No imported rock sheet is approved.
+pub const NATURAL_ROCK_FALLBACK: &str =
+    "procedural neutral natural-rock ground; never substitute paved terrain 15018";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AssetRole {
@@ -22,6 +35,8 @@ pub enum AssetRole {
     ForageBush,
     GoldDeposit,
     StoneDeposit,
+    TreeConifer,
+    TreePalm,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,6 +48,8 @@ pub struct SpriteSource {
     pub frames: u32,
     /// How the selected frames are interpreted by the renderer.
     pub interpretation: &'static str,
+    /// Explicit sheet semantics; frame count alone never establishes periodicity.
+    pub terrain_topology: Option<TerrainFrameTopology>,
 }
 
 impl SpriteSource {
@@ -43,13 +60,14 @@ impl SpriteSource {
 
 /// Sources required for a local-pack game to start. They are deliberately
 /// ordered by render role, not by incidental archive order.
-pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
+pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
     SpriteSource {
         role: AssetRole::CavalryWalking,
         archive: "graphics.drs",
         id: 3008,
         frames: 50,
         interpretation: "five facing rows of ten walking animation frames",
+        terrain_topology: None,
     },
     SpriteSource {
         role: AssetRole::CavalryStanding,
@@ -57,6 +75,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 3004,
         frames: 50,
         interpretation: "five facing rows of ten standing frames",
+        terrain_topology: None,
     },
     SpriteSource {
         role: AssetRole::TemperateGrass,
@@ -64,6 +83,10 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 15008,
         frames: 100,
         interpretation: "10x10 periodic grass texture atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
     },
     SpriteSource {
         role: AssetRole::DryGrass,
@@ -71,6 +94,10 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 15007,
         frames: 100,
         interpretation: "10x10 periodic dry-grass texture atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
     },
     SpriteSource {
         role: AssetRole::Dirt,
@@ -78,6 +105,10 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 15000,
         frames: 100,
         interpretation: "10x10 periodic dirt texture atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
     },
     SpriteSource {
         role: AssetRole::Sand,
@@ -85,13 +116,10 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 15010,
         frames: 100,
         interpretation: "10x10 periodic sand texture atlas in x-major, reversed-y order",
-    },
-    SpriteSource {
-        role: AssetRole::Rock,
-        archive: "terrain.drs",
-        id: 15018,
-        frames: 100,
-        interpretation: "10x10 periodic rock texture atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
     },
     SpriteSource {
         role: AssetRole::Water,
@@ -99,13 +127,17 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
         id: 15002,
         frames: 100,
         interpretation: "10x10 periodic water texture atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
     },
 ];
 
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -114,6 +146,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         id: 4652,
         frames: 14,
         interpretation: "individual broadleaf tree variants",
+        terrain_topology: None,
     },
     // This shadow-only sequence is paired frame-for-frame with broadleaf art
     // 4652 and retains its original mask alpha and hotspot.
@@ -123,6 +156,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         id: 2296,
         frames: 14,
         interpretation: "paired broadleaf tree shadows for frames 0 through 13",
+        terrain_topology: None,
     },
     SpriteSource {
         role: AssetRole::ForageBush,
@@ -130,6 +164,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         id: 2560,
         frames: 4,
         interpretation: "four leafy berry-bush variants",
+        terrain_topology: None,
     },
     SpriteSource {
         role: AssetRole::GoldDeposit,
@@ -137,6 +172,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         id: 4479,
         frames: 7,
         interpretation: "seven gold-ore deposit variants",
+        terrain_topology: None,
     },
     SpriteSource {
         role: AssetRole::StoneDeposit,
@@ -144,6 +180,23 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         id: 4482,
         frames: 7,
         interpretation: "seven stone-ore deposit variants",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::TreeConifer,
+        archive: "graphics.drs",
+        id: 4654,
+        frames: 9,
+        interpretation: "healthy resource subset 1,2,3,4,7,8 only; alpha silhouette, no approved paired shadow",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::TreePalm,
+        archive: "graphics.drs",
+        id: 4653,
+        frames: 13,
+        interpretation: "single resource subset 0,1,2,3,5,6,8,10,11,12 only; alpha silhouette, no approved paired shadow",
+        terrain_topology: None,
     },
 ];
 
@@ -155,12 +208,18 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 1] = [SpriteSource {
     archive: "terrain.drs",
     id: 15011,
     frames: 10,
-    interpretation: "ten native forest-floor accents mixed with periodic dirt",
+    interpretation: "ten coordinate-stable forest-floor accents; seamless full sheet unapproved",
+    terrain_topology: Some(TerrainFrameTopology::CoordinateStableAccents),
 }];
 
 /// Object roles without reviewed source art. Keep this empty while every
 /// supported resource role has an approved source mapping.
 pub const UNAVAILABLE_RESOURCE_ART: [&str; 0] = [];
+
+#[path = "catalog/tests/private_pack.rs"]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(test)]
+mod private_pack;
 
 #[cfg(test)]
 mod tests {
@@ -189,7 +248,10 @@ mod tests {
                 .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 3);
+        assert_eq!(VERSION, 5);
+        assert_eq!(AssetRole::StoneDeposit as usize, 13);
+        assert_eq!(AssetRole::TreeConifer as usize, 14);
+        assert_eq!(AssetRole::TreePalm as usize, 15);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
         assert_eq!(
@@ -199,7 +261,23 @@ mod tests {
                 .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .map(|source| source.frames as usize)
                 .sum::<usize>(),
-            756
+            MAX_REVIEWED_FRAMES as usize
+        );
+    }
+
+    #[test]
+    fn paving_is_not_approved_as_natural_rock() {
+        assert!(
+            REQUIRED_RENDER_SOURCES
+                .iter()
+                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+                .all(|source| source.role != AssetRole::Rock && source.id != 15018)
+        );
+        assert!(NATURAL_ROCK_FALLBACK.contains("procedural"));
+        assert_eq!(
+            OPTIONAL_TERRAIN_SOURCES[0].terrain_topology,
+            Some(TerrainFrameTopology::CoordinateStableAccents)
         );
     }
 
@@ -224,6 +302,8 @@ mod tests {
                 (AssetRole::ForageBush, 2560, 4),
                 (AssetRole::GoldDeposit, 4479, 7),
                 (AssetRole::StoneDeposit, 4482, 7),
+                (AssetRole::TreeConifer, 4654, 9),
+                (AssetRole::TreePalm, 4653, 13),
             ]
         );
     }
@@ -239,11 +319,17 @@ mod tests {
                         | AssetRole::DryGrass
                         | AssetRole::Dirt
                         | AssetRole::Sand
-                        | AssetRole::Rock
                         | AssetRole::Water
                 ))
-                .all(|source| source.frames == 100
-                    && source.interpretation.contains("x-major, reversed-y order"))
+                .all(|source| source.terrain_topology
+                    == Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+                        columns: 10,
+                        rows: 10
+                    })
+                    && source
+                        .terrain_topology
+                        .unwrap()
+                        .supports_frames(source.frames))
         );
     }
 }

@@ -17,6 +17,7 @@ fn variable_height_map(side: i32) -> Vec<SceneTerrain> {
                 let triangulation = ((x + y) & 1) as u8;
                 let elevation_meters = sample_surface_height(corners, triangulation, 0.5, 0.5);
                 SceneTerrain {
+                    appearance: None,
                     position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                     material: 0,
                     elevation_meters,
@@ -103,6 +104,7 @@ fn authoritative_zero_corners_do_not_create_a_fake_cliff_skirt() {
         focus_elevation_meters: 0.0,
     };
     let cliff = |position, elevation_meters| SceneTerrain {
+        appearance: None,
         position,
         material: 4,
         elevation_meters,
@@ -128,12 +130,14 @@ fn a_frontmost_cliff_occludes_pickable_ground_behind_it() {
         focus_elevation_meters: 0.0,
     };
     let ground = SceneTerrain {
+        appearance: None,
         position: [0.5, 0.5],
         material: 0,
         elevation_meters: 0.0,
         surface: SceneTerrainSurface::flat(0.0),
     };
     let cliff = SceneTerrain {
+        appearance: None,
         position: [1.5, 1.5],
         material: 4,
         elevation_meters: 2.0,

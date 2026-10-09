@@ -11,11 +11,34 @@ use crate::{
 use aoe_core::TileCoord;
 
 mod helpers;
+mod history;
 mod water_model;
+
+pub(super) use history::sample_land_use_observation;
 
 use helpers::{elevation_value, load_page, page_index, source_coordinate};
 
 pub(super) fn sample_tile(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Tile, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_tile_required(tile, cancelled);
+    }
+    let mut sample = sample_base_tile(generator, tile, cancelled)?;
+    if sample.water == WaterKind::None && sample.surface.walkable() {
+        sample.material =
+            super::landscape::material_for_tile(generator, tile, sample.biome, sample.material);
+    }
+    sample.passable = sample.water == WaterKind::None
+        && sample.material != GroundMaterial::Ice
+        && sample.surface.walkable();
+    Ok(sample)
+}
+
+/// Undecorated source terrain; preserves page failures and caller cancellation.
+pub(super) fn sample_base_tile(
     generator: &MapChunkGenerator,
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
@@ -40,8 +63,8 @@ pub(super) fn sample_tile(
     let fallback_water = fallback_water(generator, tile);
     let fallback_biome = fallback_biome(generator, tile);
 
-    let biome = if environment.vegetation.is_some() {
-        let class = sample_biome_class(generator, environment.samples_per_axis, tile, cancelled)?;
+    let biome = if let Some(axis) = environment.vegetation_samples_per_axis() {
+        let class = sample_biome_class(generator, axis, tile, cancelled)?;
         class
             .and_then(biome_from_potential_class)
             .map(|biome| (biome, Provenance::SourceDerived))
@@ -71,8 +94,9 @@ pub(super) fn sample_tile(
             Provenance::Fallback,
         )
     };
-    let (mut water, mut water_provenance) = if environment.water.is_some() {
-        let coverage = sample_water(generator, environment.samples_per_axis, tile, cancelled)?;
+    let (mut water, mut water_provenance) = if let Some(axis) = environment.water_samples_per_axis()
+    {
+        let coverage = sample_water(generator, axis, tile, cancelled)?;
         coverage
             .map(|(ocean, inland)| match ocean {
                 1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
@@ -115,11 +139,6 @@ pub(super) fn sample_tile(
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
         WaterKind::Shallow => GroundMaterial::Shore,
     };
-    let material = if water == WaterKind::None && surface_kind.walkable() {
-        super::landscape::material_for_tile(generator, tile, biome.0, material)
-    } else {
-        material
-    };
     Ok(Tile {
         geographic_height_centimeters,
         game_height_level,
@@ -144,6 +163,9 @@ pub(super) fn resource_at(
     sample: Tile,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_node_with_cancel(tile, cancelled);
+    }
     if !sample.passable {
         return Ok(None);
     }
@@ -214,6 +236,9 @@ fn occupied_without_access(
     sample: Tile,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<bool, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_occupied_with_cancel(tile, cancelled);
+    }
     if !sample.passable {
         return Ok(true);
     }
@@ -404,29 +429,20 @@ fn sample_land_use(
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<(u8, u8, u16)>, EnvironmentPageError> {
-    let (source_x, source_y) = source_coordinate(tile.x, tile.y, samples, generator.width_tiles)?;
-    let page = load_page(
-        generator,
-        EnvironmentPageKey {
-            layer: PageLayer::HistoricalLandUse,
-            level: 0,
-            x: source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-            y: source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-        },
-        cancelled,
-    )?;
-    let page = match page.as_ref() {
-        EnvironmentPage::HistoricalLandUse(page) => page,
-        _ => return Err(EnvironmentPageError::Corrupt),
+    let Some(observation) = sample_land_use_observation(generator, samples, tile, cancelled)?
+    else {
+        return Ok(None);
     };
-    let index = page_index(page.width, page.height, source_x, source_y)?;
-    if !page.coverage.is_empty() && page.coverage[index].valid_land_percent == 0 {
+    if observation
+        .coverage
+        .is_some_and(|coverage| coverage.valid_land_percent == 0)
+    {
         return Ok(None);
     }
     Ok(Some((
-        page.crop_percent[index],
-        page.grazing_percent[index],
-        page.population_pressure_per_square_kilometer[index],
+        observation.crop_percent,
+        observation.grazing_percent,
+        observation.population_pressure,
     )))
 }
 

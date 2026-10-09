@@ -2,6 +2,60 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+/// Legacy/fallback broadleaf selection retains its paired shadow index.
+fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
+    if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
+        // The legacy table's first eleven entries are the reviewed healthy set.
+        resource_frame_index(1, resource.visual_variant % 11, count)
+    } else {
+        resource_frame_index(resource.kind, resource.visual_variant, count)
+    }
+}
+
+pub fn scene_resource_presentation(
+    art: &GameArt,
+    resource: SceneResource,
+) -> Option<(GameFrame, Option<GameFrame>)> {
+    if resource.kind == 1 {
+        let family = match resource.visual_family {
+            2 => Some((&art.tree_families[0], 9, &[1_u8, 2, 3, 4, 7, 8][..])),
+            4 => Some((
+                &art.tree_families[1],
+                13,
+                &[0_u8, 1, 2, 3, 5, 6, 8, 10, 11, 12][..],
+            )),
+            _ => None,
+        };
+        if let Some((frames, expected, approved)) = family {
+            if !frames.is_empty() {
+                if frames.len() != expected {
+                    return None;
+                }
+                let index = approved[usize::from(resource.visual_variant) % approved.len()];
+                return frames
+                    .get(usize::from(index))
+                    .copied()
+                    .map(|frame| (frame, None));
+            }
+        }
+    }
+    let frames = art.resources.get(usize::from(resource.kind))?;
+    let index = scene_resource_index(resource, frames.len())?;
+    Some((
+        *frames.get(index)?,
+        if resource.kind == 1 {
+            art.tree_shadows.get(index).copied()
+        } else {
+            None
+        },
+    ))
+}
+
+pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
+    scene_resource_presentation(art, resource).map(|(frame, _)| frame)
+}
+
+#[cfg(test)]
 pub(super) fn world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -10,42 +64,44 @@ pub(super) fn world_sprite_frames(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, f64, u64)> {
-    let mut result = if terrain.is_empty() {
-        visible_terrain_frames(art, terrain, camera)
-            .into_iter()
-            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY, 0))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
+    let mut result = Vec::new();
+    emit_world_sprite_frames(art, terrain, resources, units, camera, animation, |entry| {
+        result.push(entry);
+    });
+    result
+}
+
+pub(super) fn emit_world_sprite_frames(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+    mut emit: impl FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    if terrain.is_empty() {
+        // Retain the bounded legacy terrain helper, without collecting another
+        // object scene. Surfaces and selections have already been appended.
+        for (sprite, frame) in visible_terrain_frames(art, &[], camera) {
+            emit((sprite, frame, f64::NEG_INFINITY, 0));
+        }
+    }
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
         viewport: camera.viewport,
         focus_elevation_meters: camera.focus_elevation_meters,
     };
-    let mut objects = Vec::new();
-    for resource in resources {
-        let Some(frames) = art.resources.get(usize::from(resource.kind)) else {
-            continue;
-        };
-        if frames.is_empty() {
-            continue;
-        }
-        let Some(frame_index) =
-            resource_frame_index(resource.kind, resource.visual_variant, frames.len())
-        else {
-            continue;
-        };
-        let Some(frame) = frames.get(frame_index) else {
-            continue;
-        };
-        let shadow = (resource.kind == 1)
-            .then(|| art.tree_shadows.get(frame_index).copied())
-            .flatten();
-        objects.push(WorldObject::Resource(*resource, *frame, shadow));
-    }
-    objects.extend(units.iter().copied().map(WorldObject::Unit));
+    // Preserve resource-before-unit submission without allocating/copying an
+    // unsorted intermediate object vector on every frame.
+    let objects = resources
+        .iter()
+        .filter_map(|resource| {
+            scene_resource_presentation(art, *resource)
+                .map(|(frame, shadow)| WorldObject::Resource(*resource, frame, shadow))
+        })
+        .chain(units.iter().copied().map(WorldObject::Unit));
 
     for object in objects {
         let WorldObject::Unit(unit) = object else {
@@ -60,7 +116,7 @@ pub(super) fn world_sprite_frames(
                     resource.elevation_meters,
                     camera,
                 ) {
-                    result.push((
+                    emit((
                         sprite,
                         scaled(shadow_frame, camera.zoom as f32),
                         depth,
@@ -74,12 +130,12 @@ pub(super) fn world_sprite_frames(
                 camera,
                 0.2,
             ) {
-                result.push((sprite, shadow_frame, depth, object.stable_id()));
+                emit((sprite, shadow_frame, depth, object.stable_id()));
             }
             if let Some(sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
-                result.push((
+                emit((
                     sprite,
                     scaled(frame, camera.zoom as f32),
                     depth,
@@ -109,7 +165,7 @@ pub(super) fn world_sprite_frames(
         {
             continue;
         }
-        let mut uv = frame.uv;
+        let mut uv = frame.atlas.uv;
         if flipped {
             uv[0] += uv[2];
             uv[2] = -uv[2];
@@ -134,6 +190,7 @@ pub(super) fn world_sprite_frames(
             uv,
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
+            pages: [frame.atlas.page, 0, 0, 0],
         };
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
@@ -142,11 +199,10 @@ pub(super) fn world_sprite_frames(
         if let Some((shadow, shadow_frame)) =
             alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
         {
-            result.push((shadow, shadow_frame, depth, object.stable_id()));
+            emit((shadow, shadow_frame, depth, object.stable_id()));
         }
-        result.push((sprite, scaled_frame, depth, object.stable_id()));
+        emit((sprite, scaled_frame, depth, object.stable_id()));
     }
-    result
 }
 
 fn object_depth(object: WorldObject) -> f64 {
@@ -203,9 +259,10 @@ fn scene_sprite(
             (height / camera.viewport[1]) as f32,
         ],
         color: [1.0; 4],
-        uv: frame.uv,
+        uv: frame.atlas.uv,
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [frame.atlas.page, 0, 0, 0],
     })
 }
 
@@ -276,7 +333,10 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
     use bytemuck::Zeroable;
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [1.0; 2],
         anchor: [0.0; 2],
     };

@@ -8,13 +8,19 @@ use crate::{
     },
     web::Sprite,
 };
-use aoe_core::{Camera, EntityId};
+use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
+#[cfg(test)]
 use world_sprites::world_sprite_frames;
+
+#[cfg(test)]
+#[path = "game_renderer/tests/direct_emission.rs"]
+mod direct_emission_tests;
+pub use world_sprites::{scene_resource_frame, scene_resource_presentation};
 
 pub fn resource_sprite_bounds(
     resource: SceneResource,
@@ -30,6 +36,14 @@ use canvas_depth::{CanvasPresentation, render_canvas_world};
 #[path = "game_renderer/webgl.rs"]
 mod webgl;
 use webgl::WebGlRenderer;
+
+#[path = "game_renderer/tests/filter_fixture.rs"]
+#[cfg(test)]
+pub(crate) mod filter_fixture;
+
+#[path = "game_renderer/tests/species/fixture.rs"]
+#[cfg(test)]
+pub(crate) mod species_fixture;
 
 #[cfg(test)]
 mod tests;
@@ -48,74 +62,17 @@ pub enum GameRenderer {
     Canvas {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
-        atlas: HtmlCanvasElement,
+        atlas: [Option<HtmlCanvasElement>; 3],
         source_atlas: Vec<u8>,
         presentation: CanvasPresentation,
     },
 }
-#[derive(Clone, Copy)]
-pub struct SceneCamera {
-    pub center: [f64; 2],
-    pub zoom: f64,
-    pub viewport: [f64; 2],
-    pub focus_elevation_meters: f64,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct SceneUnit {
-    pub id: EntityId,
-    pub position: [f64; 2],
-    pub moving: bool,
-    pub facing: u8,
-    pub selected: bool,
-    pub elevation_meters: f64,
-}
-
-#[derive(Clone, Copy)]
-pub struct SceneTerrain {
-    pub position: [f64; 2],
-    /// One of the six `GameArt::terrain` groups.
-    pub material: u8,
-    pub elevation_meters: f64,
-    pub surface: SceneTerrainSurface,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SceneTerrainSurface {
-    /// Shared corners ordered northwest, northeast, southeast, southwest.
-    pub corner_game_height_levels: [i16; 4],
-    /// aoe-map `SurfaceKind` discriminant: plateau, ramp, cliff.
-    pub kind: u8,
-    /// aoe-map `SurfaceDiagonal` discriminant.
-    pub triangulation: u8,
-    /// aoe-map `WaterKind` discriminant; zero means no water.
-    pub water: u8,
-}
-
-impl SceneTerrainSurface {
-    pub const PLATEAU: u8 = 0;
-    pub const RAMP: u8 = 1;
-    pub const CLIFF: u8 = 2;
-
-    pub const fn flat(elevation_meters: f64) -> Self {
-        Self {
-            corner_game_height_levels: [elevation_meters as i16; 4],
-            kind: Self::PLATEAU,
-            triangulation: 0,
-            water: 0,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct SceneResource {
-    pub id: u64,
-    pub position: [f64; 2],
-    /// Resource kind in the versioned map wire order.
-    pub kind: u8,
-    pub visual_variant: u8,
-    pub elevation_meters: f64,
-}
+#[path = "game_renderer/scene_types.rs"]
+mod scene_types;
+pub use scene_types::{
+    SceneCamera, SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance,
+    SceneTerrainSurface, SceneUnit,
+};
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }
@@ -159,7 +116,7 @@ impl GameRenderer {
             Self::Canvas {
                 canvas: replacement.clone(),
                 context: main_context,
-                atlas: new_atlas(&replacement)?,
+                atlas: [None, None, None],
                 source_atlas: Vec::new(),
                 presentation: CanvasPresentation::new(replacement.width(), replacement.height()),
             },
@@ -184,18 +141,10 @@ impl GameRenderer {
                 source_atlas,
                 ..
             } => {
-                if pixels.len() != (GAME_ATLAS_SIDE * GAME_ATLAS_SIDE * 4) as usize {
+                if pixels.len() != crate::GAME_ATLAS_BYTES {
                     return Err("Invalid game atlas size".into());
                 }
-                let data = ImageData::new_with_u8_clamped_array_and_sh(
-                    Clamped(pixels),
-                    GAME_ATLAS_SIDE,
-                    GAME_ATLAS_SIDE,
-                )
-                .map_err(error)?;
-                context(atlas)?
-                    .put_image_data(&data, 0.0, 0.0)
-                    .map_err(error)?;
+                *atlas = [None, None, None];
                 *source_atlas = pixels.to_vec();
                 Ok(())
             }
@@ -234,6 +183,7 @@ impl GameRenderer {
                 canvas,
                 context,
                 atlas,
+                source_atlas,
                 ..
             } => {
                 let width = f64::from(canvas.width());
@@ -266,7 +216,8 @@ impl GameRenderer {
                     } else {
                         context.translate(x, y).map_err(error)?;
                     }
-                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(atlas, sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
+                    let page = legacy_page(canvas, atlas, source_atlas, sprite.pages[0])?;
+                    let result = context.draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(page, sx, sy, sw.abs(), sh, 0.0, 0.0, w, h).map_err(error);
                     context.restore();
                     result?;
                 }
@@ -313,8 +264,8 @@ impl GameRenderer {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
             triangle
         });
-        let object_sprites = world_sprite_frames(art, terrain, resources, units, camera, animation);
-        let layers = ordered_world_layers(surfaces, object_sprites, units, camera);
+        let layers =
+            direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
         if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
             let depth_origin = surface_depth([
                 camera.center[0],
@@ -376,6 +327,34 @@ impl GameRenderer {
     }
 }
 
+fn legacy_page<'a>(
+    canvas: &HtmlCanvasElement,
+    pages: &'a mut [Option<HtmlCanvasElement>; 3],
+    pixels: &[u8],
+    page: u32,
+) -> Result<&'a HtmlCanvasElement, String> {
+    let slot = pages.get_mut(page as usize).ok_or("Invalid atlas page")?;
+    if slot.is_none() {
+        let start = page as usize * crate::GAME_ATLAS_PAGE_BYTES;
+        let source = pixels
+            .get(start..start + crate::GAME_ATLAS_PAGE_BYTES)
+            .ok_or("Game atlas is not uploaded")?;
+        let atlas = new_atlas(canvas)?;
+        let data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(source),
+            GAME_ATLAS_SIDE,
+            GAME_ATLAS_SIDE,
+        )
+        .map_err(error)?;
+        context(&atlas)?
+            .put_image_data(&data, 0.0, 0.0)
+            .map_err(error)?;
+        *slot = Some(atlas);
+    }
+    slot.as_ref()
+        .ok_or_else(|| "Atlas canvas unavailable".into())
+}
+
 fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     let atlas: HtmlCanvasElement = canvas
         .owner_document()
@@ -389,11 +368,56 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     Ok(atlas)
 }
 
+fn direct_world_layers(
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<WorldLayer> {
+    // Each eligible resource/unit emits at most a shadow and a body. Culling
+    // may reduce this bound; legacy terrain retains its own bounded helper.
+    let object_capacity = resources
+        .len()
+        .saturating_add(units.len())
+        .saturating_mul(2);
+    ordered_world_layers_with(surfaces, object_capacity, units, camera, |entries| {
+        world_sprites::emit_world_sprite_frames(
+            art,
+            terrain,
+            resources,
+            units,
+            camera,
+            animation,
+            |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
+        );
+    })
+}
+
+#[cfg(test)]
 fn ordered_world_layers(
     surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
     objects: Vec<(Sprite, GameFrame, f64, u64)>,
     units: &[SceneUnit],
     camera: SceneCamera,
+) -> Vec<WorldLayer> {
+    ordered_world_layers_with(surfaces, objects.len(), units, camera, |entries| {
+        entries.extend(
+            objects
+                .into_iter()
+                .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
+        );
+    })
+}
+
+fn ordered_world_layers_with(
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+    object_capacity: usize,
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    emit: impl FnOnce(&mut Vec<WorldLayer>),
 ) -> Vec<WorldLayer> {
     let surfaces = surfaces.into_iter();
     let selected_count = units.iter().filter(|unit| unit.selected).count();
@@ -401,7 +425,7 @@ fn ordered_world_layers(
         surfaces
             .size_hint()
             .0
-            .saturating_add(objects.len())
+            .saturating_add(object_capacity)
             .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
     );
     entries.extend(surfaces.map(WorldLayer::Surface));
@@ -412,15 +436,11 @@ fn ordered_world_layers(
                 .map(|(sprite, depth)| WorldLayer::Selection(sprite, depth)),
         );
     }
-    entries.extend(
-        objects
-            .into_iter()
-            .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
-    );
-    // Compose the former object (depth, id) pre-sort with layer (depth, kind)
-    // ordering in one stable sort. Exact id ties keep shadow/body and source
-    // input order, without a second scene or a second object sort buffer.
-    entries.sort_by(|left, right| {
+    emit(&mut entries);
+    // Original indices break all ties, preserving exact former stable order.
+    // Sort a bounded integer sidecar and permute this scene in place, avoiding
+    // a second large-layer scene or large-element stable-sort scratch buffer.
+    crate::stable_index_sort::sort_by(&mut entries, |left, right| {
         let left = layer_order(left);
         let right = layer_order(right);
         left.0
@@ -448,6 +468,7 @@ fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
         / 3.0
 }
 
+#[derive(Clone, Copy)]
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
     Selection(Sprite, f64),

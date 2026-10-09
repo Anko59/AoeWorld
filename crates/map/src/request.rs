@@ -21,6 +21,8 @@ pub enum ReconstructionProfile {
 pub enum DetailProfile {
     #[default]
     StandardV1,
+    /// Explicit opt-in; published StandardV1 defaults remain unchanged.
+    LandscapeV2,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

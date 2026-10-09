@@ -58,7 +58,7 @@ pub(super) fn prepare(
     let scratch = scratch::Scratch::new(cache_root)?;
     let progress_path = scratch.root.join("progress.json");
     let mut monitor = progress::Monitor::new(progress_path.clone(), progress_state);
-    let input = serde_json::to_vec(&serde_json::json!({
+    let mut input = serde_json::json!({
         "staging_root": scratch.root,
         "progress_path": progress_path,
         "operation": operation,
@@ -67,16 +67,46 @@ pub(super) fn prepare(
         "request": request,
         "samples_per_axis": preparation.samples_per_axis,
         "resolution": "glo30_prefer_glo90",
-    }))
-    .map_err(|error| format!("could not encode map-worker request: {error}"))?;
+    });
+    if let Some(axes) = preparation.field_axes {
+        input["field_axes"] = serde_json::to_value(axes)
+            .map_err(|error| format!("could not encode field axes: {error}"))?;
+    }
+    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
+        input["hydrology_mode"] = serde_json::json!("vectors");
+    }
+    let input = serde_json::to_vec(&input)
+        .map_err(|error| format!("could not encode map-worker request: {error}"))?;
     let output = execute(worker, input, cancelled, || monitor.poll())?;
-    decode_prepared_output(&output, request, preparation.samples_per_axis)
+    let package = decode_prepared_output(
+        &output,
+        request,
+        preparation.samples_per_axis,
+        preparation.field_axes,
+    )?;
+    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
+        let index = package
+            .environment
+            .hydrology_evidence
+            .as_ref()
+            .ok_or("vector worker returned no typed hydrology")?;
+        if index.samples_per_axis != 1024 || index.water_model.is_none()
+            || package.source_locks.len() != 9
+            || ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"].iter().any(|id|
+                !package.source_locks.iter().any(|lock| lock.id == *id && lock.preprocessing_version.contains(
+                    "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only")))
+        {
+            return Err("vector worker returned incompatible hydrology metadata".to_owned());
+        }
+    }
+    Ok(package)
 }
 
 fn decode_prepared_output(
     output: &[u8],
     request: MapRequest,
     samples_per_axis: u16,
+    field_axes: Option<crate::map_jobs::OverviewFieldAxes>,
 ) -> Result<MapPackage, String> {
     let WorkerOutput::PreparedDirectory { package } = serde_json::from_slice(output)
         .map_err(|error| format!("invalid map-worker response: {error}"))?
@@ -92,6 +122,14 @@ fn decode_prepared_output(
     }
     if package.environment.samples_per_axis != samples_per_axis {
         return Err("map worker returned a different preparation detail than requested".to_owned());
+    }
+    if let Some(axes) = field_axes
+        && (package.environment.samples_per_axis != axes.elevation
+            || package.environment.vegetation_samples_per_axis() != Some(axes.vegetation)
+            || package.environment.water_samples_per_axis() != Some(axes.water)
+            || package.environment.historical_samples_per_axis() != Some(axes.historical))
+    {
+        return Err("map worker returned different field axes than requested".to_owned());
     }
     Ok(*package)
 }
@@ -175,9 +213,49 @@ mod tests {
             "operation": "prepared_directory", "package": package,
         }))
         .expect("worker response");
-        assert!(decode_prepared_output(&bytes, request, 2).is_ok());
+        assert!(decode_prepared_output(&bytes, request, 2, None).is_ok());
+        let mut landscape_request = request;
+        landscape_request.detail_profile = aoe_map::DetailProfile::LandscapeV2;
+        let mut landscape_environment = package.environment.clone();
+        landscape_environment.water = Some(landscape_environment.elevation.clone());
+        landscape_environment.vegetation = Some(landscape_environment.elevation.clone());
+        landscape_environment.historical_land_use = Some(landscape_environment.elevation.clone());
+        let landscape = MapPackage::with_prepared_environment(
+            package.generator_version,
+            landscape_request,
+            package.source_locks.clone(),
+            package.projection.clone(),
+            package.provenance.clone(),
+            landscape_environment,
+        )
+        .expect("canonical metadata-only field fixture");
+        let bytes_landscape = serde_json::to_vec(&serde_json::json!({
+            "operation": "prepared_directory", "package": landscape,
+        }))
+        .expect("landscape response");
+        let axes = crate::map_jobs::OverviewFieldAxes {
+            elevation: 2,
+            vegetation: 2,
+            water: 2,
+            historical: 2,
+        };
+        assert!(decode_prepared_output(&bytes_landscape, landscape_request, 2, Some(axes)).is_ok());
+        for field in 0..4 {
+            let mut changed = axes;
+            match field {
+                0 => changed.elevation = 3,
+                1 => changed.vegetation = 3,
+                2 => changed.water = 3,
+                _ => changed.historical = 3,
+            }
+            assert!(
+                decode_prepared_output(&bytes_landscape, landscape_request, 2, Some(changed))
+                    .expect_err("silent field downgrade")
+                    .contains("different field axes")
+            );
+        }
         assert!(
-            decode_prepared_output(&bytes, request, 1024)
+            decode_prepared_output(&bytes, request, 1024, None)
                 .expect_err("wrong detail")
                 .contains("different preparation detail")
         );
@@ -195,12 +273,12 @@ mod tests {
         let mut other = request;
         other.seed += 1;
         assert!(
-            decode_prepared_output(&output, other, 128)
+            decode_prepared_output(&output, other, 128, None)
                 .expect_err("different request")
                 .contains("different request")
         );
         assert!(
-            decode_prepared_output(&output, request, 128)
+            decode_prepared_output(&output, request, 128, None)
                 .expect_err("fallback")
                 .contains("no environmental sources")
         );

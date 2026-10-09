@@ -4,6 +4,7 @@ import { PNG } from "pngjs";
 const terrainSourceColors = {
   grass: [70, 120, 55],
   ramp: [215, 72, 45],
+  dirt: [166, 92, 48],
   cliff: [92, 82, 105],
   water: [32, 104, 210],
   shore: [218, 185, 92],
@@ -25,18 +26,43 @@ const blendWater = (source: readonly number[]) =>
     Math.round(value * 0.86 + ([38, 113, 190][index] ?? 0) * 0.14),
   );
 
+// Independent fixture oracle: normalized arithmetic-mean dirt luminance feeds
+// natural rock (.18 + .55 * luma), then face lighting, with one byte rounding.
+// Cliff tops retain .78 lighting; exposed skirts retain .72 lighting.
+const luminance = (source: readonly number[]) =>
+  source.reduce((sum, value) => sum + value, 0) / (3 * 255);
+const naturalRock = (source: readonly number[], shade: number) => {
+  const gray = Math.round((0.18 + 0.55 * luminance(source)) * shade * 255);
+  return [gray, gray, gray];
+};
+// Typed Shore is a wet boundary, not dry Sand/15010: raw water detail feeds
+// (.22, .36, .33) + .25 * luma, without the open-water blue tint.
+const wetShore = (source: readonly number[]) =>
+  [0.22, 0.36, 0.33].map((base) =>
+    Math.round((base + 0.25 * luminance(source)) * 255),
+  );
+
+// Keep unused 15018 paving art in the atlas as an adversarial source sentinel.
+// These are forbidden rendered colors, deliberately outside the positive palette.
+export const syntheticPavedRockColors = [
+  tint(terrainSourceColors.cliff, 0.78),
+  tint(terrainSourceAccents.cliff, 0.78),
+  tint(terrainSourceColors.cliff, 0.72),
+  tint(terrainSourceAccents.cliff, 0.72),
+] as const;
+
 export const syntheticSurfaceColors = {
   grass: terrainSourceColors.grass,
   grassAccent: terrainSourceAccents.grass,
   ramp: tint(terrainSourceColors.ramp, 0.92),
   rampAccent: tint(terrainSourceAccents.ramp, 0.92),
-  cliff: tint(terrainSourceColors.cliff, 0.78),
-  cliffAccent: tint(terrainSourceAccents.cliff, 0.78),
-  skirt: tint(terrainSourceColors.cliff, 0.72),
+  cliff: naturalRock(terrainSourceColors.dirt, 0.78),
+  cliffAccent: naturalRock(terrainSourceAccents.dirt, 0.78),
+  skirt: naturalRock(terrainSourceColors.dirt, 0.72),
   water: blendWater(terrainSourceColors.water),
   waterAccent: blendWater(terrainSourceAccents.water),
-  shore: terrainSourceColors.shore,
-  shoreAccent: terrainSourceAccents.shore,
+  shore: wetShore(terrainSourceColors.water),
+  shoreAccent: wetShore(terrainSourceAccents.water),
   ring: [242, 217, 89],
 } as const;
 
@@ -85,7 +111,7 @@ const terrainSources = new Map<number, TerrainSource>([
       y: 600,
       width: 25,
       height: 45,
-      base: [166, 92, 48],
+      base: terrainSourceColors.dirt,
       accent: terrainSourceAccents.dirt,
       frameCount: 100,
       tiled: true,
@@ -132,15 +158,8 @@ const terrainSources = new Map<number, TerrainSource>([
   ],
 ]);
 
-/** Public CI uses original generated fixtures; local runs use the real pack. */
-export async function gameAssets(
-  page: Page,
-  forceSynthetic = false,
-): Promise<string> {
-  if (!forceSynthetic) {
-    const response = await page.request.get("/asset-pack/manifest.json");
-    if (response.ok()) return "local AoE II pack";
-  }
+/** Pure uncached fixture builder, also used as the byte-parity oracle. */
+export function buildGeneratedGameAssets() {
   const color = new PNG({ width: 2048, height: 2048 });
   const shadow = new PNG({ width: 2048, height: 2048 });
   const pixel = (x: number, y: number, rgb: readonly number[]) => {
@@ -231,6 +250,26 @@ export async function gameAssets(
   const colored = PNG.sync.write(color);
   const shadows = PNG.sync.write(shadow);
   const empty = PNG.sync.write(new PNG({ width: 2048, height: 2048 }));
+  return Object.freeze({ manifest, colored, shadows, empty });
+}
+
+let generated: ReturnType<typeof buildGeneratedGameAssets> | undefined;
+
+/** Cache only immutable bytes, never a page, route, or local-pack availability. */
+export function generatedGameAssets() {
+  return (generated ??= buildGeneratedGameAssets());
+}
+
+/** Public CI uses original generated fixtures; local runs use the real pack. */
+export async function gameAssets(
+  page: Page,
+  forceSynthetic = false,
+): Promise<string> {
+  if (!forceSynthetic) {
+    const response = await page.request.get("/asset-pack/manifest.json");
+    if (response.ok()) return "local AoE II pack";
+  }
+  const { manifest, colored, shadows, empty } = generatedGameAssets();
   await page.route("**/asset-pack/*", async (route) => {
     const url = route.request().url();
     if (url.endsWith("manifest.json")) {

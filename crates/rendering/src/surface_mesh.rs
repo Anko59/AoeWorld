@@ -1,12 +1,14 @@
 #[cfg(test)]
 use crate::GAME_ATLAS_SIDE;
-use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
+use crate::{AtlasAddress, GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
 use aoe_core::{Camera, ScreenPoint};
 #[cfg(test)]
 use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
-pub(crate) use appearance::{apply_terrain_textures, terrain_texture_frame};
+pub(crate) mod floor;
+pub(crate) mod landscape;
+pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
 pub use lod::projected_surface_triangles;
 
@@ -31,10 +33,14 @@ pub struct ProjectedSurfaceTriangle {
     pub tile: [i32; 2],
     pub skirt: bool,
     pub(crate) material: u8,
+    /// Packed optional metadata; zero is legacy, presence bit preserves Some(0).
+    pub(crate) appearance: u32,
+    /// Three canonical rounded u8 endpoints; Some opts into floor interpolation.
+    pub(crate) floor_strengths: Option<[u8; 3]>,
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
-    pub(crate) texture_uv: Option<[f32; 4]>,
-    pub(crate) texture_blend: Option<[[f32; 4]; 2]>,
+    pub(crate) texture_uv: Option<AtlasAddress>,
+    pub(crate) texture_blend: Option<[AtlasAddress; 2]>,
     pub(crate) texture_tile: [i32; 2],
     pub(crate) texture_materials: Option<[u8; 3]>,
     pub(crate) pickable: bool,
@@ -198,7 +204,9 @@ pub(crate) fn draw_surface_triangle(
                     transform[5],
                 )
                 .map_err(|error| format!("Canvas terrain transform: {error:?}"))?;
-            let [x, y, width, height] = rect.map(f64::from);
+            // This retained tint oracle is intentionally a single-page fixture.
+            assert_eq!(rect.page, 0);
+            let [x, y, width, height] = rect.uv.map(f64::from);
             let atlas_side = f64::from(GAME_ATLAS_SIDE);
             let texture_atlas = atlases
                 .get(usize::from(triangle.tint))
@@ -363,6 +371,8 @@ fn append_edge_skirt(
     let water_step = sample.surface.water != 0 && neighbor.surface.water != 0;
     let color = darken(surface_color(bank), 0.62);
     result.push(ProjectedSurfaceTriangle {
+        appearance: landscape::pack(bank.appearance),
+        floor_strengths: None,
         points: [points[0], points[1], points[2]],
         color,
         tile,
@@ -378,6 +388,8 @@ fn append_edge_skirt(
         order: skirt_order(edge),
     });
     result.push(ProjectedSurfaceTriangle {
+        appearance: landscape::pack(bank.appearance),
+        floor_strengths: None,
         points: [points[0], points[2], points[3]],
         color,
         tile,
@@ -426,6 +438,10 @@ fn surface_color(sample: SceneTerrain) -> [f32; 3] {
         3 => [0.74, 0.66, 0.42],
         4 => [0.40, 0.40, 0.40],
         5 => [0.22, 0.46, 0.66],
+        7 => [0.84, 0.85, 0.84],
+        8 => [0.57, 0.70, 0.75],
+        9 => [0.28, 0.24, 0.19],
+        10 => [0.34, 0.48, 0.45],
         _ => [0.28, 0.50, 0.23],
     };
     if sample.surface.water != 0 {
@@ -435,6 +451,9 @@ fn surface_color(sample: SceneTerrain) -> [f32; 3] {
         color = darken(color, 0.88);
     }
     if sample.surface.kind == SceneTerrainSurface::CLIFF {
+        if sample.surface.water == 0 {
+            color = [0.40; 3];
+        }
         color = darken(color, 0.78);
     }
     color

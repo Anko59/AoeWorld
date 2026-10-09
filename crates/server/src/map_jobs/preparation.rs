@@ -12,12 +12,28 @@ pub(crate) enum PreparationPreference {
     Detailed,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum HydrologyMode {
+    #[default]
+    None,
+    Vectors,
+}
+
+impl HydrologyMode {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub(crate) struct CreationRequest {
     #[serde(flatten)]
     pub request: MapRequest,
     #[serde(default)]
     pub preparation: PreparationPreference,
+    #[serde(default)]
+    pub hydrology_mode: HydrologyMode,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -28,10 +44,22 @@ pub(crate) enum PreparationMode {
     Detailed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct OverviewFieldAxes {
+    pub elevation: u16,
+    pub vegetation: u16,
+    pub water: u16,
+    pub historical: u16,
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct PreparationPlan {
     pub mode: PreparationMode,
     pub samples_per_axis: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_axes: Option<OverviewFieldAxes>,
+    #[serde(skip_serializing_if = "HydrologyMode::is_none")]
+    pub hydrology_mode: HydrologyMode,
     pub geographic_millimeters_per_sample: Option<u64>,
     pub explanation: &'static str,
 }
@@ -41,6 +69,8 @@ impl PreparationPlan {
         Self {
             mode: PreparationMode::ProceduralFallback,
             samples_per_axis: 0,
+            field_axes: None,
+            hydrology_mode: HydrologyMode::None,
             geographic_millimeters_per_sample: None,
             explanation: "No geographic worker configured; terrain is procedural fallback.",
         }
@@ -52,6 +82,15 @@ impl PreparationPlan {
             .normalized()
             .map_err(|error| error.to_string())?;
         let estimate = request.estimate().map_err(|error| error.to_string())?;
+        if input.hydrology_mode == HydrologyMode::Vectors
+            && (!worker_available
+                || request.detail_profile != aoe_map::DetailProfile::LandscapeV2
+                || input.preparation != PreparationPreference::Overview
+                || !(-119_900_000..=249_900_000).contains(&request.center_longitude_e7)
+                || !(360_100_000..=599_900_000).contains(&request.center_latitude_e7))
+        {
+            return Err("Vector hydrology requires a configured worker, explicit overview, LandscapeV2, and the western Europe pilot; the worker verifies the entire projected footprint before acquisition.".to_owned());
+        }
         if !worker_available {
             return match input.preparation {
                 PreparationPreference::Automatic => Ok(Self::fallback()),
@@ -72,6 +111,14 @@ impl PreparationPlan {
             PreparationPreference::Overview => false,
             PreparationPreference::Automatic => regional,
         };
+        let field_axes = (!detailed
+            && request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+            .then_some(OverviewFieldAxes {
+                elevation: 1024,
+                vegetation: 128,
+                water: 128,
+                historical: 1024,
+            });
         let samples = if detailed {
             estimate
                 .effective_side_meters
@@ -79,7 +126,7 @@ impl PreparationPlan {
                 .next_power_of_two()
                 .clamp(128, 4096) as u16
         } else {
-            128
+            field_axes.map_or(128, |axes| axes.elevation)
         };
         Ok(Self {
             mode: if detailed {
@@ -88,9 +135,15 @@ impl PreparationPlan {
                 PreparationMode::Overview
             },
             samples_per_axis: samples,
+            field_axes,
+            hydrology_mode: input.hydrology_mode,
             geographic_millimeters_per_sample: Some(sample_spacing(estimate, samples)),
             explanation: if detailed {
                 "Regional elevation: modern Copernicus GLO30, with GLO90 only where GLO30 is absent. Modern WorldCover and European/Middle Eastern hydrography are stored as observations; mapped river corridors and lake extents only refine existing inland overview water. Vegetation and year-600 land use retain overview grids. Reservoirs and uncertain water remain evidence, not historical water. Source errors fail the job."
+            } else if input.hydrology_mode == HydrologyMode::Vectors {
+                "Landscape overview plus opt-in pinned western European HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Categorical ocean/water context remains 128; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. Exact pilot bounds are verified before acquisition; source errors fail the job."
+            } else if field_axes.is_some() {
+                "Landscape overview: elevation and modeled year-600 land use on 1024-sample grids, potential vegetation and water on independent 128-sample grids. Fine vectors and real-source qualification are separate; source errors fail the job."
             } else {
                 "Overview: global elevation, water, potential vegetation and modeled year-600 land use on a 128-sample grid. Fine local detail is unavailable at this preparation level."
             },
@@ -106,6 +159,10 @@ fn sample_spacing(estimate: MapEstimate, samples: u16) -> u64 {
 }
 
 #[cfg(test)]
+#[path = "preparation/tests/hydrology.rs"]
+mod hydrology_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -113,6 +170,7 @@ mod tests {
         CreationRequest {
             request: MapRequest::default(),
             preparation: PreparationPreference::Automatic,
+            hydrology_mode: HydrologyMode::None,
         }
     }
 
@@ -178,6 +236,53 @@ mod tests {
                 .expect("overview")
                 .samples_per_axis,
             128
+        );
+    }
+
+    #[test]
+    fn independent_overview_is_explicit_and_legacy_metadata_is_unchanged() {
+        let mut input = input();
+        input.request.requested_side_meters = 1_200_000;
+        input.request.compression = aoe_map::Ratio::new(30, 1).expect("ratio");
+        let legacy = PreparationPlan::resolve(input, true).expect("legacy overview");
+        assert_eq!(legacy.samples_per_axis, 128);
+        assert!(legacy.field_axes.is_none());
+        let legacy_json = serde_json::to_value(legacy).expect("legacy plan");
+        assert!(legacy_json.get("field_axes").is_none());
+        input.request.detail_profile = aoe_map::DetailProfile::LandscapeV2;
+        let landscape = PreparationPlan::resolve(input, true).expect("landscape overview");
+        assert_eq!(landscape.mode, PreparationMode::Overview);
+        assert_eq!(landscape.samples_per_axis, 1024);
+        assert_eq!(landscape.geographic_millimeters_per_sample, Some(1_171_875));
+        assert_eq!(
+            landscape.field_axes,
+            Some(OverviewFieldAxes {
+                elevation: 1024,
+                vegetation: 128,
+                water: 128,
+                historical: 1024,
+            })
+        );
+        assert!(landscape.explanation.contains("independent"));
+        let json = serde_json::to_value(landscape).expect("landscape plan");
+        assert_eq!(
+            json["field_axes"],
+            serde_json::json!({
+                "elevation": 1024, "vegetation": 128, "water": 128, "historical": 1024,
+            })
+        );
+        assert!(
+            PreparationPlan::resolve(input, false)
+                .expect("fallback")
+                .field_axes
+                .is_none()
+        );
+        input.request.requested_side_meters = 30_000;
+        assert!(
+            PreparationPlan::resolve(input, true)
+                .expect("detailed")
+                .field_axes
+                .is_none()
         );
     }
 

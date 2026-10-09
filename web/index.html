@@ -89,6 +89,7 @@
       <label>Square km <input id="map-side-km" type="number" min="0.25" max="10000000" step="0.001" value="30"></label>
       <label>Compression <input id="map-compression" inputmode="decimal" value="30"></label>
       <label>Terrain detail <select id="map-preparation" aria-label="Terrain detail"><option value="automatic">Automatic</option><option value="detailed">Detailed regional elevation</option><option value="overview">Global overview</option></select></label>
+      <label>Landscape <select id="map-detail-profile" aria-label="Landscape profile"><option value="standard_v1">Published standard</option><option value="landscape_v2">Composed landscape V2 (preview)</option></select></label>
       <label>Seed <input id="map-seed" type="number" min="0" max="4294967295" step="1" value="1"></label>
       <label>Year <input value="600 CE" readonly></label>
       <label>Saved maps <select id="map-package"><option value="">No saved map loaded</option></select></label>
@@ -296,7 +297,7 @@
         year_ce: 600,
         seed: Math.round(number('map-seed')),
         reconstruction_profile: 'circa600_v1',
-        detail_profile: 'standard_v1',
+        detail_profile: document.getElementById('map-detail-profile').value,
         preparation: document.getElementById('map-preparation').value
       };
     };

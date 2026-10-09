@@ -71,11 +71,66 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
+        // Natural rock/cliffs and snow are procedural dirt-derived appearances,
+        // never imported paving or ice. Keep their low-contrast transform local
+        // to the whole face until per-material splat transforms are supported.
+        if matches!(triangle.material, 4 | 7..=10) {
+            triangle.texture_materials = None;
+            let ramp = triangle.tint == 1 || matches!(triangle.tint, 21..=26);
+            triangle.tint = match triangle.material {
+                7 => 6,
+                8 => 8,
+                9 => 9,
+                10 => 10,
+                _ if triangle.skirt || matches!(triangle.tint, 7 | 23) => 7,
+                _ if matches!(triangle.tint, 2 | 12) => 12,
+                _ => 5,
+            };
+            if ramp {
+                // Reserve base+16 codes without changing the surface packet ABI.
+                triangle.tint += 16;
+            }
+        }
+        if triangle.texture_materials.is_some_and(|materials| {
+            materials
+                .into_iter()
+                .any(|material| matches!(material, 4 | 7..=10))
+        }) {
+            triangle.texture_materials = None;
+        }
+        if triangle.appearance & 1 != 0
+            && matches!(triangle.material, 0 | 1 | 2 | 6)
+            && triangle.tint <= 3
+            && !triangle.skirt
+        {
+            let palette = (triangle.appearance >> 1) & 7;
+            let dry = triangle.material == 1 || matches!(palette, 3 | 4);
+            // Ecological palettes must not replace authoritative dirt with grass.
+            let primary = if triangle.material == 2 {
+                2
+            } else if dry {
+                1
+            } else {
+                0
+            };
+            let a = terrain_texture_frame(art, primary, triangle.texture_tile).map(|f| f.atlas);
+            // Restore reviewed native leaf litter, retaining its coordinate-stable
+            // accent selection, not claiming periodic seams. Older packs without
+            // forest art keep the exact previous V2 dirt-bed fallback.
+            let bed = if art.terrain[6].is_empty() { 2 } else { 6 };
+            let b = terrain_texture_frame(art, bed, triangle.texture_tile).map(|f| f.atlas);
+            triangle.texture_materials = Some([primary, bed, primary]);
+            triangle.texture_uv = a;
+            // Identical coherent addresses need one sample, not three reads of
+            // the same bed (especially once each minified read is filtered).
+            triangle.texture_blend = a.zip(b).filter(|(a, b)| a != b).map(|(a, b)| [b, a]);
+            continue;
+        }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
         let mut frames = [None; 3];
         for index in 0..3 {
             frames[index] = terrain_texture_frame(art, materials[index], triangle.texture_tile)
-                .map(|frame| frame.uv);
+                .map(|frame| frame.atlas);
         }
         triangle.texture_uv = frames[0];
         triangle.texture_blend = match frames {
@@ -85,37 +140,61 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
     }
 }
 
+/// Procedural appearance kernel mirrored by both GPU fragment shaders.
+/// Dirt/water luminance supplies bounded detail; no source-art identity changes.
+pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
+    let ramp = matches!(tint, 21..=26);
+    let tint = if ramp { tint - 16 } else { tint };
+    let detail = (f32::from(texel[0]) + f32::from(texel[1]) + f32::from(texel[2])) / 3.0;
+    let (base, amount, shade) = match tint {
+        5 => ([0.18; 3], 0.55, 1.0),
+        6 => ([0.78, 0.79, 0.78], 0.12, 1.0),
+        7 => ([0.18; 3], 0.55, 0.72),
+        8 => ([0.42, 0.57, 0.65], 0.20, 1.0),
+        9 => ([0.10, 0.08, 0.05], 0.35, 1.0),
+        10 => ([0.22, 0.36, 0.33], 0.25, 1.0),
+        12 => ([0.18; 3], 0.55, 0.78),
+        _ => return texel,
+    };
+    // Combine face lighting before the sole byte rounding, not after tinting.
+    let shade = shade * if ramp { 0.92 } else { 1.0 };
+    [
+        ((base[0] * 255.0 + detail * amount) * shade).round() as u8,
+        ((base[1] * 255.0 + detail * amount) * shade).round() as u8,
+        ((base[2] * 255.0 + detail * amount) * shade).round() as u8,
+        texel[3],
+    ]
+}
+
+#[inline(never)]
 pub(crate) fn terrain_texture_frame(
     art: &GameArt,
     material: u8,
     tile: [i32; 2],
 ) -> Option<GameFrame> {
-    // Forest accents are bounded native variants, not a full periodic grid.
-    // Mix with the existing complete dirt texture, identically in both backends.
-    let material = if material == 6
-        && (art.terrain[6].is_empty() || (tile[0].div_euclid(8) ^ tile[1].div_euclid(8)) & 1 == 0)
-    {
-        2
-    } else {
-        material
+    // Rock and snow deliberately reuse dirt detail, not paving or ice art.
+    // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
+    let material = match material {
+        4 | 7 | 9 => 2,
+        8 | 10 => 5,
+        6 if art.terrain[6].is_empty() => 2,
+        _ => material,
     };
-    let frames = art
-        .terrain
-        .get(usize::from(material))
-        .filter(|frames| !frames.is_empty())
-        .unwrap_or(&art.grass);
+    let (frames, topology) = match art.terrain.get(usize::from(material)) {
+        Some(frames) if !frames.is_empty() => (frames, art.terrain_topology[usize::from(material)]),
+        _ => (&art.grass, art.terrain_topology[0]),
+    };
     if frames.is_empty() {
         return None;
     }
-    let index = if frames.len() == 100 {
-        let y = (10 - tile[1].rem_euclid(10)).rem_euclid(10) as usize;
-        tile[0].rem_euclid(10) as usize * 10 + y
-    } else {
-        tile[0]
-            .wrapping_mul(7)
-            .wrapping_add(tile[1].wrapping_mul(13))
-            .unsigned_abs() as usize
-            % frames.len()
-    };
+    let index = topology
+        .and_then(|topology| topology.periodic_frame(tile[0], tile[1], frames.len()))
+        .unwrap_or_else(|| {
+            tile[0]
+                .wrapping_mul(7)
+                .wrapping_add(tile[1].wrapping_mul(13))
+                .unsigned_abs() as usize
+                % frames.len()
+        });
     frames.get(index).copied()
 }

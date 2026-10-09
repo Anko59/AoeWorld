@@ -16,7 +16,10 @@ use std::path::{Path, PathBuf};
 mod elevation;
 #[path = "lib/progress.rs"]
 pub mod preparation_progress;
-pub use elevation::{MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, PreparedElevation, prepare_elevation};
+pub use elevation::{
+    MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS,
+    PreparedElevation, prepare_elevation, prepare_elevation_for_profile,
+};
 mod directory;
 pub use directory::{
     DIRECTORY_SCHEMA_VERSION, MAX_DIRECTORY_MANIFEST_BYTES, MAX_DIRECTORY_PAGE_BYTES,
@@ -133,15 +136,18 @@ pub enum GeodataError {
 }
 
 mod map_result;
-pub use map_result::{GeneratedMap, PreparedOverview, WorkerRequest, WorkerResponse};
+pub use map_result::{
+    GeneratedMap, OverviewHydrologyMode, PreparedOverview, WorkerRequest, WorkerResponse,
+};
 
 mod worker;
-pub use worker::execute;
+pub use worker::{execute, execute_with_cancellation};
 
 #[path = "lib/overview.rs"]
 mod overview;
 pub use overview::{
-    prepare_overview, prepare_overview_with_all_corrections, prepare_overview_with_corrections,
+    OverviewFieldAxes, prepare_overview, prepare_overview_with_all_corrections,
+    prepare_overview_with_corrections, prepare_overview_with_field_axes,
     prepare_overview_with_historical_axis, prepare_overview_with_vegetation_corrections,
 };
 

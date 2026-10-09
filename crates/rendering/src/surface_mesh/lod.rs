@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::Camera;
+mod landscape;
 
 #[cfg(test)]
 #[path = "lod_tests.rs"]
@@ -48,11 +49,13 @@ pub fn projected_surface_triangles(
         }
     };
     let mut cells = vec![None; grid.width * grid.height];
+    let mut owners = if terrain.iter().any(|sample| sample.appearance.is_some()) {
+        vec![None; cells.len()]
+    } else {
+        Vec::new()
+    };
     for sample in terrain {
         let tile = tile_key(sample.position);
-        if !fine_tile_visible(&camera, *sample, tile, scene_camera.viewport) {
-            continue;
-        }
         let Some(index) = grid_index(grid, cell_key(tile, size)) else {
             continue;
         };
@@ -65,15 +68,17 @@ pub fn projected_surface_triangles(
             sample: *sample,
             distance: dx.mul_add(dx, dy * dy),
         };
-        let slot = &mut cells[index];
-        if slot.is_none_or(|best: CellSample| {
-            candidate.distance < best.distance
-                || (candidate.distance == best.distance && candidate.source_tile < best.source_tile)
-        }) {
-            *slot = Some(candidate);
+        // Canonical appearance considers all inputs before fine visibility;
+        // the geometry winner still uses the unchanged fine visibility test.
+        if sample.appearance.is_some() {
+            landscape::retain_best(&mut owners[index], candidate);
+        }
+        if fine_tile_visible(&camera, *sample, tile, scene_camera.viewport) {
+            landscape::retain_best(&mut cells[index], candidate);
         }
     }
 
+    landscape::assign(&mut cells, &owners);
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
     let divisions = appearance::texture_subdivisions(size, cells.len());
@@ -84,6 +89,7 @@ pub fn projected_surface_triangles(
         };
         let tile = grid_cell(grid, slot_index);
         let sample = candidate.sample;
+        let appearance = super::landscape::pack(sample.appearance);
         let heights = coarse_heights.as_ref().map_or(
             corner_heights(sample.surface.corner_game_height_levels),
             |heights| coarse_corner_heights(heights, grid, tile),
@@ -125,9 +131,17 @@ pub fn projected_surface_triangles(
                             corners[indices[2]],
                         ],
                         color,
+                        appearance,
+                        floor_strengths: None,
                         tile,
                         skirt: false,
-                        material: sample.material,
+                        material: if sample.surface.water == 0
+                            && sample.surface.kind == SceneTerrainSurface::CLIFF
+                        {
+                            4
+                        } else {
+                            sample.material
+                        },
                         texture_mode: texture_mode(sample.surface.triangulation, order as u8),
                         tint: if sample.surface.water == 1 {
                             4
@@ -173,6 +187,7 @@ pub fn projected_surface_triangles(
     }
     debug_assert!(result.len() <= MAX_SURFACE_TRIANGLES);
     appearance::assign_materials(&mut result, terrain);
+    floor::assign(&mut result, terrain);
     // Painter order is an average-depth approximation. Picking below uses the
     // depth at the hit point, so exact terrain-to-terrain occlusion is still
     // limited until the shared depth-buffer path lands.

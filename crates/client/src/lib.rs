@@ -26,3 +26,7 @@ mod game_assets;
 mod png_page;
 
 pub mod resource_state;
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[path = "playground_map/requests.rs"]
+mod chunk_requests;

@@ -106,15 +106,45 @@ fn map_estimate() -> Result<(), String> {
 
 fn map_generate() -> Result<(), String> {
     let request = read_request()?;
+    let hydrology_mode = match env::var("AOE_MAP_HYDROLOGY_MODE").as_deref() {
+        Err(env::VarError::NotPresent) | Ok("none") => aoe_geodata::OverviewHydrologyMode::None,
+        Ok("vectors") => aoe_geodata::OverviewHydrologyMode::Vectors,
+        _ => return Err("AOE_MAP_HYDROLOGY_MODE must be none or vectors".to_owned()),
+    };
+    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
+        if request.detail_profile != aoe_map::DetailProfile::LandscapeV2 {
+            return Err("overview vectors require LandscapeV2".to_owned());
+        }
+        let corrections = aoe_map::WaterCorrectionDocument::empty(request, 1024)
+            .map_err(|error| error.to_string())?;
+        aoe_geodata::PreparedHydrology::validate_vectors_request(
+            request,
+            1024,
+            &corrections,
+            &AtomicBool::new(false),
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let output = package_path()?;
     let cache = cache()?;
-    let sources = overview_sources().map_err(|error| error.to_string())?;
+    let mut sources = overview_sources().map_err(|error| error.to_string())?;
+    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
+        sources.extend(aoe_geodata::hydrology_vector_sources());
+    }
     print_acquisition_estimate(&cache, &sources)?;
     let response = execute(WorkerRequest::PrepareOverviewDirectory {
         cache_root: cache_root(),
         output_directory: output,
         request,
-        samples_per_axis: OVERVIEW_SAMPLES_PER_AXIS,
+        samples_per_axis: if request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
+            aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation
+        } else {
+            OVERVIEW_SAMPLES_PER_AXIS
+        },
+        field_axes: (request.detail_profile == aoe_map::DetailProfile::LandscapeV2)
+            .then_some(aoe_geodata::OverviewFieldAxes::LANDSCAPE),
+        hydrology_mode,
+        water_corrections: None,
         historical_corrections: None,
         vegetation_corrections: None,
     })

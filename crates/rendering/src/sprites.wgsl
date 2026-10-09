@@ -5,9 +5,10 @@ struct Sprite {
     uv: vec4<f32>,
     depths: vec4<f32>,
     terrain_blend: array<vec4<f32>, 2>,
+    pages: vec4<u32>,
 };
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
-@group(0) @binding(1) var sprite_atlas: texture_2d<f32>;
+@group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
 
 struct VertexOutput {
@@ -19,6 +20,10 @@ struct VertexOutput {
     @location(4) uv2: vec2<f32>,
     @location(5) uv3: vec2<f32>,
     @location(6) weights: vec3<f32>,
+    @location(7) @interpolate(flat) pages: vec4<u32>,
+    @location(8) @interpolate(flat) rect: vec4<f32>,
+    @location(9) @interpolate(flat) rect2: vec4<f32>,
+    @location(10) @interpolate(flat) rect3: vec4<f32>,
 };
 
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
@@ -80,6 +85,10 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
+    out.pages = sprite.pages;
+    out.rect = sprite.uv;
+    out.rect2 = sprite.terrain_blend[0];
+    out.rect3 = sprite.terrain_blend[1];
     out.uv2 = vec2<f32>(0.0);
     out.uv3 = vec2<f32>(0.0);
     out.weights = vec3<f32>(1.0, 0.0, 0.0);
@@ -98,7 +107,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             let atlas_uv = terrain_uv(code % 8u, corner);
             out.uv = terrain_atlas_uv(sprite.uv, atlas_uv);
             out.color = vec4<f32>(terrain_tint(code / 8u), 1.0);
-            out.solid = 0u;
+            out.solid = 1u;
             out.tint_kind = code / 8u;
             if sprite.color.w == -3.0 {
                 out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
@@ -106,6 +115,13 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                 let weights = array<vec3<f32>, 3>(
                     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
                 out.weights = weights[corner];
+                if (sprite.pages.w & 1u) != 0u {
+                    var floor_strength = f32(min((sprite.pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    if (sprite.pages.w & 536870912u) != 0u {
+                        floor_strength = f32((u32(sprite.depths.w) >> (corner * 8u)) & 255u) / 255.0;
+                    }
+                    out.weights = vec3<f32>(1.0 - floor_strength, floor_strength, 0.0);
+                }
                 out.solid = 3u;
             }
         }
@@ -123,16 +139,51 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     return out;
 }
 
+// Terrain only. Keep nearest coverage; every quadrant stays in this rectangle.
+fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
+    let center = textureSampleLevel(sprite_atlas, sprite_sampler, uv, i32(page), 0.0);
+    let size = vec2<f32>(textureDimensions(sprite_atlas));
+    let px = dx * size;
+    let py = dy * size;
+    let footprint = max(dot(px, px), dot(py, py));
+    if !(all(abs(rect) <= vec4<f32>(3.402823e38)) && all(abs(uv) <= vec2<f32>(3.402823e38)) && all(abs(dx) <= vec2<f32>(3.402823e38)) && all(abs(dy) <= vec2<f32>(3.402823e38)) && footprint > 1.5625 && footprint <= 3.402823e38) { return center; }
+    let lo = rect.xy + 0.5 / size;
+    let hi = lo + max(rect.zw - 1.0 / size, vec2<f32>(0.0));
+    let offsets = array<vec2<f32>, 4>(-dx-dy, -dx+dy, dx-dy, dx+dy);
+    var sum = vec4<f32>(0.0);
+    for (var i = 0u; i < 4u; i++) {
+        let tap = floor(textureSampleLevel(sprite_atlas, sprite_sampler, clamp(uv + 0.25 * offsets[i], lo, hi), i32(page), 0.0) * 255.0 + 0.5);
+        sum += vec4<f32>(tap.rgb * tap.a, tap.a);
+    }
+    if sum.a == 0.0 { return center; }
+    return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, center.a);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Derivatives are uniform and evaluated before any branch/discard.
+    let dx = dpdx(in.uv); let dy = dpdy(in.uv);
+    let dx2 = dpdx(in.uv2); let dy2 = dpdy(in.uv2);
+    let dx3 = dpdx(in.uv3); let dy3 = dpdy(in.uv3);
     if in.solid == 2u {
         return in.color;
     }
-    var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0);
+    var texel: vec4<f32>;
+    if in.solid == 0u || (in.pages.w & 1u) == 0u {
+        texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+    } else {
+        texel = terrain_sample(in.uv, in.pages.x, in.rect, dx, dy);
+    }
     if in.solid == 3u {
-        texel = texel * in.weights.x
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, 0.0) * in.weights.y
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, 0.0) * in.weights.z;
+        if (in.pages.w & 1u) != 0u {
+            texel = texel * in.weights.x
+                + terrain_sample(in.uv2, in.pages.y, in.rect2, dx2, dy2) * in.weights.y
+                + texel * in.weights.z;
+        } else {
+            texel = texel * in.weights.x
+                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, i32(in.pages.y), 0.0) * in.weights.y
+                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, i32(in.pages.z), 0.0) * in.weights.z;
+        }
     }
     if texel.a <= 0.0 {
         discard;
@@ -140,6 +191,39 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.tint_kind == 4u {
         let water = vec3<f32>(0.14901961, 0.44313726, 0.74509805);
         return vec4<f32>(mix(texel.rgb, water, 0.14), texel.a);
+    }
+    let ramp = in.tint_kind >= 21u && in.tint_kind <= 26u;
+    let kind = select(in.tint_kind, in.tint_kind - 16u, ramp);
+    if (kind >= 5u && kind <= 10u) || kind == 12u {
+        let detail = dot(texel.rgb, vec3<f32>(1.0 / 3.0));
+        var base = vec3<f32>(0.18);
+        var amount = 0.55;
+        var shade = 1.0;
+        switch kind {
+            case 6u: { base = vec3<f32>(0.78, 0.79, 0.78); amount = 0.12; }
+            case 7u: { shade = 0.72; }
+            case 12u: { shade = 0.78; }
+            case 8u: { base = vec3<f32>(0.42, 0.57, 0.65); amount = 0.20; }
+            case 9u: { base = vec3<f32>(0.10, 0.08, 0.05); amount = 0.35; }
+            case 10u: { base = vec3<f32>(0.22, 0.36, 0.33); amount = 0.25; }
+            default: {}
+        }
+        shade *= select(1.0, 0.92, ramp);
+        return vec4<f32>((base + detail * amount) * shade, texel.a);
+    }
+    if (in.pages.w & 1u) != 0u && in.tint_kind <= 3u {
+        var scales = vec3<f32>(1000.0);
+        switch (in.pages.w >> 1u) & 7u {
+            case 0u: { scales = vec3<f32>(990.0, 1000.0, 970.0); }
+            case 1u: { scales = vec3<f32>(950.0, 1000.0, 980.0); }
+            case 2u: { scales = vec3<f32>(940.0, 1000.0, 930.0); }
+            case 3u: { scales = vec3<f32>(1040.0, 980.0, 880.0); }
+            case 4u: { scales = vec3<f32>(1030.0, 1000.0, 900.0); }
+            default: {}
+        }
+        let canopy = f32(min((in.pages.w >> 14u) & 1023u, 1000u)) / 1000.0;
+        let factor = in.color.rgb * (scales / 1000.0) * (1.0 - 0.12 * canopy);
+        return vec4<f32>(floor(clamp(texel.rgb * 255.0 * factor, vec3<f32>(0.0), vec3<f32>(255.0)) + 0.5) / 255.0, texel.a);
     }
     return texel * in.color;
 }

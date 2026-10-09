@@ -56,12 +56,13 @@ fn canvas_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: new_atlas(&canvas).unwrap(),
+        atlas: [None, None, None],
         source_atlas: Vec::new(),
         presentation: CanvasPresentation::new(128, 128),
     };
     let camera = camera();
     let terrain = [SceneTerrain {
+        appearance: None,
         position: camera.center,
         material: 0,
         elevation_meters: 800.0,

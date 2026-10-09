@@ -1,7 +1,8 @@
 // Graphics-only WebGL2 adapter. Keep this module self-contained: wasm-bindgen
 // packages local modules, not arbitrary transitive shader/JS asset imports.
 const SIDE = 2048;
-const STRIDE = 96;
+const STRIDE = 112;
+const PAGES = 3;
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_PIXELS = 4194304;
 
@@ -16,7 +17,8 @@ layout(location=2) in vec4 uv;
 layout(location=3) in vec4 depths;
 layout(location=4) in vec4 terrainBlend0;
 layout(location=5) in vec4 terrainBlend1;
-uniform sampler2D atlas;
+layout(location=6) in uvec4 pages;
+uniform highp sampler2DArray atlas;
 out vec4 vColor;
 out vec2 vUv;
 out vec2 vUv2;
@@ -24,6 +26,10 @@ out vec2 vUv3;
 out vec3 vWeights;
 flat out uint vSolid;
 flat out uint vTint;
+flat out uvec4 vPages;
+flat out vec4 vRect;
+flat out vec4 vRect2;
+flat out vec4 vRect3;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -61,7 +67,7 @@ vec2 terrainUv(uint mode, uint corner) {
     return vec2(0);
 }
 vec2 terrainAtlasUv(vec4 rect, vec2 local) {
-    vec2 pixel = 1.0 / vec2(textureSize(atlas, 0));
+    vec2 pixel = 1.0 / vec2(textureSize(atlas, 0).xy);
     return rect.xy + pixel * .5 + local * max(rect.zw - pixel, vec2(0));
 }
 vec3 terrainTint(uint kind) {
@@ -72,6 +78,10 @@ vec3 terrainTint(uint kind) {
 }
 void main() {
     uint vertex = uint(gl_VertexID);
+    vPages = pages;
+    vRect = uv;
+    vRect2 = terrainBlend0;
+    vRect3 = terrainBlend1;
     vUv2 = vec2(0);
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
@@ -89,13 +99,20 @@ void main() {
             vec2 local = terrainUv(code % 8u, corner);
             vUv = terrainAtlasUv(uv, local);
             vColor = vec4(terrainTint(code / 8u), 1);
-            vSolid = 0u;
+            vSolid = 1u;
             vTint = code / 8u;
             if (color.w == -3.0) {
                 vUv2 = terrainAtlasUv(terrainBlend0, local);
                 vUv3 = terrainAtlasUv(terrainBlend1, local);
                 vec3 weights[3] = vec3[3](vec3(1,0,0), vec3(0,1,0), vec3(0,0,1));
                 vWeights = weights[corner];
+                if ((pages.w & 1u) != 0u) {
+                    float floorStrength = float(min((pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    if ((pages.w & 536870912u) != 0u) {
+                        floorStrength = float((uint(depths.w) >> (corner * 8u)) & 255u) / 255.0;
+                    }
+                    vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
+                }
                 vSolid = 3u;
             }
         }
@@ -113,7 +130,7 @@ void main() {
 const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D atlas;
+uniform highp sampler2DArray atlas;
 in vec4 vColor;
 in vec2 vUv;
 in vec2 vUv2;
@@ -121,21 +138,83 @@ in vec2 vUv3;
 in vec3 vWeights;
 flat in uint vSolid;
 flat in uint vTint;
+flat in uvec4 vPages;
+flat in vec4 vRect;
+flat in vec4 vRect2;
+flat in vec4 vRect3;
 out vec4 result;
+vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
+    vec4 center = textureLod(atlas, vec3(uv, float(page)), 0.0);
+    vec2 size = vec2(textureSize(atlas, 0).xy);
+    vec2 px = dx * size, py = dy * size;
+    float footprint = max(dot(px,px), dot(py,py));
+    if (!(all(lessThanEqual(abs(rect),vec4(3.402823e38))) && all(lessThanEqual(abs(uv),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint > 1.5625 && footprint <= 3.402823e38)) return center;
+    vec2 lo = rect.xy + .5 / size;
+    vec2 hi = lo + max(rect.zw - 1.0 / size, vec2(0));
+    vec2 offsets[4] = vec2[4](-dx-dy, -dx+dy, dx-dy, dx+dy);
+    vec4 sum = vec4(0);
+    for (int i=0; i<4; i++) {
+        vec4 tap = floor(textureLod(atlas, vec3(clamp(uv + .25 * offsets[i], lo, hi), float(page)), 0.0) * 255.0 + .5);
+        sum += vec4(tap.rgb * tap.a, tap.a);
+    }
+    if (sum.a == 0.0) return center;
+    return vec4(floor(sum.rgb / sum.a + .5) / 255.0, center.a);
+}
 void main() {
+    vec2 dx=dFdx(vUv), dy=dFdy(vUv);
+    vec2 dx2=dFdx(vUv2), dy2=dFdy(vUv2);
+    vec2 dx3=dFdx(vUv3), dy3=dFdy(vUv3);
     if (vSolid == 2u) {
         result = vColor;
         return;
     }
-    vec4 texel = textureLod(atlas, vUv, 0.0);
+    vec4 texel;
+    if (vSolid == 0u || (vPages.w & 1u) == 0u) texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
+    else texel = terrainSample(vUv, vPages.x, vRect, dx, dy);
     if (vSolid == 3u) {
-        texel = texel * vWeights.x
-              + textureLod(atlas, vUv2, 0.0) * vWeights.y
-              + textureLod(atlas, vUv3, 0.0) * vWeights.z;
+        if ((vPages.w & 1u) != 0u) {
+            texel = texel * vWeights.x
+                  + terrainSample(vUv2, vPages.y, vRect2, dx2, dy2) * vWeights.y
+                  + texel * vWeights.z;
+        } else {
+            texel = texel * vWeights.x
+                  + textureLod(atlas, vec3(vUv2, float(vPages.y)), 0.0) * vWeights.y
+                  + textureLod(atlas, vec3(vUv3, float(vPages.z)), 0.0) * vWeights.z;
+        }
     }
     if (texel.a <= 0.0) discard;
     if (vTint == 4u) {
         result = vec4(mix(texel.rgb, vec3(.14901961,.44313726,.74509805), .14), texel.a);
+        return;
+    }
+    bool ramp = vTint >= 21u && vTint <= 26u;
+    uint kind = ramp ? vTint - 16u : vTint;
+    if ((kind >= 5u && kind <= 10u) || kind == 12u) {
+        float detail = dot(texel.rgb, vec3(1.0 / 3.0));
+        vec3 base = vec3(.18);
+        float amount = .55;
+        float shade = 1.0;
+        if (kind == 6u) { base = vec3(.78,.79,.78); amount = .12; }
+        if (kind == 7u) { shade = .72; }
+        if (kind == 12u) { shade = .78; }
+        if (kind == 8u) { base = vec3(.42,.57,.65); amount = .20; }
+        if (kind == 9u) { base = vec3(.10,.08,.05); amount = .35; }
+        if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
+        shade *= ramp ? .92 : 1.0;
+        result = vec4((base + detail * amount) * shade, texel.a);
+        return;
+    }
+    if ((vPages.w & 1u) != 0u && vTint <= 3u) {
+        uint palette = (vPages.w >> 1u) & 7u;
+        vec3 scales = vec3(1000);
+        if (palette == 0u) scales = vec3(990,1000,970);
+        if (palette == 1u) scales = vec3(950,1000,980);
+        if (palette == 2u) scales = vec3(940,1000,930);
+        if (palette == 3u) scales = vec3(1040,980,880);
+        if (palette == 4u) scales = vec3(1030,1000,900);
+        float canopy = float(min((vPages.w >> 14u) & 1023u, 1000u)) / 1000.0;
+        vec3 factor = vColor.rgb * (scales / 1000.0) * (1.0 - .12 * canopy);
+        result = vec4(floor(clamp(texel.rgb * 255.0 * factor, vec3(0), vec3(255)) + .5) / 255.0, texel.a);
         return;
     }
     result = texel * vColor;
@@ -179,7 +258,8 @@ export class AoeWebGl {
         try {
             if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < SIDE ||
                 gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 1 ||
-                gl.getParameter(gl.MAX_VERTEX_ATTRIBS) < 6 ||
+                gl.getParameter(gl.MAX_VERTEX_ATTRIBS) < 7 ||
+                gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < PAGES ||
                 gl.getParameter(gl.DEPTH_BITS) < 24) {
                 throw new Error('WebGL2 sprite/depth limits unavailable');
             }
@@ -220,13 +300,16 @@ export class AoeWebGl {
                 gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, STRIDE, slot * 16);
                 gl.vertexAttribDivisor(slot, 1);
             }
+            gl.enableVertexAttribArray(6);
+            gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, 96);
+            gl.vertexAttribDivisor(6, 1);
             gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, this.texture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, SIDE, SIDE);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, SIDE, SIDE, PAGES, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
             gl.useProgram(this.program);
             gl.uniform1i(gl.getUniformLocation(this.program, 'atlas'), 0);
             this.resize(this.canvas.width, this.canvas.height);
@@ -263,20 +346,20 @@ export class AoeWebGl {
 
     upload(pixels) {
         this.check();
-        if (pixels.byteLength !== SIDE * SIDE * 4) throw new Error('Invalid WebGL2 atlas size');
+        if (pixels.byteLength !== SIDE * SIDE * 4 * PAGES) throw new Error('Invalid WebGL2 atlas size');
         const gl = this.gl;
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
         // Typed bytes preserve the WebGPU atlas row convention, without browser
         // image-source flipping, premultiplication, or colour-space conversion.
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SIDE, SIDE, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, SIDE, SIDE, PAGES, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         this.check();
         this.atlasReady = true;
-        // One bounded 16 MiB source atlas permits device-context restoration.
+        // One bounded 48 MiB source atlas permits device-context restoration.
         this.atlasPixels = pixels;
     }
 
@@ -301,7 +384,7 @@ export class AoeWebGl {
         }
         if (instances.byteLength) gl.bufferSubData(gl.ARRAY_BUFFER, 0, instances);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.disable(gl.CULL_FACE);
         gl.disable(gl.SCISSOR_TEST);

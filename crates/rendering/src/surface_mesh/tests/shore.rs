@@ -9,6 +9,7 @@ enum ShoreEdge {
 
 fn terrain(tile: [i32; 2], water: u8, height: i16) -> SceneTerrain {
     SceneTerrain {
+        appearance: None,
         position: [f64::from(tile[0]) + 0.5, f64::from(tile[1]) + 0.5],
         material: if water == 0 { 3 } else { 5 },
         elevation_meters: f64::from(height),
@@ -49,7 +50,10 @@ fn camera() -> SceneCamera {
 #[wasm_bindgen_test]
 fn shoreline_skirts_close_unequal_east_and_south_edges_with_water_on_either_side() {
     let art = test_art(GameFrame {
-        uv: [0.4, 0.5, 0.03, 0.02],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.4, 0.5, 0.03, 0.02],
+        },
         size: [96.0, 48.0],
         anchor: [48.0, 24.0],
     });
@@ -71,7 +75,7 @@ fn shoreline_skirts_close_unequal_east_and_south_edges_with_water_on_either_side
             assert!(skirts.iter().all(|triangle| {
                 !triangle.pickable
                     && triangle.material == 4
-                    && triangle.tint == 3
+                    && triangle.tint == 7
                     && triangle.texture_uv.is_some()
                     && triangle.color == darken(surface_color(land), 0.62)
             }));
@@ -109,7 +113,10 @@ fn modeled_water_steps_use_the_shared_water_material_and_are_not_pickable() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
-            uv: [0.4, 0.5, 0.03, 0.02],
+            atlas: crate::AtlasAddress {
+                page: 0,
+                uv: [0.4, 0.5, 0.03, 0.02],
+            },
             size: [96.0, 48.0],
             anchor: [48.0, 24.0],
         }),
@@ -153,12 +160,15 @@ fn alpha_bearing_diamond_fills_shore_skirts_without_transparent_uv_corners() {
     atlas_context.fill();
 
     let art = test_art(GameFrame {
-        uv: [
-            0.0,
-            0.0,
-            96.0 / GAME_ATLAS_SIDE as f32,
-            48.0 / GAME_ATLAS_SIDE as f32,
-        ],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [
+                0.0,
+                0.0,
+                96.0 / GAME_ATLAS_SIDE as f32,
+                48.0 / GAME_ATLAS_SIDE as f32,
+            ],
+        },
         size: [96.0, 48.0],
         anchor: [48.0, 24.0],
     });

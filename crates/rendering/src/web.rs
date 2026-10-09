@@ -1,17 +1,20 @@
 use crate::surface_mesh::ProjectedSurfaceTriangle;
 use aoe_protocol::EntityState;
 use bytemuck::{Pod, Zeroable};
-use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
-use wgpu::SurfaceTarget;
+// Generated at build time from the readable WGSL; no runtime decompression.
+include!(concat!(env!("OUT_DIR"), "/sprites_shader.rs"));
 const CAPACITY: usize = 16_384;
 const ATLAS_SIDE: u32 = 8;
-const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 
+pub(crate) mod gpu_bridge;
 #[path = "web_buffer.rs"]
 mod instance_buffer;
+mod submission;
+use gpu_bridge::{GpuBridge, error};
 pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
+use wasm_bindgen::JsCast;
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
@@ -27,17 +30,24 @@ pub(crate) struct Sprite {
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
+    /// Primary, secondary, tertiary atlas layers, then appearance (legacy zero).
+    pub(crate) pages: [u32; 4],
 }
 pub struct Renderer {
     adapter_label: String,
-    surface: wgpu::Surface<'static>,
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    pub(crate) pipeline: wgpu::RenderPipeline,
+    pub(crate) device: GpuBridge,
+    config: Configuration,
     pub(crate) instances: InstanceBuffer,
-    pub(crate) _atlas: wgpu::Texture,
-    depth: wgpu::Texture,
+    pub(crate) atlas_side: u32,
+    pub(crate) atlas_pages: u32,
+    resize_error: Option<String>,
+}
+
+struct Configuration {
+    width: u32,
+    height: u32,
+    #[cfg(test)]
+    format: String,
 }
 
 #[derive(Clone, Copy)]
@@ -62,176 +72,32 @@ pub struct Counters {
 
 impl Renderer {
     pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::BROWSER_WEBGPU;
-        let instance = wgpu::Instance::new(descriptor);
-        let surface = instance
-            .create_surface(SurfaceTarget::Canvas(canvas.clone()))
-            .map_err(|e| format!("WebGPU surface: {e}"))?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                compatible_surface: Some(&surface),
-                ..Default::default()
-            })
-            .await
-            .map_err(|e| format!("No WebGPU adapter: {e}"))?;
-        let info = adapter.get_info();
-        let adapter_label = format!("{:?}: {}", info.backend, info.name);
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
-            .await
-            .map_err(|e| format!("WebGPU device: {e}"))?;
         let width = canvas.width().max(1);
         let height = canvas.height().max(1);
-        let config = surface
-            .get_default_config(&adapter, width, height)
-            .ok_or("No compatible canvas format")?;
-        surface.configure(&device, &config);
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("synthetic sprites"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sprites.wgsl"))),
-        });
-        let atlas = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("synthetic sprite atlas"),
-            size: wgpu::Extent3d {
-                width: ATLAS_SIDE,
-                height: ATLAS_SIDE,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let mut pixels = [0_u8; ATLAS_BYTES];
-        for y in 0..ATLAS_SIDE {
-            for x in 0..ATLAS_SIDE {
-                let pixel = &mut pixels[((y * ATLAS_SIDE + x) * 4) as usize..][..4];
-                pixel.copy_from_slice(&[
-                    255,
-                    255,
-                    255,
-                    if (1..7).contains(&x) && (1..7).contains(&y) {
-                        255
-                    } else {
-                        0
-                    },
-                ]);
-            }
-        }
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &atlas,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &pixels,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(ATLAS_SIDE * 4),
-                rows_per_image: Some(ATLAS_SIDE),
-            },
-            wgpu::Extent3d {
-                width: ATLAS_SIDE,
-                height: ATLAS_SIDE,
-                depth_or_array_layers: 1,
-            },
-        );
-        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("synthetic sprite sampler"),
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sprites"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("sprite pipeline layout"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("sprite pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-        let instances = InstanceBuffer::new(
-            &device,
-            &pipeline.get_bind_group_layout(0),
-            &atlas_view,
-            &sampler,
-        );
-        let depth = create_depth_texture(&device, width, height);
+        let promise = gpu_bridge::create(
+            &canvas,
+            SHADER_SOURCE,
+            instance_buffer::INITIAL_CAPACITY as u32,
+        )
+        .map_err(error)?;
+        let device: GpuBridge = wasm_bindgen_futures::JsFuture::from(promise)
+            .await
+            .map_err(error)?
+            .unchecked_into();
+        let adapter_label = device.adapter_label();
         Ok(Self {
             adapter_label,
-            surface,
+            config: Configuration {
+                width,
+                height,
+                #[cfg(test)]
+                format: device.format(),
+            },
             device,
-            queue,
-            config,
-            pipeline,
-            instances,
-            _atlas: atlas,
-            depth,
+            instances: InstanceBuffer::new(),
+            atlas_side: ATLAS_SIDE,
+            atlas_pages: 1,
+            resize_error: None,
         })
     }
 
@@ -245,9 +111,7 @@ impl Renderer {
         }
         self.config.width = width;
         self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
-        self.depth.destroy();
-        self.depth = create_depth_texture(&self.device, width, height);
+        self.resize_error = self.device.resize(width, height).map_err(error).err();
     }
 
     pub fn render(
@@ -280,6 +144,7 @@ impl Renderer {
                 uv: [0.0, 0.0, 1.0, 1.0],
                 depths: [0.0; 4],
                 terrain_blend: [[0.0; 4]; 2],
+                pages: [0; 4],
             });
         }
         self.render_sprites(&sprites)
@@ -304,11 +169,7 @@ impl Renderer {
         clear: [f64; 4],
     ) -> Result<Counters, String> {
         let required = required_capacity(surfaces, sprites)?;
-        self.instances.ensure_capacity(
-            required,
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-        )?;
+        self.reserve_packets(required)?;
         let mut instances = Vec::with_capacity(required);
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
@@ -316,99 +177,7 @@ impl Renderer {
             instances.push(surface_instance(triangle, [width, height], 0.0));
         }
         instances.extend_from_slice(sprites);
-        normalize_depths(&mut instances);
-        self.instances.write(&self.queue, &instances);
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
-                    atlas_pages: 1,
-                    atlas_uploads: 1,
-                    atlas_bytes: ATLAS_BYTES,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
-                    atlas_pages: 1,
-                    atlas_uploads: 1,
-                    atlas_bytes: ATLAS_BYTES,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                return Err("WebGPU surface lost; reload to restore it".to_owned());
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                return Err("WebGPU surface validation failed".to_owned());
-            }
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_view = self
-            .depth
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("sprites"),
-            });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("world layers"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: clear[0],
-                            g: clear[1],
-                            b: clear[2],
-                            a: clear[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.pipeline);
-            self.instances.set_on(&mut pass);
-            pass.draw(0..6, 0..instances.len() as u32);
-        }
-        self.queue.submit(Some(encoder.finish()));
-        self.queue.present(frame);
-        Ok(Counters {
-            did_present: true,
-            visible: sprites.len(),
-            draw_calls: usize::from(!instances.is_empty()),
-            gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 7,
-            atlas_pages: 1,
-            atlas_uploads: 1,
-            atlas_bytes: ATLAS_BYTES,
-        })
+        self.submit_packets(&mut instances, sprites.len(), clear)
     }
 }
 
@@ -427,7 +196,17 @@ pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
     let (minimum, maximum) = range.unwrap_or((0.0, 0.0));
     let span = maximum - minimum;
     for sprite in instances {
-        for depth in &mut sprite.depths {
+        // Variant-tagged surface w carries an exact numeric 24-bit floor packet,
+        // not geometry depth. Legacy/manual/object packets keep old normalization.
+        let count = if sprite.color[3] < 0.0
+            && sprite.pages[3] & (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
+                == (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
+        {
+            3
+        } else {
+            4
+        };
+        for depth in &mut sprite.depths[..count] {
             *depth = if *depth == f32::NEG_INFINITY {
                 1.0
             } else if !depth.is_finite() {
@@ -441,19 +220,8 @@ pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
     }
 }
 
-fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
-    device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("world depth"),
-        size: wgpu::Extent3d {
-            width: width.max(1),
-            height: height.max(1),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Depth24Plus,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    })
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        self.device.dispose();
+    }
 }

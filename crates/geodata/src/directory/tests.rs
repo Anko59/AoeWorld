@@ -8,6 +8,9 @@ use aoe_map::{
 };
 use std::path::PathBuf;
 
+#[path = "tests/publication_cancel.rs"]
+mod publication_cancel;
+
 fn test_directory() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "aoe-directory-test-{}-{}",
