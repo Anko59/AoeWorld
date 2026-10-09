@@ -1,6 +1,6 @@
 use super::Sprite;
+use super::gpu_bridge::{GpuBridge, error};
 use crate::surface_mesh::ProjectedSurfaceTriangle;
-use wgpu::{BindGroup, BindGroupLayout, Buffer, Device, Queue, Sampler, TextureView};
 
 pub(crate) const INITIAL_CAPACITY: usize = super::CAPACITY
     + crate::surface_mesh::MAX_SURFACE_TRIANGLES
@@ -13,27 +13,12 @@ pub(crate) const MAX_CAPACITY: usize =
     (MAX_BUFFER_BYTES / std::mem::size_of::<Sprite>() as u64) as usize;
 
 pub(crate) struct InstanceBuffer {
-    buffer: Buffer,
-    bind_group: BindGroup,
-    _atlas_view: TextureView,
-    _sampler: Sampler,
     capacity: usize,
 }
 
 impl InstanceBuffer {
-    pub(crate) fn new(
-        device: &Device,
-        layout: &BindGroupLayout,
-        atlas_view: &TextureView,
-        sampler: &Sampler,
-    ) -> Self {
-        let buffer = create_buffer(device, INITIAL_CAPACITY);
-        let bind_group = create_bind_group(device, layout, &buffer, atlas_view, sampler);
+    pub(crate) fn new() -> Self {
         Self {
-            buffer,
-            bind_group,
-            _atlas_view: atlas_view.clone(),
-            _sampler: sampler.clone(),
             capacity: INITIAL_CAPACITY,
         }
     }
@@ -41,50 +26,15 @@ impl InstanceBuffer {
     pub(crate) fn ensure_capacity(
         &mut self,
         required: usize,
-        device: &Device,
-        layout: &BindGroupLayout,
+        device: &GpuBridge,
     ) -> Result<(), String> {
         validate_capacity(required)?;
         if required <= self.capacity {
             return Ok(());
         }
-        let buffer = create_buffer(device, required);
-        let bind_group =
-            create_bind_group(device, layout, &buffer, &self._atlas_view, &self._sampler);
-        self.buffer.destroy();
-        self.buffer = buffer;
-        self.bind_group = bind_group;
+        device.ensure_capacity(required as u32).map_err(error)?;
         self.capacity = required;
         Ok(())
-    }
-
-    pub(crate) fn write(&self, queue: &Queue, instances: &[Sprite]) {
-        debug_assert!(instances.len() <= self.capacity);
-        if !instances.is_empty() {
-            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(instances));
-        }
-    }
-
-    pub(crate) fn rebind_resources(
-        &mut self,
-        device: &Device,
-        layout: &BindGroupLayout,
-        atlas_view: &TextureView,
-        sampler: &Sampler,
-    ) {
-        self._atlas_view = atlas_view.clone();
-        self._sampler = sampler.clone();
-        self.bind_group = create_bind_group(
-            device,
-            layout,
-            &self.buffer,
-            &self._atlas_view,
-            &self._sampler,
-        );
-    }
-
-    pub(crate) fn set_on(&self, pass: &mut wgpu::RenderPass<'_>) {
-        pass.set_bind_group(0, &self.bind_group, &[]);
     }
 
     #[cfg(test)]
@@ -93,7 +43,7 @@ impl InstanceBuffer {
     }
 
     pub(crate) fn bytes(&self) -> usize {
-        usize::try_from(self.buffer.size()).unwrap_or(usize::MAX)
+        self.capacity * std::mem::size_of::<Sprite>()
     }
 }
 
@@ -121,47 +71,39 @@ fn validate_capacity(capacity: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn create_buffer(device: &Device, capacity: usize) -> Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("sprite instances"),
-        size: (capacity * std::mem::size_of::<Sprite>()) as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
-}
-
-fn create_bind_group(
-    device: &Device,
-    layout: &BindGroupLayout,
-    buffer: &Buffer,
-    atlas_view: &TextureView,
-    sampler: &Sampler,
-) -> BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("sprite data"),
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(atlas_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
-        ],
-    })
-}
-
 fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
     [
         (x / width * 2.0 - 1.0) as f32,
         (1.0 - y / height * 2.0) as f32,
     ]
+}
+
+/// Reconstruct the original legacy packet without changing atlas image bytes.
+pub(crate) fn retain_world_packet(sprite: &mut Sprite, admitted: Option<u32>) {
+    const WORLD: u32 = 1 << 30;
+    if sprite.pages[3] & WORLD == 0 || admitted == Some(sprite.pages[2]) {
+        return;
+    }
+    let primary_page = sprite.terrain_blend[1][2] as u32 / 8;
+    let bed_page = sprite.terrain_blend[1][3] as u32 / 8;
+    sprite.pages = [
+        primary_page,
+        bed_page,
+        primary_page,
+        sprite.pages[3] & !WORLD,
+    ];
+    if primary_page == bed_page && sprite.uv == sprite.terrain_blend[0] {
+        // World metadata forced Some even for a single native group. Undo that
+        // as well, including the optional floor payload, to match old emission.
+        sprite.color[3] = -1.0;
+        sprite.terrain_blend = [[0.0; 4]; 2];
+        sprite.pages[1] = 0;
+        sprite.pages[2] = 0;
+        sprite.pages[3] &= !crate::surface_mesh::landscape::INTERPOLATED_FLOOR;
+        sprite.depths[3] = 0.0;
+    } else {
+        sprite.terrain_blend[1] = sprite.uv;
+    }
 }
 
 pub(crate) fn surface_instance(
@@ -193,7 +135,7 @@ pub(crate) fn surface_instance(
     };
     let second = points[1];
     let third = points[2];
-    match triangle.texture_uv {
+    let mut sprite = match triangle.texture_uv {
         Some(uv) => Sprite {
             position: points[0],
             radius: second,
@@ -250,5 +192,24 @@ pub(crate) fn surface_instance(
             terrain_blend: [[0.0; 4]; 2],
             pages: [0; 4],
         },
+    };
+    if let Some(world) = triangle
+        .world_texture()
+        .filter(|_| landscape && triangle.texture_uv.is_some())
+    {
+        let pages = sprite.pages;
+        sprite.terrain_blend[1] = [
+            world.footprint[0],
+            world.footprint[1],
+            f32::from(world.groups[0]) + (pages[0] * 8) as f32,
+            f32::from(world.groups[1]) + (pages[1] * 8) as f32,
+        ];
+        sprite.pages = [
+            triangle.texture_tile[0] as u32,
+            triangle.texture_tile[1] as u32,
+            world.checksum,
+            pages[3] | (1 << 30),
+        ];
     }
+    sprite
 }

@@ -7,25 +7,19 @@ async fn webgpu_native_species_body_and_alpha_silhouette_pixels_and_removal() {
     let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
     let art = fixture::art();
     let clear = fixture::CLEAR.map(|v| f64::from(v) / 255.0);
-    let color = wgpu::Color {
-        r: clear[0],
-        g: clear[1],
-        b: clear[2],
-        a: clear[3],
-    };
     for family in [2, 4] {
         let sprites = fixture::drawn(&art, &[fixture::resource(family, 0)])
             .into_iter()
             .map(|(sprite, _, _, _)| sprite)
             .collect::<Vec<_>>();
         renderer.render_world_layers(&[], &sprites, clear).unwrap();
-        let pixels = read_pixels_with_clear(&renderer, 2, fixture::PROBES, color).await;
+        let pixels = read_pixels_with_clear(&renderer, 2, fixture::PROBES, clear).await;
         for (pixel, expected) in pixels.into_iter().zip(fixture::expected(family)) {
             assert_pixel(pixel, expected);
         }
         assert!(fixture::drawn(&art, &[]).is_empty());
         renderer.render_world_layers(&[], &[], clear).unwrap();
-        for pixel in read_pixels_with_clear(&renderer, 0, fixture::PROBES, color).await {
+        for pixel in read_pixels_with_clear(&renderer, 0, fixture::PROBES, clear).await {
             assert_pixel(pixel, fixture::CLEAR);
         }
     }

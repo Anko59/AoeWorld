@@ -2,6 +2,18 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+// Keep per-surface appearance outside the iterator's bulk Copy/emission loop.
+// The caller owns the triangle; no scene allocation or geometry copy is added.
+#[inline(never)]
+pub(super) fn texture_world_surface(
+    triangle: &mut ProjectedSurfaceTriangle,
+    art: &GameArt,
+    admitted: Option<u32>,
+) {
+    apply_terrain_textures(std::slice::from_mut(triangle), art);
+    triangle.retain_world_texture(admitted);
+}
+
 /// Legacy/fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
     if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {

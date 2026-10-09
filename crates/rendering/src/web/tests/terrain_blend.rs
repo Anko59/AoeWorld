@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "terrain_blend/readback.rs"]
 mod readback;
+#[path = "terrain_blend/world.rs"]
+mod world;
 use readback::PixelReadback;
 
 #[wasm_bindgen_test]
@@ -17,7 +19,7 @@ async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_pri
                     .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
                     .unwrap();
                 let pixels = readback
-                    .read(&renderer, 2, fixture::FOREST_PROBES, wgpu::Color::BLACK)
+                    .read(&renderer, 2, fixture::FOREST_PROBES, [0.0, 0.0, 0.0, 1.0])
                     .await;
                 for ([x, _], pixel) in fixture::FOREST_PROBES.into_iter().zip(pixels) {
                     assert_pixel(
@@ -45,7 +47,7 @@ async fn webgpu_shared_floor_gradient_seam_and_old_packet_fallback() {
                 .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
             let pixels = readback
-                .read(&renderer, 2, fixture::PROBES, wgpu::Color::BLACK)
+                .read(&renderer, 2, fixture::PROBES, [0.0, 0.0, 0.0, 1.0])
                 .await;
             for ([x, _], pixel) in fixture::PROBES.into_iter().zip(pixels) {
                 assert_pixel(pixel, fixture::expected(x, interpolated));
@@ -117,7 +119,7 @@ async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_
             .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
             .unwrap();
         for pixel in readback
-            .read(&renderer, 1, [[48, 48], [32, 32]], wgpu::Color::BLACK)
+            .read(&renderer, 1, [[48, 48], [32, 32]], [0.0, 0.0, 0.0, 1.0])
             .await
         {
             assert_pixel(pixel, expected);
@@ -145,6 +147,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         grass: vec![frame(0)],
         terrain: std::array::from_fn(|_| vec![frame(0)]),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -180,7 +183,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
                 .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
                 .unwrap();
             for pixel in readback
-                .read(&renderer, 1, [[48, 48], [32, 32]], wgpu::Color::BLACK)
+                .read(&renderer, 1, [[48, 48], [32, 32]], [0.0, 0.0, 0.0, 1.0])
                 .await
             {
                 assert_pixel(pixel, expected);
@@ -250,14 +253,14 @@ pub(super) fn assert_pixel(pixel: [u8; 4], expected: [u8; 4]) {
 }
 
 pub(super) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2]) -> [u8; 4] {
-    read_pixel_with_clear(renderer, count, point, wgpu::Color::BLACK).await
+    read_pixel_with_clear(renderer, count, point, [0.0, 0.0, 0.0, 1.0]).await
 }
 
 pub(super) async fn read_pixel_with_clear(
     renderer: &Renderer,
     count: u32,
     point: [u32; 2],
-    clear: wgpu::Color,
+    clear: [f64; 4],
 ) -> [u8; 4] {
     read_pixels_with_clear(renderer, count, [point], clear).await[0]
 }
@@ -267,14 +270,14 @@ pub(super) async fn read_pixels<const N: usize>(
     count: u32,
     points: [[u32; 2]; N],
 ) -> [[u8; 4]; N] {
-    read_pixels_with_clear(renderer, count, points, wgpu::Color::BLACK).await
+    read_pixels_with_clear(renderer, count, points, [0.0, 0.0, 0.0, 1.0]).await
 }
 
 pub(super) async fn read_pixels_with_clear<const N: usize>(
     renderer: &Renderer,
     count: u32,
     points: [[u32; 2]; N],
-    clear: wgpu::Color,
+    clear: [f64; 4],
 ) -> [[u8; 4]; N] {
     let mut readback = PixelReadback::<N>::new(renderer);
     readback.read(renderer, count, points, clear).await

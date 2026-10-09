@@ -57,7 +57,7 @@ fn canvas_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         canvas: canvas.clone(),
         context: context.clone(),
         atlas: [None, None, None],
-        source_atlas: Vec::new(),
+        source_atlas: CanvasAtlas::default(),
         presentation: CanvasPresentation::new(128, 128),
     };
     let camera = camera();

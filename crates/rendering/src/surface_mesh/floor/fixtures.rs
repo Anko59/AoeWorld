@@ -90,6 +90,7 @@ pub(crate) fn forest_faces(
             })]
         }),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

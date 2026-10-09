@@ -44,6 +44,8 @@ pub struct GameArt {
     pub terrain: [Vec<GameFrame>; 7],
     /// Authored sheet topology; never infer a repeating sheet from frame count.
     pub terrain_topology: [Option<TerrainTopology>; 7],
+    /// Layout key of the validated native lookup row; absent for raw/legacy art.
+    pub terrain_world: Option<u32>,
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
@@ -55,61 +57,16 @@ pub struct GameArt {
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
-        let side = GAME_ATLAS_SIDE;
+        self.world_atlas = None;
         if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
         }
-        let limits = self.device.limits();
-        if limits.max_texture_dimension_2d < side
-            || limits.max_texture_array_layers < GAME_ATLAS_PAGES
-        {
-            return Err("WebGPU cannot support the bounded three-page atlas".into());
-        }
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("local AoE II game atlas"),
-            size: wgpu::Extent3d {
-                width: side,
-                height: side,
-                depth_or_array_layers: GAME_ATLAS_PAGES,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        self.queue.write_texture(
-            texture.as_image_copy(),
-            pixels,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(side * 4),
-                rows_per_image: Some(side),
-            },
-            wgpu::Extent3d {
-                width: side,
-                height: side,
-                depth_or_array_layers: GAME_ATLAS_PAGES,
-            },
-        );
-        let view = texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        self.instances.rebind_resources(
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-            &view,
-            &sampler,
-        );
-        self._atlas.destroy();
-        self._atlas = texture;
+        // Borrowed WASM bytes are synchronously snapshotted by queue.writeTexture.
+        self.device
+            .upload_atlas(pixels)
+            .map_err(crate::web::gpu_bridge::error)?;
+        self.atlas_side = GAME_ATLAS_SIDE;
+        self.atlas_pages = GAME_ATLAS_PAGES;
         Ok(())
     }
 

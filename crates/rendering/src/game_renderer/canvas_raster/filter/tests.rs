@@ -2,6 +2,45 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn shared_alpha_kernel_matches_independent_integer_gold_and_keeps_center_coverage() {
+    for seed in 0..64_u32 {
+        let taps = std::array::from_fn::<_, 4, _>(|i| {
+            let i = i as u32;
+            [
+                ((seed * 31 + i * 17) % 256) as u8,
+                ((seed * 11 + i * 53) % 256) as u8,
+                ((seed * 7 + i * 97) % 256) as u8,
+                if seed == 0 {
+                    0
+                } else {
+                    [0, 1, 128, 255][i as usize]
+                },
+            ]
+        });
+        for alpha in [0, 127, 255] {
+            let center = [7, 89, 211, alpha];
+            let weight = taps.iter().map(|tap| u64::from(tap[3])).sum::<u64>();
+            let mut expected = center;
+            if weight != 0 {
+                for channel in 0..3 {
+                    let numerator = taps
+                        .iter()
+                        .map(|tap| u64::from(tap[channel]) * u64::from(tap[3]))
+                        .sum::<u64>();
+                    expected[channel] = ((numerator + weight / 2) / weight) as u8;
+                }
+            }
+            let mut sums = [0; 4];
+            for tap in taps {
+                add_tap(&mut sums, tap);
+            }
+            assert_eq!(finish(center, sums), expected);
+            assert_eq!(finish(center, sums)[3], alpha);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn threshold_nonfinite_and_quadrants_keep_nearest_ieee_fallback() {
     let address = crate::AtlasAddress {
         page: 0,

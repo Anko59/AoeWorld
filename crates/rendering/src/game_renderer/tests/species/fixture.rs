@@ -39,6 +39,7 @@ pub(crate) fn art() -> GameArt {
         grass: Vec::new(),
         terrain: Default::default(),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|kind| {
             if kind == 1 {
                 (0..14).map(|i| frame(640 + i * 16)).collect()

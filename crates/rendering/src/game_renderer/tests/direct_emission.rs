@@ -137,6 +137,7 @@ fn direct_production_scene_matches_frozen_old_scene_every_bit() {
             grass: base.grass.clone(),
             terrain: base.terrain.clone(),
             terrain_topology: base.terrain_topology,
+            terrain_world: None,
             resources: base.resources.clone(),
             tree_shadows: base.tree_shadows.clone(),
             tree_families: base.tree_families.clone(),
