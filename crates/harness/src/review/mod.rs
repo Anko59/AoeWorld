@@ -195,23 +195,22 @@ pub(crate) fn review_with(
     ask: &dyn Ask,
 ) -> Result<Report> {
     let branch = git::branch(root).unwrap_or_default();
-    review_with_branch(root, &branch, tier, runtime, task, plan, ask)
+    let policy = entry::Policy::pin(root, None, tier, runtime, plan)?;
+    review_with_branch(root, &branch, tier, &policy, task, plan, ask)
 }
 
+/// Review under `policy`, pinned by the caller before it chose the model.
 fn review_with_branch(
     root: &Path,
     branch: &str,
     tier: Tier,
-    runtime: Runtime,
+    policy: &entry::Policy,
     task: &str,
     plan: &Plan,
     ask: &dyn Ask,
 ) -> Result<Report> {
-    // Config, prompts and the policy fingerprint all come from one commit.
-    let (_pin, policy_base) = trusted::pin(root);
-    let policy_base = policy_base.ok_or("origin/dev is missing: fetch it first")?;
-    let policy_fingerprint = Report::policy_fingerprint_at(root, &policy_base, tier.name())?;
-    let config = Config::load(root)?;
+    let policy_fingerprint = Report::policy_fingerprint_at(root, &policy.commit, tier.name())?;
+    let (config, runtime) = (&policy.config, policy.runtime);
     let (base, merge_base, suites) = changed_suites(root)?;
     let minimum = config.floor(&suites);
     if tier < minimum {
@@ -249,7 +248,7 @@ fn review_with_branch(
     };
     let closing = matches!(plan, Plan::Closing { .. });
     let tier_config = config.tiers[&tier].clone();
-    let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
+    let model = policy.model.clone();
     let personas = tier_config.personas.clone();
     let started = now();
     let mut findings: Vec<Finding> = Vec::new();

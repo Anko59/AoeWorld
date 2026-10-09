@@ -100,8 +100,10 @@ none replaces another.
   Git. Any complete report for the target commit at the required tier or higher
   blocks reuse, whether it passed or failed. Only a review recorded for the
   same branch name is a source, under the reviewer policy that `origin/dev`
-  holds today: a review reads its policy from the one `origin/dev` commit it
-  started from and stores that commit's fingerprint. Reuse writes a new harness report
+  holds today: before loading its model, a review pins one policy commit
+  (the judge's own, `AOE_JUDGE_REV` from `.agents/hooks/harness.sh`, else
+  `origin/dev` once), reads config, model and prompts from it and stores its
+  fingerprint. Reuse writes a new harness report
   for the rebased commit that points to the original full
   or closing review, and the status and PR description identify the reuse. A
   reuse report is never itself a source for another reuse. Failing reviews and

@@ -51,6 +51,11 @@ fi
 [ "$event" = build ] && exit 0
 if [ "$event" = exec ]; then
   echo "harness: judge $judge" >&2
+  # A review reads its policy from the judge's own commit, never a later fetch.
+  case $key in
+    bootstrap-*) unset AOE_JUDGE_REV ;;
+    *) AOE_JUDGE_REV=$revision && export AOE_JUDGE_REV ;;
+  esac
   cd "$root" && exec "$binary" "$2"
 fi
 AOE_AGENT_HOOK_ROOT=$root AOE_AGENT_HOOK_JUDGE=$judge exec "$binary" agent-hook --runtime "$runtime" "$event"
