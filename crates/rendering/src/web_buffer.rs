@@ -1,6 +1,6 @@
 use super::Sprite;
+use super::gpu_bridge::{GpuBridge, error};
 use crate::surface_mesh::ProjectedSurfaceTriangle;
-use wgpu::{BindGroup, BindGroupLayout, Buffer, Device, Queue, Sampler, TextureView};
 
 pub(crate) const INITIAL_CAPACITY: usize = super::CAPACITY
     + crate::surface_mesh::MAX_SURFACE_TRIANGLES
@@ -13,27 +13,12 @@ pub(crate) const MAX_CAPACITY: usize =
     (MAX_BUFFER_BYTES / std::mem::size_of::<Sprite>() as u64) as usize;
 
 pub(crate) struct InstanceBuffer {
-    buffer: Buffer,
-    bind_group: BindGroup,
-    _atlas_view: TextureView,
-    _sampler: Sampler,
     capacity: usize,
 }
 
 impl InstanceBuffer {
-    pub(crate) fn new(
-        device: &Device,
-        layout: &BindGroupLayout,
-        atlas_view: &TextureView,
-        sampler: &Sampler,
-    ) -> Self {
-        let buffer = create_buffer(device, INITIAL_CAPACITY);
-        let bind_group = create_bind_group(device, layout, &buffer, atlas_view, sampler);
+    pub(crate) fn new() -> Self {
         Self {
-            buffer,
-            bind_group,
-            _atlas_view: atlas_view.clone(),
-            _sampler: sampler.clone(),
             capacity: INITIAL_CAPACITY,
         }
     }
@@ -41,50 +26,15 @@ impl InstanceBuffer {
     pub(crate) fn ensure_capacity(
         &mut self,
         required: usize,
-        device: &Device,
-        layout: &BindGroupLayout,
+        device: &GpuBridge,
     ) -> Result<(), String> {
         validate_capacity(required)?;
         if required <= self.capacity {
             return Ok(());
         }
-        let buffer = create_buffer(device, required);
-        let bind_group =
-            create_bind_group(device, layout, &buffer, &self._atlas_view, &self._sampler);
-        self.buffer.destroy();
-        self.buffer = buffer;
-        self.bind_group = bind_group;
+        device.ensure_capacity(required as u32).map_err(error)?;
         self.capacity = required;
         Ok(())
-    }
-
-    pub(crate) fn write(&self, queue: &Queue, instances: &[Sprite]) {
-        debug_assert!(instances.len() <= self.capacity);
-        if !instances.is_empty() {
-            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(instances));
-        }
-    }
-
-    pub(crate) fn rebind_resources(
-        &mut self,
-        device: &Device,
-        layout: &BindGroupLayout,
-        atlas_view: &TextureView,
-        sampler: &Sampler,
-    ) {
-        self._atlas_view = atlas_view.clone();
-        self._sampler = sampler.clone();
-        self.bind_group = create_bind_group(
-            device,
-            layout,
-            &self.buffer,
-            &self._atlas_view,
-            &self._sampler,
-        );
-    }
-
-    pub(crate) fn set_on(&self, pass: &mut wgpu::RenderPass<'_>) {
-        pass.set_bind_group(0, &self.bind_group, &[]);
     }
 
     #[cfg(test)]
@@ -93,7 +43,7 @@ impl InstanceBuffer {
     }
 
     pub(crate) fn bytes(&self) -> usize {
-        usize::try_from(self.buffer.size()).unwrap_or(usize::MAX)
+        self.capacity * std::mem::size_of::<Sprite>()
     }
 }
 
@@ -119,42 +69,6 @@ fn validate_capacity(capacity: usize) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn create_buffer(device: &Device, capacity: usize) -> Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("sprite instances"),
-        size: (capacity * std::mem::size_of::<Sprite>()) as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
-}
-
-fn create_bind_group(
-    device: &Device,
-    layout: &BindGroupLayout,
-    buffer: &Buffer,
-    atlas_view: &TextureView,
-    sampler: &Sampler,
-) -> BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("sprite data"),
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(atlas_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
-        ],
-    })
 }
 
 fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {

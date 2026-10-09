@@ -1,7 +1,25 @@
 # 0004: WebGPU-first browser rendering
 
-Use Rust/WASM with wgpu's WebGPU backend and instanced sprites as the preferred
-renderer. The client remains single threaded.
+Use Rust/WASM scene construction with WebGPU instanced sprites as the preferred
+renderer. The client remains single threaded. A thin JavaScript adapter owns only
+WebGPU calls; Rust supplies the same readable WGSL, 112-byte packets,
+visibility, layer ordering, depth normalization and bounded instance accounting.
+The adapter replaces the former wgpu browser wrapper, not the WebGPU tier.
+
+The WebGPU adapter preserves the pinned wgpu 30 browser defaults: no optional
+features, the same requested limits, preferred RGBA8/BGRA8 canvas format, opaque
+presentation, nearest array sampler, Depth24Plus and LessEqual depth tests.
+Its diagnostic atlas is still one 8-square layer; gameplay uses three 2048-square
+pages. The 64 MiB instance bound and historical seven-resource metric remain
+unchanged. Uploads synchronously consume borrowed WASM bytes without retaining
+another CPU packet or restoration atlas. Real browser acquisition succeeds or
+reports a lost surface requiring reload; there is no automatic device recovery.
+Initialization failure still tries WebGL2 and then Canvas, replacing a bound
+canvas before fallback. Pixel fixtures use the very same production pass and
+bounded probe copies, not an alternate Rust graphics implementation. Readback
+allocations are explicit test resources and are destroyed separately. The entire
+adapter JavaScript, including its readback helper, counts in deployed artifact
+inventories; WASM size alone cannot establish total transfer savings.
 
 The first playable feature exposed a compatibility gap: successful tests with
 forced software WebGPU did not establish that ordinary browsers could start the
