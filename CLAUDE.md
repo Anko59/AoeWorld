@@ -58,9 +58,10 @@ baselines, `.claude/`, instructions), which only the main session edits.
 
 ## Threat model
 
-Against subagents every rule must hold; an escape is a bug. Against the main
-session the rules catch mistakes and shortcuts, while a construction built on
-purpose to defeat them is a documented limit backstopped by the Git hooks, the
-adversarial review and CI: `dev` merges only when both the `required` CI check
+The rules catch what coding agents realistically do: skipped steps, shortcuts,
+weakened tests, edits outside their role and honest mistakes; such an escape
+through ordinary commands is a bug. A deliberate, contrived attack built to
+defeat a rule, by any agent, is a documented limit backstopped by the Git hooks,
+the adversarial review and CI: `dev` merges only when both the `required` CI check
 and the `harness/review` status pass, and no session merges. The policy reads shell text and the files commands name,
 never the code an interpreter runs.

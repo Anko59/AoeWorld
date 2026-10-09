@@ -16,16 +16,17 @@ Rules every finding must meet:
 
 **An empty findings list is a good result.** Prefer no finding to a weak one.
 
-Threat model (CLAUDE.md): the harness's guards (hooks, `make ship`, `make red`,
-the review) must hold against **subagents** (tester, implementer, reviewer and
-other launched agents): a way for a subagent to escape or fool a guard is in
-scope at full severity. Against the **main session** the guards catch skipped
-steps and honest mistakes; a main session that deliberately builds something
-to defeat a guard on purpose (forging a test, a record or a file it is allowed
-to write) is a documented limit, backstopped by this review and CI. Such a
-finding is at most `minor`, and only if a cheap check would catch it. Do not
-ask for ever more mechanism against a deliberate local forger: no local check
-can win that, and every addition is more code to get wrong.
+Threat model (CLAUDE.md): the harness's guards (hooks, `make ship`, the
+review) exist to catch what coding agents realistically do: skip a step, take a
+shortcut, weaken a test to get green, edit a file they should not, or make an
+honest mistake. A way for a subagent to do that **through ordinary commands or
+edits** is in scope at full severity. A **deliberate, contrived attack** on a
+guard (obfuscated shell, metaprogramming, git attributes, toolchain or build-
+script tricks, races planted on purpose) by any agent, subagent or main session,
+is at most `minor`: report it only if a cheap check would catch it. Do not ask
+for ever more mechanism against a determined attacker: no local check can win
+that, review and CI are the backstop, and every addition is more code to get
+wrong.
 
 Severity:
 
