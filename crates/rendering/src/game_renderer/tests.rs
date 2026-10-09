@@ -16,7 +16,10 @@ mod grid;
 
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
-        uv: [0.0, 0.0, 0.1, 0.1],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0, 0.0, 0.1, 0.1],
+        },
         size: [32.0, 48.0],
         anchor: [16.0, 48.0],
     };
@@ -27,6 +30,7 @@ fn synthetic_art() -> GameArt {
         terrain: std::array::from_fn(|_| vec![frame]),
         resources: std::array::from_fn(|_| vec![frame]),
         tree_shadows: Vec::new(),
+        terrain_topology: [None; 7],
     }
 }
 
@@ -348,7 +352,10 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
         focus_elevation_meters: 0.0,
     };
     let make_frame = |index: usize| GameFrame {
-        uv: [index as f32 / 1000.0, 0.0, 0.01, 0.01],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [index as f32 / 1000.0, 0.0, 0.01, 0.01],
+        },
         size: [32.0, 48.0],
         anchor: [16.0, 48.0],
     };
@@ -376,13 +383,13 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
     let bare_trees = sprites
         .chunks_exact(2)
         .filter(|pair| {
-            let frame = (pair[1].1.uv[0] * 1000.0).round() as usize;
+            let frame = (pair[1].1.atlas.uv[0] * 1000.0).round() as usize;
             matches!(frame, 3 | 5 | 8)
         })
         .count();
     assert_eq!(bare_trees, 18);
     for pair in sprites.chunks_exact(2) {
-        assert_eq!(pair[0].1.uv[0], pair[1].1.uv[0]);
+        assert_eq!(pair[0].1.atlas.uv[0], pair[1].1.atlas.uv[0]);
     }
 }
 

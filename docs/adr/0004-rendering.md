@@ -11,7 +11,7 @@ fallback. Full-world CPU rasterization caused measured camera and scout stalls
 on the real source map; accelerating the same geometry avoids those stalls
 without reducing resolution, terrain detail, or simulation tick precision.
 All three tiers consume the same sprite layout, imported atlas, and deterministic
-simulation. WebGL2 uses the 96-byte Sprite ABI and equivalent shaders for
+simulation. WebGL2 uses the 112-byte Sprite ABI and equivalent shaders for
 per-pixel depth, ordered equal-depth ties, alpha discard/blending, native terrain
 UVs, three-material blending, and water tint. Its thin JavaScript adapter owns
 only graphics API calls; scene construction and depth normalization stay in Rust.
@@ -22,8 +22,8 @@ WebGL2 requires a 24-bit depth buffer and preserves the existing 64 MiB instance
 and 4,194,304-pixel backing limits. Instance uploads borrow a bounded WASM memory
 view for a synchronous graphics call; never retain the packet or await while
 using it. WebGL copies it into its instance buffer before the borrow ends,
-without another retained CPU packet. One additional 16 MiB source atlas supports
-context restoration.
+without another retained CPU packet. One additional owned 48 MiB source atlas supports
+context restoration without cloning on restore.
 Restore shaders, buffers, texture, and atlas on the original canvas, then
 invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
 skipped GPU frame is not a successful presentation: do not advance picking or
@@ -54,8 +54,8 @@ with dirt on an 8×8 grid. No atlas allocation or source-art editing is involved
 
 Procedural boundaries temporarily disable three-material splatting because the
 existing packet carries one transform per face, not one per material. Native
-materials still splat normally elsewhere. The 100-frame periodic selection
-heuristic remains until explicit catalog topology is carried through GameArt.
+materials still splat normally elsewhere. Explicit catalog topology reaches
+GameArt; frame count alone never establishes a periodic sheet.
 Forest accent selection is intermediate: removing parity does not establish
 seamless full-sheet suitability. Stage 2 needs full-sheet review or accents with
 edge masking over a coherent base. All procedural ramp appearances preserve
@@ -66,3 +66,20 @@ The CPU and both GPU shaders combine shading before their single output rounding
 alpha, atlas allocation, and the Sprite ABI remain unchanged. Coarse cliff
 geometry still shares averaged heights and omits skirts; this stage changes its
 appearance, not its geometry or dedicated-source qualification.
+
+## Bounded multi-atlas addressing
+
+Gameplay owns exactly three 2048-square RGBA pages (48 MiB base pixels): terrain
+0/1, objects/units/shadows 2. Source page numbers are never runtime page numbers.
+Required overflow fails; never discard visible trees or regroup painter order.
+Page and UV travel together through shared terrain samples and sprite frames.
+Selectors append at byte 96 of the 112-byte ABI (primary, two blends, reserved
+zero); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
+WebGPU uses D2Array, WebGL2 uses integer attribute 6 and TEXTURE_2D_ARRAY, and
+Canvas samples page-major pixels with lazily created legacy page canvases.
+Diagnostic WebGPU still uses one 8-square layer (256 bytes), with actual texture
+size/layers reported separately from gameplay. GL/Canvas have no GPU counter
+observation API; unavailable measurements must not become fabricated counters.
+48 MiB is not total memory: source decode scratch, GL restoration ownership,
+Canvas copies, transient uploads and presentation buffers remain separately real.
+Synthetic page/depth/blend/restoration pixels do not qualify France or hardware.

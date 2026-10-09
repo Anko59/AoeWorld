@@ -12,6 +12,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         standing: Vec::new(),
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
+        terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
     }
@@ -47,7 +48,10 @@ fn sprites_cover_viewport(frames: &[(Sprite, GameFrame)], viewport: [f64; 2]) ->
 #[wasm_bindgen_test]
 fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     };
@@ -88,7 +92,10 @@ fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
 #[wasm_bindgen_test]
 fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
     let frame = terrain_frame(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -101,7 +108,10 @@ fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
 #[wasm_bindgen_test]
 fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -130,7 +140,10 @@ fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
 #[wasm_bindgen_test]
 fn offscreen_cached_tiles_do_not_change_visible_terrain() {
     let frame = GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [1.0, 1.0],
         anchor: [0.0, 0.0],
     };
@@ -164,7 +177,10 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
 #[wasm_bindgen_test]
 fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });
@@ -195,7 +211,10 @@ fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
 #[wasm_bindgen_test]
 fn flat_map_terrain_uses_covering_lod_at_translated_camera() {
     let art = test_art(GameFrame {
-        uv: [0.0; 4],
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.0; 4],
+        },
         size: [97.0, 49.0],
         anchor: [0.0, 0.0],
     });

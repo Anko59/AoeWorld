@@ -69,14 +69,15 @@ pub(super) fn raster_surface(
     }
 }
 
-fn sample_terrain_atlas(atlas: &[u8], rect: [f32; 4], local: [f64; 2]) -> [u8; 4] {
+fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64; 2]) -> [u8; 4] {
+    let rect = address.uv;
     let side = f64::from(GAME_ATLAS_SIDE);
     let point = [0, 1].map(|axis| {
         f64::from(rect[axis]) * side
             + 0.5
             + local[axis] * (f64::from(rect[axis + 2]) * side - 1.0).max(0.0)
     });
-    sample_atlas(atlas, point[0], point[1])
+    sample_atlas(atlas, address.page, point[0], point[1])
 }
 
 struct RasterPlane {
@@ -123,6 +124,7 @@ pub(super) fn raster_sprite(
             let texture_u = u + source_width * horizontal;
             let mut source = sample_atlas(
                 atlas,
+                sprite.pages[0],
                 texture_u * f64::from(GAME_ATLAS_SIDE),
                 texture_v * f64::from(GAME_ATLAS_SIDE),
             );
@@ -136,15 +138,15 @@ pub(super) fn raster_sprite(
     }
 }
 
-pub(super) fn sample_atlas(atlas: &[u8], x: f64, y: f64) -> [u8; 4] {
+pub(super) fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {
     let side = GAME_ATLAS_SIDE as usize;
-    let expected = side * side * 4;
-    if atlas.len() != expected {
+    let expected = crate::GAME_ATLAS_BYTES;
+    if atlas.len() != expected || page >= crate::GAME_ATLAS_PAGES {
         return [0; 4];
     }
     let x = x.floor().clamp(0.0, f64::from(GAME_ATLAS_SIDE - 1)) as usize;
     let y = y.floor().clamp(0.0, f64::from(GAME_ATLAS_SIDE - 1)) as usize;
-    let start = (y * side + x) * 4;
+    let start = page as usize * crate::GAME_ATLAS_PAGE_BYTES + (y * side + x) * 4;
     [
         atlas[start],
         atlas[start + 1],

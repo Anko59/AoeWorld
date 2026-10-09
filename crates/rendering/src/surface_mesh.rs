@@ -1,6 +1,6 @@
 #[cfg(test)]
 use crate::GAME_ATLAS_SIDE;
-use crate::{GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
+use crate::{AtlasAddress, GameArt, GameFrame, SceneCamera, SceneTerrain, SceneTerrainSurface};
 use aoe_core::{Camera, ScreenPoint};
 #[cfg(test)]
 use web_sys::CanvasRenderingContext2d;
@@ -33,8 +33,8 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) material: u8,
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
-    pub(crate) texture_uv: Option<[f32; 4]>,
-    pub(crate) texture_blend: Option<[[f32; 4]; 2]>,
+    pub(crate) texture_uv: Option<AtlasAddress>,
+    pub(crate) texture_blend: Option<[AtlasAddress; 2]>,
     pub(crate) texture_tile: [i32; 2],
     pub(crate) texture_materials: Option<[u8; 3]>,
     pub(crate) pickable: bool,
@@ -198,7 +198,9 @@ pub(crate) fn draw_surface_triangle(
                     transform[5],
                 )
                 .map_err(|error| format!("Canvas terrain transform: {error:?}"))?;
-            let [x, y, width, height] = rect.map(f64::from);
+            // This retained tint oracle is intentionally a single-page fixture.
+            assert_eq!(rect.page, 0);
+            let [x, y, width, height] = rect.uv.map(f64::from);
             let atlas_side = f64::from(GAME_ATLAS_SIDE);
             let texture_atlas = atlases
                 .get(usize::from(triangle.tint))

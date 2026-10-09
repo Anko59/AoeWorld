@@ -47,10 +47,8 @@ pub(super) struct AtlasPage {
     _outline: DiscardString,
     #[serde(rename = "outline_hash")]
     _outline_hash: DiscardString,
-    #[serde(rename = "width")]
-    _width: u16,
-    #[serde(rename = "height")]
-    _height: u16,
+    pub width: u16,
+    pub height: u16,
 }
 
 #[derive(Deserialize)]

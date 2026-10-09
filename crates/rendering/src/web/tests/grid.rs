@@ -25,7 +25,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     let mut game = GameRenderer::WebGpu(Box::new(renderer));
     game.upload_game_atlas(&vec![
         255;
-        (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4)
+        (3 * crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4)
             as usize
     ])
     .unwrap();
@@ -46,6 +46,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         standing: Vec::new(),
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
+        terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
     };
@@ -79,6 +80,10 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     }
     assert_ne!(pixels[0], pixels[1]);
     assert_eq!(pixels[0], pixels[2]);
+    let GameRenderer::WebGpu(renderer) = &game else {
+        unreachable!()
+    };
+    renderer.device.destroy();
 }
 
 // Read production instance data with the real pipeline into a GPU attachment.

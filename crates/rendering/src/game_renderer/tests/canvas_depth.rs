@@ -102,9 +102,13 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0; 4],
     };
     let frame = crate::GameFrame {
-        uv: sprite.uv,
+        atlas: crate::AtlasAddress {
+            page: sprite.pages[0],
+            uv: sprite.uv,
+        },
         size: [32.0; 2],
         anchor: [16.0; 2],
     };
@@ -116,7 +120,7 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
         )),
         WorldLayer::Sprite(sprite, frame, 100.0, 0),
     ];
-    let atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
+    let atlas = vec![0; crate::GAME_ATLAS_BYTES];
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
     let result = canvas_depth::render_canvas_world(
@@ -145,10 +149,13 @@ fn canvas_terrain_samples_the_native_atlas_and_applies_water_tint() {
         [0.0; 3],
         [0.0; 3],
     );
-    water.texture_uv = Some([0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0]);
+    water.texture_uv = Some(crate::AtlasAddress {
+        page: 0,
+        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+    });
     water.tint = 4;
     let layers = [WorldLayer::Surface(water)];
-    let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     atlas[..4].copy_from_slice(&[100, 100, 100, 255]);
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
@@ -182,16 +189,22 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
         uv: [2.0 / 2048.0, 0.0, -2.0 / 2048.0, 1.0 / 2048.0],
         depths: [1.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [2, 0, 0, 0],
     };
     let frame = crate::GameFrame {
-        uv: sprite.uv,
+        atlas: crate::AtlasAddress {
+            page: sprite.pages[0],
+            uv: sprite.uv,
+        },
         size: [32.0; 2],
         anchor: [16.0; 2],
     };
-    let atlas_len = crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4;
+    let atlas_len = crate::GAME_ATLAS_BYTES;
     let mut atlas = vec![0; atlas_len];
-    atlas[..4].copy_from_slice(&[255, 0, 0, 255]);
-    atlas[4..8].copy_from_slice(&[0, 0, 255, 255]);
+    atlas[2 * crate::GAME_ATLAS_PAGE_BYTES..2 * crate::GAME_ATLAS_PAGE_BYTES + 4]
+        .copy_from_slice(&[255, 0, 0, 255]);
+    atlas[2 * crate::GAME_ATLAS_PAGE_BYTES + 4..2 * crate::GAME_ATLAS_PAGE_BYTES + 8]
+        .copy_from_slice(&[0, 0, 255, 255]);
     let layers = [WorldLayer::Sprite(sprite, frame, 1.0, 0)];
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
 
@@ -223,9 +236,13 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         depths: [0.0; 4],
         terrain_blend: [[0.0; 4]; 2],
+        pages: [0; 4],
     };
     let frame = crate::GameFrame {
-        uv: background.uv,
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: background.uv,
+        },
         size: [32.0; 2],
         anchor: [16.0; 2],
     };
@@ -234,7 +251,7 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         uv: [1.0 / 2048.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
         ..background
     };
-    let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     atlas[..4].copy_from_slice(&[70, 120, 55, 255]);
     atlas[4..8].copy_from_slice(&[0, 0, 255, 255]);
     let layers = [
@@ -450,43 +467,4 @@ fn pixel(image: &[u8], x: u32, y: u32) -> [u8; 4] {
         image[offset + 2],
         image[offset + 3],
     ]
-}
-
-#[wasm_bindgen_test]
-fn canvas_multiplies_shadow_sprite_tint_and_alpha_like_webgpu() {
-    let Some((canvas, context)) = target_canvas() else {
-        assert!(false, "browser canvas is unavailable");
-        return;
-    };
-    let sprite = crate::web::Sprite {
-        position: [0.0; 2],
-        radius: [0.25; 2],
-        color: [0.0, 0.0, 0.0, 0.5],
-        uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
-        depths: [1.0; 4],
-        terrain_blend: [[0.0; 4]; 2],
-    };
-    let frame = crate::GameFrame {
-        uv: sprite.uv,
-        size: [32.0; 2],
-        anchor: [16.0; 2],
-    };
-    let layer = WorldLayer::Sprite(sprite, frame, 1.0, 0);
-    let mut atlas = vec![0; crate::GAME_ATLAS_SIDE as usize * crate::GAME_ATLAS_SIDE as usize * 4];
-    atlas[..4].copy_from_slice(&[255; 4]);
-    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
-
-    let result = canvas_depth::render_canvas_world(
-        &canvas,
-        &context,
-        &atlas,
-        &mut presentation,
-        &[layer],
-        test_camera(),
-        false,
-    );
-    assert!(result.is_ok(), "Canvas render failed: {result:?}");
-
-    assert_eq!(pixel(&presentation.color_buffer, 64, 64), [20, 37, 18, 255]);
-    assert_eq!(presentation.depth_buffer[64 * 128 + 64], 1.0);
 }

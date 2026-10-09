@@ -5,9 +5,10 @@ struct Sprite {
     uv: vec4<f32>,
     depths: vec4<f32>,
     terrain_blend: array<vec4<f32>, 2>,
+    pages: vec4<u32>,
 };
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
-@group(0) @binding(1) var sprite_atlas: texture_2d<f32>;
+@group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
 
 struct VertexOutput {
@@ -19,6 +20,7 @@ struct VertexOutput {
     @location(4) uv2: vec2<f32>,
     @location(5) uv3: vec2<f32>,
     @location(6) weights: vec3<f32>,
+    @location(7) @interpolate(flat) pages: vec3<u32>,
 };
 
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
@@ -80,6 +82,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
+    out.pages = sprite.pages.xyz;
     out.uv2 = vec2<f32>(0.0);
     out.uv3 = vec2<f32>(0.0);
     out.weights = vec3<f32>(1.0, 0.0, 0.0);
@@ -128,11 +131,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.solid == 2u {
         return in.color;
     }
-    var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, 0.0);
+    var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
     if in.solid == 3u {
         texel = texel * in.weights.x
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, 0.0) * in.weights.y
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, 0.0) * in.weights.z;
+            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, i32(in.pages.y), 0.0) * in.weights.y
+            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, i32(in.pages.z), 0.0) * in.weights.z;
     }
     if texel.a <= 0.0 {
         discard;

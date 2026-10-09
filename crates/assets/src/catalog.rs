@@ -7,6 +7,7 @@
 pub const VERSION: u8 = 4;
 
 pub mod candidates;
+pub mod packing;
 pub mod runtime;
 mod topology;
 pub use topology::TerrainFrameTopology;

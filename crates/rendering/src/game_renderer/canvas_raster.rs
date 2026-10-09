@@ -89,11 +89,13 @@ pub(super) fn raster_surface(
 }
 
 #[inline(never)]
-fn sample_terrain_atlas(atlas: &[u8], rect: [f32; 4], local: [f64; 2]) -> [u8; 4] {
+fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64; 2]) -> [u8; 4] {
+    let rect = address.uv;
     let side = f64::from(GAME_ATLAS_SIDE);
     // Preserve the reference add/multiply order at texel boundaries.
     sample_atlas(
         atlas,
+        address.page,
         (f64::from(rect[0]) * side + 0.5) + local[0] * (f64::from(rect[2]) * side - 1.0).max(0.0),
         (f64::from(rect[1]) * side + 0.5) + local[1] * (f64::from(rect[3]) * side - 1.0).max(0.0),
     )
@@ -155,6 +157,7 @@ pub(super) fn raster_sprite(
             let texture_u = u + source_width * horizontal;
             let mut source = sample_atlas(
                 atlas,
+                sprite.pages[0],
                 texture_u * f64::from(GAME_ATLAS_SIDE),
                 texture_v * f64::from(GAME_ATLAS_SIDE),
             );
@@ -205,17 +208,23 @@ pub(super) fn raster_selection(
 }
 
 fn valid_atlas(atlas: &[u8]) -> bool {
-    atlas.len() == GAME_ATLAS_SIDE as usize * GAME_ATLAS_SIDE as usize * 4
+    atlas.len() == crate::GAME_ATLAS_BYTES
 }
 
-fn sample_atlas(atlas: &[u8], x: f64, y: f64) -> [u8; 4] {
+fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {
     // All callers validate once per primitive, not once per sampled texel.
     let side = GAME_ATLAS_SIDE as usize;
     // Saturating float-to-integer casts floor nonnegative coordinates and map
     // negative/NaN values to zero; integer min also handles positive infinity.
     let x = (x as usize).min(side - 1);
     let y = (y as usize).min(side - 1);
-    let start = (y * side + x) * 4;
+    let Some(start) = (page as usize)
+        .checked_mul(crate::GAME_ATLAS_PAGE_BYTES)
+        .and_then(|base| base.checked_add((y * side + x) * 4))
+        .filter(|start| *start <= atlas.len().saturating_sub(4))
+    else {
+        return [0; 4];
+    };
     [
         atlas[start],
         atlas[start + 1],

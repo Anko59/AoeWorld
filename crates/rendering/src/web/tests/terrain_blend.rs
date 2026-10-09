@@ -23,7 +23,7 @@ async fn webgpu_procedural_rock_snow_ice_mud_and_shore_match_shared_kernel() {
     renderer.device.destroy();
 }
 
-async fn surface_renderer() -> Renderer {
+pub(super) async fn surface_renderer() -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document
         .create_element("canvas")
@@ -35,14 +35,24 @@ async fn surface_renderer() -> Renderer {
     let mut renderer = Renderer::new(canvas)
         .await
         .expect("software WebGPU renderer");
-    let mut atlas = vec![0; (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize];
+    let diagnostic = renderer.render_sprites(&[]).unwrap();
+    assert_eq!(diagnostic.atlas_pages, 1);
+    assert_eq!(diagnostic.atlas_bytes, 8 * 8 * 4);
+    let mut atlas = vec![0; (3 * crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize];
     atlas[..12].copy_from_slice(&[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
+    let page_bytes = (crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4) as usize;
+    atlas[page_bytes..page_bytes + 4].copy_from_slice(&[0, 255, 0, 255]);
+    atlas[page_bytes * 2..page_bytes * 2 + 12]
+        .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
     renderer.upload_game_atlas(&atlas).unwrap();
     renderer
 }
 
 async fn check_surface_pixel(renderer: &mut Renderer, tint: u8, blend: bool, expected: [u8; 4]) {
-    let rect = |x: f32| [x / 2048.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0];
+    let rect = |x: f32| crate::AtlasAddress {
+        page: 0,
+        uv: [x / 2048.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
+    };
     let mut triangle = capacity_surface();
     triangle.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
     triangle.texture_uv = Some(rect(0.0));
@@ -54,6 +64,20 @@ async fn check_surface_pixel(renderer: &mut Renderer, tint: u8, blend: bool, exp
         .render_world_layers(&[triangle], &[], [0.0, 0.0, 0.0, 1.0])
         .unwrap();
 
+    let pixel = read_pixel(renderer, 1, [48, 48]).await;
+    assert_pixel(pixel, expected);
+}
+
+pub(super) fn assert_pixel(pixel: [u8; 4], expected: [u8; 4]) {
+    for (actual, expected) in pixel.into_iter().zip(expected) {
+        assert!(
+            actual.abs_diff(expected) <= 1,
+            "unexpected GPU blend pixel: {pixel:?}"
+        );
+    }
+}
+
+pub(super) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2]) -> [u8; 4] {
     // Execute the same pipeline/instances into an explicit GPU attachment. A
     // buffer copy reads actual shader pixels without compositor canvas expiry.
     let size = wgpu::Extent3d {
@@ -104,13 +128,17 @@ async fn check_surface_pixel(renderer: &mut Renderer, tint: u8, blend: bool, exp
         });
         pass.set_pipeline(&renderer.pipeline);
         renderer.instances.set_on(&mut pass);
-        pass.draw(0..6, 0..1);
+        pass.draw(0..6, 0..count);
     }
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &target,
             mip_level: 0,
-            origin: wgpu::Origin3d { x: 48, y: 48, z: 0 },
+            origin: wgpu::Origin3d {
+                x: point[0],
+                y: point[1],
+                z: 0,
+            },
             aspect: wgpu::TextureAspect::All,
         },
         wgpu::TexelCopyBufferInfo {
@@ -159,14 +187,9 @@ async fn check_surface_pixel(renderer: &mut Renderer, tint: u8, blend: bool, exp
         }
         _ => [data[0], data[1], data[2], data[3]],
     };
-    for (actual, expected) in pixel.into_iter().zip(expected) {
-        assert!(
-            actual.abs_diff(expected) <= 1,
-            "unexpected GPU blend pixel: {pixel:?}"
-        );
-    }
     drop(data);
     output.unmap();
     output.destroy();
     target.destroy();
+    pixel
 }

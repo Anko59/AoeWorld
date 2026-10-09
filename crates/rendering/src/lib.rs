@@ -7,7 +7,10 @@ pub use web::*;
 mod playground;
 
 #[cfg(target_arch = "wasm32")]
-pub use playground::{GAME_ATLAS_SIDE, GameArt, GameFrame, resource_frame_index};
+pub use playground::{
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    GameArt, GameFrame, TerrainTopology, resource_frame_index,
+};
 
 #[cfg(target_arch = "wasm32")]
 mod game_grid;
