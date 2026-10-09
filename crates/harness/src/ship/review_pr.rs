@@ -104,12 +104,8 @@ pub(super) fn execute(root: &Path) -> Result<()> {
         }
         .into());
     }
-    // The PR or dev may have moved during the review: publish only for what
-    // was reviewed.
-    git::git(root, &["fetch", "origin", "dev"])?;
-    if git::git(root, &["rev-parse", "refs/remotes/origin/dev"])? != dev {
-        return Err("dev moved during the review; review the pull request again".into());
-    }
+    // The PR may have moved during the review: publish only for what was
+    // reviewed. dev moving does not matter: branches need not be up to date.
     let now = read_metadata(root, number, &repository)?;
     validate_metadata(&now)?;
     if now.head_oid != metadata.head_oid {
@@ -122,7 +118,7 @@ pub(super) fn execute(root: &Path) -> Result<()> {
     }
     let url = format!("https://github.com/{repository}/pull/{number}");
     for call in publication_calls(&repository, &url, &report)? {
-        gh(root, &call.iter().map(String::as_str).collect::<Vec<_>>())?;
+        super::github::publish_call(root, &call)?;
     }
     Ok(())
 }
@@ -240,15 +236,8 @@ fn publication_calls(
     url: &str,
     report: &review::Report,
 ) -> Result<Vec<Vec<String>>> {
+    // The merge call is pinned to the reviewed commit (--match-head-commit).
     let mut calls = review_gate::publish_calls(repository, url, report)?;
-    // Auto-merge only the reviewed commit, whatever is pushed later.
-    for call in &mut calls {
-        if call.first().map(String::as_str) == Some("pr")
-            && call.get(1).map(String::as_str) == Some("merge")
-        {
-            call.extend(["--match-head-commit".into(), report.head.clone()]);
-        }
-    }
     calls.push(vec![
         "pr".into(),
         "comment".into(),

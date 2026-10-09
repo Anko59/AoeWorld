@@ -3,7 +3,7 @@
 //! appended to the pull request description, a `harness/review` commit status
 //! is posted and GitHub auto-merge is armed, so GitHub merges once every
 //! required check passes. No agent runs a merge command itself.
-use super::{Options, evidence::Evidence, gh, git};
+use super::{Options, evidence::Evidence, git};
 use crate::review::{
     self, Plan, Report, Tier,
     closing::{self, Next},
@@ -188,7 +188,15 @@ pub(crate) fn publish_calls(
             &format!("description={description}"),
         ]),
         owned(&[
-            "pr", "merge", url, "--repo", repository, "--auto", "--squash",
+            "pr",
+            "merge",
+            url,
+            "--repo",
+            repository,
+            "--auto",
+            "--squash",
+            "--match-head-commit",
+            &report.head,
         ]),
     ])
 }
@@ -197,7 +205,7 @@ pub(crate) fn publish_calls(
 pub(crate) fn publish(root: &Path, url: &str, report: &Report) -> Result<()> {
     let repository = git::origin_repository(root)?;
     for call in publish_calls(&repository, url, report)? {
-        gh(root, &call.iter().map(String::as_str).collect::<Vec<_>>())?;
+        super::github::publish_call(root, &call)?;
     }
     Ok(())
 }

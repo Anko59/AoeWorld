@@ -159,6 +159,34 @@ pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) 
     Ok(url)
 }
 
+/// Run one publication call. GitHub refuses to arm auto-merge on a pull
+/// request that is already mergeable ("clean status"); that merge call is then
+/// made directly, still pinned to the reviewed commit by --match-head-commit.
+pub(crate) fn publish_call(root: &Path, call: &[String]) -> Result<()> {
+    let args: Vec<&str> = call.iter().map(String::as_str).collect();
+    match gh(root, &args) {
+        Ok(_) => Ok(()),
+        Err(error) => match direct_merge(call, &error.to_string()) {
+            Some(direct) => {
+                let direct: Vec<&str> = direct.iter().map(String::as_str).collect();
+                gh(root, &direct).map(|_| ())
+            }
+            None => Err(error),
+        },
+    }
+}
+
+/// The same merge without `--auto`, when GitHub refused auto-merge because the
+/// pull request is already clean and the call is pinned to a commit.
+pub(crate) fn direct_merge(call: &[String], error: &str) -> Option<Vec<String>> {
+    let merge = call.first().map(String::as_str) == Some("pr")
+        && call.get(1).map(String::as_str) == Some("merge")
+        && call.iter().any(|a| a == "--auto")
+        && call.iter().any(|a| a == "--match-head-commit");
+    (merge && error.contains("clean status"))
+        .then(|| call.iter().filter(|a| *a != "--auto").cloned().collect())
+}
+
 pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("gh").current_dir(root).args(args).output()?;
     if !output.status.success() {
