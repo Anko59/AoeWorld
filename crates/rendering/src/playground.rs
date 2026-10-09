@@ -44,6 +44,8 @@ pub struct GameArt {
     pub terrain: [Vec<GameFrame>; 7],
     /// Authored sheet topology; never infer a repeating sheet from frame count.
     pub terrain_topology: [Option<TerrainTopology>; 7],
+    /// Layout key of the validated native lookup row; absent for raw/legacy art.
+    pub terrain_world: Option<u32>,
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
@@ -55,6 +57,7 @@ pub struct GameArt {
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
+        self.world_atlas = None;
         let side = GAME_ATLAS_SIDE;
         if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());

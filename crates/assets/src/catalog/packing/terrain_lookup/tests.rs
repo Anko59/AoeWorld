@@ -55,6 +55,9 @@ fn valid_row() -> [u8; ROW_BYTES] {
     row
 }
 
+mod constructed;
+mod new_table;
+mod overlap;
 mod roundtrip;
 mod validation;
 mod view;

@@ -164,6 +164,34 @@ fn screen_to_clip(x: f64, y: f64, width: f64, height: f64) -> [f32; 2] {
     ]
 }
 
+/// Reconstruct the original legacy packet without changing atlas image bytes.
+pub(crate) fn retain_world_packet(sprite: &mut Sprite, admitted: Option<u32>) {
+    const WORLD: u32 = 1 << 30;
+    if sprite.pages[3] & WORLD == 0 || admitted == Some(sprite.pages[2]) {
+        return;
+    }
+    let primary_page = sprite.terrain_blend[1][2] as u32 / 8;
+    let bed_page = sprite.terrain_blend[1][3] as u32 / 8;
+    sprite.pages = [
+        primary_page,
+        bed_page,
+        primary_page,
+        sprite.pages[3] & !WORLD,
+    ];
+    if primary_page == bed_page && sprite.uv == sprite.terrain_blend[0] {
+        // World metadata forced Some even for a single native group. Undo that
+        // as well, including the optional floor payload, to match old emission.
+        sprite.color[3] = -1.0;
+        sprite.terrain_blend = [[0.0; 4]; 2];
+        sprite.pages[1] = 0;
+        sprite.pages[2] = 0;
+        sprite.pages[3] &= !crate::surface_mesh::landscape::INTERPOLATED_FLOOR;
+        sprite.depths[3] = 0.0;
+    } else {
+        sprite.terrain_blend[1] = sprite.uv;
+    }
+}
+
 pub(crate) fn surface_instance(
     triangle: &ProjectedSurfaceTriangle,
     viewport: [f64; 2],
@@ -193,7 +221,7 @@ pub(crate) fn surface_instance(
     };
     let second = points[1];
     let third = points[2];
-    match triangle.texture_uv {
+    let mut sprite = match triangle.texture_uv {
         Some(uv) => Sprite {
             position: points[0],
             radius: second,
@@ -250,5 +278,24 @@ pub(crate) fn surface_instance(
             terrain_blend: [[0.0; 4]; 2],
             pages: [0; 4],
         },
+    };
+    if let Some(world) = triangle
+        .world_texture()
+        .filter(|_| landscape && triangle.texture_uv.is_some())
+    {
+        let pages = sprite.pages;
+        sprite.terrain_blend[1] = [
+            world.footprint[0],
+            world.footprint[1],
+            f32::from(world.groups[0]) + (pages[0] * 8) as f32,
+            f32::from(world.groups[1]) + (pages[1] * 8) as f32,
+        ];
+        sprite.pages = [
+            triangle.texture_tile[0] as u32,
+            triangle.texture_tile[1] as u32,
+            world.checksum,
+            pages[3] | (1 << 30),
+        ];
     }
+    sprite
 }

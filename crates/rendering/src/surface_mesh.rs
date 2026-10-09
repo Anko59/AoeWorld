@@ -8,6 +8,7 @@ use web_sys::CanvasRenderingContext2d;
 mod appearance;
 pub(crate) mod floor;
 pub(crate) mod landscape;
+pub(crate) mod world;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
 pub use lod::projected_surface_triangles;

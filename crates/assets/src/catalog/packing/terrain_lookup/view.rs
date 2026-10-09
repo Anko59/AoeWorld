@@ -31,6 +31,14 @@ impl ValidatedTable<'_> {
     }
 }
 
+// Only the private immutable owner calls this after strict input validation.
+pub(super) fn constructed_view(atlas: &[u8], metadata: Metadata) -> ValidatedTable<'_> {
+    ValidatedTable {
+        row: &atlas[ROW_OFFSET..ROW_OFFSET + ROW_BYTES],
+        metadata,
+    }
+}
+
 /// Only construction validates the complete row, including overlaps/checksum.
 /// Legacy zero rows yield None; an invalid replacement cannot create a view.
 /// No pixels/metadata are copied or allocated by this borrowed view.

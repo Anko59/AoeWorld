@@ -48,6 +48,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
         terrain_topology: [None; 7],
+        terrain_world: None,
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

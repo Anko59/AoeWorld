@@ -36,6 +36,8 @@ use canvas_depth::{CanvasPresentation, render_canvas_world};
 #[path = "game_renderer/webgl.rs"]
 mod webgl;
 use webgl::WebGlRenderer;
+pub(crate) mod atlas_admission;
+pub use atlas_admission::CanvasAtlas;
 
 #[path = "game_renderer/tests/filter_fixture.rs"]
 #[cfg(test)]
@@ -63,7 +65,7 @@ pub enum GameRenderer {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
         atlas: [Option<HtmlCanvasElement>; 3],
-        source_atlas: Vec<u8>,
+        source_atlas: CanvasAtlas,
         presentation: CanvasPresentation,
     },
 }
@@ -117,7 +119,7 @@ impl GameRenderer {
                 canvas: replacement.clone(),
                 context: main_context,
                 atlas: [None, None, None],
-                source_atlas: Vec::new(),
+                source_atlas: CanvasAtlas::default(),
                 presentation: CanvasPresentation::new(replacement.width(), replacement.height()),
             },
             replacement,
@@ -141,11 +143,12 @@ impl GameRenderer {
                 source_atlas,
                 ..
             } => {
+                source_atlas.world = None;
                 if pixels.len() != crate::GAME_ATLAS_BYTES {
                     return Err("Invalid game atlas size".into());
                 }
                 *atlas = [None, None, None];
-                *source_atlas = pixels.to_vec();
+                *source_atlas = CanvasAtlas::raw(pixels.to_vec());
                 Ok(())
             }
         }
@@ -260,8 +263,10 @@ impl GameRenderer {
         animation: usize,
         grid: Option<aoe_core::TileRect>,
     ) -> Result<bool, String> {
+        let admitted = self.world_atlas();
         let surfaces = surfaces.iter().copied().map(|mut triangle| {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
+            triangle.retain_world_texture(admitted);
             triangle
         });
         let layers =
@@ -291,7 +296,7 @@ impl GameRenderer {
             }
             return match self {
                 Self::WebGpu(renderer) => renderer
-                    .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
+                    .render_owned_sprites(&mut instances, [0.16, 0.29, 0.14, 1.0])
                     .map(|counters| counters.did_present),
                 Self::WebGl(renderer) => renderer.render(&mut instances),
                 _ => unreachable!(),

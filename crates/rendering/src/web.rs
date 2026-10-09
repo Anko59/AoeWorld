@@ -12,8 +12,9 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 
 #[path = "web_buffer.rs"]
 mod instance_buffer;
-pub(crate) use instance_buffer::surface_instance;
+mod submission;
 use instance_buffer::{InstanceBuffer, required_capacity};
+pub(crate) use instance_buffer::{retain_world_packet, surface_instance};
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
@@ -41,6 +42,7 @@ pub struct Renderer {
     pub(crate) pipeline: wgpu::RenderPipeline,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
+    pub(crate) world_atlas: Option<u32>,
     depth: wgpu::Texture,
 }
 
@@ -238,6 +240,7 @@ impl Renderer {
             pipeline,
             instances,
             _atlas: atlas,
+            world_atlas: None,
             depth,
         })
     }
@@ -312,11 +315,7 @@ impl Renderer {
         clear: [f64; 4],
     ) -> Result<Counters, String> {
         let required = required_capacity(surfaces, sprites)?;
-        self.instances.ensure_capacity(
-            required,
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-        )?;
+        self.reserve_packets(required)?;
         let mut instances = Vec::with_capacity(required);
         let width = self.config.width.max(1) as f64;
         let height = self.config.height.max(1) as f64;
@@ -324,108 +323,7 @@ impl Renderer {
             instances.push(surface_instance(triangle, [width, height], 0.0));
         }
         instances.extend_from_slice(sprites);
-        normalize_depths(&mut instances);
-        self.instances.write(&self.queue, &instances);
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                return Err("WebGPU surface lost; reload to restore it".to_owned());
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                return Err("WebGPU surface validation failed".to_owned());
-            }
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_view = self
-            .depth
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("sprites"),
-            });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("world layers"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: clear[0],
-                            g: clear[1],
-                            b: clear[2],
-                            a: clear[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.pipeline);
-            self.instances.set_on(&mut pass);
-            pass.draw(0..6, 0..instances.len() as u32);
-        }
-        self.queue.submit(Some(encoder.finish()));
-        self.queue.present(frame);
-        Ok(Counters {
-            did_present: true,
-            visible: sprites.len(),
-            draw_calls: usize::from(!instances.is_empty()),
-            gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 7,
-            atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-            atlas_uploads: 1,
-            atlas_bytes: self._atlas.width() as usize
-                * self._atlas.height() as usize
-                * self._atlas.size().depth_or_array_layers as usize
-                * 4,
-        })
+        self.submit_packets(&mut instances, sprites.len(), clear)
     }
 }
 
