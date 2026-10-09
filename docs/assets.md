@@ -88,6 +88,12 @@ rectangle bounds, gutters, reserved bytes and a layout-only checksum are
 validated before an atomic write. No artwork is moved, resized or resampled;
 97×49 forest frames remain 97×49, while 128×64 describes world projection.
 A borrowed validated view permits constant-time record reads without rechecking
-the entire table per sample. The codec is not yet called by the runtime loader
+the entire table per sample. The zero-row constructor validates inputs before a
+single atomic copy, without decoding existing untrusted rows; the general writer
+retains strict existing-row validation and its error precedence. An opaque owned
+constructed atlas retains its immutable pixels and validated metadata without a
+second atlas or descriptor vector. Read-only views need no decoder rescan; consuming
+it into raw pixels deliberately discards the construction proof. Neither cached
+metadata nor a matching checksum provides that ownership or artwork approval. The codec is not yet called by the runtime loader
 or shaders: it alone does **not** fix zoom-dependent tiling, qualify forest
 seams, approve additional frames, or change generated ecosystems.
