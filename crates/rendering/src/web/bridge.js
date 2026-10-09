@@ -36,6 +36,12 @@ function capacity(n) {
 function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
+const LOST = "WebGPU surface lost; reload to restore it";
+// Empty adapter descriptions fall back to vendor/architecture, else a bare label.
+function adapterLabel(info) {
+  const name = info?.description || [info?.vendor, info?.architecture].filter(Boolean).join(" ");
+  return name ? `BrowserWebGpu: ${name}` : "BrowserWebGpu";
+}
 export async function createWebGpu(canvas, shaderSource, initialCapacity) {
   capacity(initialCapacity);
   if (initialCapacity === 0) throw "WebGPU initial instance capacity must be positive";
@@ -61,7 +67,7 @@ export async function createWebGpu(canvas, shaderSource, initialCapacity) {
     const preferred = gpu.getPreferredCanvasFormat();
     const format = preferred === "bgra8unorm" ? preferred : "rgba8unorm";
     bridge = new AoeWebGpu(canvas, context, device, format,
-      `BrowserWebGpu: ${adapter.info.description}`, shaderSource, initialCapacity);
+      adapterLabel(adapter.info), shaderSource, initialCapacity);
     return bridge;
   } catch (error) {
     if (bridge) bridge.dispose();
@@ -73,10 +79,18 @@ export class AoeWebGpu {
   #canvas; #context; #device; #format; #label;
   #pipeline; #layout; #buffer; #bindGroup; #atlas; #atlasView; #sampler; #depth;
   #width; #height; #capacity; #atlasSide = 8; #atlasPages = 1;
-  #configureFailed = false; #disposed = false; #deviceDestroyed = false; #preparedCount = 0;
+  #configureFailed = false; #disposed = false; #failure = null; #preparedCount = 0;
   constructor(canvas, context, device, format, label, shaderSource, initialCapacity) {
     this.#canvas = canvas; this.#context = context; this.#device = device;
     this.#format = format; this.#label = label;
+    // Asynchronous GPU failures are latched here and reported by the next call;
+    // no per-frame error scope or await is added to the render path.
+    device.lost.then(info => {
+      this.#failure ??= `WebGPU device lost (${info.reason}): ${info.message}; reload to restore it`;
+    });
+    device.addEventListener("uncapturederror", event => {
+      this.#failure ??= `WebGPU validation error: ${message(event.error)}; reload to restore it`;
+    });
     this.#width = Math.max(1, canvas.width); this.#height = Math.max(1, canvas.height);
     this.#configure();
     const shader = device.createShaderModule({ label: "synthetic sprites", code: shaderSource });
@@ -122,13 +136,11 @@ export class AoeWebGpu {
   get adapterLabel() { return this.#label; }
   get format() { return this.#format; }
   #live() {
-    if (this.#disposed || this.#deviceDestroyed) throw "WebGPU surface lost; reload to restore it";
+    if (this.#disposed) throw LOST;
+    if (this.#failure) throw this.#failure;
   }
-  destroyDevice() {
-    if (!this.#deviceDestroyed) {
-      this.#deviceDestroyed = true; this.#device.destroy();
-    }
-  }
+  // Test-only: simulates device loss; the lost promise must report it to Rust.
+  destroyDevice() { this.#device.destroy(); }
   #configure() {
     this.#canvas.width = this.#width; this.#canvas.height = this.#height;
     try {
@@ -239,21 +251,14 @@ export class AoeWebGpu {
   }
   renderPreparedInstances(bytes, clear) {
     const count = this.writePreparedInstances(bytes);
-    if (this.#configureFailed) throw "WebGPU surface lost; reload to restore it";
+    if (this.#configureFailed) throw LOST;
     let frame;
     try { frame = this.#context.getCurrentTexture(); }
-    catch (_) { throw "WebGPU surface lost; reload to restore it"; }
+    catch (_) { throw LOST; }
     const encoder = this.#device.createCommandEncoder({ label: "sprites" });
     this.#encodePass(encoder, frame.createView(), count, clear, this.#depth.createView());
     this.#device.queue.submit([encoder.finish()]);
     return true; // Browser presentation follows submit; no separate present API.
-  }
-  diagnostics() {
-    this.#live();
-    return { capacity: this.#capacity, gpuBufferBytes: this.#capacity * STRIDE,
-      persistentGpuResources: 7, atlasPages: this.#atlasPages, atlasUploads: 1,
-      atlasBytes: this.#atlasSide * this.#atlasSide * this.#atlasPages * 4,
-      width: this.#width, height: this.#height, format: this.#format };
   }
   // Explicit test resource factory; no framebuffer/readback storage in production.
   // Uses the SAME encodePass, shader, depth attachment, bindgroup and upload path.
