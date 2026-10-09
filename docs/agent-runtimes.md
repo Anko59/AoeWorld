@@ -222,10 +222,12 @@ the stop cadence run there.
 
 ## Threat model and limits
 
-Against subagents every rule must hold, and an escape is a bug. Against the main
-session the rules catch mistakes and shortcuts; a construction built on purpose
-to defeat them is a documented limit, backstopped by the Git hooks, CI and the
-person who merges. As in [ADR 0006](adr/0006-provider-neutral-harness.md), none
+The rules catch what coding agents realistically do (skipped steps, shortcuts,
+weakened tests, edits outside their role, mistakes); such an escape through
+ordinary commands or edits is a bug, reviewed at full severity. A deliberate,
+contrived construction built to defeat them, by any agent, is a documented
+limit, reported by reviewers at most as `minor` and backstopped by the Git
+hooks, the adversarial review and CI. As in [ADR 0006](adr/0006-provider-neutral-harness.md), none
 of this is a hostile same-user boundary:
 
 - The policy reads shell text and the files commands name, never the code an
