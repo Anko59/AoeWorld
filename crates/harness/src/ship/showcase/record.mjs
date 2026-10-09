@@ -1,13 +1,21 @@
 // Records a showcase plan (plan.json, written by `aoe-harness showcase`) in one
-// Playwright take: title cards and scripted terminals are drawn in-page.
-// Each scene holds the screen for exactly
-// planned duration (longer only if a page is slow) so the voice-over lines
-// up. Writes silent.webm and timings.json: the blank lead-in and each scene's
-// actual length in milliseconds, which the audio track is padded to.
+// Playwright take: title cards and scripted terminals are drawn in-page;
+// browser scenes film the app under development at plan.app, the one origin
+// allowed: every other request and WebSocket is aborted (AppOrigin::allows).
+// The container has no network: the app's port on 127.0.0.1 is a local server
+// piping each connection to app.sock, which the harness forwards to the app
+// alone (bridge.rs), so WebRTC, DNS and other addresses reach nothing.
+// Cards and terminals hold the screen for their planned duration, counted from
+// after the page is drawn; a browser scene holds for its `seconds` after its
+// last step, however long the steps took. Writes silent.webm and timings.json: the blank lead-in and each
+// scene's actual on-screen length, page loading included, in milliseconds,
+// which the audio track is padded to.
 import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createConnection, createServer } from "node:net";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
+const app = plan.app ?? null;
 const dir = process.cwd();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -60,6 +68,66 @@ async function terminal(page, scene) {
   }
 }
 
+function within(value, prefix) {
+  try {
+    return new URL(value).href.startsWith(prefix);
+  } catch {
+    return false;
+  }
+}
+
+// Serve the app's port inside the container by piping every connection to
+// the bridged Unix socket; nothing else is reachable.
+async function bridge(app) {
+  const sockets = new Set();
+  const server = createServer((client) => {
+    const upstream = createConnection("app.sock");
+    sockets.add(client).add(upstream);
+    const close = () => { client.destroy(); upstream.destroy(); sockets.delete(client); sockets.delete(upstream); };
+    for (const end of [client, upstream]) { end.on("error", close); end.on("close", close); }
+    client.pipe(upstream).pipe(client);
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(Number(new URL(app.http).port), "127.0.0.1", resolve);
+  });
+  return () => { server.close(); for (const socket of sockets) socket.destroy(); };
+}
+
+// The browser scene's caption, drawn again on every document the main frame
+// commits, so a navigation within the app keeps it.
+let caption = null;
+
+function overlay(text) {
+  const draw = () => {
+    document.getElementById("showcase-caption")?.remove();
+    const el = document.createElement("div");
+    el.id = "showcase-caption";
+    el.textContent = text;
+    Object.assign(el.style, { position: "fixed", left: 0, right: 0, bottom: 0, padding: "12px 24px", background: "rgba(13,17,23,.85)", color: "#e6edf3", font: '24px "DejaVu Sans",sans-serif', zIndex: 2147483647, pointerEvents: "none" });
+    document.body.appendChild(el);
+  };
+  if (document.body) draw();
+  else document.addEventListener("DOMContentLoaded", draw, { once: true });
+}
+
+// Load the app, then caption it; loading is measured, not planned.
+async function open(page, scene) {
+  caption = scene.caption;
+  await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
+  await page.evaluate(overlay, caption);
+}
+
+async function steps(page, scene) {
+  for (const step of scene.steps ?? []) {
+    if ("click" in step) await page.click(step.click, { timeout: 10_000 });
+    else if ("key" in step) await page.keyboard.press(step.key);
+    else if ("text" in step) await page.keyboard.type(step.text, { delay: 22 });
+    else if ("wait_ms" in step) await sleep(step.wait_ms);
+  }
+}
+
+const unbridge = app === null ? () => {} : await bridge(app);
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 1280, height: 720 },
@@ -69,24 +137,42 @@ const context = await browser.newContext({
 await context.route("**/*", async (route) => {
   const url = route.request().url();
   if (url === "about:blank" || url.startsWith("data:")) await route.continue();
+  else if (app !== null && within(url, app.http)) await route.continue();
   else await route.abort("blockedbyclient");
+});
+await context.routeWebSocket(/.*/, async (ws) => {
+  if (app !== null && within(ws.url(), app.ws)) ws.connectToServer();
+  else await ws.close();
 });
 const started = Date.now();
 const page = await context.newPage();
+page.on("framenavigated", (frame) => {
+  if (frame === page.mainFrame() && caption !== null) frame.evaluate(overlay, caption).catch(() => {});
+});
 const timings = { lead_in_ms: null, scenes_ms: [] };
 for (const scene of plan.scenes) {
   const sceneStart = Date.now();
   if (timings.lead_in_ms === null) timings.lead_in_ms = sceneStart - started;
+  if (scene.kind === "browser") await open(page, scene);
+  else {
+    caption = null;
+    if (page.url() !== "about:blank") await page.goto("about:blank");
+  }
   const begin = Date.now();
   if (scene.kind === "card") await card(page, scene);
-  else await terminal(page, scene);
+  else if (scene.kind === "terminal") await terminal(page, scene);
+  else await steps(page, scene);
   const left = scene.duration_ms - (Date.now() - begin);
-  if (left > 0) await sleep(left);
+  // A browser scene's `seconds` start after its last step, never eaten by a
+  // slow one; it still lasts until its planned (voice-covering) length.
+  const hold = scene.kind === "browser" ? Math.max(scene.seconds * 1000, left) : left;
+  if (hold > 0) await sleep(hold);
   timings.scenes_ms.push(Date.now() - sceneStart);
 }
 const video = page.video();
 await context.close();
 await browser.close();
+unbridge();
 const videoPath = await video.path();
 copyFileSync(videoPath, `${dir}/silent.webm`, constants.COPYFILE_EXCL);
 unlinkSync(videoPath);

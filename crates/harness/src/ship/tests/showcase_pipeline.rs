@@ -24,12 +24,13 @@ const ENV: &[&str] = &[
     "SHOWCASE_CURL_MODE",
     "SHOWCASE_DOCKER_MODE",
     "SHOWCASE_MAKE_MODE",
+    "SHOWCASE_APP_URL",
 ];
 
-struct Environment(Vec<(&'static str, Option<std::ffi::OsString>)>);
+pub(super) struct Environment(Vec<(&'static str, Option<std::ffi::OsString>)>);
 
 impl Environment {
-    fn setup() -> (Self, tempfile::TempDir) {
+    pub(super) fn setup() -> (Self, tempfile::TempDir) {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/tmp");
         std::fs::create_dir_all(&root).unwrap();
         let temp = tempfile::Builder::new()
@@ -76,6 +77,9 @@ if [ "$is_recorder" = 1 ]; then
       previous=$arg
     done
     case "$SHOWCASE_DOCKER_MODE" in no-video) exit 0;; esac
+    if [ -S "$work/app.sock" ]; then printf 'bridge socket app.sock\n' >> "$SHOWCASE_LOG"; fi
+    cat "$work/plan.json" >> "$SHOWCASE_LOG"
+    printf '\n' >> "$SHOWCASE_LOG"
     printf '{"lead_in_ms":10,"scenes_ms":[20,30]}' > "$work/timings.json"
     printf 'silent-video' > "$work/silent.webm"
 elif [ "$is_ffmpeg" = 1 ]; then
@@ -118,6 +122,7 @@ case "$SHOWCASE_MAKE_MODE" in fail) exit 3;; esac
             std::env::remove_var("SHOWCASE_CURL_MODE");
             std::env::remove_var("SHOWCASE_DOCKER_MODE");
             std::env::remove_var("SHOWCASE_MAKE_MODE");
+            std::env::remove_var("SHOWCASE_APP_URL");
         }
         (env, temp)
     }
@@ -141,7 +146,7 @@ fn executable(path: &Path, script: &str) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
 }
 
-fn mode(name: &str, value: &str) {
+pub(super) fn mode(name: &str, value: &str) {
     unsafe { std::env::set_var(name, value) }
 }
 

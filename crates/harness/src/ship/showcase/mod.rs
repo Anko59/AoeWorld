@@ -1,14 +1,22 @@
 //! `make showcase`: the PR's showcase video from a storyboard
-//! (docs/showcase.md). Scenes are title cards and scripted terminal
-//! transcripts (tagged before/after). Playwright in the pinned browser image
+//! (docs/showcase.md). Scenes are title cards, scripted terminal
+//! transcripts (tagged before/after) and browser scenes filming the app under
+//! development. Playwright in the pinned browser image
 //! records them in one take; narration is voiced
 //! with Gemini Flash Lite TTS on OpenRouter and mixed in with ffmpeg from the
 //! pinned ship-tools image. Each scene lasts at least as long as its voice.
+mod bridge;
+mod browser;
 mod check;
 mod media;
+mod timing;
 mod workdir;
 
-use super::describe::Level;
+#[cfg(test)]
+pub(crate) use bridge::{Bridge, SOCKET};
+pub(crate) use browser::Step;
+#[cfg(test)]
+pub(crate) use browser::{AppOrigin, DEFAULT_APP_URL, plan};
 pub(crate) use check::check;
 #[cfg(test)]
 pub(crate) use check::{check_voice_requirement, validate_image_value, validate_manifest_root};
@@ -24,6 +32,7 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::{Component, Path, PathBuf},
 };
+pub(crate) use timing::{Segment, Timings, check_duration, durations, measured_duration, track};
 #[cfg(test)]
 pub(crate) use workdir::create_work_dir;
 
@@ -86,6 +95,17 @@ pub(crate) enum Scene {
         #[serde(default)]
         narration: Option<String>,
     },
+    /// The app under development at `path` on its single configured origin
+    /// (SHOWCASE_APP_URL), driven by `steps`, then held for `seconds`.
+    Browser {
+        path: String,
+        caption: String,
+        seconds: u32,
+        #[serde(default)]
+        steps: Vec<Step>,
+        #[serde(default)]
+        narration: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -118,7 +138,9 @@ pub(crate) struct Line {
 impl Scene {
     pub(crate) fn narration(&self) -> Option<&str> {
         match self {
-            Self::Card { narration, .. } | Self::Terminal { narration, .. } => {
+            Self::Card { narration, .. }
+            | Self::Terminal { narration, .. }
+            | Self::Browser { narration, .. } => {
                 narration.as_deref().filter(|n| !n.trim().is_empty())
             }
         }
@@ -140,6 +162,12 @@ impl Scene {
                     .sum();
                 shown + 3000
             }
+            // The steps run once, then the hold: navigation is not planned
+            // (it is measured) and each step is counted exactly once.
+            Self::Browser { seconds, steps, .. } => steps
+                .iter()
+                .map(Step::planned_ms)
+                .fold(u64::from(*seconds) * 1000, u64::saturating_add),
         }
     }
 }
@@ -163,71 +191,19 @@ impl Storyboard {
                     "storyboard: scene {number}'s narration is over {TTS_MAX_CHARS} characters"
                 ));
             }
+            if let Scene::Browser {
+                path,
+                seconds,
+                steps,
+                ..
+            } = scene
+            {
+                browser::validate_scene(path, *seconds, steps)
+                    .map_err(|error| format!("storyboard: scene {number} {error}"))?;
+            }
         }
         Ok(board)
     }
-}
-
-/// Planned scene lengths: the natural time, stretched to cover the voice.
-pub(crate) fn durations(board: &Storyboard, voices: &[Option<u64>]) -> Vec<u64> {
-    board
-        .scenes
-        .iter()
-        .enumerate()
-        .map(|(i, scene)| {
-            let voice = voices.get(i).copied().flatten();
-            scene
-                .natural_ms()
-                .max(voice.map_or(0, |v| v.saturating_add(600)))
-        })
-        .collect()
-}
-
-pub(crate) fn check_duration(level: Level, durations: &[u64]) -> Result<(), String> {
-    let limit = level
-        .video_limit()
-        .ok_or_else(|| format!("{} PRs have no showcase video", level.name()))?;
-    let total = durations
-        .iter()
-        .fold(0_u64, |sum, duration| sum.saturating_add(*duration));
-    if total > u64::from(limit) * 1000 {
-        return Err(format!(
-            "the storyboard runs {:.1}s; a {} PR allows {limit}s: cut it",
-            total as f64 / 1000.0,
-            level.name()
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn measured_duration(
-    level: Level,
-    timings: &Timings,
-    scene_count: usize,
-) -> Result<u64, String> {
-    if timings.scenes_ms.len() != scene_count {
-        return Err(format!(
-            "the recorder measured {} scene(s) for a storyboard of {scene_count}",
-            timings.scenes_ms.len()
-        ));
-    }
-    let total = timings
-        .scenes_ms
-        .iter()
-        .fold(timings.lead_in_ms, |sum, duration| {
-            sum.saturating_add(*duration)
-        });
-    let limit = level
-        .video_limit()
-        .ok_or_else(|| format!("{} PRs have no showcase video", level.name()))?;
-    if total > u64::from(limit) * 1000 {
-        return Err(format!(
-            "the recorded showcase runs {:.1}s; a {} PR allows {limit}s: cut it",
-            total as f64 / 1000.0,
-            level.name()
-        ));
-    }
-    Ok(total)
 }
 
 /// Resolve the requested video path beneath `.cache/showcase`, refusing
@@ -429,45 +405,4 @@ fn open_or_create_private_child(parent: &std::fs::File, name: &str) -> nix::Resu
         }
         Err(error) => Err(error),
     }
-}
-
-/// What the recorder measured: blank video before the first scene, then the
-/// actual length of each scene (a slow page can overrun its plan).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub(crate) struct Timings {
-    pub(crate) lead_in_ms: u64,
-    pub(crate) scenes_ms: Vec<u64>,
-}
-
-/// One piece of the narration track: a scene's voice-over (by scene index)
-/// or silence, held for `ms`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Segment {
-    pub(crate) voice: Option<usize>,
-    pub(crate) ms: u64,
-}
-
-/// The narration track that lines up with the recorded video.
-pub(crate) fn track(timings: &Timings, voices: &[Option<u64>]) -> Result<Vec<Segment>, String> {
-    if timings.scenes_ms.len() != voices.len() {
-        return Err(format!(
-            "the recorder measured {} scene(s) for a storyboard of {}",
-            timings.scenes_ms.len(),
-            voices.len()
-        ));
-    }
-    let mut segments = vec![];
-    if timings.lead_in_ms > 0 {
-        segments.push(Segment {
-            voice: None,
-            ms: timings.lead_in_ms,
-        });
-    }
-    for (index, (ms, voice)) in timings.scenes_ms.iter().zip(voices).enumerate() {
-        segments.push(Segment {
-            voice: voice.map(|_| index),
-            ms: *ms,
-        });
-    }
-    Ok(segments)
 }

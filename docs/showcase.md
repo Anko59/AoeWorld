@@ -36,7 +36,9 @@ Existing outputs must be regular files. The directory is created when needed.
      "narration": "Agents could push unchecked code. Not any more."},
     {"kind": "terminal", "tag": "judge from dev", "tone": "before",
      "caption": "An agent pushes directly",
-     "lines": [{"style": "cmd", "text": "git push"}, {"style": "good", "text": "  ✓ allowed"}]}
+     "lines": [{"style": "cmd", "text": "git push"}, {"style": "good", "text": "  ✓ allowed"}]},
+    {"kind": "browser", "path": "/", "caption": "The lab after the change", "seconds": 4,
+     "steps": [{"click": "text=Start"}, {"text": "villager"}, {"key": "Enter"}, {"wait_ms": 1500}]}
   ]
 }
 ```
@@ -46,8 +48,41 @@ Existing outputs must be regular files. The directory is created when needed.
   `neutral`) tags it; line styles are `cmd` (typed), `out`, `good`, `bad`,
   `dim`. Show real output: paste it from the commands you ran.
 
-Browser scenes are planned for a follow-up issue. The recorder runs with no
-network and aborts every request except `about:blank` and `data:`.
+- **browser:** the app under development, filmed live. `path` (starting with
+  one `/`) opens on the app's origin; `caption` is overlaid, again after every
+  navigation; `steps` run in order (`click` a Playwright selector, press a
+  `key`, type `text` at 22 ms a character, or `wait_ms` up to 60 000), then the
+  page is held for `seconds` (1–300) after the last step, however long the
+  steps took. At most 64 steps. Start the app first (`make dev`).
+
+The app's origin is `SHOWCASE_APP_URL`, default `http://127.0.0.1:8080/` (the
+`make dev` address). It must be plain `http` on `127.0.0.1` or `localhost`
+with an explicit port and no credentials, path, query or fragment;
+`make showcase-check` refuses anything else when the storyboard has a browser
+scene.
+
+## Network
+
+Every take runs with `--network none`: the recorder's container has no
+network, so WebRTC/STUN, DNS and every address but one reach nothing. A take
+with a browser scene gets exactly one way out, the app's port. On the host,
+the harness's bridge (`bridge.rs`) listens on `app.sock` in the run's private
+0700 work directory and forwards each connection to the app's loopback
+`<host>:<port>` (SHOWCASE_APP_URL) and nowhere else; inside the container,
+`record.mjs` listens on `127.0.0.1:<port>` and pipes every connection to that
+socket, so Chromium reaches the app at its usual URL. The bridge allows 64
+open and 4096 total connections and stops, closing them all, when the
+recording ends.
+
+The origin filter inside Chromium stays as a second layer. Every HTTP(S)
+request (`context.route`) and every WebSocket (`context.routeWebSocket`) must
+start with the app's `http://<host>:<port>/` or `ws://<host>:<port>/` prefix;
+all others, including other loopback ports such as `http://localhost:631/`,
+other hosts, `https`/`wss` and URLs with credentials, are aborted, and service
+workers are blocked; cards and terminals allow only `about:blank` and `data:`.
+The rule is `AppOrigin::allows` in `browser.rs`, which `record.mjs` mirrors.
+Limit: the app itself is reachable without restriction, so a page can drive
+any endpoint the app serves.
 
 Not being a frontend change is never a reason for no video: use before/after
 terminal scenes for the harness, timings for performance, request/response for
@@ -71,8 +106,11 @@ A scene lasts at least as long as its voice-over.
 `crates/harness/src/ship/showcase/`: the storyboard must be a regular file no
 larger than 256 KiB and is parsed strictly; each
 narration is voiced and measured, then one Playwright take in the pinned
-browser image (`record.mjs`) plays every card and terminal scene for its
-planned length and records the actual timings. The ship-tools image (`docker/ship-tools.Dockerfile`,
+browser image (`record.mjs`) plays every scene for its
+planned length and records the actual timings. A browser scene's plan is its
+steps (waits and typing, counted once) plus its hold; the hold starts after the
+page has loaded and the steps ran, while the recorded scene length includes
+the page load, so the voice-over stays aligned with what was on screen. The ship-tools image (`docker/ship-tools.Dockerfile`,
 ffmpeg) pads each voice to its scene's measured length and muxes the track into
 the WebM. Narration can stretch a scene; plans over 5 minutes are rejected
 before image builds. A take whose
