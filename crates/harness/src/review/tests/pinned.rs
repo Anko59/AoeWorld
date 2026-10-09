@@ -159,3 +159,35 @@ fn origin_dev_moving_during_a_review_changes_neither_prompts_nor_fingerprint() {
         "the stored fingerprint is the policy the review ran under"
     );
 }
+
+#[test]
+fn the_stored_task_fingerprint_is_the_task_the_reviewers_saw() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    git(
+        root,
+        &["commit", "-q", "--amend", "-m", "COMMIT-LOG-MARKER"],
+    );
+    let unmoved = rev(root, "refs/remotes/origin/dev");
+    for (task, seen) in [
+        ("", "COMMIT-LOG-MARKER"),
+        ("the description\n", "the description\n"),
+    ] {
+        let ask = Fetching {
+            root,
+            moved: unmoved.clone(),
+            prompts: Mutex::new(Vec::new()),
+        };
+        let report =
+            review_with(root, Tier::Low, Runtime::Claude, task, &Plan::Full, &ask).unwrap();
+        assert!(
+            ask.prompts.lock().unwrap().iter().any(|p| p.contains(seen)),
+            "the reviewers saw {seen:?}"
+        );
+        assert_eq!(
+            report.task_fingerprint.as_deref(),
+            Some(Report::task_fingerprint(seen).as_str()),
+            "the fingerprint of {task:?} is of what the reviewers saw"
+        );
+    }
+}

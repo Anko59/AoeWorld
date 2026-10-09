@@ -72,15 +72,23 @@ fn advance_dev_with_grade(root: &Path, grade: u8) {
     run(root, &["rebase", "-q", "origin/dev"]);
 }
 
+/// A reviewed commit on `feature`, then a candidate on the same branch and
+/// parent with the same message: only the file blob differs.
 fn alternate_change(root: &Path, reviewed: &[u8], candidate: &[u8]) -> String {
     std::fs::write(root.join("README.md"), reviewed).unwrap();
     run(root, &["add", "README.md"]);
-    run(root, &["commit", "-q", "-m", "reviewed change"]);
+    run(root, &["commit", "-q", "-m", "change"]);
     source_report(root, Tier::Low, 9);
-    run(root, &["checkout", "-q", "-b", "candidate", "dev"]);
-    std::fs::write(root.join("README.md"), candidate).unwrap();
+    recommit(root, candidate, "2001-01-01T00:00:00")
+}
+
+/// Replace HEAD by a commit of `bytes` with the same parent and message.
+fn recommit(root: &Path, bytes: &[u8], date: &str) -> String {
+    run(root, &["reset", "-q", "--hard", "HEAD~1"]);
+    std::fs::write(root.join("README.md"), bytes).unwrap();
     run(root, &["add", "README.md"]);
-    run(root, &["commit", "-q", "-m", "candidate change"]);
+    // Another author date: the commit differs even when the tree does not.
+    run(root, &["commit", "-q", "-m", "change", "--date", date]);
     git::git(root, &["rev-parse", "HEAD"]).unwrap()
 }
 
@@ -88,10 +96,19 @@ fn refuses_alternate_change(reviewed: &[u8], candidate: &[u8]) {
     let (_temp, root) = fixture("true");
     let head = alternate_change(&root, reviewed, candidate);
     assert!(
-        Report::reuse_for_change(&root, &head, "candidate", &["low"], "")
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none(),
         "distinct file blobs must receive a fresh review"
+    );
+    // The control: the reviewed blob on the same branch and message reuses,
+    // so only the blob comparison refused the candidate.
+    let same = recommit(&root, reviewed, "2002-01-01T00:00:00");
+    assert!(
+        Report::reuse_for_change(&root, &same, "feature", &["low"], "")
+            .unwrap()
+            .is_some(),
+        "identical file blobs on the same branch reuse"
     );
 }
 
@@ -124,7 +141,7 @@ fn reuses_a_passing_review_after_rebase_onto_a_moved_base() {
         )
     );
     assert!(reused.passes());
-    let stored = Report::load_passing(&root, &head, &["low"])
+    let stored = Report::load_passing(&root, &head, &["low"], "")
         .unwrap()
         .unwrap();
     assert_eq!(stored.reused_from.as_deref(), Some(reviewed.head.as_str()));
@@ -146,7 +163,7 @@ fn reuses_a_passing_review_after_rebase_onto_a_moved_base() {
     })
     .expect("review gate should accept the eligible reused report");
     assert_eq!(reused.reused_from.as_deref(), Some(reviewed.head.as_str()));
-    let written = Report::load_passing(&root, &head, &["low"])
+    let written = Report::load_passing(&root, &head, &["low"], "")
         .unwrap()
         .expect("reuse report should be written for the rebased head");
     assert_eq!(written.reused_from.as_deref(), Some(reviewed.head.as_str()));
@@ -346,7 +363,14 @@ fn ship_reviews_head_again_when_it_has_a_complete_failure() {
     use std::cell::Cell;
 
     let (_temp, root) = fixture("true");
-    let head = alternate_change(&root, b"reviewed\n", b"reviewed\n");
+    // On its own branch: on `feature` the failure would forbid any review.
+    std::fs::write(root.join("README.md"), "reviewed\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "reviewed change"]);
+    source_report(&root, Tier::Low, 9);
+    run(&root, &["checkout", "-q", "-b", "candidate", "dev"]);
+    std::fs::write(root.join("README.md"), "reviewed\n").unwrap();
+    run(&root, &["commit", "-q", "-am", "candidate change"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     let failure = unstored(&root, Tier::Low, 7);
     failure.store(&root).unwrap();
     let evidence = judge(&root, &crate::ship::tests::offline()).unwrap();

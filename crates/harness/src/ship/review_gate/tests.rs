@@ -49,7 +49,10 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         change_fingerprint: None,
         policy_fingerprint: Report::policy_fingerprint(root, tier.name()).ok(),
         reused_from: None,
-        task_fingerprint: Some(Report::task_fingerprint("")),
+        // An empty task: the reviewers saw the commit log.
+        task_fingerprint: Report::effective_task(root, "HEAD", "")
+            .ok()
+            .map(|task| Report::task_fingerprint(&task)),
     }
 }
 

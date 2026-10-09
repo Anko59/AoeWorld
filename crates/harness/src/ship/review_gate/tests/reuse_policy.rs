@@ -301,3 +301,82 @@ fn a_reused_report_records_the_real_floor() {
         "the floor is the change's, not the request"
     );
 }
+
+#[test]
+fn a_judge_behind_the_fetched_origin_dev_never_reuses() {
+    let (_temp, root) = fixture("true");
+    let judge = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
+    unstored(&root, Tier::Low, 9).store(&root).unwrap();
+    // make ship fetched a newer origin/dev after the judge was chosen.
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    let fetched = git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap();
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change_judged(&root, &head, "feature", &["low"], "", Some(&judge))
+            .unwrap()
+            .is_none(),
+        "a judge pinned to an older origin/dev never reuses"
+    );
+    assert!(
+        Report::reuse_for_change_judged(&root, &head, "feature", &["low"], "", Some(&fetched))
+            .unwrap()
+            .is_some(),
+        "the judge of the fetched origin/dev reuses the same change"
+    );
+}
+
+#[test]
+fn an_amended_commit_message_gets_a_fresh_review() {
+    let (_temp, root) = fixture("true");
+    unstored(&root, Tier::Low, 9).store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    // Without SHIP_BODY the reviewers read the commit log, which changed.
+    run(&root, &["commit", "-q", "--amend", "-m", "reworded"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert!(
+        Report::reuse_for_change(&root, &head, "feature", &["low"], "")
+            .unwrap()
+            .is_none(),
+        "a review of one commit log never answers for another"
+    );
+}
+
+#[test]
+fn the_same_commit_with_another_description_gets_a_fresh_review() {
+    let (temp, root) = fixture("true");
+    let mut first = unstored(&root, Tier::Low, 9);
+    first.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
+    first.store(&root).unwrap();
+    let head = first.head.clone();
+    let mut unmarked = unstored(&root, Tier::Low, 9);
+    unmarked.task_fingerprint = None;
+    unmarked.store(&root).unwrap();
+    assert!(
+        Report::load_passing(&root, &head, &["low"], "first description\n")
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        Report::load_passing(&root, &head, &["low"], "")
+            .unwrap()
+            .is_none(),
+        "a report without the reviewers' task is never reused"
+    );
+
+    let body = temp.path().join("body.md");
+    std::fs::write(&body, "second description\n").unwrap();
+    let evidence = crate::ship::judge(&root, &crate::ship::tests::offline()).unwrap();
+    let options = crate::ship::Options {
+        no_review: false,
+        body_file: Some(body),
+        ..crate::ship::tests::offline()
+    };
+    let calls = std::cell::Cell::new(0);
+    crate::ship::review_gate::require(&root, &evidence, &options, &|root, tier, _, task, _| {
+        calls.set(calls.get() + 1);
+        assert_eq!(task, "second description\n");
+        Ok(unstored(root, tier, 9))
+    })
+    .unwrap();
+    assert_eq!(calls.get(), 1, "the second description was reviewed");
+}

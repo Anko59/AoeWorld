@@ -229,14 +229,7 @@ fn review_with_branch(
     let subject = prompt::Subject {
         head: head.clone(),
         merge_base: merge_base.clone(),
-        task: if task.trim().is_empty() {
-            git::git(
-                root,
-                &["log", "--format=%B", &format!("{merge_base}..HEAD")],
-            )?
-        } else {
-            task.to_owned()
-        },
+        task: Report::effective_task(root, &head, task)?,
         stat: git::git(root, &["diff", "--stat", &merge_base, "HEAD"])?,
         // A closing review audits the fixes since the last reviewed commit.
         diff: match plan {
@@ -419,7 +412,8 @@ fn review_with_branch(
         change_fingerprint,
         policy_fingerprint: Some(policy_fingerprint),
         reused_from: None,
-        task_fingerprint: Some(Report::task_fingerprint(task)),
+        // What the reviewers saw: the commit log stands in for an empty task.
+        task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
     };
     report.store(root)?;
     Ok(report)

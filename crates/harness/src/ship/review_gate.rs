@@ -55,18 +55,18 @@ pub(crate) fn require(
         .filter(|t| **t >= tier)
         .map(|t| t.name())
         .collect();
-    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible)? {
+    // The description is part of what was reviewed: reuse needs the same.
+    let task = match &options.body_file {
+        Some(path) => fs::read_to_string(path)?,
+        None => String::new(),
+    };
+    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible, &task)? {
         eprintln!(
             "ship: reusing the passing {} review of this commit",
             report.tier
         );
         return Ok(report);
     }
-    // The description is part of what was reviewed: reuse needs the same.
-    let task = match &options.body_file {
-        Some(path) => fs::read_to_string(path)?,
-        None => String::new(),
-    };
     let has_complete = Report::has_complete(root, &evidence.head, &eligible)?;
     // A complete failing review is an explicit verdict for this commit. It
     // must not be replaced by a review of another commit's change.

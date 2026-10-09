@@ -47,8 +47,9 @@ pub(crate) struct Report {
     /// Original commit whose review this report reuses, if any.
     #[serde(default)]
     pub(crate) reused_from: Option<String>,
-    /// SHA-256 of the task (the `SHIP_BODY` text) the reviewers were given:
-    /// a review of one description never answers for another.
+    /// SHA-256 of the task the reviewers were given (the `SHIP_BODY` text, or
+    /// the commit log when it is empty): a review of one description never
+    /// answers for another.
     #[serde(default)]
     pub(crate) task_fingerprint: Option<String>,
 }
@@ -73,6 +74,19 @@ impl Report {
     /// Fingerprint the task text exactly as the reviewers receive it.
     pub(crate) fn task_fingerprint(task: &str) -> String {
         hex(sha2::Sha256::digest(task.as_bytes()))
+    }
+
+    /// The task the reviewers of `head` receive: `task`, or the branch's
+    /// commit messages since origin/dev when it is empty.
+    pub(crate) fn effective_task(root: &Path, head: &str, task: &str) -> Result<String, String> {
+        if !task.trim().is_empty() {
+            return Ok(task.to_owned());
+        }
+        let merge_base = git::git(root, &["merge-base", "refs/remotes/origin/dev", head])?;
+        git::git(
+            root,
+            &["log", "--format=%B", &format!("{merge_base}..{head}")],
+        )
     }
 
     /// Fingerprint the review engine tracked by `origin/dev` for one tier.
@@ -163,12 +177,16 @@ impl Report {
         unreachable!("attempt numbers are unbounded")
     }
 
-    /// The passing review of `head`, if one is stored (any of `tiers`).
+    /// The passing review of `head`, if one is stored (any of `tiers`) for the
+    /// task the reviewers would receive now: a report without a task
+    /// fingerprint, or of another description, is not reused.
     pub(crate) fn load_passing(
         root: &Path,
         head: &str,
         tiers: &[&str],
+        task: &str,
     ) -> Result<Option<Self>, String> {
+        let wanted = Self::task_fingerprint(&Self::effective_task(root, head, task)?);
         let Ok(entries) = fs::read_dir(directory(root)?) else {
             return Ok(None);
         };
@@ -182,7 +200,12 @@ impl Report {
             })
             .filter_map(|entry| fs::read(entry.path()).ok())
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
-            .find(|r| r.head == head && tiers.contains(&r.tier.as_str()) && r.passes()))
+            .find(|r| {
+                r.head == head
+                    && tiers.contains(&r.tier.as_str())
+                    && r.task_fingerprint.as_deref() == Some(wanted.as_str())
+                    && r.passes()
+            }))
     }
 
     /// Whether a complete report already exists for this head at an eligible
@@ -214,8 +237,10 @@ impl Report {
     /// even when another branch holds an identical change: another branch's
     /// review (closing or full) never answers this branch's findings. One
     /// policy commit is pinned first: the floor, the eligible tiers, the merge
-    /// grade and the policy fingerprint all come from it. Any complete report
-    /// for this head at an eligible tier blocks reuse, including a failing one.
+    /// grade and the policy fingerprint all come from it, and it must be
+    /// origin/dev itself: a judge built from an older origin/dev never reuses.
+    /// Any complete report for this head at an eligible tier blocks reuse,
+    /// including a failing one.
     pub(crate) fn reuse_for_change(
         root: &Path,
         head: &str,
@@ -224,7 +249,24 @@ impl Report {
         task: &str,
     ) -> Result<Option<Self>, String> {
         let judge = std::env::var(super::trusted::JUDGE_REV).ok();
-        let (_pin, policy) = super::trusted::pin(root, judge.as_deref())?;
+        Self::reuse_for_change_judged(root, head, branch, tiers, task, judge.as_deref())
+    }
+
+    /// `reuse_for_change` for the judge built from `judge` (origin/dev when
+    /// `None`).
+    pub(crate) fn reuse_for_change_judged(
+        root: &Path,
+        head: &str,
+        branch: &str,
+        tiers: &[&str],
+        task: &str,
+        judge: Option<&str>,
+    ) -> Result<Option<Self>, String> {
+        let (_pin, policy) = super::trusted::pin(root, judge)?;
+        let base = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
+        if policy != base {
+            return Ok(None);
+        }
         let floor = super::floor(root).map_err(|e| e.to_string())?;
         let tiers: Vec<&str> = tiers
             .iter()
@@ -239,10 +281,9 @@ impl Report {
             return Ok(None);
         }
         let config = super::config::Config::load(root)?;
-        let wanted_task = Self::task_fingerprint(task);
+        let wanted_task = Self::task_fingerprint(&Self::effective_task(root, head, task)?);
         let (merge_base, wanted_identity) = git::change_identity(root, "dev", head)?;
         let wanted_fingerprint = git::change_fingerprint(root, "dev", head)?.1;
-        let base = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
         let Ok(entries) = fs::read_dir(directory(root)?) else {
             return Ok(None);
         };
