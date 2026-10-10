@@ -3,6 +3,7 @@ use super::*;
 mod compiler;
 mod index_context;
 mod metadata;
+mod red_tests;
 mod witness;
 
 fn run(root: &Path, args: &[&str]) -> Vec<u8> {

@@ -286,3 +286,41 @@ fn the_plan_gives_browser_scenes_their_absolute_url_and_needs_the_origin() {
             .contains("need the app origin")
     );
 }
+
+#[test]
+fn a_storyboard_may_ask_to_film_the_app_on_webgpu() {
+    let default = Storyboard::parse(&browser_board("/", "")).unwrap();
+    let app = AppOrigin::parse(APP).unwrap();
+    let json = serde_json::to_value(plan(&default, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    assert_eq!(json["renderer"], "default");
+
+    let text = browser_board("/", "").replacen('{', r#"{"renderer":"webgpu","#, 1);
+    let webgpu = Storyboard::parse(&text).unwrap();
+    let app = AppOrigin::parse(APP).unwrap();
+    let json = serde_json::to_value(plan(&webgpu, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    assert_eq!(json["renderer"], "webgpu");
+
+    let unknown = browser_board("/", "").replacen('{', r#"{"renderer":"vulkan","#, 1);
+    assert!(Storyboard::parse(&unknown).is_err());
+}
+
+#[test]
+fn the_recorder_uses_the_browser_tests_webgpu_flags() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let flags = |text: &str, start: &str, end: &str| -> Vec<String> {
+        let block = &text[text.find(start).unwrap()..];
+        let block = &block[..block.find(end).unwrap()];
+        block
+            .split('"')
+            .filter(|part| part.starts_with("--"))
+            .map(str::to_owned)
+            .collect()
+    };
+    let record =
+        std::fs::read_to_string(root.join("crates/harness/src/ship/showcase/record.mjs")).unwrap();
+    let config = std::fs::read_to_string(root.join("browser/playwright.config.ts")).unwrap();
+    let recorder = flags(&record, "const WEBGPU_ARGS", "];");
+    let tests = flags(&config, "name: \"webgpu\"", "],");
+    assert!(recorder.len() >= 5, "{recorder:?}");
+    assert_eq!(recorder, tests);
+}

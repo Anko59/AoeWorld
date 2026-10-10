@@ -128,7 +128,13 @@ async function steps(page, scene) {
 }
 
 const unbridge = app === null ? () => {} : await bridge(app);
-const browser = await chromium.launch();
+// Same software WebGPU flags as the `webgpu` project in browser/playwright.config.ts.
+const WEBGPU_ARGS = [
+  "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--enable-unsafe-webgpu",
+  "--ignore-gpu-blocklist", "--enable-gpu", "--enable-features=Vulkan",
+  "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader", "--disable-vulkan-surface",
+];
+const browser = await chromium.launch(plan.renderer === "webgpu" ? { args: WEBGPU_ARGS } : {});
 const context = await browser.newContext({
   viewport: { width: 1280, height: 720 },
   recordVideo: { dir, size: { width: 1280, height: 720 } },
