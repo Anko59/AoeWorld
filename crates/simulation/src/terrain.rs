@@ -115,10 +115,11 @@ impl Terrain {
                 && tile.x < config.width_tiles
                 && tile.y < config.height_tiles),
             Self::Map { generator, overlay } => {
-                let Some(sample) = generator.tile_at_with_cancel(tile, cancelled)? else {
+                let Some((sample, object)) =
+                    generator.tile_and_node_with_cancel(tile, cancelled)?
+                else {
                     return Ok(false);
                 };
-                let object = generator.object_at_with_cancel(tile, cancelled)?;
                 Ok(sample.passable && object.is_none_or(|node| !overlay.blocks_node(node)))
             }
         }

@@ -1,8 +1,8 @@
 use crate::GameplayService;
 use aoe_core::{PlayerId, WorldPosition};
 use aoe_map::{
-    ElevationPage, EnvironmentPageProvider, GAME_TILE_METERS, HistoricalLandUsePage,
-    MAP_SCHEMA_VERSION, MapPackage, PotentialBiomePage, PreparedEnvironment, WaterPage,
+    ElevationPage, EnvironmentPageProvider, GAME_TILE_METERS, HistoricalLandUsePage, MapPackage,
+    PotentialBiomePage, PreparedEnvironment, WaterPage,
 };
 use aoe_protocol::MapMetadata;
 use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
@@ -146,7 +146,7 @@ pub(crate) fn map_metadata(package: &MapPackage) -> MapMetadata {
         tile_size_meters: GAME_TILE_METERS as u8,
         compression_numerator: package.request.compression.numerator,
         compression_denominator: package.request.compression.denominator,
-        terrain_schema_version: MAP_SCHEMA_VERSION,
+        terrain_schema_version: package.schema_version,
     }
 }
 

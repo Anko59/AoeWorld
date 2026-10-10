@@ -23,6 +23,9 @@ pub(super) fn sample_tile(
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Tile, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_tile_required(tile, cancelled);
+    }
     let mut sample = sample_base_tile(generator, tile, cancelled)?;
     if sample.water == WaterKind::None && sample.surface.walkable() {
         sample.material =
@@ -60,8 +63,8 @@ pub(super) fn sample_base_tile(
     let fallback_water = fallback_water(generator, tile);
     let fallback_biome = fallback_biome(generator, tile);
 
-    let biome = if environment.vegetation.is_some() {
-        let class = sample_biome_class(generator, environment.samples_per_axis, tile, cancelled)?;
+    let biome = if let Some(axis) = environment.vegetation_samples_per_axis() {
+        let class = sample_biome_class(generator, axis, tile, cancelled)?;
         class
             .and_then(biome_from_potential_class)
             .map(|biome| (biome, Provenance::SourceDerived))
@@ -91,8 +94,9 @@ pub(super) fn sample_base_tile(
             Provenance::Fallback,
         )
     };
-    let (mut water, mut water_provenance) = if environment.water.is_some() {
-        let coverage = sample_water(generator, environment.samples_per_axis, tile, cancelled)?;
+    let (mut water, mut water_provenance) = if let Some(axis) = environment.water_samples_per_axis()
+    {
+        let coverage = sample_water(generator, axis, tile, cancelled)?;
         coverage
             .map(|(ocean, inland)| match ocean {
                 1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
@@ -159,6 +163,9 @@ pub(super) fn resource_at(
     sample: Tile,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_node_with_cancel(tile, cancelled);
+    }
     if !sample.passable {
         return Ok(None);
     }
@@ -229,6 +236,9 @@ fn occupied_without_access(
     sample: Tile,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<bool, EnvironmentPageError> {
+    if generator.uses_landscape_v2() {
+        return generator.landscape_occupied_with_cancel(tile, cancelled);
+    }
     if !sample.passable {
         return Ok(true);
     }

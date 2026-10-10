@@ -13,6 +13,7 @@ const RECIPE_5_START_RECIPE: u16 = 5;
 const PRIOR_WATER_MODEL_START_RECIPE: u16 = aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION;
 const PRIOR_FOREST_START_RECIPE: u16 = aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION;
 const WATER_MODEL_START_RECIPE: u16 = aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION;
+const LANDSCAPE_START_RECIPE: u16 = aoe_map::LANDSCAPE_GENERATION_RECIPE_VERSION;
 const START_EXIT_DISTANCE: u32 = 64;
 const START_EXIT_VISITS: usize = 4_096;
 
@@ -71,7 +72,8 @@ impl Terrain {
             | RECIPE_5_START_RECIPE
             | PRIOR_WATER_MODEL_START_RECIPE
             | PRIOR_FOREST_START_RECIPE
-            | WATER_MODEL_START_RECIPE => {}
+            | WATER_MODEL_START_RECIPE
+            | LANDSCAPE_START_RECIPE => {}
             _ => return Err(EnvironmentPageError::Invalid),
         }
         if cancelled() {
@@ -82,7 +84,10 @@ impl Terrain {
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
-        cache.require_exit = generation_recipe_version == WATER_MODEL_START_RECIPE;
+        cache.require_exit = matches!(
+            generation_recipe_version,
+            WATER_MODEL_START_RECIPE | LANDSCAPE_START_RECIPE
+        );
         if valid_start(&mut cache, center)? {
             return Ok(StartSearchResult::Found(center));
         }

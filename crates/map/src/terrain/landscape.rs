@@ -10,7 +10,7 @@ impl MapChunkGenerator {
     /// Pure, bounded lookup of the procedural opening in this tile's cell.
     /// A node is not a claim that source water or cliffs are traversable.
     pub fn forest_opening_center_at(&self, tile: TileCoord) -> Option<TileCoord> {
-        if !uses_forest_landscape(self) || opening_geometry(self, tile).is_none() {
+        if !uses_reservation_geometry(self) || opening_geometry(self, tile).is_none() {
             return None;
         }
         let cell = (
@@ -26,6 +26,19 @@ pub(super) fn uses_forest_landscape(generator: &MapChunkGenerator) -> bool {
         generator.generation_recipe_version(),
         crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
             | crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
+    )
+}
+
+fn uses_reservation_geometry(generator: &MapChunkGenerator) -> bool {
+    uses_forest_landscape(generator)
+        || generator.generation_recipe_version() == crate::LANDSCAPE_GENERATION_RECIPE_VERSION
+}
+
+fn uses_connected_reservations(generator: &MapChunkGenerator) -> bool {
+    matches!(
+        generator.generation_recipe_version(),
+        crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
+            | crate::LANDSCAPE_GENERATION_RECIPE_VERSION
     )
 }
 
@@ -82,7 +95,7 @@ pub(super) fn opening_contains(generator: &MapChunkGenerator, tile: TileCoord) -
 }
 
 fn starting_glade(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if !uses_forest_landscape(generator) {
+    if !uses_reservation_geometry(generator) {
         return false;
     }
     let width = generator.width_tiles.max(1);
@@ -134,9 +147,7 @@ fn opening_geometry_for_cell(
         19
     } else if kind < 760 {
         31
-    } else if generator.generation_recipe_version()
-        == crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
-    {
+    } else if uses_connected_reservations(generator) {
         // Small mandatory nodes join the recipe-eight graph without reseeding
         // the already established larger openings or canopy.
         19
@@ -191,7 +202,7 @@ fn opening_center(layout: u64, cell: (i32, i32)) -> TileCoord {
 }
 
 pub(super) fn procedural_trail_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if !uses_forest_landscape(generator) {
+    if !uses_reservation_geometry(generator) {
         return false;
     }
     if starting_connector_contains(generator, tile) {
@@ -258,22 +269,42 @@ fn trail_segment(
 }
 
 fn starting_connector_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if generator.generation_recipe_version() != crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION {
+    if !uses_connected_reservations(generator) {
         return false;
     }
     let coordinate = (generator.width_tiles.max(1) - 1) / 2;
     let center = TileCoord::new(coordinate, coordinate);
     // The center and its node are in one 192-tile cell. Reject far-away tiles
     // before hashing; no map-wide allocation or source search during sampling.
-    if tile.x.abs_diff(center.x) > OPENING_GRID_TILES as u32
-        || tile.y.abs_diff(center.y) > OPENING_GRID_TILES as u32
-    {
+    let reach = if generator.uses_landscape_v2() {
+        OPENING_GRID_TILES + OPENING_GRID_TILES / 2 + OPENING_CENTER_JITTER
+    } else {
+        OPENING_GRID_TILES
+    };
+    if tile.x.abs_diff(center.x) > reach as u32 || tile.y.abs_diff(center.y) > reach as u32 {
         return false;
     }
     let cell = (
         coordinate.div_euclid(OPENING_GRID_TILES),
         coordinate.div_euclid(OPENING_GRID_TILES),
     );
+    if generator.uses_landscape_v2() {
+        // Dense coherent forests cannot rely on recipe-eight's permeable
+        // scattered trees as shortcuts through bent graph edges. Connect the
+        // starting glade directly to its seeded surrounding opening nodes so a
+        // bounded planner can leave toward a destination without that detour.
+        // This remains only a shared vegetation reservation: cliffs/water stay.
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let neighbor = (cell.0.saturating_add(dx), cell.1.saturating_add(dy));
+                let end = opening_center(cell_layout(generator, neighbor), neighbor);
+                if near_segment(center, end, tile, 3) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     let end = opening_center(cell_layout(generator, cell), cell);
     near_segment(center, end, tile, 3)
 }

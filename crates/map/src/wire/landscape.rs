@@ -88,10 +88,7 @@ impl CompactChunk {
     /// Versions 1/2 retain the exact existing decoder semantics, then project
     /// absent appearance, Legacy resource families and no decorations.
     pub fn decode_landscape(&self) -> Result<LandscapeChunk, LandscapeChunkError> {
-        let bytes = decode_hex(&self.payload_hex)?;
-        let mut cursor = 0;
-        let version = read_u8(&bytes, &mut cursor)?;
-        if matches!(version, LEGACY_FORMAT_VERSION | FORMAT_VERSION) {
+        if self.payload_hex.starts_with("01") || self.payload_hex.starts_with("02") {
             let chunk = self.decode()?;
             return Ok(LandscapeChunk {
                 x: chunk.x,
@@ -128,6 +125,15 @@ impl CompactChunk {
                 decorations: Vec::new(),
             });
         }
+        self.decode_landscape_v3()
+    }
+
+    /// Strict schema-10 reader. Separate entry point keeps legacy projection
+    /// allocations/code out of clients that retain their original legacy cache.
+    pub fn decode_landscape_v3(&self) -> Result<LandscapeChunk, LandscapeChunkError> {
+        let bytes = decode_hex(&self.payload_hex)?;
+        let mut cursor = 0;
+        let version = read_u8(&bytes, &mut cursor)?;
         if version != VERSION {
             return Err(CompactChunkError::UnsupportedVersion.into());
         }
@@ -147,17 +153,7 @@ impl CompactChunk {
             decorations: Vec::with_capacity(decorations),
         };
         for _ in 0..tiles {
-            let height = read_i32(&bytes, &mut cursor)?;
-            let level = read_i16(&bytes, &mut cursor)?;
-            let corners = [
-                read_i16(&bytes, &mut cursor)?,
-                read_i16(&bytes, &mut cursor)?,
-                read_i16(&bytes, &mut cursor)?,
-                read_i16(&bytes, &mut cursor)?,
-            ];
-            let properties = read_u32(&bytes, &mut cursor)?;
-            let observation = read_u16(&bytes, &mut cursor)?;
-            let terrain = unpack_tile(height, level, corners, properties, Some(observation))?;
+            let terrain = read_base_tile(&bytes, &mut cursor, true)?;
             let tile = TileCoord::new(
                 read_i32(&bytes, &mut cursor)?,
                 read_i32(&bytes, &mut cursor)?,
@@ -195,17 +191,7 @@ impl CompactChunk {
             });
         }
         for _ in 0..resources {
-            let node = ResourceNode {
-                id: read_u64(&bytes, &mut cursor)?,
-                tile: TileCoord::new(
-                    read_i32(&bytes, &mut cursor)?,
-                    read_i32(&bytes, &mut cursor)?,
-                ),
-                kind: resource_kind(read_u8(&bytes, &mut cursor)?)?,
-                object: object_kind(read_u8(&bytes, &mut cursor)?)?,
-                initial_amount: read_u16(&bytes, &mut cursor)?,
-                visual_variant: read_u8(&bytes, &mut cursor)?,
-            };
+            let node = read_resource_node(&bytes, &mut cursor)?;
             let visual_family = resource_from(read_u8(&bytes, &mut cursor)?)?;
             chunk.resources.push(LandscapeResource {
                 node,

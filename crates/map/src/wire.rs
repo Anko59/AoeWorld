@@ -128,40 +128,15 @@ impl CompactChunk {
         }
         let mut tiles = Vec::with_capacity(tile_count);
         for _ in 0..tile_count {
-            let geographic_height_centimeters = read_i32(&payload, &mut cursor)?;
-            let game_height_level = read_i16(&payload, &mut cursor)?;
-            let corner_game_height_levels = [
-                read_i16(&payload, &mut cursor)?,
-                read_i16(&payload, &mut cursor)?,
-                read_i16(&payload, &mut cursor)?,
-                read_i16(&payload, &mut cursor)?,
-            ];
-            let tile = unpack_tile(
-                geographic_height_centimeters,
-                game_height_level,
-                corner_game_height_levels,
-                read_u32(&payload, &mut cursor)?,
-                if version == FORMAT_VERSION {
-                    Some(read_u16(&payload, &mut cursor)?)
-                } else {
-                    None
-                },
-            )?;
-            tiles.push(tile);
+            tiles.push(read_base_tile(
+                &payload,
+                &mut cursor,
+                version == FORMAT_VERSION,
+            )?);
         }
         let mut resources = Vec::with_capacity(resource_count);
         for _ in 0..resource_count {
-            resources.push(ResourceNode {
-                id: read_u64(&payload, &mut cursor)?,
-                tile: TileCoord::new(
-                    read_i32(&payload, &mut cursor)?,
-                    read_i32(&payload, &mut cursor)?,
-                ),
-                kind: resource_kind(read_u8(&payload, &mut cursor)?)?,
-                object: object_kind(read_u8(&payload, &mut cursor)?)?,
-                initial_amount: read_u16(&payload, &mut cursor)?,
-                visual_variant: read_u8(&payload, &mut cursor)?,
-            });
+            resources.push(read_resource_node(&payload, &mut cursor)?);
         }
         (cursor == payload.len())
             .then_some(Chunk {
@@ -176,6 +151,41 @@ impl CompactChunk {
     pub fn decoded_len(&self) -> Result<usize, CompactChunkError> {
         Ok(self.payload_hex.len() / 2)
     }
+}
+
+// Share the original physical record parser across all wire versions. Keep
+// reads and validation in published order, including the optional v2 evidence.
+fn read_base_tile(
+    bytes: &[u8],
+    cursor: &mut usize,
+    evidence: bool,
+) -> Result<Tile, CompactChunkError> {
+    let height = read_i32(bytes, cursor)?;
+    let level = read_i16(bytes, cursor)?;
+    let corners = [
+        read_i16(bytes, cursor)?,
+        read_i16(bytes, cursor)?,
+        read_i16(bytes, cursor)?,
+        read_i16(bytes, cursor)?,
+    ];
+    let properties = read_u32(bytes, cursor)?;
+    let observation = if evidence {
+        Some(read_u16(bytes, cursor)?)
+    } else {
+        None
+    };
+    unpack_tile(height, level, corners, properties, observation)
+}
+
+fn read_resource_node(bytes: &[u8], cursor: &mut usize) -> Result<ResourceNode, CompactChunkError> {
+    Ok(ResourceNode {
+        id: read_u64(bytes, cursor)?,
+        tile: TileCoord::new(read_i32(bytes, cursor)?, read_i32(bytes, cursor)?),
+        kind: resource_kind(read_u8(bytes, cursor)?)?,
+        object: object_kind(read_u8(bytes, cursor)?)?,
+        initial_amount: read_u16(bytes, cursor)?,
+        visual_variant: read_u8(bytes, cursor)?,
+    })
 }
 
 fn pack_tile_properties(tile: Tile) -> u32 {
