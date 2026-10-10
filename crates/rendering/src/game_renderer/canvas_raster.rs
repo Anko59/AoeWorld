@@ -24,6 +24,10 @@ pub(super) fn raster_surface(
         && triangle.tint <= 3
         && matches!(triangle.material, 0 | 1 | 2 | 6)
         && !triangle.skirt;
+    // Canonical endpoints are already quantized; normalize once per Canvas surface.
+    let floor_endpoints = triangle
+        .floor_strengths
+        .map(|values| values.map(|value| f32::from(value) / 255.0));
     let local_uv = triangle_texture_coordinates(triangle.texture_mode);
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
@@ -73,7 +77,11 @@ pub(super) fn raster_surface(
                     if landscape {
                         sample = crate::surface_mesh::landscape::texel(
                             samples,
-                            crate::surface_mesh::landscape::floor_weights(appearance),
+                            crate::surface_mesh::landscape::interpolated_floor_weights(
+                                floor_endpoints,
+                                appearance,
+                                weights,
+                            ),
                             triangle.tint,
                             appearance,
                         );

@@ -182,6 +182,15 @@ pub(crate) fn surface_instance(
         depths[index] = (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt)
             - depth_origin) as f32;
     }
+    let landscape = matches!(triangle.material, 0 | 1 | 2 | 6)
+        && triangle.tint <= 3
+        && !triangle.skirt
+        && triangle.appearance & 1 != 0;
+    let floors = if landscape && triangle.texture_blend.is_some() {
+        triangle.floor_strengths
+    } else {
+        None
+    };
     let second = points[1];
     let third = points[2];
     match triangle.texture_uv {
@@ -199,7 +208,12 @@ pub(crate) fn surface_instance(
                 },
             ],
             uv: uv.uv,
-            depths: [depths[0], depths[1], depths[2], 0.0],
+            depths: [
+                depths[0],
+                depths[1],
+                depths[2],
+                floors.map_or(0.0, crate::surface_mesh::landscape::pack_floors),
+            ],
             terrain_blend: triangle
                 .texture_blend
                 .map(|addresses| addresses.map(|address| address.uv))
@@ -216,7 +230,12 @@ pub(crate) fn surface_instance(
                     && triangle.tint <= 3
                     && !triangle.skirt
                 {
-                    triangle.appearance
+                    (triangle.appearance & !crate::surface_mesh::landscape::INTERPOLATED_FLOOR)
+                        | if floors.is_some() {
+                            crate::surface_mesh::landscape::INTERPOLATED_FLOOR
+                        } else {
+                            0
+                        }
                 } else {
                     0
                 },

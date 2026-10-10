@@ -3,9 +3,9 @@ use crate::biome_rules::Biome;
 use crate::land_use::{HistoricalLandUse, level_zero_land_use_pages};
 use crate::water::{PreparedWater, level_zero_water_pages};
 use crate::{
-    CHUNK_TILES, ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError,
-    EnvironmentPageError, EnvironmentPageProvider, HistoricalLandUsePage, HydrologyObservation,
-    PotentialBiomePage, PreparedEnvironment, Ratio, WaterPage,
+    ELEVATION_LEVEL_CENTIMETERS, ElevationPage, EnvironmentError, EnvironmentPageError,
+    EnvironmentPageProvider, HistoricalLandUsePage, HydrologyObservation, PotentialBiomePage,
+    PreparedEnvironment, Ratio, WaterPage,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};

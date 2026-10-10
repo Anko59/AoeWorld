@@ -42,17 +42,19 @@ impl MapChunkGenerator {
             resources: Vec::new(),
             decorations: Vec::new(),
         };
+        let memo = memo::ChunkMemo::new_chunk(self, TileCoord::new(ox, oy), cancelled);
         for ly in 0..CHUNK_TILES {
             for lx in 0..CHUNK_TILES {
                 let position = TileCoord::new(
                     ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
                     oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
                 );
-                if let Some(point) = self.evaluate_landscape_point_with_cancel(
+                if let Some(point) = self.evaluate_landscape_point_with_memo(
                     position,
                     policy_at,
                     reserved_at,
                     cancelled,
+                    &memo,
                 )? {
                     chunk.tiles.push(point.tile);
                     if let Some(resource) = point.resource {
@@ -75,6 +77,17 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
+        self.evaluate_landscape_point_with_memo(position, policy_at, reserved_at, cancelled, &memo)
+    }
+
+    fn evaluate_landscape_point_with_memo<const N: usize>(
+        &self,
+        position: TileCoord,
+        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
+        reserved_at: &dyn Fn(TileCoord) -> Reservations,
+        cancelled: &dyn Fn() -> bool,
+        memo: &memo::Memo<'_, N>,
+    ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let effective_policy = |position, base: Tile| {
             let mut policy = policy_at(position, base);
             // Explicit temperate-summer model policy, not reconstructed climate

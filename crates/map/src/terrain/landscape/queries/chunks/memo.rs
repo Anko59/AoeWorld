@@ -1,5 +1,5 @@
-//! Query-local lazy five-square halo. No allocation, generator mutation, global
-//! state, world array, or speculative source read. Entries die with one point.
+//! Query-local lazy fixed halos. No generator mutation, global state, world
+//! array, or speculative source read. Entries die with one point or chunk.
 use super::*;
 use std::cell::RefCell;
 
@@ -9,11 +9,15 @@ struct Entry {
     candidate: Option<Option<ResourceNode>>,
 }
 
-pub(super) struct PointMemo<'a> {
+pub(super) type PointMemo<'a> = Memo<'a, 25>;
+pub(super) type ChunkMemo<'a> = Memo<'a, 1296>;
+
+pub(super) struct Memo<'a, const N: usize> {
     generator: &'a MapChunkGenerator,
-    center: TileCoord,
+    origin: TileCoord,
+    side: i64,
     cancelled: &'a dyn Fn() -> bool,
-    entries: RefCell<[Entry; 25]>,
+    entries: RefCell<[Entry; N]>,
     origins: RefCell<resources::Origins>,
 }
 
@@ -25,16 +29,38 @@ impl<'a> PointMemo<'a> {
     ) -> Self {
         Self {
             generator,
-            center,
+            origin: TileCoord::new(center.x.saturating_sub(2), center.y.saturating_sub(2)),
+            side: 5,
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
             origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
+}
+
+impl<'a> ChunkMemo<'a> {
+    pub(super) fn new_chunk(
+        generator: &'a MapChunkGenerator,
+        origin: TileCoord,
+        cancelled: &'a dyn Fn() -> bool,
+    ) -> Self {
+        Self {
+            generator,
+            origin: TileCoord::new(origin.x.saturating_sub(2), origin.y.saturating_sub(2)),
+            side: i64::from(CHUNK_TILES) + 4,
+            cancelled,
+            entries: RefCell::new([Entry::default(); 1296]),
+            origins: RefCell::new(resources::Origins::new(generator)),
+        }
+    }
+}
+
+impl<const N: usize> Memo<'_, N> {
     fn index(&self, position: TileCoord) -> Option<usize> {
-        let x = i64::from(position.x) - i64::from(self.center.x);
-        let y = i64::from(position.y) - i64::from(self.center.y);
-        ((-2..=2).contains(&x) && (-2..=2).contains(&y)).then_some(((y + 2) * 5 + x + 2) as usize)
+        let x = i64::from(position.x) - i64::from(self.origin.x);
+        let y = i64::from(position.y) - i64::from(self.origin.y);
+        ((0..self.side).contains(&x) && (0..self.side).contains(&y))
+            .then_some((y * self.side + x) as usize)
     }
     pub(super) fn base(&self, position: TileCoord) -> Result<Option<Tile>, EnvironmentPageError> {
         // Cancellation is observed even on a hit. Do not retain source errors.

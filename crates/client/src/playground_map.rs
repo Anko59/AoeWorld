@@ -1,4 +1,5 @@
 use super::Client;
+use crate::chunk_requests::{MAX_REQUESTED_CHUNKS, Request};
 use aoe_core::{Camera, ScreenPoint, TileRect};
 use aoe_map::{CHUNK_TILES, CompactChunk, GroundMaterial, ResourceNode, Tile};
 use aoe_rendering::{
@@ -8,7 +9,7 @@ use aoe_rendering::{
 use std::{cell::RefCell, mem::size_of, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use web_sys::Response;
+use web_sys::{AbortController, RequestInit, Response};
 
 #[path = "playground_map/cache.rs"]
 mod cache;
@@ -42,7 +43,6 @@ pub(super) fn install_fixture_chunk(client: &mut Client, chunk: &CachedChunk) {
     include_chunk_height_bounds(client, chunk);
 }
 
-const MAX_REQUESTED_CHUNKS: usize = 64;
 const MAX_CACHED_CHUNKS: usize = 512;
 const MAX_CACHED_CHUNK_BYTES: usize = 128 * 1024 * 1024;
 const MAX_PICK_ITERATIONS: usize = 4;
@@ -69,11 +69,12 @@ pub(super) fn cache_status(client: &Client) -> String {
 pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
-    client.terrain_discovered.clear();
     client.terrain_bounds = Default::default();
     client.terrain_height_bounds = None;
     client.terrain_resident_height_bounds = None;
-    client.terrain_inflight.clear();
+    for controller in client.terrain_requests.clear().into_iter().flatten() {
+        controller.abort();
+    }
 }
 
 pub(super) fn inspection_label(client: &Client) -> String {
@@ -121,20 +122,24 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         (client.connection_id, content_hash, requests)
     };
     let content_hash = super::storage::hex(&map_hash);
-    for (x, y) in requests {
+    for request in requests {
+        let (x, y) = request.coordinate;
         let shared = shared.clone();
         let content_hash = content_hash.clone();
         spawn_local(async move {
-            let result = fetch_chunk(&content_hash, x, y).await;
+            let result = fetch_chunk(&content_hash, x, y, request.handle.as_ref()).await;
             let mut client = shared.borrow_mut();
-            if client.connection_id != connection_id || client.map_content_hash != Some(map_hash) {
+            if client.connection_id != connection_id
+                || client.map_content_hash != Some(map_hash)
+                || !client.terrain_requests.complete((x, y), request.id)
+            {
+                // Retired success/error cannot evict a replacement slot, insert
+                // stale geometry or cause the normal five-second failure backoff.
                 return;
             }
-            client.terrain_inflight.remove(&(x, y));
             match result {
                 Ok(chunk) => {
                     include_chunk_height_bounds(&mut client, &chunk);
-                    client.terrain_discovered.insert((x, y));
                     client.terrain_chunks.insert((x, y), chunk);
                     client.terrain_scene.borrow_mut().take();
                     initialize_altitude_focus(&mut client);
@@ -367,11 +372,18 @@ fn terrain_material(material: GroundMaterial) -> u8 {
     }
 }
 
-fn visible_chunks(client: &mut Client) -> Vec<(i32, i32)> {
-    let available = MAX_REQUESTED_CHUNKS.saturating_sub(client.terrain_inflight.len());
-    let requests = heights::request_candidates(client, available);
-    client.terrain_inflight.extend(requests.iter().copied());
-    requests
+fn visible_chunks(client: &mut Client) -> Vec<Request<Option<AbortController>>> {
+    if heights::chunk_retry_pending(client) {
+        return Vec::new();
+    }
+    let demanded = heights::request_candidates(client, MAX_REQUESTED_CHUNKS);
+    let update = client
+        .terrain_requests
+        .reconcile(&demanded, Option::is_some, || AbortController::new().ok());
+    for controller in update.cancelled.into_iter().flatten() {
+        controller.abort();
+    }
+    update.started
 }
 
 fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::WorldConfig) -> f64 {
@@ -384,7 +396,6 @@ fn evict_distant_chunks(client: &mut Client) {
     let preferred = heights::visible_residents(client);
     let (removed, _) = evict_distant_chunks_with_limits(
         &mut client.terrain_chunks,
-        &mut client.terrain_discovered,
         client.camera,
         client.config,
         MAX_CACHED_CHUNKS,
@@ -413,12 +424,22 @@ fn display_mebibytes(bytes: usize) -> String {
     crate::web::numeric::format(bytes as f64 / (1024.0 * 1024.0), 1)
 }
 
-async fn fetch_chunk(content_hash: &str, x: i32, y: i32) -> Result<CachedChunk, JsValue> {
+async fn fetch_chunk(
+    content_hash: &str,
+    x: i32,
+    y: i32,
+    controller: Option<&AbortController>,
+) -> Result<CachedChunk, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
-    let response: Response =
-        JsFuture::from(window.fetch_with_str(&format!("/maps/{content_hash}/chunks/{x}/{y}")))
-            .await?
-            .dyn_into()?;
+    let options = RequestInit::new();
+    if let Some(controller) = controller {
+        options.set_signal(Some(&controller.signal()));
+    }
+    let response: Response = JsFuture::from(
+        window.fetch_with_str_and_init(&format!("/maps/{content_hash}/chunks/{x}/{y}"), &options),
+    )
+    .await?
+    .dyn_into()?;
     if !response.ok() {
         return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
     }

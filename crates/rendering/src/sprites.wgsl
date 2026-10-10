@@ -110,7 +110,10 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
                 out.weights = weights[corner];
                 if (sprite.pages.w & 1u) != 0u {
-                    let floor_strength = f32(min((sprite.pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    var floor_strength = f32(min((sprite.pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    if (sprite.pages.w & 536870912u) != 0u {
+                        floor_strength = f32((u32(sprite.depths.w) >> (corner * 8u)) & 255u) / 255.0;
+                    }
                     out.weights = vec3<f32>(1.0 - floor_strength, floor_strength, 0.0);
                 }
                 out.solid = 3u;
