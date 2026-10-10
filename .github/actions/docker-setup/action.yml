@@ -1,0 +1,44 @@
+name: Docker setup
+description: >-
+  Pull Docker Hub images through mirror.gcr.io and, when cache is enabled,
+  let `make` reuse BuildKit layers from the GitHub Actions cache.
+inputs:
+  cache:
+    description: >-
+      'true' switches the daemon to the containerd image store (required for
+      BuildKit cache export with the default docker driver), exposes the
+      Actions cache runtime and sets DOCKER_BUILD_CACHE for Make.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Configure Docker Hub mirror
+      shell: bash
+      env:
+        CACHE: ${{ inputs.cache }}
+      run: |
+        set -euo pipefail
+        current="$(sudo cat /etc/docker/daemon.json 2>/dev/null || true)"
+        [ -n "$current" ] || current='{}'
+        printf '%s' "$current" \
+          | jq --argjson cache "$CACHE" '."registry-mirrors" = ["https://mirror.gcr.io"]
+              | if $cache then .features."containerd-snapshotter" = true else . end' \
+          > "$RUNNER_TEMP/daemon.json"
+        sudo install -m 0644 "$RUNNER_TEMP/daemon.json" /etc/docker/daemon.json
+        sudo systemctl restart docker
+        docker info --format 'mirrors={{json .RegistryConfig.Mirrors}} driver={{.Driver}}'
+    - if: inputs.cache == 'true'
+      uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487
+    - if: inputs.cache == 'true'
+      name: Enable BuildKit layer cache for make
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker buildx version
+        # Without the containerd store, cache export would fail every build;
+        # fall back to uncached (still correct) builds instead.
+        if docker info --format '{{json .DriverStatus}}' | grep -q io.containerd.snapshotter; then
+          echo 'DOCKER_BUILD_CACHE=type=gha,version=2' >> "$GITHUB_ENV"
+        else
+          echo '::warning::containerd image store unavailable; image builds are uncached'
+        fi

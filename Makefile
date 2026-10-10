@@ -10,6 +10,10 @@ POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
 MUTATION_IMAGE := aoeworld/mutation:27.1.0
+# CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
+DOCKER_BUILD_CACHE ?=
+COMMA := ,
+IMAGE_BUILD = docker build $(if $(DOCKER_BUILD_CACHE),--load --cache-from $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1) --cache-to $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1)$(COMMA)mode=max$(COMMA)ignore-error=true) -f docker/$(1).Dockerfile -t $(2) .
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
@@ -151,28 +155,28 @@ help:
 	@mkdir -p .cache/cargo
 
 tools: .cache/cargo
-	@docker build -f docker/rust-tools.Dockerfile -t $(TOOL_IMAGE) .
+	@$(call IMAGE_BUILD,rust-tools,$(TOOL_IMAGE))
 
 browser-tools:
-	@docker build -f docker/browser-tools.Dockerfile -t $(BROWSER_IMAGE) .
+	@$(call IMAGE_BUILD,browser-tools,$(BROWSER_IMAGE))
 
 analysis-tools: tools
-	@docker build -f docker/analysis.Dockerfile -t $(ANALYSIS_IMAGE) .
+	@$(call IMAGE_BUILD,analysis,$(ANALYSIS_IMAGE))
 
 policy-tools: tools
-	@docker build -f docker/policy.Dockerfile -t $(POLICY_IMAGE) .
+	@$(call IMAGE_BUILD,policy,$(POLICY_IMAGE))
 
 coverage-tools: tools
-	@docker build -f docker/coverage.Dockerfile -t $(COVERAGE_IMAGE) .
+	@$(call IMAGE_BUILD,coverage,$(COVERAGE_IMAGE))
 
 fuzz-tools: tools
-	@docker build -f docker/fuzz.Dockerfile -t $(FUZZ_IMAGE) .
+	@$(call IMAGE_BUILD,fuzz,$(FUZZ_IMAGE))
 
 mutation-tools:
-	@docker build -f docker/mutation.Dockerfile -t $(MUTATION_IMAGE) .
+	@$(call IMAGE_BUILD,mutation,$(MUTATION_IMAGE))
 
 orchestrator-tools: tools
-	@docker build -f docker/orchestrator.Dockerfile -t $(ORCH_IMAGE) .
+	@$(call IMAGE_BUILD,orchestrator,$(ORCH_IMAGE))
 
 browser-deps: browser-tools
 	@mkdir -p .cache/browser-home
