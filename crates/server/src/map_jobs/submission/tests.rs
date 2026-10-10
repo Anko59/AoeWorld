@@ -10,6 +10,7 @@ async fn concurrent_retries_share_one_durable_job_and_survive_restart() {
     let input = CreationRequest {
         request: MapRequest::default(),
         preparation: PreparationPreference::Automatic,
+        hydrology_mode: crate::map_jobs::HydrologyMode::None,
     };
     let key = "1234567890abcdef1234567890abcdef".to_owned();
     let mut equivalent = input;
@@ -45,6 +46,7 @@ async fn reused_key_cannot_change_request_or_preference_and_invalid_keys_are_rej
     let mut input = CreationRequest {
         request: MapRequest::default(),
         preparation: PreparationPreference::Automatic,
+        hydrology_mode: crate::map_jobs::HydrologyMode::None,
     };
     let key = "a".repeat(32);
     map_jobs::start(&state, input, Some(key.clone()))
@@ -108,6 +110,7 @@ async fn failed_checkpoint_does_not_reserve_a_key_or_accept_a_job() {
     let input = CreationRequest {
         request: MapRequest::default(),
         preparation: PreparationPreference::Automatic,
+        hydrology_mode: crate::map_jobs::HydrologyMode::None,
     };
     let key = "b".repeat(32);
     assert!(matches!(

@@ -8,6 +8,10 @@ use aoe_map::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Native overview-only hydrology selection shared with the server; never part
+/// of MapRequest.
+pub use aoe_map::OverviewHydrologyMode;
+
 /// A bounded native-worker operation passed on stdin by a direct process spawn.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
@@ -22,6 +26,11 @@ pub enum WorkerRequest {
         output_directory: PathBuf,
         request: MapRequest,
         samples_per_axis: u16,
+        field_axes: OverviewFieldAxes,
+        #[serde(default)]
+        hydrology_mode: OverviewHydrologyMode,
+        #[serde(default)]
+        water_corrections: Option<WaterCorrectionDocument>,
         #[serde(default)]
         historical_corrections: Option<GeographicHistoricalCorrectionDocument>,
         #[serde(default)]
@@ -250,16 +259,34 @@ mod tests {
             "cache_root": "/cache",
             "output_directory": "/maps",
             "request": MapRequest::default(),
-            "samples_per_axis": 128
+            "samples_per_axis": 1024,
+            "field_axes": OverviewFieldAxes::LANDSCAPE
         }))
         .unwrap();
         assert!(matches!(
             request,
             WorkerRequest::PrepareOverviewDirectory {
                 historical_corrections: None,
+                field_axes: OverviewFieldAxes::LANDSCAPE,
+                hydrology_mode: OverviewHydrologyMode::None,
+                water_corrections: None,
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn overview_worker_request_requires_field_axes() {
+        assert!(
+            serde_json::from_value::<WorkerRequest>(serde_json::json!({
+                "operation": "prepare_overview_directory",
+                "cache_root": "/cache",
+                "output_directory": "/maps",
+                "request": MapRequest::default(),
+                "samples_per_axis": 1024
+            }))
+            .is_err()
+        );
     }
 
     #[test]
@@ -274,7 +301,8 @@ mod tests {
             "cache_root": "/cache",
             "output_directory": "/maps",
             "request": MapRequest::default(),
-            "samples_per_axis": 128
+            "samples_per_axis": 1024,
+            "field_axes": OverviewFieldAxes::LANDSCAPE
         }))
         .expect("existing overview request");
         assert!(matches!(

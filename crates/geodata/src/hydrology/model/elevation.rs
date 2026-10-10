@@ -7,7 +7,7 @@ pub(in crate::hydrology) struct ElevationGrid {
 }
 
 impl ElevationGrid {
-    pub(super) fn new(pages: &[ElevationPage]) -> Result<Self, GeodataError> {
+    pub(in crate::hydrology) fn new(pages: &[ElevationPage]) -> Result<Self, GeodataError> {
         if pages.is_empty() || pages.iter().any(|page| page.level != 0) {
             return Err(GeodataError::Preparation(
                 "water-model elevation grid is unavailable",

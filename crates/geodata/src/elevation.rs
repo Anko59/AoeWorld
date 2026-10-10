@@ -13,6 +13,7 @@ use std::path::Path;
 /// Direct preparation remains intentionally bounded until page streaming is
 /// introduced. Larger requests must use the streaming worker path.
 pub const MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS: u16 = 128;
+pub const MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS: u16 = 1024;
 
 #[derive(Clone, Debug)]
 pub struct PreparedElevation {
@@ -29,12 +30,42 @@ pub fn prepare_elevation(
     prepare_elevation_dataset(&dataset, request, samples_per_axis)
 }
 
+/// The high direct cap is restricted to field-local overview preparation.
+pub fn prepare_landscape_elevation(
+    path: &Path,
+    request: MapRequest,
+    samples_per_axis: u16,
+) -> Result<PreparedElevation, GeodataError> {
+    let cap = MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS;
+    if !(2..=cap).contains(&samples_per_axis) {
+        return Err(GeodataError::Preparation(
+            "working grid is outside direct bounds",
+        ));
+    }
+    let dataset = Dataset::open(path)?;
+    prepare_elevation_dataset_bounded(&dataset, request, samples_per_axis, cap)
+}
+
 fn prepare_elevation_dataset(
     dataset: &Dataset,
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<PreparedElevation, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+    prepare_elevation_dataset_bounded(
+        dataset,
+        request,
+        samples_per_axis,
+        MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS,
+    )
+}
+
+fn prepare_elevation_dataset_bounded(
+    dataset: &Dataset,
+    request: MapRequest,
+    samples_per_axis: u16,
+    cap: u16,
+) -> Result<PreparedElevation, GeodataError> {
+    if !(2..=cap).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "working grid is outside direct bounds",
         ));
@@ -197,6 +228,68 @@ fn reduce_elevation(axis: u16, values: &[i32]) -> Result<Vec<i32>, GeodataError>
 mod tests {
     use super::*;
     use gdal::{DriverManager, raster::Buffer};
+
+    #[test]
+    fn landscape_high_cap_samples_varied_physical_geometry_without_relaxing_direct_cap() {
+        let driver = DriverManager::get_driver_by_name("MEM").expect("MEM driver");
+        let request = MapRequest {
+            requested_side_meters: 250,
+            compression: aoe_map::Ratio::new(1, 1).unwrap(),
+            ..MapRequest::default()
+        };
+        let mut dataset = driver
+            .create_with_band_type::<f64, _>("varied", 1024, 1024, 1)
+            .unwrap();
+        dataset
+            .set_spatial_ref(
+                &SpatialRef::from_definition(&local_aeqd_definition(
+                    request.center_latitude_e7,
+                    request.center_longitude_e7,
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        let side = request.estimate().unwrap().effective_side_meters as f64;
+        let spacing = side / 1024.0;
+        dataset
+            .set_geo_transform(&[-side / 2.0, spacing, 0.0, side / 2.0, 0.0, -spacing])
+            .unwrap();
+        // Populate by row: no source-sized auxiliary allocation.
+        for y in 0..1024 {
+            let mut values = Buffer::new((1024, 1), (0..1024).map(|x| (x + y) as f64).collect());
+            dataset
+                .rasterband(1)
+                .unwrap()
+                .write((0, y as isize), (1024, 1), &mut values)
+                .unwrap();
+        }
+        assert!(prepare_elevation_dataset(&dataset, request, 1024).is_err());
+        let prepared = prepare_elevation_dataset_bounded(
+            &dataset,
+            request,
+            1024,
+            MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS,
+        )
+        .unwrap();
+        assert_eq!(prepared.environment.elevation.levels.len(), 11);
+        assert_eq!(prepared.pages[0].geographic_height_centimeters[0], 0);
+        assert_eq!(prepared.pages[0].geographic_height_centimeters[1], 100);
+        assert_eq!(
+            prepared.pages.last().unwrap().geographic_height_centimeters,
+            [102_300]
+        );
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .set_no_data_value(Some(0.0))
+            .unwrap();
+        assert!(matches!(
+            prepare_elevation_dataset_bounded(&dataset, request, 1024, 1024),
+            Err(GeodataError::Preparation(
+                "source contains elevation nodata"
+            ))
+        ));
+    }
 
     #[test]
     fn native_preparation_reprojects_a_bounded_raster_into_complete_pages() {

@@ -26,7 +26,7 @@ DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
-GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_PATHS := $(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)
 SOURCE_QUAL_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(SOURCE_QUAL_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 SOURCE_QUAL_MOUNTS := $(foreach directory,$(SOURCE_QUAL_EXTERNAL_DIRS),-v $(directory):$(directory))
@@ -200,7 +200,7 @@ hooks-install:
 hooks-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
 
-include make/agents.mk make/ship.mk
+include make/agents.mk make/ship.mk make/qualification.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check
