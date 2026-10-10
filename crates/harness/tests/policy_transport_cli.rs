@@ -376,7 +376,9 @@ fn sigterm_during_resolver_retains_cancelled_receipt_and_never_ready_descriptor(
         .spawn()
         .unwrap();
     let marker = fixture.owner.path().join("started");
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Waiting for a condition, not a duration: an early exit still fails at
+    // once; only a loaded host (parallel ships, preflight) needs more than 10 s.
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !marker.exists() {
         assert!(
             child.try_wait().unwrap().is_none(),
