@@ -45,7 +45,16 @@ impl Drop for Server {
 
 struct BrowserContainer(String);
 
-const BROWSER_RUN_DEADLINE: Duration = Duration::from_secs(300);
+/// The release-build suite must finish in five minutes. Coverage runs the same
+/// suite against an instrumented debug server, which is several times slower
+/// per request; it took 288 s of its 300 s on dev (2026-10-10), so it gets its
+/// own bound instead of failing on build mode alone.
+fn browser_run_deadline(coverage: Option<&str>) -> Duration {
+    match coverage {
+        Some("1") => Duration::from_secs(900),
+        _ => Duration::from_secs(300),
+    }
+}
 
 impl Drop for BrowserContainer {
     fn drop(&mut self) {
@@ -91,6 +100,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     drop(listener);
     let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
     let relative_binary = server_binary(coverage.as_deref())?;
+    let run_deadline = browser_run_deadline(coverage.as_deref());
     let binary = root.join(relative_binary);
     if !binary.is_file() {
         return Err(format!("test server binary missing: {}", binary.display()).into());
@@ -167,12 +177,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let result = process::run_cancellable(
-                "docker",
-                &refs,
-                BROWSER_RUN_DEADLINE,
-                &worker_cancellation,
-            );
+            let result =
+                process::run_cancellable("docker", &refs, run_deadline, &worker_cancellation);
             let _ = sender.send(result);
         });
         loop {
@@ -268,7 +274,14 @@ fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::server_binary;
+    use super::{browser_run_deadline, server_binary};
+    use std::time::Duration;
+
+    #[test]
+    fn the_instrumented_debug_server_gets_its_own_deadline() {
+        assert_eq!(browser_run_deadline(None), Duration::from_secs(300));
+        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(900));
+    }
 
     #[test]
     fn coverage_mode_cannot_silently_select_an_uninstrumented_server() {
