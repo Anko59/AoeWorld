@@ -56,6 +56,8 @@ Existing outputs must be regular files. The directory is created when needed.
   `key`, type `text` at 22 ms a character, or `wait_ms` up to 60 000), then the
   page is held for `seconds` (1–300) after the last step, however long the
   steps took. At most 64 steps. Start the app first (`make dev`).
+  `"build": "before"` films the app as it was before the change instead
+  (below); `"after"`, or no `build`, is the pull request's app.
 
 Set `"renderer": "webgpu"` at the top of the storyboard to film browser
 scenes in Chromium with the same software WebGPU flags as the `webgpu`
@@ -67,28 +69,56 @@ with an explicit port and no credentials, path, query or fragment;
 `make showcase-check` refuses anything else when the storyboard has a browser
 scene.
 
+## Before and after
+
+A showcase shows the pull request's own change, so film the same path and
+steps on both builds. `before` scenes open on `SHOWCASE_BEFORE_URL`, which has
+no default, follows the rules of `SHOWCASE_APP_URL` and must use another
+port; `make showcase-check` refuses a `before` scene without it. When a
+storyboard films both builds, each browser scene is tagged `BEFORE (dev)` or
+`AFTER (this PR)` in its top-left corner.
+
+```sh
+DEV_PORT=8082 make dev    # in a worktree at origin/dev: the build before
+make dev                  # in the pull request's worktree: port 8080
+SHOWCASE_BEFORE_URL=http://127.0.0.1:8082/ make showcase SHOWCASE_STORYBOARD=.cache/showcase/storyboard.json
+```
+
+```json
+{"kind": "browser", "build": "before", "path": "/", "caption": "Seams between chunks", "seconds": 4},
+{"kind": "browser", "build": "after", "path": "/", "caption": "One continuous floor", "seconds": 4}
+```
+
+`DEV_PORT` is described in [local development](local-development.md); run
+`make down` in each worktree afterwards.
+
 ## Network
 
 Every take runs with `--network none`: the recorder's container has no
-network, so WebRTC/STUN, DNS and every address but one reach nothing. A take
-with a browser scene gets exactly one way out, the app's port. On the host,
-the harness's bridge (`bridge.rs`) listens on `app.sock` in the run's private
-0700 work directory and forwards each connection to the app's loopback
-`<host>:<port>` (SHOWCASE_APP_URL) and nowhere else; inside the container,
-`record.mjs` listens on `127.0.0.1:<port>` and pipes every connection to that
-socket, so Chromium reaches the app at its usual URL. The bridge allows 64
-open and 4096 total connections and stops, closing them all, when the
-recording ends.
+network, so WebRTC/STUN, DNS and every address but the filmed apps reach
+nothing. A take with browser scenes gets one way out per build it films: the
+app's port and, with `before` scenes, the earlier build's port. On the host,
+one bridge (`bridge.rs`) per origin listens on its own socket in the run's
+private 0700 work directory (`app.sock` for SHOWCASE_APP_URL, `before.sock`
+for SHOWCASE_BEFORE_URL) and forwards each connection to that app's loopback
+`<host>:<port>` and nowhere else; inside the container, `record.mjs` listens
+on each origin's `127.0.0.1:<port>` and pipes every connection to the matching
+socket, so Chromium reaches each app at its usual URL. A build no scene films
+is not bridged. Each bridge allows 64 open and 4096 total connections and
+stops, closing them all, when the recording ends.
 
-The origin filter inside Chromium stays as a second layer. Every HTTP(S)
+The origin filter inside Chromium stays as a second layer, and it is per
+scene: a scene reaches the origin of its own build only, so a `before` scene
+cannot load anything from the pull request's app or the reverse. Every HTTP(S)
 request (`context.route`) and every WebSocket (`context.routeWebSocket`) must
-start with the app's `http://<host>:<port>/` or `ws://<host>:<port>/` prefix;
-all others, including other loopback ports such as `http://localhost:631/`,
-other hosts, `https`/`wss` and URLs with credentials, are aborted, and service
-workers are blocked; cards and terminals allow only `about:blank` and `data:`.
-The rule is `AppOrigin::allows` in `browser.rs`, which `record.mjs` mirrors.
-Limit: the app itself is reachable without restriction, so a page can drive
-any endpoint the app serves.
+start with that origin's `http://<host>:<port>/` or `ws://<host>:<port>/`
+prefix; all others, including other loopback ports such as
+`http://localhost:631/`, other hosts, `https`/`wss` and URLs with credentials,
+are aborted, and service workers are blocked; cards and terminals allow only
+`about:blank` and `data:`. The rule is `AppOrigin::allows` in `browser.rs`,
+which `record.mjs` mirrors; `Origins` in `origins.rs` chooses the origins.
+Limit: a filmed app is itself reachable without restriction, so a page can
+drive any endpoint that app serves.
 
 Not being a frontend change is never a reason for no video: use before/after
 terminal scenes for the harness, timings for performance, request/response for

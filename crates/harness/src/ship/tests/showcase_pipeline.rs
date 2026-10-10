@@ -25,6 +25,7 @@ const ENV: &[&str] = &[
     "SHOWCASE_DOCKER_MODE",
     "SHOWCASE_MAKE_MODE",
     "SHOWCASE_APP_URL",
+    "SHOWCASE_BEFORE_URL",
 ];
 
 pub(super) struct Environment(Vec<(&'static str, Option<std::ffi::OsString>)>);
@@ -77,7 +78,9 @@ if [ "$is_recorder" = 1 ]; then
       previous=$arg
     done
     case "$SHOWCASE_DOCKER_MODE" in no-video) exit 0;; esac
-    if [ -S "$work/app.sock" ]; then printf 'bridge socket app.sock\n' >> "$SHOWCASE_LOG"; fi
+    for socket in app.sock before.sock; do
+      if [ -S "$work/$socket" ]; then printf 'bridge socket %s\n' "$socket" >> "$SHOWCASE_LOG"; fi
+    done
     cat "$work/plan.json" >> "$SHOWCASE_LOG"
     printf '\n' >> "$SHOWCASE_LOG"
     printf '{"lead_in_ms":10,"scenes_ms":[20,30]}' > "$work/timings.json"
@@ -123,6 +126,7 @@ case "$SHOWCASE_MAKE_MODE" in fail) exit 3;; esac
             std::env::remove_var("SHOWCASE_DOCKER_MODE");
             std::env::remove_var("SHOWCASE_MAKE_MODE");
             std::env::remove_var("SHOWCASE_APP_URL");
+            std::env::remove_var("SHOWCASE_BEFORE_URL");
         }
         (env, temp)
     }

@@ -7,6 +7,9 @@ struct FakeRuntime {
     exists: Cell<bool>,
     running: Cell<bool>,
     healthy: Cell<bool>,
+    /// The host port a running container publishes, and each probed port.
+    published: Cell<u16>,
+    probed: RefCell<Vec<u16>>,
     dies_on_start: bool,
 }
 
@@ -18,6 +21,7 @@ impl Runtime for FakeRuntime {
         match args {
             ["ps", ..] => Ok(if self.exists.get() { "container" } else { "" }.to_owned()),
             ["inspect", ..] => Ok(self.running.get().to_string()),
+            ["port", _, "8080/tcp"] => Ok(format!("127.0.0.1:{}", self.published.get())),
             ["rm", ..] | ["stop", ..] => {
                 self.exists.set(false);
                 self.running.set(false);
@@ -36,7 +40,8 @@ impl Runtime for FakeRuntime {
         Ok("startup failed".to_owned())
     }
 
-    fn healthy(&self) -> bool {
+    fn healthy(&self, port: u16) -> bool {
+        self.probed.borrow_mut().push(port);
         self.healthy.get()
     }
 }
@@ -110,6 +115,7 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
         "smoke",
         "revision",
         Some("local-assets/packs/example"),
+        8080,
     )
     .expect("start");
     let calls = runtime.calls.borrow();
@@ -201,9 +207,9 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
 fn invalid_configuration_or_missing_build_never_launches_docker_container() {
     let checkout = built_checkout();
     let runtime = FakeRuntime::default();
-    assert!(start_with(&runtime, checkout.path(), "unknown", "revision", None).is_err());
+    assert!(start_with(&runtime, checkout.path(), "unknown", "revision", None, 8080).is_err());
     std::fs::remove_file(checkout.path().join("web/pkg/aoe_client_bg.wasm")).expect("remove WASM");
-    assert!(start_with(&runtime, checkout.path(), "smoke", "revision", None).is_err());
+    assert!(start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080).is_err());
     assert!(
         !runtime
             .calls
@@ -220,7 +226,7 @@ fn missing_or_nonexecutable_worker_never_launches_docker_container() {
     let worker = checkout.path().join("target/release/aoe-map-worker");
     assert!(is_executable(&worker));
     std::fs::remove_file(&worker).expect("remove worker");
-    let missing = start_with(&runtime, checkout.path(), "smoke", "revision", None)
+    let missing = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
         .expect_err("missing worker");
     assert!(missing.to_string().contains("aoe-map-worker"));
     #[cfg(unix)]
@@ -229,7 +235,7 @@ fn missing_or_nonexecutable_worker_never_launches_docker_container() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&worker, std::fs::Permissions::from_mode(0o644))
             .expect("remove executable bit");
-        let rejected = start_with(&runtime, checkout.path(), "smoke", "revision", None)
+        let rejected = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
             .expect_err("nonexecutable worker");
         assert!(rejected.to_string().contains("aoe-map-worker"));
     }
@@ -252,7 +258,7 @@ fn writable_cache_mount_uses_canonical_target_for_a_symlink() {
     symlink(external.path(), checkout.path().join(".cache")).expect("cache symlink");
     let runtime = FakeRuntime::default();
     runtime.healthy.set(true);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None).expect("start");
+    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080).expect("start");
     let calls = runtime.calls.borrow();
     let run = calls
         .iter()
@@ -274,7 +280,7 @@ fn failed_start_stops_only_its_checkout_container() {
         dies_on_start: true,
         ..Default::default()
     };
-    let error = start_with(&runtime, checkout.path(), "smoke", "revision", None)
+    let error = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
         .expect_err("failed start")
         .to_string();
     assert!(error.contains("startup failed"));
@@ -292,7 +298,9 @@ fn existing_running_lab_is_not_replaced() {
     let runtime = FakeRuntime::default();
     runtime.exists.set(true);
     runtime.running.set(true);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None).expect("already running");
+    runtime.published.set(8080);
+    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
+        .expect("already running");
     assert!(
         !runtime
             .calls
@@ -300,4 +308,94 @@ fn existing_running_lab_is_not_replaced() {
             .iter()
             .any(|args| matches!(args.first().map(String::as_str), Some("rm" | "run")))
     );
+}
+
+#[test]
+fn the_host_port_comes_from_dev_port_and_defaults_to_8080() {
+    assert_eq!(dev_port(None).expect("default"), 8080);
+    assert_eq!(dev_port(Some("")).expect("empty"), 8080);
+    assert_eq!(dev_port(Some("8082")).expect("chosen"), 8082);
+    assert_eq!(dev_port(Some("65535")).expect("highest"), 65535);
+    for value in [
+        "0", "65536", "-1", "+8082", " 8082", "8082 ", "0x50", "http", "80.0",
+    ] {
+        let error = dev_port(Some(value)).expect_err(value).to_string();
+        assert!(error.contains("DEV_PORT"), "{value}: {error}");
+    }
+}
+
+#[test]
+fn the_chosen_host_port_maps_to_the_fixed_container_port() {
+    assert_eq!(host_mapping(8080), "127.0.0.1:8080:8080");
+    assert_eq!(host_mapping(8082), "127.0.0.1:8082:8080");
+    assert_eq!(url(8082), "http://127.0.0.1:8082");
+    let checkout = built_checkout();
+    let runtime = FakeRuntime::default();
+    runtime.healthy.set(true);
+    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8082).expect("start");
+    let calls = runtime.calls.borrow();
+    let run = calls
+        .iter()
+        .find(|args| args.first().is_some_and(|arg| arg == "run"))
+        .expect("Docker run");
+    let published = run
+        .windows(2)
+        .filter_map(|pair| (pair[0] == "-p").then_some(pair[1].as_str()))
+        .collect::<Vec<_>>();
+    // Loopback only, one mapping; the server still binds 8080 inside.
+    assert_eq!(published, ["127.0.0.1:8082:8080"]);
+    assert!(run.contains(&"AOE_BIND=0.0.0.0:8080".to_owned()));
+    assert_eq!(*runtime.probed.borrow(), [8082]);
+}
+
+#[test]
+fn two_checkouts_run_side_by_side_on_their_own_ports() {
+    let (first, second) = (built_checkout(), built_checkout());
+    let (one, two) = (FakeRuntime::default(), FakeRuntime::default());
+    one.healthy.set(true);
+    two.healthy.set(true);
+    start_with(&one, first.path(), "smoke", "revision", None, 8080).expect("first");
+    start_with(&two, second.path(), "smoke", "revision", None, 8082).expect("second");
+    let run = |runtime: &FakeRuntime| {
+        runtime
+            .calls
+            .borrow()
+            .iter()
+            .find(|args| args.first().is_some_and(|arg| arg == "run"))
+            .expect("Docker run")
+            .clone()
+    };
+    let (one_run, two_run) = (run(&one), run(&two));
+    assert!(one_run.contains(&name(first.path())) && two_run.contains(&name(second.path())));
+    assert_ne!(name(first.path()), name(second.path()));
+    assert!(one_run.contains(&"127.0.0.1:8080:8080".to_owned()));
+    assert!(two_run.contains(&"127.0.0.1:8082:8080".to_owned()));
+    // Stopping one names only its own container.
+    down_with(&two, &name(second.path())).expect("stop second");
+    assert!(
+        two.calls
+            .borrow()
+            .iter()
+            .any(|args| args == &["stop", &name(second.path())])
+    );
+    assert!(one.running.get());
+}
+
+#[test]
+fn a_lab_running_on_another_port_is_reported_not_moved() {
+    let checkout = built_checkout();
+    let runtime = FakeRuntime::default();
+    runtime.exists.set(true);
+    runtime.running.set(true);
+    runtime.published.set(8082);
+    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8082).expect("same port");
+    let error = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
+        .expect_err("other port")
+        .to_string();
+    assert!(error.contains("http://127.0.0.1:8082"), "{error}");
+    assert!(error.contains("make down"), "{error}");
+    assert!(!runtime.calls.borrow().iter().any(|args| matches!(
+        args.first().map(String::as_str),
+        Some("rm" | "run" | "stop")
+    )));
 }

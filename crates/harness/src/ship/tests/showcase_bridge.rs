@@ -1,4 +1,6 @@
-use super::super::showcase::{Bridge, SOCKET};
+use super::super::showcase::{Bridge, Build};
+
+const SOCKET: &str = "app.sock";
 use std::{
     io::{Read, Write},
     net::{Shutdown, TcpListener},
@@ -57,7 +59,7 @@ fn refused(socket: &Path) -> bool {
 fn the_bridge_forwards_its_socket_to_the_app_port_both_ways() {
     let dir = work();
     let socket = dir.path().join(SOCKET);
-    let bridge = Bridge::start(dir.path(), "127.0.0.1", echo_app()).unwrap();
+    let bridge = Bridge::start(dir.path(), SOCKET, "127.0.0.1", echo_app()).unwrap();
     assert_eq!(
         round_trip(&socket, b"GET / HTTP/1.1\r\n\r\n"),
         b"GET / HTTP/1.1\r\n\r\n"
@@ -73,7 +75,7 @@ fn the_bridge_forwards_its_socket_to_the_app_port_both_ways() {
 fn the_bridge_reaches_loopback_only() {
     let dir = work();
     for host in ["10.0.0.1", "192.0.2.1", "0.0.0.0"] {
-        let error = Bridge::start(dir.path(), host, 80)
+        let error = Bridge::start(dir.path(), SOCKET, host, 80)
             .err()
             .unwrap()
             .to_string();
@@ -86,7 +88,7 @@ fn the_bridge_reaches_loopback_only() {
 fn the_bridge_bounds_open_and_total_connections() {
     let dir = work();
     let socket = dir.path().join(SOCKET);
-    let _bridge = Bridge::start_with(dir.path(), "127.0.0.1", echo_app(), 2, 3).unwrap();
+    let _bridge = Bridge::start_with(dir.path(), SOCKET, "127.0.0.1", echo_app(), 2, 3).unwrap();
     let mut first = UnixStream::connect(&socket).unwrap();
     let mut second = UnixStream::connect(&socket).unwrap();
     assert!(echoes(&mut first, b"one"));
@@ -105,7 +107,7 @@ fn the_bridge_bounds_open_and_total_connections() {
 fn stopping_the_bridge_closes_open_connections() {
     let dir = work();
     let socket = dir.path().join(SOCKET);
-    let bridge = Bridge::start(dir.path(), "127.0.0.1", echo_app()).unwrap();
+    let bridge = Bridge::start(dir.path(), SOCKET, "127.0.0.1", echo_app()).unwrap();
     let mut open = UnixStream::connect(&socket).unwrap();
     assert!(echoes(&mut open, b"idle keep-alive"));
     drop(bridge);
@@ -114,16 +116,53 @@ fn stopping_the_bridge_closes_open_connections() {
 }
 
 #[test]
-fn the_recorder_serves_the_app_port_from_the_bridge_socket_only() {
+fn each_build_has_its_own_socket_forwarded_to_its_own_app() {
+    assert_eq!(Build::After.socket(), SOCKET);
+    assert_eq!(Build::Before.socket(), "before.sock");
+    let dir = work();
+    let (app, before) = (echo_app(), echo_app());
+    let after_bridge = Bridge::start(dir.path(), Build::After.socket(), "127.0.0.1", app).unwrap();
+    let before_bridge = Bridge::start_with(
+        dir.path(),
+        Build::Before.socket(),
+        "127.0.0.1",
+        before,
+        1,
+        1,
+    )
+    .unwrap();
+    let (after_socket, before_socket) = (dir.path().join(SOCKET), dir.path().join("before.sock"));
+    assert_eq!(round_trip(&after_socket, b"after"), b"after");
+    assert_eq!(round_trip(&before_socket, b"before"), b"before");
+    // The limits are counted per socket: the spent one refuses, the other serves.
+    assert!(refused(&before_socket));
+    assert_eq!(round_trip(&after_socket, b"more"), b"more");
+    drop(before_bridge);
+    assert!(!before_socket.exists() && after_socket.exists());
+    assert_eq!(round_trip(&after_socket, b"still"), b"still");
+    drop(after_bridge);
+    assert!(!after_socket.exists());
+    // A second bridge cannot take a socket that is already bound.
+    let _held = Bridge::start(dir.path(), SOCKET, "127.0.0.1", app).unwrap();
+    assert!(Bridge::start(dir.path(), SOCKET, "127.0.0.1", before).is_err());
+}
+
+#[test]
+fn the_recorder_serves_each_origins_port_from_its_bridge_socket_only() {
     let script = include_str!("../showcase/record.mjs");
     assert!(script.contains("import { createConnection, createServer } from \"node:net\";"));
-    assert!(script.contains("createConnection(\"app.sock\")"));
+    assert!(script.contains("createConnection(origin.socket)"));
     assert!(
-        script.contains("server.listen(Number(new URL(app.http).port), \"127.0.0.1\", resolve);")
+        script
+            .contains("server.listen(Number(new URL(origin.http).port), \"127.0.0.1\", resolve);")
     );
     assert_eq!(script.matches("createConnection(").count(), 1);
     assert_eq!(script.matches("server.listen(").count(), 1);
-    let bridge = script.find("await bridge(app)").unwrap();
+    // No socket name or port is written into the recorder: both come from the plan.
+    assert!(!script.contains(".sock\""));
+    let bridge = script
+        .find("for (const origin of origins) unbridges.push(await bridge(origin));")
+        .unwrap();
     let launch = script.find("chromium.launch(").unwrap();
     let unbridge = script.find("unbridge();").unwrap();
     let closed = script.find("await browser.close();").unwrap();
@@ -156,7 +195,9 @@ fn the_caption_is_drawn_again_after_every_main_frame_navigation() {
     assert!(
         script.contains("document.addEventListener(\"DOMContentLoaded\", draw, { once: true });")
     );
-    assert!(script.contains("caption = scene.caption;"));
+    assert!(script.contains(
+        "caption = { text: scene.caption, label: scene.label ?? null, build: scene.build };"
+    ));
     assert!(script.contains("caption = null;"));
     let listener = script.find("page.on(\"framenavigated\"").unwrap();
     let first_scene = script.find("for (const scene of plan.scenes)").unwrap();

@@ -1,8 +1,12 @@
-//! Browser scenes: the single origin they may film (the app under
-//! development), the steps that drive it, and the plan handed to the
-//! recorder. `AppOrigin::allows` is the reference rule that record.mjs applies
-//! to every HTTP request and WebSocket; everything else is aborted.
-use super::{MAX_SECONDS, Scene, Storyboard};
+//! Browser scenes: the single origin each may film (one build of the app
+//! under development, origins.rs), the steps that drive it, and the plan
+//! handed to the recorder. `AppOrigin::allows` is the reference rule that
+//! record.mjs applies to every HTTP request and WebSocket of a scene with that
+//! scene's own origin; everything else is aborted.
+use super::{
+    MAX_SECONDS, Scene, Storyboard,
+    origins::{Bridged, Origins},
+};
 use serde::{Deserialize, Serialize};
 
 /// `make dev` serves the app here (crates/harness/src/dev.rs).
@@ -127,7 +131,7 @@ pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result
     Ok(())
 }
 
-/// The one origin browser scenes may reach, as the URL prefixes the recorder
+/// The one origin a browser scene may reach, as the URL prefixes the recorder
 /// lets through: `http://<host>:<port>/` and `ws://<host>:<port>/`.
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct AppOrigin {
@@ -138,10 +142,10 @@ pub(crate) struct AppOrigin {
 impl AppOrigin {
     /// A plain local HTTP origin with an explicit port: no credentials, path,
     /// query or fragment, so no other local service can be named.
-    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+    pub(crate) fn parse_named(variable: &str, value: &str) -> Result<Self, String> {
         let refuse = || {
             format!(
-                "SHOWCASE_APP_URL={value}: use http://127.0.0.1:<port>/ or http://localhost:<port>/, the app under development"
+                "{variable}={value}: use http://127.0.0.1:<port>/ or http://localhost:<port>/, the app under development"
             )
         };
         let url = url::Url::parse(value).map_err(|_| refuse())?;
@@ -165,6 +169,12 @@ impl AppOrigin {
         })
     }
 
+    /// [`Self::parse_named`] for SHOWCASE_APP_URL.
+    #[cfg(test)]
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        Self::parse_named("SHOWCASE_APP_URL", value)
+    }
+
     /// The app's HTTP prefix, e.g. `http://127.0.0.1:8080/`.
     pub(crate) fn http(&self) -> &str {
         &self.http
@@ -177,15 +187,6 @@ impl AppOrigin {
             (Some(host), Some(port)) => Ok((host.to_owned(), port)),
             _ => Err(format!("{} names no host and port", self.http)),
         }
-    }
-
-    /// SHOWCASE_APP_URL, defaulting to the `make dev` address.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let value = std::env::var("SHOWCASE_APP_URL")
-            .ok()
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| DEFAULT_APP_URL.into());
-        Self::parse(&value)
     }
 
     /// Whether the recorder lets `request` through: its normalized URL must
@@ -210,28 +211,13 @@ impl AppOrigin {
     }
 }
 
-/// The app origin when the storyboard films it (each path checked against
-/// it), else `None`: card and terminal takes need no network at all.
-pub(crate) fn app_for(board: &Storyboard) -> Result<Option<AppOrigin>, String> {
-    let mut paths = board.scenes.iter().filter_map(|scene| match scene {
-        Scene::Browser { path, .. } => Some(path),
-        _ => None,
-    });
-    let Some(first) = paths.next() else {
-        return Ok(None);
-    };
-    let app = AppOrigin::from_env()?;
-    for path in std::iter::once(first).chain(paths) {
-        app.resolve(path)?;
-    }
-    Ok(Some(app))
-}
-
 #[derive(Debug, Serialize)]
 pub(crate) struct Plan<'a> {
     pub(crate) title: &'a str,
     pub(crate) renderer: super::Renderer,
-    pub(crate) app: Option<AppOrigin>,
+    /// Every origin the take may reach, each served from its own socket;
+    /// empty for card and terminal takes, which need no network at all.
+    pub(crate) origins: Vec<Bridged>,
     pub(crate) scenes: Vec<Planned<'a>>,
 }
 
@@ -242,34 +228,39 @@ pub(crate) struct Planned<'a> {
     pub(crate) duration_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) url: Option<String>,
+    /// The build tag drawn on a browser scene when both builds are filmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) label: Option<&'static str>,
 }
 
 /// What record.mjs plays: each scene with its planned length (steps
-/// included once) and, for browser scenes, the absolute URL to open.
+/// included once) and, for browser scenes, the absolute URL to open on the
+/// origin of the scene's own build.
 pub(crate) fn plan<'a>(
     board: &'a Storyboard,
     planned: &[u64],
-    app: Option<AppOrigin>,
+    origins: &Origins,
 ) -> Result<Plan<'a>, String> {
     let mut scenes = Vec::with_capacity(board.scenes.len());
     for (scene, duration_ms) in board.scenes.iter().zip(planned) {
-        let url = match (scene, &app) {
-            (Scene::Browser { path, .. }, Some(app)) => Some(app.resolve(path)?),
-            (Scene::Browser { .. }, None) => {
-                return Err("browser scenes need the app origin".into());
-            }
-            _ => None,
+        let (url, label) = match scene {
+            Scene::Browser { build, path, .. } => (
+                Some(origins.resolve(*build, path)?),
+                origins.labelled().then(|| build.label()),
+            ),
+            _ => (None, None),
         };
         scenes.push(Planned {
             scene,
             duration_ms: *duration_ms,
             url,
+            label,
         });
     }
     Ok(Plan {
         title: &board.title,
         renderer: board.renderer,
-        app,
+        origins: origins.bridged(),
         scenes,
     })
 }

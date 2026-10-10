@@ -1,5 +1,7 @@
 use super::{
-    super::showcase::{AppOrigin, DEFAULT_APP_URL, Step, Storyboard, check, durations, make, plan},
+    super::showcase::{
+        AppOrigin, DEFAULT_APP_URL, Origins, Step, Storyboard, check, durations, make, plan,
+    },
     showcase_pipeline::{Environment, mode},
     showcase_security::ENV_LOCK,
 };
@@ -47,7 +49,7 @@ fn the_origin_filter_allows_only_the_app_under_development() {
         assert!(app.allows(allowed), "refused {allowed}");
     }
     for refused in [
-        "http://127.0.0.1:8081/",
+        "http://127.0.0.1:8082/",
         "http://localhost:631/",
         "http://localhost:8080/",
         "http://127.0.0.2:8080/",
@@ -172,7 +174,15 @@ fn browser_scenes_are_validated_with_the_storyboard() {
 #[test]
 fn the_recorder_routes_http_and_websockets_through_the_same_origin_check() {
     let script = include_str!("../showcase/record.mjs");
-    assert!(script.contains("const app = plan.app ?? null;"));
+    assert!(script.contains("const origins = plan.origins;"));
+    assert!(script.contains(
+        "else if (current !== null && within(url, current.http)) await route.continue();"
+    ));
+    assert!(
+        script.contains(
+            "if (current !== null && within(ws.url(), current.ws)) ws.connectToServer();"
+        )
+    );
     assert!(script.contains("return new URL(value).href.startsWith(prefix);"));
     assert!(script.contains("context.routeWebSocket(/.*/"));
     assert!(script.contains("else await ws.close();"));
@@ -224,7 +234,12 @@ fn a_browser_take_has_no_network_but_the_bridged_app_origin() {
     assert!(log.contains("--network none"), "{log}");
     assert!(!log.contains("--network host"), "{log}");
     assert!(log.contains("bridge socket app.sock"), "{log}");
-    assert!(log.contains(r#""app":{"http":"http://127.0.0.1:8080/","ws":"ws://127.0.0.1:8080/"}"#));
+    assert!(!log.contains("before.sock"), "{log}");
+    assert!(log.contains(
+        r#""origins":[{"build":"after","http":"http://127.0.0.1:8080/","ws":"ws://127.0.0.1:8080/","socket":"app.sock"}]"#
+    ));
+    assert!(log.contains(r#""build":"after""#));
+    assert!(!log.contains(r#""label""#), "{log}");
     assert!(log.contains(r#""url":"http://127.0.0.1:8080/lab""#));
     assert!(log.contains(r#""steps":[{"wait_ms":10}]"#));
     assert!(log.contains(r#""duration_ms":3010"#));
@@ -243,7 +258,7 @@ fn a_browser_take_has_no_network_but_the_bridged_app_origin() {
     assert!(log.contains("--network none"), "{log}");
     assert!(!log.contains("--network host"), "{log}");
     assert!(!log.contains("bridge socket"), "{log}");
-    assert!(log.contains(r#""app":null"#));
+    assert!(log.contains(r#""origins":[]"#));
 }
 
 #[test]
@@ -270,34 +285,37 @@ fn a_bad_app_origin_is_refused_by_the_check_before_any_side_effect() {
     );
 }
 
+fn origins(board: &Storyboard) -> Origins {
+    Origins::select(board, APP, None).unwrap()
+}
+
 #[test]
 fn the_plan_gives_browser_scenes_their_absolute_url_and_needs_the_origin() {
     let board = Storyboard::parse(&browser_board("/lab", "")).unwrap();
-    let app = AppOrigin::parse(APP).unwrap();
-    let planned = plan(&board, &[3500, 3000], Some(app)).unwrap();
+    let planned = plan(&board, &[3500, 3000], &origins(&board)).unwrap();
     let json = serde_json::to_value(&planned).unwrap();
-    assert_eq!(json["app"]["ws"], "ws://127.0.0.1:8080/");
+    assert_eq!(json["origins"][0]["ws"], "ws://127.0.0.1:8080/");
     assert_eq!(json["scenes"][0].get("url"), None);
     assert_eq!(json["scenes"][1]["url"], "http://127.0.0.1:8080/lab");
     assert_eq!(json["scenes"][1]["duration_ms"], 3000);
     assert!(
-        plan(&board, &[3500, 3000], None)
+        plan(&board, &[3500, 3000], &Origins::default())
             .unwrap_err()
-            .contains("need the app origin")
+            .contains("needs its origin")
     );
 }
 
 #[test]
 fn a_storyboard_may_ask_to_film_the_app_on_webgpu() {
     let default = Storyboard::parse(&browser_board("/", "")).unwrap();
-    let app = AppOrigin::parse(APP).unwrap();
-    let json = serde_json::to_value(plan(&default, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    let json =
+        serde_json::to_value(plan(&default, &[3500, 3000], &origins(&default)).unwrap()).unwrap();
     assert_eq!(json["renderer"], "default");
 
     let text = browser_board("/", "").replacen('{', r#"{"renderer":"webgpu","#, 1);
     let webgpu = Storyboard::parse(&text).unwrap();
-    let app = AppOrigin::parse(APP).unwrap();
-    let json = serde_json::to_value(plan(&webgpu, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    let json =
+        serde_json::to_value(plan(&webgpu, &[3500, 3000], &origins(&webgpu)).unwrap()).unwrap();
     assert_eq!(json["renderer"], "webgpu");
 
     let unknown = browser_board("/", "").replacen('{', r#"{"renderer":"vulkan","#, 1);
@@ -329,8 +347,8 @@ fn the_recorder_uses_the_browser_tests_webgpu_flags() {
 fn steps_may_click_inside_an_element_and_choose_a_select_option() {
     let steps = r##"{"click":"#start"},{"click_at":{"selector":"#minimap-map","x":37,"y":63}},{"select":{"selector":"#map-package","value":"c3436b"}}"##;
     let board = Storyboard::parse(&browser_board("/", steps)).unwrap();
-    let app = AppOrigin::parse(APP).unwrap();
-    let json = serde_json::to_value(plan(&board, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    let json =
+        serde_json::to_value(plan(&board, &[3500, 3000], &origins(&board)).unwrap()).unwrap();
     let planned = &json["scenes"][1]["steps"];
     assert_eq!(planned[1]["click_at"]["selector"], "#minimap-map");
     assert_eq!(planned[1]["click_at"]["x"], 37);

@@ -285,12 +285,14 @@ fn recorder_aborts_every_request_except_inline_document_urls() {
     assert!(script.contains("context.route(\"**/*\""));
     assert!(script.contains("route.abort(\"blockedbyclient\")"));
     assert!(script.contains("url === \"about:blank\" || url.startsWith(\"data:\")"));
-    // Browser scenes (showcase_browser.rs) add exactly one other origin, the
-    // app's, for HTTP and WebSockets alike; nothing else is ever navigated to.
+    // A browser scene (showcase_builds.rs) adds exactly one other origin, its
+    // build's, for HTTP and WebSockets alike; nothing else is ever navigated to.
     assert!(
-        script.contains("else if (app !== null && within(url, app.http)) await route.continue();")
+        script.contains("(current !== null && within(url, current.http)) await route.continue();")
     );
-    assert!(script.contains("if (app !== null && within(ws.url(), app.ws)) ws.connectToServer();"));
+    assert!(
+        script.contains("(current !== null && within(ws.url(), current.ws)) ws.connectToServer();")
+    );
     assert!(!script.contains("browserScene"));
     assert_eq!(script.matches("page.goto(").count(), 2);
     assert!(script.contains("page.goto(scene.url,"));
@@ -299,13 +301,14 @@ fn recorder_aborts_every_request_except_inline_document_urls() {
 
 #[test]
 fn recorder_runs_without_container_network() {
-    // Every take, browser scenes included, has no network; the app's port
-    // alone is bridged through a Unix socket (showcase_bridge.rs).
+    // Every take, browser scenes included, has no network; each filmed app's
+    // port alone is bridged through its own Unix socket (showcase_bridge.rs).
     let media = include_str!("../showcase/media.rs");
     assert!(media.contains("\"--network\",\n            \"none\","));
     assert_eq!(media.matches("\"--network\"").count(), 1);
     assert!(!media.contains("\"host\" } else"));
-    assert!(media.contains("Bridge::start(work, &host, port)?"));
+    assert!(media.contains("Bridge::start(work, bridged.socket, &host, port)?"));
+    assert_eq!(media.matches("Bridge::start").count(), 1);
 }
 
 #[test]
