@@ -185,3 +185,17 @@ approved by its semantic name. Decorations
 retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.
+
+## Direct scene emission
+
+The production scene builder now appends the shared sprite emitter directly
+after surfaces and selection rings. It no longer materializes an intermediate
+object vector and then copies it into the WorldLayer vector. Resource-before-unit
+submission and the existing stable-index depth/type/id sort remain unchanged.
+The diagnostic terrain-frame helper, selection temporaries, integer sort sidecar and GPU
+instance vector still allocate; this is not whole-renderer allocation reuse.
+Bounded scene tests pin the final layer content over 72 cases (missing art,
+source ties, mirrors, boundary cameras, NaN depths) by digest and assert the
+stable depth/type/id order. An absolute allocation budget for a dense
+8,158-sprite scene (no growth reallocations, at most 102 allocations) guards the
+direct path. Performance/size claims require measured unchanged gates.
