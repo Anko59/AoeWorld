@@ -29,13 +29,6 @@ invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
 skipped GPU frame is not a successful presentation: do not advance picking or
 render-cache positions until pixels have actually been submitted.
 
-World layers retain exact stable (depth total_cmp, tier, resource id, source order)
-ordering by sorting an integer index sidecar with original indices as final ties,
-then applying permutation cycles in place with one saved Copy layer. There is no
-second layer scene or large-layer stable-sort scratch allocation. Empty-terrain
-fallback generates unique canonical cells in lexicographic (x,y) order directly;
-the generic nonempty compatibility helper and its behavior remain available.
-
 Diagnostics continue to require WebGPU. Test their explicit capability error.
 Test the game both with WebGPU and without special GPU launch flags, including
 missing API, null context, and adapter failures. A compatibility test must

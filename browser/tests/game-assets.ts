@@ -158,8 +158,15 @@ const terrainSources = new Map<number, TerrainSource>([
   ],
 ]);
 
-/** Pure uncached fixture builder, also used as the byte-parity oracle. */
-export function buildGeneratedGameAssets() {
+/** Public CI uses original generated fixtures; local runs use the real pack. */
+export async function gameAssets(
+  page: Page,
+  forceSynthetic = false,
+): Promise<string> {
+  if (!forceSynthetic) {
+    const response = await page.request.get("/asset-pack/manifest.json");
+    if (response.ok()) return "local AoE II pack";
+  }
   const color = new PNG({ width: 2048, height: 2048 });
   const shadow = new PNG({ width: 2048, height: 2048 });
   const pixel = (x: number, y: number, rgb: readonly number[]) => {
@@ -250,26 +257,6 @@ export function buildGeneratedGameAssets() {
   const colored = PNG.sync.write(color);
   const shadows = PNG.sync.write(shadow);
   const empty = PNG.sync.write(new PNG({ width: 2048, height: 2048 }));
-  return Object.freeze({ manifest, colored, shadows, empty });
-}
-
-let generated: ReturnType<typeof buildGeneratedGameAssets> | undefined;
-
-/** Cache only immutable bytes, never a page, route, or local-pack availability. */
-export function generatedGameAssets() {
-  return (generated ??= buildGeneratedGameAssets());
-}
-
-/** Public CI uses original generated fixtures; local runs use the real pack. */
-export async function gameAssets(
-  page: Page,
-  forceSynthetic = false,
-): Promise<string> {
-  if (!forceSynthetic) {
-    const response = await page.request.get("/asset-pack/manifest.json");
-    if (response.ok()) return "local AoE II pack";
-  }
-  const { manifest, colored, shadows, empty } = generatedGameAssets();
   await page.route("**/asset-pack/*", async (route) => {
     const url = route.request().url();
     if (url.endsWith("manifest.json")) {

@@ -29,9 +29,7 @@ pub(super) fn world_sprite_frames(
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, f64, u64)> {
     let mut result = if terrain.is_empty() {
-        // The branch proves an empty scene; the literal slice lets the small
-        // compatibility wrapper specialize without removing its nonempty API.
-        visible_terrain_frames(art, &[], camera)
+        visible_terrain_frames(art, terrain, camera)
             .into_iter()
             .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY, 0))
             .collect::<Vec<_>>()

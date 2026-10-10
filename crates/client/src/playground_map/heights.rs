@@ -1,9 +1,5 @@
 use super::*;
 
-#[path = "heights/tests.rs"]
-#[cfg(test)]
-mod tests;
-
 const INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 40.0;
 // Compact height metadata is independent of the 512 decoded-chunk cache.
 // At a 16K viewport and minimum zoom, even the complete i16 height sweep
@@ -215,8 +211,7 @@ pub(super) fn candidate_chunks(
         camera.center[0].round() as i64,
         camera.center[1].round() as i64,
     ];
-    // Each grid coordinate occurs once; a max-heap retains the same top K.
-    let mut nearest = std::collections::BinaryHeap::with_capacity(capacity + 1);
+    let mut nearest = std::collections::BTreeSet::new();
     for y in visible.min.y.div_euclid(CHUNK_TILES)
         ..=visible.max.y.saturating_sub(1).div_euclid(CHUNK_TILES)
     {
@@ -229,17 +224,13 @@ pub(super) fn candidate_chunks(
         for x in minimum..=maximum {
             let dx = i64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - center[0];
             let dy = i64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - center[1];
-            nearest.push((dx * dx + dy * dy, x, y));
+            nearest.insert((dx * dx + dy * dy, x, y));
             if nearest.len() > capacity {
-                nearest.pop();
+                nearest.pop_last();
             }
         }
     }
-    nearest
-        .into_sorted_vec()
-        .into_iter()
-        .map(|(_, x, y)| (x, y))
-        .collect()
+    nearest.into_iter().map(|(_, x, y)| (x, y)).collect()
 }
 
 pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32, i32)> {

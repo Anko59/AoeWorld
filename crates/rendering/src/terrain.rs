@@ -11,7 +11,6 @@ const TERRAIN_NATIVE_DIAMOND_HEIGHT: f32 = 48.0;
 /// Builds a bounded layer of local terrain sprites beneath world entities.
 /// A map supplies semantic material groups; diagnostic worlds retain the
 /// existing grass fallback before any immutable chunks arrive.
-#[inline]
 pub(crate) fn visible_terrain_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -22,13 +21,6 @@ pub(crate) fn visible_terrain_frames(
     }
     if !terrain.is_empty() {
         return visible_map_terrain_frames(art, terrain, camera);
-    }
-    empty_terrain_frames(art, camera)
-}
-
-pub(crate) fn empty_terrain_frames(art: &GameArt, camera: SceneCamera) -> Vec<(Sprite, GameFrame)> {
-    if art.grass.is_empty() {
-        return Vec::new();
     }
     let projection = Camera {
         center: camera.center,
@@ -43,11 +35,9 @@ pub(crate) fn empty_terrain_frames(art: &GameArt, camera: SceneCamera) -> Vec<(S
     }
     let ((min_cell_x, max_cell_x), (min_cell_y, max_cell_y)) =
         canonical_cell_bounds(bounds, cell_size);
-    let mut result = Vec::new();
-    // Each canonical key is generated once. x-major/y-minor traversal is the
-    // exact lexicographic order of the former BTreeMap<(x,y), candidate>.
-    for cell_x in min_cell_x..max_cell_x {
-        for cell_y in min_cell_y..max_cell_y {
+    let mut cells = BTreeMap::new();
+    for cell_y in min_cell_y..max_cell_y {
+        for cell_x in min_cell_x..max_cell_x {
             let position = cell_center((cell_x, cell_y), cell_size);
             let source_tile = [
                 cell_x.saturating_mul(cell_size),
@@ -69,15 +59,11 @@ pub(crate) fn empty_terrain_frames(art: &GameArt, camera: SceneCamera) -> Vec<(S
                 camera,
                 cell_size,
             ) {
-                // Candidate already has the canonical centre and cell_size
-                // scale formerly overwritten with identical values by render_cells.
-                if let Some(frame) = terrain_sprite(&projection, candidate, camera) {
-                    result.push(frame);
-                }
+                cells.insert((cell_x, cell_y), candidate);
             }
         }
     }
-    result
+    render_cells(&projection, camera, cell_size, cells)
 }
 
 fn visible_map_terrain_frames(

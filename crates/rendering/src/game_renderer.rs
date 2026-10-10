@@ -385,10 +385,10 @@ fn ordered_world_layers(
             .into_iter()
             .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
     );
-    // Original indices break all ties, preserving exact former stable order.
-    // Sort a bounded integer sidecar and permute this scene in place, avoiding
-    // a second large-layer scene or large-element stable-sort scratch buffer.
-    crate::stable_index_sort::sort_by(&mut entries, |left, right| {
+    // Compose the former object (depth, id) pre-sort with layer (depth, kind)
+    // ordering in one stable sort. Exact id ties keep shadow/body and source
+    // input order, without a second scene or a second object sort buffer.
+    entries.sort_by(|left, right| {
         let left = layer_order(left);
         let right = layer_order(right);
         left.0
@@ -416,7 +416,6 @@ fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
         / 3.0
 }
 
-#[derive(Clone, Copy)]
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
     Selection(Sprite, f64),

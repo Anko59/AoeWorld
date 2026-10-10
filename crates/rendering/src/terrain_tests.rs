@@ -6,9 +6,6 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
-#[path = "terrain/tests/empty.rs"]
-mod empty;
-
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
         walking: Vec::new(),

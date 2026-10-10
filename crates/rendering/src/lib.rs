@@ -1,5 +1,3 @@
-#[cfg(any(target_arch = "wasm32", test))]
-mod stable_index_sort;
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]
