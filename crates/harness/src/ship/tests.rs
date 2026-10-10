@@ -291,8 +291,23 @@ mod showcase_security;
 
 #[test]
 fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {
-    let keepalive = super::ssh_keepalive(false, false).expect("default keepalive");
+    let keepalive = super::ssh_keepalive(false).expect("default keepalive");
     assert!(keepalive.contains("ServerAliveInterval=30"));
-    assert_eq!(super::ssh_keepalive(true, false), None);
-    assert_eq!(super::ssh_keepalive(false, true), None);
+    assert_eq!(super::ssh_keepalive(true), None);
+
+    let temp = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(temp.path())
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["config", "core.sshCommand", "ssh -i /dev/null"]);
+    assert!(super::caller_chose_ssh(temp.path()));
 }

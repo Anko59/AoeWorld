@@ -303,3 +303,24 @@ fn a_storyboard_may_ask_to_film_the_app_on_webgpu() {
     let unknown = browser_board("/", "").replacen('{', r#"{"renderer":"vulkan","#, 1);
     assert!(Storyboard::parse(&unknown).is_err());
 }
+
+#[test]
+fn the_recorder_uses_the_browser_tests_webgpu_flags() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let flags = |text: &str, start: &str, end: &str| -> Vec<String> {
+        let block = &text[text.find(start).unwrap()..];
+        let block = &block[..block.find(end).unwrap()];
+        block
+            .split('"')
+            .filter(|part| part.starts_with("--"))
+            .map(str::to_owned)
+            .collect()
+    };
+    let record =
+        std::fs::read_to_string(root.join("crates/harness/src/ship/showcase/record.mjs")).unwrap();
+    let config = std::fs::read_to_string(root.join("browser/playwright.config.ts")).unwrap();
+    let recorder = flags(&record, "const WEBGPU_ARGS", "];");
+    let tests = flags(&config, "name: \"webgpu\"", "],");
+    assert!(recorder.len() >= 5, "{recorder:?}");
+    assert_eq!(recorder, tests);
+}

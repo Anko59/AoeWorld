@@ -313,10 +313,15 @@ pub(crate) fn ship_with(
 /// Git opens the SSH connection before the pre-push hook runs `make
 /// preflight` for several minutes; without keepalives GitHub drops the idle
 /// connection and the push dies silently (#209). A caller's own SSH
-/// command wins.
-fn ssh_keepalive(has_ssh_command: bool, has_ssh: bool) -> Option<&'static str> {
-    (!has_ssh_command && !has_ssh)
-        .then_some("ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40")
+/// command (`GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand`) wins.
+fn ssh_keepalive(caller_chose_ssh: bool) -> Option<&'static str> {
+    (!caller_chose_ssh).then_some("ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40")
+}
+
+fn caller_chose_ssh(root: &Path) -> bool {
+    std::env::var_os("GIT_SSH_COMMAND").is_some()
+        || std::env::var_os("GIT_SSH").is_some()
+        || git::git(root, &["config", "--get", "core.sshCommand"]).is_ok()
 }
 
 fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
@@ -327,10 +332,7 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     if force {
         command.arg("--force-with-lease");
     }
-    if let Some(ssh) = ssh_keepalive(
-        std::env::var_os("GIT_SSH_COMMAND").is_some(),
-        std::env::var_os("GIT_SSH").is_some(),
-    ) {
+    if let Some(ssh) = ssh_keepalive(caller_chose_ssh(root)) {
         command.env("GIT_SSH_COMMAND", ssh);
     }
     let status = command.args(["origin", &refspec]).status()?;
