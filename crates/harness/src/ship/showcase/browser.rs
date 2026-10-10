@@ -15,13 +15,20 @@ const MAX_TEXT_CHARS: usize = 500;
 const MAX_SELECTOR_CHARS: usize = 512;
 const MAX_KEY_CHARS: usize = 32;
 const MAX_PATH_BYTES: usize = 2048;
+/// The recorder's viewport is 1280×720; a larger offset cannot land.
+const MAX_POSITION_PX: u32 = 4096;
 
 /// One action on the filmed page, written `{"click": "<selector>"}`,
-/// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
+/// `{"click_at": {"selector": "#minimap", "x": 37, "y": 63}}` (CSS pixels
+/// from the element's top-left corner), `{"select": {"selector": "#map",
+/// "value": "<option value>"}}`, `{"key": "Enter"}`, `{"text": "typed"}` or
+/// `{"wait_ms": 500}`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
     Click(String),
+    ClickAt { selector: String, x: u32, y: u32 },
+    Select { selector: String, value: String },
     Key(String),
     Text(String),
     WaitMs(u32),
@@ -32,7 +39,7 @@ impl Step {
     /// starts the hold only after the steps ran.
     pub(crate) fn planned_ms(&self) -> u64 {
         match self {
-            Self::Click(_) | Self::Key(_) => 0,
+            Self::Click(_) | Self::ClickAt { .. } | Self::Select { .. } | Self::Key(_) => 0,
             Self::Text(text) => TYPE_MS * text.chars().count() as u64,
             Self::WaitMs(ms) => u64::from(*ms),
         }
@@ -40,6 +47,24 @@ impl Step {
 
     fn validate(&self) -> Result<(), String> {
         match self {
+            Self::ClickAt { selector, x, y } => {
+                Self::Click(selector.clone()).validate()?;
+                if *x > MAX_POSITION_PX || *y > MAX_POSITION_PX {
+                    return Err(format!(
+                        "click positions are limited to {MAX_POSITION_PX} px"
+                    ));
+                }
+                Ok(())
+            }
+            Self::Select { selector, value } => {
+                Self::Click(selector.clone()).validate()?;
+                if value.chars().count() > MAX_TEXT_CHARS || value.chars().any(char::is_control) {
+                    return Err(format!(
+                        "option values are limited to {MAX_TEXT_CHARS} printable characters"
+                    ));
+                }
+                Ok(())
+            }
             Self::Click(selector)
                 if selector.trim().is_empty()
                     || selector.chars().count() > MAX_SELECTOR_CHARS

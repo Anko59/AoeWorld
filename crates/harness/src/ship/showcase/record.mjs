@@ -121,6 +121,12 @@ async function open(page, scene) {
 async function steps(page, scene) {
   for (const step of scene.steps ?? []) {
     if ("click" in step) await page.click(step.click, { timeout: 10_000 });
+    else if ("click_at" in step) {
+      const { selector, x, y } = step.click_at;
+      await page.click(selector, { position: { x, y }, timeout: 10_000 });
+    } else if ("select" in step) {
+      await page.selectOption(step.select.selector, step.select.value, { timeout: 10_000 });
+    }
     else if ("key" in step) await page.keyboard.press(step.key);
     else if ("text" in step) await page.keyboard.type(step.text, { delay: 22 });
     else if ("wait_ms" in step) await sleep(step.wait_ms);

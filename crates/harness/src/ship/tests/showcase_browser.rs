@@ -324,3 +324,28 @@ fn the_recorder_uses_the_browser_tests_webgpu_flags() {
     assert!(recorder.len() >= 5, "{recorder:?}");
     assert_eq!(recorder, tests);
 }
+
+#[test]
+fn steps_may_click_inside_an_element_and_choose_a_select_option() {
+    let steps = r##"{"click":"#start"},{"click_at":{"selector":"#minimap-map","x":37,"y":63}},{"select":{"selector":"#map-package","value":"c3436b"}}"##;
+    let board = Storyboard::parse(&browser_board("/", steps)).unwrap();
+    let app = AppOrigin::parse(APP).unwrap();
+    let json = serde_json::to_value(plan(&board, &[3500, 3000], Some(app)).unwrap()).unwrap();
+    let planned = &json["scenes"][1]["steps"];
+    assert_eq!(planned[1]["click_at"]["selector"], "#minimap-map");
+    assert_eq!(planned[1]["click_at"]["x"], 37);
+    assert_eq!(planned[2]["select"]["value"], "c3436b");
+
+    for bad in [
+        r##",{"click_at":{"selector":"","x":1,"y":1}}"##,
+        r##",{"click_at":{"selector":"#a","x":5000,"y":1}}"##,
+        r##",{"select":{"selector":"#a","value":"x\ny"}}"##,
+        r##",{"select":{"selector":"","value":"x"}}"##,
+    ] {
+        let steps = format!(r##"{{"click":"#start"}}{bad}"##);
+        assert!(
+            Storyboard::parse(&browser_board("/", &steps)).is_err(),
+            "{bad}"
+        );
+    }
+}
