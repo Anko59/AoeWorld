@@ -187,10 +187,13 @@ fn escaped_pipe_holder_cannot_block_drain_or_leave_reader_threads() {
     };
     let root = tempfile::tempdir().unwrap();
     // setsid escapes the supervised process group; its stdout stays inherited.
-    // The fixture PID is printed by the child itself and has a distinct group.
+    // The parent prints the fixture PID ($!) before exiting: a child that
+    // printed it itself could lose the race with the drain under load. A
+    // background job is not a group leader, so setsid execs in place and the
+    // PID is also the new session's group.
     let captured = shell(
         root.path(),
-        "setsid sh -c 'echo $$; sleep 5' & sleep 0.05",
+        "setsid sh -c 'sleep 5' & echo $!; sleep 0.05",
         Duration::from_secs(2),
         &Cancellation::default(),
     );
