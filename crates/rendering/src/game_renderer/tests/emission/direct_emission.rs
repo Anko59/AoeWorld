@@ -1,5 +1,7 @@
 //! Full-scene content of the production scene builder over bounded cases.
 use super::*;
+#[path = "alloc_budget.rs"]
+mod alloc_budget;
 
 const FNV: u64 = 0x0000_0100_0000_01b3;
 
