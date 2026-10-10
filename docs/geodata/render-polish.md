@@ -40,27 +40,21 @@ procedural texture splatting, not the original game's authored transition masks;
 it can soften very narrow dirt tracks. The unchanged 24,576-triangle budget still limits texture detail at extreme
 viewport sizes; these views may scale a native tile over multiple source tiles.
 
-Generation recipe 7 adds geography-keyed canopy density, irregular clearings of
-varying size and spacing, and bent dirt trails between selected clearings.
-Temperate ground follows the same masks: denser canopy gets forest floor and
-openings get dry grass or dirt. A small irregular central glade preserves the
-existing bounded start search without changing water, elevation, or slope rules.
-These are procedural forest tracks, not historically sourced roads. Recipes
-3–7 retain their generation behavior and remain loadable. Recipe 8 adds small
-opening nodes in formerly empty cells, mandatory bent cardinal tracks, and a
-narrow connection from the central glade to its cell's node. These masks clear
-procedural resources, never water or cliffs. Recipe-8 accepted starts must also
-certify an actual terrain/resource-crossable route at least 64 tiles away on
+Forest layout, clearings, trails and ground appearance come from the single
+composed landscape described in [the landscape reference](landscape/implementation.md):
+coherent ecological patches, a starting glade, a 192-tile opening lattice with
+bent trails, and matching canopy/forest-floor appearance. Its reservations clear
+procedural resources, never water or cliffs. These are procedural forest tracks,
+not historically sourced roads.
+
+Every accepted start needs a clear 5×5 footprint, at least 256 reachable tiles
+and a certified terrain/resource-crossable exit route at least 64 tiles away on
 large worlds. Small worlds use `min(64, max(1, (max(width, height)-1)/2))`
 tiles so an edge-directed certificate is possible (31 on a 64-tile map, still
-beyond the central glade's 27). The unchanged bounds are 4,096 visited exit
-tiles and 64 exit chunks across the start search.
-Cancellation or an exhausted bound is not proof of absence. Natural barriers
-can split the procedural graph; unqualified starts are rejected, not teleported.
-Existing recipe-7 packages require regeneration into a new content-addressed
-recipe-8 package to use these tracks; their saved identities are not upgraded in
-place. Source locks and prepared page roots remain applicable when geodata is
-unchanged.
+beyond the central glade's 27). The bounds are 4,096 visited exit tiles and 64
+exit chunks across the start search. Cancellation or an exhausted bound is not
+proof of absence. Natural barriers can split the procedural graph; unqualified
+starts are rejected, not teleported.
 
 Broadleaf trees use their matching original shadow frames and a frame selection
 that favors leafy crowns while retaining some bare trees. Other resources and

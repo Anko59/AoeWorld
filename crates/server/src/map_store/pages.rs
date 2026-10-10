@@ -218,21 +218,13 @@ fn load<T>(
 ) -> Result<Vec<T>, MapStoreError> {
     let root = root(directory, package, layer);
     let mut pages = Vec::new();
-    let mut index = 0;
     for (level, metadata) in levels.iter().enumerate() {
         let count = metadata
             .samples_per_axis
             .div_ceil(u16::from(ENVIRONMENT_PAGE_SAMPLES));
         for y in 0..count {
             for x in 0..count {
-                let coordinate_path = root.join(format!("{level}-{x}-{y}.json"));
-                let path = if coordinate_path.try_exists()? {
-                    coordinate_path
-                } else {
-                    root.join(format!("{index}.json"))
-                };
-                pages.push(read(&path)?);
-                index += 1;
+                pages.push(read(&root.join(format!("{level}-{x}-{y}.json")))?);
             }
         }
     }

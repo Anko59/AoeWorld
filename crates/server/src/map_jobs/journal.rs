@@ -13,7 +13,7 @@ use std::{
 };
 
 const MAX_JOURNAL_BYTES: u64 = 2 * 1024 * 1024;
-const SCHEMA: u8 = 2;
+const SCHEMA: u8 = 1;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,7 +97,7 @@ impl Manager {
             return Err("job history exceeds its byte bound".into());
         }
         let journal: Journal = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-        if !matches!(journal.schema, 1 | SCHEMA) || journal.jobs.len() > MAX_RETAINED_JOBS {
+        if journal.schema != SCHEMA || journal.jobs.len() > MAX_RETAINED_JOBS {
             return Err("invalid job history schema or count".into());
         }
         let mut manager = Self {

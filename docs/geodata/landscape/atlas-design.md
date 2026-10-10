@@ -1,8 +1,7 @@
 # Bounded multi-atlas implementation notes
 
-Read-only architecture audit against `b438dc8bca460a353ef66e4c7cc726568de89e5b`
-with the stage-1 working patch. This is implementation guidance, not delivered
-multi-atlas support or a qualification report.
+Contract and implementation guidance for the bounded three-page atlas. This is
+not a qualification report.
 
 ## Fixed contract
 
@@ -60,7 +59,7 @@ array, without cloning it again, then invalidates the idle frame cache. Lost,
 zero-size and skipped frames remain unsuccessful presentations.
 
 **Canvas:** one page-major CPU source; checked `page * PAGE_BYTES + local_offset`
-for sprites and all three terrain samples. Legacy drawImage needs page-specific
+for sprites and all three terrain samples. Canvas drawImage needs page-specific
 canvases, preferably lazy rather than eagerly retaining three additional copies.
 Never make one oversized 4096/6144-wide or tall atlas. The depth raster, picking,
 geometry and current procedural-boundary blend policy remain unchanged.
@@ -79,7 +78,7 @@ Base payload is not total memory:
 
 - WebGPU atlas: 48 MiB GPU, plus upload/source decoding transient allocations.
 - WebGL2: 48 MiB GPU plus one 48 MiB owned CPU restoration copy.
-- Canvas: 48 MiB CPU source, plus up to 48 MiB for legacy page canvases if used.
+- Canvas: 48 MiB CPU source, plus up to 48 MiB for per-page drawImage canvases if used.
 - Source PNG color/player/shadow decoding: 48 MiB scratch, plus compressed bytes,
   inflater/IDAT/JS buffers; upload may temporarily coexist with CPU and GPU copies.
 - Existing backing cap is 4,194,304 pixels / 4,096 per axis; color plus f64 depth

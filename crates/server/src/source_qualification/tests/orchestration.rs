@@ -298,12 +298,12 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     assert_eq!(
         centered_resource,
         ResourceNode {
-            id: 13_099_385_686,
-            tile: TileCoord::new(25_003, 24_985),
-            kind: aoe_map::ResourceKind::Gold,
-            object: aoe_map::ObjectKind::GoldDeposit,
-            initial_amount: 800,
-            visual_variant: 143,
+            id: 13_089_948_530,
+            tile: TileCoord::new(25_017, 24_967),
+            kind: aoe_map::ResourceKind::Stone,
+            object: aoe_map::ObjectKind::StoneDeposit,
+            initial_amount: 350,
+            visual_variant: 57,
         }
     );
     assert_eq!(report.resource_id, centered_resource.id);
@@ -373,7 +373,7 @@ fn synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay() 
     let config = planner_world.config();
     let start = match planner_world
         .terrain()
-        .search_start_for_recipe(config, package.generation_recipe_version, 64, || false)
+        .search_start_checked(config, 64, || false)
         .expect("synthetic activation search")
     {
         StartSearchResult::Found(tile) => tile,

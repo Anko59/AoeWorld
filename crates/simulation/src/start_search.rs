@@ -7,13 +7,6 @@ const START_CLEAR_RADIUS: i32 = 2;
 const START_REACHABLE_TILES: usize = 256;
 const START_SEARCH_CHUNKS: usize = 64;
 const START_CACHE_CHUNKS: usize = 256;
-const LEGACY_START_RECIPE: u16 = 3;
-const RECIPE_4_START_RECIPE: u16 = 4;
-const RECIPE_5_START_RECIPE: u16 = 5;
-const PRIOR_WATER_MODEL_START_RECIPE: u16 = aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION;
-const PRIOR_FOREST_START_RECIPE: u16 = aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION;
-const WATER_MODEL_START_RECIPE: u16 = aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION;
-const LANDSCAPE_START_RECIPE: u16 = aoe_map::LANDSCAPE_GENERATION_RECIPE_VERSION;
 const START_EXIT_DISTANCE: u32 = 64;
 const START_EXIT_VISITS: usize = 4_096;
 
@@ -48,34 +41,14 @@ impl Terrain {
             .unwrap_or(StartSearchResult::Unavailable)
     }
 
+    /// A start is a clear 5×5 footprint whose reachable area includes a
+    /// bounded exit; exhausting the exit budget reports `LimitReached`.
     pub fn search_start_checked(
         &self,
         config: WorldConfig,
         max_chunks: usize,
         cancelled: impl Fn() -> bool,
     ) -> Result<StartSearchResult, EnvironmentPageError> {
-        self.search_start_for_recipe(config, LEGACY_START_RECIPE, max_chunks, cancelled)
-    }
-
-    /// Validates the package recipe while preserving the established start
-    /// footprint and bounded search for all supported generation recipes.
-    pub fn search_start_for_recipe(
-        &self,
-        config: WorldConfig,
-        generation_recipe_version: u16,
-        max_chunks: usize,
-        cancelled: impl Fn() -> bool,
-    ) -> Result<StartSearchResult, EnvironmentPageError> {
-        match generation_recipe_version {
-            LEGACY_START_RECIPE
-            | RECIPE_4_START_RECIPE
-            | RECIPE_5_START_RECIPE
-            | PRIOR_WATER_MODEL_START_RECIPE
-            | PRIOR_FOREST_START_RECIPE
-            | WATER_MODEL_START_RECIPE
-            | LANDSCAPE_START_RECIPE => {}
-            _ => return Err(EnvironmentPageError::Invalid),
-        }
         if cancelled() {
             return Ok(StartSearchResult::Cancelled);
         }
@@ -84,10 +57,6 @@ impl Terrain {
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
-        cache.require_exit = matches!(
-            generation_recipe_version,
-            WATER_MODEL_START_RECIPE | LANDSCAPE_START_RECIPE
-        );
         if valid_start(&mut cache, center)? {
             return Ok(StartSearchResult::Found(center));
         }
@@ -144,7 +113,6 @@ struct StartPassabilityCache<'a> {
     entries: BTreeMap<(i32, i32), Vec<bool>>,
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
-    require_exit: bool,
     exit_visits: usize,
     exit_chunks: BTreeSet<(i32, i32)>,
     exit_budget_exhausted: bool,
@@ -159,7 +127,6 @@ impl<'a> StartPassabilityCache<'a> {
             entries: BTreeMap::new(),
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
-            require_exit: false,
             exit_visits: 0,
             exit_chunks: BTreeSet::new(),
             exit_budget_exhausted: false,
@@ -216,7 +183,7 @@ impl<'a> StartPassabilityCache<'a> {
         Ok(result)
     }
 
-    /// Recipe eight certifies an actual route beyond any starting glade.
+    /// Every start certifies an actual route beyond any starting glade.
     /// A distance-prioritized frontier avoids exploring an entire open disk.
     /// Work and chunk bounds apply across ALL candidates in this search.
     fn reaches_exit(&mut self, origin: TileCoord) -> Result<bool, EnvironmentPageError> {
@@ -355,7 +322,7 @@ fn valid_start(
 ) -> Result<bool, EnvironmentPageError> {
     Ok(clear_starting_area(cache, candidate)?
         && cache.reaches_required_tiles(candidate)?
-        && (!cache.require_exit || cache.reaches_exit(candidate)?))
+        && cache.reaches_exit(candidate)?)
 }
 
 fn clear_starting_area(

@@ -38,7 +38,7 @@ export type VisualCase = {
   historical_land_use: {
     level_zero_pages: number;
     coverage_present_pages: number;
-    legacy_coverage_missing_pages: number;
+    coverage_missing_pages: number;
     coverage_samples: number;
     land_percent_sum: number;
     valid_land_percent_sum: number;

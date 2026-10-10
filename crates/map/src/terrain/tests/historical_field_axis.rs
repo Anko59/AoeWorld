@@ -62,12 +62,15 @@ fn history_lookup_uses_historical_axis_below_elevation_axis() {
         .unwrap();
     let history = generator.historical_land_use.as_ref().unwrap();
     assert_eq!(
-        history.at(TileCoord::new(0, 0), 100).unwrap().crop_percent,
+        history
+            .at_observation(TileCoord::new(0, 0), 100)
+            .unwrap()
+            .crop_percent,
         0
     );
     assert_eq!(
         history
-            .at(TileCoord::new(99, 99), 100)
+            .at_observation(TileCoord::new(99, 99), 100)
             .unwrap()
             .crop_percent,
         30

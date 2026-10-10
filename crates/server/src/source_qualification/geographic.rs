@@ -81,12 +81,10 @@ pub(super) fn qualify(
         planner_provider.clone() as Arc<dyn EnvironmentPageProvider>,
     )?;
     let config = planner_world.config();
-    let start = match planner_world.terrain().search_start_for_recipe(
-        config,
-        package.generation_recipe_version,
-        64,
-        || false,
-    )? {
+    let start = match planner_world
+        .terrain()
+        .search_start_checked(config, 64, || false)?
+    {
         StartSearchResult::Found(tile) => tile,
         StartSearchResult::LimitReached => {
             return Err(SourceQualificationError::GeographicStartSearchLimit);

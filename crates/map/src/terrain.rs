@@ -11,9 +11,9 @@ use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-mod clearing;
 mod elevation;
 mod fallback;
+mod geometry;
 mod landscape_dispatch;
 pub use landscape_dispatch::LandscapePoint;
 pub(crate) mod landscape;
@@ -32,17 +32,11 @@ mod surface;
 use elevation::PreparedElevation;
 pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
 
-fn validate_vector_environment(
-    environment: &PreparedEnvironment,
-    profile: crate::DetailProfile,
-) -> Result<(), EnvironmentError> {
+fn validate_vector_environment(environment: &PreparedEnvironment) -> Result<(), EnvironmentError> {
     if environment.hydrology_evidence.is_some() {
         return Err(EnvironmentError::InvalidIndex);
     }
-    if profile == crate::DetailProfile::LandscapeV2 {
-        environment.validate_for_profile(profile)?;
-    }
-    Ok(())
+    environment.validate()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -149,7 +143,6 @@ pub struct MapChunkGenerator {
     provider: Option<Arc<dyn EnvironmentPageProvider>>,
     provider_environment: Option<Arc<PreparedEnvironment>>,
     provider_compression: Option<Ratio>,
-    elevation_sampling_recipe: u16,
 }
 
 impl MapChunkGenerator {
@@ -165,24 +158,6 @@ impl MapChunkGenerator {
             provider: None,
             provider_environment: None,
             provider_compression: None,
-            elevation_sampling_recipe: crate::GENERATION_RECIPE_VERSION,
-        }
-    }
-
-    pub(crate) fn with_elevation_sampling_recipe(mut self, recipe: u16) -> Self {
-        self.elevation_sampling_recipe = recipe;
-        self
-    }
-
-    pub(crate) const fn generation_recipe_version(&self) -> u16 {
-        self.elevation_sampling_recipe
-    }
-
-    fn environment_profile(&self) -> crate::DetailProfile {
-        if self.elevation_sampling_recipe == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
-            crate::DetailProfile::LandscapeV2
-        } else {
-            crate::DetailProfile::StandardV1
         }
     }
 
@@ -195,7 +170,7 @@ impl MapChunkGenerator {
         environment: PreparedEnvironment,
         provider: Arc<dyn EnvironmentPageProvider>,
     ) -> Result<Self, EnvironmentError> {
-        environment.validate_for_profile(self.environment_profile())?;
+        environment.validate()?;
         if environment.samples_per_axis == 0 {
             return Err(EnvironmentError::InvalidPyramid);
         }
@@ -214,9 +189,8 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<ElevationPage>,
     ) -> Result<Self, EnvironmentError> {
-        validate_vector_environment(environment, self.environment_profile())?;
-        let level_zero =
-            crate::environment::level_zero_pages(environment, pages, self.environment_profile())?;
+        validate_vector_environment(environment)?;
+        let level_zero = crate::environment::level_zero_pages(environment, pages)?;
         Ok(Self {
             geography_key: self.geography_key,
             procedural_seed: self.procedural_seed,
@@ -225,7 +199,6 @@ impl MapChunkGenerator {
                 samples_per_axis: environment.samples_per_axis,
                 compression,
                 pages: level_zero,
-                sampling_recipe: self.elevation_sampling_recipe,
             })),
             water: self.water,
             biome: self.biome,
@@ -233,7 +206,6 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
-            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -244,7 +216,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<WaterPage>,
     ) -> Result<Self, EnvironmentError> {
-        validate_vector_environment(environment, self.environment_profile())?;
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.water else {
             return pages
                 .is_empty()
@@ -268,7 +240,6 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
-            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -279,7 +250,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<PotentialBiomePage>,
     ) -> Result<Self, EnvironmentError> {
-        validate_vector_environment(environment, self.environment_profile())?;
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.vegetation else {
             return pages
                 .is_empty()
@@ -303,7 +274,6 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
-            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
@@ -313,7 +283,7 @@ impl MapChunkGenerator {
         environment: &PreparedEnvironment,
         pages: Vec<HistoricalLandUsePage>,
     ) -> Result<Self, EnvironmentError> {
-        validate_vector_environment(environment, self.environment_profile())?;
+        validate_vector_environment(environment)?;
         let Some(field) = &environment.historical_land_use else {
             return pages
                 .is_empty()
@@ -337,64 +307,51 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
-            elevation_sampling_recipe: self.elevation_sampling_recipe,
         })
     }
 
     pub fn tile_at(&self, tile: TileCoord) -> Option<Tile> {
-        if self.provider.is_some() {
-            return self.tile_at_with_cancel(tile, &|| false).ok().flatten();
-        }
-        (tile.x >= 0 && tile.y >= 0 && tile.x < self.width_tiles && tile.y < self.width_tiles)
-            .then(|| self.sample_tile(tile))
+        self.tile_at_with_cancel(tile, &|| false).ok().flatten()
     }
 
-    /// Fallible source-backed tile query. A provider failure is never mapped
-    /// to procedural terrain or an absent successful tile.
+    /// Fallible composed tile query. A provider failure is never mapped to
+    /// procedural terrain or an absent successful tile.
     pub fn tile_at_with_cancel(
         &self,
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Tile>, EnvironmentPageError> {
-        if self.uses_landscape_v2() {
-            return self
-                .landscape_point_with_cancel(tile, cancelled)
-                .map(|point| point.map(|point| point.tile.terrain));
-        }
-        if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
-            return Ok(None);
-        }
-        if self.provider.is_some() {
-            provider::sample_tile(self, tile, cancelled).map(Some)
-        } else {
-            Ok(Some(self.sample_tile(tile)))
-        }
+        self.landscape_point_with_cancel(tile, cancelled)
+            .map(|point| point.map(|point| point.tile.terrain))
     }
 
     pub fn chunk(&self, x: i32, y: i32) -> Result<Chunk, EnvironmentPageError> {
         self.chunk_with_cancel(x, y, &|| false)
     }
 
-    /// Fallible bounded chunk query. At most one returned chunk and the page
-    /// handles needed for its tiles are retained by the provider cache.
+    /// Physical projection of the composed chunk: terrain and resource nodes
+    /// without appearance, visual families or decorations.
     pub fn chunk_with_cancel(
         &self,
         x: i32,
         y: i32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Chunk, EnvironmentPageError> {
-        if self.uses_landscape_v2() {
-            return self.landscape_legacy_chunk(x, y, cancelled);
-        }
-        self.legacy_chunk_with_cancel(x, y, cancelled)
+        let scene = self.landscape_chunk_with_cancel(x, y, cancelled)?;
+        Ok(Chunk {
+            x,
+            y,
+            tiles: scene.tiles.into_iter().map(|tile| tile.terrain).collect(),
+            resources: scene
+                .resources
+                .into_iter()
+                .map(|resource| resource.node)
+                .collect(),
+        })
     }
 
     pub fn object_at(&self, tile: TileCoord) -> Option<ResourceNode> {
-        if self.provider.is_some() {
-            return self.object_at_with_cancel(tile, &|| false).ok().flatten();
-        }
-        self.tile_at(tile)
-            .and_then(|sample| self.resource_at(tile, sample))
+        self.object_at_with_cancel(tile, &|| false).ok().flatten()
     }
 
     pub fn object_at_with_cancel(
@@ -402,32 +359,8 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
-        if self.uses_landscape_v2() {
-            return self
-                .landscape_point_with_cancel(tile, cancelled)
-                .map(|point| point.and_then(|point| point.resource.map(|resource| resource.node)));
-        }
-        let Some(sample) = self.tile_at_with_cancel(tile, cancelled)? else {
-            return Ok(None);
-        };
-        if self.provider.is_some() {
-            provider::resource_at(self, tile, sample, cancelled)
-        } else {
-            Ok(self.resource_at(tile, sample))
-        }
-    }
-
-    /// Applies the deterministic crop/grazing roll used to clear procedural
-    /// vegetation from tiles with historical land-use evidence.
-    pub fn is_tree_suppressed_by_historical_land_use(
-        &self,
-        tile: TileCoord,
-        crop_percent: u8,
-        grazing_percent: u8,
-    ) -> bool {
-        let value = unsigned_noise(self.geography_key, b"objects", tile.x, tile.y)
-            ^ self.procedural_seed.rotate_left(17);
-        value % 100 < u64::from(crop_percent) + u64::from(grazing_percent)
+        self.landscape_point_with_cancel(tile, cancelled)
+            .map(|point| point.and_then(|point| point.resource.map(|resource| resource.node)))
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {

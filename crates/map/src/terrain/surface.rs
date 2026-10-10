@@ -44,32 +44,10 @@ impl TileSurface {
 impl MapChunkGenerator {
     /// Determines whether an adjacent terrain edge can be crossed without
     /// interpreting center-height samples as a substitute for shared geometry.
+    /// Composition changes material only, so edges use physical base terrain.
     pub fn edge_between(&self, from: TileCoord, to: TileCoord) -> EdgePassability {
-        let delta_x = to.x.saturating_sub(from.x).unsigned_abs();
-        let delta_y = to.y.saturating_sub(from.y).unsigned_abs();
-        if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
-            return EdgePassability::Blocked;
-        }
-        if self.uses_landscape_v2() {
-            return self
-                .edge_between_with_cancel(from, to, &|| false)
-                .unwrap_or(EdgePassability::Blocked);
-        }
-        let Some(from) = self.tile_at(from) else {
-            return EdgePassability::Blocked;
-        };
-        let Some(to) = self.tile_at(to) else {
-            return EdgePassability::Blocked;
-        };
-        if !from.passable
-            || !to.passable
-            || !from.surface.walkable()
-            || !to.surface.walkable()
-            || (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() > 1
-        {
-            return EdgePassability::Blocked;
-        }
-        EdgePassability::Passable
+        self.edge_between_with_cancel(from, to, &|| false)
+            .unwrap_or(EdgePassability::Blocked)
     }
 
     pub fn edge_between_with_cancel(
@@ -83,33 +61,13 @@ impl MapChunkGenerator {
         if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
             return Ok(EdgePassability::Blocked);
         }
-        if self.uses_landscape_v2() {
-            let from = self
-                .base_physical_tile_with_cancel(from, cancelled)?
-                .ok_or(EnvironmentPageError::Invalid)?;
-            let to = self
-                .base_physical_tile_with_cancel(to, cancelled)?
-                .ok_or(EnvironmentPageError::Invalid)?;
-            return Ok(physical_edge(from, to));
-        }
         let from = self
-            .tile_at_with_cancel(from, cancelled)?
+            .base_physical_tile_with_cancel(from, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;
         let to = self
-            .tile_at_with_cancel(to, cancelled)?
+            .base_physical_tile_with_cancel(to, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;
-        Ok(
-            if !from.passable
-                || !to.passable
-                || !from.surface.walkable()
-                || !to.surface.walkable()
-                || (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() > 1
-            {
-                EdgePassability::Blocked
-            } else {
-                EdgePassability::Passable
-            },
-        )
+        Ok(physical_edge(from, to))
     }
 }
 

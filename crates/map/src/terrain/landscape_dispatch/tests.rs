@@ -11,15 +11,15 @@ use std::sync::Arc;
 mod physical_queries;
 #[path = "tests/route_probe.rs"]
 mod route_probe;
+#[path = "tests/source_families.rs"]
+mod source_families;
 
 const SEEDS: [u64; 16] = [0, 1, 2, 3, 7, 11, 17, 18, 23, 29, 31, 47, 63, 71, 97, 255];
 fn flat(seed: u64, width: i32) -> MapChunkGenerator {
-    let mut generator = MapChunkGenerator::new([17; 32], seed, width)
-        .with_elevation_sampling_recipe(crate::LANDSCAPE_GENERATION_RECIPE_VERSION);
+    let mut generator = MapChunkGenerator::new([17; 32], seed, width);
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 1,
         compression: Ratio::new(30, 1).unwrap(),
-        sampling_recipe: crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
         pages: [(
             (0, 0),
             ElevationPage {
@@ -94,10 +94,7 @@ fn all_sixteen_seeds_authoritative_points_objects_blocking_and_sparse_chunks_agr
                     .collect::<Vec<_>>()
             );
             assert_eq!(
-                CompactChunk::encode_landscape(&scene)
-                    .unwrap()
-                    .decode_landscape()
-                    .unwrap(),
+                CompactChunk::encode(&scene).unwrap().decode().unwrap(),
                 scene
             );
             if width == 50 {
@@ -130,10 +127,6 @@ fn all_sixteen_seeds_authoritative_points_objects_blocking_and_sparse_chunks_agr
                 );
                 assert_eq!(generator.object_at(tile.tile), node);
                 assert_eq!(
-                    generator.occupied_without_access(tile.tile, tile.terrain),
-                    !tile.terrain.passable || node.is_some()
-                );
-                assert_eq!(
                     point.decoration,
                     scene
                         .decorations
@@ -162,7 +155,7 @@ fn all_sixteen_seeds_authoritative_points_objects_blocking_and_sparse_chunks_agr
                                 has_access |= neighbor.tile.terrain.passable
                                     && neighbor.resource.is_none()
                                     && neighbor.decoration.is_none()
-                                    && neighbor.tile.appearance.unwrap().floor_strength == 0
+                                    && neighbor.tile.appearance.floor_strength == 0
                                     && (i32::from(tile.terrain.game_height_level)
                                         - i32::from(neighbor.tile.terrain.game_height_level))
                                     .abs()
@@ -195,7 +188,7 @@ fn starts_routes_history_and_resource_approaches_share_the_same_forest_mask() {
         let reservation = generator.landscape_reservations_at(tile.tile);
         if reservation.start || reservation.route {
             starts += 1;
-            let appearance = tile.appearance.unwrap();
+            let appearance = tile.appearance;
             assert_eq!(
                 (appearance.canopy_strength, appearance.floor_strength),
                 (0, 0)
@@ -210,18 +203,6 @@ fn starts_routes_history_and_resource_approaches_share_the_same_forest_mask() {
         }
     }
     assert!(starts > 100);
-    // Recipe9 retains old openings/routes and adds direct seeded start-node
-    // connections for its dense forests. It does not copy recipe8 forest density.
-    let old = generator.clone().with_elevation_sampling_recipe(8);
-    for tile in &scene.tiles {
-        assert_eq!(
-            landscape::opening_contains(&old, tile.tile),
-            landscape::opening_contains(&generator, tile.tile)
-        );
-        if landscape::procedural_trail_contains(&old, tile.tile) {
-            assert!(landscape::procedural_trail_contains(&generator, tile.tile));
-        }
-    }
     let mut cleared = generator;
     cleared.historical_land_use = Some(Arc::new(crate::land_use::HistoricalLandUse::new(
         1,
@@ -244,12 +225,7 @@ fn starts_routes_history_and_resource_approaches_share_the_same_forest_mask() {
     let scene = cleared
         .landscape_chunk_with_cancel(0, 0, &|| false)
         .unwrap();
-    assert!(
-        scene
-            .tiles
-            .iter()
-            .all(|t| t.appearance.unwrap().floor_strength == 0)
-    );
+    assert!(scene.tiles.iter().all(|t| t.appearance.floor_strength == 0));
     assert!(
         scene
             .resources
@@ -294,7 +270,7 @@ fn seeded_start_connections_clear_full_neighbor_segments_without_changing_source
                         .landscape_point_with_cancel(position, &|| false)
                         .unwrap()
                         .unwrap();
-                    let appearance = point.tile.appearance.unwrap();
+                    let appearance = point.tile.appearance;
                     assert_eq!(
                         (appearance.canopy_strength, appearance.floor_strength),
                         (0, 0)

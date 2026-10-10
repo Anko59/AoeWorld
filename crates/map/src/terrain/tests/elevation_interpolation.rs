@@ -93,14 +93,12 @@ fn small_plane() -> (PreparedEnvironment, Vec<ElevationPage>, Pages) {
 }
 
 #[test]
-fn recipe_four_bilinear_dense_and_provider_samples_match_across_shared_corners() {
+fn bilinear_dense_and_provider_samples_match_across_shared_corners() {
     let (environment, elevation, pages) = small_plane();
     let dense = MapChunkGenerator::new([4; 32], 3, 5)
-        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
         .with_prepared_elevation(Ratio::new(1, 1).expect("ratio"), &environment, elevation)
         .expect("dense elevation");
     let lazy = MapChunkGenerator::new([4; 32], 3, 5)
-        .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION)
         .with_page_provider(
             Ratio::new(1, 1).expect("ratio"),
             environment,
@@ -250,42 +248,6 @@ fn constant_fields_and_symmetric_rounding_are_deterministic() {
     assert_eq!(bilinear_height([i32::MIN; 4], 1, 1, 2), i32::MIN);
 }
 
-#[test]
-fn recipe_three_keeps_the_historical_nearest_cell_mapping() {
-    let (environment, elevation, _) = small_plane();
-    let dense = MapChunkGenerator::new([4; 32], 3, 5)
-        .with_elevation_sampling_recipe(crate::LEGACY_GENERATION_RECIPE_VERSION)
-        .with_prepared_elevation(Ratio::new(1, 1).expect("ratio"), &environment, elevation)
-        .expect("legacy elevation");
-    let (environment, _elevation, pages) = small_plane();
-    let lazy = MapChunkGenerator::new([4; 32], 3, 5)
-        .with_elevation_sampling_recipe(crate::LEGACY_GENERATION_RECIPE_VERSION)
-        .with_page_provider(
-            Ratio::new(1, 1).expect("ratio"),
-            environment,
-            Arc::new(pages),
-        )
-        .expect("legacy provider elevation");
-    for y in 0..5 {
-        for x in 0..5 {
-            let tile = TileCoord::new(x, y);
-            assert_eq!(
-                dense.tile_at(tile).expect("dense legacy tile"),
-                lazy.tile_at_with_cancel(tile, &|| false)
-                    .expect("provider query")
-                    .expect("provider legacy tile")
-            );
-        }
-    }
-    assert_eq!(
-        dense
-            .tile_at(TileCoord::new(3, 3))
-            .expect("legacy tile")
-            .geographic_height_centimeters,
-        200
-    );
-}
-
 fn pyramid_levels(mut axis: u16) -> Vec<PyramidLevel> {
     let mut levels = Vec::new();
     loop {
@@ -354,7 +316,6 @@ fn odd_axis_generator(
 ) -> MapChunkGenerator {
     let (environment, _) = odd_axis_data();
     MapChunkGenerator::new([5; 32], 1, 65)
-        .with_elevation_sampling_recipe(crate::GENERATION_RECIPE_VERSION)
         .with_page_provider(
             Ratio::new(1, 1).expect("ratio"),
             environment,

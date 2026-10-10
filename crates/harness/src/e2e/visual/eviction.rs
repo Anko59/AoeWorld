@@ -189,7 +189,7 @@ mod tests {
             },
             tiles_per_side: 750,
             package_chunk_count_bound: 576,
-            schema_version: 9,
+            schema_version: aoe_map::MAP_SCHEMA_VERSION,
             generator_version: 1,
             generation_recipe_version: 1,
             source_locks: vec![aoe_map::SourceLock {

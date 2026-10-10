@@ -1,5 +1,5 @@
-//! Nonactivating landscape transport data. None appearance is an explicit legacy
-//! projection, never a request to infer forest metadata from old terrain codes.
+//! Composed landscape scene data: physical terrain plus its ecological appearance,
+//! resources with visual families and nonblocking decorations.
 use super::{ResourceNode, Tile};
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 pub struct LandscapeTile {
     pub tile: TileCoord,
     pub terrain: Tile,
-    pub appearance: Option<LandscapeAppearance>,
+    pub appearance: LandscapeAppearance,
 }
 
 /// Coherent descriptor strengths use per-thousand integers, not source evidence.
-/// Codec 3 requires equal canopy/floor strengths, each at most 1000;
+/// The chunk codec requires equal canopy/floor strengths, each at most 1000;
 /// Savanna/Treeless ecology modes require both forest strengths to be zero.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,10 +62,11 @@ pub struct LandscapeResource {
 }
 
 /// Semantic selection only: these names do not approve or promote any art.
+/// Trees always carry a specific family; other resources are `Generic`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum ResourceVisualFamily {
-    Legacy,
+    Generic,
     Broadleaf,
     Conifer,
     DryScrub,
@@ -94,8 +95,8 @@ pub struct LandscapeDecoration {
 
 /// Extensions live with their objects, avoiding parallel-array length contracts.
 /// Explicit coordinates represent partial/sparse chunks in strict row-major
-/// order. Codec 3 allows one resource and one decoration per present tile cell,
-/// including their overlap. Legacy projection retains only implied coordinates.
+/// order. The codec allows one resource and one decoration per present tile
+/// cell, including their overlap.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LandscapeChunk {

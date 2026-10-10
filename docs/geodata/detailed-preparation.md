@@ -62,13 +62,13 @@ that fallback, including where modern evidence already says land. Wetlands,
 reservoirs, regulated lakes, and otherwise unknown water remain evidence-only
 unless an explicit cited correction changes the modeled cells.
 
-Schema-9 packages persist `HydrologyEvidencePage` and `ModernLandCoverPage` as
+Packages persist `HydrologyEvidencePage` and `ModernLandCoverPage` as
 separate level-zero evidence grids. Hydrology records the supported kind and
 its acquisition method; modern land cover retains the raw WorldCover class.
 Both grids participate in package roots, verification, and bounded residency,
-and terrain reads them through the package provider. Legacy `WaterPage`
-coverage remains present for schema-8 compatibility and overview fallback.
-Detailed preparation adds a separately versioned water-model page to each
+and terrain reads them through the package provider. The optional `WaterPage`
+coverage layer supplies the overview fallback. Detailed preparation adds a
+water-model page (model version 1, the only accepted version) to each
 typed evidence page. It joins four-neighbor natural-lake cells across page
 boundaries and assigns a common level from the lower quartile of adjacent
 Copernicus DEM heights sampled onto the hydrology grid. This is a modeled level
@@ -109,9 +109,8 @@ in the 64 KiB worker request alongside optional historical corrections.
 Omitted or empty corrections are valid; they apply no manual geographic
 changes, while the documented natural-water model is still prepared.
 
-New overview and modeled-water packages use generation recipe 7, which adds
-the deterministic forest and ground landscape. Recipes 5 and 6 remain readable
-with their original terrain output and package identities. Source-lock
+Overview and modeled-water packages use the single current generation recipe
+and its composed landscape. Source-lock
 preprocessing records `hydrology-gdal-page-v3`, `lake-surface-model-v2`, and
 `river-topology-profile-v1`. The vector adapter rewinds the OpenFileGDB cursor
 after the GDAL iterator's feature-count query, which otherwise can consume all
@@ -163,8 +162,8 @@ unknown or water-only cell therefore differs from valid historical zero in
 the verified page and terrain sampling. Missing land quantities and outside
 coverage still fail production preparation.
 
-The public `prepare_hyde_600` function remains available for recipe-3 package
-reproduction and keeps its nearest-cell semantics. Production source locks
+The public `prepare_hyde_600` helper keeps nearest-cell semantics and is not
+the production path. Production source locks
 identify this coverage-aware preparation as `hyde-600ad-area-pages-v3`, so its package
 identity changes through preprocessing identity and historical page roots. The
 source valid-land denominator retains HYDE's spherical square kilometers;
@@ -192,8 +191,6 @@ prepares history directly from the HYDE archive on an independent
 does not become a claim of 1024-axis source detail. The package records the
 actual historical field axis and provider lookup uses that axis. The older schema-1
 quantity document remains an intermediate format.
-Terrain generation semantics did not change, so the generation recipe remains
-unchanged.
 
 `HistoricalCorrectionDocument` is the versioned JSON contract for sparse
 whole-cell corrections. Schema 1 targets 600 CE, accepts grids from 2 through
@@ -208,7 +205,7 @@ capacity, ordering, evidence fields, and byte limit before accepting a
 document; versions other than schema 1 fail closed.
 
 The standalone allocation helpers keep `HydrologyPage` and
-`ModernLandCoverPage` as preparation intermediates. Schema-9 publication
+`ModernLandCoverPage` as preparation intermediates. Publication
 upgrades those inputs to the typed persisted evidence pages described above, so
 supported lake/river kinds and raw WorldCover classes remain distinguishable to
 terrain consumers. Separate modeled-water pages carry derived levels and

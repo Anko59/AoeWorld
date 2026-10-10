@@ -42,8 +42,7 @@ fn generator(error: Option<EnvironmentPageError>) -> (MapChunkGenerator, Arc<Sou
         calls: AtomicUsize::new(0),
         error,
     });
-    let mut generator = MapChunkGenerator::new([17; 32], 1, 128)
-        .with_elevation_sampling_recipe(crate::LANDSCAPE_GENERATION_RECIPE_VERSION);
+    let mut generator = MapChunkGenerator::new([17; 32], 1, 128);
     generator.provider = Some(source.clone());
     generator.provider_compression = Some(Ratio::new(1, 1).unwrap());
     generator.provider_environment = Some(Arc::new(PreparedEnvironment {

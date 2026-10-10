@@ -106,19 +106,33 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
         samples_per_axis: 2,
         geographic_millimeters_per_sample: 1_000,
         page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+        // The lazy provider serves level zero only; overview roots are index
+        // metadata that keep each pyramid canonical down to one sample.
         elevation: FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 2,
-                ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
-                    .expect("elevation root"),
-            }],
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
+                        .expect("elevation root"),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [5; 32],
+                },
+            ],
         },
         water: Some(FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 2,
-                ordered_page_root: ordered_water_page_root(std::slice::from_ref(&water))
-                    .expect("water root"),
-            }],
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_water_page_root(std::slice::from_ref(&water))
+                        .expect("water root"),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [6; 32],
+                },
+            ],
         }),
         vegetation: None,
         historical_land_use: None,
@@ -180,7 +194,6 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
         ),
     ]));
     let generator = MapChunkGenerator::new([8; 32], 3, 128)
-        .with_elevation_sampling_recipe(crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION)
         .with_page_provider(
             Ratio::new(1, 1).expect("ratio"),
             environment,
@@ -190,73 +203,54 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
     let expected_land = generator
         .tile_at(TileCoord::new(127, 127))
         .expect("corrected source land");
-    for recipe in [
-        crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION,
-        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION,
-        crate::GENERATION_RECIPE_VERSION,
-    ] {
-        let current = generator.clone().with_elevation_sampling_recipe(recipe);
-        for coordinate in [
-            TileCoord::new(0, 0),
-            TileCoord::new(0, 127),
-            TileCoord::new(127, 0),
-        ] {
-            assert_eq!(
-                current.tile_at(coordinate),
-                generator.tile_at(coordinate),
-                "recipe {recipe} retains modeled lake/coast and fallback wet terrain"
-            );
-        }
-        let generator = current;
-        let tile = generator
-            .tile_at_with_cancel(TileCoord::new(0, 0), &|| false)
-            .expect("tile query")
-            .expect("lake tile");
-        assert_eq!(tile.water, WaterKind::Lake);
-        assert_eq!(tile.water_provenance, Provenance::ModelDerived);
-        assert_eq!(tile.game_height_level, 12);
-        assert_eq!(tile.surface.corner_game_height_levels, [12; 4]);
-        assert_eq!(tile.surface.kind, SurfaceKind::Plateau);
-        assert_eq!(tile.material, GroundMaterial::Water);
-        assert!(!tile.passable);
+    let tile = generator
+        .tile_at_with_cancel(TileCoord::new(0, 0), &|| false)
+        .expect("tile query")
+        .expect("lake tile");
+    assert_eq!(tile.water, WaterKind::Lake);
+    assert_eq!(tile.water_provenance, Provenance::ModelDerived);
+    assert_eq!(tile.game_height_level, 12);
+    assert_eq!(tile.surface.corner_game_height_levels, [12; 4]);
+    assert_eq!(tile.surface.kind, SurfaceKind::Plateau);
+    assert_eq!(tile.material, GroundMaterial::Water);
+    assert!(!tile.passable);
 
-        let corrected_land = generator
-            .tile_at_with_cancel(TileCoord::new(127, 127), &|| false)
-            .expect("corrected land query")
-            .expect("corrected land tile");
-        assert_eq!(
-            corrected_land.geographic_height_centimeters,
-            expected_land.geographic_height_centimeters
-        );
-        assert_eq!(
-            corrected_land.game_height_level,
-            expected_land.game_height_level
-        );
-        assert_eq!(corrected_land.surface, expected_land.surface);
-        assert_eq!(corrected_land.passable, expected_land.passable);
-        assert_eq!(corrected_land.biome, expected_land.biome);
-        assert_eq!(
-            corrected_land.elevation_provenance,
-            expected_land.elevation_provenance
-        );
-        assert_eq!(corrected_land.water, WaterKind::None);
-        assert_eq!(
-            corrected_land.water_provenance,
-            Provenance::HistoricallyCorrected
-        );
+    let corrected_land = generator
+        .tile_at_with_cancel(TileCoord::new(127, 127), &|| false)
+        .expect("corrected land query")
+        .expect("corrected land tile");
+    assert_eq!(
+        corrected_land.geographic_height_centimeters,
+        expected_land.geographic_height_centimeters
+    );
+    assert_eq!(
+        corrected_land.game_height_level,
+        expected_land.game_height_level
+    );
+    assert_eq!(corrected_land.surface, expected_land.surface);
+    assert_eq!(corrected_land.passable, expected_land.passable);
+    assert_eq!(corrected_land.biome, expected_land.biome);
+    assert_eq!(
+        corrected_land.elevation_provenance,
+        expected_land.elevation_provenance
+    );
+    assert_eq!(corrected_land.water, WaterKind::None);
+    assert_eq!(
+        corrected_land.water_provenance,
+        Provenance::HistoricallyCorrected
+    );
 
-        let modern_land = generator
-            .tile_at_with_cancel(TileCoord::new(0, 127), &|| false)
-            .expect("modern land query")
-            .expect("historical fallback tile");
-        assert_eq!(modern_land.water, WaterKind::Lake);
+    let modern_land = generator
+        .tile_at_with_cancel(TileCoord::new(0, 127), &|| false)
+        .expect("modern land query")
+        .expect("historical fallback tile");
+    assert_eq!(modern_land.water, WaterKind::Lake);
 
-        let coast = generator
-            .tile_at_with_cancel(TileCoord::new(127, 0), &|| false)
-            .expect("coast tile query")
-            .expect("ocean tile");
-        assert_eq!(coast.water, WaterKind::Ocean);
-        assert_eq!(coast.water_provenance, Provenance::ModelDerived);
-        assert_eq!(coast.surface.corner_game_height_levels, [0; 4]);
-    }
+    let coast = generator
+        .tile_at_with_cancel(TileCoord::new(127, 0), &|| false)
+        .expect("coast tile query")
+        .expect("ocean tile");
+    assert_eq!(coast.water, WaterKind::Ocean);
+    assert_eq!(coast.water_provenance, Provenance::ModelDerived);
+    assert_eq!(coast.surface.corner_game_height_levels, [0; 4]);
 }

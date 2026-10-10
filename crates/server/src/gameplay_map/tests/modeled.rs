@@ -1,8 +1,8 @@
 use super::*;
 use aoe_map::{
-    HYDROLOGY_WATER_MODEL_VERSION, HydrologyEvidenceIndex, HydrologyEvidenceMethod,
-    HydrologyEvidencePage, HydrologyKind, HydrologyWaterModelIndex, HydrologyWaterModelPage,
-    HydrologyWaterPolicy, ModernLandCoverPage, WATER_MODEL_GENERATION_RECIPE_VERSION,
+    GENERATION_RECIPE_VERSION, HYDROLOGY_WATER_MODEL_VERSION, HydrologyEvidenceIndex,
+    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyWaterModelIndex,
+    HydrologyWaterModelPage, HydrologyWaterPolicy, ModernLandCoverPage,
     WORLD_COVER_OBSERVATION_YEAR, WaterCorrectionDocument, WaterFlowDirection,
     WaterModelProvenance, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
@@ -87,10 +87,7 @@ fn modeled_water_package_activates_and_cancellation_remains_bounded() {
     )
     .expect("modeled package");
     package.validate().expect("valid package identity");
-    assert_eq!(
-        package.generation_recipe_version,
-        WATER_MODEL_GENERATION_RECIPE_VERSION
-    );
+    assert_eq!(package.generation_recipe_version, GENERATION_RECIPE_VERSION);
     let provider = Arc::new(ModeledProvider {
         elevation: elevation_provider(),
         hydrology: Arc::new(EnvironmentPage::HydrologyEvidence(hydrology)),

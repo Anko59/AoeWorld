@@ -217,8 +217,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "landscape_fixture": {
             "kind": "synthetic-prepared-flat-temperate",
             "content_hash": fixture.hash,
-            "schema_version": 10,
-            "generation_recipe_version": 9,
+            "schema_version": aoe_map::MAP_SCHEMA_VERSION,
+            "generation_recipe_version": aoe_map::GENERATION_RECIPE_VERSION,
             "real_source_qualification": false
         },
         "result": "PASS"

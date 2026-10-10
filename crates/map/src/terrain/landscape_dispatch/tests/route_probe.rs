@@ -4,7 +4,7 @@ use crate::navigation::{DIAGONAL_COST, ORTHOGONAL_COST};
 use crate::{EdgePassability, MapPackage, MapRequest};
 
 fn exact_fixture() -> MapChunkGenerator {
-    let mut package = MapPackage::new(
+    let package = MapPackage::new(
         1,
         MapRequest {
             requested_side_meters: 30_720,
@@ -13,7 +13,6 @@ fn exact_fixture() -> MapChunkGenerator {
         Vec::new(),
     )
     .unwrap();
-    package.generation_recipe_version = crate::LANDSCAPE_GENERATION_RECIPE_VERSION;
     let original = package.generator();
     assert_eq!(original.width_tiles, 512);
     let mut generator = flat(original.procedural_seed, original.width_tiles);
@@ -72,7 +71,7 @@ fn clear(generator: &MapChunkGenerator, position: TileCoord) {
             .is_none(),
         "object disagrees at {position:?}"
     );
-    let appearance = point.tile.appearance.unwrap();
+    let appearance = point.tile.appearance;
     assert_eq!(
         (appearance.floor_strength, appearance.canopy_strength),
         (0, 0),
@@ -148,7 +147,7 @@ fn exact_simulation_fixture_has_clear_octile_optimal_fanout_to_every_opening() {
                 "route must have exact octile-optimal cost to {target:?}"
             );
             eprintln!(
-                "exact recipe9 clear fanout target={target:?} tiles={steps} optimal_cost={cost}, key={:?}",
+                "exact clear fanout target={target:?} tiles={steps} optimal_cost={cost}, key={:?}",
                 generator.geography_key
             );
         }

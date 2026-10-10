@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn detailed_worker_request_accepts_legacy_without_staging_scope() {
+    fn detailed_worker_request_without_staging_scope_is_accepted() {
         let request: WorkerRequest = serde_json::from_value(serde_json::json!({
             "operation": "prepare_detailed_directory",
             "cache_root": "/cache",
@@ -233,7 +233,7 @@ mod tests {
             "samples_per_axis": 128,
             "resolution": "glo90"
         }))
-        .expect("legacy detailed request");
+        .expect("detailed request");
         assert!(matches!(
             request,
             WorkerRequest::PrepareDetailedDirectory {

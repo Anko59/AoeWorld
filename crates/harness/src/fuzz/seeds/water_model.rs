@@ -39,71 +39,63 @@ pub(super) fn prepare(
     });
     modeled_page.validate()?;
 
-    let mut seeds = Vec::new();
-    for (version, name) in [(1, "v1"), (HYDROLOGY_WATER_MODEL_VERSION, "v2")] {
-        let page_bytes = serde_json::to_vec(&modeled_page)?;
-        seeds.push(write(
-            root,
-            "environment_page",
-            &format!("modeled-water-page-{name}"),
-            &page_bytes,
-        )?);
-
-        let model = HydrologyWaterModelIndex {
-            model_version: version,
-            samples_per_axis: u16::from(evidence.width),
-            target_year_ce: WATER_CORRECTION_TARGET_YEAR_CE,
-            correction_document: WaterCorrectionDocument::empty(
-                request,
-                u16::from(evidence.width),
-            )?,
-        };
-        model.validate()?;
-        let index = HydrologyEvidenceIndex {
-            samples_per_axis: u16::from(evidence.width),
-            page_samples: ENVIRONMENT_PAGE_SAMPLES,
-            world_cover_year: WORLD_COVER_OBSERVATION_YEAR,
-            policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
-            hydrology_page_root: ordered_hydrology_page_root(std::slice::from_ref(&modeled_page))?,
-            modern_land_cover_page_root: ordered_modern_land_cover_page_root(
-                std::slice::from_ref(land_cover),
-            )?,
-            water_model: Some(model),
-        };
-        let environment = PreparedEnvironment {
-            samples_per_axis: u16::from(evidence.width),
-            geographic_millimeters_per_sample: 1_000,
-            page_samples: ENVIRONMENT_PAGE_SAMPLES,
-            elevation: FieldPyramid {
-                levels: vec![
-                    PyramidLevel {
-                        samples_per_axis: u16::from(evidence.width),
-                        ordered_page_root: [1; 32],
-                    },
-                    PyramidLevel {
-                        samples_per_axis: 1,
-                        ordered_page_root: [2; 32],
-                    },
-                ],
-            },
-            hydrology_evidence: Some(index),
-            ..PreparedEnvironment::default()
-        };
-        let package = MapPackage::with_prepared_environment(
-            MAP_SCHEMA_VERSION,
-            request,
-            Vec::new(),
-            Default::default(),
-            Default::default(),
-            environment,
-        )?;
-        package.validate()?;
-        seeds.push(write(
-            root,
-            "map_package",
-            &format!("modeled-water-{name}"),
-            &serde_json::to_vec(&package)?,
-        )?);
-    }
+    let mut seeds = vec![write(
+        root,
+        "environment_page",
+        "modeled-water-page",
+        &serde_json::to_vec(&modeled_page)?,
+    )?];
+    let model = HydrologyWaterModelIndex {
+        model_version: HYDROLOGY_WATER_MODEL_VERSION,
+        samples_per_axis: u16::from(evidence.width),
+        target_year_ce: WATER_CORRECTION_TARGET_YEAR_CE,
+        correction_document: WaterCorrectionDocument::empty(request, u16::from(evidence.width))?,
+    };
+    model.validate()?;
+    let index = HydrologyEvidenceIndex {
+        samples_per_axis: u16::from(evidence.width),
+        page_samples: ENVIRONMENT_PAGE_SAMPLES,
+        world_cover_year: WORLD_COVER_OBSERVATION_YEAR,
+        policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+        hydrology_page_root: ordered_hydrology_page_root(std::slice::from_ref(&modeled_page))?,
+        modern_land_cover_page_root: ordered_modern_land_cover_page_root(std::slice::from_ref(
+            land_cover,
+        ))?,
+        water_model: Some(model),
+    };
+    let environment = PreparedEnvironment {
+        samples_per_axis: u16::from(evidence.width),
+        geographic_millimeters_per_sample: 1_000,
+        page_samples: ENVIRONMENT_PAGE_SAMPLES,
+        elevation: FieldPyramid {
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: u16::from(evidence.width),
+                    ordered_page_root: [1; 32],
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: [2; 32],
+                },
+            ],
+        },
+        hydrology_evidence: Some(index),
+        ..PreparedEnvironment::default()
+    };
+    let package = MapPackage::with_prepared_environment(
+        MAP_SCHEMA_VERSION,
+        request,
+        Vec::new(),
+        Default::default(),
+        Default::default(),
+        environment,
+    )?;
+    package.validate()?;
+    seeds.push(write(
+        root,
+        "map_package",
+        "modeled-water",
+        &serde_json::to_vec(&package)?,
+    )?);
     Ok(seeds)
 }

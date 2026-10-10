@@ -1,5 +1,5 @@
 use super::super::{PREVIEW_SAMPLES_PER_AXIS, preview};
-use super::modeled_source_package;
+use super::{elevation_overview, modeled_source_package};
 use aoe_map::{GroundMaterial, MAP_SCHEMA_VERSION, MapPackage, MapRequest, SourceLock, WaterKind};
 use axum::{
     extract::{Path, State},
@@ -65,8 +65,15 @@ fn persist_source_fixture(directory: &FsPath) -> MapPackage {
         serde_json::to_vec(&land_cover).expect("land-cover JSON"),
     )
     .expect("write modern land-cover page");
-    crate::map_store::persist_prepared(Some(directory), &package, &[elevation], &[], &[], &[])
-        .expect("persist source package and elevation page");
+    crate::map_store::persist_prepared(
+        Some(directory),
+        &package,
+        &[elevation, elevation_overview()],
+        &[],
+        &[],
+        &[],
+    )
+    .expect("persist source package and elevation page");
     package
 }
 

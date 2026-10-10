@@ -75,9 +75,9 @@ Required overflow fails; never discard visible trees or regroup painter order.
 Page and UV travel together through shared terrain samples and sprite frames.
 Selectors append at byte 96 of the 112-byte ABI (primary, two blends, appearance
 word); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
-Legacy sprites retain the exact reserved-zero fourth word.
+Sprites without landscape appearance keep a zero fourth word.
 WebGPU uses D2Array, WebGL2 uses integer attribute 6 and TEXTURE_2D_ARRAY, and
-Canvas samples page-major pixels with lazily created legacy page canvases.
+Canvas samples page-major pixels with lazily created per-page canvases.
 Diagnostic WebGPU still uses one 8-square layer (256 bytes), with actual texture
 size/layers reported separately from gameplay. GL/Canvas have no GPU counter
 observation API; unavailable measurements must not become fabricated counters.
@@ -85,10 +85,11 @@ observation API; unavailable measurements must not become fabricated counters.
 Canvas copies, transient uploads and presentation buffers remain separately real.
 Synthetic page/depth/blend/restoration pixels do not qualify France or hardware.
 
-## Opt-in landscape appearance
+## Landscape appearance
 
-Scene terrain carries optional canopy/floor strength, palette, exposure and height
-band. None follows the exact legacy kernel. Displayed triangles retain a packed
+Map chunks always carry canopy/floor strength, palette, exposure and height band.
+Scene terrain without that metadata (synthetic, non-map scenes) is None and uses
+the base material kernel. Displayed triangles retain a packed
 u32 sidecar (private field, not a public DTO change), with zero for None and a
 presence bit for Some zero-strength metadata. Canonical nearest world-cell-centre
 ownership with tile-key tie breaks
@@ -107,14 +108,15 @@ height are carried semantic evidence, not species/art selection permissions.
 
 New vegetative faces blend coherent grass (dry grass in dry/savanna regions) with
 forest detail, uniformly falling back to dirt when forest frames are absent.
-Weights are (1-floor/1000, floor/1000, 0), not legacy barycentric weights. The
+Weights are (1-floor/1000, floor/1000, 0), not base-material barycentric weights. The
 primary and both secondary page addresses still travel together without extra
 geometry, atlas allocations or draw-order regrouping. Restrained palette channel
 multipliers and canopy shading (at most 12%) follow face lighting, with shared
 byte rounding in Canvas, WGSL and GLSL. This does not qualify forest accent sheets
 as seamless full-sheet art; that review limitation above remains in force.
 
-Resource family zero keeps exact legacy variant selection. Families 1–4 explicitly
+Resource family zero (`Generic`, non-tree resources) keeps the base variant
+selection. Families 1–4 explicitly
 fall back to healthy approved broadleaf 4652 frames, paired with 2296 shadows;
 client culling and renderer selection share scene_resource_frame. No conifer,
 dry-scrub, tropical or cliff sheet is approved by its semantic name. Decorations

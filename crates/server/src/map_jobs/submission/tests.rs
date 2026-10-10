@@ -71,7 +71,7 @@ async fn reused_key_cannot_change_request_or_preference_and_invalid_keys_are_rej
 }
 
 #[tokio::test]
-async fn legacy_journal_loads_and_duplicate_or_invalid_submission_keys_fail() {
+async fn other_journal_schemas_and_duplicate_or_invalid_submission_keys_fail() {
     let (state, _, _) = map_jobs::tests::state_with_job();
     let directory = tempfile::tempdir().unwrap();
     journal::persist(Some(directory.path()), &*state.map_jobs.lock().await)
@@ -80,10 +80,13 @@ async fn legacy_journal_loads_and_duplicate_or_invalid_submission_keys_fail() {
     let path = directory.path().join("jobs/history.json");
     let mut value: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    value["schema"] = 1.into();
-    std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(Manager::load(Some(directory.path()), &BTreeMap::new()).is_ok());
-    value["schema"] = 2.into();
+    for schema in [0, 2] {
+        value["schema"] = schema.into();
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(Manager::load(Some(directory.path()), &BTreeMap::new()).is_err());
+    }
+    value["schema"] = 1.into();
     value["jobs"][0]["submission"] = serde_json::json!({"key": "bad", "preference": "automatic"});
     std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(Manager::load(Some(directory.path()), &BTreeMap::new()).is_err());

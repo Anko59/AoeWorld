@@ -19,7 +19,7 @@ pub enum ScaleQualificationError {
     )]
     ReferenceConfiguration { actual: Vec<u64> },
     #[error(
-        "source scale package `{package_hash}` is not a recipe-5/6 source-backed {tiles_per_side}-tile 1:1 package"
+        "source scale package `{package_hash}` is not a current-recipe source-backed {tiles_per_side}-tile 1:1 package"
     )]
     UnsupportedPackage {
         tiles_per_side: u64,

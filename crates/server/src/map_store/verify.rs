@@ -98,20 +98,13 @@ fn field<T: StoredPage>(
     let directory = root.join(layer.directory_name());
     require_directory(&directory)?;
     let side = u16::from(ENVIRONMENT_PAGE_SAMPLES);
-    let mut legacy_index = 0;
     for (level, metadata) in index.levels.iter().enumerate() {
         let count = metadata.samples_per_axis.div_ceil(side);
         let mut digest = PageRootBuilder::new(layer, usize::from(count).pow(2))
             .map_err(|error| invalid(&directory, error))?;
         for y in 0..count {
             for x in 0..count {
-                let coordinate_path = directory.join(format!("{level}-{x}-{y}.json"));
-                let path = if layer == PageLayer::Elevation || coordinate_path.try_exists()? {
-                    coordinate_path
-                } else {
-                    directory.join(format!("{legacy_index}.json"))
-                };
-                legacy_index += 1;
+                let path = directory.join(format!("{level}-{x}-{y}.json"));
                 let page: T = read(&path)?;
                 let width = (metadata.samples_per_axis - x * side).min(side) as u8;
                 let height = (metadata.samples_per_axis - y * side).min(side) as u8;

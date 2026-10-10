@@ -230,36 +230,31 @@ fn modeled_water_pages_validate_categories_levels_and_flow_and_affect_roots() {
 }
 
 #[test]
-fn legacy_water_model_v1_roundtrips_with_stable_hash_and_unknown_versions_fail() {
+fn water_model_index_roundtrips_with_stable_hash_and_other_versions_fail() {
     let request = crate::MapRequest::default();
-    let legacy = HydrologyWaterModelIndex {
-        model_version: 1,
+    let current = HydrologyWaterModelIndex {
+        model_version: HYDROLOGY_WATER_MODEL_VERSION,
         samples_per_axis: 2,
         target_year_ce: WATER_CORRECTION_TARGET_YEAR_CE,
         correction_document: WaterCorrectionDocument::empty(request, 2).expect("empty corrections"),
     };
-    assert!(legacy.validate().is_ok());
-    let encoded = serde_json::to_vec(&legacy).expect("serialized legacy model");
+    assert!(current.validate().is_ok());
+    let encoded = serde_json::to_vec(&current).expect("serialized model");
     let decoded: HydrologyWaterModelIndex =
-        serde_json::from_slice(&encoded).expect("decoded legacy model");
-    assert_eq!(decoded, legacy);
+        serde_json::from_slice(&encoded).expect("decoded model");
+    assert_eq!(decoded, current);
     assert_eq!(
         serde_json::to_vec(&decoded).expect("re-serialized model"),
         encoded
     );
-
     let identity = |index: &HydrologyWaterModelIndex| {
         let mut hash = blake3::Hasher::new();
         index.hash_into(&mut hash);
         *hash.finalize().as_bytes()
     };
-    assert_eq!(identity(&decoded), identity(&legacy));
-    let mut current = legacy.clone();
-    current.model_version = HYDROLOGY_WATER_MODEL_VERSION;
-    assert!(current.validate().is_ok());
-    assert_ne!(identity(&current), identity(&legacy));
-    for model_version in [0, 3] {
-        let mut unsupported = legacy.clone();
+    assert_eq!(identity(&decoded), identity(&current));
+    for model_version in [0, 2, 3] {
+        let mut unsupported = current.clone();
         unsupported.model_version = model_version;
         assert_eq!(unsupported.validate(), Err(EnvironmentError::InvalidIndex));
     }

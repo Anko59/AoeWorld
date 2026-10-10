@@ -27,13 +27,6 @@ const PAGE_INDEX_ENTRY_BYTES: usize = 96;
 #[derive(Clone, Debug)]
 struct PageEntry {
     expected_hash: [u8; 32],
-    location: PageLocation,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum PageLocation {
-    Coordinate,
-    Legacy(u32),
 }
 
 #[derive(Debug, Default)]
@@ -211,7 +204,6 @@ fn scan_layer(
     cancelled: &dyn Fn() -> bool,
 ) -> Result<(), MapStoreError> {
     let directory = root.join(layer.directory_name());
-    let mut legacy_index = 0_u32;
     for (level, metadata) in field.levels.iter().enumerate() {
         let side = u16::from(ENVIRONMENT_PAGE_SAMPLES);
         let count = metadata.samples_per_axis.div_ceil(side);
@@ -225,29 +217,13 @@ fn scan_layer(
                 if entries.len().saturating_add(1) > MAX_PAGE_INDEX_BYTES / PAGE_INDEX_ENTRY_BYTES {
                     return Err(invalid(&directory, "prepared page index exceeds its bound"));
                 }
-                let coordinate = directory.join(format!("{level}-{x}-{y}.json"));
-                let location = if layer == PageLayer::Elevation || coordinate.try_exists()? {
-                    PageLocation::Coordinate
-                } else {
-                    legacy_index = legacy_index.saturating_add(1);
-                    PageLocation::Legacy(legacy_index.saturating_sub(1))
-                };
-                // Legacy pages use the same deterministic row-major numbering
-                // as the old reader, including coordinates that happen to be
-                // present in the mixed layout.
-                if matches!(location, PageLocation::Coordinate) {
-                    legacy_index = legacy_index.saturating_add(1);
-                }
                 let key = EnvironmentPageKey {
                     layer,
                     level: level as u8,
                     x,
                     y,
                 };
-                let path = match location {
-                    PageLocation::Coordinate => coordinate,
-                    PageLocation::Legacy(index) => directory.join(format!("{index}.json")),
-                };
+                let path = directory.join(format!("{level}-{x}-{y}.json"));
                 let bytes = read_bounded_file(&path, MAX_PAGE_BYTES, "environment page")?;
                 let page = decode_page(key, &bytes).map_err(|reason| invalid(&path, reason))?;
                 let expected_dimensions = (
@@ -264,7 +240,6 @@ fn scan_layer(
                         key,
                         PageEntry {
                             expected_hash: hash,
-                            location,
                         },
                     )
                     .is_some()
@@ -332,7 +307,6 @@ fn scan_evidence_layer(
                     key,
                     PageEntry {
                         expected_hash: hash,
-                        location: PageLocation::Coordinate,
                     },
                 )
                 .is_some()
@@ -356,14 +330,8 @@ fn scan_evidence_layer(
 
 impl PageEntry {
     fn path(&self, root: &Path, key: EnvironmentPageKey) -> PathBuf {
-        match self.location {
-            PageLocation::Coordinate => root
-                .join(key.layer.directory_name())
-                .join(format!("{}-{}-{}.json", key.level, key.x, key.y)),
-            PageLocation::Legacy(index) => root
-                .join(key.layer.directory_name())
-                .join(format!("{index}.json")),
-        }
+        root.join(key.layer.directory_name())
+            .join(format!("{}-{}-{}.json", key.level, key.x, key.y))
     }
 }
 

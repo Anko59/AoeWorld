@@ -1,7 +1,7 @@
 use super::*;
 use crate::{EdgePassability, ResourceOverlay, SurfaceKind};
 
-fn old_predicate(from: Tile, to: Tile) -> EdgePassability {
+fn expected_edge(from: Tile, to: Tile) -> EdgePassability {
     if !from.passable
         || !to.passable
         || !from.surface.walkable()
@@ -61,7 +61,6 @@ fn physical_sources() -> (MapChunkGenerator, MapChunkGenerator) {
     dense.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 4,
         compression: Ratio::new(30, 1).unwrap(),
-        sampling_recipe: crate::LANDSCAPE_GENERATION_RECIPE_VERSION,
         pages: [((0, 0), elevation.clone())].into(),
     }));
     // Keep vegetation procedural on both paths; physical terrain is independent
@@ -90,10 +89,9 @@ fn physical_sources() -> (MapChunkGenerator, MapChunkGenerator) {
 }
 
 #[test]
-fn base_edges_match_old_composed_physics_on_fallback_dense_and_provider() {
+fn base_edges_match_composed_physics_on_fallback_dense_and_provider() {
     let (dense, source) = physical_sources();
-    let fallback = MapChunkGenerator::new([17; 32], 1, 16)
-        .with_elevation_sampling_recipe(crate::LANDSCAPE_GENERATION_RECIPE_VERSION);
+    let fallback = MapChunkGenerator::new([17; 32], 1, 16);
     let mut saw_water = false;
     let mut saw_cliff = false;
     let mut saw_height_gap = false;
@@ -125,7 +123,7 @@ fn base_edges_match_old_composed_physics_on_fallback_dense_and_provider() {
                         - i32::from(other.game_height_level))
                     .abs()
                         > 1;
-                    let expected = old_predicate(composed, other);
+                    let expected = expected_edge(composed, other);
                     saw_passable |= expected == EdgePassability::Passable;
                     assert_eq!(generator.edge_between(tile, next), expected);
                     assert_eq!(
@@ -306,29 +304,4 @@ fn provider_errors_are_not_cached_by_physical_or_combined_queries() {
             .unwrap()
             .is_some()
     );
-}
-
-#[test]
-fn legacy_pairs_and_edges_retain_the_old_ordered_queries() {
-    for recipe in 3..=8 {
-        let generator = flat(1, 16).with_elevation_sampling_recipe(recipe);
-        for tile in [
-            TileCoord::new(1, 1),
-            TileCoord::new(8, 8),
-            TileCoord::new(-1, 0),
-        ] {
-            let sample = generator.tile_at_with_cancel(tile, &|| false).unwrap();
-            let node = generator.object_at_with_cancel(tile, &|| false).unwrap();
-            assert_eq!(
-                generator
-                    .tile_and_node_with_cancel(tile, &|| false)
-                    .unwrap(),
-                sample.map(|sample| (sample, node))
-            );
-            let next = TileCoord::new(tile.x + 1, tile.y);
-            if let (Some(from), Some(to)) = (sample, generator.tile_at(next)) {
-                assert_eq!(generator.edge_between(tile, next), old_predicate(from, to));
-            }
-        }
-    }
 }

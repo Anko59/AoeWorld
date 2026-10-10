@@ -1,10 +1,9 @@
 use super::Result;
 use aoe_map::{
-    CompactChunk, ENVIRONMENT_PAGE_SAMPLES, FieldPyramid, HydrologyEvidenceIndex,
-    HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyObservation,
-    HydrologyWaterPolicy, MAP_SCHEMA_VERSION, MapChunkGenerator, MapPackage, MapRequest,
-    ModernLandCoverPage, PreparedEnvironment, PyramidLevel, WORLD_COVER_OBSERVATION_YEAR,
-    ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
+    ENVIRONMENT_PAGE_SAMPLES, FieldPyramid, HydrologyEvidenceIndex, HydrologyEvidenceMethod,
+    HydrologyEvidencePage, HydrologyKind, HydrologyWaterPolicy, MAP_SCHEMA_VERSION, MapPackage,
+    MapRequest, ModernLandCoverPage, PreparedEnvironment, PyramidLevel,
+    WORLD_COVER_OBSERVATION_YEAR, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
 };
 use serde::Serialize;
 use std::{
@@ -12,8 +11,8 @@ use std::{
     io::{ErrorKind, Write},
     path::Path,
 };
+mod chunks;
 mod history;
-mod landscape;
 mod water_model;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -43,29 +42,29 @@ pub(super) struct SeedInventory {
     pub verified_legacy_seeds: Vec<Seed>,
 }
 
-struct LegacySeed {
+struct CheckedInSeed {
     target: &'static str,
     name: &'static str,
     bytes: &'static [u8],
 }
 
-const LEGACY_SEEDS: [LegacySeed; 4] = [
-    LegacySeed {
+const CHECKED_IN_SEEDS: [CheckedInSeed; 4] = [
+    CheckedInSeed {
         target: "drs",
         name: "one-entry.drs",
         bytes: include_bytes!("../../../../fuzz/corpus/drs/one-entry.drs"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "manifest",
         name: "minimal.json",
         bytes: include_bytes!("../../../../fuzz/corpus/manifest/minimal.json"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "palette",
         name: "jasc.pal",
         bytes: include_bytes!("../../../../fuzz/corpus/palette/jasc.pal"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "slp",
         name: "two-pixels.slp",
         bytes: include_bytes!("../../../../fuzz/corpus/slp/two-pixels.slp"),
@@ -152,12 +151,6 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
         "typed-package",
         &serde_json::to_vec(&typed)?,
     )?);
-    prepared_seeds.push(write(
-        root,
-        "map_package",
-        "schema8-default",
-        include_bytes!("../../../map/tests/fixtures/schema8-default-package.json"),
-    )?);
     for (name, field) in [
         (
             "elevation",
@@ -191,22 +184,18 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
             &serde_json::to_vec(&page)?,
         )?);
     }
-    for name in ["hydrology-evidence", "schema9-typed-hydrology"] {
-        prepared_seeds.push(write(
-            root,
-            "environment_page",
-            name,
-            &serde_json::to_vec(&hydrology)?,
-        )?);
-    }
-    for name in ["modern-land-cover", "schema9-modern-land-cover"] {
-        prepared_seeds.push(write(
-            root,
-            "environment_page",
-            name,
-            &serde_json::to_vec(&land_cover)?,
-        )?);
-    }
+    prepared_seeds.push(write(
+        root,
+        "environment_page",
+        "hydrology-evidence",
+        &serde_json::to_vec(&hydrology)?,
+    )?);
+    prepared_seeds.push(write(
+        root,
+        "environment_page",
+        "modern-land-cover",
+        &serde_json::to_vec(&land_cover)?,
+    )?);
     prepared_seeds.extend(water_model::prepare(
         root,
         MapRequest::default(),
@@ -214,56 +203,13 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
         &land_cover,
     )?);
     prepared_seeds.extend(history::prepare(root)?);
-    let chunk = MapChunkGenerator::new([3; 32], 7, 32).chunk(0, 0)?;
-    prepared_seeds.push(write(
-        root,
-        "map_chunk",
-        "full-chunk",
-        &chunk_bytes(&chunk)?,
-    )?);
-    let mut observed_tile = chunk.tiles[0];
-    observed_tile.hydrology_observation = Some(HydrologyObservation {
-        kind: HydrologyKind::Land,
-        method: HydrologyEvidenceMethod::WorldCoverClass,
-    });
-    observed_tile.modern_land_cover_class = Some(10);
-    let observed = aoe_map::Chunk {
-        x: 0,
-        y: 0,
-        tiles: vec![observed_tile],
-        resources: Vec::new(),
-    };
-    prepared_seeds.push(write(
-        root,
-        "map_chunk",
-        "typed-v2",
-        &chunk_bytes(&observed)?,
-    )?);
-    prepared_seeds.push(write(root, "map_chunk", "invalid-hex", b"not-hex-payload")?);
-    prepared_seeds.push(write(root, "map_chunk", "empty-legacy", &[1, 0, 0, 0, 0])?);
-    prepared_seeds.push(write(
-        root,
-        "map_chunk",
-        "one-tile-v1",
-        &[
-            1, 1, 0, 0, 0, 2, 0xde, 0xff, 0xff, 0xa9, 0xff, 0xa9, 0xff, 0xa9, 0xff, 0xa9, 0xff,
-            0xa9, 0xff, 0x65, 0xc3, 0x16, 0x00,
-        ],
-    )?);
-    landscape::prepare(root, &mut prepared_seeds)?;
+    prepared_seeds.extend(chunks::prepare(root)?);
     Ok(SeedInventory {
         prepared_seeds,
         verified_legacy_seeds: verify_legacy_seeds(root)?,
     })
 }
 
-fn chunk_bytes(chunk: &aoe_map::Chunk) -> Result<Vec<u8>> {
-    let hex = CompactChunk::encode(chunk)?.payload_hex;
-    hex.as_bytes()
-        .chunks_exact(2)
-        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair)?, 16).map_err(Into::into))
-        .collect()
-}
 fn write(root: &Path, target: &'static str, name: &str, bytes: &[u8]) -> Result<Seed> {
     let directory = root.join("fuzz/corpus").join(target);
     fs::create_dir_all(&directory)?;
@@ -301,7 +247,7 @@ fn retain(path: &Path, bytes: &[u8]) -> Result<bool> {
 }
 
 pub(super) fn verify_legacy_seeds(root: &Path) -> Result<Vec<Seed>> {
-    LEGACY_SEEDS
+    CHECKED_IN_SEEDS
         .iter()
         .map(|legacy| {
             let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);

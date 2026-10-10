@@ -10,23 +10,11 @@ fuzz_target!(|bytes: &[u8]| {
         y: 0,
         payload_hex,
     };
+    // Every accepted chunk must retain every explicit scene field.
     if let Ok(chunk) = encoded.decode() {
         assert!(
             aoe_map::CompactChunk::encode(&chunk)
                 .and_then(|value| value.decode())
-                .is_ok_and(|roundtrip| roundtrip == chunk)
-        );
-    }
-    // New schema-aware caller must retain every explicit scene field. Legacy
-    // projections may contain coordinates forbidden by v3, so only v3 inputs
-    // require a new-format roundtrip; all formats still reach the new reader.
-    let landscape = encoded.decode_landscape();
-    if encoded.payload_hex.starts_with("03")
-        && let Ok(chunk) = landscape
-    {
-        assert!(
-            aoe_map::CompactChunk::encode_landscape(&chunk)
-                .and_then(|value| value.decode_landscape())
                 .is_ok_and(|roundtrip| roundtrip == chunk)
         );
     }

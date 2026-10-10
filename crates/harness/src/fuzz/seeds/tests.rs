@@ -1,29 +1,30 @@
 use super::*;
+use aoe_map::CompactChunk;
+
 #[test]
 fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
     let root = tempfile::tempdir().unwrap();
     let inventory = prepare(root.path()).unwrap();
     let corpus = root.path().join("fuzz/corpus");
-    let package: MapPackage =
-        serde_json::from_slice(&fs::read(corpus.join("map_package/package")).unwrap()).unwrap();
-    package.validate().unwrap();
-    for name in ["typed-package", "schema8-default"] {
-        let package: MapPackage =
-            serde_json::from_slice(&fs::read(corpus.join("map_package").join(name)).unwrap())
-                .unwrap();
+    for name in ["package", "typed-package", "modeled-water"] {
+        let bytes = fs::read(corpus.join("map_package").join(name)).unwrap();
+        let package: MapPackage = serde_json::from_slice(&bytes).unwrap();
         package.validate().unwrap();
-        if name == "typed-package" {
-            assert_eq!(package.schema_version, MAP_SCHEMA_VERSION);
-            assert_eq!(package.schema_version, 9);
+        assert_eq!(package.schema_version, MAP_SCHEMA_VERSION);
+        assert_eq!(
+            package.generation_recipe_version,
+            aoe_map::GENERATION_RECIPE_VERSION
+        );
+        let canonical = serde_json::to_vec(&package).unwrap();
+        let decoded: MapPackage = serde_json::from_slice(&canonical).unwrap();
+        assert_eq!(decoded, package);
+        if name != "package" {
             assert!(package.environment.hydrology_evidence.is_some());
         }
     }
-    for name in ["modeled-water-v1", "modeled-water-v2"] {
-        let package: MapPackage =
-            serde_json::from_slice(&fs::read(corpus.join("map_package").join(name)).unwrap())
-                .unwrap();
-        package.validate().unwrap();
-    }
+    let request: MapRequest =
+        serde_json::from_slice(&fs::read(corpus.join("map_package/request")).unwrap()).unwrap();
+    assert_eq!(request.normalized().unwrap(), request);
     macro_rules! check {
         ($name:expr, $kind:ty) => {
             let page: $kind = serde_json::from_slice(
@@ -38,86 +39,62 @@ fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
     check!("vegetation", aoe_map::PotentialBiomePage);
     check!("history", aoe_map::HistoricalLandUsePage);
     check!("history-compact-coverage", aoe_map::HistoricalLandUsePage);
-    check!("history-legacy-coverage", aoe_map::HistoricalLandUsePage);
     check!("hydrology-evidence", aoe_map::HydrologyEvidencePage);
-    check!("schema9-typed-hydrology", aoe_map::HydrologyEvidencePage);
-    check!("modeled-water-page-v1", aoe_map::HydrologyEvidencePage);
-    check!("modeled-water-page-v2", aoe_map::HydrologyEvidencePage);
+    check!("modeled-water-page", aoe_map::HydrologyEvidencePage);
     check!("modern-land-cover", aoe_map::ModernLandCoverPage);
-    check!("schema9-modern-land-cover", aoe_map::ModernLandCoverPage);
-    let invalid = fs::read(corpus.join("map_chunk/invalid-hex")).unwrap();
+    let compact: serde_json::Value = serde_json::from_slice(
+        &fs::read(corpus.join("environment_page/history-compact-coverage")).unwrap(),
+    )
+    .unwrap();
+    assert!(compact["coverage"].is_string());
+    let chunk = |name: &str| CompactChunk {
+        x: 0,
+        y: 0,
+        payload_hex: fs::read_to_string(corpus.join("map_chunk").join(name)).unwrap(),
+    };
     assert_eq!(
-        CompactChunk {
-            x: 0,
-            y: 0,
-            payload_hex: String::from_utf8_lossy(&invalid).into_owned(),
-        }
-        .decode(),
+        chunk("invalid-hex").decode(),
         Err(aoe_map::CompactChunkError::InvalidHex)
     );
+    for name in ["full-chunk-hex", "typed-tile-hex", "empty-hex"] {
+        let encoded = chunk(name);
+        assert!(encoded.payload_hex.starts_with("04"), "{name}");
+        let scene = encoded.decode().unwrap();
+        assert_eq!(CompactChunk::encode(&scene).unwrap(), encoded);
+        match name {
+            "full-chunk-hex" => assert_eq!(scene.tiles.len(), 1024),
+            "typed-tile-hex" => {
+                assert_eq!(scene.tiles.len(), 1);
+                assert_eq!(scene.tiles[0].terrain.modern_land_cover_class, Some(10));
+            }
+            _ => assert!(scene.tiles.is_empty()),
+        }
+    }
     for path in [
-        "fuzz/corpus/environment_page/schema9-typed-hydrology",
-        "fuzz/corpus/environment_page/schema9-modern-land-cover",
-        "fuzz/corpus/environment_page/modeled-water-page-v1",
-        "fuzz/corpus/environment_page/modeled-water-page-v2",
+        "fuzz/corpus/map_package/modeled-water",
+        "fuzz/corpus/environment_page/modeled-water-page",
         "fuzz/corpus/environment_page/history-compact-coverage",
-        "fuzz/corpus/environment_page/history-legacy-coverage",
-        "fuzz/corpus/map_package/modeled-water-v1",
-        "fuzz/corpus/map_package/modeled-water-v2",
-        "fuzz/corpus/map_chunk/one-tile-v1",
+        "fuzz/corpus/map_chunk/full-chunk-hex",
     ] {
         assert!(
             inventory
                 .prepared_seeds
                 .iter()
-                .any(|seed| seed.path == path)
+                .any(|seed| seed.path == path),
+            "{path}"
         );
     }
-    for legacy in &LEGACY_SEEDS {
-        let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);
-        assert_eq!(fs::read(root.path().join(&path)).unwrap(), legacy.bytes);
+    for checked_in in &CHECKED_IN_SEEDS {
+        let path = format!("fuzz/corpus/{}/{}", checked_in.target, checked_in.name);
+        assert_eq!(fs::read(root.path().join(&path)).unwrap(), checked_in.bytes);
         let seed = inventory
             .verified_legacy_seeds
             .iter()
             .find(|seed| seed.path == path)
-            .expect("verified legacy seed");
+            .expect("verified asset-format seed");
         assert_eq!(
             seed.blake3_hex,
-            blake3::hash(legacy.bytes).to_hex().to_string()
-        );
-    }
-    let hydrology_alias = fs::read(corpus.join("environment_page/hydrology-evidence")).unwrap();
-    let hydrology_schema9 =
-        fs::read(corpus.join("environment_page/schema9-typed-hydrology")).unwrap();
-    let land_cover_alias = fs::read(corpus.join("environment_page/modern-land-cover")).unwrap();
-    let land_cover_schema9 =
-        fs::read(corpus.join("environment_page/schema9-modern-land-cover")).unwrap();
-    assert_eq!(hydrology_alias, hydrology_schema9);
-    assert_eq!(land_cover_alias, land_cover_schema9);
-    assert_ne!(hydrology_schema9, land_cover_schema9);
-    let hydrology: aoe_map::HydrologyEvidencePage =
-        serde_json::from_slice(&hydrology_schema9).unwrap();
-    let land_cover: aoe_map::ModernLandCoverPage =
-        serde_json::from_slice(&land_cover_schema9).unwrap();
-    assert_ne!(
-        hydrology.content_hash().unwrap(),
-        land_cover.content_hash().unwrap()
-    );
-    for name in ["one-tile-v1", "typed-v2"] {
-        let bytes = fs::read(corpus.join("map_chunk").join(name)).unwrap();
-        assert_eq!(bytes[0], if name == "one-tile-v1" { 1 } else { 2 });
-        let payload_hex = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-        let chunk = CompactChunk {
-            x: 0,
-            y: 0,
-            payload_hex,
-        }
-        .decode()
-        .unwrap();
-        assert_eq!(chunk.tiles.len(), 1);
-        assert_eq!(
-            chunk.tiles[0].modern_land_cover_class,
-            if name == "typed-v2" { Some(10) } else { None },
+            blake3::hash(checked_in.bytes).to_hex().to_string()
         );
     }
     fs::write(corpus.join("map_chunk/discovered"), b"keep").unwrap();
@@ -129,149 +106,30 @@ fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
 }
 
 #[test]
-fn modeled_water_versions_and_historical_coverage_seeds_roundtrip_hashes() {
-    let root = tempfile::tempdir().unwrap();
-    let inventory = prepare(root.path()).unwrap();
-    let corpus = root.path().join("fuzz/corpus");
-    let package = |name: &str| {
-        let bytes = fs::read(corpus.join("map_package").join(name)).unwrap();
-        let parsed: MapPackage = serde_json::from_slice(&bytes).unwrap();
-        parsed.validate().unwrap();
-        let canonical = serde_json::to_vec(&parsed).unwrap();
-        let decoded: MapPackage = serde_json::from_slice(&canonical).unwrap();
-        assert_eq!(decoded, parsed);
-        decoded.validate().unwrap();
-        assert_eq!(decoded.content_hash, parsed.content_hash);
-        parsed
-    };
-    let legacy_package = package("modeled-water-v1");
-    let current_package = package("modeled-water-v2");
-    assert_eq!(
-        legacy_package.generation_recipe_version,
-        aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(
-        current_package.generation_recipe_version,
-        aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
-    );
-    let model_version = |package: &MapPackage| {
-        package
-            .environment
-            .hydrology_evidence
-            .as_ref()
-            .and_then(|index| index.water_model.as_ref())
-            .expect("modeled water index")
-            .model_version
-    };
-    assert_eq!(model_version(&legacy_package), 1);
-    assert_eq!(
-        model_version(&current_package),
-        aoe_map::HYDROLOGY_WATER_MODEL_VERSION
-    );
-    let legacy_model = legacy_package
-        .environment
-        .hydrology_evidence
-        .as_ref()
-        .and_then(|index| index.water_model.as_ref())
-        .expect("legacy modeled water index");
-    let serialized_model = serde_json::to_vec(legacy_model).unwrap();
-    let decoded_model: aoe_map::HydrologyWaterModelIndex =
-        serde_json::from_slice(&serialized_model).unwrap();
-    assert_eq!(
-        decoded_model.digest().unwrap(),
-        legacy_model.digest().unwrap()
-    );
-    assert_ne!(legacy_package.content_hash, current_package.content_hash);
-
-    let modeled_page = |name: &str| {
-        let bytes = fs::read(corpus.join("environment_page").join(name)).unwrap();
-        let page: aoe_map::HydrologyEvidencePage = serde_json::from_slice(&bytes).unwrap();
-        page.validate().unwrap();
-        let decoded: aoe_map::HydrologyEvidencePage =
-            serde_json::from_slice(&serde_json::to_vec(&page).unwrap()).unwrap();
-        assert_eq!(decoded, page);
-        assert_eq!(
-            decoded.content_hash().unwrap(),
-            page.content_hash().unwrap()
-        );
-        page
-    };
-    assert_eq!(
-        modeled_page("modeled-water-page-v1")
-            .content_hash()
-            .unwrap(),
-        modeled_page("modeled-water-page-v2")
-            .content_hash()
-            .unwrap()
-    );
-
-    let compact_bytes = fs::read(corpus.join("environment_page/history-compact-coverage")).unwrap();
-    let compact_json: serde_json::Value = serde_json::from_slice(&compact_bytes).unwrap();
-    assert!(compact_json["coverage"].is_string());
-    let compact: aoe_map::HistoricalLandUsePage = serde_json::from_slice(&compact_bytes).unwrap();
-    let legacy: aoe_map::HistoricalLandUsePage = serde_json::from_slice(
-        &fs::read(corpus.join("environment_page/history-legacy-coverage")).unwrap(),
-    )
-    .unwrap();
-    compact.validate().unwrap();
-    legacy.validate().unwrap();
-    assert_eq!(compact, legacy);
-    assert_eq!(
-        compact.content_hash().unwrap(),
-        legacy.content_hash().unwrap()
-    );
-    for seed in [
-        "fuzz/corpus/map_package/modeled-water-v1",
-        "fuzz/corpus/map_package/modeled-water-v2",
-        "fuzz/corpus/environment_page/modeled-water-page-v1",
-        "fuzz/corpus/environment_page/modeled-water-page-v2",
-        "fuzz/corpus/environment_page/history-compact-coverage",
-        "fuzz/corpus/environment_page/history-legacy-coverage",
-    ] {
-        assert!(
-            inventory
-                .prepared_seeds
-                .iter()
-                .any(|item| item.path == seed)
-        );
-    }
-}
-
-#[test]
 fn fixed_seed_names_retain_existing_bytes_and_changed_names_stay_stable() {
     let root = tempfile::tempdir().unwrap();
     let first = prepare(root.path()).unwrap();
     let corpus = root.path().join("fuzz/corpus");
-    let legacy = corpus.join("map_chunk/one-tile-v1");
+    let chunk = corpus.join("map_chunk/full-chunk-hex");
     let generated = corpus.join("map_package/package");
-    let captured_legacy = fs::read(&legacy).unwrap();
-    assert_eq!(captured_legacy.first(), Some(&1));
-    fs::write(&legacy, b"retained legacy seed").unwrap();
+    fs::write(&chunk, b"retained discovered chunk").unwrap();
     fs::write(&generated, b"retained generated seed").unwrap();
 
     let second = prepare(root.path()).unwrap();
-    assert_eq!(fs::read(&legacy).unwrap(), b"retained legacy seed");
+    assert_eq!(fs::read(&chunk).unwrap(), b"retained discovered chunk");
     assert_eq!(fs::read(&generated).unwrap(), b"retained generated seed");
-    for (name, preferred, inventory) in [
-        ("one-tile-v1", legacy, &first),
-        ("package", generated, &first),
+    for (name, target, preferred) in [
+        ("full-chunk-hex", "map_chunk", chunk),
+        ("package", "map_package", generated),
     ] {
         let retained = second
             .prepared_seeds
             .iter()
-            .find(|seed| {
-                seed.target
-                    == if name == "package" {
-                        "map_package"
-                    } else {
-                        "map_chunk"
-                    }
-                    && seed.name.starts_with(&format!("{name}."))
-            })
+            .find(|seed| seed.target == target && seed.name.starts_with(&format!("{name}.")))
             .expect("content-addressed replacement seed");
         assert_ne!(preferred, root.path().join(&retained.path));
         assert!(
-            inventory
+            first
                 .prepared_seeds
                 .iter()
                 .all(|seed| seed.path != retained.path)
@@ -294,7 +152,7 @@ fn fixed_seed_names_retain_existing_bytes_and_changed_names_stay_stable() {
 }
 
 #[test]
-fn changed_legacy_blob_is_preserved_and_blocks_the_fuzz_campaign() {
+fn changed_asset_format_blob_is_preserved_and_blocks_the_fuzz_campaign() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("fuzz/corpus/drs");
     fs::create_dir_all(&directory).unwrap();

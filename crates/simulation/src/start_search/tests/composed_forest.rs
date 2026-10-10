@@ -14,13 +14,15 @@ fn paris_procedural_preview_uses_the_actual_runtime_start_certificate() {
         year_ce: 600,
         seed: 1,
         reconstruction_profile: aoe_map::ReconstructionProfile::Circa600V1,
-        detail_profile: aoe_map::DetailProfile::LandscapeV2,
     };
     // Match /maps/activate: no prepared pages, no source locks, no flat fixture.
     let package = aoe_map::MapPackage::new(aoe_map::MAP_SCHEMA_VERSION, request, Vec::new())
         .expect("fallback package");
-    assert_eq!(package.schema_version, 10);
-    assert_eq!(package.generation_recipe_version, LANDSCAPE_START_RECIPE);
+    assert_eq!(package.schema_version, aoe_map::MAP_SCHEMA_VERSION);
+    assert_eq!(
+        package.generation_recipe_version,
+        aoe_map::GENERATION_RECIPE_VERSION
+    );
     assert_eq!(package.environment.samples_per_axis, 0);
     assert!(package.source_locks.is_empty());
     let world = GameWorld::from_map(package).expect("runtime fallback world");
@@ -28,22 +30,20 @@ fn paris_procedural_preview_uses_the_actual_runtime_start_certificate() {
     assert_eq!((config.width_tiles, config.height_tiles), (512, 512));
     let result = world
         .terrain()
-        .search_start_for_recipe(config, LANDSCAPE_START_RECIPE, 64, || false)
+        .search_start_checked(config, 64, || false)
         .expect("fallible actual start certificate");
     // This exact unsupported fallback exhausts the unchanged certificate bound.
     // Never fabricate a scout, flatten relief, or borrow the prepared-field result.
     assert_eq!(result, StartSearchResult::LimitReached);
     assert_eq!(
-        world
-            .terrain()
-            .search_start_for_recipe(config, LANDSCAPE_START_RECIPE, 64, || true,),
+        world.terrain().search_start_checked(config, 64, || true),
         Ok(StartSearchResult::Cancelled),
     );
 }
 
 #[test]
 fn composed_forest_start_has_bounded_exit_and_replayable_cavalry_route() {
-    let generator = flat_temperate_generator(LANDSCAPE_START_RECIPE);
+    let generator = flat_temperate_generator();
     let config = crate::movement_speed::cavalry_config(
         WorldConfig::new(512, 512, Seed(600)).expect("config"),
     );
@@ -72,9 +72,7 @@ fn composed_forest_start_has_bounded_exit_and_replayable_cavalry_route() {
         overlay: ResourceOverlay::default(),
     };
     assert_eq!(
-        world
-            .terrain
-            .search_start_for_recipe(config, LANDSCAPE_START_RECIPE, 64, || false),
+        world.terrain.search_start_checked(config, 64, || false),
         Ok(StartSearchResult::Found(start))
     );
     let mut cache = StartPassabilityCache::new(&world.terrain, config, &|| false);
@@ -102,7 +100,7 @@ fn composed_forest_start_has_bounded_exit_and_replayable_cavalry_route() {
     world.issue_move(unit, destination).expect("order");
     let mut replay = GameWorld::new(config).expect("replay");
     replay.terrain = Terrain::Map {
-        generator: flat_temperate_generator(LANDSCAPE_START_RECIPE),
+        generator: flat_temperate_generator(),
         overlay: ResourceOverlay::default(),
     };
     let repeated = replay

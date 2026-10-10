@@ -10,7 +10,7 @@ const MAX_EXIT_VISITS: usize = 32_768;
 const MAX_EXIT_TICKS: u64 = 20_000;
 
 #[tokio::test]
-#[ignore = "requires explicit verified private France recipe-8 package and hash"]
+#[ignore = "requires an explicit verified private France package and hash"]
 async fn private_source_spawn_cavalry_exits_certified_glade() {
     let directory = PathBuf::from(
         std::env::var("AOE_PRIVATE_SPAWN_PACKAGE_DIRECTORY")
@@ -24,7 +24,10 @@ async fn private_source_spawn_cavalry_exits_certified_glade() {
         .expect("exact requested content hash must exist")
         .clone();
     assert_eq!(package.content_hash_hex(), hash);
-    assert_eq!(package.generation_recipe_version, 8);
+    assert_eq!(
+        package.generation_recipe_version,
+        aoe_map::GENERATION_RECIPE_VERSION
+    );
     assert_eq!(package.estimate.tiles_per_side, 70_000);
     assert_eq!(package.request.compression.numerator, 10);
     assert_eq!(package.request.compression.denominator, 1);
@@ -44,16 +47,16 @@ async fn private_source_spawn_cavalry_exits_certified_glade() {
     assert_eq!(config.move_speed_subunits_per_tick_denominator, 5);
     let start = match world
         .terrain()
-        .search_start_for_recipe(config, 8, 64, || false)
+        .search_start_checked(config, 64, || false)
         .unwrap()
     {
         StartSearchResult::Found(tile) => tile,
-        result => panic!("ordinary certified recipe-8 start failed: {result:?}"),
+        result => panic!("ordinary certified start failed: {result:?}"),
     };
     assert_eq!(
         replay
             .terrain()
-            .search_start_for_recipe(config, 8, 64, || false)
+            .search_start_checked(config, 64, || false)
             .unwrap(),
         StartSearchResult::Found(start)
     );

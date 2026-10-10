@@ -64,7 +64,7 @@ pub(super) fn run() -> Result<()> {
         let created_evidence = read_evidence(&evidence_path(&evidence_dir, "created", profile))?;
         let hash = evidence_hash(&created_evidence)?.to_owned();
         let manifest = root
-            .join("local-assets/maps-v8")
+            .join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY)
             .join(format!("{hash}.json"));
         let package: MapPackage = serde_json::from_slice(&fs::read(&manifest)?)?;
         let record = evidence::created_record(profile, &package, &created_evidence, paris_request)?;
