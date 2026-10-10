@@ -5,8 +5,12 @@ use crate::web::surface_instance;
 use aoe_core::ScreenPoint;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::wasm_bindgen_test;
+#[path = "webgl_filter.rs"]
+mod filter_pixels;
 #[path = "webgl_floor.rs"]
 mod floor_pixels;
+#[path = "species/webgl.rs"]
+mod species_pixels;
 
 #[wasm_bindgen_test]
 fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
@@ -44,6 +48,7 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     };
     art.terrain[2] = vec![frame(1)];
     art.terrain[6] = vec![frame(2)];
@@ -69,7 +74,7 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         assert_pixel(&canvas, 48, 48, expected);
         assert_pixel(&canvas, 32, 32, expected);
         assert_ne!(expected, [82, 86, 86, 255]);
-        for floor_strength in [0, 650] {
+        for floor_strength in [0, 650, 1000] {
             let mut dirt = face;
             dirt.material = 2;
             dirt.appearance =
@@ -132,6 +137,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
         terrain: std::array::from_fn(|_| Vec::new()),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
         terrain_topology: [None; 7],
     };
     let camera = SceneCamera {

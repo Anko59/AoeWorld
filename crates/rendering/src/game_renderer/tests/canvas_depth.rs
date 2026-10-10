@@ -1,8 +1,12 @@
 #![cfg(test)]
 #[path = "canvas_presentation.rs"]
 mod canvas_presentation;
+#[path = "species/canvas.rs"]
+mod species_pixels;
 #[path = "terrain_blend.rs"]
 mod terrain_blend;
+#[path = "terrain_filter.rs"]
+mod terrain_filter;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};

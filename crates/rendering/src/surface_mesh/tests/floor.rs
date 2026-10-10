@@ -100,7 +100,7 @@ fn floor_numeric_packet_is_exact_bounded_and_survives_depth_normalization() {
     assert_eq!(landscape::pack_floors([255; 3]), 16_777_215.0);
     let terrain = [SceneTerrain {
         position: [0.5; 2],
-        material: 2,
+        material: 0,
         elevation_meters: 0.0,
         surface: SceneTerrainSurface::flat(0.0),
         appearance: Some(metadata(650)),
@@ -117,7 +117,16 @@ fn floor_numeric_packet_is_exact_bounded_and_survives_depth_normalization() {
         size: [1.0; 2],
         anchor: [0.0; 2],
     };
-    apply_terrain_textures(&mut triangles, &test_art(frame));
+    let mut art = test_art(frame);
+    // A real two-address bed is required to exercise interpolated blend packets.
+    art.terrain[6] = vec![GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 1,
+            ..frame.atlas
+        },
+        ..frame
+    }];
+    apply_terrain_textures(&mut triangles, &art);
     let face = &mut triangles[0];
     face.floor_strengths = Some([0, 128, 255]);
     let mut packet = crate::web::surface_instance(face, [128.0; 2], 0.0);

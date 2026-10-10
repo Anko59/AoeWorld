@@ -15,6 +15,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 mod grid;
 #[path = "tests/landscape.rs"]
 mod landscape;
+#[path = "tests/species.rs"]
+mod species;
 
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
@@ -32,6 +34,7 @@ fn synthetic_art() -> GameArt {
         terrain: std::array::from_fn(|_| vec![frame]),
         resources: std::array::from_fn(|_| vec![frame]),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
         terrain_topology: [None; 7],
     }
 }

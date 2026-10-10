@@ -79,6 +79,37 @@ fn placements_preserve_semantic_order_domains_and_signed_anchors() {
 }
 
 #[wasm_bindgen_test]
+fn native_tree_family_rectangles_preserve_outside_and_negative_anchors() {
+    for (role, id, width, height, anchor) in [
+        (AssetRole::TreePalm, 4653, 88, 168, [20, 175]),
+        (AssetRole::TreeConifer, 4654, 90, 180, [-17, -23]),
+    ] {
+        let mut manifest = fixture();
+        let frame = &mut manifest.frames[0];
+        frame.source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
+        frame.width = width;
+        frame.height = height;
+        frame.anchor_x = anchor[0];
+        frame.anchor_y = anchor[1];
+        let place = plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
+        let actual = record(&manifest.frames[0], place);
+        assert_eq!(actual.anchor, anchor.map(|value| value as f32));
+        assert_eq!(actual.size, [f32::from(width), f32::from(height)]);
+        assert_eq!(actual.atlas.page, 2);
+        assert!(
+            OPTIONAL_RESOURCE_SOURCES
+                .iter()
+                .any(|source| source.role == role)
+        );
+        manifest.frames[0].x = 2047;
+        assert!(plan(&manifest, &[0], &[AtlasDomain::Objects]).is_err());
+        manifest.frames[0].x = 0;
+        manifest.frames[0].width = 0;
+        assert!(plan(&manifest, &[0], &[AtlasDomain::Objects]).is_err());
+    }
+}
+
+#[wasm_bindgen_test]
 fn equal_uv_on_three_pages_copy_masks_alpha_and_keep_source_ids_separate() {
     let mut manifest = fixture();
     let frame = &mut manifest.frames[0];
@@ -163,7 +194,7 @@ fn source_groups_are_bounded_by_selection_not_sparse_page_id_and_do_not_reorder_
 }
 
 #[wasm_bindgen_test]
-fn reviewed_catalog_is_exactly_656_in_original_source_and_frame_order() {
+fn reviewed_catalog_is_exactly_678_in_original_source_and_frame_order() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
     let mut frames = Vec::new();
@@ -192,7 +223,7 @@ fn reviewed_catalog_is_exactly_656_in_original_source_and_frame_order() {
             source_frames(&manifest, &source.manifest_source(), source.frames).unwrap()
         })
         .collect::<Vec<_>>();
-    assert_eq!(actual.len(), 656);
+    assert_eq!(actual.len(), 678);
     assert_eq!(actual, expected);
     assert_eq!(TERRAIN_ROLES[4], AssetRole::Rock);
 }

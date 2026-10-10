@@ -29,6 +29,9 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert_eq!(ranges[AssetRole::Rock as usize], None);
+    assert_eq!(ROLE_SLOTS, 16);
+    assert!(ranges[AssetRole::TreeConifer as usize].is_some());
+    assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }
 
 #[wasm_bindgen_test]
@@ -55,6 +58,49 @@ fn source_indices_preserve_frame_order_and_reject_missing_or_duplicate_frames() 
     value["frames"][2]["frame"] = 0.into();
     let duplicate: Manifest = serde_json::from_value(value).unwrap();
     assert_eq!(source_frames(&duplicate, "fixture", 3), None);
+}
+
+#[wasm_bindgen_test]
+fn optional_tree_families_require_complete_unique_native_prefixes() {
+    for role in [AssetRole::TreeConifer, AssetRole::TreePalm] {
+        let selection = OPTIONAL_RESOURCE_SOURCES
+            .iter()
+            .find(|source| source.role == role)
+            .unwrap();
+        let identity = selection.manifest_source();
+        let mut value = manifest::fixture();
+        let template = value["frames"][0].clone();
+        let absent: Manifest = serde_json::from_value(value.clone()).unwrap();
+        assert!(!source_present(&absent, &identity));
+        assert!(source_frames(&absent, &identity, selection.frames).is_none());
+        let mut entries = Vec::new();
+        for number in (0..selection.frames).rev() {
+            let mut frame = template.clone();
+            frame["source"] = identity.clone().into();
+            frame["frame"] = number.into();
+            entries.push(frame);
+        }
+        value["frames"] = entries.into();
+        let complete: Manifest = serde_json::from_value(value.clone()).unwrap();
+        assert!(source_present(&complete, &identity));
+        let expected = (0..selection.frames as usize).rev().collect::<Vec<_>>();
+        assert_eq!(
+            source_frames(&complete, &identity, selection.frames),
+            Some(expected)
+        );
+        // Presence is never downgraded to absence by an incomplete/duplicate prefix.
+        value["frames"].as_array_mut().unwrap().pop();
+        let missing: Manifest = serde_json::from_value(value.clone()).unwrap();
+        assert!(source_present(&missing, &identity));
+        assert!(source_frames(&missing, &identity, selection.frames).is_none());
+        value["frames"].as_array_mut().unwrap().push(template);
+        let last = selection.frames as usize - 1;
+        value["frames"][last]["source"] = identity.clone().into();
+        value["frames"][last]["frame"] = (selection.frames - 1).into();
+        let duplicate: Manifest = serde_json::from_value(value).unwrap();
+        assert!(source_present(&duplicate, &identity));
+        assert!(source_frames(&duplicate, &identity, selection.frames).is_none());
+    }
 }
 
 #[wasm_bindgen_test]
