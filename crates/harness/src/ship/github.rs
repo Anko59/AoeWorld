@@ -39,9 +39,21 @@ pub(super) fn gh_version(text: &str) -> Option<(u32, u32)> {
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
-/// Before any gate runs: a usable `gh`, and a title and description when the
-/// branch has no open pull request yet, so nothing is pushed half-way.
-pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<Option<String>> {
+/// What the pull request checks found before any gate ran.
+#[derive(Default)]
+pub(super) struct Preflight {
+    /// The validated `SHIP_BODY` text.
+    pub(super) body: Option<String>,
+    /// The open pull request a stacked base belongs to.
+    pub(super) parent: Option<super::stack::Parent>,
+    /// The base the branch's open pull request targets now, if any.
+    pub(super) current_base: Option<String>,
+}
+
+/// Before any gate runs: a usable `gh`, a valid base, and a title and
+/// description when the branch has no open pull request yet, so nothing is
+/// pushed half-way.
+pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<Preflight> {
     if let Some(video) = &options.video
         && !attachable_video(video)
     {
@@ -66,7 +78,13 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<O
     }
     let branch = git::branch(root)?;
     let repository = git::origin_repository(root)?;
-    let open = open_pull_request(root, &repository, &branch)?.is_some();
+    let parent = if options.base == crate::review::base::DEV {
+        None
+    } else {
+        Some(super::stack::parent(root, &repository, &options.base)?)
+    };
+    let existing = open_pull_request(root, &repository, &branch)?;
+    let open = existing.is_some();
     if !open && (options.title.is_none() || options.body_file.is_none()) {
         return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
     }
@@ -80,18 +98,30 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<O
             Some(video) => Some(probe_video(root, video)?),
             None => None,
         };
-        template.check(changed_lines(root)?, probe)?;
+        template.check(changed_lines(root, &options.base)?, probe)?;
         Some(text)
     } else {
         None
     };
-    Ok(template_text)
+    Ok(Preflight {
+        body: template_text,
+        parent,
+        current_base: existing.map(|pr| pr.base),
+    })
+}
+
+/// A branch's open pull request: its URL and the branch it targets.
+#[derive(serde::Deserialize)]
+struct OpenPr {
+    url: String,
+    #[serde(rename = "baseRefName")]
+    base: String,
 }
 
 /// The open pull request whose head is `branch` (never a PR number that
 /// happens to equal a numeric branch name).
-fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<String>> {
-    let url = gh(
+fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<OpenPr>> {
+    let found = gh(
         root,
         &[
             "pr",
@@ -103,12 +133,63 @@ fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Opti
             "--state",
             "open",
             "--json",
-            "url",
+            "url,baseRefName",
             "--jq",
-            ".[0].url // empty",
+            ".[0] // empty",
         ],
     )?;
-    Ok((!url.is_empty()).then_some(url))
+    if found.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_str(&found)?))
+}
+
+/// `gh pr create` into `base` (dev, or a stacked parent branch).
+pub(super) fn create_args(
+    repository: &str,
+    base: &str,
+    branch: &str,
+    title: &str,
+    body: &str,
+) -> Vec<String> {
+    [
+        "pr",
+        "create",
+        "--repo",
+        repository,
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        title,
+        "--body-file",
+        body,
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+/// `gh pr edit`, moving the pull request to `retarget` when given; `None`
+/// when there is nothing to change.
+pub(super) fn edit_args(
+    url: &str,
+    repository: &str,
+    title: Option<&str>,
+    body: Option<&str>,
+    retarget: Option<&str>,
+) -> Vec<String> {
+    let mut args = vec!["pr", "edit", url, "--repo", repository];
+    for (flag, value) in [
+        ("--title", title),
+        ("--body-file", body),
+        ("--base", retarget),
+    ] {
+        if let Some(value) = value {
+            args.extend([flag, value]);
+        }
+    }
+    args.into_iter().map(str::to_owned).collect()
 }
 
 pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {
@@ -117,18 +198,19 @@ pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) 
     let body = options.body_file.as_ref().map(|p| p.display().to_string());
     let existing = open_pull_request(root, &repository, branch)?;
     let url = match existing {
-        Some(url) => {
-            let mut args = vec!["pr", "edit", url.as_str(), "--repo", repository.as_str()];
-            if let Some(title) = options.title.as_deref() {
-                args.extend(["--title", title]);
-            }
-            if let Some(body) = body.as_deref() {
-                args.extend(["--body-file", body]);
-            }
+        Some(pr) => {
+            let retarget = super::stack::retarget(Some(&pr.base), &options.base);
+            let args = edit_args(
+                &pr.url,
+                &repository,
+                options.title.as_deref(),
+                body.as_deref(),
+                retarget,
+            );
             if args.len() > 5 {
-                gh(root, &args)?;
+                gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>())?;
             }
-            url.clone()
+            pr.url
         }
         None => {
             let (Some(title), Some(body)) = (options.title.as_deref(), body.as_deref()) else {
@@ -136,23 +218,8 @@ pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) 
                     "a new pull request needs SHIP_TITLE and SHIP_BODY (a description file)".into(),
                 );
             };
-            gh(
-                root,
-                &[
-                    "pr",
-                    "create",
-                    "--repo",
-                    &repository,
-                    "--base",
-                    &options.base,
-                    "--head",
-                    branch,
-                    "--title",
-                    title,
-                    "--body-file",
-                    body,
-                ],
-            )?
+            let args = create_args(&repository, &options.base, branch, title, body);
+            gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>())?
         }
     };
     println!("{url}");
@@ -200,10 +267,10 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Lines added plus removed against the merge base with dev; a binary file
-/// (`-` in numstat) counts as larger than any `low` PR.
-pub(super) fn changed_lines(root: &Path) -> Result<u64> {
-    let (_, merge_base) = git::base(root, "dev", true)?;
+/// Lines added plus removed against the merge base with origin/<base>; a
+/// binary file (`-` in numstat) counts as larger than any `low` PR.
+pub(super) fn changed_lines(root: &Path, base: &str) -> Result<u64> {
+    let (_, merge_base) = git::base(root, base, true)?;
     let numstat = git::git(root, &["diff", "--numstat", &merge_base, "HEAD"])?;
     Ok(numstat
         .lines()
@@ -264,9 +331,13 @@ pub(super) fn description(
         report,
         evidence,
         &describe::footer(options.runtime),
-        &super::metrics::table(root)?,
+        &super::metrics::table(root, &evidence.base_branch)?,
         &super::test_first::summary(root, &evidence.merge_base, &evidence.head),
     );
+    let text = match &options.parent {
+        Some(parent) => format!("{}\n{text}", super::stack::note(parent)),
+        None => text,
+    };
     // A private directory in the git common dir, never a guessable /tmp path.
     let path = super::evidence::directory(root)?
         .with_file_name("bodies")

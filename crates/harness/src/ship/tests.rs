@@ -202,7 +202,7 @@ fn the_low_tier_size_check_fetches_the_current_origin_dev() {
         .unwrap()
         .to_owned();
     assert_ne!(stale, current);
-    super::github::changed_lines(&root).unwrap();
+    super::github::changed_lines(&root, "dev").unwrap();
     assert_eq!(
         git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap(),
         current

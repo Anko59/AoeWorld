@@ -36,7 +36,7 @@ pub(crate) struct Report {
     /// left", and its grade is reported, not gated.
     #[serde(default)]
     pub(crate) closing: bool,
-    /// SHA-256 of the raw Git file identity diff relative to origin/dev.
+    /// SHA-256 of the raw Git file identity diff relative to origin/<base>.
     /// Reuse always recomputes this value from Git; it is informational only.
     #[serde(default)]
     #[serde(alias = "patch_id")]
@@ -52,6 +52,10 @@ pub(crate) struct Report {
     /// answers for another.
     #[serde(default)]
     pub(crate) task_fingerprint: Option<String>,
+    /// The branch `base` and `merge_base` come from: `dev`, or the parent of a
+    /// stacked pull request. Older reports have none and were against dev.
+    #[serde(default)]
+    pub(crate) base_branch: Option<String>,
 }
 
 fn hex(digest: impl AsRef<[u8]>) -> String {
@@ -77,12 +81,13 @@ impl Report {
     }
 
     /// The task the reviewers of `head` receive: `task`, or the branch's
-    /// commit messages since origin/dev when it is empty.
+    /// commit messages since origin/<base> when it is empty.
     pub(crate) fn effective_task(root: &Path, head: &str, task: &str) -> Result<String, String> {
         if !task.trim().is_empty() {
             return Ok(task.to_owned());
         }
-        let merge_base = git::git(root, &["merge-base", "refs/remotes/origin/dev", head])?;
+        let base = format!("refs/remotes/origin/{}", super::base::current());
+        let merge_base = git::git(root, &["merge-base", &base, head])?;
         git::git(
             root,
             &["log", "--format=%B", &format!("{merge_base}..{head}")],
@@ -139,6 +144,11 @@ impl Report {
             }
     }
 
+    /// Reviewed against the base branch the change is shipped against now.
+    pub(crate) fn against_current_base(&self) -> bool {
+        super::base::of(self.base_branch.as_deref()) == super::base::current()
+    }
+
     /// Every session answered: the review counts toward the branch's budget.
     pub(crate) fn complete(&self) -> bool {
         self.failures.is_empty()
@@ -178,8 +188,9 @@ impl Report {
     }
 
     /// The passing review of `head`, if one is stored (any of `tiers`) for the
-    /// task the reviewers would receive now: a report without a task
-    /// fingerprint, or of another description, is not reused.
+    /// task the reviewers would receive now, against the current base branch:
+    /// a report without a task fingerprint, of another description or of the
+    /// change against another base, is not reused.
     pub(crate) fn load_passing(
         root: &Path,
         head: &str,
@@ -202,6 +213,7 @@ impl Report {
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .find(|r| {
                 r.head == head
+                    && r.against_current_base()
                     && tiers.contains(&r.tier.as_str())
                     && r.task_fingerprint.as_deref() == Some(wanted.as_str())
                     && r.passes()
@@ -209,7 +221,7 @@ impl Report {
     }
 
     /// Whether a complete report already exists for this head at an eligible
-    /// tier, regardless of whether it passed.
+    /// tier against the current base branch, whether it passed or not.
     pub(crate) fn has_complete(root: &Path, head: &str, tiers: &[&str]) -> Result<bool, String> {
         let Ok(entries) = fs::read_dir(directory(root)?) else {
             return Ok(false);
@@ -225,117 +237,11 @@ impl Report {
             .filter_map(|entry| fs::read(entry.path()).ok())
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .any(|report| {
-                report.head == head && tiers.contains(&report.tier.as_str()) && report.complete()
-            }))
-    }
-
-    /// Copy an original passing review onto `head` when Git confirms the same
-    /// change (identical file blobs) against the current origin/dev and the
-    /// reviewers were given the same `task`. The stored change fingerprint is
-    /// never consulted, and a reuse report can never become a source. By
-    /// design only a review recorded for this same branch name is eligible,
-    /// even when another branch holds an identical change: another branch's
-    /// review (closing or full) never answers this branch's findings. One
-    /// policy commit is pinned first: the floor, the eligible tiers, the merge
-    /// grade and the policy fingerprint all come from it, and it must be
-    /// origin/dev itself: a judge built from an older origin/dev never reuses.
-    /// Any complete report for this head at an eligible tier blocks reuse,
-    /// including a failing one.
-    pub(crate) fn reuse_for_change(
-        root: &Path,
-        head: &str,
-        branch: &str,
-        tiers: &[&str],
-        task: &str,
-    ) -> Result<Option<Self>, String> {
-        let judge = std::env::var(super::trusted::JUDGE_REV).ok();
-        Self::reuse_for_change_judged(root, head, branch, tiers, task, judge.as_deref())
-    }
-
-    /// `reuse_for_change` for the judge built from `judge` (origin/dev when
-    /// `None`).
-    pub(crate) fn reuse_for_change_judged(
-        root: &Path,
-        head: &str,
-        branch: &str,
-        tiers: &[&str],
-        task: &str,
-        judge: Option<&str>,
-    ) -> Result<Option<Self>, String> {
-        let (_pin, policy) = super::trusted::pin(root, judge)?;
-        let base = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
-        if policy != base {
-            return Ok(None);
-        }
-        let floor = super::floor(root).map_err(|e| e.to_string())?;
-        let tiers: Vec<&str> = tiers
-            .iter()
-            .copied()
-            .filter(|name| {
-                <super::Tier as clap::ValueEnum>::value_variants()
-                    .iter()
-                    .any(|tier| tier.name() == *name && *tier >= floor)
-            })
-            .collect();
-        if tiers.is_empty() || Self::has_complete(root, head, &tiers)? {
-            return Ok(None);
-        }
-        let config = super::config::Config::load(root)?;
-        let wanted_task = Self::task_fingerprint(&Self::effective_task(root, head, task)?);
-        let (merge_base, wanted_identity) = git::change_identity(root, "dev", head)?;
-        let wanted_fingerprint = git::change_fingerprint(root, "dev", head)?.1;
-        let Ok(entries) = fs::read_dir(directory(root)?) else {
-            return Ok(None);
-        };
-        let mut candidates: Vec<Self> = entries
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| fs::read(entry.path()).ok())
-            .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
-            .filter(|report| {
-                report.head != head
-                    && !branch.is_empty()
-                    && report.branch == branch
-                    && report.head.len() == 40
-                    && report.head.bytes().all(|byte| byte.is_ascii_hexdigit())
-                    && report.reused_from.is_none()
+                report.head == head
+                    && report.against_current_base()
                     && tiers.contains(&report.tier.as_str())
-                    && report.task_fingerprint.as_deref() == Some(wanted_task.as_str())
                     && report.complete()
-                    && report.passes()
-                    && (report.closing || report.grade >= config.merge_grade)
-            })
-            .collect();
-        candidates.sort_by_key(|report| std::cmp::Reverse(report.finished));
-        for mut source in candidates {
-            let Ok(current_policy) = Self::policy_fingerprint_at(root, &policy, &source.tier)
-            else {
-                continue;
-            };
-            if source.policy_fingerprint.as_deref() != Some(current_policy.as_str()) {
-                continue;
-            }
-            let source_head = source.head.clone();
-            let Ok((_, identity)) = git::change_identity(root, "dev", &source.head) else {
-                continue;
-            };
-            if identity != wanted_identity {
-                continue;
-            }
-            source.head = head.to_owned();
-            source.branch = branch.to_owned();
-            source.base = base.clone();
-            source.merge_base = merge_base;
-            source.floor = floor.name().to_owned();
-            source.merge_grade = config.merge_grade;
-            source.change_fingerprint = Some(wanted_fingerprint);
-            source.reused_from = Some(source_head);
-            source.finished = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |duration| duration.as_secs());
-            source.store(root)?;
-            return Ok(Some(source));
-        }
-        Ok(None)
+            }))
     }
 
     /// The emoji badge for the grade.

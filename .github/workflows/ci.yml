@@ -1,8 +1,10 @@
 name: AoeWorld validation
 
 on:
+  # Every base: a stacked pull request (docs/shipping.md) needs the same
+  # jobs before its parent merges; branch protection gates merges into dev.
   pull_request:
-    branches: [dev, main, 'harness/**']
+    branches: ['**']
   push:
     branches: [dev, main]
   workflow_dispatch:

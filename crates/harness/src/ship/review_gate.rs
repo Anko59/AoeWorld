@@ -166,12 +166,25 @@ fn short(sha: &str) -> &str {
     &sha[..12.min(sha.len())]
 }
 
-/// The `gh` calls that publish a passing review: the `harness/review`
-/// success status on the reviewed commit, then GitHub auto-merge (squash).
+/// The `gh` calls that publish a passing review into dev: the
+/// `harness/review` success status on the reviewed commit, then GitHub
+/// auto-merge (squash).
 pub(crate) fn publish_calls(
     repository: &str,
     url: &str,
     report: &Report,
+) -> Result<Vec<Vec<String>>> {
+    publish_calls_onto(repository, url, report, crate::review::base::DEV)
+}
+
+/// `publish_calls` for a pull request into `base`: auto-merge is armed only
+/// into dev, never into a stacked parent branch, which GitHub would merge
+/// into without the parent's review.
+pub(crate) fn publish_calls_onto(
+    repository: &str,
+    url: &str,
+    report: &Report,
+    base: &str,
 ) -> Result<Vec<Vec<String>>> {
     if !report.passes() {
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
@@ -195,37 +208,40 @@ pub(crate) fn publish_calls(
         )
     };
     let owned = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
-    Ok(vec![
-        owned(&[
-            "api",
-            "--method",
-            "POST",
-            &format!("repos/{repository}/statuses/{}", report.head),
-            "-f",
-            "state=success",
-            "-f",
-            "context=harness/review",
-            "-f",
-            &format!("description={description}"),
-        ]),
-        owned(&[
-            "pr",
-            "merge",
-            url,
-            "--repo",
-            repository,
-            "--auto",
-            "--squash",
-            "--match-head-commit",
-            &report.head,
-        ]),
-    ])
+    let mut calls = vec![owned(&[
+        "api",
+        "--method",
+        "POST",
+        &format!("repos/{repository}/statuses/{}", report.head),
+        "-f",
+        "state=success",
+        "-f",
+        "context=harness/review",
+        "-f",
+        &format!("description={description}"),
+    ])];
+    if base != crate::review::base::DEV {
+        return Ok(calls);
+    }
+    calls.push(owned(&[
+        "pr",
+        "merge",
+        url,
+        "--repo",
+        repository,
+        "--auto",
+        "--squash",
+        "--match-head-commit",
+        &report.head,
+    ]));
+    Ok(calls)
 }
 
-/// Post `harness/review` on the commit and arm auto-merge on the pull request.
-pub(crate) fn publish(root: &Path, url: &str, report: &Report) -> Result<()> {
+/// Post `harness/review` on the commit and, into dev, arm auto-merge on the
+/// pull request.
+pub(crate) fn publish(root: &Path, url: &str, report: &Report, base: &str) -> Result<()> {
     let repository = git::origin_repository(root)?;
-    for call in publish_calls(&repository, url, report)? {
+    for call in publish_calls_onto(&repository, url, report, base)? {
         super::github::publish_call(root, &call)?;
     }
     Ok(())

@@ -3,12 +3,14 @@
 //! findings until no status changes or the tier's round cap; a grader writes a
 //! grade /10 and two lines, which confirmed findings cap. The report is stored
 //! next to the ship evidence, keyed by commit, where agents cannot write.
+pub(crate) mod base;
 pub(crate) mod closing;
 pub(crate) mod config;
 mod entry;
 mod prompt;
 pub(crate) mod protocol;
 mod report;
+mod reuse;
 mod runner;
 mod session;
 #[cfg(test)]
@@ -115,7 +117,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
 }
 
 fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTreeSet<String>)> {
-    let (base, merge_base) = git::base(root, "dev", false)?;
+    let (base, merge_base) = git::base(root, &base::current(), false)?;
     let changed = git::changed(root, &merge_base)?;
     let registry = Registry::parse(trusted(root, "gates/registry.json")?.as_bytes())?;
     // A misspelt floor would silently give the low tier.
@@ -385,7 +387,7 @@ fn review_with_branch(
         }
     };
     let cap = protocol::cap(&findings);
-    let change_fingerprint = git::change_fingerprint(root, "dev", &head)
+    let change_fingerprint = git::change_fingerprint(root, &base::current(), &head)
         .ok()
         .map(|(_, fingerprint)| fingerprint);
     let report = Report {
@@ -415,6 +417,7 @@ fn review_with_branch(
         reused_from: None,
         // What the reviewers saw: the commit log stands in for an empty task.
         task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
+        base_branch: Some(base::current()),
     };
     report.store(root)?;
     Ok(report)

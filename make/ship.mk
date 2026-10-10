@@ -2,14 +2,14 @@
 # preflight gates at the exact commit, evidence, push, pull request. It runs the
 # same judge as the agent hooks: built from origin/dev, or (labelled
 # non-authoritative) from this checkout's committed HEAD while bootstrapping;
-# never from uncommitted edits. SHIP_TITLE, SHIP_BODY and SHIP_FORCE reach it
+# never from uncommitted edits. SHIP_TITLE, SHIP_BODY, SHIP_FORCE and SHIP_BASE reach it
 # through the environment only; they are never pasted into shell text.
 # PR is the public Make argument; REVIEW_PR is the process environment value
 # consumed by the harness. Neither is embedded in recipe shell text.
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
 .PHONY: ship ship-status review review-floor review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9

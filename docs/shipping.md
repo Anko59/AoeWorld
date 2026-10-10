@@ -16,8 +16,8 @@ not ship; the session that ran them reviews, commits and ships.
 `aoe-harness ship` (`crates/harness/src/ship/`), run on the host by the same
 judge binary as the agent hooks (`.agents/hooks/harness.sh exec ship`, built
 from `origin/dev`; while bootstrapping, from the checkout's committed HEAD and
-labelled non-authoritative), never from uncommitted edits. `SHIP_TITLE`, `SHIP_BODY` and
-`SHIP_FORCE` reach it through the environment, never through shell text, and the
+labelled non-authoritative), never from uncommitted edits. `SHIP_TITLE`, `SHIP_BODY`,
+`SHIP_FORCE` and `SHIP_BASE` reach it through the environment, never through shell text, and the
 agent policy refuses `$` in agent-set Make values.
 
 0. **Checks first** that `gh` is 2.100 or newer (PR video uploads) and, when
@@ -26,8 +26,9 @@ agent policy refuses `$` in agent-set Make values.
 1. **Refuses** a tree with uncommitted or untracked changes ("evidence is for a
    commit"), the protected branches `dev`, `main` and `release/*`, and a
    detached HEAD.
-2. **Selects** suites from the change against `refs/remotes/origin/dev` after a
-   fetch, never a local branch or tag that could shadow it.
+2. **Selects** suites from the change against `refs/remotes/origin/<base>`
+   (`dev`, or `SHIP_BASE`; see [stacked pull requests](#stacked-pull-requests))
+   after a fetch, never a local branch or tag that could shadow it.
 3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
@@ -65,14 +66,42 @@ agent policy refuses `$` in agent-set Make values.
    (`AOE_SHIP_EVIDENCE`, checked in Rust), and runs `make preflight` otherwise. The push sets SSH keepalives (unless
    `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the
    connection for minutes (#209).
-8. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
-   repository, found by head branch (never by a number), with the review
-   appended; posts the `harness/review` status and arms auto-merge.
+8. **Creates or updates** the pull request against the base (`dev`) on
+   `origin`'s GitHub repository, found by head branch (never by a number),
+   with the review appended; posts the `harness/review` status and, into
+   `dev` only, arms auto-merge.
 9. **Files the review's leftovers** as issues: one per confirmed or disputed
    critical or major finding, and one `Review follow-ups for #<pr>` checklist
    for the minor and nit ones, deduplicated across ships
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
+
+## Stacked pull requests
+
+A change that depends on an unmerged pull request does not wait for it:
+
+```sh
+make ship SHIP_BASE=<parent branch> SHIP_TITLE=… SHIP_BODY=…
+```
+
+The base must be `dev` or a branch with an open pull request on origin that
+`make ship` opened (found by head branch). Another protected branch, the
+branch itself, an unknown branch and a parent whose pull request is closed or
+merged are refused; for the last, rebase onto `origin/dev` instead. Suites, the
+review diff, test-first and metrics use the merge base with the fetched
+`refs/remotes/origin/<parent>`, so the parent's change is not reviewed again;
+evidence and review reports record the base branch and commit. The pull
+request is opened with `--base <parent>` and its description says it is
+stacked on #<parent>. CI runs on pull requests into any branch, so both are
+tested at once. The `harness/review` status is posted, but auto-merge is not
+armed: GitHub would merge the child into the parent branch.
+
+After the parent squash-merges, rebase the branch onto `origin/dev` (`git
+rebase --onto origin/dev <old parent tip>`), commit nothing else, and run
+`make ship SHIP_BASE=dev`. When the change is identical (the same raw diff,
+[review](review.md#what-happens-next)), the stacked review is reused; the pull
+request is retargeted to `dev` (`gh pr edit --base dev`), force-pushed with
+lease, and auto-merge is armed. Any other change gets a fresh review.
 
 ## The pull request description
 

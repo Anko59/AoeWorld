@@ -95,7 +95,7 @@ fn metrics_are_revision_bound_and_the_table_uses_merge_base() {
     assert_eq!(head.lines.get("production"), Some(&7));
     assert_eq!(head.lines.get("tests"), Some(&4));
 
-    let table = metrics::table(&root).unwrap();
+    let table = metrics::table(&root, "dev").unwrap();
     assert!(
         table.contains("| Lines changed: production | | +— / −— | |"),
         "{table}"
@@ -159,7 +159,7 @@ fn integration_test_paths_are_only_crate_top_level_tests_and_missing_values_are_
     let head = metrics::repository(&root, "HEAD").unwrap();
     assert_eq!(head.tests.get("unit"), Some(&1));
     assert_eq!(head.tests.get("integration"), Some(&1));
-    let table = metrics::table(&root).unwrap();
+    let table = metrics::table(&root, "dev").unwrap();
     assert!(
         table.contains("| Lines changed: config | | +— / −— | |"),
         "{table}"
