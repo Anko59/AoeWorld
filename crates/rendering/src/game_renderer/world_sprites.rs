@@ -26,11 +26,9 @@ pub fn scene_resource_presentation(
             )),
             _ => None,
         };
+        // A missing or incomplete reviewed group falls back to broadleaf art.
         if let Some((frames, expected, approved)) = family {
-            if !frames.is_empty() {
-                if frames.len() != expected {
-                    return None;
-                }
+            if frames.len() == expected {
                 let index = approved[usize::from(resource.visual_variant) % approved.len()];
                 return frames
                     .get(usize::from(index))
