@@ -288,6 +288,7 @@ mod showcase_browser;
 mod showcase_findings;
 mod showcase_pipeline;
 mod showcase_security;
+pub(super) mod stack;
 
 #[test]
 fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {

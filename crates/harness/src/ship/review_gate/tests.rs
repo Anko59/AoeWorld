@@ -9,6 +9,7 @@ use super::super::{
 
 mod reuse;
 mod reuse_policy;
+mod stacked;
 use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
