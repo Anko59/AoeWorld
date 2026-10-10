@@ -18,6 +18,12 @@ pub(crate) mod landscape;
 #[path = "terrain/landscape/queries.rs"]
 mod landscape_queries;
 pub use landscape_queries::{LandscapePolicy, LandscapeSample};
+#[path = "terrain/landscape/data.rs"]
+mod landscape_data;
+pub use landscape_data::{
+    DecorationFamily, EcologicalPalette, LandscapeAppearance, LandscapeChunk, LandscapeDecoration,
+    LandscapeResource, LandscapeTile, NativeExposure, NativeHeightBand, ResourceVisualFamily,
+};
 mod provider;
 mod resources;
 mod surface;

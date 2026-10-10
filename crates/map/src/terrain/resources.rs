@@ -50,7 +50,20 @@ pub(super) fn candidate(
     tile: TileCoord,
     sample: Tile,
 ) -> Option<ResourceNode> {
-    if !sample.passable || super::clearing::suppresses_objects(generator, tile, sample.biome) {
+    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
+        return None;
+    }
+    candidate_unreserved(generator, tile, sample)
+}
+
+/// Base resource distribution for a shared landscape mask. Does not query
+/// decorated tiles, trees or legacy clearings; callers own reservations/access.
+pub(super) fn candidate_unreserved(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    sample: Tile,
+) -> Option<ResourceNode> {
+    if !sample.passable {
         return None;
     }
     let key = detail_key(generator);
