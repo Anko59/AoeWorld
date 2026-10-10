@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "tests/chunk.rs"]
+mod chunk;
 use crate::{
     ElevationPage, EnvironmentPage, EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid,
     PreparedEnvironment, PyramidLevel, Ratio,

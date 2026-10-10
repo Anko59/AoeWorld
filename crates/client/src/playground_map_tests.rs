@@ -299,7 +299,6 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     ]);
     let mut request_bounds = None;
     let mut resident_bounds = None;
-    let mut discovered = std::collections::BTreeSet::new();
     for coordinate in [(8, 8), (9, 8)] {
         let Some(chunk) = chunks.get(&coordinate) else {
             assert!(false, "fetched chunk is resident");
@@ -307,7 +306,6 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         };
         heights::merge_chunk_height_bounds(&mut request_bounds, chunk);
         heights::merge_chunk_height_bounds(&mut resident_bounds, chunk);
-        discovered.insert(coordinate);
     }
     assert_eq!(request_bounds, Some((0, 52)));
     assert_eq!(resident_bounds, Some((0, 52)));
@@ -324,7 +322,6 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     // eligibility while preserving the monotonic request bound.
     let (removed, refreshed) = evict_distant_chunks_with_limits(
         &mut chunks,
-        &mut discovered,
         camera,
         config,
         1,
@@ -332,7 +329,7 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         &[],
     );
     assert!(removed);
-    assert!(!discovered.contains(&(9, 8)));
+    assert!(!chunks.contains_key(&(9, 8)));
     resident_bounds = refreshed;
     assert_eq!(resident_bounds, Some((0, 0)));
     assert_eq!(request_bounds, Some((0, 52)));
@@ -351,7 +348,6 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     // off-screen low chunk. Eviction must retain requested relief.
     evict_distant_chunks_with_limits(
         &mut chunks,
-        &mut discovered,
         camera,
         config,
         1,
@@ -359,7 +355,6 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         &[(9, 8)],
     );
     assert!(!chunks.contains_key(&(8, 8)));
-    discovered.insert((9, 8));
     let Some(resident) = chunks.get(&(9, 8)) else {
         assert!(false, "high-relief chunk is resident");
         return;

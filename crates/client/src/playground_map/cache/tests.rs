@@ -176,7 +176,6 @@ fn cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
         ((0, 0), near),
         ((1, 1), CachedChunk::from(landscape())),
     ]);
-    let mut discovered = std::collections::BTreeSet::from([(0, 0), (1, 1)]);
     let config = aoe_core::WorldConfig::new(50, 50, aoe_core::Seed(1)).unwrap();
     let camera = Camera {
         center: [1.5, 1.5],
@@ -186,7 +185,6 @@ fn cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
     };
     let (removed, _) = evict_distant_chunks_with_limits(
         &mut chunks,
-        &mut discovered,
         camera,
         config,
         MAX_CACHED_CHUNKS,
@@ -196,7 +194,7 @@ fn cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
     assert!(removed);
     assert_eq!(chunks.len(), 1);
     assert!(chunks.contains_key(&(0, 0)));
-    assert!(!discovered.contains(&(1, 1)));
+    assert!(!chunks.contains_key(&(1, 1)));
     assert_eq!(
         chunks.values().map(chunk_resident_bytes).sum::<usize>(),
         limit

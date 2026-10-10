@@ -5,6 +5,8 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 mod appearance_tests;
 #[path = "tests/equivalence.rs"]
 mod equivalence_tests;
+#[path = "tests/floor.rs"]
+mod floor_tests;
 #[path = "tests/landscape.rs"]
 mod landscape_tests;
 #[path = "tests/native_canvas.rs"]
