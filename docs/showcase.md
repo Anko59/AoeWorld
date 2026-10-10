@@ -50,7 +50,9 @@ Existing outputs must be regular files. The directory is created when needed.
 
 - **browser:** the app under development, filmed live. `path` (starting with
   one `/`) opens on the app's origin; `caption` is overlaid, again after every
-  navigation; `steps` run in order (`click` a Playwright selector, press a
+  navigation; `steps` run in order (`click` a Playwright selector,
+  `click_at` a position inside one (`{"selector", "x", "y"}`, CSS pixels from
+  its top-left), `select` an option value in a `<select>`, press a
   `key`, type `text` at 22 ms a character, or `wait_ms` up to 60 000), then the
   page is held for `seconds` (1–300) after the last step, however long the
   steps took. At most 64 steps. Start the app first (`make dev`).
