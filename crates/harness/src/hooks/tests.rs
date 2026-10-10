@@ -270,7 +270,7 @@ fn dispatchers_preserve_gate_arguments_and_failure_status() {
     let make = tools.join("make");
     fs::write(&make, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 23\n").unwrap();
     fs::set_permissions(&make, fs::Permissions::from_mode(0o755)).unwrap();
-    for (name, gate) in [("pre-commit", "pre-commit"), ("pre-push", "preflight")] {
+    for (name, gate) in [("pre-commit", "pre-commit"), ("pre-push", "pre-push")] {
         let output = Command::new(hook_path(root.path(), name).unwrap())
             .current_dir(root.path())
             .env("PATH", &tools)

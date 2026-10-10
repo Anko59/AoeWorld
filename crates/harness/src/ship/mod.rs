@@ -10,6 +10,7 @@ pub(crate) mod git;
 mod github;
 mod issues;
 mod metrics;
+pub(crate) mod prepush;
 mod review_gate;
 mod review_pr;
 pub(crate) mod run;
@@ -47,6 +48,8 @@ pub(crate) enum Commands {
     ShowcaseCheck,
     /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
     NightlyTriage,
+    /// Pre-push: succeed only if `make ship` evidence covers the pushed HEAD.
+    PrepushEvidence,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -127,6 +130,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         }
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
+        Commands::PrepushEvidence => prepush::check(&root),
         Commands::ShipStatus => {
             let head = git::git(&root, &["rev-parse", "HEAD"])?;
             match evidence::read(&root, &head)? {
@@ -324,11 +328,19 @@ fn caller_chose_ssh(root: &Path) -> bool {
         || git::git(root, &["config", "--get", "core.sshCommand"]).is_ok()
 }
 
+/// `git push` naming the evidenced commit, so the pre-push hook can reuse
+/// this ship's preflight evidence instead of running it again.
+fn push_command(root: &Path, head: &str) -> Command {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(root).arg("push");
+    command.env(prepush::ENV, head);
+    command
+}
+
 fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     // The remote is fixed and the refspec names the evidenced branch only.
     let refspec = format!("{}:refs/heads/{}", evidence.head, evidence.branch);
-    let mut command = Command::new("git");
-    command.arg("-C").arg(root).arg("push");
+    let mut command = push_command(root, &evidence.head);
     if force {
         command.arg("--force-with-lease");
     }
@@ -337,10 +349,7 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     }
     let status = command.args(["origin", &refspec]).status()?;
     if !status.success() {
-        return Err(format!(
-            "git push failed ({status}; the pre-push hook re-runs `make preflight`)"
-        )
-        .into());
+        return Err(format!("git push failed ({status}; see git's message above)").into());
     }
     // Best effort: a commit-id refspec cannot set the upstream itself.
     let _ = git::git(

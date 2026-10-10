@@ -12,7 +12,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const HOOKS: [(&str, &[u8]); 2] = [
     ("pre-commit", b"#!/bin/sh\nexec make pre-commit\n"),
-    ("pre-push", b"#!/bin/sh\nexec make preflight\n"),
+    ("pre-push", b"#!/bin/sh\nexec make pre-push\n"),
 ];
 
 /// Install the same mandatory Make dispatchers used by the local gates.

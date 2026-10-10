@@ -311,3 +311,29 @@ fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {
     git(&["config", "core.sshCommand", "ssh -i /dev/null"]);
     assert!(super::caller_chose_ssh(temp.path()));
 }
+
+#[test]
+fn the_push_names_the_evidenced_commit_for_the_pre_push_hook() {
+    let head = "a".repeat(40);
+    let command = super::push_command(std::path::Path::new("."), &head);
+    let names: Vec<_> = command
+        .get_envs()
+        .filter_map(|(key, value)| Some((key.to_str()?, value?.to_str()?)))
+        .collect();
+    assert!(
+        names.contains(&(super::prepush::ENV, head.as_str())),
+        "{names:?}"
+    );
+    // The hook's Make target reaches the Rust check with the variable passed
+    // into the container, and falls back to the full preflight.
+    let makefile =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Makefile")).unwrap();
+    let run = makefile
+        .lines()
+        .find(|line| line.starts_with("DOCKER_RUN :="))
+        .unwrap();
+    assert!(run.contains("-e AOE_SHIP_EVIDENCE"), "{run}");
+    let recipe = &makefile[makefile.find("\npre-push:").unwrap()..];
+    let recipe = &recipe[..=recipe[1..].find("\n\n").unwrap()];
+    assert!(recipe.contains("-- prepush-evidence || $(MAKE) --no-print-directory preflight"));
+}

@@ -60,7 +60,9 @@ agent policy refuses `$` in agent-set Make values.
    ([review](review.md#pull-requests-the-harness-did-not-open)).
 7. **Only then**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
-   runs `make preflight` again. The push sets SSH keepalives (unless
+   runs `make pre-push`: it skips the preflight when
+   `make ship`'s passing preflight evidence covers the clean HEAD being pushed
+   (`AOE_SHIP_EVIDENCE`, checked in Rust), and runs `make preflight` otherwise. The push sets SSH keepalives (unless
    `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the
    connection for minutes (#209).
 8. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
@@ -156,6 +158,6 @@ Proving in CI that the tests ran red then green remains
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the
   authoritative re-run.
-- The preflight gates run twice per ship (once by `ship`, once by the pre-push
-  hook). The duplicate keeps hook bytes unchanged; removing it needs a migration
-  of installed hooks.
+- The pre-push hook trusts `make ship`'s local evidence for the pushed commit;
+  like all local evidence it is not a protected judge, and CI re-runs every
+  gate. A manual push without that evidence runs the full preflight.
