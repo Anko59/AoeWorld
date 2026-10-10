@@ -236,3 +236,27 @@ fn http(address: std::net::SocketAddr, request: String) -> String {
     stream.read_to_string(&mut reply).unwrap();
     reply
 }
+
+#[test]
+fn selected_candidate_staging_does_not_copy_mutable_overlay_state() {
+    let root = tempfile::tempdir().expect("isolated root");
+    let fixture = prepare(root.path(), None).expect("synthetic source fixture");
+    let mutable = fixture.directory.path().join("resource-overlays");
+    fs::create_dir_all(&mutable).expect("source overlay directory");
+    fs::write(mutable.join("sentinel"), b"unchanged").expect("source sentinel");
+    let target = tempfile::tempdir().expect("candidate-only target");
+    stage_candidate(fixture.directory.path(), target.path(), &fixture.hash)
+        .expect("copy only immutable package and pages");
+    assert!(
+        target
+            .path()
+            .join(format!("{}.json", fixture.hash))
+            .is_file()
+    );
+    assert!(target.path().join("pages").join(&fixture.hash).is_dir());
+    assert!(!target.path().join("resource-overlays").exists());
+    assert_eq!(
+        fs::read(mutable.join("sentinel")).expect("original sentinel"),
+        b"unchanged"
+    );
+}

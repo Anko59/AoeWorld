@@ -195,6 +195,9 @@ are not a published package.
 four fixed 256 m local orders on one external 30:1, 1,200 km package. It keeps
 limit, unavailable and cancelled outcomes distinct, never relaxes the canonical
 50k/1:1 qualification case, and qualifies neither live activation nor hardware.
+Its physical-blocker diagnostics, bounded connected-land observation, native
+local orders, three-backend `make test-country-source` capture and one live
+controller order are recorded in [country qualification](country-qualification.md).
 
 ## Open limits
 

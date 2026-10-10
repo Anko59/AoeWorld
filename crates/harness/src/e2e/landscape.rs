@@ -168,6 +168,21 @@ fn verify_store(directory: &Path) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn stage_candidate(source: &Path, target: &Path, hash: &str) -> Result<()> {
+    verify_store(source)?;
+    let mut budget = CopyBudget::default();
+    budget.copy_file(
+        &source.join(format!("{hash}.json")),
+        &target.join(format!("{hash}.json")),
+    )?;
+    budget.copy_tree(
+        &source.join("pages").join(hash),
+        &target.join("pages").join(hash),
+        0,
+    )?;
+    verify_store(target)
+}
+
 fn include_existing(source: &Path, target: &Path) -> Result<()> {
     if !source.try_exists()? {
         return Ok(());
