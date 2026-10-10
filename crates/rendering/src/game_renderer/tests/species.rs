@@ -59,21 +59,11 @@ fn reviewed_species_subsets_and_broadleaf_pairing_share_selection_and_draw() {
                 continue;
             }
             art.tree_families[slot] = vec![original[0]; length];
-            for variant in 0..=255 {
-                assert!(
-                    scene_resource_presentation(&art, fixture::resource(family, variant)).is_none()
-                );
-                assert!(fixture::drawn(&art, &[fixture::resource(family, variant)]).is_empty());
-            }
+            // An incomplete family is unavailable art, not a reason to drop trees.
+            assert_broadleaf_fallback(&art, family);
         }
         art.tree_families[slot].clear();
-        for variant in 0..=255 {
-            let (body, shadow) =
-                scene_resource_presentation(&art, fixture::resource(family, variant)).unwrap();
-            let index = [0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13][usize::from(variant) % 11];
-            assert_eq!(body.atlas, art.resources[1][index].atlas);
-            assert_eq!(shadow.unwrap().atlas, art.tree_shadows[index].atlas);
-        }
+        assert_broadleaf_fallback(&art, family);
         art.tree_families[slot] = original;
     }
 }
@@ -122,5 +112,16 @@ fn native_signed_and_outside_anchors_preserve_body_overhang_and_removal() {
             fixture::drawn(&art, &[]).is_empty(),
             "removing resource removes body and silhouette"
         );
+    }
+}
+
+fn assert_broadleaf_fallback(art: &GameArt, family: u8) {
+    for variant in 0..=255 {
+        let (body, shadow) =
+            scene_resource_presentation(art, fixture::resource(family, variant)).unwrap();
+        let index = [0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13][usize::from(variant) % 11];
+        assert_eq!(body.atlas, art.resources[1][index].atlas);
+        assert_eq!(shadow.unwrap().atlas, art.tree_shadows[index].atlas);
+        assert!(!fixture::drawn(art, &[fixture::resource(family, variant)]).is_empty());
     }
 }
