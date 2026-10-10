@@ -64,6 +64,32 @@ async fn webgpu_v2_floor_packets_use_uniform_three_page_pixels_without_geometry_
     renderer.device.destroy();
 }
 
+#[wasm_bindgen_test]
+async fn webgpu_landscape_parity_fixture_matches_shared_expected_texels() {
+    use crate::surface_mesh::landscape::parity;
+    let mut renderer = surface_renderer().await;
+    renderer.upload_game_atlas(&parity::atlas()).unwrap();
+    let mut face = capacity_surface();
+    face.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
+    for case in parity::cases() {
+        let mut texels = Vec::new();
+        for legacy in [true, false] {
+            parity::apply(&case, &mut face, legacy);
+            renderer
+                .render_world_layers(&[face], &[], [0.0, 0.0, 0.0, 1.0])
+                .unwrap();
+            for at in [48, 32] {
+                texels.push(read_pixel(&renderer, 1, [at, at]).await);
+            }
+        }
+        for index in 0..2 {
+            let expected = case.expected.unwrap_or(texels[index]);
+            assert_pixel(texels[index + 2], expected);
+        }
+    }
+    renderer.device.destroy();
+}
+
 pub(super) async fn surface_renderer() -> Renderer {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document

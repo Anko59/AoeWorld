@@ -1,6 +1,10 @@
 //! Shared compact appearance packet and byte-rounding reference kernel.
 use crate::SceneTerrainAppearance;
 
+#[cfg(test)]
+#[path = "tests/landscape_parity.rs"]
+pub(crate) mod parity;
+
 pub(crate) fn pack(value: Option<SceneTerrainAppearance>) -> u32 {
     value.map_or(0, |v| {
         1 | (u32::from(v.palette.min(5)) << 1)

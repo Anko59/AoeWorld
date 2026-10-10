@@ -74,6 +74,41 @@ fn canvas_v2_floor_pixels_are_uniform_and_distinct_from_legacy() {
     }
 }
 
+#[wasm_bindgen_test]
+fn canvas_landscape_parity_fixture_matches_shared_expected_texels() {
+    use crate::surface_mesh::landscape::parity;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = parity::atlas();
+    let mut draw = |face: ProjectedSurfaceTriangle| {
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &[WorldLayer::Surface(face)],
+            test_camera(),
+            false,
+        )
+        .unwrap();
+        [48, 32].map(|at| pixel(&presentation.color_buffer, at, at))
+    };
+    for case in parity::cases() {
+        let mut legacy = blended_triangle();
+        parity::apply(&case, &mut legacy, true);
+        let legacy = draw(legacy);
+        let mut face = blended_triangle();
+        parity::apply(&case, &mut face, false);
+        let actual = draw(face);
+        let expected = case.expected.map_or(legacy, |texel| [texel; 2]);
+        assert_eq!(
+            actual, expected,
+            "material {} tint {}",
+            case.material, case.tint
+        );
+    }
+}
+
 fn blend_atlas() -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     for (page, texel) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
