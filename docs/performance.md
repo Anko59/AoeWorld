@@ -86,7 +86,11 @@ pass. The pinned Gungraun/Callgrind and DHAT analysis image measures four
 simulation, protocol, and palette-decoding kernels. Binaryen optimizes the WASM bundle before gzip
 size comparison. Their reviewed initial baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports
-without changing the baselines. These measured deterministic comparisons pass
+without changing the baselines. The WASM size baseline was re-taken on
+2026-10-10 at 228410 B (from 217240 B, set by #6), the size of the tree that
+reverts #208 and #221: both existed only to fit a 5% gate that had 37 B left,
+one by moving WebGPU out of Rust. A baseline moves only in its own reviewed
+change, with the reason recorded here. These measured deterministic comparisons pass
 locally. Encoded network bytes and tick durations are informational because
 they vary with scheduling. The dedicated hardware environment and
 qualification are **not established**; 20 Hz simulation and 60 FPS rendering

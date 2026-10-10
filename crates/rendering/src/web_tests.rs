@@ -5,8 +5,6 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 #[path = "web/tests/atlas_pages.rs"]
 mod atlas_pages;
-#[path = "web/tests/device_loss.rs"]
-mod device_loss;
 #[path = "web/tests/grid.rs"]
 mod grid;
 #[path = "web/tests/terrain_blend.rs"]

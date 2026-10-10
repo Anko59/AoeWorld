@@ -53,23 +53,76 @@ pub struct GameArt {
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
+        let side = GAME_ATLAS_SIDE;
         if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
         }
-        // Borrowed WASM bytes are synchronously snapshotted by queue.writeTexture;
-        // only each page's occupied rows are staged.
-        let mut rows = [0; GAME_ATLAS_PAGES as usize];
-        for (rows, page) in rows
-            .iter_mut()
-            .zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES))
+        let limits = self.device.limits();
+        if limits.max_texture_dimension_2d < side
+            || limits.max_texture_array_layers < GAME_ATLAS_PAGES
         {
-            *rows = atlas::occupied_rows(page);
+            return Err("WebGPU cannot support the bounded three-page atlas".into());
         }
-        self.device
-            .upload_atlas(pixels, &rows)
-            .map_err(crate::web::gpu_bridge::error)?;
-        self.atlas_side = GAME_ATLAS_SIDE;
-        self.atlas_pages = GAME_ATLAS_PAGES;
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("local AoE II game atlas"),
+            size: wgpu::Extent3d {
+                width: side,
+                height: side,
+                depth_or_array_layers: GAME_ATLAS_PAGES,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        // One layer per write bounds browser/GPU staging to one page, and only
+        // its occupied rows are staged: the texture starts zeroed.
+        for (layer, page) in (0..).zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES)) {
+            let rows = atlas::occupied_rows(page);
+            if rows == 0 {
+                continue;
+            }
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: layer,
+                    },
+                    ..texture.as_image_copy()
+                },
+                &page[..rows as usize * side as usize * 4],
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(side * 4),
+                    rows_per_image: Some(side),
+                },
+                wgpu::Extent3d {
+                    width: side,
+                    height: rows,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        self.instances.rebind_resources(
+            &self.device,
+            &self.pipeline.get_bind_group_layout(0),
+            &view,
+            &sampler,
+        );
+        self._atlas.destroy();
+        self._atlas = texture;
         Ok(())
     }
 
