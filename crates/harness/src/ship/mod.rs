@@ -10,6 +10,7 @@ pub(crate) mod git;
 mod github;
 mod issues;
 mod metrics;
+mod prepush;
 mod review_gate;
 mod review_pr;
 pub(crate) mod run;
@@ -47,6 +48,8 @@ pub(crate) enum Commands {
     ShowcaseCheck,
     /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
     NightlyTriage,
+    /// Pre-push: succeed only if `make ship` evidence covers the pushed HEAD.
+    PrepushEvidence,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -127,6 +130,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         }
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
+        Commands::PrepushEvidence => prepush::check(&root),
         Commands::ShipStatus => {
             let head = git::git(&root, &["rev-parse", "HEAD"])?;
             match evidence::read(&root, &head)? {
@@ -329,6 +333,7 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     let refspec = format!("{}:refs/heads/{}", evidence.head, evidence.branch);
     let mut command = Command::new("git");
     command.arg("-C").arg(root).arg("push");
+    command.env(prepush::ENV, &evidence.head);
     if force {
         command.arg("--force-with-lease");
     }
