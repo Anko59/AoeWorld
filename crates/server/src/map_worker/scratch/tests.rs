@@ -93,6 +93,8 @@ fn cancelled_preparation_reaps_worker_before_removing_its_staging() {
             crate::map_jobs::PreparationPlan {
                 mode: crate::map_jobs::PreparationMode::Detailed,
                 samples_per_axis: 128,
+                field_axes: None,
+                hydrology_mode: crate::map_jobs::HydrologyMode::None,
                 geographic_millimeters_per_sample: None,
                 explanation: "fixture",
             },
