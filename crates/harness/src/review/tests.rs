@@ -276,7 +276,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         policy_fingerprint: None,
         reused_from: None,
         task_fingerprint: None,
-        base_branch: None,
+        base_branch: "dev".into(),
     };
     assert!(report.passes());
     assert!(

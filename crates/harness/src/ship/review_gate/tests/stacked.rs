@@ -23,7 +23,7 @@ fn rev(root: &Path, name: &str) -> String {
 fn stacked_review(root: &Path) -> Report {
     let _base = review::base::scope("parent");
     let mut report = unstored(root, Tier::Low, 9);
-    report.base_branch = Some("parent".into());
+    report.base_branch = "parent".into();
     report.base = rev(root, "refs/remotes/origin/parent");
     report.merge_base = report.base.clone();
     report.store(root).unwrap();
@@ -58,7 +58,7 @@ fn a_stacked_review_is_reused_after_the_parent_merged() {
     let reused = reuse(&root, "feature").expect("identical change reuses");
     assert_eq!(reused.reused_from.as_deref(), Some(reviewed.head.as_str()));
     assert_eq!(reused.head, rev(&root, "HEAD"));
-    assert_eq!(reused.base_branch.as_deref(), Some("dev"));
+    assert_eq!(reused.base_branch, "dev");
     assert_eq!(reused.base, rev(&root, "refs/remotes/origin/dev"));
     assert!(reused.passes());
 
@@ -123,7 +123,7 @@ fn the_stacked_review_is_reused_on_the_same_parent_after_a_rebase() {
     let _base = review::base::scope("parent");
     let reused = reuse(&root, "feature").expect("same change on the moved parent");
     assert_eq!(reused.reused_from.as_deref(), Some(reviewed.head.as_str()));
-    assert_eq!(reused.base_branch.as_deref(), Some("parent"));
+    assert_eq!(reused.base_branch, "parent");
 }
 
 #[test]

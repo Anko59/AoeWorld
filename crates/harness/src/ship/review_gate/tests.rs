@@ -54,7 +54,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         task_fingerprint: Report::effective_task(root, "HEAD", "")
             .ok()
             .map(|task| Report::task_fingerprint(&task)),
-        base_branch: None,
+        base_branch: "dev".into(),
     }
 }
 

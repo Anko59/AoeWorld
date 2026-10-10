@@ -136,16 +136,6 @@ fn a_base_missing_on_origin_is_refused() {
 }
 
 #[test]
-fn old_evidence_without_a_base_branch_reads_as_dev() {
-    let (_temp, root) = fixture("true");
-    let evidence = judge(&root, &offline()).unwrap();
-    let mut json = serde_json::to_value(&evidence).unwrap();
-    json.as_object_mut().unwrap().remove("base_branch");
-    let read: super::super::evidence::Evidence = serde_json::from_value(json).unwrap();
-    assert_eq!(read.base_branch, "dev");
-}
-
-#[test]
 fn the_pull_request_targets_the_base_and_retargets_after_a_restack() {
     let create = create_args("o/r", "parent", "feature", "Title", "/b.md");
     let at = create.iter().position(|a| a == "--base").expect("--base");

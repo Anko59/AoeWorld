@@ -53,9 +53,8 @@ pub(crate) struct Report {
     #[serde(default)]
     pub(crate) task_fingerprint: Option<String>,
     /// The branch `base` and `merge_base` come from: `dev`, or the parent of a
-    /// stacked pull request. Older reports have none and were against dev.
-    #[serde(default)]
-    pub(crate) base_branch: Option<String>,
+    /// stacked pull request.
+    pub(crate) base_branch: String,
 }
 
 fn hex(digest: impl AsRef<[u8]>) -> String {
@@ -146,7 +145,7 @@ impl Report {
 
     /// Reviewed against the base branch the change is shipped against now.
     pub(crate) fn against_current_base(&self) -> bool {
-        super::base::of(self.base_branch.as_deref()) == super::base::current()
+        self.base_branch == super::base::current()
     }
 
     /// Every session answered: the review counts toward the branch's budget.

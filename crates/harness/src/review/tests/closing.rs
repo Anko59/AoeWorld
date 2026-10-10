@@ -50,7 +50,7 @@ fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report
         policy_fingerprint: None,
         reused_from: None,
         task_fingerprint: None,
-        base_branch: None,
+        base_branch: "dev".into(),
     }
 }
 

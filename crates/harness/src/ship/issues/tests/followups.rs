@@ -54,7 +54,7 @@ fn report(findings: Vec<Finding>) -> Report {
         policy_fingerprint: None,
         reused_from: None,
         task_fingerprint: None,
-        base_branch: None,
+        base_branch: "dev".into(),
     }
 }
 

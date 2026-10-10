@@ -115,7 +115,7 @@ impl Report {
             let source_head = std::mem::replace(&mut source.head, head.to_owned());
             source.branch = branch.to_owned();
             source.base = target_commit;
-            source.base_branch = Some(target);
+            source.base_branch = target;
             source.merge_base = merge_base;
             source.floor = floor.name().to_owned();
             source.merge_grade = config.merge_grade;
@@ -136,10 +136,10 @@ fn full_id(sha: &str) -> bool {
 }
 
 /// The source's raw identity diff: against the current origin/dev for a
-/// review of dev (as before stacking existed), otherwise against the parent
+/// review of dev, otherwise against the parent
 /// commit the stacked review recorded, whose merge base Git recomputes.
 fn source_identity(root: &Path, source: &Report) -> Result<Vec<u8>, String> {
-    match base::of(source.base_branch.as_deref()) {
+    match source.base_branch.as_str() {
         base::DEV => git::change_identity(root, base::DEV, &source.head).map(|(_, raw)| raw),
         _ if full_id(&source.base) => {
             git::change_identity_from(root, &source.base, &source.head).map(|(_, raw)| raw)

@@ -417,7 +417,7 @@ fn review_with_branch(
         reused_from: None,
         // What the reviewers saw: the commit log stands in for an empty task.
         task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
-        base_branch: Some(base::current()),
+        base_branch: base::current(),
     };
     report.store(root)?;
     Ok(report)

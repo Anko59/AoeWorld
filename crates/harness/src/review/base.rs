@@ -30,8 +30,3 @@ pub(crate) fn current() -> String {
     BASE.with(|base| base.borrow().clone())
         .unwrap_or_else(|| DEV.to_owned())
 }
-
-/// The base a stored report was reviewed against (`dev` for older reports).
-pub(crate) fn of(recorded: Option<&str>) -> &str {
-    recorded.unwrap_or(DEV)
-}

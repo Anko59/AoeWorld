@@ -27,7 +27,6 @@ pub(crate) struct Evidence {
     pub(crate) branch: String,
     /// `origin/<base_branch>` at the run: `dev`, or a stacked parent branch.
     pub(crate) base: String,
-    #[serde(default = "dev")]
     pub(crate) base_branch: String,
     pub(crate) merge_base: String,
     pub(crate) changed: Vec<String>,
@@ -35,10 +34,6 @@ pub(crate) struct Evidence {
     pub(crate) verdict: Verdict,
     pub(crate) started: u64,
     pub(crate) finished: u64,
-}
-
-fn dev() -> String {
-    crate::review::base::DEV.to_owned()
 }
 
 pub(crate) fn verdict(results: &[GateResult]) -> Verdict {
