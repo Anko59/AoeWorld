@@ -233,8 +233,12 @@ pub(super) fn candidate_chunks(
     nearest.into_iter().map(|(_, x, y)| (x, y)).collect()
 }
 
+pub(super) fn chunk_retry_pending(client: &Client) -> bool {
+    super::super::now() < client.terrain_bounds.chunk_retry_after
+}
+
 pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32, i32)> {
-    if super::super::now() < client.terrain_bounds.chunk_retry_after {
+    if chunk_retry_pending(client) {
         return Vec::new();
     }
     cached_candidates(client);
@@ -250,7 +254,6 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
         .copied()
         .filter(|coordinate| {
             !client.terrain_chunks.contains_key(coordinate)
-                && !client.terrain_inflight.contains(coordinate)
                 && (pending_focus == Some(*coordinate)
                     || client
                         .terrain_bounds

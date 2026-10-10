@@ -148,6 +148,7 @@ fn pickable_ground_wins_an_exact_tie_against_an_unpickable_skirt() {
     ];
     let triangle = |skirt, pickable| ProjectedSurfaceTriangle {
         appearance: 0,
+        floor_strengths: None,
         points,
         color: [0.2, 0.3, 0.4],
         tile: [7, 11],
@@ -192,6 +193,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
     };
     let cliff = ProjectedSurfaceTriangle {
         appearance: 0,
+        floor_strengths: None,
         points: [
             SurfacePoint {
                 world: [0.0, 0.0, 8.0],

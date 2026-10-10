@@ -6,6 +6,7 @@ use aoe_core::{Camera, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
+pub(crate) mod floor;
 pub(crate) mod landscape;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
@@ -34,6 +35,8 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) material: u8,
     /// Packed optional metadata; zero means none, presence bit preserves Some(0).
     pub(crate) appearance: u32,
+    /// Three canonical rounded u8 endpoints; Some opts into floor interpolation.
+    pub(crate) floor_strengths: Option<[u8; 3]>,
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
     pub(crate) texture_uv: Option<AtlasAddress>,
@@ -369,6 +372,7 @@ fn append_edge_skirt(
     let color = darken(surface_color(bank), 0.62);
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
+        floor_strengths: None,
         points: [points[0], points[1], points[2]],
         color,
         tile,
@@ -385,6 +389,7 @@ fn append_edge_skirt(
     });
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
+        floor_strengths: None,
         points: [points[0], points[2], points[3]],
         color,
         tile,

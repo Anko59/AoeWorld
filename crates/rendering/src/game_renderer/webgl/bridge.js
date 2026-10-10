@@ -102,6 +102,9 @@ void main() {
                 vWeights = weights[corner];
                 if ((pages.w & 1u) != 0u) {
                     float floorStrength = float(min((pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    if ((pages.w & 536870912u) != 0u) {
+                        floorStrength = float((uint(depths.w) >> (corner * 8u)) & 255u) / 255.0;
+                    }
                     vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
                 }
                 vSolid = 3u;
