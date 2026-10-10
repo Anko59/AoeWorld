@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
       - run: make tools
       - id: manifest
         env:
@@ -45,6 +46,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make preflight
 
@@ -55,6 +57,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
       - run: make coverage
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -71,6 +74,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make browser-check
       - run: make test-wasm
@@ -99,6 +103,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make perf-ci
       - run: make perf-pressure
@@ -117,6 +122,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
       - run: make fuzz-smoke
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -137,6 +143,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
       - run: make tools
       - name: Validate selection and selected jobs
         env:
@@ -159,6 +166,9 @@ jobs:
       artifact-metadata: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
+        with:
+          cache: 'false'
       - run: make bootstrap
       - run: make coverage
       - run: make browser-check
@@ -287,6 +297,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
+        with:
+          cache: 'false'
       - id: source
         env:
           AOE_RELEASE_BRANCH: ${{ github.head_ref }}
@@ -368,6 +381,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
+        with:
+          cache: 'false'
       - id: source
         run: make release-main-source-check
       - name: Download existing verified dev build

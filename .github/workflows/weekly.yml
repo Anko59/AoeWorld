@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: dev
+      - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make perf-soak-30
       - if: always()
@@ -39,6 +40,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: dev
+      - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make perf-stress
       - if: always()
