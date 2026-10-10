@@ -9,12 +9,15 @@ mod raster;
 use raster::{raster_selection, raster_sprite, raster_surface};
 
 /// Reuses both the WASM-side raster buffers and the browser-owned ImageData
-/// backing array until the canvas changes size.
+/// backing array. A resize only wraps a new ImageData view around the retained
+/// JS array while it stays within the WASM buffers' shrink policy, so camera
+/// and window resizes do not leave full-frame garbage for the JS collector.
 pub struct CanvasPresentation {
     pub(super) color_buffer: Vec<u8>,
     pub(super) depth_buffer: Vec<f64>,
     pub(super) image_data: Option<ImageData>,
     pub(super) image_pixels: Option<Uint8ClampedArray>,
+    pub(super) image_store: Option<Uint8ClampedArray>,
     size: [u32; 2],
 }
 
@@ -25,6 +28,7 @@ impl CanvasPresentation {
             depth_buffer: Vec::new(),
             image_data: None,
             image_pixels: None,
+            image_store: None,
             size: [width, height],
         }
     }
@@ -52,7 +56,7 @@ impl CanvasPresentation {
         if self.image_data.is_none() || self.size != [width, height] {
             let byte_len = u32::try_from(self.color_buffer.len())
                 .map_err(|_| "Canvas image buffer exceeds the typed-array limit".to_owned())?;
-            let pixels = Uint8ClampedArray::new_with_length(byte_len);
+            let pixels = self.image_view(byte_len);
             let image = ImageData::new_with_js_u8_clamped_array_and_sh(&pixels, width, height)
                 .map_err(error)?;
             self.image_pixels = Some(pixels);
@@ -67,6 +71,26 @@ impl CanvasPresentation {
             return Err("Canvas ImageData is unavailable".to_owned());
         };
         context.put_image_data(image, 0.0, 0.0).map_err(error)
+    }
+
+    /// Returns a `byte_len` view of the retained JS array, reallocating only
+    /// when it is too small or more than twice the needed size.
+    fn image_view(&mut self, byte_len: u32) -> Uint8ClampedArray {
+        let store = match self.image_store.take() {
+            Some(store)
+                if store.length() >= byte_len && byte_len.saturating_mul(2) >= store.length() =>
+            {
+                store
+            }
+            _ => Uint8ClampedArray::new_with_length(byte_len),
+        };
+        let view = if store.length() == byte_len {
+            store.clone()
+        } else {
+            store.subarray(0, byte_len)
+        };
+        self.image_store = Some(store);
+        view
     }
 }
 
