@@ -246,9 +246,9 @@ fn consume_read(record: JsValue, output: &mut Vec<u8>, limit: usize) -> Result<b
     if output.len().saturating_add(length) > limit {
         return Err(invalid("Atlas PNG expands beyond its dimension limit"));
     }
-    let mut decoded = vec![0; length];
-    chunk.copy_to(&mut decoded);
-    output.extend_from_slice(&decoded);
+    let start = output.len();
+    output.resize(start + length, 0);
+    chunk.copy_to(&mut output[start..]);
     Ok(false)
 }
 

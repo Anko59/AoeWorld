@@ -53,6 +53,7 @@ pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<Ga
     scene_resource_presentation(art, resource).map(|(frame, _)| frame)
 }
 
+#[cfg(test)]
 pub(super) fn world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -61,14 +62,29 @@ pub(super) fn world_sprite_frames(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<(Sprite, GameFrame, f64, u64)> {
-    let mut result = if terrain.is_empty() {
-        visible_terrain_frames(art, terrain, camera)
-            .into_iter()
-            .map(|(sprite, frame)| (sprite, frame, f64::NEG_INFINITY, 0))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
+    let mut result = Vec::new();
+    emit_world_sprite_frames(art, terrain, resources, units, camera, animation, |entry| {
+        result.push(entry);
+    });
+    result
+}
+
+pub(super) fn emit_world_sprite_frames(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+    mut emit: impl FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    if terrain.is_empty() {
+        // Keep the bounded diagnostic terrain-frame helper, without collecting another
+        // object scene. Surfaces and selections have already been appended.
+        for (sprite, frame) in visible_terrain_frames(art, terrain, camera) {
+            emit((sprite, frame, f64::NEG_INFINITY, 0));
+        }
+    }
     let projection = Camera {
         center: camera.center,
         zoom: camera.zoom,
@@ -98,7 +114,7 @@ pub(super) fn world_sprite_frames(
                     resource.elevation_meters,
                     camera,
                 ) {
-                    result.push((
+                    emit((
                         sprite,
                         scaled(shadow_frame, camera.zoom as f32),
                         depth,
@@ -112,12 +128,12 @@ pub(super) fn world_sprite_frames(
                 camera,
                 0.2,
             ) {
-                result.push((sprite, shadow_frame, depth, object.stable_id()));
+                emit((sprite, shadow_frame, depth, object.stable_id()));
             }
             if let Some(sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
-                result.push((
+                emit((
                     sprite,
                     scaled(frame, camera.zoom as f32),
                     depth,
@@ -181,11 +197,10 @@ pub(super) fn world_sprite_frames(
         if let Some((shadow, shadow_frame)) =
             alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
         {
-            result.push((shadow, shadow_frame, depth, object.stable_id()));
+            emit((shadow, shadow_frame, depth, object.stable_id()));
         }
-        result.push((sprite, scaled_frame, depth, object.stable_id()));
+        emit((sprite, scaled_frame, depth, object.stable_id()));
     }
-    result
 }
 
 fn object_depth(object: WorldObject) -> f64 {
