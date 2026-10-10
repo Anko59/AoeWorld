@@ -1,4 +1,6 @@
 #![cfg(test)]
+#[path = "canvas_presentation.rs"]
+mod canvas_presentation;
 #[path = "terrain_blend.rs"]
 mod terrain_blend;
 
