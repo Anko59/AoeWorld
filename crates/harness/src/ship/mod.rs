@@ -310,6 +310,15 @@ pub(crate) fn ship_with(
     Ok(evidence)
 }
 
+/// Git opens the SSH connection before the pre-push hook runs `make
+/// preflight` for several minutes; without keepalives GitHub drops the idle
+/// connection and the push dies silently (#209). A caller's own SSH
+/// command wins.
+fn ssh_keepalive(has_ssh_command: bool, has_ssh: bool) -> Option<&'static str> {
+    (!has_ssh_command && !has_ssh)
+        .then_some("ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40")
+}
+
 fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     // The remote is fixed and the refspec names the evidenced branch only.
     let refspec = format!("{}:refs/heads/{}", evidence.head, evidence.branch);
@@ -318,9 +327,18 @@ fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
     if force {
         command.arg("--force-with-lease");
     }
+    if let Some(ssh) = ssh_keepalive(
+        std::env::var_os("GIT_SSH_COMMAND").is_some(),
+        std::env::var_os("GIT_SSH").is_some(),
+    ) {
+        command.env("GIT_SSH_COMMAND", ssh);
+    }
     let status = command.args(["origin", &refspec]).status()?;
     if !status.success() {
-        return Err("git push failed (the pre-push hook re-runs `make preflight`)".into());
+        return Err(format!(
+            "git push failed ({status}; the pre-push hook re-runs `make preflight`)"
+        )
+        .into());
     }
     // Best effort: a commit-id refspec cannot set the upstream itself.
     let _ = git::git(

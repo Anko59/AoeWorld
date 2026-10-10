@@ -124,7 +124,7 @@ fn the_recorder_serves_the_app_port_from_the_bridge_socket_only() {
     assert_eq!(script.matches("createConnection(").count(), 1);
     assert_eq!(script.matches("server.listen(").count(), 1);
     let bridge = script.find("await bridge(app)").unwrap();
-    let launch = script.find("chromium.launch()").unwrap();
+    let launch = script.find("chromium.launch(").unwrap();
     let unbridge = script.find("unbridge();").unwrap();
     let closed = script.find("await browser.close();").unwrap();
     assert!(bridge < launch && closed < unbridge);

@@ -55,6 +55,10 @@ Existing outputs must be regular files. The directory is created when needed.
   page is held for `seconds` (1–300) after the last step, however long the
   steps took. At most 64 steps. Start the app first (`make dev`).
 
+Set `"renderer": "webgpu"` at the top of the storyboard to film browser
+scenes in Chromium with the same software WebGPU flags as the `webgpu`
+browser-test project; the default is the plain pinned Chromium (WebGL2).
+
 The app's origin is `SHOWCASE_APP_URL`, default `http://127.0.0.1:8080/` (the
 `make dev` address). It must be plain `http` on `127.0.0.1` or `localhost`
 with an explicit port and no credentials, path, query or fragment;

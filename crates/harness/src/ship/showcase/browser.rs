@@ -205,6 +205,7 @@ pub(crate) fn app_for(board: &Storyboard) -> Result<Option<AppOrigin>, String> {
 #[derive(Debug, Serialize)]
 pub(crate) struct Plan<'a> {
     pub(crate) title: &'a str,
+    pub(crate) renderer: super::Renderer,
     pub(crate) app: Option<AppOrigin>,
     pub(crate) scenes: Vec<Planned<'a>>,
 }
@@ -242,6 +243,7 @@ pub(crate) fn plan<'a>(
     }
     Ok(Plan {
         title: &board.title,
+        renderer: board.renderer,
         app,
         scenes,
     })

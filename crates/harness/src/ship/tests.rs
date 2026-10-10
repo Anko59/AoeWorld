@@ -288,3 +288,11 @@ mod showcase_browser;
 mod showcase_findings;
 mod showcase_pipeline;
 mod showcase_security;
+
+#[test]
+fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {
+    let keepalive = super::ssh_keepalive(false, false).expect("default keepalive");
+    assert!(keepalive.contains("ServerAliveInterval=30"));
+    assert_eq!(super::ssh_keepalive(true, false), None);
+    assert_eq!(super::ssh_keepalive(false, true), None);
+}

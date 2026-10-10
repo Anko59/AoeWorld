@@ -60,7 +60,9 @@ agent policy refuses `$` in agent-set Make values.
    ([review](review.md#pull-requests-the-harness-did-not-open)).
 7. **Only then**, pushes exactly that commit to `origin` as the branch
    (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
-   runs `make preflight` again.
+   runs `make preflight` again. The push sets SSH keepalives (unless
+   `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the
+   connection for minutes (#209).
 8. **Creates or updates** the pull request against `dev` on `origin`'s GitHub
    repository, found by head branch (never by a number), with the review
    appended; posts the `harness/review` status and arms auto-merge.
@@ -110,6 +112,10 @@ and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.
 
 ## Test-first
+
+A pre-commit that stages only test files runs clippy without test targets, so
+red tests that name code not written yet can be committed first; the next
+commit and every preflight check all targets.
 
 Test-first is reported, never enforced: `make ship` proceeds whatever the
 report says. From Git alone (merge base..HEAD), `aoe-harness`

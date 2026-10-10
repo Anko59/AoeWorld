@@ -69,7 +69,19 @@ pub(crate) struct Storyboard {
     /// A Gemini TTS voice: Kore, Puck, Charon, …
     #[serde(default = "default_voice")]
     pub(crate) voice: String,
+    /// Browser for browser scenes: the default build, or Chromium with the
+    /// same software WebGPU flags as the `webgpu` browser-test project.
+    #[serde(default)]
+    pub(crate) renderer: Renderer,
     pub(crate) scenes: Vec<Scene>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Renderer {
+    #[default]
+    Default,
+    Webgpu,
 }
 
 fn default_voice() -> String {
