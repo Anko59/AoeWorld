@@ -9,8 +9,9 @@ HTTP, WebSocket lifecycle, and clocks. `aoe-harness` owns policy and commands.
 Rendering, assets, QA, and release adapters must consume these boundaries.
 
 Simulation and core code must avoid OS, browser, filesystem, network, and clock
-APIs. Keep transport types out of simulation storage. Add compatibility fixtures
-for protocol changes and deterministic replay checks for simulation changes.
+APIs. Keep transport types out of simulation storage. Add golden fixtures
+pinning the current wire format for protocol changes and deterministic replay
+checks for simulation changes.
 Performance-sensitive changes require scenario-specific counts and benchmarks.
 
 ## Workflow

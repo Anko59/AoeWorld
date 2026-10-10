@@ -85,11 +85,10 @@ locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
 Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
 Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
-vegetation and historical inputs. Schema-9 packages persist typed hydrology and
-modern land-cover evidence in bounded, independently verified pages. Terrain
-consumes those observations through the package provider while retaining the
-legacy water coverage layer for compatibility; schema-8 packages remain
-readable with typed evidence absent. Source availability, the requested date,
+vegetation and historical inputs. Packages persist typed hydrology and modern
+land-cover evidence in bounded, independently verified pages. Terrain consumes
+those observations through the package provider; the optional water coverage
+layer supplies the overview fallback. Source availability, the requested date,
 and normalized package provenance remain distinct so a modern source cannot be
 mistaken for a historical reconstruction.
 
@@ -101,16 +100,18 @@ than evidence for a particular real-world mine, herd, or stand of trees.
 
 `MapPackage` is the game-facing protocol boundary. Its schema version,
 normalized request, projection metadata, source locks, prepared-page roots,
-generation recipe version, and content hash are validated before activation. The
-server persists prepared pages alongside the manifest, serves immutable chunk
-responses keyed by that hash, and rejects missing or inconsistent roots. Keep
-package artifacts outside Git. When the generation recipe changes, retain the
-old package directory for inspection and regenerate compatible packages from
-the cached source inputs into the new versioned directory.
+generation recipe version, and content hash are validated before activation.
+There is exactly one current schema (`MAP_SCHEMA_VERSION = 1`) and one recipe
+(`GENERATION_RECIPE_VERSION = 1`); the strict reader rejects unknown fields and
+any other schema or recipe. The server persists prepared pages alongside the
+manifest, serves immutable chunk responses keyed by that hash, and rejects
+missing or inconsistent roots. Keep package artifacts outside Git. When the
+package format or generation changes, regenerate packages from the cached
+source inputs; old packages are not read. The default server package directory
+is `local-assets/map-packages`.
 
-Recipe 7 adds correlated woodland canopy, irregular clearings, procedural
-trails, and local temperate-ground variation. Recipes 5 and 6 remain readable
-with their original generated terrain and package identities.
+Generation composes one landscape for source-backed and fallback maps alike;
+see [the landscape reference](landscape/implementation.md).
 
 The local asset mapping is equally deliberate: the client maps semantic terrain
 to six imported AoE II terrain groups (temperate grass, dry grass, dirt, sand,
@@ -139,8 +140,8 @@ still decides whether a valid starting position exists.
 Paris creator in overview and detailed modes in Chromium, using the same fixed
 request from `reference-matrix.json`. It checks the world locator, selected
 footprint, mode-specific estimate, measured page progress, source-backed
-activation, and layer preview. Both new packages use recipe 7; the detailed
-package must retain its modeled-water source index. After restarting the
+activation, and layer preview. Both packages use the current recipe; the
+detailed package must retain its modeled-water source index. After restarting the
 server without a worker and with a freshly emptied source cache, the second
 browser session opens both packages and checks that each joins its own world
 chunks before requesting a previously unseen chunk from published pages.
@@ -173,7 +174,8 @@ aggregate does not isolate per-case server memory or the browser container.
 `AOE_MAP_PACKAGE_DIRECTORY` can point the server at a verified package
 directory without copying packages into the normal creator store.
 Historical land-use metadata counts known coverage samples separately from
-legacy pages that omit coverage; omitted values are not treated as land or zero.
+pages prepared without a coverage grid; omitted values are not treated as land
+or zero.
 
 The original `coast_estuary` request was centered on Cairo and produced zero
 water coverage, so it was rejected as a coast capture. The corrected request
@@ -282,7 +284,7 @@ A fixed temporary name limits crash leftovers to one per map and the next
 write recovers it under the process lock. One server process must own a package directory; this is not a shared database.
 No gather command or economy is introduced.
 
-Gameplay protocol 7 synchronizes sparse resource amounts. Every subscription
+The gameplay protocol synchronizes sparse resource amounts. Every subscription
 receives a complete reset, including an empty reset for an unchanged map. Later
 messages name the exact previous overlay revision and contain sorted final
 amounts for changed IDs. The server retains 1,024 revision entries, coalesces
@@ -346,8 +348,8 @@ characters generated independently of the map seed. While its job remains in
 the bounded 128-record history, the same key and normalized request/preference
 return the original job, including after restart, without another worker launch.
 Changing coordinates, seed, scale or preparation preference with an existing key
-returns HTTP 409. Invalid keys return 400. Journal schema 2 persists keys and
-continues to read schema 1; malformed or duplicate saved keys fail startup.
+returns HTTP 409. Invalid keys return 400. The job journal (schema 1, the only
+accepted schema) persists keys; malformed or duplicate saved keys fail startup.
 Retiring a terminal history record also retires its key: this is bounded request
 recovery, not an indefinite global deduplication service.
 

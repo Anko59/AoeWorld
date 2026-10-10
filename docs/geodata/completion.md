@@ -2,8 +2,9 @@
 
 This ledger began at `04464752609a4bcd74a7d4d4c5943f20233dac65`.
 The table below tracks the September 26 completion work. Earlier handoffs
-remain below as revision-bound history. All compilation and validation uses
-Dockerized Make targets.
+remain below as revision-bound history; package hashes recorded there are not
+readable by the current single-version reader and must be regenerated. All
+compilation and validation uses Dockerized Make targets.
 
 ## Product contract
 
@@ -28,11 +29,11 @@ A result from an earlier or dirty revision does not qualify the final revision.
 | --- | --- | --- |
 | Regional preparation | Overview and detailed source acquisition, independent bounded history grid, verified persisted pages | `geodata-test`, `test-creator-source`, `test-geographic-matrix` |
 | Circa-600 reconstruction | Conservative HYDE area allocation, compact coverage, corrections and explicit modern/model/fallback provenance | Offline conservation fixtures and fixed-region regeneration |
-| Water | Model-v2 connected lake surfaces and directed river topology, correction policy, bounded lake rasterization, recipe-6 activation | Source-backed Finland/Paris verification and water captures |
+| Water | Connected lake surfaces and directed river topology (water model 1), correction policy, bounded lake rasterization | Source-backed Finland/Paris verification and water captures |
 | Movement/resources | Ordinary bounded starts, long orders, deterministic replay, durable depletion and reconnect | `map-source-qualify`, source-scale cases and browser resource tests |
 | Rendering | Textured WebGPU/Canvas, shared elevation geometry, verified height bounds and bounded viewport discovery | `test-wasm`, `test-e2e`, `test-geographic-visuals` including >512-chunk return journey |
 | Creator | Geographic land locator, projected footprint, overview/detailed generation and offline reopening | Both profiles through `test-creator-source` |
-| Robustness | Valid model-v1/v2 and compact/legacy-history fuzz seeds, adversarial metadata and source fixtures | `coverage`, `fuzz-smoke`, two clean-revision `fuzz-nightly` campaigns |
+| Robustness | Valid water-model, compact-chunk and history fuzz seeds, adversarial metadata and source fixtures | `coverage`, `fuzz-smoke`, two clean-revision `fuzz-nightly` campaigns |
 | Integration | Sparse maximum dimensions, unchanged cache/planner budgets and repository policies | `preflight`, `perf-ci`, `map-perf`, required CI |
 
 The September 26 resumed source qualification used the server/map implementation
@@ -129,9 +130,6 @@ not yet wired into normal generation.
 
 ## Handoffs
 
-Earlier revision-bound evidence is preserved in
-[completion history](completion-history.md).
-
 M2/M7 creator detail selection is reviewed in
 [PR #26](https://github.com/Anko59/AoeWorld/pull/26), revision
 `c4020f9482b6789e74d25dec20a3bea71f8089ec`. Automatic regional elevation uses
@@ -150,7 +148,7 @@ M7 normal development worker startup is reviewed in
 worker and mounts only package output and the canonical geodata cache writable.
 The checkout remains read-only; missing or non-executable workers fail startup.
 Hooks, preflight (324 native tests), E2E (23), and clean pre-push preflight
-passed on that branch. Integration preserves the recipe-3 maps-v7 directory.
+passed on that branch.
 Actual source-backed creator verification remains pending.
 
 The normal creator flow was verified at integration
@@ -185,7 +183,7 @@ preflight passed 342 native tests.
 
 M5 resource synchronization is reviewed in
 [PR #30](https://github.com/Anko59/AoeWorld/pull/30), revision
-`356a9a0259a0f29e37f937262f294dbdd9f0dfa4`. Protocol 7 sends bounded sparse
+`356a9a0259a0f29e37f937262f294dbdd9f0dfa4`. The gameplay protocol sends bounded sparse
 resets and exact-revision deltas, using a 1,024-entry server journal and full
 reset when history is unavailable. The client retains at most 65,536 amounts
 outside immutable chunk residency and filters exhausted sprites on both
@@ -224,7 +222,7 @@ not close historical reconstruction or typed terrain consumption. Independent
 review, hooks, native tests, preflight, and actual Paris generation/verification
 passed. Integration `0ca2cd174ef397b20fe5538441bf384988942a7f` passes 367 native
 tests. Dockerized `make map-generate-detailed` and `make map-verify` generated
-and verified recipe-3 Paris at 1024 samples per axis, hash
+and verified Paris at 1024 samples per axis, hash
 `718664fc84d93df87e0ab3e47f706b5a3339e4a27570000ab66642029e7882ac`.
 
 M7 durable history and browser recovery are reviewed in
