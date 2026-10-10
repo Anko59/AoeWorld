@@ -1,7 +1,7 @@
 {
   "version": 2,
   "suites": [
-    {"id":"everything","paths":["AGENTS.md","**/AGENTS.md","CLAUDE.md",".claude/**",".agents/**",".codex/**",".dsh/**",".pi/**","make/**","docs/agent-engineering.md","docs/agent-runtimes.md","skills/**","crates/harness/**","gates/**",".github/**","crates/map/**","crates/geodata/**"],"implies":["static","docs","native","gameplay","browser","assets","performance","release"],"review":true},
+    {"id":"everything","paths":["AGENTS.md","**/AGENTS.md","CLAUDE.md",".claude/**",".agents/**",".codex/**",".dsh/**",".pi/**","make/**","docs/agent-engineering.md","docs/agent-runtimes.md","skills/**","crates/harness/**","gates/**",".github/**"],"implies":["static","docs","native","gameplay","browser","assets","performance","release","map"],"review":true},
     {"id":"static","paths":[],"implies":[],"review":false},
     {"id":"docs","paths":["docs/**","README.md","LICENSE","THIRD_PARTY.md"],"implies":["static"],"review":false},
     {"id":"native","paths":[],"implies":["performance"],"review":true},
@@ -9,7 +9,8 @@
     {"id":"browser","paths":["browser/**","web/**","crates/client/**","crates/rendering/**"],"implies":["native","performance"],"review":true},
     {"id":"assets","paths":["crates/assets/**"],"implies":["native","browser","performance"],"review":true},
     {"id":"performance","paths":[],"implies":[],"review":true},
-    {"id":"release","paths":[],"implies":[],"review":true}
+    {"id":"release","paths":[],"implies":[],"review":true},
+    {"id":"map","paths":["crates/map/**","crates/geodata/**"],"implies":["static","docs","native","gameplay","browser","assets","performance","release"],"review":true}
   ],
   "gates": [
     {"id":"fmt-check","command":"make fmt-check","requires":[],"select":"all","evidence":"rustfmt exit status","suites":["static"],"cadences":["edit","stop","commit","pr","ci","nightly","preflight"],"budget_s":120,"static":true,"capabilities":["docker"],"blocks":["stop","commit","pr","ci","nightly","preflight"]},

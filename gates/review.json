@@ -105,6 +105,7 @@
     "browser": "medium",
     "assets": "medium",
     "performance": "medium",
+    "map": "medium",
     "everything": "high"
   }
 }

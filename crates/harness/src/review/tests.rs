@@ -195,6 +195,11 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
         config.floor(&suites(&["static", "gameplay", "native"])),
         Tier::Medium
     );
+    // Map and geodata changes select every product suite but not the harness floor.
+    assert_eq!(
+        config.floor(&suites(&["map", "static", "native", "gameplay", "browser"])),
+        Tier::Medium
+    );
     assert_eq!(config.floor(&suites(&["static", "everything"])), Tier::High);
     assert_eq!(
         config.floor(&suites(&["static", "everything", "release"])),

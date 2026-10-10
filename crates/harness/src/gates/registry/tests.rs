@@ -243,8 +243,6 @@ fn unknown_invalid_empty_map_and_policy_paths_select_everything() {
         "unknown/guide.md",
         "Cargo.lock",
         "Makefile",
-        "crates/map/src/lib.rs",
-        "crates/geodata/src/lib.rs",
         "gates/registry.json",
         "crates/harness/src/gates.rs",
         "skills/testing/SKILL.md",
@@ -276,6 +274,28 @@ fn rename_union_keeps_old_code_when_new_name_is_docs_and_reverse() {
         assert!(impact.suites.contains(suite));
     }
     assert!(!impact.suites.contains("everything"));
+}
+
+#[test]
+fn map_and_geodata_select_every_product_suite_without_the_harness_floor() {
+    let registry = registry();
+    for path in ["crates/map/src/lib.rs", "crates/geodata/src/lib.rs"] {
+        let impact = registry.classify(&paths(&[path]));
+        assert!(!impact.suites.contains("everything"), "{path}");
+        for suite in [
+            "map",
+            "static",
+            "docs",
+            "native",
+            "gameplay",
+            "browser",
+            "assets",
+            "performance",
+            "release",
+        ] {
+            assert!(impact.suites.contains(suite), "{path}: {suite}");
+        }
+    }
 }
 
 #[test]
