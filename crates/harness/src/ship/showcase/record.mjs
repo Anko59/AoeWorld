@@ -1,10 +1,12 @@
 // Records a showcase plan (plan.json, written by `aoe-harness showcase`) in one
 // Playwright take: title cards and scripted terminals are drawn in-page;
-// browser scenes film the app under development at plan.app, the one origin
-// allowed: every other request and WebSocket is aborted (AppOrigin::allows).
-// The container has no network: the app's port on 127.0.0.1 is a local server
-// piping each connection to app.sock, which the harness forwards to the app
-// alone (bridge.rs), so WebRTC, DNS and other addresses reach nothing.
+// browser scenes film the app under development, each on the one origin of its
+// build (plan.origins: the pull request's app and, for before scenes, the app
+// before the change): every other request and WebSocket is aborted
+// (AppOrigin::allows). The container has no network: each origin's port on
+// 127.0.0.1 is a local server piping every connection to that origin's socket,
+// which the harness forwards to that app alone (bridge.rs), so WebRTC, DNS and
+// other addresses reach nothing.
 // Cards and terminals hold the screen for their planned duration, counted from
 // after the page is drawn; a browser scene holds for its `seconds` after its
 // last step, however long the steps took. Writes silent.webm and timings.json: the blank lead-in and each
@@ -15,7 +17,7 @@ import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from
 import { createConnection, createServer } from "node:net";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
-const app = plan.app ?? null;
+const origins = plan.origins;
 const dir = process.cwd();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -76,12 +78,12 @@ function within(value, prefix) {
   }
 }
 
-// Serve the app's port inside the container by piping every connection to
-// the bridged Unix socket; nothing else is reachable.
-async function bridge(app) {
+// Serve one origin's port inside the container by piping every connection to
+// its bridged Unix socket; nothing else is reachable.
+async function bridge(origin) {
   const sockets = new Set();
   const server = createServer((client) => {
-    const upstream = createConnection("app.sock");
+    const upstream = createConnection(origin.socket);
     sockets.add(client).add(upstream);
     const close = () => { client.destroy(); upstream.destroy(); sockets.delete(client); sockets.delete(upstream); };
     for (const end of [client, upstream]) { end.on("error", close); end.on("close", close); }
@@ -89,18 +91,29 @@ async function bridge(app) {
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(Number(new URL(app.http).port), "127.0.0.1", resolve);
+    server.listen(Number(new URL(origin.http).port), "127.0.0.1", resolve);
   });
   return () => { server.close(); for (const socket of sockets) socket.destroy(); };
 }
 
-// The browser scene's caption, drawn again on every document the main frame
-// commits, so a navigation within the app keeps it.
+// The browser scene's caption and build tag, drawn again on every document the
+// main frame commits, so a navigation within the app keeps them.
 let caption = null;
+// The one origin the scene on screen may reach; none for cards and terminals.
+let current = null;
 
-function overlay(text) {
+function overlay({ text, label, build }) {
   const draw = () => {
     document.getElementById("showcase-caption")?.remove();
+    document.getElementById("showcase-build")?.remove();
+    if (label !== null) {
+      const tag = document.createElement("div");
+      tag.id = "showcase-build";
+      tag.textContent = label;
+      const [background, color] = build === "before" ? ["#3d1418", "#ff7b72"] : ["#12301b", "#7ee787"];
+      Object.assign(tag.style, { position: "fixed", left: "16px", top: "16px", padding: "6px 16px", borderRadius: "20px", background, color, font: 'bold 20px "DejaVu Sans",sans-serif', zIndex: 2147483647, pointerEvents: "none" });
+      document.body.appendChild(tag);
+    }
     const el = document.createElement("div");
     el.id = "showcase-caption";
     el.textContent = text;
@@ -111,9 +124,11 @@ function overlay(text) {
   else document.addEventListener("DOMContentLoaded", draw, { once: true });
 }
 
-// Load the app, then caption it; loading is measured, not planned.
+// Load the scene's build of the app, then caption it; loading is measured,
+// not planned.
 async function open(page, scene) {
-  caption = scene.caption;
+  current = origins.find((origin) => origin.build === scene.build) ?? null;
+  caption = { text: scene.caption, label: scene.label ?? null, build: scene.build };
   await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
   await page.evaluate(overlay, caption);
 }
@@ -133,7 +148,9 @@ async function steps(page, scene) {
   }
 }
 
-const unbridge = app === null ? () => {} : await bridge(app);
+const unbridges = [];
+for (const origin of origins) unbridges.push(await bridge(origin));
+const unbridge = () => { for (const close of unbridges) close(); };
 // Same software WebGPU flags as the `webgpu` project in browser/playwright.config.ts.
 const WEBGPU_ARGS = [
   "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--enable-unsafe-webgpu",
@@ -149,11 +166,11 @@ const context = await browser.newContext({
 await context.route("**/*", async (route) => {
   const url = route.request().url();
   if (url === "about:blank" || url.startsWith("data:")) await route.continue();
-  else if (app !== null && within(url, app.http)) await route.continue();
+  else if (current !== null && within(url, current.http)) await route.continue();
   else await route.abort("blockedbyclient");
 });
 await context.routeWebSocket(/.*/, async (ws) => {
-  if (app !== null && within(ws.url(), app.ws)) ws.connectToServer();
+  if (current !== null && within(ws.url(), current.ws)) ws.connectToServer();
   else await ws.close();
 });
 const started = Date.now();
@@ -168,6 +185,7 @@ for (const scene of plan.scenes) {
   if (scene.kind === "browser") await open(page, scene);
   else {
     caption = null;
+    current = null;
     if (page.url() !== "about:blank") await page.goto("about:blank");
   }
   const begin = Date.now();

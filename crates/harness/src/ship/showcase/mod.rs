@@ -1,7 +1,7 @@
 //! `make showcase`: the PR's showcase video from a storyboard
 //! (docs/showcase.md). Scenes are title cards, scripted terminal
 //! transcripts (tagged before/after) and browser scenes filming the app under
-//! development. Playwright in the pinned browser image
+//! development, as built before or after the change. Playwright in the pinned browser image
 //! records them in one take; narration is voiced
 //! with Gemini Flash Lite TTS on OpenRouter and mixed in with ffmpeg from the
 //! pinned ship-tools image. Each scene lasts at least as long as its voice.
@@ -9,11 +9,12 @@ mod bridge;
 mod browser;
 mod check;
 mod media;
+mod origins;
 mod timing;
 mod workdir;
 
 #[cfg(test)]
-pub(crate) use bridge::{Bridge, SOCKET};
+pub(crate) use bridge::Bridge;
 pub(crate) use browser::Step;
 #[cfg(test)]
 pub(crate) use browser::{AppOrigin, DEFAULT_APP_URL, plan};
@@ -27,6 +28,9 @@ pub(crate) use media::read_storyboard;
 pub(crate) use media::{
     concat_entry, narrate, publish_temp_output, save_tts_response, tts_command,
 };
+pub(crate) use origins::Build;
+#[cfg(test)]
+pub(crate) use origins::Origins;
 use serde::{Deserialize, Serialize};
 use std::{
     os::unix::ffi::OsStrExt,
@@ -107,9 +111,13 @@ pub(crate) enum Scene {
         #[serde(default)]
         narration: Option<String>,
     },
-    /// The app under development at `path` on its single configured origin
-    /// (SHOWCASE_APP_URL), driven by `steps`, then held for `seconds`.
+    /// The app under development at `path` on the single origin of its
+    /// `build`: the pull request's (SHOWCASE_APP_URL) unless it names the one
+    /// before the change (SHOWCASE_BEFORE_URL). Driven by `steps`, then held
+    /// for `seconds`.
     Browser {
+        #[serde(default)]
+        build: Build,
         path: String,
         caption: String,
         seconds: u32,

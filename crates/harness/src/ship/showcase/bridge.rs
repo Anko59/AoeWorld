@@ -1,7 +1,8 @@
 //! The only way out of a browser take's container, which has no network: a
 //! Unix socket in the run's private work directory whose every connection is
-//! forwarded to the app's loopback host and port, and nowhere else.
-//! record.mjs listens on the app's port inside the container and pipes each
+//! forwarded to one app's loopback host and port, and nowhere else. Each
+//! origin a storyboard films (origins.rs) has its own bridge and socket.
+//! record.mjs listens on that app's port inside the container and pipes each
 //! connection here, so Chromium reaches the app at its usual URL while WebRTC,
 //! DNS and every other address find no network at all. The bridge is bounded
 //! in open and total connections and lives exactly as long as the recording.
@@ -22,8 +23,6 @@ use std::{
     time::Duration,
 };
 
-/// The socket's name in the work directory, which record.mjs dials.
-pub(crate) const SOCKET: &str = "app.sock";
 /// Connections open at once; Chromium keeps a handful per origin.
 pub(crate) const MAX_OPEN: usize = 64;
 /// Connections over the whole recording.
@@ -41,14 +40,15 @@ pub(crate) struct Bridge {
 }
 
 impl Bridge {
-    /// Listen on `work`/[`SOCKET`] and forward to `host:port`, which must
+    /// Listen on `work`/`name` and forward to `host:port`, which must
     /// resolve to loopback addresses only.
-    pub(crate) fn start(work: &Path, host: &str, port: u16) -> io::Result<Self> {
-        Self::start_with(work, host, port, MAX_OPEN, MAX_TOTAL)
+    pub(crate) fn start(work: &Path, name: &str, host: &str, port: u16) -> io::Result<Self> {
+        Self::start_with(work, name, host, port, MAX_OPEN, MAX_TOTAL)
     }
 
     pub(crate) fn start_with(
         work: &Path,
+        name: &str,
         host: &str,
         port: u16,
         max_open: usize,
@@ -63,11 +63,11 @@ impl Bridge {
                 "the app bridge forwards only to loopback, not {host}:{port}"
             )));
         }
-        let socket = work.join(SOCKET);
+        let socket = work.join(name);
         // A deep checkout overflows the 108-byte socket address; the work
         // directory's descriptor names the same place in a few bytes.
         let directory = std::fs::File::open(work)?;
-        let short = format!("/proc/self/fd/{}/{SOCKET}", directory.as_raw_fd());
+        let short = format!("/proc/self/fd/{}/{name}", directory.as_raw_fd());
         let listener = UnixListener::bind(short)
             .map_err(|error| io::Error::other(format!("{}: {error}", socket.display())))?;
         drop(directory);

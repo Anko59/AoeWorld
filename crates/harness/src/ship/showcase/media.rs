@@ -3,7 +3,8 @@
 //! pipe and never written to disk.
 use super::super::describe::Level;
 use super::bridge::Bridge;
-use super::browser::{Plan, app_for, plan};
+use super::browser::{Plan, plan};
+use super::origins::Origins;
 use super::workdir::create_new;
 use super::{
     Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
@@ -194,9 +195,10 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<V
 }
 
 /// Record the plan in one Playwright take; returns the silent WebM and timings.
-/// The container never has a network. When a browser scene films the app, the
-/// bridge forwards the work directory's Unix socket to the app's port alone
-/// (bridge.rs), and record.mjs still aborts every request off the app origin.
+/// The container never has a network. Each origin the browser scenes film gets
+/// a bridge forwarding its own Unix socket in the work directory to that app's
+/// port alone (bridge.rs), and record.mjs still aborts every request off the
+/// origin of the scene on screen.
 fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings)> {
     let browser = image_env("BROWSER_IMAGE")?;
     let modules = std::env::var_os("AOE_SHOWCASE_NODE_MODULES")
@@ -210,13 +212,11 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
     }
     create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
     create_new(&work.join("record.mjs"))?.write_all(RECORDER.as_bytes())?;
-    let bridge = match &plan.app {
-        Some(app) => {
-            let (host, port) = app.address()?;
-            Some(Bridge::start(work, &host, port)?)
-        }
-        None => None,
-    };
+    let mut bridges = Vec::with_capacity(plan.origins.len());
+    for bridged in &plan.origins {
+        let (host, port) = bridged.origin.address()?;
+        bridges.push(Bridge::start(work, bridged.socket, &host, port)?);
+    }
     let status = Command::new("docker")
         .args([
             "run",
@@ -239,13 +239,22 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         ))
         .args([browser.as_str(), "node", "record.mjs"])
         .status()?;
-    drop(bridge);
+    drop(bridges);
     if !status.success() {
-        return Err(match &plan.app {
-            Some(app) => format!("the recorder failed (is the app up at {}?)", app.http()),
-            None => "the recorder failed".into(),
-        }
-        .into());
+        let apps: Vec<&str> = plan
+            .origins
+            .iter()
+            .map(|bridged| bridged.origin.http())
+            .collect();
+        return Err(if apps.is_empty() {
+            "the recorder failed".into()
+        } else {
+            format!(
+                "the recorder failed (is the app up at {}?)",
+                apps.join(" and ")
+            )
+            .into()
+        });
     }
     let timings: Timings = serde_json::from_slice(&fs::read(work.join("timings.json"))?)?;
     Ok((work.join("silent.webm"), timings))
@@ -355,7 +364,7 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_OUT.into());
     let out = resolve_out(root, &requested_out)?;
-    app_for(&board)?;
+    Origins::from_env(&board)?;
     check_duration(level, &durations(&board, &vec![None; board.scenes.len()]))?;
     Ok((board, out, level))
 }
@@ -404,7 +413,7 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
         if !status.success() {
             return Err("building showcase images failed".into());
         }
-        let plan = plan(&board, &planned, app_for(&board)?)?;
+        let plan = plan(&board, &planned, &Origins::from_env(&board)?)?;
         let (silent, timings) = record(root, work_path, &plan)?;
         let measured = measured_duration(level, &timings, board.scenes.len())?;
         let encoded = work_path.join("showcase.webm");
