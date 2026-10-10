@@ -26,7 +26,7 @@ out vec2 vUv3;
 out vec3 vWeights;
 flat out uint vSolid;
 flat out uint vTint;
-flat out uvec3 vPages;
+flat out uvec4 vPages;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -75,7 +75,7 @@ vec3 terrainTint(uint kind) {
 }
 void main() {
     uint vertex = uint(gl_VertexID);
-    vPages = pages.xyz;
+    vPages = pages;
     vUv2 = vec2(0);
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
@@ -100,6 +100,10 @@ void main() {
                 vUv3 = terrainAtlasUv(terrainBlend1, local);
                 vec3 weights[3] = vec3[3](vec3(1,0,0), vec3(0,1,0), vec3(0,0,1));
                 vWeights = weights[corner];
+                if ((pages.w & 1u) != 0u) {
+                    float floorStrength = float(min((pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
+                }
                 vSolid = 3u;
             }
         }
@@ -125,7 +129,7 @@ in vec2 vUv3;
 in vec3 vWeights;
 flat in uint vSolid;
 flat in uint vTint;
-flat in uvec3 vPages;
+flat in uvec4 vPages;
 out vec4 result;
 void main() {
     if (vSolid == 2u) {
@@ -158,6 +162,19 @@ void main() {
         if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
         shade *= ramp ? .92 : 1.0;
         result = vec4((base + detail * amount) * shade, texel.a);
+        return;
+    }
+    if ((vPages.w & 1u) != 0u && vTint <= 3u) {
+        uint palette = (vPages.w >> 1u) & 7u;
+        vec3 scales = vec3(1000);
+        if (palette == 0u) scales = vec3(990,1000,970);
+        if (palette == 1u) scales = vec3(950,1000,980);
+        if (palette == 2u) scales = vec3(940,1000,930);
+        if (palette == 3u) scales = vec3(1040,980,880);
+        if (palette == 4u) scales = vec3(1030,1000,900);
+        float canopy = float(min((vPages.w >> 14u) & 1023u, 1000u)) / 1000.0;
+        vec3 factor = vColor.rgb * (scales / 1000.0) * (1.0 - .12 * canopy);
+        result = vec4(floor(clamp(texel.rgb * 255.0 * factor, vec3(0), vec3(255)) + .5) / 255.0, texel.a);
         return;
     }
     result = texel * vColor;

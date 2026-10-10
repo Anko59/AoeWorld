@@ -9,6 +9,7 @@ enum ShoreEdge {
 
 fn terrain(tile: [i32; 2], water: u8, height: i16) -> SceneTerrain {
     SceneTerrain {
+        appearance: None,
         position: [f64::from(tile[0]) + 0.5, f64::from(tile[1]) + 0.5],
         material: if water == 0 { 3 } else { 5 },
         elevation_meters: f64::from(height),

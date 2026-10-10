@@ -8,12 +8,13 @@ use crate::{
     },
     web::Sprite,
 };
-use aoe_core::{Camera, EntityId};
+use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
+pub use world_sprites::scene_resource_frame;
 use world_sprites::world_sprite_frames;
 
 pub fn resource_sprite_bounds(
@@ -53,71 +54,12 @@ pub enum GameRenderer {
         presentation: CanvasPresentation,
     },
 }
-#[derive(Clone, Copy)]
-pub struct SceneCamera {
-    pub center: [f64; 2],
-    pub zoom: f64,
-    pub viewport: [f64; 2],
-    pub focus_elevation_meters: f64,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct SceneUnit {
-    pub id: EntityId,
-    pub position: [f64; 2],
-    pub moving: bool,
-    pub facing: u8,
-    pub selected: bool,
-    pub elevation_meters: f64,
-}
-
-#[derive(Clone, Copy)]
-pub struct SceneTerrain {
-    pub position: [f64; 2],
-    /// Display material: 0 grass, 1 dry grass, 2 dirt, 3 sand, 4 procedural
-    /// rock, 5 water, 6 forest, 7 procedural snow, 8 interim procedural ice,
-    /// 9 procedural mud, 10 procedural shallow/shore water. Not recipe identity.
-    pub material: u8,
-    pub elevation_meters: f64,
-    pub surface: SceneTerrainSurface,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SceneTerrainSurface {
-    /// Shared corners ordered northwest, northeast, southeast, southwest.
-    pub corner_game_height_levels: [i16; 4],
-    /// aoe-map `SurfaceKind` discriminant: plateau, ramp, cliff.
-    pub kind: u8,
-    /// aoe-map `SurfaceDiagonal` discriminant.
-    pub triangulation: u8,
-    /// aoe-map `WaterKind` discriminant; zero means no water.
-    pub water: u8,
-}
-
-impl SceneTerrainSurface {
-    pub const PLATEAU: u8 = 0;
-    pub const RAMP: u8 = 1;
-    pub const CLIFF: u8 = 2;
-
-    pub const fn flat(elevation_meters: f64) -> Self {
-        Self {
-            corner_game_height_levels: [elevation_meters as i16; 4],
-            kind: Self::PLATEAU,
-            triangulation: 0,
-            water: 0,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct SceneResource {
-    pub id: u64,
-    pub position: [f64; 2],
-    /// Resource kind in the versioned map wire order.
-    pub kind: u8,
-    pub visual_variant: u8,
-    pub elevation_meters: f64,
-}
+#[path = "game_renderer/scene_types.rs"]
+mod scene_types;
+pub use scene_types::{
+    SceneCamera, SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance,
+    SceneTerrainSurface, SceneUnit,
+};
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
 }

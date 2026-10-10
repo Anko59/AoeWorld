@@ -2,6 +2,24 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+/// Only approved broadleaf frames exist. New ecological families explicitly
+/// fall back to healthy broadleaf art; no family name promotes another sheet.
+fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
+    if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
+        const HEALTHY: [usize; 11] = [0, 1, 2, 4, 6, 7, 9, 10, 11, 12, 13];
+        Some(HEALTHY[usize::from(resource.visual_variant) % HEALTHY.len()])
+    } else {
+        resource_frame_index(resource.kind, resource.visual_variant, count)
+    }
+}
+
+pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
+    let frames = art.resources.get(usize::from(resource.kind))?;
+    frames
+        .get(scene_resource_index(resource, frames.len())?)
+        .copied()
+}
+
 pub(super) fn world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -32,9 +50,7 @@ pub(super) fn world_sprite_frames(
         if frames.is_empty() {
             continue;
         }
-        let Some(frame_index) =
-            resource_frame_index(resource.kind, resource.visual_variant, frames.len())
-        else {
+        let Some(frame_index) = scene_resource_index(*resource, frames.len()) else {
             continue;
         };
         let Some(frame) = frames.get(frame_index) else {

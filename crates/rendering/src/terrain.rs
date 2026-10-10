@@ -49,6 +49,7 @@ pub(crate) fn visible_terrain_frames(
             if let Some(candidate) = terrain_candidate(
                 &projection,
                 SceneTerrain {
+                    appearance: None,
                     position,
                     material: 0,
                     elevation_meters: 0.0,

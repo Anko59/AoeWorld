@@ -5,6 +5,7 @@ use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 pub(crate) struct PreparedScene {
     camera: Camera,
     pub terrain: Vec<SceneTerrain>,
+    pub decorations: Vec<SceneDecoration>,
     pub triangles: Vec<ProjectedSurfaceTriangle>,
     bucket_keys: WorldKeyIndex,
     buckets: Vec<Vec<usize>>,
@@ -17,13 +18,15 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     {
         return scene.clone();
     }
-    let scene = Rc::new(PreparedScene::new(client.camera, scene_terrain(client)));
+    let mut scene = PreparedScene::new(client.camera, scene_terrain(client));
+    scene.decorations = decorations::for_scene(client, &scene);
+    let scene = Rc::new(scene);
     *client.terrain_scene.borrow_mut() = Some(scene.clone());
     scene
 }
 
 impl PreparedScene {
-    fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
+    pub(super) fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
         let triangles = aoe_rendering::projected_surface_triangles(
             &terrain,
             SceneCamera {
@@ -63,6 +66,7 @@ impl PreparedScene {
         Self {
             camera,
             terrain,
+            decorations: Vec::new(),
             triangles,
             bucket_keys,
             buckets,
@@ -127,6 +131,7 @@ mod tests {
                 (0..64).map(move |x| SceneTerrain {
                     position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                     material: 0,
+                    appearance: None,
                     elevation_meters: f64::from((x % 4) * 2),
                     surface: SceneTerrainSurface::flat(f64::from((x % 4) * 2)),
                 })
@@ -164,6 +169,7 @@ mod tests {
                 (0..128).map(move |x| SceneTerrain {
                     position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
                     material: 0,
+                    appearance: None,
                     elevation_meters: f64::from((x % 4) * 2),
                     surface: SceneTerrainSurface {
                         corner_game_height_levels: [(x % 4 * 2) as i16; 4],

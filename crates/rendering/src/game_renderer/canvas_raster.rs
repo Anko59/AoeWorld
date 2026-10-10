@@ -19,6 +19,11 @@ pub(super) fn raster_surface(
         return; // Every sampled alpha would be zero, including water/blend tint.
     }
     let blend = triangle.texture_blend;
+    let appearance = triangle.appearance;
+    let landscape = appearance != 0
+        && triangle.tint <= 3
+        && matches!(triangle.material, 0 | 1 | 2 | 6)
+        && !triangle.skirt;
     let local_uv = triangle_texture_coordinates(triangle.texture_mode);
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
@@ -65,14 +70,34 @@ pub(super) fn raster_surface(
                         sample_terrain_atlas(atlas, second, local),
                         sample_terrain_atlas(atlas, third, local),
                     ];
-                    for channel in 0..4 {
-                        sample[channel] = (f64::from(samples[0][channel]) * first
-                            + f64::from(samples[1][channel]) * weights[1]
-                            + f64::from(samples[2][channel]) * weights[2])
-                            .round() as u8;
+                    if landscape {
+                        sample = crate::surface_mesh::landscape::texel(
+                            samples,
+                            crate::surface_mesh::landscape::floor_weights(appearance),
+                            triangle.tint,
+                            appearance,
+                        );
+                    } else {
+                        for channel in 0..4 {
+                            sample[channel] = (f64::from(samples[0][channel]) * first
+                                + f64::from(samples[1][channel]) * weights[1]
+                                + f64::from(samples[2][channel]) * weights[2])
+                                .round() as u8;
+                        }
                     }
+                } else if landscape {
+                    sample = crate::surface_mesh::landscape::texel(
+                        [sample; 3],
+                        [1.0, 0.0, 0.0],
+                        triangle.tint,
+                        appearance,
+                    );
                 }
-                tint_sample(sample, triangle.tint)
+                if landscape {
+                    sample
+                } else {
+                    tint_sample(sample, triangle.tint)
+                }
             } else {
                 [
                     (triangle.color[0] * 255.0).round() as u8,

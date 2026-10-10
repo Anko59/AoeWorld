@@ -127,6 +127,7 @@ fn parity(actual: &(Vec<u8>, Vec<f64>), expected: &(Vec<u8>, Vec<f64>)) {
 fn triangle(mode: u8, tint: u8, textured: bool, blend: bool) -> ProjectedSurfaceTriangle {
     let screen = [[-3.25, 2.0], [46.0, -2.125], [21.75, 33.0]];
     ProjectedSurfaceTriangle {
+        appearance: 0,
         points: std::array::from_fn(|index| SurfacePoint {
             world: [
                 index as f64 * 5.0,

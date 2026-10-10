@@ -60,6 +60,7 @@ fn canvas_keeps_an_alpha_bearing_native_terrain_diamond_aligned_to_the_tile() {
     };
     let mut triangles = projected_surface_triangles(
         &[SceneTerrain {
+            appearance: None,
             position: [0.5, 0.5],
             material: 0,
             elevation_meters: 0.0,

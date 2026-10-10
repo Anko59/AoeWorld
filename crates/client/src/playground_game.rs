@@ -1,13 +1,13 @@
 use aoe_core::{
     Camera, EntityId, FIXED_SUBUNITS_PER_TILE, ScreenPoint, TileRect, WorldConfig, WorldPosition,
 };
-use aoe_map::Chunk;
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     GameplayUnitState, ResumeToken, decode_gameplay_server, encode_gameplay_client,
 };
 use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
 use js_sys::Uint8Array;
+use map::CachedChunk;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -47,7 +47,7 @@ pub(super) struct Client {
     pub resources: crate::resource_state::ResourceStateCache,
     pub terrain_scene: RefCell<Option<Rc<map::scene::PreparedScene>>>,
     pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
-    pub terrain_chunks: BTreeMap<(i32, i32), Chunk>,
+    pub terrain_chunks: BTreeMap<(i32, i32), CachedChunk>,
     pub terrain_discovered: BTreeSet<(i32, i32)>,
     pub terrain_height_bounds: Option<(i16, i16)>,
     pub terrain_bounds: map::heights::MapHeightBounds,

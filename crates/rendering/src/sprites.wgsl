@@ -20,7 +20,7 @@ struct VertexOutput {
     @location(4) uv2: vec2<f32>,
     @location(5) uv3: vec2<f32>,
     @location(6) weights: vec3<f32>,
-    @location(7) @interpolate(flat) pages: vec3<u32>,
+    @location(7) @interpolate(flat) pages: vec4<u32>,
 };
 
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
@@ -82,7 +82,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
-    out.pages = sprite.pages.xyz;
+    out.pages = sprite.pages;
     out.uv2 = vec2<f32>(0.0);
     out.uv3 = vec2<f32>(0.0);
     out.weights = vec3<f32>(1.0, 0.0, 0.0);
@@ -109,6 +109,10 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                 let weights = array<vec3<f32>, 3>(
                     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
                 out.weights = weights[corner];
+                if (sprite.pages.w & 1u) != 0u {
+                    let floor_strength = f32(min((sprite.pages.w >> 4u) & 1023u, 1000u)) / 1000.0;
+                    out.weights = vec3<f32>(1.0 - floor_strength, floor_strength, 0.0);
+                }
                 out.solid = 3u;
             }
         }
@@ -162,6 +166,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         shade *= select(1.0, 0.92, ramp);
         return vec4<f32>((base + detail * amount) * shade, texel.a);
+    }
+    if (in.pages.w & 1u) != 0u && in.tint_kind <= 3u {
+        var scales = vec3<f32>(1000.0);
+        switch (in.pages.w >> 1u) & 7u {
+            case 0u: { scales = vec3<f32>(990.0, 1000.0, 970.0); }
+            case 1u: { scales = vec3<f32>(950.0, 1000.0, 980.0); }
+            case 2u: { scales = vec3<f32>(940.0, 1000.0, 930.0); }
+            case 3u: { scales = vec3<f32>(1040.0, 980.0, 880.0); }
+            case 4u: { scales = vec3<f32>(1030.0, 1000.0, 900.0); }
+            default: {}
+        }
+        let canopy = f32(min((in.pages.w >> 14u) & 1023u, 1000u)) / 1000.0;
+        let factor = in.color.rgb * (scales / 1000.0) * (1.0 - 0.12 * canopy);
+        return vec4<f32>(floor(clamp(texel.rgb * 255.0 * factor, vec3<f32>(0.0), vec3<f32>(255.0)) + 0.5) / 255.0, texel.a);
     }
     return texel * in.color;
 }

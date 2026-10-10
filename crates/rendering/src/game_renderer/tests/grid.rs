@@ -62,6 +62,7 @@ fn canvas_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     };
     let camera = camera();
     let terrain = [SceneTerrain {
+        appearance: None,
         position: camera.center,
         material: 0,
         elevation_meters: 800.0,

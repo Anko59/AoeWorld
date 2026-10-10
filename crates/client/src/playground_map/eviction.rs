@@ -1,9 +1,9 @@
-use super::{Camera, Chunk, chunk_distance_for, chunk_resident_bytes, heights};
+use super::{CachedChunk, Camera, chunk_distance_for, chunk_resident_bytes, heights};
 use aoe_core::WorldConfig;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn evict_distant_chunks_with_limits(
-    chunks: &mut BTreeMap<(i32, i32), Chunk>,
+    chunks: &mut BTreeMap<(i32, i32), CachedChunk>,
     discovered: &mut BTreeSet<(i32, i32)>,
     camera: Camera,
     config: WorldConfig,

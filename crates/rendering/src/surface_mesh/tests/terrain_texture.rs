@@ -84,6 +84,7 @@ fn same_uv_different_pages_remain_distinct_terrain_blend_addresses() {
     art.terrain[1][0].atlas.page = 1;
     art.terrain[2][0].atlas.page = 2;
     let sample = SceneTerrain {
+        appearance: None,
         position: [0.5; 2],
         material: 0,
         elevation_meters: 0.0,

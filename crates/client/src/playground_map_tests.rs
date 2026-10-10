@@ -33,12 +33,11 @@ fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
         assert!(false, "fixture chunk");
         return;
     };
-    assert_eq!(
-        chunk_resident_bytes(&chunk),
-        size_of::<Chunk>()
-            + chunk.tiles.capacity() * size_of::<Tile>()
-            + chunk.resources.capacity() * size_of::<ResourceNode>()
-    );
+    let expected = size_of::<CachedChunk>()
+        + chunk.tiles.capacity() * size_of::<Tile>()
+        + chunk.resources.capacity() * size_of::<ResourceNode>();
+    let cached = CachedChunk::Legacy(chunk);
+    assert_eq!(chunk_resident_bytes(&cached), expected);
 }
 
 #[wasm_bindgen_test]
@@ -108,7 +107,10 @@ fn resident_surface_bounds_expand_terrain_visibility_to_high_relief() {
     for tile in &mut chunk.tiles {
         tile.surface.corner_game_height_levels = [0, 0, 80, -80];
     }
-    assert_eq!(heights::chunk_height_bounds(&chunk), Some((-80, 80)));
+    assert_eq!(
+        heights::chunk_height_bounds(&CachedChunk::Legacy(chunk)),
+        Some((-80, 80))
+    );
 }
 
 #[wasm_bindgen_test]
@@ -164,7 +166,10 @@ fn authoritative_bounds_request_unseen_high_relief_before_residency() {
     let evidence = &mut chunk.tiles[high_index];
     evidence.game_height_level = 52;
     evidence.surface.corner_game_height_levels = [52; 4];
-    assert_eq!(heights::chunk_height_bounds(&chunk), Some((0, 52)));
+    assert_eq!(
+        heights::chunk_height_bounds(&CachedChunk::Legacy(chunk)),
+        Some((0, 52))
+    );
 
     let discovered = heights::candidate_chunks(camera, config, (0, 52), MAX_CACHED_CHUNKS);
     assert!(discovered.contains(&(9, 8)));
@@ -267,7 +272,10 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         tile.surface.corner_game_height_levels = [0; 4];
     }
 
-    let mut chunks = std::collections::BTreeMap::from([((8, 8), low), ((9, 8), high.clone())]);
+    let mut chunks = std::collections::BTreeMap::from([
+        ((8, 8), CachedChunk::Legacy(low)),
+        ((9, 8), CachedChunk::Legacy(high.clone())),
+    ]);
     let mut request_bounds = None;
     let mut resident_bounds = None;
     let mut discovered = std::collections::BTreeSet::new();
@@ -317,7 +325,7 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     let re_request = heights::candidate_chunks(camera, config, (0, 52), MAX_CACHED_CHUNKS);
     assert!(re_request.contains(&(9, 8)));
 
-    chunks.insert((9, 8), high);
+    chunks.insert((9, 8), CachedChunk::Legacy(high));
     // A visible high chunk can be farther in world coordinates than an
     // off-screen low chunk. Eviction must retain requested relief.
     evict_distant_chunks_with_limits(
@@ -335,7 +343,12 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         assert!(false, "high-relief chunk is resident");
         return;
     };
-    assert_eq!(resident.tiles[high_index].game_height_level, 52);
+    assert_eq!(
+        resident
+            .tile_at(512, 512, high_tile.0, high_tile.1)
+            .map(|tile| tile.game_height_level),
+        Some(52)
+    );
     assert_eq!(
         heights::resident_height_bounds(chunks.values()),
         Some((0, 52))

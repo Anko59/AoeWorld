@@ -55,6 +55,7 @@ fn resource_at_sprite_center(
         position: camera.screen_to_world_at_height(contact_screen, 0.0),
         kind: 0,
         visual_variant: 0,
+        visual_family: 0,
         elevation_meters: 0.0,
     }
 }

@@ -120,3 +120,21 @@ fn restoration_reuploads_existing_owner_and_errors_never_present() {
     restore_owned_pages(renderer.test_bridge(), true).unwrap();
     assert!(renderer.render(&mut [body]).is_err());
 }
+
+#[wasm_bindgen_test]
+fn webgl_landscape_parity_fixture_matches_shared_expected_texels() {
+    use crate::surface_mesh::landscape::parity;
+    let (canvas, mut renderer) = target(&parity::atlas());
+    let screen = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]];
+    for case in parity::cases() {
+        let mut face = triangle(screen, [0.0; 3], [0.0; 3]);
+        parity::apply(&case, &mut face, true);
+        render(&mut renderer, &mut [instance(&face)]);
+        let legacy = [48, 32].map(|at| pixel(&canvas, at, at));
+        parity::apply(&case, &mut face, false);
+        render(&mut renderer, &mut [instance(&face)]);
+        for (index, at) in [48, 32].into_iter().enumerate() {
+            assert_pixel(&canvas, at, at, case.expected.unwrap_or(legacy[index]));
+        }
+    }
+}

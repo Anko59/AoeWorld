@@ -28,12 +28,12 @@ pub(super) fn visible_tiles_for_height_bounds(
     .clamp(config.width_tiles, config.height_tiles)
 }
 
-pub(super) fn include_chunk_height_bounds(client: &mut Client, chunk: &Chunk) {
+pub(super) fn include_chunk_height_bounds(client: &mut Client, chunk: &CachedChunk) {
     if let Some(bounds) = merge_chunk_height_bounds(&mut client.terrain_height_bounds, chunk) {
         remember_probe(
             &mut client.terrain_bounds.probes,
             &mut client.terrain_bounds.probe_order,
-            (chunk.x, chunk.y),
+            chunk.coordinate(),
             bounds,
             MAX_HEIGHT_PROBES,
         );
@@ -47,7 +47,7 @@ pub(super) fn refresh_chunk_height_bounds(client: &mut Client) {
 
 pub(super) fn merge_chunk_height_bounds(
     target: &mut Option<(i16, i16)>,
-    chunk: &Chunk,
+    chunk: &CachedChunk,
 ) -> Option<(i16, i16)> {
     let bounds = chunk_height_bounds(chunk)?;
     merge_height_bounds(target, bounds);
@@ -63,7 +63,7 @@ pub(super) fn merge_height_bounds(target: &mut Option<(i16, i16)>, (minimum, max
 }
 
 pub(super) fn resident_height_bounds<'a>(
-    chunks: impl Iterator<Item = &'a Chunk>,
+    chunks: impl Iterator<Item = &'a CachedChunk>,
 ) -> Option<(i16, i16)> {
     chunks
         .filter_map(chunk_height_bounds)
@@ -73,10 +73,9 @@ pub(super) fn resident_height_bounds<'a>(
         })
 }
 
-pub(super) fn chunk_height_bounds(chunk: &Chunk) -> Option<(i16, i16)> {
+pub(super) fn chunk_height_bounds(chunk: &CachedChunk) -> Option<(i16, i16)> {
     let mut corners = chunk
-        .tiles
-        .iter()
+        .base_tiles()
         .flat_map(|tile| tile.surface.corner_game_height_levels);
     let first = corners.next()?;
     Some(corners.fold((first, first), |(minimum, maximum), height| {
