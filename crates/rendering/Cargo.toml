@@ -10,9 +10,9 @@ aoe-core.workspace = true
 aoe-protocol.workspace = true
 bytemuck = { version = "1.23", features = ["derive"] }
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData", "Document", "Element", "Node", "Window"] }
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData", "Document", "Element", "Node"] }
+wgpu = { version = "30.0", default-features = false, features = ["webgpu", "wgsl"] }
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "=0.3.78"
