@@ -45,14 +45,15 @@ impl Drop for Server {
 
 struct BrowserContainer(String);
 
-/// The release-build suite must finish in five minutes. Coverage runs the same
-/// suite against an instrumented debug server, which is several times slower
-/// per request; it took 288 s of its 300 s on dev (2026-10-10), so it gets its
-/// own bound instead of failing on build mode alone.
+/// Whole-suite bounds for one serial Playwright worker; each test keeps its own
+/// 30 s timeout, so a hang still fails fast. The suite is ~94 tests at ~3 s each:
+/// the release run reached 282 s of a former 300 s bound on dev (2026-10-10) and
+/// any new spec tipped it over. Coverage runs the same suite against an
+/// instrumented debug server.
 fn browser_run_deadline(coverage: Option<&str>) -> Duration {
     match coverage {
-        Some("1") => Duration::from_secs(900),
-        _ => Duration::from_secs(300),
+        Some("1") => Duration::from_secs(1200),
+        _ => Duration::from_secs(600),
     }
 }
 
@@ -279,8 +280,8 @@ mod tests {
 
     #[test]
     fn the_instrumented_debug_server_gets_its_own_deadline() {
-        assert_eq!(browser_run_deadline(None), Duration::from_secs(300));
-        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(900));
+        assert_eq!(browser_run_deadline(None), Duration::from_secs(600));
+        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(1200));
     }
 
     #[test]
