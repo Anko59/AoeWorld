@@ -28,6 +28,11 @@ for ever more mechanism against a determined attacker: no local check can win
 that, review and CI are the backstop, and every addition is more code to get
 wrong.
 
+Project rule (AGENTS.md): no backward compatibility before v1.0. A change
+that adds a legacy or "prior" version, an opt-in profile kept beside the old
+path, a version-gated branch, or a fixture freezing old output is a `major`
+finding; removing such code is never a regression in itself.
+
 Severity:
 
 - `critical`: a crash, panic, data loss, desync or security hole on a normal

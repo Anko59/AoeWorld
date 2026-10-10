@@ -13,6 +13,14 @@ a pass. Human-authored text files must stay within 500 lines, and a directory
 may directly contain at most 14 code/config files. Place substantive command
 logic in Rust, not Make, shell, or workflow YAML.
 
+No backward compatibility before v1.0 (the owner's rule). There are no
+players and no data worth keeping: change formats, generators, schemas and
+protocols in place, keep exactly one current version, and regenerate local
+data instead of migrating it. Do not add legacy or "prior" versions, opt-in
+"V2" profiles beside the old path, version-gated branches, or golden fixtures
+that freeze old output; delete such code when you touch it. Old requirements
+saying otherwise (for example in #200) are void.
+
 Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you
 lack access ([credentials](docs/credentials.md)).
