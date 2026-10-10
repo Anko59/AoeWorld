@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 4;
+pub const VERSION: u8 = 5;
 
 pub mod candidates;
 pub mod packing;
@@ -12,8 +12,8 @@ pub mod runtime;
 mod topology;
 pub use topology::TerrainFrameTopology;
 
-/// Stage 1 remains within the existing single-atlas selection budget.
-pub const MAX_REVIEWED_FRAMES: u32 = 656;
+/// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
+pub const MAX_REVIEWED_FRAMES: u32 = 678;
 
 /// Paving 15018 is not natural rock. No imported rock sheet is approved.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -35,6 +35,8 @@ pub enum AssetRole {
     ForageBush,
     GoldDeposit,
     StoneDeposit,
+    TreeConifer,
+    TreePalm,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,7 +137,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -180,6 +182,22 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 5] = [
         interpretation: "seven stone-ore deposit variants",
         terrain_topology: None,
     },
+    SpriteSource {
+        role: AssetRole::TreeConifer,
+        archive: "graphics.drs",
+        id: 4654,
+        frames: 9,
+        interpretation: "healthy resource subset 1,2,3,4,7,8 only; alpha silhouette, no approved paired shadow",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::TreePalm,
+        archive: "graphics.drs",
+        id: 4653,
+        frames: 13,
+        interpretation: "single resource subset 0,1,2,3,5,6,8,10,11,12 only; alpha silhouette, no approved paired shadow",
+        terrain_topology: None,
+    },
 ];
 
 /// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only
@@ -197,6 +215,11 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 1] = [SpriteSource {
 /// Object roles without reviewed source art. Keep this empty while every
 /// supported resource role has an approved source mapping.
 pub const UNAVAILABLE_RESOURCE_ART: [&str; 0] = [];
+
+#[path = "catalog/tests/private_pack.rs"]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(test)]
+mod private_pack;
 
 #[cfg(test)]
 mod tests {
@@ -225,7 +248,10 @@ mod tests {
                 .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 4);
+        assert_eq!(VERSION, 5);
+        assert_eq!(AssetRole::StoneDeposit as usize, 13);
+        assert_eq!(AssetRole::TreeConifer as usize, 14);
+        assert_eq!(AssetRole::TreePalm as usize, 15);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
         assert_eq!(
@@ -276,6 +302,8 @@ mod tests {
                 (AssetRole::ForageBush, 2560, 4),
                 (AssetRole::GoldDeposit, 4479, 7),
                 (AssetRole::StoneDeposit, 4482, 7),
+                (AssetRole::TreeConifer, 4654, 9),
+                (AssetRole::TreePalm, 4653, 13),
             ]
         );
     }

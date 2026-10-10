@@ -30,14 +30,8 @@ const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> Candidate
 
 /// Metadata-confirmed contiguous ranges; no topology or gameplay approval yet.
 /// In particular, 100 frames is NOT evidence of a seamless 10×10 sheet.
-pub const UNAPPROVED_SOURCES: [CandidateSource; 21] = [
-    graphics(
-        4654,
-        9,
-        "conifers; contact sheet includes bare/autumn variants",
-    ),
+pub const UNAPPROVED_SOURCES: [CandidateSource; 19] = [
     graphics(2304, 9, "possible conifer shadows; pairing unverified"),
-    graphics(4653, 13, "palms"),
     terrain(15001, 100, "grass"),
     terrain(15009, 100, "grass"),
     terrain(15006, 100, "grass"),
@@ -79,7 +73,13 @@ mod tests {
                     .any(|source| source.archive == candidate.archive && source.id == candidate.id)
             );
         }
-        assert_eq!(UNAPPROVED_SOURCES.len(), 21);
+        assert_eq!(UNAPPROVED_SOURCES.len(), 19);
+        assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
+        assert!(
+            !OPTIONAL_RESOURCE_SOURCES
+                .iter()
+                .any(|source| matches!(source.id, 2300 | 2304))
+        );
         assert_eq!(
             UNAPPROVED_SOURCES
                 .iter()

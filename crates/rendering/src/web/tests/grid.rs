@@ -50,6 +50,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         terrain_topology: [None; 7],
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
+        tree_families: Default::default(),
     };
     let projection = aoe_core::Camera {
         center: camera.center,

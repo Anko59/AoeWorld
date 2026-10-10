@@ -107,9 +107,16 @@ rock/snow/ice/mud/water, sand and skirts retain their existing kernels and zero
 packet word; their raw scene/triangle metadata is not discarded. Exposure and
 height are carried semantic evidence, not species/art selection permissions.
 
-New vegetative faces blend coherent grass (dry grass in dry/savanna regions) or
-authoritative dirt with forest detail, uniformly falling back to dirt when forest
-frames are absent. Canonical displayed integer vertices gather a rounded mean of
+New vegetative faces blend grass (dry grass in dry/savanna regions) or
+authoritative dirt with native 15011 forest-soil leaf litter when its reviewed
+optional frames are present. The earlier coherent-dirt substitution was rejected
+in live visual feedback: dirt is not forest soil. The ten coordinate-stable native
+frames restore the intended material, not seamless periodic-sheet qualification.
+Absent optional forest frames fall back to a dirt bed; metadata-free material 6
+keeps its base selection. Native forest soil is available
+even if the dirt group is absent. Identical primary/bed addresses still use one
+sampler rather than three duplicate reads; their appearance transform remains
+active without an interpolated blend flag. Canonical displayed integer vertices gather a rounded mean of
 up to four incident landscape vegetative cells, excluding missing, metadata-free, cliff and water
 support; no support falls back to zero. Duplicate cell records cannot reweight the
 mean, and conflicting duplicates conservatively choose the lower floor. Shared
@@ -138,11 +145,43 @@ multipliers and canopy shading (at most 12%) follow face lighting, with shared
 byte rounding in Canvas, WGSL and GLSL. This does not qualify forest accent sheets
 as seamless full-sheet art; that review limitation above remains in force.
 
+Eligible landscape vegetative terrain alone uses a bounded minification kernel when
+source footprint exceeds 1.25 texels per backing pixel. Four symmetric pixel-quadrant
+RGB samples stay clamped to the same atlas rectangle's texel centers; their RGB
+is alpha-weighted and byte-rounded before tint/appearance. The original nearest
+center alpha stays exact, preserving coverage and depth; zero summed sample alpha
+or nonfinite rect/UV/derivatives falls back to that center. GPU derivatives are
+evaluated before branches/discards, and three additional flat rectangle varyings
+travel within the existing interstage limits. No Sprite112 or atlas allocation changes.
+Canvas computes gradients and offsets per surface, not per fragment: at most two
+64-byte offset payloads, plus Option tags/padding and 32-byte gradient storage;
+compiler stack/register layout and call arguments are additional real storage.
+
+A filtered single layer costs up to 5 atlas reads (center plus four quadrants),
+landscape blends up to 10; their zero third weight avoids a third sampler. Metadata-free,
+manual zero-word, protected faces and every sprite/shadow/selection retain
+nearest sampling (one read, or three for base-material blends). New
+cross-backend pixels pin contrast attenuation, nearest/magnified controls,
+transparent/partial-alpha behavior, rectangle/page isolation and unchanged depth
+bits/picking. This is not a full mip pyramid, severe-zoom antialiasing guarantee,
+coarse-LOD world-frequency fix, frame-cadence or dedicated-hardware qualification.
+
 Resource family zero (`Generic`, non-tree resources) keeps the base variant
-selection. Families 1–4 explicitly
-fall back to healthy approved broadleaf 4652 frames, paired with 2296 shadows;
-client culling and renderer selection share scene_resource_frame. No conifer,
-dry-scrub, tropical or cliff sheet is approved by its semantic name. Decorations
+selection. Wood family 2 uses
+reviewed conifer 4654 healthy indices [1,2,3,4,7,8]; family 4 uses reviewed palm 4653
+single indices [0,1,2,3,5,6,8,10,11,12]. Full raw prefixes 9/13 live in optional
+GameArt tree_families, separate from the four economic resource kinds. Only an
+empty species group falls back to healthy broadleaf 4652 with matching 2296; a
+nonempty malformed prefix is unavailable, not absence. Other families retain
+healthy broadleaf fallback and nonwood ignores family metadata. Central
+scene_resource_presentation chooses body and shadow together; culling's body
+wrapper and drawing share that selection. Native species use the existing selected
+body alpha silhouette, never 2296 or unqualified 2304/2300. Signed/outside anchors
+are preserved. Culling remains body-only: shadow-only edge envelopes are not fixed.
+No IDs, kinds, amounts, passability, generator bytes or source identities change.
+Present species may move atlas UVs through repacking; broadleaf atlas addresses
+stay fixed only when both new sources are absent. No dry-scrub or cliff art is
+approved by its semantic name. Decorations
 retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.

@@ -114,10 +114,16 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
                 0
             };
             let a = terrain_texture_frame(art, primary, triangle.texture_tile).map(|f| f.atlas);
-            let b = terrain_texture_frame(art, 6, triangle.texture_tile).map(|f| f.atlas);
-            triangle.texture_materials = Some([primary, 6, primary]);
+            // Restore reviewed native leaf litter, retaining its coordinate-stable
+            // accent selection, not claiming periodic seams. Packs without optional
+            // forest art fall back to a dirt bed.
+            let bed = if art.terrain[6].is_empty() { 2 } else { 6 };
+            let b = terrain_texture_frame(art, bed, triangle.texture_tile).map(|f| f.atlas);
+            triangle.texture_materials = Some([primary, bed, primary]);
             triangle.texture_uv = a;
-            triangle.texture_blend = a.zip(b).map(|(a, b)| [b, a]);
+            // Identical coherent addresses need one sample, not three reads of
+            // the same bed (especially once each minified read is filtered).
+            triangle.texture_blend = a.zip(b).filter(|(a, b)| a != b).map(|(a, b)| [b, a]);
             continue;
         }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);

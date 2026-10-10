@@ -42,6 +42,18 @@ fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
                 selected.atlas.uv,
                 terrain_texture_frame(&art, 6, [x, y]).unwrap().atlas.uv
             );
+            let index =
+                (x.wrapping_mul(7).wrapping_add(y.wrapping_mul(13))).unsigned_abs() as usize % 10;
+            assert_eq!(selected.atlas, art.terrain[6][index].atlas);
+            let mut face = floor::forest_faces(6, 650, false)[0];
+            face.texture_tile = [x, y];
+            apply_terrain_textures(std::slice::from_mut(&mut face), &art);
+            assert_eq!(face.texture_blend, Some([selected.atlas, frame.atlas]));
+            face.appearance = 0;
+            face.texture_materials = None;
+            apply_terrain_textures(std::slice::from_mut(&mut face), &art);
+            assert_eq!(face.texture_uv, Some(selected.atlas));
+            assert!(face.texture_blend.is_none());
         }
     }
     assert_eq!((accents, dirt), (1024, 0));

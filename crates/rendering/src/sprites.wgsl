@@ -21,6 +21,9 @@ struct VertexOutput {
     @location(5) uv3: vec2<f32>,
     @location(6) weights: vec3<f32>,
     @location(7) @interpolate(flat) pages: vec4<u32>,
+    @location(8) @interpolate(flat) rect: vec4<f32>,
+    @location(9) @interpolate(flat) rect2: vec4<f32>,
+    @location(10) @interpolate(flat) rect3: vec4<f32>,
 };
 
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
@@ -83,6 +86,9 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     let sprite = sprites[instance];
     var out: VertexOutput;
     out.pages = sprite.pages;
+    out.rect = sprite.uv;
+    out.rect2 = sprite.terrain_blend[0];
+    out.rect3 = sprite.terrain_blend[1];
     out.uv2 = vec2<f32>(0.0);
     out.uv3 = vec2<f32>(0.0);
     out.weights = vec3<f32>(1.0, 0.0, 0.0);
@@ -101,7 +107,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             let atlas_uv = terrain_uv(code % 8u, corner);
             out.uv = terrain_atlas_uv(sprite.uv, atlas_uv);
             out.color = vec4<f32>(terrain_tint(code / 8u), 1.0);
-            out.solid = 0u;
+            out.solid = 1u;
             out.tint_kind = code / 8u;
             if sprite.color.w == -3.0 {
                 out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
@@ -133,16 +139,51 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     return out;
 }
 
+// Terrain only. Keep nearest coverage; every quadrant stays in this rectangle.
+fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
+    let center = textureSampleLevel(sprite_atlas, sprite_sampler, uv, i32(page), 0.0);
+    let size = vec2<f32>(textureDimensions(sprite_atlas));
+    let px = dx * size;
+    let py = dy * size;
+    let footprint = max(dot(px, px), dot(py, py));
+    if !(all(abs(rect) <= vec4<f32>(3.402823e38)) && all(abs(uv) <= vec2<f32>(3.402823e38)) && all(abs(dx) <= vec2<f32>(3.402823e38)) && all(abs(dy) <= vec2<f32>(3.402823e38)) && footprint > 1.5625 && footprint <= 3.402823e38) { return center; }
+    let lo = rect.xy + 0.5 / size;
+    let hi = lo + max(rect.zw - 1.0 / size, vec2<f32>(0.0));
+    let offsets = array<vec2<f32>, 4>(-dx-dy, -dx+dy, dx-dy, dx+dy);
+    var sum = vec4<f32>(0.0);
+    for (var i = 0u; i < 4u; i++) {
+        let tap = floor(textureSampleLevel(sprite_atlas, sprite_sampler, clamp(uv + 0.25 * offsets[i], lo, hi), i32(page), 0.0) * 255.0 + 0.5);
+        sum += vec4<f32>(tap.rgb * tap.a, tap.a);
+    }
+    if sum.a == 0.0 { return center; }
+    return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, center.a);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Derivatives are uniform and evaluated before any branch/discard.
+    let dx = dpdx(in.uv); let dy = dpdy(in.uv);
+    let dx2 = dpdx(in.uv2); let dy2 = dpdy(in.uv2);
+    let dx3 = dpdx(in.uv3); let dy3 = dpdy(in.uv3);
     if in.solid == 2u {
         return in.color;
     }
-    var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+    var texel: vec4<f32>;
+    if in.solid == 0u || (in.pages.w & 1u) == 0u {
+        texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+    } else {
+        texel = terrain_sample(in.uv, in.pages.x, in.rect, dx, dy);
+    }
     if in.solid == 3u {
-        texel = texel * in.weights.x
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, i32(in.pages.y), 0.0) * in.weights.y
-            + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, i32(in.pages.z), 0.0) * in.weights.z;
+        if (in.pages.w & 1u) != 0u {
+            texel = texel * in.weights.x
+                + terrain_sample(in.uv2, in.pages.y, in.rect2, dx2, dy2) * in.weights.y
+                + texel * in.weights.z;
+        } else {
+            texel = texel * in.weights.x
+                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, i32(in.pages.y), 0.0) * in.weights.y
+                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, i32(in.pages.z), 0.0) * in.weights.z;
+        }
     }
     if texel.a <= 0.0 {
         discard;

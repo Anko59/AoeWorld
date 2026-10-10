@@ -85,7 +85,7 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
     art.terrain[2] = vec![frame(1, 0.2)];
     art.terrain[6] = vec![frame(1, 0.3)];
     for palette in 0..6 {
-        for floor_strength in [0, 650] {
+        for floor_strength in [0, 650, 1000] {
             for material in [0, 1, 2, 6] {
                 let metadata = crate::SceneTerrainAppearance {
                     floor_strength,
@@ -119,16 +119,29 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
                         Some([primary as u8, 6, primary as u8])
                     );
                     assert_eq!(triangle.texture_uv, Some(address));
+                    let bed = art.terrain[6][0].atlas;
                     assert_eq!(
                         triangle.texture_blend,
-                        Some([art.terrain[6][0].atlas, address])
+                        (address != bed).then_some([bed, address])
                     );
                     assert_eq!(triangle.appearance, landscape::pack(Some(metadata)));
                     let packet = crate::web::surface_instance(&triangle, [256.0, 128.0], 0.0);
-                    assert_eq!(packet.pages[..3], [address.page, 1, address.page]);
+                    assert_eq!(
+                        packet.pages[..3],
+                        if address != bed {
+                            [address.page, 1, address.page]
+                        } else {
+                            [address.page, 0, 0]
+                        }
+                    );
                     assert_eq!(
                         packet.pages[3],
-                        triangle.appearance | landscape::INTERPOLATED_FLOOR
+                        triangle.appearance
+                            | if address != bed {
+                                landscape::INTERPOLATED_FLOOR
+                            } else {
+                                0
+                            }
                     );
                 }
             }
@@ -137,7 +150,7 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
 }
 
 #[wasm_bindgen_test]
-fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recoloring() {
+fn landscape_floor_restores_native_soil_and_preserves_metadata_free_and_absent_art() {
     let frame = |page| GameFrame {
         atlas: crate::AtlasAddress {
             page,
@@ -147,7 +160,7 @@ fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recolori
         anchor: [48.0, 24.0],
     };
     let mut art = test_art(frame(0));
-    art.terrain[6].clear();
+    art.terrain[6] = vec![frame(2)];
     art.terrain[2] = vec![frame(1)];
     let sample = SceneTerrain {
         position: [0.5; 2],
@@ -169,8 +182,60 @@ fn landscape_floor_selects_grass_and_forest_fallback_without_procedural_recolori
         triangles
             .iter()
             .all(|t| t.texture_uv == Some(frame(0).atlas)
-                && t.texture_blend == Some([frame(1).atlas, frame(0).atlas]))
+                && t.texture_blend == Some([frame(2).atlas, frame(0).atlas]))
     );
+    let mut legacy = projected_surface_triangles(
+        &[SceneTerrain {
+            appearance: None,
+            ..sample
+        }],
+        camera([0.5; 2], 1.0, [256.0, 128.0]),
+    );
+    apply_terrain_textures(&mut legacy, &art);
+    assert!(legacy.iter().all(|t| t.texture_uv == Some(frame(2).atlas)
+        && t.texture_blend.is_none()
+        && t.appearance == 0));
+    for native_present in [true, false] {
+        for dirt_present in [true, false] {
+            art.terrain[6] = native_present.then(|| frame(2)).into_iter().collect();
+            art.terrain[2] = dirt_present.then(|| frame(1)).into_iter().collect();
+            for material in [0, 2, 6] {
+                let mut missing = projected_surface_triangles(
+                    &[SceneTerrain { material, ..sample }],
+                    camera([0.5; 2], 1.0, [256.0, 128.0]),
+                );
+                apply_terrain_textures(&mut missing, &art);
+                let primary = if material == 2 && dirt_present {
+                    frame(1)
+                } else {
+                    frame(0)
+                };
+                let bed = if native_present {
+                    frame(2)
+                } else if dirt_present {
+                    frame(1)
+                } else {
+                    frame(0)
+                };
+                assert!(!missing.is_empty());
+                for t in missing {
+                    assert_eq!(t.texture_uv, Some(primary.atlas));
+                    assert_eq!(
+                        t.texture_blend,
+                        (primary.atlas != bed.atlas).then_some([bed.atlas, primary.atlas])
+                    );
+                    assert_eq!(
+                        t.texture_materials,
+                        Some([
+                            if material == 2 { 2 } else { 0 },
+                            if native_present { 6 } else { 2 },
+                            if material == 2 { 2 } else { 0 }
+                        ])
+                    );
+                }
+            }
+        }
+    }
     for material in [4, 5, 7, 8, 9, 10] {
         let mut raw = projected_surface_triangles(
             &[SceneTerrain { material, ..sample }],

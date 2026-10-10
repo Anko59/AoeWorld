@@ -1,4 +1,4 @@
-use super::terrain_blend::{assert_pixel, read_pixel, surface_renderer};
+use super::terrain_blend::{assert_pixel, read_pixel, read_pixels, surface_renderer};
 use super::*;
 
 fn address(page: u32, x: f32) -> crate::AtlasAddress {
@@ -59,8 +59,9 @@ async fn webgpu_array_same_uv_primary_blends_and_page_two_body_shadow_pixels() {
     renderer
         .render_world_layers(&[], &[body], [0.0, 0.0, 0.0, 1.0])
         .unwrap();
-    assert_pixel(read_pixel(&renderer, 1, [40, 64]).await, [0, 0, 255, 255]);
-    assert_pixel(read_pixel(&renderer, 1, [88, 64]).await, [255, 255, 0, 255]);
+    let pixels = read_pixels(&renderer, 1, [[40, 64], [88, 64]]).await;
+    assert_pixel(pixels[0], [0, 0, 255, 255]);
+    assert_pixel(pixels[1], [255, 255, 0, 255]);
     let mirrored = Sprite {
         uv: [2.0 / 2048.0, 0.0, -2.0 / 2048.0, 1.0 / 2048.0],
         ..body
@@ -68,8 +69,9 @@ async fn webgpu_array_same_uv_primary_blends_and_page_two_body_shadow_pixels() {
     renderer
         .render_world_layers(&[], &[mirrored], [0.0, 0.0, 0.0, 1.0])
         .unwrap();
-    assert_pixel(read_pixel(&renderer, 1, [40, 64]).await, [255, 255, 0, 255]);
-    assert_pixel(read_pixel(&renderer, 1, [88, 64]).await, [0, 0, 255, 255]);
+    let pixels = read_pixels(&renderer, 1, [[40, 64], [88, 64]]).await;
+    assert_pixel(pixels[0], [255, 255, 0, 255]);
+    assert_pixel(pixels[1], [0, 0, 255, 255]);
     let shadow = Sprite {
         uv: address(2, 2.0).uv,
         ..body
