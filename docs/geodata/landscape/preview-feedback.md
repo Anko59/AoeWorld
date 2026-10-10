@@ -84,10 +84,121 @@ Focused follow-up verification (working tree based on a0c29cdc):
   compact vector, with stable-reference tests including unsorted duplicate inputs.
   No deadline, source identity, baseline, atlas, instance or cache cap was relaxed.
 
+The appearance/request stage is committed as
+`796360cbd4d526a6c0ac09ad8d291564427c5a53`. Required hooks and corrected preflight
+passed 1239 native tests with 1 existing skip; an initial test-module attribute-order
+policy failure was fixed in the declaration, not in the policy. The unchanged full
+`make GID=117 test-e2e` now passes 81 tests with 9 environment-specific skips in 3.9m;
+the earlier timed-out run remains a failed historical attempt, not a prior pass.
+The refreshed 8081 preview reports this exact revision and its separate explicit
+original-source three-backend capture passes (local evidence under ignored
+`reports/france-live-preview-796360c/`). External memory/hardware limits still apply.
+
+## Zoom soil follow-up
+
+The landscape forest bed now selects coherent periodic dirt rather than rendering
+nonperiodic 15011 forest accents as full-floor sheets. Metadata-free material 6 keeps
+its base art selection. Missing dirt leaves the primary alone rather
+than silently promoting an accent. This is presentation policy only: generator
+bytes, resources, topology and source identity are unchanged. The shared floor
+field still only smooths floor strength, not canopy/palette ownership.
+
+A bounded landscape vegetative terrain-only minification kernel is the next
+implementation: preserve original center alpha/coverage, alpha-weight and
+byte-round four rect-clamped RGB taps only when the source footprint is minified.
+Metadata-free, manual zero-word and protected faces and all sprites retain nearest
+sampling. No whole-atlas mip allocation and no claim that four sparse samples
+solve severe zoom or coarse-LOD world-frequency stretch. Validate actual
+three-backend contrast, transparency, atlas/page-edge and depth pixels and the
+unchanged WASM budget. Initial testing caught an unintended metadata-free filtering
+change; restore that exact nearest reference contract rather than weakening its test.
+
+Focused landscape filter verification on the working tree based on 796360c:
+
+- `make GID=117 fmt test-wasm perf-wasm-size`: pass after fixing explicit
+  nested-module paths, restoring exact metadata-free nearest behavior, correcting unused
+  single-layer page assertions and using a real two-address floor-packet fixture.
+  Actual WASM tests 2 core/63 client/128 rendering. New Canvas tests compare the
+  entire depth buffer bit-for-bit with identical unfiltered geometry; no tolerance
+  was introduced. Rect-edge tests use a wider synthetic sheet with robust interior
+  coverage, retaining exact red-neighbor rejection rather than lowering thresholds.
+- `make GID=117 browser-check perf-ci fuzz-smoke`: pass. Optimized gzip 227,948
+  against unchanged cap 228,102/baseline 217,240+5% (154 bytes remaining). No budget,
+  profile, deadline, baseline or hook/test policy was relaxed.
+- Same pinned sources with `make GID=117 test-country-source`: pass; all 3 backend
+  observations have empty errors. Ignored local evidence `reports/country-source/run-EDndry/`
+  captures 508 unique chunks, peak summed Chromium RSS 954,634,240 bytes and final-four
+  spread 9,031,680 bytes. Eviction limit still not exercised. The captured grass/forest
+  view was inspected; relief improvement at every zoom/location is not established.
+  This remains compressed 20k candidate evidence, not canonical 50k/global/hardware
+  qualification. Read-only independent sampler review found no actionable defect.
+
+## Reviewed species promotion (working tree based on 8243267)
+
+Catalog v5 appends optional conifer/palm roles without changing prior role numbers,
+resource kinds, IDs, amounts, passability, generator bytes or package identities.
+Full raw prefixes 4654/9 and 4653/13 load strictly; only healthy conifer singles
+[1,2,3,4,7,8] and palm singles [0,1,2,3,5,6,8,10,11,12] become wood presentations.
+Native bodies use their own alpha silhouette, never broadleaf 2296 or unqualified
+2304/2300. Empty optional families retain the exact healthy broadleaf fallback;
+nonempty malformed groups are unavailable. Signed/outside anchors are preserved.
+Culling and drawing share one body/shadow selection; body-only culling remains a
+known limit for shadow-only edge visibility.
+
+- `make GID=117 assets-verify`: pass for the unchanged original pack. Explicit
+  Docker native private-manifest packing test: pass, all 678 actual extents
+  (510 terrain/168 objects) on the existing three 2048² pages/50,331,648 bytes,
+  with source/output bounds and overlap checks. Portable synthetic packing and
+  an ignored private test alone are not this proof; missing explicit input fails.
+- `make GID=117 fmt test-wasm perf-ci`: pass, actual 2 core/66 client/134 rendering
+  WASM tests. All three backend pixel tests cover native selection/alpha/shadows;
+  valid even-ID overlay snapshot/delta tests hide depleted native bodies and shadows.
+  Lazy resource-then-unit submission is bit-for-bit compared with the previous
+  materialized order across absent/present/malformed families and equal-depth ties.
+- Initial gzip 228,194 exceeded the unchanged 228,102 cap. Compact index tables
+  alone reached 228,187; an inlining annotation had no effect and was removed.
+  Removing the unnecessary per-frame unsorted object-vector allocation retained
+  exact submission semantics and reached 228,084 (18 bytes below cap). No baseline,
+  profile, deadline, ABI, atlas, memory cap or test requirement was relaxed.
+- Explicit original-art browser proof: pass on WebGPU, WebGL 2 and Canvas 2D with
+  visible pixel removal and empty errors. Private captures were inspected: broadleaf,
+  conifer and palm bodies fully visible. This uses synthetic flat fixture terrain,
+  not a generated ecosystem or a hand-built production map. First capture failed
+  visual qualification despite no JS errors: old source altitude focus and excessive
+  wheel zoom projected bodies outside the viewport. The test now resets altitude
+  focus after fixture binding and asserts visible pixel removal, not errors alone.
+- Read-only independent source review found no actionable semantic defect.
+  `make GID=117 browser-check fuzz-smoke hooks-install hooks-check`: pass.
+  `make GID=117 fmt test-wasm preflight`: pass; 1,240 native tests/2 skips in
+  233.187 seconds plus static/doctest/build/performance-smoke checks. One skip is
+  the explicit private proof separately run above, not a packing success claim.
+  The first attempt rejected stale source identity; an unchanged serialized retry
+  caught a new fixture's banned unwrap. The fixture now explicitly asserts missing
+  presentation failure, and the native helper lives in a proper test-only directory;
+  no policy or production cache/protocol change was made.
+- Pinned source qualification: pass with `make GID=117 test-country-source`,
+  explicitly setting `AOE_SOURCE_QUAL_PACKAGE_DIRECTORY`,
+  `AOE_SOURCE_QUAL_CONTENT_HASH` and `AOE_ASSET_PACK` to the unchanged inputs.
+  An omitted package-directory invocation failed before running qualification;
+  the first explicit attempt captured real Chromium `net::ERR_NETWORK_CHANGED`
+  failures. An unchanged serialized retry passed, with all three backend error
+  arrays empty. Local run-SBmaFD records 505 unique source chunks, peak summed
+  Chromium RSS 952,934,400 bytes and final-four spread 4,055,040 bytes. Eviction
+  qualification remains false; compressed candidate evidence is not canonical
+  50k, global ecosystem, severe-zoom or hardware qualification. Commit/full E2E
+  verification remain pending.
+
 ## Representation issues to address, not conceal
 
 The candidate has real river evidence, but its 1024-axis hydrology grid spans
-1200km: about 1171.875m per cell versus modeled river buffer radii 4..100m.
+1200km: about 1171.875m per cell versus modeled river buffer radii 4..100m
+(full corridor 8..200m). A read-only code audit also confirms a separate registration
+mismatch: preprocessing uses (i+0.5)L/N cell centers, but runtime hydrology uses
+rounded endpoints x(N-1)/(W-1). At W20000/N1024/x10 it chooses 1 instead of the
+containing center-cell 0; the first boundary is displaced about 555m at 60m/tile.
+This arithmetic is not an executed fixture or attribution to a particular lake.
+A correction changes the one hydrology model and regenerates its identity; do
+not alter the shared categorical helper in place.
 Center-hit preprocessing loses narrow reaches; nearest-cell runtime lookup
 expands retained cells into squares. Coarse 128-axis inland fractions persist
 beneath fine NoEvidence. Increasing cell occupancy or inventing a river path

@@ -5,6 +5,8 @@ use crate::{
     },
 };
 const WATER_TINT: [u8; 3] = [38, 113, 190];
+#[path = "canvas_raster/filter.rs"]
+mod filter;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
@@ -31,6 +33,23 @@ pub(super) fn raster_surface(
     let local_uv = triangle_texture_coordinates(triangle.texture_mode);
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
+    };
+    let gradient = if landscape {
+        filter::gradients(&plane, local_uv)
+    } else {
+        [[0.0; 2]; 2]
+    };
+    let primary_filter = if landscape {
+        texture.and_then(|address| filter::offsets(address, gradient))
+    } else {
+        None
+    };
+    // Landscape blends have a zero third weight; metadata-free faces never
+    // filter. Keep only the two offset payloads that can actually be consumed.
+    let secondary_filter = if landscape {
+        blend.and_then(|addresses| filter::offsets(addresses[0], gradient))
+    } else {
+        None
     };
     let mut vertex_depths = [0.0; 3];
     for index in 0..3 {
@@ -67,12 +86,16 @@ pub(super) fn raster_surface(
                         + local_uv[1][1] * weights[1]
                         + local_uv[2][1] * weights[2],
                 ];
-                let mut sample = sample_terrain_atlas(atlas, sampler, local);
+                let mut sample = filter::sample(atlas, sampler, local, primary_filter);
                 if let Some([second, third]) = blend {
                     let samples = [
                         sample,
-                        sample_terrain_atlas(atlas, second, local),
-                        sample_terrain_atlas(atlas, third, local),
+                        filter::sample(atlas, second, local, secondary_filter),
+                        if landscape {
+                            sample
+                        } else {
+                            sample_terrain_atlas(atlas, third, local)
+                        },
                     ];
                     if landscape {
                         sample = crate::surface_mesh::landscape::texel(

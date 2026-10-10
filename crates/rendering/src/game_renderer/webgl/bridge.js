@@ -27,6 +27,9 @@ out vec3 vWeights;
 flat out uint vSolid;
 flat out uint vTint;
 flat out uvec4 vPages;
+flat out vec4 vRect;
+flat out vec4 vRect2;
+flat out vec4 vRect3;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -76,6 +79,9 @@ vec3 terrainTint(uint kind) {
 void main() {
     uint vertex = uint(gl_VertexID);
     vPages = pages;
+    vRect = uv;
+    vRect2 = terrainBlend0;
+    vRect3 = terrainBlend1;
     vUv2 = vec2(0);
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
@@ -93,7 +99,7 @@ void main() {
             vec2 local = terrainUv(code % 8u, corner);
             vUv = terrainAtlasUv(uv, local);
             vColor = vec4(terrainTint(code / 8u), 1);
-            vSolid = 0u;
+            vSolid = 1u;
             vTint = code / 8u;
             if (color.w == -3.0) {
                 vUv2 = terrainAtlasUv(terrainBlend0, local);
@@ -133,17 +139,48 @@ in vec3 vWeights;
 flat in uint vSolid;
 flat in uint vTint;
 flat in uvec4 vPages;
+flat in vec4 vRect;
+flat in vec4 vRect2;
+flat in vec4 vRect3;
 out vec4 result;
+vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
+    vec4 center = textureLod(atlas, vec3(uv, float(page)), 0.0);
+    vec2 size = vec2(textureSize(atlas, 0).xy);
+    vec2 px = dx * size, py = dy * size;
+    float footprint = max(dot(px,px), dot(py,py));
+    if (!(all(lessThanEqual(abs(rect),vec4(3.402823e38))) && all(lessThanEqual(abs(uv),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint > 1.5625 && footprint <= 3.402823e38)) return center;
+    vec2 lo = rect.xy + .5 / size;
+    vec2 hi = lo + max(rect.zw - 1.0 / size, vec2(0));
+    vec2 offsets[4] = vec2[4](-dx-dy, -dx+dy, dx-dy, dx+dy);
+    vec4 sum = vec4(0);
+    for (int i=0; i<4; i++) {
+        vec4 tap = floor(textureLod(atlas, vec3(clamp(uv + .25 * offsets[i], lo, hi), float(page)), 0.0) * 255.0 + .5);
+        sum += vec4(tap.rgb * tap.a, tap.a);
+    }
+    if (sum.a == 0.0) return center;
+    return vec4(floor(sum.rgb / sum.a + .5) / 255.0, center.a);
+}
 void main() {
+    vec2 dx=dFdx(vUv), dy=dFdy(vUv);
+    vec2 dx2=dFdx(vUv2), dy2=dFdy(vUv2);
+    vec2 dx3=dFdx(vUv3), dy3=dFdy(vUv3);
     if (vSolid == 2u) {
         result = vColor;
         return;
     }
-    vec4 texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
+    vec4 texel;
+    if (vSolid == 0u || (vPages.w & 1u) == 0u) texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
+    else texel = terrainSample(vUv, vPages.x, vRect, dx, dy);
     if (vSolid == 3u) {
-        texel = texel * vWeights.x
-              + textureLod(atlas, vec3(vUv2, float(vPages.y)), 0.0) * vWeights.y
-              + textureLod(atlas, vec3(vUv3, float(vPages.z)), 0.0) * vWeights.z;
+        if ((vPages.w & 1u) != 0u) {
+            texel = texel * vWeights.x
+                  + terrainSample(vUv2, vPages.y, vRect2, dx2, dy2) * vWeights.y
+                  + texel * vWeights.z;
+        } else {
+            texel = texel * vWeights.x
+                  + textureLod(atlas, vec3(vUv2, float(vPages.y)), 0.0) * vWeights.y
+                  + textureLod(atlas, vec3(vUv3, float(vPages.z)), 0.0) * vWeights.z;
+        }
     }
     if (texel.a <= 0.0) discard;
     if (vTint == 4u) {
