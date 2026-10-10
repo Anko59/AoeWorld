@@ -20,6 +20,11 @@ fn fresh_default_workspace_does_not_precreate_root_owned_cache_mounts() {
         include_str!("../../../make/ship.mk"),
     )
     .unwrap();
+    fs::write(
+        workspace.path().join("make/qualification.mk"),
+        include_str!("../../../make/qualification.mk"),
+    )
+    .unwrap();
     let render = |extra: &[String]| {
         let result = Command::new("make")
             .current_dir(workspace.path())
