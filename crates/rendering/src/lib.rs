@@ -31,7 +31,7 @@ pub use game_renderer::{
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{
     ProjectedSurfaceTriangle, pick_surface_point, projected_surface_triangles,
-    sample_surface_height, surface_depth_at,
+    sample_surface_height, surface_depth_at, write_terrain_directory,
 };
 #[cfg(target_arch = "wasm32")]
 pub use world_key_index::WorldKeyIndex;

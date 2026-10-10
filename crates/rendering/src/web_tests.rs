@@ -13,6 +13,8 @@ mod species;
 mod terrain_blend;
 #[path = "web/tests/terrain_filter.rs"]
 mod terrain_filter;
+#[path = "web/tests/terrain_tiling.rs"]
+mod terrain_tiling;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
