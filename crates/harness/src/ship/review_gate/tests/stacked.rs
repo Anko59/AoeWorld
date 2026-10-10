@@ -176,8 +176,7 @@ fn a_stacked_description_names_its_parent() {
     assert!(text.contains("# 🧑 For humans"), "{text}");
 }
 
-fn review_on(root: &Path) -> Options {
-    let _ = root;
+fn review_on(_root: &Path) -> Options {
     Options {
         no_review: false,
         ..offline()

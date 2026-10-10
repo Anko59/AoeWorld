@@ -221,7 +221,8 @@ pub(crate) fn ship_with(
             "SHIP_BODY is required: the review is appended to the pull request description".into(),
         );
     }
-    stack::refuse_base(&options.base, &git::branch(root)?)?;
+    let branch = git::branch(root)?;
+    stack::refuse_base(&options.base, &branch)?;
     // Suites, the review diff, test-first and metrics all measure the change
     // against origin/<base>.
     let _base = crate::review::base::scope(&options.base);
@@ -231,8 +232,14 @@ pub(crate) fn ship_with(
         github::Preflight::default()
     };
     let body_text = preflight.body;
-    // A restack (the open PR targets another base) rewrote the branch.
-    let retarget = stack::retarget(preflight.current_base.as_deref(), &options.base).is_some();
+    // A restack rewrote the branch: the open PR targets another base, or
+    // (GitHub already retargeted it) the last review was of another base.
+    let retarget = stack::retarget(preflight.current_base.as_deref(), &options.base).is_some()
+        || stack::restacked(
+            &crate::review::history(root, &branch)?,
+            &options.base,
+            stack::remote_is_ancestor(root, &branch),
+        );
     let options = &Options {
         parent: preflight.parent,
         force: options.force || retarget,

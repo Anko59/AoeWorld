@@ -126,6 +126,31 @@ pub(crate) fn retarget<'a>(existing: Option<&str>, base: &'a str) -> Option<&'a 
     existing.filter(|current| *current != base).map(|_| base)
 }
 
+/// A restack, from local facts only (GitHub may already have retargeted the
+/// pull request when the parent branch was deleted): the branch as pushed is
+/// not an ancestor of HEAD, and its latest review (a reuse report is not one)
+/// was made against another base. Such a push needs `--force-with-lease`.
+pub(crate) fn restacked(
+    history: &[crate::review::Report],
+    base: &str,
+    remote_is_ancestor: Option<bool>,
+) -> bool {
+    remote_is_ancestor == Some(false)
+        && history
+            .iter()
+            .rev()
+            .find(|report| report.reused_from.is_none())
+            .is_some_and(|report| report.base_branch != base)
+}
+
+/// Whether `origin/<branch>` as last seen is an ancestor of HEAD; `None`
+/// when the branch was never pushed from or fetched into this repository.
+pub(crate) fn remote_is_ancestor(root: &Path, branch: &str) -> Option<bool> {
+    let remote = format!("refs/remotes/origin/{branch}");
+    git::git(root, &["rev-parse", "--verify", "--quiet", &remote]).ok()?;
+    Some(git::git(root, &["merge-base", "--is-ancestor", &remote, "HEAD"]).is_ok())
+}
+
 /// The line at the top of a stacked pull request's description.
 pub(crate) fn note(parent: &Parent) -> String {
     format!(

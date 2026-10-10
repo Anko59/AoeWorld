@@ -192,6 +192,19 @@ pub(super) fn edit_args(
     args.into_iter().map(str::to_owned).collect()
 }
 
+/// `gh pr merge --disable-auto`: take back an armed auto-merge.
+pub(super) fn disable_auto_args(url: &str, repository: &str) -> Vec<String> {
+    ["pr", "merge", url, "--repo", repository, "--disable-auto"]
+        .map(str::to_owned)
+        .to_vec()
+}
+
+/// GitHub's refusal to disable an auto-merge that was never armed.
+pub(super) fn auto_merge_not_enabled(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("auto-merge is not enabled") || error.contains("auto merge is not enabled")
+}
+
 pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {
     let branch = evidence.branch.as_str();
     let repository = git::origin_repository(root)?;
@@ -200,6 +213,15 @@ pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) 
     let url = match existing {
         Some(pr) => {
             let retarget = super::stack::retarget(Some(&pr.base), &options.base);
+            // Auto-merge armed by an earlier ship into dev must not merge
+            // this branch into a stacked parent.
+            if retarget.is_some_and(|base| base != crate::review::base::DEV) {
+                let args = disable_auto_args(&pr.url, &repository);
+                match gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
+                    Err(error) if !auto_merge_not_enabled(&error.to_string()) => return Err(error),
+                    _ => {}
+                }
+            }
             let args = edit_args(
                 &pr.url,
                 &repository,

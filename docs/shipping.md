@@ -100,8 +100,12 @@ After the parent squash-merges, rebase the branch onto `origin/dev` (`git
 rebase --onto origin/dev <old parent tip>`), commit nothing else, and run
 `make ship SHIP_BASE=dev`. When the change is identical (the same raw diff,
 [review](review.md#what-happens-next)), the stacked review is reused; the pull
-request is retargeted to `dev` (`gh pr edit --base dev`), force-pushed with
-lease, and auto-merge is armed. Any other change gets a fresh review.
+request is retargeted to `dev` (`gh pr edit --base dev`, unless GitHub already
+did when the parent branch was deleted), force-pushed with
+lease (decided locally: the pushed branch is not an ancestor of HEAD and its
+last review was against another base), and auto-merge is armed. Any other
+change gets a fresh review. Moving an open pull request from `dev` onto a
+parent disables the auto-merge an earlier ship armed.
 
 ## The pull request description
 
