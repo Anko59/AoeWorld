@@ -31,8 +31,9 @@ Harness and pi.
 | max | 5 | ≤ 5 | strong |
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
-asset and performance changes need `medium`; the harness, gates, instructions,
-`.github/` and the map/geodata crates (`everything`) need `high`.
+asset, performance and map/geodata changes need `medium` (map and geodata still
+select every product suite in CI); the harness, gates, instructions and
+`.github/` (`everything`) need `high`.
 
 ## Threat model
 
