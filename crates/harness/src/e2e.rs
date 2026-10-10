@@ -1,5 +1,6 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+mod country;
 mod landscape;
 mod matrix;
 mod source;
@@ -80,6 +81,30 @@ fn ready(address: SocketAddr) -> bool {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
     let mut prefix = [0u8; 12];
     stream.read_exact(&mut prefix).is_ok() && &prefix == b"HTTP/1.1 200"
+}
+
+/// `source-country-probe` arguments: one verified external country package.
+#[derive(clap::Args, Debug)]
+pub struct CountryProbeArgs {
+    #[arg(long)]
+    package_directory: std::path::PathBuf,
+    #[arg(long)]
+    content_hash: String,
+    #[arg(long)]
+    browser: bool,
+}
+
+pub fn country_probe(args: &CountryProbeArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let (directory, hash) = (&args.package_directory, args.content_hash.as_str());
+    if args.browser {
+        country::run(directory, hash)
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&aoe_server::run_source_country_probe(directory, hash)?)?
+        );
+        Ok(())
+    }
 }
 
 pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {
@@ -295,19 +320,4 @@ mod tests {
             assert!(server_binary(Some(invalid)).is_err());
         }
     }
-}
-
-/// `source-country-probe` arguments: one verified external country package.
-#[derive(clap::Args, Debug)]
-pub struct CountryProbeArgs {
-    #[arg(long)]
-    package_directory: std::path::PathBuf,
-    #[arg(long)]
-    content_hash: String,
-}
-
-pub fn country_probe(args: &CountryProbeArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let report = aoe_server::run_source_country_probe(&args.package_directory, &args.content_hash)?;
-    println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(())
 }
