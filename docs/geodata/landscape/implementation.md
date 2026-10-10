@@ -165,10 +165,40 @@ creator/geographic suites, the activated source URL/hash for memory, reference
 packages for movement, and unqualified external checks. No CI claim without
 revision-bound CI evidence. Keep screenshots and original art private.
 
+## Source preparation
+
+Overview packages always sample independent field axes
+(`OverviewFieldAxes::LANDSCAPE`): elevation and year-600 history on 1024-sample
+grids, potential vegetation and categorical water on 128-sample grids. The
+server creator plan, the `map-generate` CLI and the worker JSON all carry these
+four axes; the worker rejects out-of-bound axes and an elevation axis that does
+not match `samples_per_axis` before any acquisition, and the server rejects a
+worker package whose field axes differ from the request. The 1024 elevation cap
+applies only to this field-local preparation; detailed preparation keeps its
+coupled 128-sample overview context and its direct 128 cap. Field-local source
+locks append `;axes=E/V/W/H` to their preprocessing identity.
+
+Vector hydrology is selected explicitly, never by region: the creator's
+`hydrology_mode: vectors` with an explicit overview, or
+`AOE_MAP_HYDROLOGY_MODE=vectors` for the CLI. `PreparedHydrology::prepare_vectors`
+uses the prepared overview context plus pinned HydroLAKES/HydroRIVERS, without
+WorldCover catalog or raster work. Typed evidence and modeled water share the
+1024 axis; categorical water stays at 128 and modern land cover is class-0
+nodata, not an observation. The whole projected footprint must lie inside the
+river-vector source coverage window less the query padding; the window, padding,
+axes, mode and lock counts (7 overview, 2 vector) are defined once in
+`aoe_map` environment/preparation and shared by geodata, worker and server.
+Cancellation is checked before publishing the manifest; orphan immutable pages
+are not a published package.
+
+`make map-country-probe` (`source-country-probe`) reports ordinary start work and
+four fixed 256 m local orders on one external 30:1, 1,200 km package. It keeps
+limit, unavailable and cancelled outcomes distinct, never relaxes the canonical
+50k/1:1 qualification case, and qualifies neither live activation nor hardware.
+
 ## Open limits
 
 Full-sheet seamlessness, expanded-art and shadow review, decoration drawing,
 France capture/movement/memory, source-query cost, CI and dedicated-hardware
-qualification remain open. Geodata acquisition still uses coupled DEM, water
-and PNV axes; independent overview options and vectors-only hydrology are
-pending.
+qualification remain open. Per-cell/page vector geometry scans have no work
+counter; their worst case under current feature caps is unmeasured.

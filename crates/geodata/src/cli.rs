@@ -16,7 +16,6 @@ use std::{
 };
 
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
-const OVERVIEW_SAMPLES_PER_AXIS: u16 = 128;
 
 pub fn run(arguments: &[OsString]) -> Result<(), String> {
     let Some(command) = arguments.first().and_then(|argument| argument.to_str()) else {
@@ -106,15 +105,38 @@ fn map_estimate() -> Result<(), String> {
 
 fn map_generate() -> Result<(), String> {
     let request = read_request()?;
+    let hydrology_mode = match env::var("AOE_MAP_HYDROLOGY_MODE").as_deref() {
+        Err(env::VarError::NotPresent) | Ok("none") => aoe_geodata::OverviewHydrologyMode::None,
+        Ok("vectors") => aoe_geodata::OverviewHydrologyMode::Vectors,
+        _ => return Err("AOE_MAP_HYDROLOGY_MODE must be none or vectors".to_owned()),
+    };
+    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
+        let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
+        let corrections = aoe_map::WaterCorrectionDocument::empty(request, axis)
+            .map_err(|error| error.to_string())?;
+        aoe_geodata::PreparedHydrology::validate_vectors_request(
+            request,
+            axis,
+            &corrections,
+            &AtomicBool::new(false),
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let output = package_path()?;
     let cache = cache()?;
-    let sources = overview_sources().map_err(|error| error.to_string())?;
+    let mut sources = overview_sources().map_err(|error| error.to_string())?;
+    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
+        sources.extend(aoe_geodata::hydrology_vector_sources());
+    }
     print_acquisition_estimate(&cache, &sources)?;
     let response = execute(WorkerRequest::PrepareOverviewDirectory {
         cache_root: cache_root(),
         output_directory: output,
         request,
-        samples_per_axis: OVERVIEW_SAMPLES_PER_AXIS,
+        samples_per_axis: aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation,
+        field_axes: aoe_geodata::OverviewFieldAxes::LANDSCAPE,
+        hydrology_mode,
+        water_corrections: None,
         historical_corrections: None,
         vegetation_corrections: None,
     })

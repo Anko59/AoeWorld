@@ -296,3 +296,18 @@ mod tests {
         }
     }
 }
+
+/// `source-country-probe` arguments: one verified external country package.
+#[derive(clap::Args, Debug)]
+pub struct CountryProbeArgs {
+    #[arg(long)]
+    package_directory: std::path::PathBuf,
+    #[arg(long)]
+    content_hash: String,
+}
+
+pub fn country_probe(args: &CountryProbeArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let report = aoe_server::run_source_country_probe(&args.package_directory, &args.content_hash)?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}

@@ -147,6 +147,7 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+    SourceCountryProbe(e2e::CountryProbeArgs),
     SourceQualify {
         #[arg(long)]
         package_directory: PathBuf,
@@ -361,6 +362,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             release::rehearse(&candidate, &previous)?;
         }
         Command::RepoPolicyCheck => repo_policy::check()?,
+        Command::SourceCountryProbe(args) => e2e::country_probe(&args)?,
         Command::SourceQualify {
             package_directory,
             content_hash,

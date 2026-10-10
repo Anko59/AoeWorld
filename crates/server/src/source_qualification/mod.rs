@@ -1,6 +1,7 @@
 //! Bounded qualification against immutable, verified source-backed packages.
 
 mod activation;
+mod country;
 mod diagnostics;
 mod geographic;
 mod lifecycle;
@@ -13,6 +14,7 @@ mod report;
 mod route;
 mod workload;
 
+pub use country::{SourceCountryProbe, run_source_country_probe};
 pub use navigation_report::SourceScaleEvidence;
 use report::{
     LogicalMemoryEvidence, QualificationSections, QualificationVerdict, RoutePlanningDiagnostic,
@@ -47,16 +49,12 @@ use std::{
 #[cfg(test)]
 mod tests;
 
-const QUALIFICATION_AXIS_TILES: u64 = 50_000;
-const MAX_ROUTE_TICKS: u64 = 1_200_000;
-const ORDINARY_ACTIVATION_SEARCH_CHUNKS: usize = 64;
-const MAX_RESOURCE_SCAN_SIDE: i32 = 64;
-const MAX_RESIDENT_PAGES: usize = 128;
-const QUALIFICATION_CASE: &str = "source-backed-100km-50k-tiles-1-to-1";
-const PARIS_DIAGNOSTIC_CENTER: (i32, i32) = (488_500_000, 20_000_000);
-const PARIS_DIAGNOSTIC_CHAIN_X: [i32; 6] = [5_000, 7_000, 9_000, 11_000, 13_000, 15_000];
-const NAVIGATION_CACHE_BYTE_SCOPE: &str =
-    "logical payload only; excludes allocator and map container overhead";
+mod limits;
+use limits::{
+    MAX_RESIDENT_PAGES, MAX_RESOURCE_SCAN_SIDE, MAX_ROUTE_TICKS, NAVIGATION_CACHE_BYTE_SCOPE,
+    ORDINARY_ACTIVATION_SEARCH_CHUNKS, PARIS_DIAGNOSTIC_CENTER, PARIS_DIAGNOSTIC_CHAIN_X,
+    QUALIFICATION_AXIS_TILES, QUALIFICATION_CASE,
+};
 
 #[derive(Clone, Debug)]
 pub struct SourceScalePackageReference {

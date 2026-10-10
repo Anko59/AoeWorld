@@ -1,11 +1,23 @@
 use super::{
     GeneratedMap, GeodataError, WorkerRequest, WorkerResponse, etopo_2022_60s_surface,
     hyde_sources, local_aeqd_definition, potential_biome_sources, prepare_elevation,
-    prepare_overview, prepare_overview_with_all_corrections, project_wgs84, projected_footprint,
+    prepare_overview, prepare_overview_with_field_axes, project_wgs84, projected_footprint,
     projection_distortion, raster_dimensions, round_meters,
 };
 
+mod overview_hydrology;
+
 pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
+    execute_with_cancellation(request, &std::sync::atomic::AtomicBool::new(false))
+}
+
+pub fn execute_with_cancellation(
+    request: WorkerRequest,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<WorkerResponse, GeodataError> {
+    if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(crate::CacheError::Cancelled.into());
+    }
     match request {
         WorkerRequest::PrepareOverviewElevation {
             cache_root,
@@ -19,22 +31,58 @@ pub fn execute(request: WorkerRequest) -> Result<WorkerResponse, GeodataError> {
             output_directory,
             request,
             samples_per_axis,
+            field_axes,
+            hydrology_mode,
+            water_corrections,
             historical_corrections,
             vegetation_corrections,
         } => {
-            let prepared = prepare_overview_with_all_corrections(
-                cache_root,
+            crate::overview::validate_field_axes(field_axes, true)?;
+            if field_axes.elevation != samples_per_axis {
+                return Err(GeodataError::Preparation(
+                    "overview elevation axis does not match requested samples",
+                ));
+            }
+            let vector_corrections = overview_hydrology::preflight(
+                hydrology_mode,
                 request,
                 samples_per_axis,
-                samples_per_axis,
+                field_axes,
+                water_corrections,
+                cancelled,
+            )?;
+            let prepared = prepare_overview_with_field_axes(
+                cache_root.clone(),
+                request,
+                field_axes,
                 historical_corrections.as_ref(),
                 vegetation_corrections.as_ref(),
             )?;
+            let hydrology = vector_corrections
+                .map(|corrections| {
+                    crate::PreparedHydrology::prepare_vectors(
+                        cache_root,
+                        request,
+                        overview_hydrology::VECTOR_SAMPLES_PER_AXIS,
+                        &prepared.pages,
+                        &prepared.water_pages,
+                        corrections,
+                        cancelled,
+                    )
+                })
+                .transpose()?;
             let generated = GeneratedMap::from_prepared(request, prepared)?;
+            let generated = match hydrology {
+                Some(hydrology) => generated.with_overview_vector_hydrology(hydrology)?,
+                None => generated,
+            };
             crate::preparation_progress::stage(
                 crate::preparation_progress::Phase::PublishingPackage,
             );
-            generated.write_directory(&output_directory)?;
+            if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(crate::CacheError::Cancelled.into());
+            }
+            generated.write_directory_with_cancellation(&output_directory, cancelled)?;
             Ok(WorkerResponse::PreparedDirectory {
                 package: generated.package,
             })
