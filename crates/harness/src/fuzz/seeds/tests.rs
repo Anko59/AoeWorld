@@ -84,9 +84,9 @@ fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
             "{path}"
         );
     }
-    for legacy in &LEGACY_SEEDS {
-        let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);
-        assert_eq!(fs::read(root.path().join(&path)).unwrap(), legacy.bytes);
+    for checked_in in &CHECKED_IN_SEEDS {
+        let path = format!("fuzz/corpus/{}/{}", checked_in.target, checked_in.name);
+        assert_eq!(fs::read(root.path().join(&path)).unwrap(), checked_in.bytes);
         let seed = inventory
             .verified_legacy_seeds
             .iter()
@@ -94,7 +94,7 @@ fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
             .expect("verified asset-format seed");
         assert_eq!(
             seed.blake3_hex,
-            blake3::hash(legacy.bytes).to_hex().to_string()
+            blake3::hash(checked_in.bytes).to_hex().to_string()
         );
     }
     fs::write(corpus.join("map_chunk/discovered"), b"keep").unwrap();

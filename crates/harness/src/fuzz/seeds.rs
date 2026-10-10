@@ -42,29 +42,29 @@ pub(super) struct SeedInventory {
     pub verified_legacy_seeds: Vec<Seed>,
 }
 
-struct LegacySeed {
+struct CheckedInSeed {
     target: &'static str,
     name: &'static str,
     bytes: &'static [u8],
 }
 
-const LEGACY_SEEDS: [LegacySeed; 4] = [
-    LegacySeed {
+const CHECKED_IN_SEEDS: [CheckedInSeed; 4] = [
+    CheckedInSeed {
         target: "drs",
         name: "one-entry.drs",
         bytes: include_bytes!("../../../../fuzz/corpus/drs/one-entry.drs"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "manifest",
         name: "minimal.json",
         bytes: include_bytes!("../../../../fuzz/corpus/manifest/minimal.json"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "palette",
         name: "jasc.pal",
         bytes: include_bytes!("../../../../fuzz/corpus/palette/jasc.pal"),
     },
-    LegacySeed {
+    CheckedInSeed {
         target: "slp",
         name: "two-pixels.slp",
         bytes: include_bytes!("../../../../fuzz/corpus/slp/two-pixels.slp"),
@@ -247,7 +247,7 @@ fn retain(path: &Path, bytes: &[u8]) -> Result<bool> {
 }
 
 pub(super) fn verify_legacy_seeds(root: &Path) -> Result<Vec<Seed>> {
-    LEGACY_SEEDS
+    CHECKED_IN_SEEDS
         .iter()
         .map(|legacy| {
             let path = format!("fuzz/corpus/{}/{}", legacy.target, legacy.name);
