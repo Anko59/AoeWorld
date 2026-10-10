@@ -285,6 +285,7 @@ mod metrics;
 mod showcase;
 mod showcase_bridge;
 mod showcase_browser;
+mod showcase_builds;
 mod showcase_findings;
 mod showcase_pipeline;
 mod showcase_security;
