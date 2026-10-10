@@ -137,70 +137,101 @@ fn cleared_overlay_with_width(terrain: &MapChunkGenerator, width: i32) -> Resour
 }
 
 fn enclosed_local_terrain() -> MapChunkGenerator {
-    let elevation = ElevationPage {
-        level: 0,
-        x: 0,
-        y: 0,
-        width: 2,
-        height: 2,
-        geographic_height_centimeters: vec![0; 4],
-    };
-    let water = WaterPage {
-        level: 0,
-        x: 0,
-        y: 0,
-        width: 2,
-        height: 2,
-        ocean_coverage_percent: vec![0, 100, 100, 0],
-        inland_coverage_percent: vec![0; 4],
-    };
-    let biome = PotentialBiomePage {
-        level: 0,
-        x: 0,
-        y: 0,
-        width: 2,
-        height: 2,
-        potential_biome_class: vec![27; 4],
-    };
-    let environment = PreparedEnvironment {
-        samples_per_axis: 2,
-        geographic_millimeters_per_sample: 1_000,
-        page_samples: ENVIRONMENT_PAGE_SAMPLES,
-        elevation: FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 2,
-                ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
-                    .expect("elevation root"),
-            }],
+    let elevation = [
+        ElevationPage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            geographic_height_centimeters: vec![0; 4],
         },
-        water: Some(FieldPyramid {
-            levels: vec![PyramidLevel {
+        ElevationPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            geographic_height_centimeters: vec![0],
+        },
+    ];
+    let water = [
+        WaterPage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            ocean_coverage_percent: vec![0, 100, 100, 0],
+            inland_coverage_percent: vec![0; 4],
+        },
+        WaterPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            ocean_coverage_percent: vec![50],
+            inland_coverage_percent: vec![0],
+        },
+    ];
+    let biome = [
+        PotentialBiomePage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            potential_biome_class: vec![27; 4],
+        },
+        PotentialBiomePage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            potential_biome_class: vec![27],
+        },
+    ];
+    let levels = |roots: [[u8; 32]; 2]| FieldPyramid {
+        levels: vec![
+            PyramidLevel {
                 samples_per_axis: 2,
-                ordered_page_root: ordered_water_page_root(std::slice::from_ref(&water))
-                    .expect("water root"),
-            }],
-        }),
-        vegetation: Some(FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 2,
-                ordered_page_root: ordered_biome_page_root(std::slice::from_ref(&biome))
-                    .expect("biome root"),
-            }],
-        }),
-        historical_land_use: None,
-
-        hydrology_evidence: None,
+                ordered_page_root: roots[0],
+            },
+            PyramidLevel {
+                samples_per_axis: 1,
+                ordered_page_root: roots[1],
+            },
+        ],
     };
+    let environment =
+        PreparedEnvironment {
+            samples_per_axis: 2,
+            geographic_millimeters_per_sample: 1_000,
+            page_samples: ENVIRONMENT_PAGE_SAMPLES,
+            elevation: levels(elevation.clone().map(|page| {
+                ordered_page_root(std::slice::from_ref(&page)).expect("elevation root")
+            })),
+            water: Some(levels(water.clone().map(|page| {
+                ordered_water_page_root(std::slice::from_ref(&page)).expect("water root")
+            }))),
+            vegetation: Some(levels(biome.clone().map(|page| {
+                ordered_biome_page_root(std::slice::from_ref(&page)).expect("biome root")
+            }))),
+            historical_land_use: None,
+            hydrology_evidence: None,
+        };
     MapChunkGenerator::new([0; 32], 0, 2)
         .with_prepared_elevation(
             Ratio::new(1, 1).expect("compression"),
             &environment,
-            vec![elevation],
+            elevation.to_vec(),
         )
         .expect("elevation")
-        .with_prepared_water(&environment, vec![water])
+        .with_prepared_water(&environment, water.to_vec())
         .expect("water")
-        .with_prepared_biomes(&environment, vec![biome])
+        .with_prepared_biomes(&environment, biome.to_vec())
         .expect("biome")
 }
 

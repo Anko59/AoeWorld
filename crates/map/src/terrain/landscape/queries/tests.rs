@@ -33,7 +33,7 @@ fn page(crop: u8, coverage: Vec<HistoricalCoverage>) -> HistoricalLandUsePage {
     }
 }
 fn dense(page: HistoricalLandUsePage) -> MapChunkGenerator {
-    let mut generator = MapChunkGenerator::new([17; 32], 1, 256).with_elevation_sampling_recipe(8);
+    let mut generator = MapChunkGenerator::new([17; 32], 1, 256);
     generator.historical_land_use =
         Some(Arc::new(HistoricalLandUse::new(1, [((0, 0), page)].into())));
     generator
@@ -54,7 +54,7 @@ impl EnvironmentPageProvider for Source {
     }
 }
 fn provider(result: Result<Arc<EnvironmentPage>, EnvironmentPageError>) -> MapChunkGenerator {
-    let mut generator = MapChunkGenerator::new([17; 32], 1, 256).with_elevation_sampling_recipe(8);
+    let mut generator = MapChunkGenerator::new([17; 32], 1, 256);
     // Independent history axis, no source-elevation field in this fixture.
     let environment = PreparedEnvironment {
         samples_per_axis: 0,
@@ -139,9 +139,9 @@ fn raw_history_status_survives_candidate_evaluation_on_dense_and_provider_inputs
 }
 
 #[test]
-fn candidate_queries_do_not_modify_published_tile_or_resource_results() {
+fn candidate_queries_do_not_modify_default_tile_or_resource_results() {
     let generator = dense(page(50, Vec::new()));
-    let before = generator.chunk(1, 1).expect("published chunk");
+    let before = generator.chunk(1, 1).expect("default chunk");
     let mut trees = 0;
     for y in 0..128 {
         for x in 0..128 {
@@ -166,7 +166,7 @@ fn candidate_queries_do_not_modify_published_tile_or_resource_results() {
         }
     }
     assert!(trees > 0, "some unreserved forest must remain");
-    assert_eq!(generator.chunk(1, 1).expect("published chunk"), before);
+    assert_eq!(generator.chunk(1, 1).expect("default chunk"), before);
 }
 
 #[test]

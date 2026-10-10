@@ -159,9 +159,8 @@ pub async fn run_source_qualification_with_geographic_reference(
         provider.clone() as Arc<dyn EnvironmentPageProvider>,
     )?;
     let activation_config = activation_probe.config();
-    let activation_start = activation_probe.terrain().search_start_for_recipe(
+    let activation_start = activation_probe.terrain().search_start_checked(
         activation_config,
-        package.generation_recipe_version,
         ORDINARY_ACTIVATION_SEARCH_CHUNKS,
         || false,
     )?;
@@ -490,11 +489,5 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn supported_recipe(recipe: u16) -> bool {
-    matches!(
-        recipe,
-        aoe_map::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
-            | aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
-            | aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION
-            | aoe_map::GENERATION_RECIPE_VERSION
-    )
+    recipe == aoe_map::GENERATION_RECIPE_VERSION
 }

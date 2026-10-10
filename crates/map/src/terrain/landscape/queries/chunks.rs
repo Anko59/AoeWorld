@@ -1,4 +1,4 @@
-//! Bounded candidate scene generation; not a profile/package activation path.
+//! Bounded composed scene generation: the only chunk/point composition path.
 use super::*;
 use crate::terrain::{resource_id, resources, unsigned_noise};
 #[path = "chunks/memo.rs"]
@@ -111,7 +111,7 @@ impl MapChunkGenerator {
         let tile = LandscapeTile {
             tile: position,
             terrain,
-            appearance: Some(appearance),
+            appearance,
         };
         let reserved = shared_reservations(position)?;
         let node = if !reserved.route && !reserved.start {
@@ -122,9 +122,16 @@ impl MapChunkGenerator {
         let resource = if let Some(node) = node {
             Some(LandscapeResource {
                 node,
-                visual_family: ResourceVisualFamily::Legacy,
+                visual_family: ResourceVisualFamily::Generic,
             })
         } else if sample.density.tree {
+            let visual_family = families::source_tree_family(
+                self.geography_key,
+                self.procedural_seed,
+                self.source_biome_class_with_cancel(position, cancelled)?,
+                base.biome,
+                position,
+            );
             let value = unsigned_noise(self.geography_key, b"objects", position.x, position.y)
                 ^ self.procedural_seed.rotate_left(17);
             Some(LandscapeResource {
@@ -136,7 +143,7 @@ impl MapChunkGenerator {
                     initial_amount: 100,
                     visual_variant: (value >> 8) as u8,
                 },
-                visual_family: tree_family(base.biome),
+                visual_family,
             })
         } else {
             None
@@ -198,6 +205,33 @@ impl MapChunkGenerator {
             provider::sample_base_tile(self, position, cancelled).map(Some)
         } else {
             Ok(Some(self.sample_base_tile(position)))
+        }
+    }
+
+    /// Raw source PNV class at a tile, from the same field the base biome uses.
+    /// Missing vegetation fields return `None`; page failures propagate.
+    pub(in crate::terrain) fn source_biome_class_with_cancel(
+        &self,
+        position: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<u8>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if self.provider.is_none() {
+            return Ok(self
+                .biome
+                .as_ref()
+                .and_then(|biome| biome.class_at(position, self.width_tiles)));
+        }
+        let axis = self
+            .provider_environment
+            .as_ref()
+            .ok_or(EnvironmentPageError::Invalid)?
+            .vegetation_samples_per_axis();
+        match axis {
+            Some(axis) => provider::sample_biome_class(self, axis, position, cancelled),
+            None => Ok(None),
         }
     }
 
@@ -339,3 +373,6 @@ fn material(base: Tile, appearance: LandscapeAppearance) -> GroundMaterial {
 #[path = "chunks/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[path = "chunks/families.rs"]
+mod families;

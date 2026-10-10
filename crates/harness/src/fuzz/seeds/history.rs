@@ -27,22 +27,10 @@ pub(super) fn prepare(root: &Path) -> Result<Vec<Seed>> {
         ],
     };
     page.validate()?;
-    let compact_bytes = serde_json::to_vec(&page)?;
-    let mut legacy = serde_json::to_value(&page)?;
-    legacy["coverage"] = serde_json::to_value(&page.coverage)?;
-    let legacy_bytes = serde_json::to_vec(&legacy)?;
-    Ok(vec![
-        write(
-            root,
-            "environment_page",
-            "history-compact-coverage",
-            &compact_bytes,
-        )?,
-        write(
-            root,
-            "environment_page",
-            "history-legacy-coverage",
-            &legacy_bytes,
-        )?,
-    ])
+    Ok(vec![write(
+        root,
+        "environment_page",
+        "history-compact-coverage",
+        &serde_json::to_vec(&page)?,
+    )?])
 }

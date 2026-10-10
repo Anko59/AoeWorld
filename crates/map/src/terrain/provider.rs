@@ -1,12 +1,10 @@
 use super::elevation::{AxisPosition, bilinear_height, source_axis_position};
-use super::{
-    Biome, GroundMaterial, MapChunkGenerator, ObjectKind, Provenance, ResourceKind, ResourceNode,
-    Tile, WaterKind, resources, surface,
-};
+use super::fallback::{fallback_biome, fallback_height, fallback_water, water_from_coverage};
+use super::{GroundMaterial, MapChunkGenerator, Provenance, Tile, WaterKind, surface};
 use crate::{
     ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
     HydrologyEvidenceMethod, PageLayer,
-    biome_rules::{biome_from_potential_class, material_for, tree_present_for_recipe},
+    biome_rules::{biome_from_potential_class, material_for},
 };
 use aoe_core::TileCoord;
 
@@ -17,25 +15,6 @@ mod water_model;
 pub(super) use history::sample_land_use_observation;
 
 use helpers::{elevation_value, load_page, page_index, source_coordinate};
-
-pub(super) fn sample_tile(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Tile, EnvironmentPageError> {
-    if generator.uses_landscape_v2() {
-        return generator.landscape_tile_required(tile, cancelled);
-    }
-    let mut sample = sample_base_tile(generator, tile, cancelled)?;
-    if sample.water == WaterKind::None && sample.surface.walkable() {
-        sample.material =
-            super::landscape::material_for_tile(generator, tile, sample.biome, sample.material);
-    }
-    sample.passable = sample.water == WaterKind::None
-        && sample.material != GroundMaterial::Ice
-        && sample.surface.walkable();
-    Ok(sample)
-}
 
 /// Undecorated source terrain; preserves page failures and caller cancellation.
 pub(super) fn sample_base_tile(
@@ -50,27 +29,14 @@ pub(super) fn sample_base_tile(
     let compression = generator
         .provider_compression
         .ok_or(EnvironmentPageError::Invalid)?;
-    let fallback_height = super::signed_noise(
-        generator.geography_key,
-        b"relief",
-        tile.x.div_euclid(8),
-        tile.y.div_euclid(8),
-    )
-    .saturating_mul(25)
-    .saturating_add(
-        super::signed_noise(generator.geography_key, b"relief-detail", tile.x, tile.y) / 8,
-    );
-    let fallback_water = fallback_water(generator, tile);
-    let fallback_biome = fallback_biome(generator, tile);
-
     let biome = if let Some(axis) = environment.vegetation_samples_per_axis() {
         let class = sample_biome_class(generator, axis, tile, cancelled)?;
         class
             .and_then(biome_from_potential_class)
             .map(|biome| (biome, Provenance::SourceDerived))
-            .unwrap_or((fallback_biome, Provenance::Fallback))
+            .unwrap_or_else(|| (fallback_biome(generator, tile), Provenance::Fallback))
     } else {
-        (fallback_biome, Provenance::Fallback)
+        (fallback_biome(generator, tile), Provenance::Fallback)
     };
     let (
         geographic_height_centimeters,
@@ -87,10 +53,11 @@ pub(super) fn sample_base_tile(
             Provenance::SourceDerived,
         )
     } else {
+        let height = fallback_height(generator, tile);
         (
-            fallback_height,
-            super::quantize_game_height(fallback_height, super::compression_fallback()),
-            surface::from_heights([fallback_height; 4], super::compression_fallback()),
+            height,
+            super::quantize_game_height(height, super::compression_fallback()),
+            surface::from_heights([height; 4], super::compression_fallback()),
             Provenance::Fallback,
         )
     };
@@ -98,18 +65,10 @@ pub(super) fn sample_base_tile(
     {
         let coverage = sample_water(generator, axis, tile, cancelled)?;
         coverage
-            .map(|(ocean, inland)| match ocean {
-                1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
-                51..=100 => (WaterKind::Ocean, Provenance::SourceDerived),
-                _ => match inland {
-                    0 => (WaterKind::None, Provenance::SourceDerived),
-                    1..=50 => (WaterKind::Shallow, Provenance::SourceDerived),
-                    _ => (WaterKind::Lake, Provenance::SourceDerived),
-                },
-            })
+            .map(|(ocean, inland)| water_from_coverage(ocean, inland))
             .unwrap_or((WaterKind::None, Provenance::SourceDerived))
     } else {
-        (fallback_water, Provenance::Fallback)
+        (fallback_water(generator, tile), Provenance::Fallback)
     };
     let (hydrology_observation, modern_land_cover_class, modeled_water) =
         if let Some(index) = &environment.hydrology_evidence {
@@ -157,131 +116,6 @@ pub(super) fn sample_base_tile(
     })
 }
 
-pub(super) fn resource_at(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    sample: Tile,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Option<ResourceNode>, EnvironmentPageError> {
-    if generator.uses_landscape_v2() {
-        return generator.landscape_node_with_cancel(tile, cancelled);
-    }
-    if !sample.passable {
-        return Ok(None);
-    }
-    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
-        return Ok(None);
-    }
-    let value = super::unsigned_noise(generator.geography_key, b"objects", tile.x, tile.y)
-        ^ generator.procedural_seed.rotate_left(17);
-    let land_use = if generator
-        .provider_environment
-        .as_ref()
-        .is_some_and(|environment| environment.historical_land_use.is_some())
-    {
-        sample_land_use(
-            generator,
-            generator
-                .provider_environment
-                .as_ref()
-                .and_then(|environment| environment.historical_samples_per_axis())
-                .unwrap_or(0),
-            tile,
-            cancelled,
-        )?
-    } else {
-        None
-    };
-    let historically_cleared = land_use
-        .map(|(crop, grazing, _)| {
-            generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
-        })
-        .unwrap_or(false);
-    if !historically_cleared
-        && tree_present_for_recipe(
-            generator.geography_key,
-            tile.x,
-            tile.y,
-            sample.biome,
-            generator.generation_recipe_version(),
-        )
-    {
-        return Ok(Some(ResourceNode {
-            id: super::resource_id(tile, 0),
-            tile,
-            kind: ResourceKind::Wood,
-            object: ObjectKind::Tree,
-            initial_amount: 100,
-            visual_variant: (value >> 8) as u8,
-        }));
-    }
-    resources::at_with_access(generator, tile, sample, |neighbor| {
-        if neighbor.x < 0
-            || neighbor.y < 0
-            || neighbor.x >= generator.width_tiles
-            || neighbor.y >= generator.width_tiles
-        {
-            return Ok(false);
-        }
-        let sample = sample_tile(generator, neighbor, cancelled)?;
-        Ok(!occupied_without_access(
-            generator, neighbor, sample, cancelled,
-        )?)
-    })
-}
-
-fn occupied_without_access(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    sample: Tile,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<bool, EnvironmentPageError> {
-    if generator.uses_landscape_v2() {
-        return generator.landscape_occupied_with_cancel(tile, cancelled);
-    }
-    if !sample.passable {
-        return Ok(true);
-    }
-    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
-        return Ok(false);
-    }
-    let land_use = if generator
-        .provider_environment
-        .as_ref()
-        .is_some_and(|environment| environment.historical_land_use.is_some())
-    {
-        sample_land_use(
-            generator,
-            generator
-                .provider_environment
-                .as_ref()
-                .and_then(|environment| environment.historical_samples_per_axis())
-                .unwrap_or(0),
-            tile,
-            cancelled,
-        )?
-    } else {
-        None
-    };
-    let historically_cleared = land_use
-        .map(|(crop, grazing, _)| {
-            generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
-        })
-        .unwrap_or(false);
-    if !historically_cleared
-        && tree_present_for_recipe(
-            generator.geography_key,
-            tile.x,
-            tile.y,
-            sample.biome,
-            generator.generation_recipe_version(),
-        )
-    {
-        return Ok(true);
-    }
-    Ok(resources::candidate(generator, tile, sample).is_some())
-}
-
 fn sample_elevation(
     generator: &MapChunkGenerator,
     samples: u16,
@@ -294,34 +128,20 @@ fn sample_elevation(
         (tile.x.saturating_add(1), tile.y.saturating_add(1)),
         (tile.x, tile.y.saturating_add(1)),
     ];
-    if generator.elevation_sampling_recipe != crate::LEGACY_GENERATION_RECIPE_VERSION {
-        let height = sample_bilinear_elevation(
-            generator,
-            tile.x,
-            tile.y,
-            samples,
-            AxisPosition::TileCenter,
-            cancelled,
-        )?;
-        let mut corners = [0; 4];
-        for (index, (x, y)) in coordinates.into_iter().enumerate() {
-            corners[index] = sample_bilinear_elevation(
-                generator,
-                x,
-                y,
-                samples,
-                AxisPosition::Corner,
-                cancelled,
-            )?;
-        }
-        return Ok((height, corners));
-    }
+    let height = sample_bilinear_elevation(
+        generator,
+        tile.x,
+        tile.y,
+        samples,
+        AxisPosition::TileCenter,
+        cancelled,
+    )?;
     let mut corners = [0; 4];
     for (index, (x, y)) in coordinates.into_iter().enumerate() {
-        let (source_x, source_y) = source_coordinate(x, y, samples, generator.width_tiles)?;
-        corners[index] = provider_elevation(generator, source_x, source_y, cancelled)?;
+        corners[index] =
+            sample_bilinear_elevation(generator, x, y, samples, AxisPosition::Corner, cancelled)?;
     }
-    Ok((corners[0], corners))
+    Ok((height, corners))
 }
 
 fn sample_bilinear_elevation(
@@ -398,7 +218,8 @@ fn sample_water(
     )))
 }
 
-fn sample_biome_class(
+/// Raw potential-vegetation class; page failures and cancellation propagate.
+pub(super) fn sample_biome_class(
     generator: &MapChunkGenerator,
     samples: u16,
     tile: TileCoord,
@@ -421,72 +242,4 @@ fn sample_biome_class(
     };
     let index = page_index(page.width, page.height, source_x, source_y)?;
     Ok(Some(page.potential_biome_class[index]))
-}
-
-fn sample_land_use(
-    generator: &MapChunkGenerator,
-    samples: u16,
-    tile: TileCoord,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Option<(u8, u8, u16)>, EnvironmentPageError> {
-    let Some(observation) = sample_land_use_observation(generator, samples, tile, cancelled)?
-    else {
-        return Ok(None);
-    };
-    if observation
-        .coverage
-        .is_some_and(|coverage| coverage.valid_land_percent == 0)
-    {
-        return Ok(None);
-    }
-    Ok(Some((
-        observation.crop_percent,
-        observation.grazing_percent,
-        observation.population_pressure,
-    )))
-}
-
-fn fallback_water(generator: &MapChunkGenerator, tile: TileCoord) -> WaterKind {
-    if super::unsigned_noise(
-        generator.geography_key,
-        b"water",
-        tile.x.div_euclid(16),
-        tile.y.div_euclid(16),
-    )
-    .is_multiple_of(97)
-    {
-        WaterKind::Lake
-    } else if super::unsigned_noise(
-        generator.geography_key,
-        b"river",
-        tile.x.div_euclid(4),
-        tile.y.div_euclid(4),
-    )
-    .is_multiple_of(521)
-    {
-        WaterKind::River
-    } else {
-        WaterKind::None
-    }
-}
-
-fn fallback_biome(generator: &MapChunkGenerator, tile: TileCoord) -> Biome {
-    match super::unsigned_noise(
-        generator.geography_key,
-        b"biome",
-        tile.x.div_euclid(32),
-        tile.y.div_euclid(32),
-    ) % 10
-    {
-        0 => Biome::Tropical,
-        1 => Biome::Boreal,
-        2 => Biome::Woodland,
-        3 => Biome::Savanna,
-        4 => Biome::Steppe,
-        5 => Biome::Desert,
-        6 => Biome::Tundra,
-        7 => Biome::Alpine,
-        8 => Biome::Polar,
-        _ => Biome::Temperate,
-    }
 }

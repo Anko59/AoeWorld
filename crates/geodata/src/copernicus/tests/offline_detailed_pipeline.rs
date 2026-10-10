@@ -15,7 +15,7 @@ use std::{
 };
 
 #[test]
-fn acquired_inputs_build_and_verify_a_corrected_recipe_six_package_offline() {
+fn acquired_inputs_build_and_verify_a_corrected_package_offline() {
     let root = temporary_directory();
     let output = root.join("published");
     fs::create_dir_all(&root).expect("fixture root");

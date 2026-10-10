@@ -11,7 +11,6 @@ pub(super) struct SearchState {
     pub(super) open: BTreeSet<OpenNode>,
     pub(super) records: BTreeMap<TileCoord, SearchRecord>,
     pub(super) active: Option<ActiveExpansion>,
-    pub(super) prefer_progress: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,11 +57,11 @@ impl PartialOrd for OpenNode {
 }
 
 impl SearchState {
-    pub(super) fn new(origin: TileCoord, destination: TileCoord, prefer_progress: bool) -> Self {
+    pub(super) fn new(origin: TileCoord, destination: TileCoord) -> Self {
         let mut open = BTreeSet::new();
         open.insert(OpenNode::new(
             super::heuristic(origin, destination),
-            super::super::priority_cost(0, prefer_progress),
+            super::super::priority_cost(0),
             origin,
         ));
         Self {
@@ -75,7 +74,6 @@ impl SearchState {
                 },
             )]),
             active: None,
-            prefer_progress,
         }
     }
 }
@@ -165,7 +163,7 @@ impl<'a> ExpansionContext<'a> {
         );
         search.open.insert(OpenNode::new(
             next_cost.saturating_add(super::heuristic(next, self.destination)),
-            super::super::priority_cost(next_cost, search.prefer_progress),
+            super::super::priority_cost(next_cost),
             next,
         ));
         Ok(())

@@ -1,7 +1,7 @@
 use super::{EnvironmentError, HydrologyKind};
 use serde::{Deserialize, Serialize};
 
-pub const HYDROLOGY_WATER_MODEL_VERSION: u16 = 2;
+pub const HYDROLOGY_WATER_MODEL_VERSION: u16 = 1;
 pub const MODELLING_GRID_LIMIT: u16 = 1_024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -164,7 +164,7 @@ pub struct HydrologyWaterModelIndex {
 
 impl HydrologyWaterModelIndex {
     pub fn validate(&self) -> Result<(), EnvironmentError> {
-        if ![1, HYDROLOGY_WATER_MODEL_VERSION].contains(&self.model_version)
+        if self.model_version != HYDROLOGY_WATER_MODEL_VERSION
             || !(2..=MODELLING_GRID_LIMIT).contains(&self.samples_per_axis)
             || self.target_year_ce != super::WATER_CORRECTION_TARGET_YEAR_CE
         {

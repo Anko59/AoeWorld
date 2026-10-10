@@ -1,9 +1,7 @@
 use super::*;
 
-#[path = "tests/landscape.rs"]
-mod landscape;
-#[path = "tests/water_model.rs"]
-mod water_model;
+#[path = "tests/strict.rs"]
+mod strict;
 
 fn environment() -> PreparedEnvironment {
     PreparedEnvironment {
@@ -117,7 +115,7 @@ fn duplicate_source_locks_are_rejected() {
     ));
 }
 #[test]
-fn validation_rejects_tampering_and_old_generation_recipe_identity() {
+fn validation_rejects_tampering_and_other_generation_recipe_identity() {
     let mut package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
     package.estimate.tiles_per_side += 1;
     assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
@@ -130,113 +128,42 @@ fn validation_rejects_tampering_and_old_generation_recipe_identity() {
         &package.projection,
         &package.provenance,
         &package.environment,
-        HashMode::Content(None),
+        HashMode::Content(crate::GENERATION_RECIPE_VERSION + 1),
     );
     assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
     assert_eq!(
         package.generator().chunk(0, 0),
         current.generator().chunk(0, 0)
     );
-    package.content_hash = hash_package(
-        package.generator_version,
-        package.request,
-        &package.source_locks,
-        &package.projection,
-        &package.provenance,
-        &package.environment,
-        HashMode::Content(Some(2)),
-    );
-    assert_eq!(package.validate(), Err(MapPackageError::NonCanonicalFields));
+    package = current.clone();
+    package.generation_recipe_version += 1;
     assert_eq!(
-        terrain_fingerprint(&current.generator().chunk(0, 0).expect("fixture chunk")),
-        [
-            0x38, 0xfc, 0x44, 0x7f, 0x20, 0x1c, 0xca, 0xc7, 0x13, 0x84, 0x04, 0x8a, 0xe9, 0xee,
-            0x2e, 0x4b, 0x03, 0xa1, 0xb7, 0xca, 0x3a, 0x89, 0x97, 0x93, 0x74, 0xa8, 0xa2, 0x6d,
-            0x83, 0x1b, 0xd0, 0x6e,
-        ]
-    );
-}
-
-fn schema_nine_package_for_recipe(generation_recipe_version: u16) -> MapPackage {
-    MapPackage::with_generation_recipe(
-        crate::MAP_SCHEMA_VERSION,
-        generation_recipe_version,
-        MapRequest::default(),
-        Vec::new(),
-        ProjectionMetadata::default(),
-        EnvironmentalProvenance::default(),
-        PreparedEnvironment::default(),
-    )
-    .expect("package")
-}
-
-#[test]
-fn supported_generation_recipes_preserve_serialization_and_identity() {
-    let legacy = schema_nine_package_for_recipe(crate::LEGACY_GENERATION_RECIPE_VERSION);
-    let prior = schema_nine_package_for_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
-    let current = schema_nine_package_for_recipe(crate::GENERATION_RECIPE_VERSION);
-
-    assert_eq!(
-        legacy.generation_recipe_version,
-        crate::LEGACY_GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(
-        legacy.content_hash_hex(),
-        "d8aa78b19092802ca080ce67b34389196eb20dcb33bc8dc117f2de9815c9228d"
-    );
-    assert!(legacy.validate().is_ok());
-    let serialized = serde_json::to_value(&legacy).expect("legacy JSON");
-    assert!(
-        !serialized
-            .as_object()
-            .expect("package object")
-            .contains_key("generation_recipe_version")
-    );
-    let decoded: MapPackage = serde_json::from_value(serialized).expect("legacy decode");
-    assert_eq!(decoded, legacy);
-    assert!(decoded.validate().is_ok());
-
-    assert_eq!(
-        prior.generation_recipe_version,
-        crate::PRIOR_GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(
-        prior.content_hash_hex(),
-        "1eb4f33086e24910842a52b65c8a70ec2a40c7c9aba7db5f7b3c566f4f5f8c0c"
-    );
-    assert_eq!(
-        current.generation_recipe_version,
-        crate::GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(
-        MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())
-            .expect("current package"),
-        current
-    );
-    assert_ne!(current.content_hash, legacy.content_hash);
-    assert_ne!(current.content_hash, prior.content_hash);
-    let overview = schema_nine_package_for_recipe(crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION);
-    assert_ne!(overview.content_hash, current.content_hash);
-    let forest = schema_nine_package_for_recipe(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
-    assert_ne!(forest.content_hash, current.content_hash);
-    for package in [&prior, &overview, &forest, &current] {
-        let serialized = serde_json::to_value(package).expect("versioned package JSON");
-        assert_eq!(
-            serialized["generation_recipe_version"],
-            package.generation_recipe_version
-        );
-        let decoded: MapPackage = serde_json::from_value(serialized).expect("versioned decode");
-        assert_eq!(decoded, *package);
-        assert!(decoded.validate().is_ok());
-    }
-
-    let mut unknown = current;
-    unknown.generation_recipe_version = 99;
-    assert_eq!(
-        unknown.validate(),
+        package.validate(),
         Err(MapPackageError::InvalidGenerationRecipeVersion)
     );
 }
+
+/// Regression guard on the current version, not a compatibility fixture: a
+/// deliberate generation or identity change updates these digests.
+#[test]
+fn default_package_identity_and_terrain_are_pinned() {
+    let package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
+    assert_eq!(package.schema_version, crate::MAP_SCHEMA_VERSION);
+    assert_eq!(
+        package.generation_recipe_version,
+        crate::GENERATION_RECIPE_VERSION
+    );
+    assert_eq!(package.content_hash_hex(), DEFAULT_PACKAGE_HASH);
+    assert_eq!(
+        fingerprint_hex(&package.generator().chunk(0, 0).expect("chunk")),
+        DEFAULT_TERRAIN_FINGERPRINT
+    );
+}
+
+const DEFAULT_PACKAGE_HASH: &str =
+    "9f736ce35dc8498c6e33256586a9cdb6c4ea7844d474dbb691ee684ee96068b5";
+const DEFAULT_TERRAIN_FINGERPRINT: &str =
+    "5216ecbe42545ee3958222a22b78957a274aad41029b38797e926ac8ac46aa29";
 
 #[test]
 fn packages_require_and_hash_projection_metadata() {
@@ -328,51 +255,6 @@ fn acquisition_time_is_not_a_content_input_but_preprocessing_is() {
 }
 
 #[test]
-fn schema_eight_manifest_and_hash_remain_readable_after_schema_nine() {
-    const LEGACY_HASH: &str = "1c82962e62bdfad02d3e0cb5f50aa85f1d72a0e778437c899284f5dfa6e95b18";
-    const LEGACY_TERRAIN_FINGERPRINT: &str =
-        "ef9ad686d6c588cacb21be148a4ec6291ea49997a77f47a825e77f30cd4c99aa";
-    let fixture = include_str!("../../tests/fixtures/schema8-default-package.json");
-    let legacy: MapPackage = serde_json::from_str(fixture).expect("legacy manifest parses");
-    assert_eq!(legacy.schema_version, crate::LEGACY_MAP_SCHEMA_VERSION);
-    assert_eq!(legacy.generator_version, 8);
-    assert_eq!(legacy.content_hash_hex(), LEGACY_HASH);
-    assert!(legacy.validate().is_ok());
-    assert_eq!(
-        serde_json::to_vec_pretty(&legacy).unwrap(),
-        fixture.as_bytes()
-    );
-
-    let legacy_chunk = legacy
-        .generator()
-        .chunk(0, 0)
-        .expect("legacy terrain chunk");
-    assert_eq!(fingerprint_hex(&legacy_chunk), LEGACY_TERRAIN_FINGERPRINT);
-
-    let current = MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), vec![])
-        .expect("current schema package");
-    // The published recipe-4 identity uses the schema-9 generator input; it
-    // is neither the generator-version-1 fixture nor the recipe-5 default.
-    let prior = schema_nine_package_for_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
-    assert_eq!(current.schema_version, 9);
-    assert_eq!(current.generator_version, 9);
-    assert_eq!(
-        current.generation_recipe_version,
-        crate::GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(
-        prior.content_hash_hex(),
-        "1eb4f33086e24910842a52b65c8a70ec2a40c7c9aba7db5f7b3c566f4f5f8c0c"
-    );
-    assert_ne!(current.content_hash, prior.content_hash);
-    let current_chunk = current
-        .generator()
-        .chunk(0, 0)
-        .expect("current terrain chunk");
-    assert_ne!(fingerprint_hex(&current_chunk), LEGACY_TERRAIN_FINGERPRINT);
-}
-
-#[test]
 fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
     let mut environment = environment();
     environment.hydrology_evidence = Some(crate::HydrologyEvidenceIndex {
@@ -392,7 +274,7 @@ fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
         EnvironmentalProvenance::default(),
         environment,
     )
-    .expect("schema-nine package");
+    .expect("typed-evidence package");
     assert!(matches!(
         package.generator_with_elevation(Vec::new()),
         Err(MapPackageError::InvalidEnvironment)
@@ -401,19 +283,12 @@ fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
         package.generator_with_environment(Vec::new(), Vec::new(), Vec::new(), Vec::new()),
         Err(MapPackageError::InvalidEnvironment)
     ));
-
-    let mut schema_eight_with_evidence = package.clone();
-    schema_eight_with_evidence.schema_version = crate::LEGACY_MAP_SCHEMA_VERSION;
-    assert_eq!(
-        schema_eight_with_evidence.validate(),
-        Err(MapPackageError::NonCanonicalFields)
-    );
-    let mut unsupported_schema =
-        MapPackage::new(crate::MAP_SCHEMA_VERSION, MapRequest::default(), vec![])
-            .expect("schema-nine package");
-    unsupported_schema.schema_version += 1;
-    assert_eq!(
-        unsupported_schema.validate(),
-        Err(MapPackageError::NonCanonicalFields)
-    );
+    for schema_version in [0, crate::MAP_SCHEMA_VERSION + 1] {
+        let mut unsupported_schema = package.clone();
+        unsupported_schema.schema_version = schema_version;
+        assert_eq!(
+            unsupported_schema.validate(),
+            Err(MapPackageError::NonCanonicalFields)
+        );
+    }
 }

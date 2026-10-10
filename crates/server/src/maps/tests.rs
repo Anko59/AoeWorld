@@ -35,6 +35,17 @@ impl EnvironmentPageProvider for MemoryPageProvider {
     }
 }
 
+pub(super) fn elevation_overview() -> ElevationPage {
+    ElevationPage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        geographic_height_centimeters: vec![12_345],
+    }
+}
+
 fn modeled_source_package() -> (
     MapPackage,
     MemoryPageProvider,
@@ -102,12 +113,21 @@ fn modeled_source_package() -> (
         samples_per_axis: 2,
         geographic_millimeters_per_sample: 1_000,
         page_samples: 64,
+        // The canonical pyramid ends at one sample; its overview lies within
+        // the level-zero height range.
         elevation: FieldPyramid {
-            levels: vec![PyramidLevel {
-                samples_per_axis: 2,
-                ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
-                    .expect("elevation root"),
-            }],
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_page_root(std::slice::from_ref(&elevation))
+                        .expect("elevation root"),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: ordered_page_root(&[elevation_overview()])
+                        .expect("overview root"),
+                },
+            ],
         },
         water: None,
         vegetation: None,
@@ -224,7 +244,7 @@ async fn source_height_bounds_http_payload_uses_verified_pages_and_is_cached() {
     crate::map_store::persist_prepared(
         Some(directory.path()),
         &package,
-        &[elevation],
+        &[elevation, elevation_overview()],
         &[],
         &[],
         &[],

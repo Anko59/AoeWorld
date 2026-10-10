@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::{
-    DetailProfile, EnvironmentPage, EnvironmentPageKey, FieldPyramid, MapPackage, MapPackageError,
-    MapRequest, PageLayer, PyramidLevel,
+    EnvironmentPage, EnvironmentPageKey, FieldPyramid, MapPackage, MapPackageError, MapRequest,
+    PageLayer, PyramidLevel,
 };
 use std::collections::BTreeMap;
 
@@ -115,20 +115,16 @@ fn fixture(axes: [u16; 4]) -> (MapPackage, Pages) {
         historical_land_use: Some(field(axes[3], PageLayer::HistoricalLandUse, &mut pages)),
         hydrology_evidence: None,
     };
-    let package = package(environment, DetailProfile::LandscapeV2).unwrap();
+    let package = package(environment).unwrap();
     (package, pages)
 }
 
-fn package(
-    environment: PreparedEnvironment,
-    detail_profile: DetailProfile,
-) -> Result<MapPackage, MapPackageError> {
+fn package(environment: PreparedEnvironment) -> Result<MapPackage, MapPackageError> {
     MapPackage::with_prepared_environment(
         1,
         MapRequest {
             requested_side_meters: 512,
             compression: Ratio::new(1, 1).unwrap(),
-            detail_profile,
             ..MapRequest::default()
         },
         Vec::new(),
@@ -158,14 +154,11 @@ fn dense(package: &MapPackage, pages: &Pages) -> MapChunkGenerator {
 }
 
 #[test]
-fn schema_ten_field_axes_roundtrip_without_new_wire_fields_or_identity_changes() {
+fn field_axes_roundtrip_without_identity_changes() {
     for axes in [[128, 32, 64, 16], [1024, 128, 128, 1024]] {
         let (original, _) = fixture(axes);
-        assert_eq!(original.schema_version, crate::LANDSCAPE_MAP_SCHEMA_VERSION);
-        assert_eq!(
-            original.environment.validate(),
-            Err(EnvironmentError::InvalidPyramid)
-        );
+        assert_eq!(original.schema_version, crate::MAP_SCHEMA_VERSION);
+        original.environment.validate().unwrap();
         original.validate().unwrap();
         let json = serde_json::to_string(&original).unwrap();
         let restored: MapPackage = serde_json::from_str(&json).unwrap();
@@ -173,15 +166,11 @@ fn schema_ten_field_axes_roundtrip_without_new_wire_fields_or_identity_changes()
         assert_eq!(original.content_hash, restored.content_hash);
         assert_eq!(original.environment, restored.environment);
         restored.validate().unwrap();
-        assert_eq!(
-            package(original.environment, DetailProfile::StandardV1),
-            Err(MapPackageError::InvalidEnvironment)
-        );
     }
 }
 
 #[test]
-fn published_prepared_axis_ceiling_and_valid_legacy_packages_are_unchanged() {
+fn prepared_axis_ceiling_is_enforced() {
     // The country acquisition plan is bounded separately: do not narrow the
     // existing prepared-package contract while adding independent field axes.
     assert_eq!(crate::MAX_ENVIRONMENT_SAMPLES_PER_AXIS, 16_384);
@@ -205,23 +194,17 @@ fn published_prepared_axis_ceiling_and_valid_legacy_packages_are_unchanged() {
     environment.vegetation = Some(environment.elevation.clone());
     environment.historical_land_use = Some(environment.elevation.clone());
     environment.validate().unwrap();
-    for profile in [DetailProfile::StandardV1, DetailProfile::LandscapeV2] {
-        let original = package(environment.clone(), profile).unwrap();
-        let restored: MapPackage =
-            serde_json::from_slice(&serde_json::to_vec(&original).unwrap()).unwrap();
-        assert_eq!(restored, original);
-        restored.validate().unwrap();
-    }
+    let original = package(environment.clone()).unwrap();
+    let restored: MapPackage =
+        serde_json::from_slice(&serde_json::to_vec(&original).unwrap()).unwrap();
+    assert_eq!(restored, original);
+    restored.validate().unwrap();
     environment.samples_per_axis += 1;
     assert_eq!(environment.validate(), Err(EnvironmentError::InvalidIndex));
-    assert_eq!(
-        environment.validate_for_profile(DetailProfile::LandscapeV2),
-        Err(EnvironmentError::InvalidIndex)
-    );
 }
 
 #[test]
-fn schema_ten_validates_every_axis_and_complete_canonical_pyramids() {
+fn every_axis_and_complete_canonical_pyramid_is_validated() {
     let (original, _) = fixture([128, 32, 64, 16]);
     for layer in 0..4 {
         for corruption in 0..5 {
@@ -241,17 +224,13 @@ fn schema_ten_validates_every_axis_and_complete_canonical_pyramids() {
                 3 => field.levels[0].ordered_page_root = [0; 32],
                 _ => field.levels[0].samples_per_axis = 0,
             }
-            assert!(
-                environment
-                    .validate_for_profile(DetailProfile::LandscapeV2)
-                    .is_err()
-            );
+            assert!(environment.validate().is_err());
             let mut malformed = original.clone();
             malformed.environment = environment.clone();
             let json = serde_json::to_string(&malformed).unwrap();
             assert!(serde_json::from_str::<MapPackage>(&json).is_err());
             assert_eq!(
-                package(environment, DetailProfile::LandscapeV2),
+                package(environment),
                 Err(MapPackageError::InvalidEnvironment)
             );
         }
@@ -259,10 +238,6 @@ fn schema_ten_validates_every_axis_and_complete_canonical_pyramids() {
     let mut environment = original.environment;
     environment.page_samples = 32;
     assert_eq!(environment.validate(), Err(EnvironmentError::InvalidIndex));
-    assert_eq!(
-        environment.validate_for_profile(DetailProfile::LandscapeV2),
-        Err(EnvironmentError::InvalidIndex)
-    );
 }
 
 #[test]
@@ -292,7 +267,7 @@ fn field_local_dense_and_provider_base_samples_match_edges_and_boundaries() {
                     .historical_land_use
                     .as_ref()
                     .unwrap()
-                    .at(tile, dense.width_tiles)
+                    .at_observation(tile, dense.width_tiles)
                     .unwrap();
                 let observed =
                     provider::sample_land_use_observation(&lazy, axes[3], tile, &|| false)
@@ -313,25 +288,6 @@ fn field_local_dense_and_provider_base_samples_match_edges_and_boundaries() {
             provider::sample_base_tile(&lazy, TileCoord::new(0, 0), &|| true),
             Err(EnvironmentPageError::Cancelled)
         );
-    }
-}
-
-#[test]
-fn legacy_water_and_vegetation_mismatches_and_error_precedence_remain_strict() {
-    let (package, _) = fixture([128, 32, 64, 16]);
-    for water in [false, true] {
-        let mut environment = package.environment.clone();
-        if water {
-            environment.vegetation = None;
-        } else {
-            environment.water = None;
-        }
-        assert_eq!(
-            environment.validate(),
-            Err(EnvironmentError::InvalidPyramid)
-        );
-        environment.geographic_millimeters_per_sample = 0;
-        assert_eq!(environment.validate(), Err(EnvironmentError::InvalidIndex));
     }
 }
 

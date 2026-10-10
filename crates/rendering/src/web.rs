@@ -27,7 +27,7 @@ pub(crate) struct Sprite {
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
-    /// Primary, secondary, tertiary atlas layers, then appearance (legacy zero).
+    /// Primary, secondary, tertiary atlas layers, then appearance (zero: none).
     pub(crate) pages: [u32; 4],
 }
 pub struct Renderer {

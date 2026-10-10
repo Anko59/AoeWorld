@@ -14,6 +14,7 @@ pub(super) struct PointMemo<'a> {
     center: TileCoord,
     cancelled: &'a dyn Fn() -> bool,
     entries: RefCell<[Entry; 25]>,
+    origins: RefCell<resources::Origins>,
 }
 
 impl<'a> PointMemo<'a> {
@@ -27,6 +28,7 @@ impl<'a> PointMemo<'a> {
             center,
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
+            origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
     fn index(&self, position: TileCoord) -> Option<usize> {
@@ -64,8 +66,9 @@ impl<'a> PointMemo<'a> {
             return Ok(candidate);
         }
         let candidate = self
-            .base(position)?
-            .and_then(|base| resources::candidate_unreserved(self.generator, position, base));
+            .origins
+            .borrow_mut()
+            .candidate_with(position, || self.base(position))?;
         if let Some(index) = index {
             self.entries.borrow_mut()[index].candidate = Some(candidate);
         }

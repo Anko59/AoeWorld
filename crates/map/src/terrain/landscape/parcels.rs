@@ -1,5 +1,4 @@
-//! Pure historical parcel realization, reserved for explicit landscape-9 dispatch.
-//! Recipes 3..=8 and their pixel-roll suppression are deliberately untouched.
+//! Pure historical parcel realization for the composed landscape.
 //!
 //! Fractions are of SOURCE VALID LAND, never forest or ecology-suitable land.
 //! The caller supplies observation/valid-land status and retains all provenance,

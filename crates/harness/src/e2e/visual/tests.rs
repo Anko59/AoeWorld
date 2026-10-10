@@ -10,7 +10,7 @@ fn case() -> packages::CaptureCase {
         request: aoe_map::MapRequest::default(),
         tiles_per_side: 64,
         package_chunk_count_bound: 4,
-        schema_version: 9,
+        schema_version: aoe_map::MAP_SCHEMA_VERSION,
         generator_version: 1,
         generation_recipe_version: 1,
         source_locks: Vec::new(),

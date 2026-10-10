@@ -61,9 +61,8 @@ pub fn ordered_biome_page_root(pages: &[PotentialBiomePage]) -> Result<[u8; 32],
 pub(crate) fn level_zero_pages(
     environment: &PreparedEnvironment,
     pages: Vec<ElevationPage>,
-    profile: crate::DetailProfile,
 ) -> Result<BTreeMap<(u16, u16), ElevationPage>, EnvironmentError> {
-    environment.validate_for_profile(profile)?;
+    environment.validate()?;
     let mut levels = (0..environment.elevation.levels.len())
         .map(|_| Vec::new())
         .collect::<Vec<Vec<ElevationPage>>>();

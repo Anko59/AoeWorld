@@ -32,8 +32,8 @@ pub struct PreparedEnvironment {
     pub geographic_millimeters_per_sample: u64,
     pub page_samples: u8,
     pub elevation: FieldPyramid,
-    /// Optional prepared water coverage. Legacy grids align with elevation;
-    /// LandscapeV2 may declare an independent axis in its first level.
+    /// Optional prepared water coverage on its own axis, declared by its first
+    /// pyramid level.
     pub water: Option<FieldPyramid>,
     /// Optional potential-natural-vegetation classification. Values retain the
     /// source's published class identifiers and are mapped to game biomes only
@@ -94,11 +94,9 @@ pub struct PotentialBiomePage {
 }
 
 impl PreparedEnvironment {
+    /// Each field declares its own canonical axis in its first level and every
+    /// pyramid ends at one sample.
     pub fn validate(&self) -> Result<(), EnvironmentError> {
-        self.validate_axes(false)
-    }
-
-    fn validate_axes(&self, independent: bool) -> Result<(), EnvironmentError> {
         if self.samples_per_axis == 0 {
             return (self.elevation.levels.is_empty()
                 && self.water.is_none()
@@ -114,15 +112,9 @@ impl PreparedEnvironment {
         {
             return Err(EnvironmentError::InvalidIndex);
         }
-        self.elevation
-            .validate_axis(self.samples_per_axis, independent)?;
+        self.elevation.validate_axis(self.samples_per_axis)?;
         for field in [&self.water, &self.vegetation].into_iter().flatten() {
-            let axis = if independent {
-                field.axis().ok_or(EnvironmentError::InvalidPyramid)?
-            } else {
-                self.samples_per_axis
-            };
-            field.validate_axis(axis, independent)?;
+            field.validate_axis(field.axis().ok_or(EnvironmentError::InvalidPyramid)?)?;
         }
         if let Some(land_use) = &self.historical_land_use {
             let axis = land_use
@@ -133,7 +125,7 @@ impl PreparedEnvironment {
             if axis == 0 || axis > MAX_ENVIRONMENT_SAMPLES_PER_AXIS {
                 return Err(EnvironmentError::InvalidPyramid);
             }
-            land_use.validate_axis(axis, independent)?;
+            land_use.validate_axis(axis)?;
         }
         self.hydrology_evidence
             .as_ref()

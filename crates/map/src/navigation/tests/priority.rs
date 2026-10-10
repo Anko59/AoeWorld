@@ -1,16 +1,10 @@
 use super::*;
 
-fn rectangle(
-    origin: TileCoord,
-    destination: TileCoord,
-    budget: u32,
-    progress: bool,
-) -> MovementOutcome {
-    search_path_with_priority(
+fn rectangle(origin: TileCoord, destination: TileCoord, budget: u32) -> MovementOutcome {
+    search_path(
         origin,
         destination,
         budget,
-        progress,
         |tile| (0..32).contains(&tile.x) && (0..32).contains(&tile.y),
         |tile| {
             let mut neighbors = Vec::new();
@@ -41,11 +35,7 @@ fn rectangle(
 fn progress_priority_crosses_octile_plateau_with_same_small_expansion_budget_and_optimal_cost() {
     let origin = TileCoord::new(1, 1);
     let target = TileCoord::new(25, 18);
-    assert_eq!(
-        rectangle(origin, target, 30, false),
-        MovementOutcome::BudgetExceeded
-    );
-    let MovementOutcome::Path(path) = rectangle(origin, target, 30, true) else {
+    let MovementOutcome::Path(path) = rectangle(origin, target, 30) else {
         panic!("progress priority must reach goal within unchanged30 expansions");
     };
     assert_eq!(
@@ -58,22 +48,21 @@ fn progress_priority_crosses_octile_plateau_with_same_small_expansion_budget_and
 }
 
 #[test]
-fn legacy_equal_f_prefers_lower_g_and_retains_canonical_route() {
+fn equal_f_prefers_greater_g_with_a_canonical_route() {
     let origin = TileCoord::new(1, 1);
     let target = TileCoord::new(3, 2);
-    let MovementOutcome::Path(old) = rectangle(origin, target, 100, false) else {
-        panic!("legacy path");
+    let MovementOutcome::Path(path) = rectangle(origin, target, 100) else {
+        panic!("progress path");
     };
-    assert_eq!(old.tiles, vec![origin, TileCoord::new(2, 1), target]);
-    let MovementOutcome::Path(new) = rectangle(origin, target, 100, true) else {
-        panic!("landscape path");
-    };
-    assert_eq!(new.tiles, vec![origin, TileCoord::new(2, 2), target]);
-    assert_eq!(new.cost, old.cost);
+    assert_eq!(path.tiles, vec![origin, TileCoord::new(2, 2), target]);
+    assert_eq!(
+        path.cost,
+        u64::from(DIAGONAL_COST) + u64::from(ORTHOGONAL_COST)
+    );
 }
 
 #[test]
-fn recipe_nine_incremental_planner_keeps_actual_cost_and_bounded_work() {
+fn incremental_planner_keeps_actual_cost_and_bounded_work() {
     use crate::{
         ElevationPage, FieldPyramid, PotentialBiomePage, PreparedEnvironment, PyramidLevel, Ratio,
         WaterPage,
@@ -123,7 +112,6 @@ fn recipe_nine_incremental_planner_keeps_actual_cost_and_bounded_work() {
         ..PreparedEnvironment::default()
     };
     let terrain = MapChunkGenerator::new([17; 32], 1, 64)
-        .with_elevation_sampling_recipe(crate::LANDSCAPE_GENERATION_RECIPE_VERSION)
         .with_prepared_elevation(Ratio::new(1, 1).unwrap(), &environment, vec![elevation])
         .unwrap()
         .with_prepared_water(&environment, vec![water])
@@ -147,7 +135,7 @@ fn recipe_nine_incremental_planner_keeps_actual_cost_and_bounded_work() {
                 assert_eq!(path.tiles.last(), Some(&target));
                 break;
             }
-            other => panic!("bounded incremental9 route failed: {other:?}"),
+            other => panic!("bounded incremental route failed: {other:?}"),
         }
     }
     assert_eq!(planner.work(), repeated.work());
@@ -156,8 +144,7 @@ fn recipe_nine_incremental_planner_keeps_actual_cost_and_bounded_work() {
 #[test]
 fn complemented_queue_keys_keep_total_order_eq_consistency_and_actual_cost_round_trip() {
     for actual in [0, 1, 1024, 1448, u64::MAX - 1, u64::MAX] {
-        assert_eq!(priority_cost(actual, false), actual);
-        assert_eq!(priority_cost(priority_cost(actual, true), true), actual);
+        assert_eq!(priority_cost(priority_cost(actual)), actual);
     }
     let keys = [0, 1, u64::MAX - 1, u64::MAX];
     for a in keys {

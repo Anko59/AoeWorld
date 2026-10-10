@@ -1,6 +1,5 @@
 //! Shared landscape eligibility from undecorated terrain and historical parcels.
-//! No published recipe invokes this adapter yet. Region/support are explicit
-//! modeling policy, not modern land-cover or an inferred historical observation.
+//! Region/support are explicit modeling policy, not modern land-cover or an inferred historical observation.
 use crate::historical_parcels::LandUse;
 use crate::landscape_patches::{Fitness, Input, Mode, Region};
 use crate::{Biome, GroundMaterial, Tile, WaterKind};

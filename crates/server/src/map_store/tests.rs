@@ -8,11 +8,11 @@ use aoe_map::{
 use std::fs;
 
 #[cfg(test)]
-mod legacy;
+mod eager;
 #[cfg(test)]
 mod residency;
 
-use legacy::{load_elevation_pages, load_land_use_pages, load_vegetation_pages, load_water_pages};
+use eager::{load_elevation_pages, load_land_use_pages, load_vegetation_pages, load_water_pages};
 
 pub(super) fn prepared() -> (
     MapPackage,
@@ -288,7 +288,7 @@ fn streaming_verifier_rejects_redirected_layer_directories() {
 }
 
 #[test]
-fn legacy_numbered_non_elevation_pages_remain_readable() {
+fn numbered_page_files_are_not_a_page_layout() {
     let directory = tempfile::tempdir().expect("directory");
     let (package, elevation, water, vegetation, land_use) = prepared();
     persist_prepared(
@@ -300,25 +300,14 @@ fn legacy_numbered_non_elevation_pages_remain_readable() {
         &land_use,
     )
     .expect("persist");
-    for layer in ["water", "vegetation", "historical-land-use"] {
-        let root = directory
-            .path()
-            .join("pages")
-            .join(package.content_hash_hex())
-            .join(layer);
-        for level in 0..2 {
-            fs::rename(
-                root.join(format!("{level}-0-0.json")),
-                root.join(format!("{level}.json")),
-            )
-            .expect("legacy filename");
-        }
-    }
-    assert_eq!(load(Some(directory.path())).expect("reload").len(), 1);
-    assert_eq!(
-        load_water_pages(Some(directory.path()), &package).expect("water"),
-        water
-    );
+    let root = directory
+        .path()
+        .join("pages")
+        .join(package.content_hash_hex())
+        .join("water");
+    fs::rename(root.join("0-0-0.json"), root.join("0.json")).expect("rename page");
+    assert!(super::verify_stored(directory.path(), &package).is_err());
+    assert!(load_water_pages(Some(directory.path()), &package).is_err());
 }
 
 #[test]

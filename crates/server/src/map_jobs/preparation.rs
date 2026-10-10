@@ -117,11 +117,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_requests_default_to_automatic_and_unknown_modes_fail() {
+    fn requests_without_a_mode_are_automatic_and_unknown_modes_fail() {
         let mut value = serde_json::to_value(MapRequest::default()).expect("request");
-        let legacy: CreationRequest = serde_json::from_value(value.clone()).expect("legacy");
+        let automatic: CreationRequest = serde_json::from_value(value.clone()).expect("automatic");
         assert_eq!(
-            PreparationPlan::resolve(legacy, true).expect("plan").mode,
+            PreparationPlan::resolve(automatic, true)
+                .expect("plan")
+                .mode,
             PreparationMode::Detailed
         );
         value["preparation"] = serde_json::json!("invented");

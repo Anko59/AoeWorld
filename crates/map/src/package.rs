@@ -1,9 +1,8 @@
 use crate::{
-    CHUNK_TILES, GENERATION_RECIPE_VERSION, LEGACY_GENERATION_RECIPE_VERSION, MapChunkGenerator,
-    MapEstimate, MapRequest, MapRequestError, PRIOR_GENERATION_RECIPE_VERSION, PreparedEnvironment,
+    CHUNK_TILES, GENERATION_RECIPE_VERSION, MAP_SCHEMA_VERSION, MapChunkGenerator, MapEstimate,
+    MapRequest, MapRequestError, PreparedEnvironment,
 };
 use serde::{Deserialize, Serialize};
-mod profile;
 mod wire;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -80,12 +79,8 @@ pub struct SourceLock {
 pub struct MapPackage {
     pub schema_version: u16,
     pub generator_version: u16,
-    /// Runtime generation behavior used by this immutable package. Missing
-    /// values deserialize as recipe 3 so existing schema-8 hashes remain valid.
-    #[serde(
-        default = "legacy_generation_recipe_version",
-        skip_serializing_if = "is_legacy_generation_recipe_version"
-    )]
+    /// Generation behavior bound into this immutable package's identity. Only
+    /// [`GENERATION_RECIPE_VERSION`] is accepted.
     pub generation_recipe_version: u16,
     pub request: MapRequest,
     pub estimate: MapEstimate,
@@ -150,22 +145,9 @@ impl MapPackage {
         provenance: EnvironmentalProvenance,
         environment: PreparedEnvironment,
     ) -> Result<Self, MapPackageError> {
-        let generation_recipe_version =
-            if request.detail_profile == crate::DetailProfile::LandscapeV2 {
-                crate::LANDSCAPE_GENERATION_RECIPE_VERSION
-            } else if environment
-                .hydrology_evidence
-                .as_ref()
-                .and_then(|index| index.water_model.as_ref())
-                .is_some()
-            {
-                crate::WATER_MODEL_GENERATION_RECIPE_VERSION
-            } else {
-                GENERATION_RECIPE_VERSION
-            };
         Self::with_generation_recipe(
             generator_version,
-            generation_recipe_version,
+            GENERATION_RECIPE_VERSION,
             request,
             source_locks,
             projection,
@@ -183,40 +165,7 @@ impl MapPackage {
         provenance: EnvironmentalProvenance,
         environment: PreparedEnvironment,
     ) -> Result<Self, MapPackageError> {
-        if !matches!(
-            generation_recipe_version,
-            LEGACY_GENERATION_RECIPE_VERSION
-                | PRIOR_GENERATION_RECIPE_VERSION
-                | crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
-                | crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
-                | crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
-                | GENERATION_RECIPE_VERSION
-                | crate::LANDSCAPE_GENERATION_RECIPE_VERSION
-        ) {
-            return Err(MapPackageError::InvalidGenerationRecipeVersion);
-        }
-        profile::validate(
-            profile::schema(request.detail_profile),
-            request.detail_profile,
-            generation_recipe_version,
-            environment.hydrology_evidence.is_some(),
-        )?;
-        let has_modeled_water = environment
-            .hydrology_evidence
-            .as_ref()
-            .and_then(|index| index.water_model.as_ref())
-            .is_some();
-        if (generation_recipe_version == crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
-            && !has_modeled_water)
-            || (has_modeled_water
-                && !matches!(
-                    generation_recipe_version,
-                    crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
-                        | crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
-                        | crate::WATER_MODEL_GENERATION_RECIPE_VERSION
-                        | crate::LANDSCAPE_GENERATION_RECIPE_VERSION
-                ))
-        {
+        if generation_recipe_version != GENERATION_RECIPE_VERSION {
             return Err(MapPackageError::InvalidGenerationRecipeVersion);
         }
         let request = request.normalized()?;
@@ -243,7 +192,7 @@ impl MapPackage {
             return Err(MapPackageError::InvalidProjection);
         }
         environment
-            .validate_for_profile(request.detail_profile)
+            .validate()
             .map_err(|_| MapPackageError::InvalidEnvironment)?;
         if let Some(model) = environment
             .hydrology_evidence
@@ -263,10 +212,10 @@ impl MapPackage {
             &projection,
             &provenance,
             &environment,
-            HashMode::Content(Some(generation_recipe_version)),
+            HashMode::Content(generation_recipe_version),
         );
         Ok(Self {
-            schema_version: profile::schema(request.detail_profile),
+            schema_version: MAP_SCHEMA_VERSION,
             generator_version,
             generation_recipe_version,
             request,
@@ -292,13 +241,10 @@ impl MapPackage {
     /// its chunks. It rejects stale estimates, reordered source locks, and a
     /// content hash that no longer covers the package inputs.
     pub fn validate(&self) -> Result<(), MapPackageError> {
-        profile::validate(
-            self.schema_version,
-            self.request.detail_profile,
-            self.generation_recipe_version,
-            self.environment.hydrology_evidence.is_some(),
-        )?;
-        let mut canonical = Self::with_generation_recipe(
+        if self.schema_version != MAP_SCHEMA_VERSION {
+            return Err(MapPackageError::NonCanonicalFields);
+        }
+        let canonical = Self::with_generation_recipe(
             self.generator_version,
             self.generation_recipe_version,
             self.request,
@@ -307,11 +253,6 @@ impl MapPackage {
             self.provenance.clone(),
             self.environment.clone(),
         )?;
-        // Schema 9 adds optional identity fields. Keep schema-8 packages whose
-        // omitted evidence field defaults to None on their original hash.
-        if self.schema_version == crate::LEGACY_MAP_SCHEMA_VERSION {
-            canonical.schema_version = crate::LEGACY_MAP_SCHEMA_VERSION;
-        }
         (canonical == *self)
             .then_some(())
             .ok_or(MapPackageError::NonCanonicalFields)
@@ -332,20 +273,11 @@ impl MapPackage {
             self.request.seed,
             self.estimate.tiles_per_side as i32,
         )
-        .with_elevation_sampling_recipe(self.generation_recipe_version)
     }
 
     pub fn chunk_count_per_side(&self) -> u64 {
         self.estimate.tiles_per_side.div_ceil(CHUNK_TILES as u64)
     }
-}
-
-fn legacy_generation_recipe_version() -> u16 {
-    LEGACY_GENERATION_RECIPE_VERSION
-}
-
-fn is_legacy_generation_recipe_version(version: &u16) -> bool {
-    *version == LEGACY_GENERATION_RECIPE_VERSION
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -367,7 +299,7 @@ pub enum MapPackageError {
 #[derive(Clone, Copy)]
 enum HashMode {
     Geography,
-    Content(Option<u16>),
+    Content(u16),
 }
 
 fn hash_package(
@@ -390,14 +322,6 @@ fn hash_package(
     hash.update(&request.compression.denominator.to_le_bytes());
     hash.update(&request.year_ce.to_le_bytes());
     hash.update(&[request.reconstruction_profile as u8]);
-    // A new detail profile changes immutable content, not source geography.
-    // StandardV1's existing byte remains exactly zero in both hash modes.
-    let detail = if matches!(mode, HashMode::Geography) {
-        0
-    } else {
-        request.detail_profile as u8
-    };
-    hash.update(&[detail]);
     if !matches!(mode, HashMode::Geography) {
         hash.update(&request.seed.to_le_bytes());
     }
@@ -410,28 +334,11 @@ fn hash_package(
         provenance.vegetation as u8,
         provenance.historical_land_use as u8,
     ]);
-    if matches!(mode, HashMode::Geography)
-        && request.detail_profile == crate::DetailProfile::LandscapeV2
-    {
-        // Correction documents bind the full request, including detail. Normalize
-        // a small index-only clone for geography; actual source identity/content
-        // and request-bound validation keep the original LandscapeV2 document.
-        let mut geography_environment = environment.clone();
-        if let Some(model) = geography_environment
-            .hydrology_evidence
-            .as_mut()
-            .and_then(|index| index.water_model.as_mut())
-        {
-            model.correction_document.request.detail_profile = crate::DetailProfile::StandardV1;
-        }
-        geography_environment.hash_into(&mut hash);
-    } else {
-        environment.hash_into(&mut hash);
-    }
-    if let HashMode::Content(Some(generation_recipe_version)) = mode {
-        // Generation behavior is part of the immutable content identity, while
-        // the geography key remains stable when only the generation recipe changes.
-        hash.update(b"aoe-map-resource-recipe-v1\0");
+    environment.hash_into(&mut hash);
+    if let HashMode::Content(generation_recipe_version) = mode {
+        // Generation behavior is part of the immutable content identity; the
+        // geography key covers source inputs only.
+        hash.update(b"aoe-map-generation-recipe\0");
         hash.update(&generation_recipe_version.to_le_bytes());
     }
     for source in source_locks {

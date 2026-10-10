@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-    DetailProfile, FieldPyramid, GeographicWaterPatch, HydrologyEvidenceIndex,
-    HydrologyWaterModelIndex, HydrologyWaterPolicy, PyramidLevel, Ratio, ReconstructionProfile,
-    WaterCorrectionDocument, WaterCorrectionProjection,
+    FieldPyramid, GeographicWaterPatch, HydrologyEvidenceIndex, HydrologyWaterModelIndex,
+    HydrologyWaterPolicy, PyramidLevel, Ratio, ReconstructionProfile, WaterCorrectionDocument,
+    WaterCorrectionProjection,
 };
 
 strict_object!(StrictRatio, ratio, Ratio, {numerator: u32, denominator: u32});
@@ -14,8 +14,6 @@ strict_object!(StrictRequest, request, MapRequest, {
     year_ce: u16, seed: u64,
     #[serde(default)]
     reconstruction_profile: ReconstructionProfile,
-    #[serde(default)]
-    detail_profile: DetailProfile,
 });
 strict_object!(StrictEstimate, estimate, MapEstimate, {
     effective_side_meters: u64, tiles_per_side: u64, game_side_meters: u64,

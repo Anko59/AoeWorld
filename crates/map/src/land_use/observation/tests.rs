@@ -53,12 +53,11 @@ fn raw_coverage_preserves_valid_zero_nodata_and_unobserved_land() {
         assert_eq!(observation.crop_percent, 0);
         assert_eq!(observation.grazing_percent, 0);
         assert_eq!(observation.population_pressure, 0);
-        assert_eq!(history.at(tile, 3).is_some(), index == 0);
     }
 }
 
 #[test]
-fn raw_legacy_quantities_and_coordinates_match_legacy_wrapper() {
+fn coverage_free_quantities_and_coordinates_are_raw_page_values() {
     let mut source = page(Vec::new());
     source.crop_percent = vec![3, 7, 13, 19];
     source.grazing_percent = vec![5, 11, 17, 23];
@@ -69,14 +68,12 @@ fn raw_legacy_quantities_and_coordinates_match_legacy_wrapper() {
         for x in 0..=4 {
             let tile = TileCoord::new(x, y);
             let observation = history.at_observation(tile, 5).unwrap();
-            let legacy = history.at(tile, 5).unwrap();
+            // Five tiles over two samples: nearest-sample columns 0..=1 / 2..=4.
+            let index = usize::from(y >= 2) * 2 + usize::from(x >= 2);
             assert_eq!(observation.coverage, None);
-            assert_eq!(observation.crop_percent, legacy.crop_percent);
-            assert_eq!(observation.grazing_percent, legacy.grazing_percent);
-            assert_eq!(
-                observation.population_pressure,
-                legacy.population_pressure_per_square_kilometer
-            );
+            assert_eq!(observation.crop_percent, [3, 7, 13, 19][index]);
+            assert_eq!(observation.grazing_percent, [5, 11, 17, 23][index]);
+            assert_eq!(observation.population_pressure, [29, 31, 37, 41][index]);
         }
     }
     assert!(history.at_observation(TileCoord::new(-1, 0), 5).is_none());

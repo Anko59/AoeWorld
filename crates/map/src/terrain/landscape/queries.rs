@@ -1,5 +1,5 @@
-//! Explicit candidate evaluation on real dense/provider source inputs.
-//! This does not activate a profile or modify any published chunk/recipe.
+//! Landscape evaluation on dense or provider source inputs. The default
+//! policy is the generator's; explicit policies support bounded what-if probes.
 use super::{LandscapePoint, MapChunkGenerator, Tile, provider};
 #[path = "queries/chunks.rs"]
 mod chunks;

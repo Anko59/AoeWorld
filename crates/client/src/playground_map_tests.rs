@@ -29,14 +29,17 @@ mod resource_viewport;
 
 #[wasm_bindgen_test]
 fn resident_chunk_measurement_counts_the_struct_and_owned_buffers() {
-    let Ok(chunk) = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0) else {
+    let Ok(chunk) =
+        MapChunkGenerator::new([0; 32], 1, 32).landscape_chunk_with_cancel(0, 0, &|| false)
+    else {
         assert!(false, "fixture chunk");
         return;
     };
     let expected = size_of::<CachedChunk>()
-        + chunk.tiles.capacity() * size_of::<Tile>()
-        + chunk.resources.capacity() * size_of::<ResourceNode>();
-    let cached = CachedChunk::Legacy(chunk);
+        + chunk.tiles.capacity() * size_of::<aoe_map::LandscapeTile>()
+        + chunk.resources.capacity() * size_of::<aoe_map::LandscapeResource>()
+        + chunk.decorations.capacity() * size_of::<aoe_map::LandscapeDecoration>();
+    let cached = CachedChunk::from(chunk);
     assert_eq!(chunk_resident_bytes(&cached), expected);
 }
 
@@ -48,23 +51,30 @@ fn decoded_cache_limit_matches_the_product_budget() {
 
 #[wasm_bindgen_test]
 fn partial_edge_chunk_uses_active_map_dimensions_for_rows() {
-    let Ok(chunk) = MapChunkGenerator::new([0; 32], 1, 500).chunk(15, 15) else {
+    let Ok(chunk) =
+        MapChunkGenerator::new([0; 32], 1, 500).landscape_chunk_with_cancel(15, 15, &|| false)
+    else {
         assert!(false, "partial chunk fixture");
         return;
     };
     assert_eq!(chunk.tiles.len(), 20 * 20);
-    assert_eq!(chunk_tile_index(500, 500, &chunk, 480, 480), Some(0));
-    assert_eq!(chunk_tile_index(500, 500, &chunk, 499, 499), Some(399));
-    assert_eq!(chunk_tile_index(500, 500, &chunk, 500, 499), None);
+    let first = chunk.tiles[0].terrain;
+    let last = chunk.tiles[399].terrain;
+    let cached = CachedChunk::from(chunk);
+    assert_eq!(cached.tile_at(500, 500, 480, 480), Some(&first));
+    assert_eq!(cached.tile_at(500, 500, 499, 499), Some(&last));
+    assert_eq!(cached.tile_at(500, 500, 500, 499), None);
 }
 
 #[wasm_bindgen_test]
 fn unit_and_resource_contacts_follow_the_rendered_surface_diagonal() {
-    let Ok(chunk) = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0) else {
+    let Ok(chunk) =
+        MapChunkGenerator::new([0; 32], 1, 32).landscape_chunk_with_cancel(0, 0, &|| false)
+    else {
         assert!(false, "surface fixture chunk");
         return;
     };
-    let mut tile = chunk.tiles[0];
+    let mut tile = chunk.tiles[0].terrain;
     tile.game_height_level = 0;
     tile.surface.corner_game_height_levels = [0, 2, 4, 6];
     tile.surface.triangulation = aoe_map::SurfaceDiagonal::NorthwestSoutheast;
@@ -100,15 +110,17 @@ fn resident_surface_bounds_expand_terrain_visibility_to_high_relief() {
     assert!(high_relief.width() > ground.width());
     assert!(high_relief.height() > ground.height());
 
-    let Ok(mut chunk) = MapChunkGenerator::new([0; 32], 1, 32).chunk(0, 0) else {
+    let Ok(mut chunk) =
+        MapChunkGenerator::new([0; 32], 1, 32).landscape_chunk_with_cancel(0, 0, &|| false)
+    else {
         assert!(false, "fixture chunk");
         return;
     };
     for tile in &mut chunk.tiles {
-        tile.surface.corner_game_height_levels = [0, 0, 80, -80];
+        tile.terrain.surface.corner_game_height_levels = [0, 0, 80, -80];
     }
     assert_eq!(
-        heights::chunk_height_bounds(&CachedChunk::Legacy(chunk)),
+        heights::chunk_height_bounds(&CachedChunk::from(chunk)),
         Some((-80, 80))
     );
 }
@@ -154,20 +166,22 @@ fn authoritative_bounds_request_unseen_high_relief_before_residency() {
             || high_tile.1 >= initial.max.y
     );
 
-    let Ok(mut chunk) = MapChunkGenerator::new([0; 32], 1, 512).chunk(9, 8) else {
+    let Ok(mut chunk) =
+        MapChunkGenerator::new([0; 32], 1, 512).landscape_chunk_with_cancel(9, 8, &|| false)
+    else {
         assert!(false, "high-relief discovery chunk");
         return;
     };
     for tile in &mut chunk.tiles {
-        tile.game_height_level = 0;
-        tile.surface.corner_game_height_levels = [0; 4];
+        tile.terrain.game_height_level = 0;
+        tile.terrain.surface.corner_game_height_levels = [0; 4];
     }
     let high_index = fixture_chunk_tile_index(high_tile, (9, 8));
-    let evidence = &mut chunk.tiles[high_index];
+    let evidence = &mut chunk.tiles[high_index].terrain;
     evidence.game_height_level = 52;
     evidence.surface.corner_game_height_levels = [52; 4];
     assert_eq!(
-        heights::chunk_height_bounds(&CachedChunk::Legacy(chunk)),
+        heights::chunk_height_bounds(&CachedChunk::from(chunk)),
         Some((0, 52))
     );
 
@@ -252,29 +266,36 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     };
     let high_tile = (290, 272);
     let high_index = fixture_chunk_tile_index(high_tile, (9, 8));
-    let Ok(mut high) = MapChunkGenerator::new([0; 32], 1, 512).chunk(9, 8) else {
+    let Ok(mut high) =
+        MapChunkGenerator::new([0; 32], 1, 512).landscape_chunk_with_cancel(9, 8, &|| false)
+    else {
         assert!(false, "high-relief fetch chunk");
         return;
     };
     for tile in &mut high.tiles {
-        tile.game_height_level = 0;
-        tile.surface.corner_game_height_levels = [0; 4];
+        tile.terrain.game_height_level = 0;
+        tile.terrain.surface.corner_game_height_levels = [0; 4];
     }
-    high.tiles[high_index].game_height_level = 52;
-    high.tiles[high_index].surface.corner_game_height_levels = [52; 4];
+    high.tiles[high_index].terrain.game_height_level = 52;
+    high.tiles[high_index]
+        .terrain
+        .surface
+        .corner_game_height_levels = [52; 4];
 
-    let Ok(mut low) = MapChunkGenerator::new([0; 32], 1, 512).chunk(8, 8) else {
+    let Ok(mut low) =
+        MapChunkGenerator::new([0; 32], 1, 512).landscape_chunk_with_cancel(8, 8, &|| false)
+    else {
         assert!(false, "low-relief fetch chunk");
         return;
     };
     for tile in &mut low.tiles {
-        tile.game_height_level = 0;
-        tile.surface.corner_game_height_levels = [0; 4];
+        tile.terrain.game_height_level = 0;
+        tile.terrain.surface.corner_game_height_levels = [0; 4];
     }
 
     let mut chunks = std::collections::BTreeMap::from([
-        ((8, 8), CachedChunk::Legacy(low)),
-        ((9, 8), CachedChunk::Legacy(high.clone())),
+        ((8, 8), CachedChunk::from(low)),
+        ((9, 8), CachedChunk::from(high.clone())),
     ]);
     let mut request_bounds = None;
     let mut resident_bounds = None;
@@ -325,7 +346,7 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     let re_request = heights::candidate_chunks(camera, config, (0, 52), MAX_CACHED_CHUNKS);
     assert!(re_request.contains(&(9, 8)));
 
-    chunks.insert((9, 8), CachedChunk::Legacy(high));
+    chunks.insert((9, 8), CachedChunk::from(high));
     // A visible high chunk can be farther in world coordinates than an
     // off-screen low chunk. Eviction must retain requested relief.
     evict_distant_chunks_with_limits(

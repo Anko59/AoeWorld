@@ -32,7 +32,7 @@ pub struct ProjectedSurfaceTriangle {
     pub tile: [i32; 2],
     pub skirt: bool,
     pub(crate) material: u8,
-    /// Packed optional metadata; zero is legacy, presence bit preserves Some(0).
+    /// Packed optional metadata; zero means none, presence bit preserves Some(0).
     pub(crate) appearance: u32,
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,

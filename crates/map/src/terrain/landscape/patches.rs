@@ -1,11 +1,10 @@
-//! Bounded ecological patch descriptor; no published recipe invokes it yet.
+//! Bounded ecological patch descriptor used by the composed landscape.
 //! Pure bounded integer analytic clusters: two overlapping lobes per macrocell,
 //! 25-cell lookup, sparse macrocell activation modulated at 192 tiles, irregular
 //! centres/radii/asymmetric lobes/eight orientations and smooth 96-tile warp. No world-size storage,
 //! allocation, float, unsafe, geometry/height/source changes or query-order state.
-//! Existing recipes 3..=8 must retain explicit-ID dispatch, never latest checks.
-//! Stable mixer is not cryptographic; changing to a forest_noise adapter requires
-//! new recipe-9 fixture qualification before publishing its behavior.
+//! The stable mixer is not cryptographic; changing it changes generation and
+//! its golden digests.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Region {
     Sparse,

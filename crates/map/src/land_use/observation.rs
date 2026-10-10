@@ -3,7 +3,7 @@ use crate::ENVIRONMENT_PAGE_SAMPLES;
 use aoe_core::TileCoord;
 
 /// Raw historical quantities and their source coverage, without a clearing policy.
-/// Missing legacy coverage remains distinct from observed zero and source nodata.
+/// Missing coverage remains distinct from observed zero and source nodata.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HistoricalLandUseObservation {
     pub crop_percent: u8,

@@ -8,7 +8,10 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
     let package = prepared.package.clone();
     assert_eq!(
         (package.schema_version, package.generation_recipe_version),
-        (10, 9)
+        (
+            aoe_map::MAP_SCHEMA_VERSION,
+            aoe_map::GENERATION_RECIPE_VERSION
+        )
     );
     assert_eq!(package.estimate.tiles_per_side, 512);
     assert!(package.source_locks.is_empty());
@@ -24,7 +27,9 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
     let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() else {
         panic!("prepared fixture must use map terrain")
     };
-    let chunk = generator.chunk(8, 8).expect("dense forest chunk");
+    // The central chunks hold the starting glade and its connectors; probe a
+    // forest chunk between the glade and the surrounding opening nodes.
+    let chunk = generator.chunk(4, 4).expect("dense forest chunk");
     assert!(
         chunk
             .tiles
@@ -44,13 +49,13 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
     let config = world.config();
     let search = world
         .terrain()
-        .search_start_for_recipe(config, 9, 64, || false)
-        .expect("bounded recipe 9 search");
+        .search_start_checked(config, 64, || false)
+        .expect("bounded start search");
     let StartSearchResult::Found(start) = search else {
         panic!("fixture has no playable start: {search:?}")
     };
-    // The recipe 9 search also requires an exit at distance 64, not merely
-    // an isolated 256-tile pocket. Do not substitute the legacy start search.
+    // The start search also requires an exit at distance 64, not merely an
+    // isolated 256-tile pocket.
     assert_eq!(world.terrain().reachable_tiles(start, config, 256), 256);
     for dy in -2..=2 {
         for dx in -2..=2 {
@@ -76,22 +81,16 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
     assert_eq!(
         world
             .terrain()
-            .search_start_for_recipe(config, 9, 0, || false)
+            .search_start_checked(config, 0, || false)
             .unwrap(),
         StartSearchResult::LimitReached
     );
     assert_eq!(
         world
             .terrain()
-            .search_start_for_recipe(config, 9, 64, || true)
+            .search_start_checked(config, 64, || true)
             .unwrap(),
         StartSearchResult::Cancelled
-    );
-    assert!(
-        world
-            .terrain()
-            .search_start_for_recipe(config, 99, 64, || false)
-            .is_err()
     );
     assert_eq!(
         fields().expect("repeat fixture").package.content_hash,
@@ -210,7 +209,7 @@ fn production_runtime_activates_the_same_persisted_provider_twice() {
             let reply = tokio::task::spawn_blocking(move || http(address, request)).await.unwrap();
             assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
             let body: serde_json::Value = serde_json::from_str(reply.split_once("\r\n\r\n").unwrap().1).unwrap();
-            assert!(body["payload_hex"].as_str().unwrap().starts_with("03"));
+            assert!(body["payload_hex"].as_str().unwrap().starts_with("04"));
             // Activation retires the previous world and its controller session.
             let _ = socket.close(None).await;
         }

@@ -101,9 +101,9 @@ fn valid_report() -> SourceQualificationReport {
     SourceQualificationReport {
         qualification_case: "source-backed-100km-50k-tiles-1-to-1",
         package_hash: "a".repeat(64),
-        schema_version: 9,
-        generator_version: 9,
-        generation_recipe_version: 5,
+        schema_version: aoe_map::MAP_SCHEMA_VERSION,
+        generator_version: aoe_map::MAP_SCHEMA_VERSION,
+        generation_recipe_version: aoe_map::GENERATION_RECIPE_VERSION,
         tiles_per_side: 50_000,
         physical_side_meters: 100_000,
         sample_axis: 1_024,

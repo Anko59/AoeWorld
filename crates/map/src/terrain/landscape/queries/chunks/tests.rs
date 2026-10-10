@@ -6,12 +6,10 @@ use crate::{CompactChunk, ElevationPage, PotentialBiomePage, WaterPage};
 use std::sync::Arc;
 
 fn fixture(width: i32, class: u8, height: i32) -> MapChunkGenerator {
-    let mut generator =
-        MapChunkGenerator::new([17; 32], 1, width).with_elevation_sampling_recipe(8);
+    let mut generator = MapChunkGenerator::new([17; 32], 1, width);
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 1,
         compression: crate::Ratio::new(30, 1).expect("ratio"),
-        sampling_recipe: 8,
         pages: [(
             (0, 0),
             ElevationPage {
@@ -74,15 +72,16 @@ fn candidate(generator: &MapChunkGenerator, x: i32, y: i32) -> LandscapeChunk {
 }
 
 #[test]
-fn candidate_forest_families_floor_and_source_geometry_survive_compact_three() {
+fn candidate_forest_families_floor_and_source_geometry_survive_the_codec() {
     for (class, family) in [
-        (8, ResourceVisualFamily::Broadleaf),
+        (8, ResourceVisualFamily::Conifer),
+        (13, ResourceVisualFamily::Broadleaf),
         (14, ResourceVisualFamily::Conifer),
         (1, ResourceVisualFamily::Tropical),
         (4, ResourceVisualFamily::DryScrub),
     ] {
         let generator = fixture(128, class, 100);
-        let published = generator.chunk(1, 1).expect("old chunk");
+        let published = generator.chunk(1, 1).expect("default chunk");
         let mut trees = 0;
         let mut floors = 0;
         for y in 0..4 {
@@ -101,7 +100,7 @@ fn candidate_forest_families_floor_and_source_geometry_survive_compact_three() {
                         tile.terrain.vegetation_provenance,
                         base.vegetation_provenance
                     );
-                    let appearance = tile.appearance.expect("candidate metadata");
+                    let appearance = tile.appearance;
                     assert_eq!(appearance.canopy_strength, appearance.floor_strength);
                     floors += usize::from(appearance.floor_strength > 0);
                     assert_eq!(
@@ -117,16 +116,16 @@ fn candidate_forest_families_floor_and_source_geometry_survive_compact_three() {
                     }
                 }
                 assert_eq!(
-                    CompactChunk::encode_landscape(&scene)
+                    CompactChunk::encode(&scene)
                         .expect("encode")
-                        .decode_landscape()
+                        .decode()
                         .expect("decode"),
                     scene
                 );
             }
         }
         assert!(trees > 100 && floors >= trees);
-        assert_eq!(generator.chunk(1, 1).expect("old chunk"), published);
+        assert_eq!(generator.chunk(1, 1).expect("default chunk"), published);
     }
 }
 
@@ -153,7 +152,7 @@ fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing()
                         .landscape_resource_reserved(tile.tile, &|| false)
                         .expect("source")
                 {
-                    let appearance = tile.appearance.expect("metadata");
+                    let appearance = tile.appearance;
                     assert_eq!(appearance.floor_strength, 0);
                     assert_eq!(appearance.canopy_strength, 0);
                     assert!(
@@ -197,9 +196,9 @@ fn sparse_edge_chunks_and_shuffled_requests_are_coordinate_stable() {
     assert_eq!(scene.tiles.len(), 18 * 18);
     assert_eq!(scene.tiles[18].tile, TileCoord::new(32, 33));
     assert_eq!(
-        CompactChunk::encode_landscape(&scene)
+        CompactChunk::encode(&scene)
             .expect("sparse encode")
-            .decode_landscape()
+            .decode()
             .expect("decode"),
         scene
     );
@@ -253,7 +252,7 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
         let generator = fixture(64, class, height);
         let scene = candidate(&generator, 0, 0);
         for tile in &scene.tiles {
-            let appearance = tile.appearance.expect("metadata");
+            let appearance = tile.appearance;
             assert_eq!(appearance.height_band, expected);
             assert_eq!(appearance.floor_strength, 0);
         }
@@ -289,7 +288,7 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
                 scene
                     .tiles
                     .iter()
-                    .all(|tile| tile.appearance.expect("metadata").floor_strength == 0)
+                    .all(|tile| tile.appearance.floor_strength == 0)
             );
             trees += scene
                 .resources
@@ -297,9 +296,9 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
                 .filter(|r| r.node.object == ObjectKind::Tree)
                 .count();
             assert_eq!(
-                CompactChunk::encode_landscape(&scene)
+                CompactChunk::encode(&scene)
                     .expect("encode")
-                    .decode_landscape()
+                    .decode()
                     .expect("decode"),
                 scene
             );
@@ -337,7 +336,7 @@ fn historical_clearings_cannot_be_refilled_by_decorations() {
         scene
             .tiles
             .iter()
-            .all(|tile| tile.appearance.expect("metadata").floor_strength == 0)
+            .all(|tile| tile.appearance.floor_strength == 0)
     );
     assert!(
         !scene

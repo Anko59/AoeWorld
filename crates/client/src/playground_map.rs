@@ -1,6 +1,6 @@
 use super::Client;
 use aoe_core::{Camera, ScreenPoint, TileRect};
-use aoe_map::{CHUNK_TILES, Chunk, CompactChunk, GroundMaterial, ResourceNode, Tile};
+use aoe_map::{CHUNK_TILES, CompactChunk, GroundMaterial, ResourceNode, Tile};
 use aoe_rendering::{
     SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance, SceneTerrainSurface,
     pick_surface_point, sample_surface_height,
@@ -172,9 +172,7 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
         {
             continue;
         }
-        for (position, tile, appearance) in
-            chunk.scene_tiles(client.config.width_tiles, client.config.height_tiles)
-        {
+        for (position, tile, appearance) in chunk.scene_tiles() {
             let x = position.x;
             let y = position.y;
             if x < visible.min.x || x >= visible.max.x || y < visible.min.y || y >= visible.max.y {
@@ -189,17 +187,17 @@ pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
 fn terrain_scene_sample(
     position: aoe_core::TileCoord,
     tile: &Tile,
-    appearance: Option<aoe_map::LandscapeAppearance>,
+    appearance: aoe_map::LandscapeAppearance,
 ) -> SceneTerrain {
     SceneTerrain {
         position: [f64::from(position.x) + 0.5, f64::from(position.y) + 0.5],
         material: terrain_material(tile.material),
-        appearance: appearance.map(|value| SceneTerrainAppearance {
-            canopy_strength: value.canopy_strength,
-            floor_strength: value.floor_strength,
-            palette: value.palette as u8,
-            exposure: value.exposure as u8,
-            height_band: value.height_band as u8,
+        appearance: Some(SceneTerrainAppearance {
+            canopy_strength: appearance.canopy_strength,
+            floor_strength: appearance.floor_strength,
+            palette: appearance.palette as u8,
+            exposure: appearance.exposure as u8,
+            height_band: appearance.height_band as u8,
         }),
         elevation_meters: tile_center_elevation(tile),
         surface: SceneTerrainSurface {
@@ -351,25 +349,6 @@ fn chunk_axis_len(total_tiles: i32, chunk: i32) -> usize {
     let start = i64::from(chunk) * i64::from(CHUNK_TILES);
     let remaining = i64::from(total_tiles).saturating_sub(start);
     usize::try_from(remaining.clamp(0, i64::from(CHUNK_TILES))).unwrap_or(0)
-}
-
-fn chunk_tile_index(
-    width_tiles: i32,
-    height_tiles: i32,
-    chunk: &Chunk,
-    x: i32,
-    y: i32,
-) -> Option<usize> {
-    if x < 0 || y < 0 || x >= width_tiles || y >= height_tiles {
-        return None;
-    }
-    let (chunk_width, chunk_height) = (
-        chunk_axis_len(width_tiles, chunk.x),
-        chunk_axis_len(height_tiles, chunk.y),
-    );
-    let local_x = x.rem_euclid(CHUNK_TILES) as usize;
-    let local_y = y.rem_euclid(CHUNK_TILES) as usize;
-    (local_x < chunk_width && local_y < chunk_height).then_some(local_y * chunk_width + local_x)
 }
 
 fn terrain_material(material: GroundMaterial) -> u8 {

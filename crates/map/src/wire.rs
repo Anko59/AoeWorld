@@ -1,23 +1,28 @@
 use crate::{
-    Biome, CHUNK_TILES, Chunk, GroundMaterial, ObjectKind, Provenance, ResourceKind, ResourceNode,
-    SurfaceDiagonal, SurfaceKind, Tile, TileSurface, WaterKind,
+    CHUNK_TILES, EcologicalPalette, LandscapeAppearance, LandscapeChunk, LandscapeDecoration,
+    LandscapeResource, LandscapeTile, ObjectKind, ResourceKind, ResourceNode, ResourceVisualFamily,
+    Tile, TileSurface,
 };
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 
-const LEGACY_FORMAT_VERSION: u8 = 1;
-const FORMAT_VERSION: u8 = 2;
-const LEGACY_TILE_BYTES: usize = 18;
-const TILE_BYTES: usize = 20;
-const RESOURCE_BYTES: usize = 21;
-const HEADER_BYTES: usize = 5;
+/// The only chunk payload version. Any other leading byte is rejected; cached
+/// payloads from earlier development formats are discarded and regenerated.
+pub const CHUNK_FORMAT_VERSION: u8 = 4;
 pub const MAX_DECODED_CHUNK_BYTES: usize = 128 * 1024;
+const HEADER_BYTES: usize = 7;
+/// Physical terrain record before explicit coordinates and appearance.
+const TERRAIN_BYTES: usize = 20;
+/// Terrain 20 + world coordinates 8 + appearance 7.
+const TILE_BYTES: usize = TERRAIN_BYTES + 8 + 7;
+const RESOURCE_BYTES: usize = 22;
+const DECORATION_BYTES: usize = 11;
 const MAX_CHUNK_TILES: usize = (CHUNK_TILES * CHUNK_TILES) as usize;
 
+mod codes;
 mod evidence;
-mod landscape;
+use codes::*;
 use evidence::{pack_observation_properties, unpack_observation_properties};
-pub use landscape::LandscapeChunkError;
 
 /// Compact, immutable transport representation for one 32 by 32 map chunk.
 ///
@@ -38,6 +43,8 @@ pub enum CompactChunkError {
     TooManyTiles,
     #[error("chunk has more than one object per tile")]
     TooManyResources,
+    #[error("chunk has more than one decoration per tile")]
+    TooManyDecorations,
     #[error("chunk payload exceeds the decoded size limit")]
     PayloadTooLarge,
     #[error("chunk payload is not valid hexadecimal")]
@@ -48,104 +55,127 @@ pub enum CompactChunkError {
     InvalidLength,
     #[error("chunk payload contains an invalid terrain enum")]
     InvalidEnum,
+    #[error("invalid landscape metadata, coordinates or duplicate cell")]
+    InvalidLandscape,
 }
 
 impl CompactChunk {
-    pub fn encode(chunk: &Chunk) -> Result<Self, CompactChunkError> {
-        if chunk.tiles.len() > MAX_CHUNK_TILES || chunk.tiles.len() > u16::MAX as usize {
-            return Err(CompactChunkError::TooManyTiles);
-        }
-        if chunk.resources.len() > chunk.tiles.len() || chunk.resources.len() > u16::MAX as usize {
-            return Err(CompactChunkError::TooManyResources);
-        }
-        let byte_len = HEADER_BYTES
-            .checked_add(chunk.tiles.len().saturating_mul(TILE_BYTES))
-            .and_then(|value| {
-                value.checked_add(chunk.resources.len().saturating_mul(RESOURCE_BYTES))
-            })
-            .ok_or(CompactChunkError::PayloadTooLarge)?;
-        if byte_len > MAX_DECODED_CHUNK_BYTES {
-            return Err(CompactChunkError::PayloadTooLarge);
-        }
-        let mut payload = Vec::with_capacity(byte_len);
-        payload.push(FORMAT_VERSION);
-        push_u16(&mut payload, chunk.tiles.len() as u16);
-        push_u16(&mut payload, chunk.resources.len() as u16);
-        for tile in &chunk.tiles {
-            push_i32(&mut payload, tile.geographic_height_centimeters);
-            push_i16(&mut payload, tile.game_height_level);
+    pub fn encode(chunk: &LandscapeChunk) -> Result<Self, CompactChunkError> {
+        let size = payload_size(
+            chunk.tiles.len(),
+            chunk.resources.len(),
+            chunk.decorations.len(),
+        )?;
+        validate(chunk)?;
+        let mut bytes = Vec::with_capacity(size);
+        bytes.push(CHUNK_FORMAT_VERSION);
+        push_u16(&mut bytes, chunk.tiles.len() as u16);
+        push_u16(&mut bytes, chunk.resources.len() as u16);
+        push_u16(&mut bytes, chunk.decorations.len() as u16);
+        for sample in &chunk.tiles {
+            let tile = sample.terrain;
+            push_i32(&mut bytes, tile.geographic_height_centimeters);
+            push_i16(&mut bytes, tile.game_height_level);
             for height in tile.surface.corner_game_height_levels {
-                push_i16(&mut payload, height);
+                push_i16(&mut bytes, height);
             }
-            push_u32(&mut payload, pack_tile_properties(*tile));
-            push_u16(&mut payload, pack_observation_properties(*tile)?);
+            push_u32(&mut bytes, pack_tile_properties(tile));
+            push_u16(&mut bytes, pack_observation_properties(tile)?);
+            push_i32(&mut bytes, sample.tile.x);
+            push_i32(&mut bytes, sample.tile.y);
+            let appearance = sample.appearance;
+            push_u16(&mut bytes, appearance.canopy_strength);
+            push_u16(&mut bytes, appearance.floor_strength);
+            bytes.push(appearance.palette as u8);
+            bytes.push(appearance.exposure as u8);
+            bytes.push(appearance.height_band as u8);
         }
         for resource in &chunk.resources {
-            push_u64(&mut payload, resource.id);
-            push_i32(&mut payload, resource.tile.x);
-            push_i32(&mut payload, resource.tile.y);
-            payload.push(resource.kind as u8);
-            payload.push(resource.object as u8);
-            push_u16(&mut payload, resource.initial_amount);
-            payload.push(resource.visual_variant);
+            let node = resource.node;
+            push_u64(&mut bytes, node.id);
+            push_i32(&mut bytes, node.tile.x);
+            push_i32(&mut bytes, node.tile.y);
+            bytes.push(node.kind as u8);
+            bytes.push(node.object as u8);
+            push_u16(&mut bytes, node.initial_amount);
+            bytes.push(node.visual_variant);
+            bytes.push(resource.visual_family as u8);
+        }
+        for decoration in &chunk.decorations {
+            push_i32(&mut bytes, decoration.tile.x);
+            push_i32(&mut bytes, decoration.tile.y);
+            bytes.push(decoration.family as u8);
+            bytes.push(decoration.variant);
+            bytes.push(decoration.orientation);
         }
         Ok(Self {
             x: chunk.x,
             y: chunk.y,
-            payload_hex: encode_hex(&payload),
+            payload_hex: encode_hex(&bytes),
         })
     }
 
-    pub fn decode(&self) -> Result<Chunk, CompactChunkError> {
-        let payload = decode_hex(&self.payload_hex)?;
-        if payload.len() > MAX_DECODED_CHUNK_BYTES {
-            return Err(CompactChunkError::PayloadTooLarge);
-        }
+    pub fn decode(&self) -> Result<LandscapeChunk, CompactChunkError> {
+        let bytes = decode_hex(&self.payload_hex)?;
         let mut cursor = 0;
-        let version = read_u8(&payload, &mut cursor)?;
-        if !matches!(version, LEGACY_FORMAT_VERSION | FORMAT_VERSION) {
+        if read_u8(&bytes, &mut cursor)? != CHUNK_FORMAT_VERSION {
             return Err(CompactChunkError::UnsupportedVersion);
         }
-        let tile_count = read_u16(&payload, &mut cursor)? as usize;
-        let resource_count = read_u16(&payload, &mut cursor)? as usize;
-        if tile_count > MAX_CHUNK_TILES {
-            return Err(CompactChunkError::TooManyTiles);
-        }
-        if resource_count > tile_count {
-            return Err(CompactChunkError::TooManyResources);
-        }
-        let tile_bytes = if version == LEGACY_FORMAT_VERSION {
-            LEGACY_TILE_BYTES
-        } else {
-            TILE_BYTES
-        };
-        let expected = HEADER_BYTES
-            .checked_add(tile_count.saturating_mul(tile_bytes))
-            .and_then(|value| value.checked_add(resource_count.saturating_mul(RESOURCE_BYTES)))
-            .ok_or(CompactChunkError::PayloadTooLarge)?;
-        if expected != payload.len() {
+        let tiles = usize::from(read_u16(&bytes, &mut cursor)?);
+        let resources = usize::from(read_u16(&bytes, &mut cursor)?);
+        let decorations = usize::from(read_u16(&bytes, &mut cursor)?);
+        if payload_size(tiles, resources, decorations)? != bytes.len() {
             return Err(CompactChunkError::InvalidLength);
         }
-        let mut tiles = Vec::with_capacity(tile_count);
-        for _ in 0..tile_count {
-            tiles.push(read_base_tile(
-                &payload,
-                &mut cursor,
-                version == FORMAT_VERSION,
-            )?);
+        // Validate the complete coordinate domain before terrain allocations.
+        origin(self.x, self.y)?;
+        let mut chunk = LandscapeChunk {
+            x: self.x,
+            y: self.y,
+            tiles: Vec::with_capacity(tiles),
+            resources: Vec::with_capacity(resources),
+            decorations: Vec::with_capacity(decorations),
+        };
+        for _ in 0..tiles {
+            let terrain = read_terrain(&bytes, &mut cursor)?;
+            let tile = TileCoord::new(
+                read_i32(&bytes, &mut cursor)?,
+                read_i32(&bytes, &mut cursor)?,
+            );
+            let appearance = LandscapeAppearance {
+                canopy_strength: read_u16(&bytes, &mut cursor)?,
+                floor_strength: read_u16(&bytes, &mut cursor)?,
+                palette: palette_from(read_u8(&bytes, &mut cursor)?)?,
+                exposure: exposure_from(read_u8(&bytes, &mut cursor)?)?,
+                height_band: height_from(read_u8(&bytes, &mut cursor)?)?,
+            };
+            chunk.tiles.push(LandscapeTile {
+                tile,
+                terrain,
+                appearance,
+            });
         }
-        let mut resources = Vec::with_capacity(resource_count);
-        for _ in 0..resource_count {
-            resources.push(read_resource_node(&payload, &mut cursor)?);
+        for _ in 0..resources {
+            let node = read_resource_node(&bytes, &mut cursor)?;
+            let visual_family = resource_family_from(read_u8(&bytes, &mut cursor)?)?;
+            chunk.resources.push(LandscapeResource {
+                node,
+                visual_family,
+            });
         }
-        (cursor == payload.len())
-            .then_some(Chunk {
-                x: self.x,
-                y: self.y,
-                tiles,
-                resources,
-            })
-            .ok_or(CompactChunkError::InvalidLength)
+        for _ in 0..decorations {
+            chunk.decorations.push(LandscapeDecoration {
+                tile: TileCoord::new(
+                    read_i32(&bytes, &mut cursor)?,
+                    read_i32(&bytes, &mut cursor)?,
+                ),
+                family: decoration_from(read_u8(&bytes, &mut cursor)?)?,
+                variant: read_u8(&bytes, &mut cursor)?,
+                orientation: read_u8(&bytes, &mut cursor)?,
+            });
+        }
+        validate(&chunk)?;
+        Ok(chunk)
     }
 
     pub fn decoded_len(&self) -> Result<usize, CompactChunkError> {
@@ -153,13 +183,31 @@ impl CompactChunk {
     }
 }
 
-// Share the original physical record parser across all wire versions. Keep
-// reads and validation in published order, including the optional v2 evidence.
-fn read_base_tile(
-    bytes: &[u8],
-    cursor: &mut usize,
-    evidence: bool,
-) -> Result<Tile, CompactChunkError> {
+fn payload_size(
+    tiles: usize,
+    resources: usize,
+    decorations: usize,
+) -> Result<usize, CompactChunkError> {
+    if tiles > MAX_CHUNK_TILES {
+        return Err(CompactChunkError::TooManyTiles);
+    }
+    if resources > tiles {
+        return Err(CompactChunkError::TooManyResources);
+    }
+    if decorations > tiles {
+        return Err(CompactChunkError::TooManyDecorations);
+    }
+    let size = HEADER_BYTES
+        + tiles * TILE_BYTES
+        + resources * RESOURCE_BYTES
+        + decorations * DECORATION_BYTES;
+    if size > MAX_DECODED_CHUNK_BYTES {
+        return Err(CompactChunkError::PayloadTooLarge);
+    }
+    Ok(size)
+}
+
+fn read_terrain(bytes: &[u8], cursor: &mut usize) -> Result<Tile, CompactChunkError> {
     let height = read_i32(bytes, cursor)?;
     let level = read_i16(bytes, cursor)?;
     let corners = [
@@ -169,11 +217,7 @@ fn read_base_tile(
         read_i16(bytes, cursor)?,
     ];
     let properties = read_u32(bytes, cursor)?;
-    let observation = if evidence {
-        Some(read_u16(bytes, cursor)?)
-    } else {
-        None
-    };
+    let observation = read_u16(bytes, cursor)?;
     unpack_tile(height, level, corners, properties, observation)
 }
 
@@ -205,15 +249,13 @@ fn unpack_tile(
     game_height_level: i16,
     corner_game_height_levels: [i16; 4],
     properties: u32,
-    observation_properties: Option<u16>,
+    observation_properties: u16,
 ) -> Result<Tile, CompactChunkError> {
     if properties >> 24 != 0 {
         return Err(CompactChunkError::InvalidEnum);
     }
-    let (hydrology_observation, modern_land_cover_class) = observation_properties
-        .map(unpack_observation_properties)
-        .transpose()?
-        .unwrap_or((None, None));
+    let (hydrology_observation, modern_land_cover_class) =
+        unpack_observation_properties(observation_properties)?;
     Ok(Tile {
         geographic_height_centimeters,
         game_height_level,
@@ -234,186 +276,82 @@ fn unpack_tile(
     })
 }
 
-fn ground_material(value: u8) -> Result<GroundMaterial, CompactChunkError> {
-    match value {
-        0 => Ok(GroundMaterial::TemperateGrass),
-        1 => Ok(GroundMaterial::DryGrass),
-        2 => Ok(GroundMaterial::LushGrass),
-        3 => Ok(GroundMaterial::ForestFloor),
-        4 => Ok(GroundMaterial::Dirt),
-        5 => Ok(GroundMaterial::Sand),
-        6 => Ok(GroundMaterial::Rock),
-        7 => Ok(GroundMaterial::Mud),
-        8 => Ok(GroundMaterial::Snow),
-        9 => Ok(GroundMaterial::Ice),
-        10 => Ok(GroundMaterial::Shore),
-        11 => Ok(GroundMaterial::Water),
-        _ => Err(CompactChunkError::InvalidEnum),
-    }
+fn origin(x: i32, y: i32) -> Result<TileCoord, CompactChunkError> {
+    let x = x
+        .checked_mul(CHUNK_TILES)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    let y = y
+        .checked_mul(CHUNK_TILES)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    x.checked_add(CHUNK_TILES - 1)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    y.checked_add(CHUNK_TILES - 1)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    Ok(TileCoord::new(x, y))
 }
 
-fn biome(value: u8) -> Result<Biome, CompactChunkError> {
-    match value {
-        0 => Ok(Biome::Temperate),
-        1 => Ok(Biome::Boreal),
-        2 => Ok(Biome::Tropical),
-        3 => Ok(Biome::Woodland),
-        4 => Ok(Biome::Savanna),
-        5 => Ok(Biome::Steppe),
-        6 => Ok(Biome::Desert),
-        7 => Ok(Biome::Tundra),
-        8 => Ok(Biome::Alpine),
-        9 => Ok(Biome::Polar),
-        _ => Err(CompactChunkError::InvalidEnum),
+fn cell(tile: TileCoord, origin: TileCoord) -> Result<usize, CompactChunkError> {
+    let x = tile
+        .x
+        .checked_sub(origin.x)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    let y = tile
+        .y
+        .checked_sub(origin.y)
+        .ok_or(CompactChunkError::InvalidLandscape)?;
+    if !(0..CHUNK_TILES).contains(&x) || !(0..CHUNK_TILES).contains(&y) {
+        return Err(CompactChunkError::InvalidLandscape);
     }
+    Ok((y * CHUNK_TILES + x) as usize)
 }
 
-fn provenance(value: u8) -> Result<Provenance, CompactChunkError> {
-    match value {
-        0 => Ok(Provenance::SourceDerived),
-        1 => Ok(Provenance::ModelDerived),
-        2 => Ok(Provenance::Procedural),
-        3 => Ok(Provenance::Fallback),
-        4 => Ok(Provenance::HistoricallyCorrected),
-        _ => Err(CompactChunkError::InvalidEnum),
+/// Explicit coordinates represent partial/sparse chunks in strict row-major
+/// order; at most one resource and one decoration per present tile cell.
+fn validate(chunk: &LandscapeChunk) -> Result<(), CompactChunkError> {
+    let origin = origin(chunk.x, chunk.y)?;
+    let mut tile_cells = [false; MAX_CHUNK_TILES];
+    let mut previous = None;
+    for tile in &chunk.tiles {
+        let index = cell(tile.tile, origin)?;
+        if previous.is_some_and(|last| index <= last) {
+            return Err(CompactChunkError::InvalidLandscape);
+        }
+        previous = Some(index);
+        tile_cells[index] = true;
+        let a = tile.appearance;
+        if a.canopy_strength > 1000
+            || a.floor_strength != a.canopy_strength
+            || (a.canopy_strength > 0
+                && matches!(
+                    a.palette,
+                    EcologicalPalette::Savanna | EcologicalPalette::Treeless
+                ))
+        {
+            return Err(CompactChunkError::InvalidLandscape);
+        }
     }
-}
-
-fn water_kind(value: u8) -> Result<WaterKind, CompactChunkError> {
-    match value {
-        0 => Ok(WaterKind::None),
-        1 => Ok(WaterKind::Shallow),
-        2 => Ok(WaterKind::Lake),
-        3 => Ok(WaterKind::River),
-        4 => Ok(WaterKind::Ocean),
-        _ => Err(CompactChunkError::InvalidEnum),
+    let mut resource_cells = [false; MAX_CHUNK_TILES];
+    for resource in &chunk.resources {
+        let index = cell(resource.node.tile, origin)?;
+        if !tile_cells[index] || resource_cells[index] {
+            return Err(CompactChunkError::InvalidLandscape);
+        }
+        resource_cells[index] = true;
+        let node = resource.node;
+        let tree = node.kind == ResourceKind::Wood && node.object == ObjectKind::Tree;
+        if tree == (resource.visual_family == ResourceVisualFamily::Generic) {
+            return Err(CompactChunkError::InvalidLandscape);
+        }
     }
-}
-
-fn surface_kind(value: u8) -> Result<SurfaceKind, CompactChunkError> {
-    match value {
-        0 => Ok(SurfaceKind::Plateau),
-        1 => Ok(SurfaceKind::Ramp),
-        2 => Ok(SurfaceKind::Cliff),
-        _ => Err(CompactChunkError::InvalidEnum),
+    let mut decoration_cells = [false; MAX_CHUNK_TILES];
+    for decoration in &chunk.decorations {
+        let index = cell(decoration.tile, origin)?;
+        if !tile_cells[index] || decoration_cells[index] || decoration.orientation > 7 {
+            return Err(CompactChunkError::InvalidLandscape);
+        }
+        decoration_cells[index] = true;
     }
-}
-
-fn diagonal(value: u8) -> Result<SurfaceDiagonal, CompactChunkError> {
-    match value {
-        0 => Ok(SurfaceDiagonal::NorthwestSoutheast),
-        1 => Ok(SurfaceDiagonal::NortheastSouthwest),
-        _ => Err(CompactChunkError::InvalidEnum),
-    }
-}
-
-fn resource_kind(value: u8) -> Result<ResourceKind, CompactChunkError> {
-    match value {
-        0 => Ok(ResourceKind::Food),
-        1 => Ok(ResourceKind::Wood),
-        2 => Ok(ResourceKind::Gold),
-        3 => Ok(ResourceKind::Stone),
-        _ => Err(CompactChunkError::InvalidEnum),
-    }
-}
-
-fn object_kind(value: u8) -> Result<ObjectKind, CompactChunkError> {
-    match value {
-        0 => Ok(ObjectKind::Tree),
-        1 => Ok(ObjectKind::ForageBush),
-        2 => Ok(ObjectKind::GoldDeposit),
-        3 => Ok(ObjectKind::StoneDeposit),
-        4 => Ok(ObjectKind::Decoration),
-        _ => Err(CompactChunkError::InvalidEnum),
-    }
-}
-
-fn push_u16(bytes: &mut Vec<u8>, value: u16) {
-    bytes.extend_from_slice(&value.to_le_bytes());
-}
-fn push_i16(bytes: &mut Vec<u8>, value: i16) {
-    bytes.extend_from_slice(&value.to_le_bytes());
-}
-fn push_u32(bytes: &mut Vec<u8>, value: u32) {
-    bytes.extend_from_slice(&value.to_le_bytes());
-}
-fn push_i32(bytes: &mut Vec<u8>, value: i32) {
-    bytes.extend_from_slice(&value.to_le_bytes());
-}
-fn push_u64(bytes: &mut Vec<u8>, value: u64) {
-    bytes.extend_from_slice(&value.to_le_bytes());
-}
-
-fn read_u8(bytes: &[u8], cursor: &mut usize) -> Result<u8, CompactChunkError> {
-    let value = *bytes.get(*cursor).ok_or(CompactChunkError::InvalidLength)?;
-    *cursor += 1;
-    Ok(value)
-}
-fn read_u16(bytes: &[u8], cursor: &mut usize) -> Result<u16, CompactChunkError> {
-    Ok(u16::from_le_bytes(read_array(bytes, cursor)?))
-}
-fn read_i16(bytes: &[u8], cursor: &mut usize) -> Result<i16, CompactChunkError> {
-    Ok(i16::from_le_bytes(read_array(bytes, cursor)?))
-}
-fn read_u32(bytes: &[u8], cursor: &mut usize) -> Result<u32, CompactChunkError> {
-    Ok(u32::from_le_bytes(read_array(bytes, cursor)?))
-}
-fn read_i32(bytes: &[u8], cursor: &mut usize) -> Result<i32, CompactChunkError> {
-    Ok(i32::from_le_bytes(read_array(bytes, cursor)?))
-}
-fn read_u64(bytes: &[u8], cursor: &mut usize) -> Result<u64, CompactChunkError> {
-    Ok(u64::from_le_bytes(read_array(bytes, cursor)?))
-}
-
-fn read_array<const N: usize>(
-    bytes: &[u8],
-    cursor: &mut usize,
-) -> Result<[u8; N], CompactChunkError> {
-    let end = cursor
-        .checked_add(N)
-        .ok_or(CompactChunkError::InvalidLength)?;
-    let source = bytes
-        .get(*cursor..end)
-        .ok_or(CompactChunkError::InvalidLength)?;
-    *cursor = end;
-    source
-        .try_into()
-        .map_err(|_| CompactChunkError::InvalidLength)
-}
-
-fn encode_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut hex = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        hex.push(HEX[(byte >> 4) as usize] as char);
-        hex.push(HEX[(byte & 0xf) as usize] as char);
-    }
-    hex
-}
-
-fn decode_hex(hex: &str) -> Result<Vec<u8>, CompactChunkError> {
-    if hex.len() > MAX_DECODED_CHUNK_BYTES * 2 {
-        return Err(CompactChunkError::PayloadTooLarge);
-    }
-    if !hex.len().is_multiple_of(2) {
-        return Err(CompactChunkError::InvalidHex);
-    }
-    let mut bytes = Vec::with_capacity(hex.len() / 2);
-    for pair in hex.as_bytes().chunks_exact(2) {
-        let high = hex_value(pair[0])?;
-        let low = hex_value(pair[1])?;
-        bytes.push(high << 4 | low);
-    }
-    Ok(bytes)
-}
-
-fn hex_value(value: u8) -> Result<u8, CompactChunkError> {
-    match value {
-        b'0'..=b'9' => Ok(value - b'0'),
-        b'a'..=b'f' => Ok(value - b'a' + 10),
-        b'A'..=b'F' => Ok(value - b'A' + 10),
-        _ => Err(CompactChunkError::InvalidHex),
-    }
+    Ok(())
 }
 
 #[cfg(test)]

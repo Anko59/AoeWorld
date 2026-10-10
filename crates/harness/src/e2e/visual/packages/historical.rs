@@ -6,7 +6,7 @@ use std::{fs, path::Path};
 pub struct HistoricalLandUseEvidence {
     pub(super) level_zero_pages: usize,
     pub(super) coverage_present_pages: usize,
-    pub(super) legacy_coverage_missing_pages: usize,
+    pub(super) coverage_missing_pages: usize,
     pub(super) coverage_samples: usize,
     pub(super) land_percent_sum: u64,
     pub(super) valid_land_percent_sum: u64,
@@ -37,7 +37,7 @@ pub(super) fn read_historical_coverage(
             .get("coverage")
             .is_none()
         {
-            evidence.legacy_coverage_missing_pages += 1;
+            evidence.coverage_missing_pages += 1;
             continue;
         }
         let expected_samples = usize::from(page.width) * usize::from(page.height);
@@ -90,13 +90,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reports_known_coverage_and_legacy_unknown_pages_separately() {
+    fn reports_known_coverage_and_coverage_free_pages_separately() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let directory = temporary.path().join("pages/hash/historical-land-use");
         fs::create_dir_all(&directory).expect("historical page directory");
         fs::write(
             directory.join("0-0-0.json"),
-            r#"{"level":0,"x":0,"y":0,"width":2,"height":1,"crop_percent":[0,0],"grazing_percent":[0,0],"population_pressure_per_square_kilometer":[0,0],"coverage":[{"land_percent":100,"valid_land_percent":80,"lake_percent":0,"ocean_percent":0,"nodata_percent":0,"outside_percent":0},{"land_percent":40,"valid_land_percent":0,"lake_percent":20,"ocean_percent":10,"nodata_percent":20,"outside_percent":10}]}"#,
+            r#"{"level":0,"x":0,"y":0,"width":2,"height":1,"crop_percent":[0,0],"grazing_percent":[0,0],"population_pressure_per_square_kilometer":[0,0],"coverage":"6450000000002800140a140a"}"#,
         )
         .expect("coverage page");
         fs::write(
@@ -108,7 +108,7 @@ mod tests {
             directory.join("1-0-0.json"),
             r#"{"level":0,"x":0,"y":0,"width":1,"height":1,"crop_percent":[0],"grazing_percent":[0],"population_pressure_per_square_kilometer":[0]}"#,
         )
-        .expect("legacy page");
+        .expect("coverage-free page");
         fs::write(
             directory.join("2-0-0.json"),
             r#"{"level":1,"x":0,"y":0,"width":1,"height":1,"crop_percent":[0],"grazing_percent":[0],"population_pressure_per_square_kilometer":[0]}"#,
@@ -120,7 +120,7 @@ mod tests {
 
         assert_eq!(evidence.level_zero_pages, 3);
         assert_eq!(evidence.coverage_present_pages, 2);
-        assert_eq!(evidence.legacy_coverage_missing_pages, 1);
+        assert_eq!(evidence.coverage_missing_pages, 1);
         assert_eq!(evidence.coverage_samples, 3);
         assert_eq!(evidence.land_percent_sum, 240);
         assert_eq!(evidence.valid_land_percent_sum, 180);

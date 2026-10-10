@@ -16,15 +16,6 @@ pub enum ReconstructionProfile {
     Circa600V1,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DetailProfile {
-    #[default]
-    StandardV1,
-    /// Explicit opt-in; published StandardV1 defaults remain unchanged.
-    LandscapeV2,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Ratio {
     pub numerator: u32,
@@ -61,8 +52,6 @@ pub struct MapRequest {
     pub seed: u64,
     #[serde(default)]
     pub reconstruction_profile: ReconstructionProfile,
-    #[serde(default)]
-    pub detail_profile: DetailProfile,
 }
 
 impl Default for MapRequest {
@@ -79,7 +68,6 @@ impl Default for MapRequest {
             year_ce: 600,
             seed: 1,
             reconstruction_profile: ReconstructionProfile::Circa600V1,
-            detail_profile: DetailProfile::StandardV1,
         }
     }
 }

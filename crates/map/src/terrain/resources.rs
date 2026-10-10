@@ -19,95 +19,171 @@ const PATCH_OFFSETS: [(i32, i32); 8] = [
     (1, -1),
 ];
 
-pub(super) fn at(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    sample: Tile,
-) -> Option<ResourceNode> {
-    at_with_access(generator, tile, sample, |neighbor| {
-        Ok::<_, std::convert::Infallible>(generator.tile_at(neighbor).is_some_and(|sample| {
-            sample.passable && !generator.occupied_without_access(neighbor, sample)
-        }))
-    })
-    .ok()
-    .flatten()
-}
-
-pub(super) fn at_with_access<E>(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    sample: Tile,
-    access: impl Fn(TileCoord) -> Result<bool, E>,
-) -> Result<Option<ResourceNode>, E> {
-    let Some(candidate) = candidate(generator, tile, sample) else {
-        return Ok(None);
-    };
-    Ok(adjacent_access(tile, access)?.then_some(candidate))
-}
-
-pub(super) fn candidate(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    sample: Tile,
-) -> Option<ResourceNode> {
-    if super::clearing::suppresses_objects(generator, tile, sample.biome) {
-        return None;
-    }
-    candidate_unreserved(generator, tile, sample)
-}
-
-/// Base resource distribution for a shared landscape mask. Does not query
-/// decorated tiles, trees or legacy clearings; callers own reservations/access.
+/// Base resource distribution for the shared landscape mask. Does not query
+/// decorated tiles or trees; callers own reservations and access.
+#[cfg(test)]
 pub(super) fn candidate_unreserved(
     generator: &MapChunkGenerator,
     tile: TileCoord,
     sample: Tile,
 ) -> Option<ResourceNode> {
-    if !sample.passable {
-        return None;
+    Origins::new(generator).candidate(tile, sample)
+}
+
+/// Patch domain and cell coordinates.
+type CellKey = (u8, i32, i32);
+/// Patch root, keyed value and member count.
+type Origin = (TileCoord, u64, usize);
+
+/// Query-local memo of patch-cell origins. Neighboring candidate queries in
+/// one point evaluation share cells; results equal uncached evaluation.
+pub(super) struct Origins {
+    key: [u8; 32],
+    cells: Vec<(CellKey, Origin)>,
+}
+
+impl Origins {
+    pub(super) fn new(generator: &MapChunkGenerator) -> Self {
+        Self {
+            key: detail_key(generator),
+            cells: Vec::new(),
+        }
     }
-    let key = detail_key(generator);
-    if suitable_forage(sample.biome)
-        && let Some((slot, key)) =
-            patch_node(key, b"forage-patch", tile, FORAGE_COLUMNS, FORAGE_ROWS)
-    {
-        return Some(node(
-            tile,
-            ResourceKind::Food,
-            ObjectKind::ForageBush,
-            125,
-            slot,
-            key,
-        ));
+
+    #[cfg(test)]
+    pub(super) fn candidate(&mut self, tile: TileCoord, sample: Tile) -> Option<ResourceNode> {
+        self.candidate_with(tile, || Ok::<_, std::convert::Infallible>(Some(sample)))
+            .unwrap_or_else(|never| match never {})
     }
-    if !suitable_ore(sample.biome) {
-        return None;
+
+    /// Patch membership is pure coordinate hashing, so the base tile is read
+    /// only for the few tiles inside a patch; results equal eager evaluation.
+    pub(super) fn candidate_with<E>(
+        &mut self,
+        tile: TileCoord,
+        base: impl FnOnce() -> Result<Option<Tile>, E>,
+    ) -> Result<Option<ResourceNode>, E> {
+        let forage = self.patch_node(0, tile, FORAGE_COLUMNS, FORAGE_ROWS);
+        let gold = self.patch_node(1, tile, GOLD_COLUMNS, GOLD_ROWS);
+        let stone = self.patch_node(2, tile, STONE_COLUMNS, STONE_ROWS);
+        if forage.is_none() && gold.is_none() && stone.is_none() {
+            return Ok(None);
+        }
+        let Some(sample) = base()? else {
+            return Ok(None);
+        };
+        if !sample.passable {
+            return Ok(None);
+        }
+        if suitable_forage(sample.biome)
+            && let Some((slot, key)) = forage
+        {
+            return Ok(Some(node(
+                tile,
+                ResourceKind::Food,
+                ObjectKind::ForageBush,
+                125,
+                slot,
+                key,
+            )));
+        }
+        if !suitable_ore(sample.biome) {
+            return Ok(None);
+        }
+        if let Some((slot, key)) = gold {
+            return Ok(Some(node(
+                tile,
+                ResourceKind::Gold,
+                ObjectKind::GoldDeposit,
+                800,
+                slot,
+                key,
+            )));
+        }
+        Ok(stone.map(|(slot, key)| {
+            node(
+                tile,
+                ResourceKind::Stone,
+                ObjectKind::StoneDeposit,
+                350,
+                slot,
+                key,
+            )
+        }))
     }
-    if let Some((slot, key)) = patch_node(key, b"gold-patch-v2", tile, GOLD_COLUMNS, GOLD_ROWS) {
-        return Some(node(
-            tile,
-            ResourceKind::Gold,
-            ObjectKind::GoldDeposit,
-            800,
-            slot,
-            key,
-        ));
+
+    fn origin(&mut self, domain: u8, x: i32, y: i32, columns: i32, rows: i32) -> Origin {
+        if let Some((_, origin)) = self.cells.iter().find(|(cell, _)| *cell == (domain, x, y)) {
+            return *origin;
+        }
+        let origin = patch_origin(self.key, DOMAINS[usize::from(domain)], x, y, columns, rows);
+        self.cells.push(((domain, x, y), origin));
+        origin
     }
-    let (slot, key) = patch_node(key, b"stone-patch-v2", tile, STONE_COLUMNS, STONE_ROWS)?;
-    Some(node(
-        tile,
-        ResourceKind::Stone,
-        ObjectKind::StoneDeposit,
-        350,
-        slot,
-        key,
-    ))
+
+    fn patch_node(
+        &mut self,
+        domain: u8,
+        tile: TileCoord,
+        columns: i32,
+        rows: i32,
+    ) -> Option<(u8, u64)> {
+        let (xs, ys) = candidate_cells(tile, columns, rows);
+        for y in ys {
+            for x in xs.clone() {
+                let (root, value, count) = self.origin(domain, x, y, columns, rows);
+                if let Some(slot) = patch_slot(tile, root, count) {
+                    return Some((slot, value));
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Patch roots lie inside their cell and members are at most one tile from
+/// the root, so only edge tiles can belong to a neighboring cell's patch.
+/// Cells keep the canonical row-major order of the full 3×3 scan.
+fn candidate_cells(
+    tile: TileCoord,
+    columns: i32,
+    rows: i32,
+) -> (std::ops::RangeInclusive<i32>, std::ops::RangeInclusive<i32>) {
+    let axis = |coordinate: i32, size: i32| {
+        let cell = coordinate.div_euclid(size);
+        let local = coordinate.rem_euclid(size);
+        let first = if local == 0 {
+            cell.saturating_sub(1)
+        } else {
+            cell
+        };
+        let last = if local == size - 1 {
+            cell.saturating_add(1)
+        } else {
+            cell
+        };
+        first..=last
+    };
+    (axis(tile.x, columns), axis(tile.y, rows))
+}
+
+const DOMAINS: [&[u8]; 3] = [b"forage-patch", b"gold-patch-v2", b"stone-patch-v2"];
+
+fn patch_slot(tile: TileCoord, root: TileCoord, count: usize) -> Option<u8> {
+    PATCH_OFFSETS[..count]
+        .iter()
+        .position(|&(offset_x, offset_y)| {
+            tile == TileCoord::new(
+                root.x.saturating_add(offset_x),
+                root.y.saturating_add(offset_y),
+            )
+        })
+        .map(|slot| slot as u8)
 }
 
 pub(super) fn detail_key(generator: &MapChunkGenerator) -> [u8; 32] {
     let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
-    hash.update(b"resource-detail-v2");
-    hash.update(&crate::RESOURCE_PLACEMENT_RECIPE_VERSION.to_le_bytes());
+    hash.update(b"resource-detail");
     hash.update(&generator.procedural_seed.to_le_bytes());
     *hash.finalize().as_bytes()
 }
@@ -130,6 +206,7 @@ fn node(
     }
 }
 
+#[cfg(test)]
 fn patch_node(
     key: [u8; 32],
     domain: &[u8],
@@ -137,20 +214,12 @@ fn patch_node(
     columns: i32,
     rows: i32,
 ) -> Option<(u8, u64)> {
-    let cell_x = tile.x.div_euclid(columns);
-    let cell_y = tile.y.div_euclid(rows);
-    for y in cell_y.saturating_sub(1)..=cell_y.saturating_add(1) {
-        for x in cell_x.saturating_sub(1)..=cell_x.saturating_add(1) {
+    let (xs, ys) = candidate_cells(tile, columns, rows);
+    for y in ys {
+        for x in xs.clone() {
             let (root, value, count) = patch_origin(key, domain, x, y, columns, rows);
-            for (slot, &(offset_x, offset_y)) in PATCH_OFFSETS[..count].iter().enumerate() {
-                if tile
-                    == TileCoord::new(
-                        root.x.saturating_add(offset_x),
-                        root.y.saturating_add(offset_y),
-                    )
-                {
-                    return Some((slot as u8, value));
-                }
+            if let Some(slot) = patch_slot(tile, root, count) {
+                return Some((slot, value));
             }
         }
     }
@@ -164,7 +233,7 @@ pub(super) fn patch_origin(
     y: i32,
     columns: i32,
     rows: i32,
-) -> (TileCoord, u64, usize) {
+) -> Origin {
     let value = super::unsigned_noise(key, domain, x, y);
     let root = TileCoord::new(
         x.saturating_mul(columns) + (value % columns as u64) as i32,
@@ -175,25 +244,6 @@ pub(super) fn patch_origin(
 
 fn patch_count(value: u64) -> usize {
     4 + (value % 5) as usize
-}
-
-fn adjacent_access<E>(
-    tile: TileCoord,
-    access: impl Fn(TileCoord) -> Result<bool, E>,
-) -> Result<bool, E> {
-    [
-        TileCoord::new(tile.x - 1, tile.y),
-        TileCoord::new(tile.x + 1, tile.y),
-        TileCoord::new(tile.x, tile.y - 1),
-        TileCoord::new(tile.x, tile.y + 1),
-    ]
-    .into_iter()
-    .try_fold(
-        false,
-        |found, neighbor| {
-            if found { Ok(true) } else { access(neighbor) }
-        },
-    )
 }
 
 fn suitable_forage(biome: Biome) -> bool {
@@ -210,6 +260,40 @@ fn suitable_ore(biome: Biome) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edge_restricted_cell_scan_equals_the_full_neighborhood_scan() {
+        let full = |key, domain: &[u8], tile: TileCoord, columns: i32, rows: i32| {
+            let (cx, cy) = (tile.x.div_euclid(columns), tile.y.div_euclid(rows));
+            for y in cy - 1..=cy + 1 {
+                for x in cx - 1..=cx + 1 {
+                    let (root, value, count) = patch_origin(key, domain, x, y, columns, rows);
+                    if let Some(slot) = patch_slot(tile, root, count) {
+                        return Some((slot, value));
+                    }
+                }
+            }
+            None
+        };
+        for key in [[7; 32], [19; 32]] {
+            for (domain, columns, rows) in [
+                (DOMAINS[0], FORAGE_COLUMNS, FORAGE_ROWS),
+                (DOMAINS[1], GOLD_COLUMNS, GOLD_ROWS),
+                (DOMAINS[2], STONE_COLUMNS, STONE_ROWS),
+            ] {
+                let mut hits = 0;
+                for y in -200..200 {
+                    for x in -200..200 {
+                        let tile = TileCoord::new(x, y);
+                        let expected = full(key, domain, tile, columns, rows);
+                        hits += usize::from(expected.is_some());
+                        assert_eq!(patch_node(key, domain, tile, columns, rows), expected);
+                    }
+                }
+                assert!(hits > 0);
+            }
+        }
+    }
 
     #[test]
     fn patches_are_bounded_and_identical_from_every_query_direction() {
@@ -253,50 +337,5 @@ mod tests {
         let (gold_root, _, _) = patch_origin(key, gold_domain, 3, 5, GOLD_COLUMNS, GOLD_ROWS);
         let (stone_root, _, _) = patch_origin(key, stone_domain, 3, 5, STONE_COLUMNS, STONE_ROWS);
         assert_ne!(gold_root, stone_root);
-    }
-
-    #[test]
-    fn published_resource_detail_key_is_pinned_for_generation_recipes_three_to_seven() {
-        let expected = [
-            145, 3, 63, 73, 212, 75, 248, 103, 212, 82, 195, 76, 52, 27, 200, 174, 91, 195, 208,
-            205, 226, 186, 236, 136, 13, 35, 219, 138, 84, 145, 250, 244,
-        ];
-        for recipe in [
-            crate::LEGACY_GENERATION_RECIPE_VERSION,
-            crate::PRIOR_GENERATION_RECIPE_VERSION,
-            crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION,
-            crate::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION,
-            crate::GENERATION_RECIPE_VERSION,
-        ] {
-            let generator =
-                MapChunkGenerator::new([7; 32], 3, 64).with_elevation_sampling_recipe(recipe);
-            assert_eq!(detail_key(&generator), expected);
-        }
-    }
-
-    #[test]
-    fn recipe_five_only_suppresses_resource_candidates_inside_clearings() {
-        let prior = MapChunkGenerator::new([71; 32], 5, 512)
-            .with_elevation_sampling_recipe(crate::PRIOR_GENERATION_RECIPE_VERSION);
-        let current = MapChunkGenerator::new([71; 32], 5, 512)
-            .with_elevation_sampling_recipe(crate::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION);
-        let mut retained = 0;
-        let mut suppressed = 0;
-        for y in 0..96 {
-            for x in 0..96 {
-                let tile = TileCoord::new(x, y);
-                let sample = current.tile_at(tile).expect("current tile");
-                let prior_candidate = candidate(&prior, tile, sample);
-                let current_candidate = candidate(&current, tile, sample);
-                if super::super::clearing::contains(&current, tile) {
-                    assert!(current_candidate.is_none());
-                    suppressed += usize::from(prior_candidate.is_some());
-                } else {
-                    assert_eq!(current_candidate, prior_candidate);
-                    retained += usize::from(prior_candidate.is_some());
-                }
-            }
-        }
-        assert_eq!((retained, suppressed), (27, 8));
     }
 }

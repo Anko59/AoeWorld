@@ -49,7 +49,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     page.on("response", async (response) => {
       if (!response.url().includes("/chunks/") || !response.ok()) return;
       const body = await response.json();
-      if (body.payload_hex?.startsWith("03") && fetched.size < 64)
+      if (body.payload_hex?.startsWith("04") && fetched.size < 64)
         fetched.add(response.url());
     });
     await page.goto("/");
@@ -83,9 +83,9 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     const packageResponse = await request.get(`/maps/${hash}`);
     expect(packageResponse.ok()).toBeTruthy();
     const pkg = await packageResponse.json();
-    expect(pkg.schema_version).toBe(10);
-    expect(pkg.generation_recipe_version).toBe(9);
-    expect(pkg.request.detail_profile).toBe("landscape_v2");
+    expect(pkg.schema_version).toBe(1);
+    expect(pkg.generation_recipe_version).toBe(1);
+    expect(pkg.request).not.toHaveProperty("detail_profile");
     expect(pkg.estimate.tiles_per_side).toBe(512);
     // Prepared-page tile labels may say SourceDerived; these samples are
     // synthetic test inputs, not observed real geodata or source qualification.
@@ -103,7 +103,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     expect(pkg.environment.vegetation.levels).toHaveLength(1);
     const chunkResponse = await request.get(`/maps/${hash}/chunks/8/8`);
     expect(chunkResponse.ok()).toBeTruthy();
-    expect((await chunkResponse.json()).payload_hex).toMatch(/^03/);
+    expect((await chunkResponse.json()).payload_hex).toMatch(/^04/);
     // Activation retires the old world; the existing UI explicitly requires a
     // reconnect to join its replacement. Wait until reset cleared the old token.
     await expect(page.locator("#connection")).toHaveText(/reconnect/);

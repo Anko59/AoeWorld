@@ -5,6 +5,14 @@ use aoe_map::{
 };
 use wasm_bindgen_test::wasm_bindgen_test;
 
+const OPEN: LandscapeAppearance = LandscapeAppearance {
+    canopy_strength: 0,
+    floor_strength: 0,
+    palette: EcologicalPalette::Temperate,
+    exposure: NativeExposure::Open,
+    height_band: NativeHeightBand::Lowland,
+};
+
 fn landscape() -> LandscapeChunk {
     let source = MapChunkGenerator::new([0; 32], 1, 50).chunk(1, 1).unwrap();
     let appearance = LandscapeAppearance {
@@ -26,7 +34,7 @@ fn landscape() -> LandscapeChunk {
             LandscapeTile {
                 tile: TileCoord::new(32 + (index % 18) as i32, 32 + (index / 18) as i32),
                 terrain,
-                appearance: (index != 0).then_some(appearance),
+                appearance: if index == 0 { OPEN } else { appearance },
             }
         })
         .collect();
@@ -56,32 +64,32 @@ fn landscape() -> LandscapeChunk {
 }
 
 #[wasm_bindgen_test]
-fn legacy_partial_rows_preserve_twenty_column_geometry() {
+fn partial_edge_rows_keep_explicit_twenty_column_coordinates() {
     let source = MapChunkGenerator::new([0; 32], 1, 500)
-        .chunk(15, 15)
+        .landscape_chunk_with_cancel(15, 15, &|| false)
         .unwrap();
     let cached = CachedChunk::decode(&CompactChunk::encode(&source).unwrap()).unwrap();
-    assert!(matches!(cached, CachedChunk::Legacy(_)));
-    let tiles: Vec<_> = cached.scene_tiles(500, 500).collect();
+    let tiles: Vec<_> = cached.scene_tiles().collect();
     assert_eq!(tiles.len(), 400);
     assert_eq!(tiles[20].0, TileCoord::new(480, 481));
     assert_eq!(tiles[399].0, TileCoord::new(499, 499));
-    assert!(tiles.iter().all(|(_, _, appearance)| appearance.is_none()));
-    assert_eq!(cached.tile_at(500, 500, 499, 499), source.tiles.get(399));
+    assert_eq!(
+        cached.tile_at(500, 500, 499, 499),
+        source.tiles.get(399).map(|tile| &tile.terrain)
+    );
     assert!(cached.tile_at(500, 500, 500, 499).is_none());
-    assert!(cached.resources().all(|(_, family)| family == 0));
-    assert!(cached.decorations().is_empty());
+    assert_eq!(cached.resources().count(), source.resources.len());
+    assert_eq!(cached.decorations(), source.decorations.as_slice());
 }
 
 #[wasm_bindgen_test]
-fn explicit_sparse_rows_and_none_appearance_are_not_legacy_layout() {
+fn explicit_sparse_rows_keep_their_coordinates_and_appearance() {
     let source = landscape();
-    let cached = CachedChunk::decode(&CompactChunk::encode_landscape(&source).unwrap()).unwrap();
-    assert!(matches!(cached, CachedChunk::Landscape(_)));
-    let tiles: Vec<_> = cached.scene_tiles(50, 50).collect();
+    let cached = CachedChunk::decode(&CompactChunk::encode(&source).unwrap()).unwrap();
+    let tiles: Vec<_> = cached.scene_tiles().collect();
     assert_eq!(tiles.len(), 323);
     assert_eq!(tiles[0].0, TileCoord::new(32, 32));
-    assert!(tiles[0].2.is_none());
+    assert_eq!(tiles[0].2, OPEN);
     assert_eq!(tiles[18].0, TileCoord::new(32, 33));
     assert_eq!(tiles[19].0, TileCoord::new(34, 33));
     for (position, tile, _) in &tiles {
@@ -100,9 +108,9 @@ fn explicit_sparse_rows_and_none_appearance_are_not_legacy_layout() {
 
 #[wasm_bindgen_test]
 fn explicit_scene_contacts_and_picking_use_source_coordinates_and_heights() {
-    let cached = CachedChunk::Landscape(landscape());
+    let cached = CachedChunk::from(landscape());
     let terrain = cached
-        .scene_tiles(50, 50)
+        .scene_tiles()
         .map(|(position, tile, appearance)| terrain_scene_sample(position, tile, appearance))
         .collect();
     let camera = Camera {
@@ -137,7 +145,7 @@ fn physical_metadata_and_dressing_capacity_are_accounted_without_resource_proxy(
         + source.tiles.capacity() * size_of::<LandscapeTile>()
         + source.resources.capacity() * size_of::<LandscapeResource>()
         + source.decorations.capacity() * size_of::<LandscapeDecoration>();
-    let cached = CachedChunk::Landscape(source);
+    let cached = CachedChunk::from(source);
     assert_eq!(chunk_resident_bytes(&cached), expected);
     let resources: Vec<_> = cached.resources().collect();
     assert_eq!(resources.len(), 1);
@@ -157,12 +165,16 @@ fn physical_metadata_and_dressing_capacity_are_accounted_without_resource_proxy(
 }
 
 #[wasm_bindgen_test]
-fn mixed_cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
-    let legacy = CachedChunk::Legacy(MapChunkGenerator::new([0; 32], 1, 50).chunk(0, 0).unwrap());
-    let limit = chunk_resident_bytes(&legacy);
+fn cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
+    let near = CachedChunk::from(
+        MapChunkGenerator::new([0; 32], 1, 50)
+            .landscape_chunk_with_cancel(0, 0, &|| false)
+            .unwrap(),
+    );
+    let limit = chunk_resident_bytes(&near);
     let mut chunks = std::collections::BTreeMap::from([
-        ((0, 0), legacy),
-        ((1, 1), CachedChunk::Landscape(landscape())),
+        ((0, 0), near),
+        ((1, 1), CachedChunk::from(landscape())),
     ]);
     let mut discovered = std::collections::BTreeSet::from([(0, 0), (1, 1)]);
     let config = aoe_core::WorldConfig::new(50, 50, aoe_core::Seed(1)).unwrap();
@@ -202,6 +214,8 @@ fn unsupported_and_malformed_payloads_do_not_enter_cache() {
         "0100",
         "02ff",
         "0300000000000000",
+        "03000000000000",
+        "0400000000000000",
     ] {
         let compact = CompactChunk {
             x: 1,

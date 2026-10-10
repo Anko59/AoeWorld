@@ -49,10 +49,13 @@ function syntheticChunk(
   y: number;
   payload_hex: string;
 } {
+  // Chunk format 4: header, then per tile 20 terrain bytes, explicit world
+  // coordinates and 7 appearance bytes; resources carry a visual family.
   const bytes = [
-    1,
+    4,
     ...u16(CHUNK_TILES * CHUNK_TILES),
     ...u16(denseResources ? 1024 : 0),
+    ...u16(0),
   ];
   for (let localY = 0; localY < CHUNK_TILES; localY += 1) {
     for (let localX = 0; localX < CHUNK_TILES; localX += 1) {
@@ -65,6 +68,9 @@ function syntheticChunk(
       bytes.push(...i32(level * 100), ...i16(level));
       for (const height of corners) bytes.push(...i16(height));
       bytes.push(...u32(denseResources ? 1 << 20 : properties(tileX, tileY)));
+      // No hydrology/land-cover evidence; open temperate lowland appearance.
+      bytes.push(...u16(0), ...i32(tileX), ...i32(tileY));
+      bytes.push(...u16(0), ...u16(0), 0, 1, 0);
     }
   }
   if (denseResources) {
@@ -75,7 +81,8 @@ function syntheticChunk(
         const id = BigInt(ty) * 524288n + BigInt(tx) * 2n;
         for (let b = 0n; b < 8n; b++)
           bytes.push(Number((id >> (8n * b)) & 255n));
-        bytes.push(...i32(tx), ...i32(ty), 1, 0, ...u16(100), 0);
+        // Wood tree, 100 units, variant 0, broadleaf family.
+        bytes.push(...i32(tx), ...i32(ty), 1, 0, ...u16(100), 0, 1);
       }
     }
   }

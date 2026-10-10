@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn recipe_eight_links_every_local_node_and_the_central_glade() {
+fn every_local_node_links_to_the_central_glade() {
     for key in [3_u8, 17, 71, 255] {
         for width in [512, 1_024, 70_000] {
             let terrain = MapChunkGenerator::new([key; 32], 600, width);
@@ -29,16 +29,16 @@ fn recipe_eight_links_every_local_node_and_the_central_glade() {
                             as i32,
                 );
                 assert!(procedural_trail_contains(&terrain, tile));
-                assert!(clearing::suppresses_objects(
-                    &terrain,
-                    tile,
-                    Biome::Temperate
-                ));
+                assert!(terrain.landscape_reservations_at(tile).route);
             }
             for dy in -1..=1 {
                 for dx in -1..=1 {
                     let cell = (cell.0 + dx, cell.1 + dy);
-                    assert!(opening_geometry_for_cell(&terrain, cell).is_some());
+                    let shape = opening_geometry_for_cell(&terrain, cell);
+                    assert!(geometry::point_in_polygon(
+                        &shape.vertices,
+                        shape_center(&terrain, cell)
+                    ));
                     for axis in 0..=1 {
                         let segment = trail_segment(&terrain, cell, axis).expect("mandatory edge");
                         assert!(opening_contains(&terrain, segment.start));
@@ -46,34 +46,6 @@ fn recipe_eight_links_every_local_node_and_the_central_glade() {
                     }
                 }
             }
-        }
-    }
-}
-
-#[test]
-fn recipe_seven_remains_optional_and_has_no_new_start_connector() {
-    let old = generator(crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION);
-    assert!(!starting_connector_contains(&old, TileCoord::new(511, 511)));
-    assert!((0..12).any(|y| (0..12).any(|x| opening_geometry_for_cell(&old, (x, y)).is_none())));
-    assert!((0..12).any(|y| (0..12).any(|x| trail_segment(&old, (x, y), 0).is_none())));
-    let new = generator(crate::GENERATION_RECIPE_VERSION);
-    for y in (0..512).step_by(3) {
-        for x in (0..512).step_by(3) {
-            let tile = TileCoord::new(x, y);
-            let before = old.tile_at(tile).expect("old");
-            let after = new.tile_at(tile).expect("new");
-            assert_eq!(
-                before.geographic_height_centimeters,
-                after.geographic_height_centimeters
-            );
-            assert_eq!(before.game_height_level, after.game_height_level);
-            assert_eq!(before.surface, after.surface);
-            assert_eq!(before.biome, after.biome);
-            assert_eq!(before.water, after.water);
-            assert_eq!(before.passable, after.passable);
-            assert_eq!(before.elevation_provenance, after.elevation_provenance);
-            assert_eq!(before.water_provenance, after.water_provenance);
-            assert_eq!(before.vegetation_provenance, after.vegetation_provenance);
         }
     }
 }

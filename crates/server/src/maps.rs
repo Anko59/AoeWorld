@@ -396,17 +396,10 @@ pub(super) async fn chunk(
         } else {
             package.generator()
         };
-        if package.request.detail_profile == aoe_map::DetailProfile::LandscapeV2 {
-            let scene = generator
-                .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
-                .map_err(|_| StatusCode::NOT_FOUND)?;
-            CompactChunk::encode_landscape(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        } else {
-            let chunk = generator
-                .chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
-                .map_err(|_| StatusCode::NOT_FOUND)?;
-            CompactChunk::encode(&chunk).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        let scene = generator
+            .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
+            .map_err(|_| StatusCode::NOT_FOUND)?;
+        CompactChunk::encode(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;

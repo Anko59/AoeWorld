@@ -13,7 +13,6 @@ pub(super) struct PreparedElevation {
     pub(super) samples_per_axis: u16,
     pub(super) compression: Ratio,
     pub(super) pages: BTreeMap<(u16, u16), ElevationPage>,
-    pub(super) sampling_recipe: u16,
 }
 
 impl PreparedElevation {
@@ -46,21 +45,6 @@ impl PreparedElevation {
     }
 
     fn sample(&self, x: i32, y: i32, width_tiles: i32, position: AxisPosition) -> Option<i32> {
-        if self.sampling_recipe != crate::LEGACY_GENERATION_RECIPE_VERSION {
-            return self.sample_bilinear(x, y, width_tiles, position);
-        }
-        let source_x = nearest_source_coordinate(x, self.samples_per_axis, width_tiles)?;
-        let source_y = nearest_source_coordinate(y, self.samples_per_axis, width_tiles)?;
-        self.source_sample(source_x, source_y)
-    }
-
-    fn sample_bilinear(
-        &self,
-        x: i32,
-        y: i32,
-        width_tiles: i32,
-        position: AxisPosition,
-    ) -> Option<i32> {
         let (x0, x1, x_remainder, denominator) =
             source_axis_position(x, self.samples_per_axis, width_tiles, position)?;
         let (y0, y1, y_remainder, _) =
@@ -132,20 +116,6 @@ pub(super) fn source_axis_position(
     let remainder = u64::try_from(numerator % denominator).ok()?;
     let upper = lower.checked_add(1)?;
     Some((lower, upper, remainder, denominator_u64))
-}
-
-pub(super) fn nearest_source_coordinate(
-    coordinate: i32,
-    samples_per_axis: u16,
-    width_tiles: i32,
-) -> Option<u16> {
-    let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
-    let source_axis = u64::from(samples_per_axis.checked_sub(1)?);
-    if tile_axis == 0 {
-        return Some(0);
-    }
-    let coordinate = u64::try_from(coordinate.clamp(0, width_tiles.checked_sub(1)?)).ok()?;
-    u16::try_from((coordinate * source_axis + tile_axis / 2) / tile_axis).ok()
 }
 
 pub(super) fn bilinear_height(

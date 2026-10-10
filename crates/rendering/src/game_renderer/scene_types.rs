@@ -28,7 +28,8 @@ pub struct SceneTerrain {
     pub material: u8,
     pub elevation_meters: f64,
     pub surface: SceneTerrainSurface,
-    /// None preserves the exact published/legacy appearance path.
+    /// None for terrain without landscape metadata (synthetic, non-map scenes);
+    /// map chunks always supply an appearance.
     pub appearance: Option<SceneTerrainAppearance>,
 }
 
@@ -70,7 +71,7 @@ pub struct SceneResource {
     pub position: [f64; 2],
     pub kind: u8,
     pub visual_variant: u8,
-    /// Semantic family, never automatic artwork approval. Zero is legacy.
+    /// Semantic family, never automatic artwork approval. Zero is generic.
     pub visual_family: u8,
     pub elevation_meters: f64,
 }

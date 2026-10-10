@@ -76,12 +76,11 @@ fn fields() -> Result<Fields> {
         hydrology_evidence: None,
     };
     let package = MapPackage::with_prepared_environment(
-        9,
+        aoe_map::MAP_SCHEMA_VERSION,
         MapRequest {
             center_latitude_e7: 0,
             center_longitude_e7: 0,
             requested_side_meters: 30_720,
-            detail_profile: aoe_map::DetailProfile::LandscapeV2,
             ..MapRequest::default()
         },
         Vec::new(),

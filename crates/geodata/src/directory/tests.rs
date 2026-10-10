@@ -79,23 +79,13 @@ fn prepared_map() -> GeneratedMap {
 }
 
 #[test]
-fn schema_eight_generated_map_keeps_vector_page_validation() {
-    let mut legacy = prepared_map();
-    legacy.package = MapPackage::with_prepared_environment(
-        8,
-        legacy.package.request,
-        legacy.package.source_locks.clone(),
-        legacy.package.projection.clone(),
-        legacy.package.provenance.clone(),
-        legacy.package.environment.clone(),
-    )
-    .expect("legacy generator package");
-    legacy.package.schema_version = aoe_map::LEGACY_MAP_SCHEMA_VERSION;
-    let identity = legacy.package.content_hash;
-    legacy.validate().expect("legacy vectors validate");
-    assert_eq!(legacy.package.content_hash, identity);
+fn generated_map_keeps_vector_page_validation() {
+    let generated = prepared_map();
+    let identity = generated.package.content_hash;
+    generated.validate().expect("vectors validate");
+    assert_eq!(generated.package.content_hash, identity);
 
-    let mut malformed = legacy;
+    let mut malformed = generated;
     malformed.elevation_pages[0].geographic_height_centimeters[0] += 1;
     assert!(malformed.validate().is_err());
 }

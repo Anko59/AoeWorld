@@ -53,9 +53,7 @@ pub use package::{
     EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, ProjectionMetadata,
     SourceLock, VerticalDatum,
 };
-pub use request::{
-    DetailProfile, MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile,
-};
+pub use request::{MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile};
 pub use terrain::{
     Chunk, DecorationFamily, EcologicalPalette, EdgePassability, GroundMaterial,
     LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapePoint, LandscapePolicy,
@@ -63,39 +61,17 @@ pub use terrain::{
     NativeHeightBand, ObjectKind, Provenance, ResourceKind, ResourceNode, ResourceVisualFamily,
     SurfaceDiagonal, SurfaceKind, Tile, TileSurface, WaterKind,
 };
-pub use wire::{CompactChunk, CompactChunkError, LandscapeChunkError, MAX_DECODED_CHUNK_BYTES};
+pub use wire::{CHUNK_FORMAT_VERSION, CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 
 pub const CHUNK_TILES: i32 = 32;
-/// StandardV1 default schema: independently rooted water/land-cover evidence.
-/// Keep this creator default pinned; opt-in landscape uses its explicit version.
-pub const MAP_SCHEMA_VERSION: u16 = 9;
-pub const LANDSCAPE_MAP_SCHEMA_VERSION: u16 = 10;
-pub const LANDSCAPE_GENERATION_RECIPE_VERSION: u16 = 9;
-/// Version 8 packages remain readable when they contain no typed evidence.
-pub const LEGACY_MAP_SCHEMA_VERSION: u16 = 8;
+/// The only package schema. Before v1.0 formats change in place: there is no
+/// reader for earlier schemas and local packages are regenerated instead.
+pub const MAP_SCHEMA_VERSION: u16 = 1;
 pub const GAME_TILE_METERS: u32 = 2;
 pub const ELEVATION_LEVEL_CENTIMETERS: i32 = 100;
 pub const REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR: u32 = 7;
 pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
-/// Increment when deterministic generation behavior changes. This version is
-/// part of the canonical package identity but does not reseed geography.
-pub const GENERATION_RECIPE_VERSION: u16 = 8;
-/// Published recipe 8 behavior is pinned independently of the latest recipe.
-/// Use this constant, not the latest-version alias, for legacy forest rules.
-pub const CONNECTED_FOREST_GENERATION_RECIPE_VERSION: u16 = 8;
-/// Recipe 8 connects the central glade and the local opening graph; natural
-/// water and cliff constraints still determine actual traversal.
-pub const WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 8;
-/// Published recipe 7 retains its original canopy, openings and optional trails.
-pub const PRIOR_FOREST_GENERATION_RECIPE_VERSION: u16 = 7;
-/// Recipe 6 remains readable for packages generated before recipe 7.
-pub const PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION: u16 = 6;
-/// Recipe 5 remains readable for model-free overview packages.
-pub const PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION: u16 = 5;
-/// Recipe 4 retains bilinear elevation and the published recipe-2 resources.
-pub const PRIOR_GENERATION_RECIPE_VERSION: u16 = 4;
-pub const LEGACY_GENERATION_RECIPE_VERSION: u16 = 3;
-/// Resource placement keeps its recipe identity separate so terrain recipe
-/// changes do not reseed already published resource detail.
-pub const RESOURCE_PLACEMENT_RECIPE_VERSION: u16 = 2;
+/// The only deterministic generation recipe: the composed landscape. It is part
+/// of canonical package identity; packages naming any other value are rejected.
+pub const GENERATION_RECIPE_VERSION: u16 = 1;

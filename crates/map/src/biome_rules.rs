@@ -46,76 +46,6 @@ pub(crate) fn material_for(biome: Biome, height: i32) -> GroundMaterial {
     }
 }
 
-/// Initial occupied-tile tree targets for the game model, before water and
-/// land-use exclusions. Terrain applies a correlated local modifier so these
-/// do not form a uniform checkerboard.
-pub(crate) const fn tree_density_per_thousand(biome: Biome) -> u16 {
-    match biome {
-        Biome::Tropical => 650,
-        Biome::Temperate => 550,
-        Biome::Boreal => 500,
-        Biome::Woodland => 200,
-        Biome::Savanna => 80,
-        Biome::Steppe => 10,
-        Biome::Desert | Biome::Tundra | Biome::Alpine | Biome::Polar => 0,
-    }
-}
-
-pub(crate) fn tree_present(key: [u8; 32], x: i32, y: i32, biome: Biome) -> bool {
-    let base = tree_density_per_thousand(biome);
-    if base == 0 {
-        return false;
-    }
-    let regional =
-        75 + forest_noise(key, b"forest-density", x.div_euclid(16), y.div_euclid(16)) % 51;
-    let density = u64::from(base) * regional / 100;
-    forest_noise(key, b"forest-tree", x, y) % 1_000 < density
-}
-
-pub(crate) fn tree_present_for_recipe(
-    key: [u8; 32],
-    x: i32,
-    y: i32,
-    biome: Biome,
-    recipe: u16,
-) -> bool {
-    // Recipe nine obtains trees only from the shared composed descriptor.
-    // Never silently fall back to legacy per-tile density/parity here.
-    if recipe == crate::LANDSCAPE_GENERATION_RECIPE_VERSION {
-        return false;
-    }
-    if !matches!(
-        recipe,
-        crate::PRIOR_FOREST_GENERATION_RECIPE_VERSION
-            | crate::CONNECTED_FOREST_GENERATION_RECIPE_VERSION
-    ) {
-        return tree_present(key, x, y, biome);
-    }
-    let base = tree_density_per_thousand(biome);
-    if base == 0 {
-        return false;
-    }
-    let field = super::terrain::landscape::canopy_strength(key, x, y);
-    let multiplier = match field {
-        0..=219 => 150,
-        220..=359 => 400,
-        360..=499 => 800,
-        500..=619 => 1_250,
-        620..=739 => 1_650,
-        _ => 1_950,
-    };
-    let density = u64::from(base) * multiplier / 1_000;
-    forest_noise(key, b"forest-tree", x, y) % 1_000 < density.min(960)
-}
-
-pub(crate) fn forest_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> u64 {
-    let mut hash = blake3::Hasher::new_keyed(&key);
-    hash.update(domain);
-    hash.update(&x.to_le_bytes());
-    hash.update(&y.to_le_bytes());
-    u64::from_le_bytes(hash.finalize().as_bytes()[..8].try_into().unwrap_or([0; 8]))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,17 +56,6 @@ mod tests {
         assert_eq!(biome_from_potential_class(15), Some(Biome::Boreal));
         assert_eq!(biome_from_potential_class(27), Some(Biome::Desert));
         assert_eq!(biome_from_potential_class(0), None);
-    }
-
-    #[test]
-    fn game_tree_targets_follow_the_biome_defaults() {
-        assert_eq!(tree_density_per_thousand(Biome::Tropical), 650);
-        assert_eq!(tree_density_per_thousand(Biome::Temperate), 550);
-        assert_eq!(tree_density_per_thousand(Biome::Boreal), 500);
-        assert_eq!(tree_density_per_thousand(Biome::Woodland), 200);
-        assert_eq!(tree_density_per_thousand(Biome::Savanna), 80);
-        assert_eq!(tree_density_per_thousand(Biome::Steppe), 10);
-        assert_eq!(tree_density_per_thousand(Biome::Desert), 0);
     }
 
     #[test]
@@ -154,25 +73,6 @@ mod tests {
         assert_eq!(
             material_for(Biome::Temperate, 350_001),
             GroundMaterial::Rock
-        );
-    }
-
-    #[test]
-    fn forests_use_correlated_biome_specific_tree_density() {
-        let key = [9; 32];
-        let tropical = (0..64)
-            .flat_map(|y| (0..64).map(move |x| tree_present(key, x, y, Biome::Tropical)))
-            .filter(|tree| *tree)
-            .count();
-        let woodland = (0..64)
-            .flat_map(|y| (0..64).map(move |x| tree_present(key, x, y, Biome::Woodland)))
-            .filter(|tree| *tree)
-            .count();
-        assert!(tropical > woodland);
-        assert!(!tree_present(key, 3, 3, Biome::Desert));
-        assert_eq!(
-            tree_present(key, 17, 24, Biome::Tropical),
-            tree_present(key, 17, 24, Biome::Tropical)
         );
     }
 }

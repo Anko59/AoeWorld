@@ -155,18 +155,19 @@ pub(super) fn start_diagnostic(
                 if !tile.passable {
                     continue;
                 }
-                if let Some((crop, grazing)) = land_use_at(package, provider, candidate)? {
+                if land_use_at(package, provider, candidate)?.is_some() {
                     land_use_candidates += 1;
-                    land_use_cleared_candidates += usize::from(
-                        generator
-                            .is_tree_suppressed_by_historical_land_use(candidate, crop, grazing),
-                    );
+                    land_use_cleared_candidates +=
+                        usize::from(!composed_tree_at(generator, candidate)?);
                 }
             }
         }
     }
 
-    let center_clearing_frequency = land_use_frequency(generator, center, center_hyde);
+    let center_clearing_frequency = match center_hyde {
+        Some(_) => Some(!composed_tree_at(generator, center)?),
+        None => None,
+    };
     let clearing_frequency_percent = if land_use_candidates == 0 {
         0.0
     } else {
@@ -183,7 +184,7 @@ pub(super) fn start_diagnostic(
         config,
     )?;
     Ok(format!(
-        "center=({},{}), center_clear_5x5_tiles={center_clear_tiles}/25, center_clear_3x3_tiles={center_clear_three_tiles}/9, center_objects={center_objects}, cliffs={cliffs}, center_material={:?}, center_biome={:?}, center_water={:?}, center_passable={}, center_surface={:?}, center_object={:?}, center_height_cm={}, cardinal_sample_heights={neighbor_heights:?}, max_adjacent_rise_cm={max_neighbor_rise_cm}, max_2m_edge_grade_percent={max_edge_grade_percent:.2}, scanned_chunks={}, candidate_tiles={candidate_tiles}, fully_clear_5x5_windows={clear_windows}, clear_5x5_windows_reaching_256={reachable_windows}, fully_clear_3x3_windows={clear_three_windows}, clear_3x3_windows_reaching_256={reachable_three_windows}, max_reachable_tiles_from_clear_5x5_window={maximum_reachable_start_tiles}, max_reachable_tiles_from_clear_3x3_window={maximum_reachable_three_tiles}, center_hyde_crop_pct={:?}, center_hyde_grazing_pct={:?}, center_hyde_clears_tree={center_clearing_frequency:?}, scanned_hyde_cleared_tiles={land_use_cleared_candidates}/{land_use_candidates}, scanned_hyde_clearing_frequency_percent={clearing_frequency_percent:.3}, start_component_diagnostic={component_diagnostic}",
+        "center=({},{}), center_clear_5x5_tiles={center_clear_tiles}/25, center_clear_3x3_tiles={center_clear_three_tiles}/9, center_objects={center_objects}, cliffs={cliffs}, center_material={:?}, center_biome={:?}, center_water={:?}, center_passable={}, center_surface={:?}, center_object={:?}, center_height_cm={}, cardinal_sample_heights={neighbor_heights:?}, max_adjacent_rise_cm={max_neighbor_rise_cm}, max_2m_edge_grade_percent={max_edge_grade_percent:.2}, scanned_chunks={}, candidate_tiles={candidate_tiles}, fully_clear_5x5_windows={clear_windows}, clear_5x5_windows_reaching_256={reachable_windows}, fully_clear_3x3_windows={clear_three_windows}, clear_3x3_windows_reaching_256={reachable_three_windows}, max_reachable_tiles_from_clear_5x5_window={maximum_reachable_start_tiles}, max_reachable_tiles_from_clear_3x3_window={maximum_reachable_three_tiles}, center_hyde_crop_pct={:?}, center_hyde_grazing_pct={:?}, center_hyde_tile_without_tree={center_clearing_frequency:?}, scanned_hyde_tiles_without_tree={land_use_cleared_candidates}/{land_use_candidates}, scanned_hyde_treeless_percent={clearing_frequency_percent:.3}, start_component_diagnostic={component_diagnostic}",
         center.x,
         center.y,
         center_tile.material,
@@ -315,14 +316,14 @@ fn ring_chunks(center: TileCoord, ring: i32) -> Vec<(i32, i32)> {
     chunks
 }
 
-fn land_use_frequency(
+/// Composed-landscape tree presence; historical parcels are one of its inputs.
+fn composed_tree_at(
     generator: &aoe_map::MapChunkGenerator,
     tile: TileCoord,
-    land_use: Option<(u8, u8)>,
-) -> Option<bool> {
-    land_use.map(|(crop, grazing)| {
-        generator.is_tree_suppressed_by_historical_land_use(tile, crop, grazing)
-    })
+) -> Result<bool, EnvironmentPageError> {
+    Ok(generator
+        .object_at_with_cancel(tile, &|| false)?
+        .is_some_and(|node| node.object == aoe_map::ObjectKind::Tree))
 }
 
 fn land_use_at(

@@ -1,9 +1,9 @@
 use super::*;
 
-#[path = "recipe_eight.rs"]
-mod recipe_eight;
-#[path = "recipe_nine.rs"]
-mod recipe_nine;
+#[path = "composed_forest.rs"]
+mod composed_forest;
+#[path = "exit_certificate.rs"]
+mod exit_certificate;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,
@@ -81,107 +81,49 @@ fn centered_candidate_keys_round_trip_across_odd_and_even_boundaries() {
 }
 
 #[test]
-fn footprint_boundary_candidates_fail_closed_for_every_supported_recipe() {
+fn footprint_boundary_candidates_fail_closed() {
     let terrain = Terrain::uniform(1);
     let config = WorldConfig::new(5, 5, Seed(1)).expect("config");
-    for recipe in [
-        LEGACY_START_RECIPE,
-        RECIPE_4_START_RECIPE,
-        RECIPE_5_START_RECIPE,
-        PRIOR_WATER_MODEL_START_RECIPE,
-        PRIOR_FOREST_START_RECIPE,
-    ] {
-        assert_eq!(
-            terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
-            Ok(StartSearchResult::Unavailable),
-            "recipe {recipe} cannot wrap the 5x5 footprint across map boundaries"
-        );
-    }
+    assert_eq!(
+        terrain.search_start_checked(config, START_SEARCH_CHUNKS, || false),
+        Ok(StartSearchResult::Unavailable),
+        "the 5x5 footprint cannot wrap across map boundaries"
+    );
 }
 
 #[test]
-fn open_fixture_retains_recipe_three_and_recipe_four_compatibility() {
+fn open_fixture_selects_the_center_deterministically() {
     let terrain = Terrain::uniform(1);
     let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
     let expected = StartSearchResult::Found(TileCoord::new(31, 31));
-    for recipe in [
-        LEGACY_START_RECIPE,
-        RECIPE_4_START_RECIPE,
-        RECIPE_5_START_RECIPE,
-        PRIOR_WATER_MODEL_START_RECIPE,
-        PRIOR_FOREST_START_RECIPE,
-    ] {
-        let selected = terrain
-            .search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false)
-            .expect("open-fixture recipe search");
-        assert_eq!(selected, expected, "recipe {recipe} selection");
-        assert_eq!(
-            terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
-            Ok(selected),
-            "recipe {recipe} selection is deterministic"
-        );
-        assert_start_contract(&terrain, config, selected);
-    }
+    let selected = terrain
+        .search_start_checked(config, START_SEARCH_CHUNKS, || false)
+        .expect("open-fixture search");
+    assert_eq!(selected, expected);
     assert_eq!(
         terrain.search_start_checked(config, START_SEARCH_CHUNKS, || false),
-        Ok(expected),
-        "the unversioned API retains legacy recipe-3 semantics"
+        Ok(selected)
     );
+    assert_start_contract(&terrain, config, selected);
     assert_eq!(terrain.starting_tile(config), Some(TileCoord::new(31, 31)));
 }
 
 #[test]
-fn dense_modern_recipes_preserve_the_fixed_start_contract() {
+fn dense_forest_preserves_the_fixed_start_contract() {
     let config = WorldConfig::new(512, 512, Seed(1)).expect("config");
-    for recipe in [
-        RECIPE_5_START_RECIPE,
-        PRIOR_WATER_MODEL_START_RECIPE,
-        PRIOR_FOREST_START_RECIPE,
-    ] {
-        let terrain = Terrain::Map {
-            generator: flat_temperate_generator(recipe),
-            overlay: ResourceOverlay::default(),
-        };
-        let selected = terrain
-            .search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false)
-            .expect("supported recipe search");
-        assert_eq!(
-            terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
-            Ok(selected),
-            "recipe {recipe} selection is deterministic"
-        );
-        assert!(
-            matches!(selected, StartSearchResult::Found(_)),
-            "recipe {recipe}: {selected:?}"
-        );
-        assert_start_contract(&terrain, config, selected);
-    }
-}
-
-#[test]
-fn dense_recipe_three_and_four_reach_the_fixed_search_limit() {
-    let config = WorldConfig::new(512, 512, Seed(1)).expect("config");
-    for recipe in [LEGACY_START_RECIPE, RECIPE_4_START_RECIPE] {
-        let terrain = Terrain::Map {
-            generator: flat_temperate_generator(recipe),
-            overlay: ResourceOverlay::default(),
-        };
-        assert_eq!(
-            terrain.search_start_for_recipe(config, recipe, START_SEARCH_CHUNKS, || false),
-            Ok(StartSearchResult::LimitReached),
-            "dense recipe {recipe} remains bounded instead of weakening the contract"
-        );
-    }
-}
-
-#[test]
-fn start_search_rejects_unknown_generation_recipes() {
-    let terrain = Terrain::uniform(1);
-    let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
+    let terrain = Terrain::Map {
+        generator: flat_temperate_generator(),
+        overlay: ResourceOverlay::default(),
+    };
+    let selected = terrain
+        .search_start_checked(config, START_SEARCH_CHUNKS, || false)
+        .expect("start search");
     assert_eq!(
-        terrain.search_start_for_recipe(config, 99, START_SEARCH_CHUNKS, || false),
-        Err(EnvironmentPageError::Invalid)
+        terrain.search_start_checked(config, START_SEARCH_CHUNKS, || false),
+        Ok(selected)
     );
+    assert_eq!(selected, StartSearchResult::Found(TileCoord::new(255, 255)));
+    assert_start_contract(&terrain, config, selected);
 }
 
 fn assert_start_contract(terrain: &Terrain, config: WorldConfig, selected: StartSearchResult) {
@@ -201,19 +143,15 @@ fn assert_start_contract(terrain: &Terrain, config: WorldConfig, selected: Start
     );
 }
 
-fn flat_temperate_generator(generation_recipe: u16) -> MapChunkGenerator {
-    flat_temperate_generator_with_water(generation_recipe, 0)
+fn flat_temperate_generator() -> MapChunkGenerator {
+    flat_temperate_generator_with_water(0)
 }
 
-fn flat_temperate_generator_with_water(
-    generation_recipe: u16,
-    water_percent: u8,
-) -> MapChunkGenerator {
-    flat_temperate_generator_with_water_field(generation_recipe, 1, vec![water_percent])
+fn flat_temperate_generator_with_water(water_percent: u8) -> MapChunkGenerator {
+    flat_temperate_generator_with_water_field(1, vec![water_percent])
 }
 
 fn flat_temperate_generator_with_water_field(
-    generation_recipe: u16,
     samples: u16,
     ocean_coverage_percent: Vec<u8>,
 ) -> MapChunkGenerator {
@@ -342,8 +280,7 @@ fn flat_temperate_generator_with_water_field(
         requested_side_meters: 30_720,
         ..MapRequest::default()
     };
-    let mut package = MapPackage::new(1, request, Vec::new()).expect("fixture package");
-    package.generation_recipe_version = generation_recipe;
+    let package = MapPackage::new(1, request, Vec::new()).expect("fixture package");
     package
         .generator()
         .with_prepared_elevation(

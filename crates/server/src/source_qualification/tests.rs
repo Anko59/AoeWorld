@@ -127,21 +127,9 @@ async fn qualification_rejects_unbounded_tick_requests_before_source_access() {
 }
 
 #[test]
-fn qualification_accepts_current_and_prior_elevation_recipes() {
-    assert!(supported_recipe(
-        aoe_map::PRIOR_OVERVIEW_GENERATION_RECIPE_VERSION
-    ));
-    assert!(supported_recipe(
-        aoe_map::PRIOR_WATER_MODEL_GENERATION_RECIPE_VERSION
-    ));
-    assert!(supported_recipe(
-        aoe_map::PRIOR_FOREST_GENERATION_RECIPE_VERSION
-    ));
+fn qualification_accepts_only_the_current_recipe() {
     assert!(supported_recipe(aoe_map::GENERATION_RECIPE_VERSION));
-    assert!(supported_recipe(
-        aoe_map::WATER_MODEL_GENERATION_RECIPE_VERSION
-    ));
-    for recipe in [0, 3, 4, 9, u16::MAX] {
+    for recipe in [0, 2, 3, 8, 9, 10, u16::MAX] {
         assert!(!supported_recipe(recipe));
     }
 }
