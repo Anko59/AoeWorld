@@ -210,8 +210,8 @@ fn signed_delta(before: u64, after: u64) -> String {
     }
 }
 
-pub(super) fn table(root: &Path) -> Result<String, String> {
-    let (_, merge_base) = git::base(root, "dev", true)?;
+pub(super) fn table(root: &Path, base: &str) -> Result<String, String> {
+    let (_, merge_base) = git::base(root, base, true)?;
     let base = repository(root, &merge_base)?;
     let head = repository(root, "HEAD")?;
     let changed = numstat(root, &merge_base)?;

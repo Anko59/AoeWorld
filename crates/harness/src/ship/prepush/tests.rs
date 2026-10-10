@@ -35,6 +35,7 @@ fn record(root: &Path, verdict: Verdict, cadence: &str) -> String {
             tree: git(root, &["rev-parse", "HEAD^{tree}"]),
             branch: "feature".into(),
             base: "dev".into(),
+            base_branch: "dev".into(),
             merge_base: head.clone(),
             changed: Vec::new(),
             gates: Vec::new(),

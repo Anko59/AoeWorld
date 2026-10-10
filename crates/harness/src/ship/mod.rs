@@ -15,6 +15,7 @@ mod review_gate;
 mod review_pr;
 pub(crate) mod run;
 mod showcase;
+pub(crate) mod stack;
 pub(crate) mod test_first;
 #[cfg(test)]
 mod tests;
@@ -63,9 +64,13 @@ pub(crate) struct Options {
     /// Push with `--force-with-lease`, after a rebase.
     #[arg(long)]
     pub(crate) force: bool,
-    /// Always `dev`: not settable from the command line.
+    /// `dev`, or the branch of an open harness pull request to stack on
+    /// (SHIP_BASE only; not settable from the command line).
     #[arg(skip = String::from("dev"))]
     pub(crate) base: String,
+    /// The open pull request of a stacked `base`, found before the gates run.
+    #[arg(skip)]
+    pub(crate) parent: Option<stack::Parent>,
     /// Tests only: leave the pull request alone.
     #[arg(skip)]
     pub(crate) no_pr: bool,
@@ -93,6 +98,7 @@ impl Default for Options {
             body_file: None,
             force: false,
             base: "dev".into(),
+            parent: None,
             no_pr: false,
             no_fetch: false,
             tier: None,
@@ -114,6 +120,9 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 .body_file
                 .or_else(|| env("SHIP_BODY").map(PathBuf::from));
             options.force |= env("SHIP_FORCE").as_deref() == Some("1");
+            if let Some(base) = env("SHIP_BASE") {
+                options.base = base;
+            }
             options.video = options
                 .video
                 .or_else(|| env("SHIP_VIDEO").map(PathBuf::from));
@@ -155,6 +164,7 @@ fn now() -> u64 {
 /// Gates at the exact commit, then evidence; a moved HEAD or tree leaves none.
 pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
     let subject = git::subject(root)?;
+    stack::refuse_base(&options.base, &subject.branch)?;
     let (base, merge_base) = git::base(root, &options.base, !options.no_fetch)?;
     let changed = git::changed(root, &merge_base)?;
     let registry = Registry::load(root)?;
@@ -184,6 +194,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
         tree: subject.tree,
         branch: subject.branch,
         base,
+        base_branch: options.base.clone(),
         merge_base,
         changed,
         gates: results,
@@ -210,10 +221,29 @@ pub(crate) fn ship_with(
             "SHIP_BODY is required: the review is appended to the pull request description".into(),
         );
     }
-    let body_text = if !options.no_pr {
+    let branch = git::branch(root)?;
+    stack::refuse_base(&options.base, &branch)?;
+    // Suites, the review diff, test-first and metrics all measure the change
+    // against origin/<base>.
+    let _base = crate::review::base::scope(&options.base);
+    let preflight = if !options.no_pr {
         github::preflight_pull_request(root, options)?
     } else {
-        None
+        github::Preflight::default()
+    };
+    let body_text = preflight.body;
+    // A restack rewrote the branch: the open PR targets another base, or
+    // (GitHub already retargeted it) the last review was of another base.
+    let retarget = stack::retarget(preflight.current_base.as_deref(), &options.base).is_some()
+        || stack::restacked(
+            &crate::review::history(root, &branch)?,
+            &options.base,
+            stack::remote_is_ancestor(root, &branch),
+        );
+    let options = &Options {
+        parent: preflight.parent,
+        force: options.force || retarget,
+        ..options.clone()
     };
     let evidence = judge(root, options)?;
     for result in &evidence.gates {
@@ -302,13 +332,14 @@ pub(crate) fn ship_with(
             )?;
         }
         if let Some(report) = &review {
-            review_gate::publish(root, &url, report)?;
+            review_gate::publish(root, &url, report, &evidence.base_branch)?;
             // The review passed: a leftover that cannot be filed is reported, not fatal.
             for problem in issues::followups::file(root, &url, report) {
                 eprintln!(
                     "ship: review follow-up not filed ({problem}); file it with `make issue`"
                 );
             }
+            eprintln!("{}", stack::next_steps(options.parent.as_ref(), &url));
         }
     }
     Ok(evidence)

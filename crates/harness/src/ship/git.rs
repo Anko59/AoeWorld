@@ -122,7 +122,13 @@ pub(crate) fn subject(root: &Path) -> Result<Subject> {
 /// shadow it, and the merge base with HEAD.
 pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, String)> {
     if fetch {
-        git(root, &["fetch", "--quiet", "origin", base])?;
+        // Review policy always comes from origin/dev, so a stacked base
+        // fetches dev too.
+        let mut args = vec!["fetch", "--quiet", "origin", "dev"];
+        if base != "dev" {
+            args.push(base);
+        }
+        git(root, &args)?;
     }
     let remote = git(
         root,
@@ -159,6 +165,16 @@ pub(crate) fn change_fingerprint(
 /// Git's exact raw identity diff, kept as bytes so reuse can compare it
 /// directly. Paths may contain arbitrary bytes and must never be decoded.
 pub(crate) fn change_identity(root: &Path, base: &str, commit: &str) -> Result<(String, Vec<u8>)> {
+    change_identity_from(root, &format!("refs/remotes/origin/{base}"), commit)
+}
+
+/// `change_identity` from any base revision, e.g. the parent commit a stacked
+/// review recorded; the merge base is recomputed from Git.
+pub(crate) fn change_identity_from(
+    root: &Path,
+    base: &str,
+    commit: &str,
+) -> Result<(String, Vec<u8>)> {
     let base = git(
         root,
         &[
@@ -166,7 +182,7 @@ pub(crate) fn change_identity(root: &Path, base: &str, commit: &str) -> Result<(
             "--verify",
             "--quiet",
             "--end-of-options",
-            &format!("refs/remotes/origin/{base}^{{commit}}"),
+            &format!("{base}^{{commit}}"),
         ],
     )?;
     let commit = git(

@@ -25,7 +25,9 @@ pub(crate) struct Evidence {
     pub(crate) head: String,
     pub(crate) tree: String,
     pub(crate) branch: String,
+    /// `origin/<base_branch>` at the run: `dev`, or a stacked parent branch.
     pub(crate) base: String,
+    pub(crate) base_branch: String,
     pub(crate) merge_base: String,
     pub(crate) changed: Vec<String>,
     pub(crate) gates: Vec<GateResult>,

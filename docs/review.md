@@ -114,7 +114,13 @@ none replaces another.
   for the rebased commit that points to the original full
   or closing review, and the status and PR description identify the reuse. A
   reuse report is never itself a source for another reuse. Failing reviews and
-  reviews below the required tier are not reused. This is a local review
+  reviews below the required tier are not reused. A review is for one base
+  branch: a stacked review (`SHIP_BASE`, [shipping](shipping.md#stacked-pull-requests))
+  never answers for the same commit shipped against dev. Across bases, the
+  same rule applies: after the parent merged and the branch was rebased onto
+  dev, the review recorded against the parent is reused when the raw diff from
+  its merge base with the recorded parent commit equals the raw diff from the
+  new commit's merge base with `origin/dev`. This is a local review
   equivalence check: a patch can behave differently on a new base, so CI
   re-runs every gate on the new commit. Branch
   protection on `dev` requires both `required` (CI) and `harness/review`, so

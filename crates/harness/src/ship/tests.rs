@@ -202,7 +202,7 @@ fn the_low_tier_size_check_fetches_the_current_origin_dev() {
         .unwrap()
         .to_owned();
     assert_ne!(stale, current);
-    super::github::changed_lines(&root).unwrap();
+    super::github::changed_lines(&root, "dev").unwrap();
     assert_eq!(
         git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap(),
         current
@@ -289,6 +289,7 @@ mod showcase_builds;
 mod showcase_findings;
 mod showcase_pipeline;
 mod showcase_security;
+pub(super) mod stack;
 
 #[test]
 fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {

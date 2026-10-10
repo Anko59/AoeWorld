@@ -107,8 +107,8 @@ Existing Make/CI dispatch remains active; the static CI job and every handoff
 still require the full `make preflight`, including for documentation changes.
 Source/artwork/hardware checks are explicit qualification plans, never silently
 substituted by synthetic tests. Release publication is not a generic cadence.
-Pull requests targeting `harness/**` also receive validation while the upgrade
-is reviewed as a dependent stack; protected branch publication is unchanged.
+Pull requests into any branch receive the same validation, so a stacked pull
+request is tested before its parent merges; protected branch publication is unchanged.
 
 ## Exact static inputs
 
