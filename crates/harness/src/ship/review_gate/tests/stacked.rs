@@ -175,3 +175,73 @@ fn a_stacked_description_names_its_parent() {
     assert!(text.contains("Stacked on #12"), "{text}");
     assert!(text.contains("# 🧑 For humans"), "{text}");
 }
+
+fn review_on(root: &Path) -> Options {
+    let _ = root;
+    Options {
+        no_review: false,
+        ..offline()
+    }
+}
+
+fn remote_feature(root: &Path) -> String {
+    git::git(root, &["ls-remote", "origin", "refs/heads/feature"])
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[test]
+fn a_restack_is_pushed_with_lease_whatever_the_pull_request_targets() {
+    // GitHub already retargeted the pull request to dev when the parent
+    // branch was deleted: only local facts say the branch was rewritten.
+    let (_temp, root) = crate::ship::tests::stack::stacked_fixture();
+    let reviewed = stacked_review(&root);
+    run(&root, &["push", "-q", "origin", "feature"]);
+    merge_parent_and_restack(&root);
+    let history = review::history(&root, "feature").unwrap();
+    assert!(crate::ship::stack::restacked(&history, "dev", Some(false)));
+    crate::ship::ship_with(&root, &review_on(&root), &|_, _, _, _, _| {
+        panic!("the stacked review is reused")
+    })
+    .expect("the rebased branch is pushed without SHIP_FORCE");
+    assert_eq!(remote_feature(&root), rev(&root, "HEAD"));
+    assert_ne!(remote_feature(&root), reviewed.head);
+}
+
+#[test]
+fn a_plain_dev_ship_is_never_forced_by_itself() {
+    let (_temp, root) = crate::ship::tests::fixture("true");
+    let review = |root: &Path, tier, _, _: &str, _: &review::Plan| Ok(graded(root, tier, 9));
+    crate::ship::ship_with(&root, &review_on(&root), &review).expect("first ship");
+    let pushed = remote_feature(&root);
+    run(&root, &["commit", "-q", "--amend", "-m", "rewritten"]);
+    let error = crate::ship::ship_with(&root, &review_on(&root), &review)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("git push failed"), "{error}");
+    assert_eq!(remote_feature(&root), pushed);
+}
+
+#[test]
+fn only_a_rewritten_branch_whose_last_review_was_stacked_is_a_restack() {
+    let (_temp, root) = crate::ship::tests::stack::stacked_fixture();
+    let restacked = crate::ship::stack::restacked;
+    assert!(!restacked(&[], "dev", Some(false)), "no stacked history");
+    let stacked = stacked_review(&root);
+    let history = [stacked.clone()];
+    assert!(restacked(&history, "dev", Some(false)));
+    assert!(!restacked(&history, "parent", Some(false)), "same base");
+    assert!(!restacked(&history, "dev", Some(true)), "fast-forward");
+    assert!(!restacked(&history, "dev", None), "never pushed");
+    // A reuse report is not a review; a later review of dev ends the restack.
+    let mut reuse = stacked.clone();
+    reuse.base_branch = "dev".into();
+    reuse.reused_from = Some(stacked.head.clone());
+    assert!(restacked(&[stacked.clone(), reuse], "dev", Some(false)));
+    let mut later = stacked.clone();
+    later.base_branch = "dev".into();
+    assert!(!restacked(&[stacked, later], "dev", Some(false)));
+}

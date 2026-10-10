@@ -170,3 +170,24 @@ fn the_description_and_next_steps_name_the_parent() {
     let next = stack::next_steps(None, "u");
     assert!(next.contains("auto-merge"), "{next}");
 }
+
+#[test]
+fn moving_a_pull_request_off_dev_disables_its_auto_merge() {
+    use super::super::github::{auto_merge_not_enabled, disable_auto_args};
+    assert_eq!(
+        disable_auto_args("https://github.com/o/r/pull/13", "o/r"),
+        [
+            "pr",
+            "merge",
+            "https://github.com/o/r/pull/13",
+            "--repo",
+            "o/r",
+            "--disable-auto"
+        ]
+    );
+    assert!(auto_merge_not_enabled(
+        "gh pr merge: GraphQL: Auto-merge is not enabled for this pull request"
+    ));
+    assert!(auto_merge_not_enabled("auto merge is not enabled"));
+    assert!(!auto_merge_not_enabled("HTTP 502: bad gateway"));
+}
