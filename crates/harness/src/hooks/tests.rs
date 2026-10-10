@@ -52,29 +52,6 @@ fn install_writes_exact_dispatchers_and_is_idempotent() {
 }
 
 #[test]
-fn install_replaces_only_our_superseded_pre_push_dispatcher() {
-    if context::isolated("install_replaces_only_our_superseded_pre_push_dispatcher") {
-        return;
-    }
-    let root = repository();
-    install(root.path()).expect("install");
-    let pre_push = hook_path(root.path(), "pre-push").unwrap();
-    fs::write(&pre_push, b"#!/bin/sh\nexec make preflight\n").unwrap();
-    assert!(check(root.path()).is_err(), "the old dispatcher is stale");
-    install(root.path()).expect("upgrade the superseded dispatcher");
-    assert_eq!(
-        fs::read(&pre_push).unwrap(),
-        b"#!/bin/sh\nexec make pre-push\n"
-    );
-    check(root.path()).expect("upgraded hooks");
-    fs::write(&pre_push, b"#!/bin/sh\nexec make preflight # mine\n").unwrap();
-    assert!(
-        install(root.path()).is_err(),
-        "a foreign hook is never overwritten"
-    );
-}
-
-#[test]
 fn rejects_commented_unreachable_and_malformed_dispatchers() {
     if context::isolated("rejects_commented_unreachable_and_malformed_dispatchers") {
         return;

@@ -15,9 +15,6 @@ const HOOKS: [(&str, &[u8]); 2] = [
     ("pre-push", b"#!/bin/sh\nexec make pre-push\n"),
 ];
 
-/// Earlier canonical dispatchers that `install` may replace in place.
-const SUPERSEDED: [(&str, &[u8]); 1] = [("pre-push", b"#!/bin/sh\nexec make preflight\n")];
-
 /// Install the same mandatory Make dispatchers used by the local gates.
 pub fn install(root: &Path) -> Result<()> {
     let mut planned = Vec::new();
@@ -42,19 +39,14 @@ pub fn install(root: &Path) -> Result<()> {
                 );
             }
             Ok(_) => {
-                let current = fs::read(&path)?;
-                if current == expected {
-                    true
-                } else if SUPERSEDED.contains(&(name, current.as_slice())) {
-                    // Our own earlier dispatcher: replace it atomically below.
-                    false
-                } else {
+                if fs::read(&path)? != expected {
                     return Err(format!(
                         "existing {name} hook differs; refusing to overwrite: {}",
                         path.display()
                     )
                     .into());
                 }
+                true
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => return Err(error.into()),
@@ -63,15 +55,11 @@ pub fn install(root: &Path) -> Result<()> {
     }
     for (expected, path, exists) in planned {
         if !exists {
-            // Written beside the hook and renamed over a superseded dispatcher.
-            let temporary = path.with_extension("aoe-new");
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(&temporary)?;
+                .open(&path)?;
             file.write_all(expected)?;
-            drop(file);
-            fs::rename(&temporary, &path)?;
         }
         #[cfg(unix)]
         {
