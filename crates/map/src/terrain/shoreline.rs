@@ -2,25 +2,31 @@
 //!
 //! Source water arrives as cells (prepared coverage, modeled hydrology or the
 //! seeded fallback blocks). Reading the nearest cell per tile draws straight
-//! shorelines and right angles. A tile instead blends the wet/dry state of
-//! the four surrounding cells bilinearly into a wetness between zero and one
-//! and compares it with a noisy threshold around one half. The blend rounds
-//! corners and turns staircases into diagonals; the threshold noise adds
-//! bays, headlands and tile-scale irregularity along straight runs.
+//! shorelines and right angles. A tile instead reads the grid at a mildly
+//! warped position, blends the wet/dry state of the four surrounding cells
+//! bilinearly into a wetness between zero and one and compares it with a
+//! noisy threshold around one half. The blend rounds corners and turns
+//! staircases into diagonals; the threshold noise adds bays, headlands and
+//! tile-scale irregularity; the warp bends shores of cells only a few tiles
+//! wide, where sub-cell noise alone moves a shoreline by about one tile.
 //!
 //! Every constant here is a modelling choice, not observed geography:
 //! - threshold noise never exceeds `core - 0.5` (at most 0.42), so wetness at
-//!   or above `core` is always water and at or below `1 - core` always land:
-//!   a shaped shoreline stays within 0.42 source cells of the half-wet
-//!   contour and never leaves the cells that hold the source boundary;
+//!   or above `core` is always water and at or below `1 - core` always land;
 //! - the noise has three bilinear value-noise octaves: 2.5 cells (32% of the
 //!   budget), 0.8 cells (30%) and five tiles (38%, at most two tiles);
 //!   their sum passes a monotonic soft gain so the budget is actually used;
+//! - the warp is one bilinear octave per axis on a 16-tile lattice, at most
+//!   2.5 tiles and at most 0.65 cells;
+//! - a shaped shoreline therefore stays within `0.42 * cell + 2.5` tiles of
+//!   the half-wet contour of the source cells: under one cell for cells of
+//!   five tiles or more;
 //! - cells narrower than three tiles are already tile-sized and stay exact.
 //!
 //! Connectivity is structural, not statistical: the segment joining two
-//! four-adjacent wet cell centres has wetness one, so a tile row inside the
-//! protected core always stays water (and symmetrically land between dry
+//! four-adjacent wet cell centres has wetness one, the warp gradient is at
+//! most 0.32, and the protected core is wide enough that the tile row nearest
+//! the warped segment always stays water (and symmetrically land between dry
 //! cells). Diagonal-only wet pairs are joined by an explicit ridge so
 //! rasterised rivers stay connected.
 //! Pure integer arithmetic on world coordinates: chunk seams, halos and point
@@ -35,9 +41,12 @@ const MIN_SHAPED_CELL: i64 = 3 * UNIT;
 const FULL: i64 = 1024;
 /// Protected core: wetness that noise can never turn into land.
 const CORE: i64 = 942;
-/// The tile row nearest a cell-centre segment lies within this many sub-tile
-/// units of it (half a tile plus margin) and must stay inside the core.
-const CORE_ROW: i64 = 140;
+/// The tile row nearest a warped cell-centre segment lies within this many
+/// sub-tile units of it (half a tile stretched by the warp gradient, plus
+/// margin) and must stay inside the core.
+const CORE_ROW: i64 = 176;
+const WARP_LATTICE: i64 = 16 * UNIT;
+const WARP_TILES: i64 = UNIT * 5 / 2;
 /// Shares of the noise budget, in percent.
 const COAST_SHARE: i64 = 32;
 const BAY_SHARE: i64 = 30;
@@ -158,6 +167,28 @@ fn threshold_noise(key: u64, cell: i64, tile: TileCoord) -> i64 {
     raw * 3 * budget / (budget + 2 * raw.abs())
 }
 
+/// Smooth world-anchored value in `-1024..=1024` on a lattice of
+/// `lattice_tiles`; the shore band varies its widths with it.
+pub(super) fn variation(key: u64, domain: u64, tile: TileCoord, lattice_tiles: i64) -> i64 {
+    let position = (i64::from(tile.x) * UNIT, i64::from(tile.y) * UNIT);
+    octave(key, domain, position, lattice_tiles * UNIT, FULL)
+}
+
+/// Largest warp displacement in sub-tile units for one cell width.
+fn warp_reach(cell: i64) -> i64 {
+    WARP_TILES.min(cell * 13 / 20)
+}
+
+/// Warped sub-tile position of a tile centre.
+fn warped(key: u64, cell: i64, tile: TileCoord) -> (i64, i64) {
+    let position = (i64::from(tile.x) * UNIT, i64::from(tile.y) * UNIT);
+    let reach = warp_reach(cell);
+    (
+        position.0 + octave(key, 4, position, WARP_LATTICE, reach),
+        position.1 + octave(key, 5, position, WARP_LATTICE, reach),
+    )
+}
+
 /// The wet source cell that owns `tile`, or `None` for land. `cell` returns a
 /// value for wet cells only; coordinates are always within a bounded axis.
 pub(super) fn sample<T: Copy, E>(
@@ -169,8 +200,9 @@ pub(super) fn sample<T: Copy, E>(
     if !grid.shaped() {
         return cell(grid.nearest(tile.x), grid.nearest(tile.y));
     }
-    let u = grid.coordinate(i64::from(tile.x) * UNIT);
-    let v = grid.coordinate(i64::from(tile.y) * UNIT);
+    let position = warped(key, grid.cell(), tile);
+    let u = grid.coordinate(position.0);
+    let v = grid.coordinate(position.1);
     let (x0, fu) = (u.div_euclid(UNIT), u.rem_euclid(UNIT));
     let (y0, fv) = (v.div_euclid(UNIT), v.rem_euclid(UNIT));
     let x1 = grid.last.map_or(x0 + 1, |last| (x0 + 1).min(last));
@@ -237,10 +269,11 @@ pub(super) fn any_wet_near<E>(
         }
         return Ok(false);
     }
-    // A shaped tile is water only if one of its four surrounding cells is.
+    // A shaped tile is water only if one of the four cells around its warped
+    // position is.
     let span = |tile: i32| {
         let centre = i64::from(tile) * UNIT;
-        let reach = i64::from(radius) * UNIT;
+        let reach = i64::from(radius) * UNIT + warp_reach(grid.cell());
         let low = grid.coordinate(centre - reach).div_euclid(UNIT);
         let high = grid.coordinate(centre + reach).div_euclid(UNIT) + 1;
         (low, grid.last.map_or(high, |last| high.min(last)))
@@ -294,9 +327,21 @@ mod tests {
                 extremes.0 < -limit / 3 && extremes.1 > limit / 3,
                 "{cell}: {extremes:?}"
             );
-            // Wetness half a tile beside a fully wet segment stays in the core.
-            assert!(FULL - FULL * (UNIT / 2) / cell >= core(cell));
-            assert!(core(cell) > FULL * 4 / 5);
+            // Half a tile beside a fully wet segment, stretched by the largest
+            // warp gradient (two reaches per lattice), stays in the core.
+            let gradient = 2 * warp_reach(cell) * FULL / WARP_LATTICE;
+            let row = (UNIT / 2) * (FULL + gradient) / FULL;
+            assert!(gradient <= FULL * 32 / 100);
+            assert!(FULL - FULL * row / cell >= core(cell), "{cell}");
+            assert!(core(cell) > FULL * 3 / 4);
+            for y in -40..40 {
+                for x in -40..40 {
+                    let tile = TileCoord::new(x * 5, y * 3);
+                    let (wx, wy) = warped(0x51ed_270b, cell, tile);
+                    assert!((wx - i64::from(tile.x) * UNIT).abs() <= warp_reach(cell));
+                    assert!((wy - i64::from(tile.y) * UNIT).abs() <= warp_reach(cell));
+                }
+            }
         }
     }
 }

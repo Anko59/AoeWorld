@@ -253,7 +253,14 @@ fn field_local_dense_and_provider_base_samples_match_edges_and_boundaries() {
             dense.sample_base_tile(nodata).vegetation_provenance,
             Provenance::Fallback
         );
-        assert_eq!(dense.sample_base_tile(nodata).water, WaterKind::None);
+        // Water at the corner is shaped from its neighbors, identically on
+        // both paths.
+        assert_eq!(
+            dense.sample_base_tile(nodata).water,
+            provider::sample_base_tile(&lazy, nodata, &|| false)
+                .unwrap()
+                .water
+        );
         let edge = dense.width_tiles - 1;
         for y in [0, 1, 31, 32, 63, 64, edge] {
             for x in [0, 1, 31, 32, 63, 64, edge] {

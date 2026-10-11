@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 pub(super) const WIDTH: i32 = 257;
 pub(super) const CELL: i32 = 8;
-/// Modelling bound, not geography: threshold noise keeps a shoreline within
-/// 0.42 cells (3.4 tiles for the eight-tile fixture cell) of the source one.
-pub(super) const SHAPE_TILES: i32 = 4;
+/// Modelling bound, not geography: threshold noise (0.42 cells, 3.4 tiles for
+/// the eight-tile fixture cell) plus warp (2.5 tiles) around the source one.
+pub(super) const SHAPE_TILES: i32 = 6;
 /// Bilinear thresholding additionally rounds corners by at most half a cell.
 pub(super) const CORNER_TILES: i32 = CELL / 2;
 
@@ -182,6 +182,40 @@ pub(super) fn water_component(tiles: &[LandscapeTile], start: (i32, i32)) -> Vec
         }
     }
     seen
+}
+
+/// The largest eight-connected body of water.
+pub(super) fn main_water(tiles: &[LandscapeTile]) -> Vec<bool> {
+    let mut assigned = vec![false; (WIDTH * WIDTH) as usize];
+    let mut largest = Vec::new();
+    let mut largest_size = 0;
+    for index in 0..WIDTH * WIDTH {
+        if assigned[index as usize] || !wet(tiles, index % WIDTH, index / WIDTH) {
+            continue;
+        }
+        let component = water_component(tiles, (index % WIDTH, index / WIDTH));
+        let mut size = 0;
+        for (seen, member) in assigned.iter_mut().zip(&component) {
+            *seen |= *member;
+            size += usize::from(*member);
+        }
+        if size > largest_size {
+            (largest, largest_size) = (component, size);
+        }
+    }
+    largest
+}
+
+/// Whether `component` has a tile within three tiles of a source cell centre.
+pub(super) fn passes_cell(component: &[bool], sx: i32, sy: i32) -> bool {
+    let (x, y) = (sx * CELL, sy * CELL);
+    (-3..=3).any(|dy: i32| {
+        (-3..=3).any(|dx: i32| {
+            (0..WIDTH).contains(&(x + dx))
+                && (0..WIDTH).contains(&(y + dy))
+                && component[((y + dy) * WIDTH + x + dx) as usize]
+        })
+    })
 }
 
 fn straight_coast(key: u8) -> MapChunkGenerator {
@@ -393,15 +427,14 @@ fn one_cell_wide_source_rivers_stay_connected_through_bends_and_diagonal_steps()
             (0, if channel(sx, sy) { coverage } else { 0 })
         });
         let tiles = composed(&generator);
-        // Every source cell centre is protected core water, and all of them
-        // share one eight-connected body. Detached ponds beside the channel
-        // are allowed; cuts are not.
-        let component = water_component(&tiles, (4 * CELL, 16 * CELL));
+        // One eight-connected body of water passes every source cell: the
+        // warped centre segments are protected core. Detached ponds beside
+        // the channel are allowed; cuts are not.
+        let component = main_water(&tiles);
         for (sx, sy) in (0..33).flat_map(|sy| (0..33).map(move |sx| (sx, sy))) {
             if channel(sx, sy) {
-                let (x, y) = (i32::from(sx) * CELL, i32::from(sy) * CELL);
                 assert!(
-                    component[(y * WIDTH + x) as usize],
+                    passes_cell(&component, i32::from(sx), i32::from(sy)),
                     "key {key}: river cell {sx},{sy} is cut off"
                 );
             }

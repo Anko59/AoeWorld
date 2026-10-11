@@ -9,9 +9,11 @@ use crate::{
     MovementOutcome, WaterFlowDirection, WaterModelProvenance,
 };
 
-/// Beach and bank reach: water within this squared tile distance (two tiles
-/// straight, or a knight's step).
-const BAND_DISTANCE_SQUARED: i32 = 5;
+/// Beach and bank squared reach: always one tile (2), usually two tiles or a
+/// knight's step (5), at most three tiles or a (3, 1) step (10).
+const NARROW: i32 = 2;
+const ORDINARY: i32 = 5;
+const WIDE: i32 = 10;
 
 fn lake(key: u8) -> MapChunkGenerator {
     coast(key, &|sx, sy| {
@@ -42,10 +44,49 @@ fn nearest_water(tiles: &[LandscapeTile], x: i32, y: i32, reach: i32) -> Option<
     nearest
 }
 
-fn land_adjacent(tiles: &[LandscapeTile], x: i32, y: i32) -> bool {
-    (-1..=1).any(|dy| {
-        (-1..=1).any(|dx| at(tiles, x + dx, y + dy).is_some() && !wet(tiles, x + dx, y + dy))
-    })
+/// Checks one land tile against the band model and reports whether it is in
+/// the band: always within `NARROW`, never beyond `WIDE`.
+fn in_band(tiles: &[LandscapeTile], x: i32, y: i32, material: GroundMaterial) -> bool {
+    let tile = at(tiles, x, y).expect("tile").terrain;
+    let distance = nearest_water(tiles, x, y, 3).map_or(i32::MAX, |(distance, _)| distance);
+    let band = tile.material == material;
+    assert!(tile.passable, "flat shore land is walkable at {x},{y}");
+    assert!(band || distance > NARROW, "bare shore at {x},{y}");
+    assert!(
+        !band || distance <= WIDE,
+        "band {distance} from water at {x},{y}"
+    );
+    band
+}
+
+/// Narrow and wide stretches both occur: `(band beyond ORDINARY, bare within ORDINARY)`.
+fn width_varies(tiles: &[LandscapeTile], material: GroundMaterial) -> (bool, bool) {
+    let mut varies = (false, false);
+    for y in 0..WIDTH {
+        for x in 0..WIDTH {
+            let tile = at(tiles, x, y).expect("tile").terrain;
+            if tile.water != WaterKind::None {
+                continue;
+            }
+            let distance = nearest_water(tiles, x, y, 3).map_or(i32::MAX, |(distance, _)| distance);
+            varies.0 |= tile.material == material && distance > ORDINARY;
+            varies.1 |= tile.material != material && distance <= ORDINARY;
+        }
+    }
+    varies
+}
+
+/// Squared distance to the nearest land tile within two tiles.
+fn nearest_land(tiles: &[LandscapeTile], x: i32, y: i32) -> i32 {
+    let mut nearest = i32::MAX;
+    for dy in -2..=2_i32 {
+        for dx in -2..=2_i32 {
+            if at(tiles, x + dx, y + dy).is_some() && !wet(tiles, x + dx, y + dy) {
+                nearest = nearest.min(dx * dx + dy * dy);
+            }
+        }
+    }
+    nearest
 }
 
 #[test]
@@ -68,18 +109,12 @@ fn lakes_get_a_walkable_sand_beach_of_the_modelled_width_and_a_shallow_rim() {
     }
     assert!(!trees.is_empty(), "temperate fixture grows forest");
     let (mut beach, mut shallow, mut deep) = (0, 0, 0);
+    let (mut wide_rim, mut narrow_rim) = (false, false);
     for y in 0..WIDTH {
         for x in 0..WIDTH {
             let tile = at(&tiles, x, y).expect("tile").terrain;
             if tile.water == WaterKind::None {
-                let near = nearest_water(&tiles, x, y, 2)
-                    .is_some_and(|(distance, _)| distance <= BAND_DISTANCE_SQUARED);
-                assert!(tile.passable, "flat shore land is walkable at {x},{y}");
-                assert_eq!(
-                    tile.material == GroundMaterial::Sand,
-                    near,
-                    "beach band mismatch at {x},{y}"
-                );
+                let near = in_band(&tiles, x, y, GroundMaterial::Sand);
                 if near {
                     beach += 1;
                     assert!(!trees.contains(&(x, y)), "tree on the beach at {x},{y}");
@@ -91,18 +126,24 @@ fn lakes_get_a_walkable_sand_beach_of_the_modelled_width_and_a_shallow_rim() {
                 }
             } else {
                 assert!(!tile.passable, "water is never walkable at {x},{y}");
-                if land_adjacent(&tiles, x, y) {
+                let land = nearest_land(&tiles, x, y);
+                if tile.water == WaterKind::Shallow {
                     shallow += 1;
-                    assert_eq!(tile.water, WaterKind::Shallow, "rim at {x},{y}");
+                    assert!(land <= ORDINARY, "rim {land} from land at {x},{y}");
                     assert_eq!(tile.material, GroundMaterial::Shore);
+                    wide_rim |= land > NARROW;
                 } else {
                     deep += 1;
+                    assert!(land > NARROW, "deep water touches land at {x},{y}");
                     assert_eq!(tile.water, WaterKind::Lake, "open water at {x},{y}");
                     assert_eq!(tile.material, GroundMaterial::Water);
+                    narrow_rim |= land <= ORDINARY;
                 }
             }
         }
     }
+    assert_eq!(width_varies(&tiles, GroundMaterial::Sand), (true, true));
+    assert!(wide_rim && narrow_rim, "shallow rim has one constant width");
     assert!(
         beach > 150 && shallow > 100 && deep > 1_000,
         "{beach} {shallow} {deep}"
@@ -224,11 +265,11 @@ fn modeled_river(key: u8) -> MapChunkGenerator {
 fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
     for key in [81, 82, 83] {
         let tiles = composed(&modeled_river(key));
-        // Cell centres are protected core water of one connected river.
-        let component = super::shoreline::water_component(&tiles, (16 * CELL, 0));
-        for (sx, sy) in [(16, 10), (16, 20), (20, 20), (24, 20)] {
+        // One connected river passes every modeled cell.
+        let component = super::shoreline::main_water(&tiles);
+        for (sx, sy) in [(16, 0), (16, 10), (16, 20), (20, 20), (24, 20)] {
             assert!(
-                component[(sy * CELL * WIDTH + sx * CELL) as usize],
+                super::shoreline::passes_cell(&component, sx, sy),
                 "key {key}: modeled river is cut before cell {sx},{sy}"
             );
         }
@@ -241,14 +282,7 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
             for x in 0..WIDTH {
                 let tile = at(&tiles, x, y).expect("tile").terrain;
                 if tile.water == WaterKind::None {
-                    let near = nearest_water(&tiles, x, y, 2)
-                        .is_some_and(|(distance, _)| distance <= BAND_DISTANCE_SQUARED);
-                    assert_eq!(
-                        tile.material == GroundMaterial::Mud,
-                        near,
-                        "bank at {x},{y}"
-                    );
-                    assert!(tile.passable);
+                    let near = in_band(&tiles, x, y, GroundMaterial::Mud);
                     banks += i32::from(near);
                 } else {
                     // Rivers keep their kind to the bank: no shallow rim.
@@ -261,6 +295,7 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
             }
         }
         assert!(banks > 200, "key {key}: {banks} bank tiles");
+        assert_eq!(width_varies(&tiles, GroundMaterial::Mud), (true, true));
         assert!(
             straight_rows.len() >= 3,
             "key {key}: river bank is a straight line"
@@ -288,9 +323,9 @@ fn seeded_fallback_rivers_have_mud_banks_only_beside_river_water() {
         }
         mud += 1;
         assert!(tile.passable && tile.water == WaterKind::None);
-        let river_near = (-2..=2).any(|dy: i32| {
-            (-2..=2).any(|dx: i32| {
-                dx * dx + dy * dy <= BAND_DISTANCE_SQUARED
+        let river_near = (-3..=3).any(|dy: i32| {
+            (-3..=3).any(|dx: i32| {
+                dx * dx + dy * dy <= WIDE
                     && tiles
                         .get(&(x + dx, y + dy))
                         .is_some_and(|near| near.water == WaterKind::River)

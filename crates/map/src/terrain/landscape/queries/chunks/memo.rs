@@ -12,12 +12,12 @@ struct Entry {
 /// One 192-tile cell and its wildness.
 type CellWildness = ((i64, i64), u16);
 
-pub(super) type PointMemo<'a> = Memo<'a, 25, 49>;
-pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 1444>;
+pub(super) type PointMemo<'a> = Memo<'a, 25, 81>;
+pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 1600>;
 
-/// Base tiles keep a two-tile halo. Water kinds keep three: the shore band
-/// of a neighbor reads water two tiles beyond that neighbor.
-const WATER_HALO: i64 = 1;
+/// Base tiles keep a two-tile halo. Water kinds keep four: the shore band
+/// of a neighbor reads water up to three tiles beyond that neighbor.
+const WATER_HALO: i64 = 2;
 
 pub(super) struct Memo<'a, const N: usize, const W: usize> {
     generator: &'a MapChunkGenerator,
@@ -47,7 +47,7 @@ impl<'a> PointMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
             cells: RefCell::new([None; 16]),
-            water: RefCell::new([None; 49]),
+            water: RefCell::new([None; 81]),
             shores: RefCell::new([None; 25]),
             probe_reach: true,
             origins: RefCell::new(resources::Origins::new(generator)),
@@ -68,7 +68,7 @@ impl<'a> ChunkMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 1296]),
             cells: RefCell::new([None; 16]),
-            water: RefCell::new([None; 1444]),
+            water: RefCell::new([None; 1600]),
             shores: RefCell::new([None; 1296]),
             probe_reach: false,
             origins: RefCell::new(resources::Origins::new(generator)),
