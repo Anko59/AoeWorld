@@ -34,37 +34,11 @@ const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
 vec2 terrainUv(uint mode, uint corner) {
-    if (mode == 0u) {
-        if (corner == 0u) return vec2(.5,0);
-        if (corner == 1u) return vec2(1,.5);
-        return vec2(.5,1);
-    }
-    if (mode == 1u) {
-        if (corner == 0u) return vec2(.5,0);
-        if (corner == 1u) return vec2(.5,1);
-        return vec2(0,.5);
-    }
-    if (mode == 2u) {
-        if (corner == 0u) return vec2(.5,0);
-        if (corner == 1u) return vec2(1,.5);
-        return vec2(0,.5);
-    }
-    if (mode == 3u) {
-        if (corner == 0u) return vec2(1,.5);
-        if (corner == 1u) return vec2(.5,1);
-        return vec2(0,.5);
-    }
-    if (mode == 4u) {
-        if (corner == 0u) return vec2(.3,.3);
-        if (corner == 1u) return vec2(.7,.3);
-        return vec2(.7,.7);
-    }
-    if (mode == 5u) {
-        if (corner == 0u) return vec2(.3,.3);
-        if (corner == 1u) return vec2(.7,.7);
-        return vec2(.3,.7);
-    }
-    return vec2(0);
+    const vec2 table[18] = vec2[18](
+        vec2(.5,0), vec2(1,.5), vec2(.5,1), vec2(.5,0), vec2(.5,1), vec2(0,.5),
+        vec2(.5,0), vec2(1,.5), vec2(0,.5), vec2(1,.5), vec2(.5,1), vec2(0,.5),
+        vec2(.3,.3), vec2(.7,.3), vec2(.7,.7), vec2(.3,.3), vec2(.7,.7), vec2(.3,.7));
+    return mode < 6u ? table[mode * 3u + corner] : vec2(0);
 }
 vec2 terrainAtlasUv(vec4 rect, vec2 local) {
     vec2 pixel = 1.0 / vec2(textureSize(atlas, 0).xy);
@@ -132,6 +106,12 @@ void main() {
                         floorStrength = float((uint(depths.w) >> (corner * 8u)) & 255u) / 255.0;
                     }
                     vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
+                    uint mode = uint(terrainBlend0.z);
+                    if (tiled && mode != 0u) {
+                        uint share = uint(terrainBlend1[corner]);
+                        vWeights = vec3(float(share & 255u) / 255.0, float(share >> 8u) / 255.0, floorStrength);
+                        vSolid |= 8u * mode;
+                    }
                 }
                 vSolid |= 2u;
             }
@@ -203,6 +183,37 @@ Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
     vec2 span = max(rect.zw - 1.0 / size, vec2(0));
     return Layer(rect.xy + .5 / size + local * span, uint(b.w), rect, gx * span, gy * span);
 }
+// Mixed ground, as sprites.wgsl: procedural layer kernel and world-anchored noise.
+vec3 ground(vec3 rgb, uint kind) {
+    vec3 base = vec3(.18);
+    float amount = .55;
+    if (kind == 6u) { base = vec3(.78,.79,.78); amount = .12; }
+    else if (kind == 8u) { base = vec3(.42,.57,.65); amount = .20; }
+    else if (kind == 9u) { base = vec3(.10,.08,.05); amount = .35; }
+    else if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
+    else if (kind != 5u && kind != 7u && kind != 12u) return rgb;
+    return base + dot(rgb, vec3(1.0 / 3.0)) * amount;
+}
+vec4 mixed(vec4 texel, uint material) {
+    const uint kinds[16] = uint[16](0u,0u,0u,0u,5u,0u,0u,6u,8u,9u,0u,0u,0u,0u,0u,0u);
+    return vec4(ground(texel.rgb, kinds[material & 15u]), texel.a);
+}
+float lattice(ivec2 p) {
+    uint hash = (uint(p.x) * 2654435761u) ^ (uint(p.y) * 2246822519u);
+    hash = (hash ^ (hash >> 15u)) * 739982445u;
+    return float((hash ^ (hash >> 12u)) & 255u) / 255.0;
+}
+float value(ivec2 tile, vec2 inside, int cells) {
+    vec2 scaled = inside * float(cells), cell = floor(scaled), t = scaled - cell;
+    vec2 u = t * t * (3.0 - 2.0 * t);
+    ivec2 at = tile * cells + ivec2(cell);
+    float top = lattice(at) + (lattice(at + ivec2(1,0)) - lattice(at)) * u.x;
+    float bottom = lattice(at + ivec2(0,1)) + (lattice(at + ivec2(1,1)) - lattice(at + ivec2(0,1))) * u.x;
+    return top + (bottom - top) * u.y;
+}
+float edge(float share, float noise) {
+    return clamp((share - .5) * 4.0 + .5 + (noise - .5) * 2.6, 0.0, 1.0);
+}
 void main() {
     Layer first = Layer(vUv, vPages.x, vRect, dFdx(vUv), dFdy(vUv));
     Layer second = Layer(vUv2, vPages.y, vRect2, dFdx(vUv2), dFdy(vUv2));
@@ -212,24 +223,32 @@ void main() {
         return;
     }
     bool blend = (vSolid & 3u) == 3u;
-    bool landscape = (vPages.w & 1u) != 0u;
+    bool landscape = (vPages.w & 1u) != 0u, mixing = vSolid >= 8u;
+    vec2 cell = floor(vUv), inside = vUv - cell;
+    ivec2 tile = ivec2(int(vPages.x), int(vPages.y)) + ivec2(cell);
     if ((vSolid & 4u) != 0u) {
         if (vRect.y < 1.0) discard;
-        vec2 cell = floor(vUv), inside = vUv - cell;
-        ivec2 tile = ivec2(int(vPages.x), int(vPages.y)) + ivec2(cell);
         vec2 local = vec2(.5 + .5 * (inside.x - inside.y), .5 * (inside.x + inside.y));
         vec2 gx = vec2(.5 * (first.dx.x - first.dx.y), .5 * (first.dx.x + first.dx.y));
         vec2 gy = vec2(.5 * (first.dy.x - first.dy.y), .5 * (first.dy.x + first.dy.y));
         first = tiledLayer(vRect, tile, local, gx, gy);
         if (blend) {
             second = tiledLayer(vRect2, tile, local, gx, gy);
-            if (!landscape) third = tiledLayer(vRect3, tile, local, gx, gy);
+            if (!landscape || mixing) third = tiledLayer(vRect3, tile, local, gx, gy);
         }
     }
     vec4 texel;
     if (vSolid == 0u || !landscape) texel = textureLod(atlas, vec3(first.uv, float(first.page)), 0.0);
     else texel = terrainSample(first.uv, first.page, first.rect, first.dx, first.dy);
-    if (blend) {
+    if (mixing) {
+        float noise = .6 * value(tile, inside, 1) + .4 * value(tile, inside, 4);
+        float over = edge(vWeights.x, noise), middle = edge(vWeights.x + vWeights.y, noise);
+        vec3 weights = vSolid >= 16u ? vec3(1.0 - middle, middle - over, over)
+                                     : vec3((1.0 - vWeights.z) * (1.0 - over), vWeights.z, (1.0 - vWeights.z) * over);
+        texel = mixed(texel, vPages.z) * weights.x
+              + mixed(terrainSample(second.uv, second.page, second.rect, second.dx, second.dy), vPages.z >> 8u) * weights.y
+              + mixed(terrainSample(third.uv, third.page, third.rect, third.dx, third.dy), vPages.z >> 16u) * weights.z;
+    } else if (blend) {
         if (landscape) {
             texel = texel * vWeights.x
                   + terrainSample(second.uv, second.page, second.rect, second.dx, second.dy) * vWeights.y
@@ -248,18 +267,8 @@ void main() {
     bool ramp = vTint >= 21u && vTint <= 26u;
     uint kind = ramp ? vTint - 16u : vTint;
     if ((kind >= 5u && kind <= 10u) || kind == 12u) {
-        float detail = dot(texel.rgb, vec3(1.0 / 3.0));
-        vec3 base = vec3(.18);
-        float amount = .55;
-        float shade = 1.0;
-        if (kind == 6u) { base = vec3(.78,.79,.78); amount = .12; }
-        if (kind == 7u) { shade = .72; }
-        if (kind == 12u) { shade = .78; }
-        if (kind == 8u) { base = vec3(.42,.57,.65); amount = .20; }
-        if (kind == 9u) { base = vec3(.10,.08,.05); amount = .35; }
-        if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
-        shade *= ramp ? .92 : 1.0;
-        result = vec4((base + detail * amount) * shade, texel.a);
+        float shade = (kind == 7u ? .72 : kind == 12u ? .78 : 1.0) * (ramp ? .92 : 1.0);
+        result = vec4(ground(texel.rgb, kind) * shade, texel.a);
         return;
     }
     if ((vPages.w & 1u) != 0u && vTint <= 3u) {

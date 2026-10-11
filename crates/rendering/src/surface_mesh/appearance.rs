@@ -101,6 +101,9 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
+        if mix::texture(triangle, art) {
+            continue;
+        }
         // Natural rock/cliffs and snow are procedural dirt-derived appearances,
         // never imported paving or ice. Keep their low-contrast transform local
         // to the whole face until per-material splat transforms are supported.

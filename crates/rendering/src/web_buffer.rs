@@ -198,13 +198,26 @@ pub(crate) fn surface_instance(
     // origin tile and its layer materials; the fragment resolves each frame.
     let tiled = (triangle.texture_mode == crate::surface_mesh::directory::TILED).then(|| {
         let local = crate::surface_mesh::directory::locals(triangle).map(|l| l.map(|v| v as f32));
+        let mix = triangle.mix;
+        let share =
+            |corner: usize| f32::from(u16::from(mix[corner]) | u16::from(mix[3 + corner]) << 8);
+        let mode = match mix {
+            [0, 0, 0, 0, 0, 0] => 0.0,
+            [_, _, _, 0, 0, 0] => 1.0,
+            _ => 2.0,
+        };
         let layers = triangle
             .texture_materials
             .unwrap_or([triangle.material; 3])
             .map(u32::from);
         (
             [local[0][0], local[0][1], local[1][0], local[1][1]],
-            [[local[2][0], local[2][1], 0.0, 0.0], [0.0; 4]],
+            // A mixed face adds its mode (1 bed, 2 middle material) and one
+            // exact integer per corner: overlay share plus 256 × middle share.
+            [
+                [local[2][0], local[2][1], mode, 0.0],
+                [share(0), share(1), share(2), 0.0],
+            ],
             [
                 triangle.texture_tile[0] as u32,
                 triangle.texture_tile[1] as u32,

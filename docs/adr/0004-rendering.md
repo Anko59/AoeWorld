@@ -223,6 +223,50 @@ retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.
 
+## Ground mixing between every material pair
+
+Only grass against forest soil used to blend: map tiles always carry appearance
+metadata, and that branch of `apply_terrain_textures` chose grass plus the
+forest bed and returned before the per-vertex material splat; rock, snow, ice
+and mud faces dropped their vertex materials because their procedural look was
+one tint per face. `surface_mesh/mix.rs` replaces both gaps for map scenes.
+
+Each displayed vertex takes the share of every ground sheet among its four
+incident land tiles (water, cliffs and metadata-free samples are not
+observations). A face whose vertices see one sheet keeps its existing path.
+A face that sees several becomes a world-tiled face (mode 6) with three
+layers ordered by `mix::rank`, low to high: ice, rock, mud, sand, dirt, dry
+grass, grass, snow. The lowest is the base and the highest the overlay, so both
+sides of a border draw the same pair. The middle layer is the forest-floor bed
+whenever its corner strengths are nonzero, otherwise a third material; with a
+bed, a third material folds into the base under the leaf litter.
+
+Corner shares are u8 (k/4 of the incident tiles) and travel in the tiled
+packet's free words: `terrain_blend[0].z` is the mode (1 bed, 2 middle
+material) and `terrain_blend[1].xyz` one exact integer per corner, overlay
+share plus 256 × middle share. Bed strengths reuse the interpolated floor word.
+The fragment thresholds the interpolated share `s` with world-anchored noise
+`n`: `clamp((s - 0.5) * 4 + 0.5 + (n - 0.5) * 2.6, 0, 1)`. A share of zero or
+one stays exact for any noise, so pure ground is untouched and the band is
+about half a tile soft, meandering up to 0.6 tile around the tile edge. `n` is
+two octaves of value noise on integer lattices (one and four cells per tile)
+hashed from the fragment's world tile, identical in WGSL, GLSL and Canvas and
+at every zoom and mesh LOD. Weights are cumulative thresholds (`1 - m`,
+`m - o`, `o`) for three materials and `(1-b)(1-o)`, `b`, `(1-b)o` with a bed,
+so a face with two materials meets a face with three without a seam.
+
+Procedural rock, snow, ice and mud are evaluated per layer from the layer's
+scene material (the packet's material bytes) before blending; face tints 5–10
+remain only for faces that are entirely one procedural material, and the two
+agree where they meet. Mixed faces keep face shading (tint 0–3), the minification
+kernel on all three layers, and the ecological palette only when the face's own
+tile is vegetative. Cost: mixed faces alone pay two directory texels and up to
+five taps per layer plus eight lattice hashes; no Sprite112 field, texture,
+binding or varying is added, and the triangle stays 240 bytes (six spare bytes
+hold the shares). Land against water is unchanged: water sheets and shores
+belong to the water renderer. Borders are still one mesh face wide on coarse
+LODs, and long straight biome edges are a map-generation property.
+
 ## Direct scene emission
 
 The production scene builder now appends the shared sprite emitter directly
