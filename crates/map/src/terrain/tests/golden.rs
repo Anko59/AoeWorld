@@ -130,10 +130,12 @@ const FOREST_ROUTES: (usize, &str) = (
     "47e23b8803057e8fe8aaaa69589b63aee292ab0f4d137c6f9a44ed8c10b91cf3",
 );
 
+// Current chunks retain Lake/Ocean kinds at shallow rims. Correcting that
+// serialized field changes these digests, but not the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "8ac4169255beb6840b874e2d2053610e208fcfdc887434dffed851c76baf0004",
-    "86ed3a601e2e3643c46f56c74cd61a12d275278bf1aff196a3d94a8a3d5c20c9",
-    "451b9745473e656aab90e8ef00e473a7b64d6c972d050954c19a0c3da3477810",
+    "45fca45cb4d406eb36cd220af43c6e123163add4cae9896eec4f6b4990a875eb",
+    "bc84c068e5aa351584a311bc608d0d9381a50518d0dc1d9ffe5b46c4618f33c6",
+    "fb81888dbeb175bb715916b890572a661bd4a4eb8f11329caba9b146b0c4a16e",
 ];
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "d8885a09cc4d1026a12f9666a16762a4ac9ee9b153cd464e6492ad28c6940ad6";
+    "fe07b5498340b1486e694efc1cab091e0813f05e2f2b7d62b010a9dcdd96a863";

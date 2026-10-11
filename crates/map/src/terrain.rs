@@ -60,7 +60,8 @@ pub enum GroundMaterial {
     Water,
     /// Open water with no land within the medium reach.
     DeepWater,
-    /// Walkable river shallows: a ford.
+    /// Renderer mapping for walkable river shallows. No terrain generator
+    /// emits this material yet; ford generation belongs to separate river work.
     Ford,
 }
 

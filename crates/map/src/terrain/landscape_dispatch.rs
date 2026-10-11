@@ -13,8 +13,8 @@ pub struct LandscapePoint {
 
 impl MapChunkGenerator {
     /// Physical terrain only. Composition changes material and marks the
-    /// shallow rim, never passability, surface or height; overlays remain a
-    /// caller concern.
+    /// shallow rim, never water kind, passability, surface or height;
+    /// overlays remain a caller concern.
     pub(super) fn base_physical_tile_with_cancel(
         &self,
         tile: TileCoord,

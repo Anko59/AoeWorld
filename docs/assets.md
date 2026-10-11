@@ -33,11 +33,14 @@ To inspect a pack in the local app, start `make dev` with
 dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
 10×10 periodic topology explicitly, indexed x-major with reversed y so
 neighboring source edges meet. Water 15002 is the light shallow sheet; optional
-periodic sheets add medium water 15016, deep water 15015 and the walkable marsh
-shallows 15014 used for fords, and a pack without one draws the shallow sheet
-in its place. Catalog v6 retains the removal of paved 15018 from the natural
-rock role: natural rock requires procedural neutral ground, not paving. The
-renderer owns that fallback's appearance. Frame count alone is never topology. The map client selects those groups from
+periodic sheets add medium water 15016, deep water 15015 and marsh shallows
+15014. The latter is renderer wiring for `Ford` only: no terrain generator
+emits it yet, and ford generation belongs to separate river work. Generated
+shallow water remains impassable. A pack without an optional sheet draws the
+shallow sheet in its place. Catalog v6 retains the removal of paved 15018
+from the natural rock role: natural rock requires procedural neutral ground,
+not paving. The renderer owns that fallback's appearance. Frame count alone
+is never topology. The map client selects those groups from
 semantic terrain chunks. Optional native Forest/g_for terrain 15011 contributes
 frames 0–9 as nonperiodic coordinate-stable forest-soil frames. Landscape forest beds
 blend this native leaf litter with grass, dry grass or authoritative dirt; only

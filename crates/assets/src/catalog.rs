@@ -208,9 +208,10 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
 /// Optional so partial packs keep their explicit dirt fallback.
 ///
 /// Water depth: required water 15002 is the light shallow sheet. Medium
-/// 15016, deep 15015 and the walkable marsh shallows 15014 (fords) are
-/// periodic sheets of the same layout; a pack without one draws the shallow
-/// sheet in its place, never a flat tint.
+/// 15016, deep 15015 and marsh shallows 15014 are periodic sheets of the same
+/// layout; a pack without one draws the shallow sheet in its place, never a
+/// flat tint. Shallows is renderer wiring only: no terrain generator emits
+/// Ford yet. Ford generation belongs to separate river work.
 pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 4] = [
     SpriteSource {
         role: AssetRole::ForestFloor,
@@ -247,7 +248,7 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 4] = [
         archive: "terrain.drs",
         id: 15014,
         frames: 100,
-        interpretation: "10x10 periodic marsh-shallows atlas for fords in x-major, reversed-y order",
+        interpretation: "10x10 periodic marsh-shallows atlas in x-major, reversed-y order; renderer mapping only, no generated fords",
         terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
             columns: 10,
             rows: 10,

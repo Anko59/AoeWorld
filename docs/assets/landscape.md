@@ -53,7 +53,10 @@ frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
 | Water 15002 (required) | Light turquoise | 10 | Shallow rim of lakes and seas, river margins, shallow source water |
 | Water 15016 (optional) | Medium blue | 5 | Water five to seven tiles from land at most; midstream river water |
 | Water 15015 (optional) | Dark blue | 11 | Open water beyond the medium reach |
-| Shallows 15014 (optional) | Green marsh with lilies | 12 | Walkable fords |
+| Shallows 15014 (optional) | Green marsh with lilies | 12 | Renderer mapping for Ford; no generator emits it yet |
+
+Ford generation belongs to separate river work. The sheet is wired for
+rendering only; generated shallow water and river margins stay impassable.
 
 Faces between two classes blend their sheets through the same per-vertex
 splat as land materials; water never blends with land across the shore. No

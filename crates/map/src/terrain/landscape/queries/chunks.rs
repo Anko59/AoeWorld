@@ -127,14 +127,10 @@ impl MapChunkGenerator {
         let mut terrain = base;
         terrain.material = material(base, appearance);
         // Shore band: appearance on land, a shallow rim in open water. It
-        // never changes passability, heights or the shaped water outline.
+        // never changes water kind, passability, heights or the shaped outline.
         match memo.shore(position)? {
             memo::Shore::None => {}
-            memo::Shore::Shallow => {
-                terrain.water = crate::WaterKind::Shallow;
-                terrain.material = GroundMaterial::Shore;
-            }
-            memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
+            memo::Shore::Shallow | memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
             memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
             shore if base.passable && soft_ground(terrain.material) => {
                 terrain.material = if shore == memo::Shore::Bank {
