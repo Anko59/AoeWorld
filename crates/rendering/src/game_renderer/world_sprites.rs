@@ -19,7 +19,7 @@ pub fn scene_resource_presentation(
     art: &GameArt,
     resource: SceneResource,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
-    if resource.kind == SceneResource::CLIFF {
+    if resource.kind >= SceneResource::CLIFF {
         return scenery::frame(art, resource).map(|(frame, _)| (frame, None));
     }
     if resource.kind == 1 {
@@ -103,7 +103,15 @@ pub(super) fn emit_world_sprite_frames(
         .iter()
         .filter_map(|resource| {
             scene_resource_presentation(art, *resource).map(|(frame, shadow)| {
-                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
+                WorldObject::Resource(
+                    *resource,
+                    if resource.kind == SceneResource::ROCK {
+                        frame
+                    } else {
+                        world_frame(frame)
+                    },
+                    shadow.map(world_frame),
+                )
             })
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
@@ -333,7 +341,11 @@ pub(super) fn resource_sprite_bounds(
     camera: SceneCamera,
 ) -> Option<[f64; 4]> {
     sprite_screen_bounds(
-        world_frame(frame),
+        if resource.kind == SceneResource::ROCK {
+            frame
+        } else {
+            world_frame(frame)
+        },
         resource.position,
         resource.elevation_meters,
         camera,

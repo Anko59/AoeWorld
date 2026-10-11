@@ -3,7 +3,7 @@
 Catalog v9 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
 prefixes, three water depth sheets and four ground-variety sheets and ice 15024 bring the ceiling
-to 1,467 frames (1,274 terrain/193 objects including cliff faces).
+to 1,474 frames (1,274 terrain/200 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -35,7 +35,7 @@ conifer/palm prefixes and the four ground sheets have moved to the reviewed opti
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 1,467 actual extents through the runtime packer; the
+test separately feeds all 1,474 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -76,6 +76,16 @@ are emitted. Cell tops retain surrounding ground; only vertical skirts are
 rock. The runtime atlas restrains the trial cliff palette to warm neutral stone
 while retaining luminance relief and alpha; original pack pixels are unchanged. A pack without group 226 shows the impassable cells as bare
 rock-tinted ground.
+
+## Loose rocks
+
+`Stone` decorations draw graphics 1034: seven plain grey rock piles (56–85 ×
+33–46), the stone-deposit shapes without ore glints. The decoration variant
+picks the pile and one of four sizes (45–90%), with the soft shadow of other
+objects without paired shadow art. Emission and culling keep that chosen size
+without the ordinary resource object's additional native-tile enlargement.
+Crags 233/234, the rock slab 235 and the
+boulders painted into the cliff faces are not used as separate objects.
 
 ## Snow ground
 

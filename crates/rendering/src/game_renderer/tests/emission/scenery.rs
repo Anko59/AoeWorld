@@ -25,7 +25,10 @@ fn art() -> GameArt {
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
-        scenery: crate::SceneryArt { cliff_faces },
+        scenery: crate::SceneryArt {
+            cliff_faces,
+            rocks: Vec::new(),
+        },
     }
 }
 
@@ -104,4 +107,42 @@ fn cliff_orientation_selects_native_faces_with_their_authored_lighting() {
     let mut partial = art;
     partial.scenery.cliff_faces.truncate(11);
     assert!(scene_resource_frame(&partial, piece(0)).is_none());
+}
+
+#[wasm_bindgen_test]
+fn loose_rocks_are_small_shadowed_sprites_in_several_sizes() {
+    let mut art = art();
+    let rock = |variant| SceneResource {
+        id: 3,
+        position: [10.5, 10.5],
+        kind: SceneResource::ROCK,
+        visual_variant: variant,
+        visual_family: 0,
+        elevation_meters: 0.0,
+    };
+    assert!(scene_resource_frame(&art, rock(0)).is_none());
+    art.scenery.rocks = (0..7)
+        .map(|slot| GameFrame {
+            atlas: crate::AtlasAddress {
+                page: 2,
+                uv: [0.5 + slot as f32 * 0.01, 0.25, 0.03, 0.02],
+            },
+            size: [80.0, 40.0],
+            anchor: [40.0, 30.0],
+        })
+        .collect();
+    let mut widths = Vec::new();
+    for variant in [0_u8, 8, 16, 24, 5] {
+        let sprites = world_sprite_frames(&art, &[], &[rock(variant)], &[], camera(), 0);
+        // A soft shadow and the body, like other objects without paired shadows.
+        assert_eq!(sprites.len(), 2);
+        let (body, frame, _, _) = sprites[1];
+        assert_eq!(body.color, [1.0; 4]);
+        assert!(frame.size[0] < 80.0 && frame.size[0] > 30.0);
+        assert!((frame.anchor[1] / frame.size[1] - 0.75).abs() < 1e-4);
+        widths.push(frame.size[0] as u32);
+    }
+    widths.sort_unstable();
+    widths.dedup();
+    assert_eq!(widths.len(), 4);
 }

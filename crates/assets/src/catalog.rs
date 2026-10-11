@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 9;
+pub const VERSION: u8 = 10;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_467;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_474;
 
 /// Paving 15018 is not natural rock. Neutral rock uses gravel or dirt detail.
 pub const NATURAL_ROCK_FALLBACK: &str = "procedural neutral rock over gravel 15017 or dirt detail; never substitute paved terrain 15018";
@@ -45,6 +45,7 @@ pub enum AssetRole {
     Gravel,
     CliffFace,
     Snow,
+    RockPile,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,7 +146,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 8] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 9] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -215,6 +216,16 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 8] = [
         id: 226,
         frames: 25,
         interpretation: "camera-facing cliff faces 1,2,3,4,5,15,16,17,18,19,24 on a 3x3 tile footprint; other slots are placeholders",
+        terrain_topology: None,
+    },
+    // Seven plain grey rock piles: the stone-deposit shapes without ore
+    // glints. Drawn reduced as loose rocks, never as a resource.
+    SpriteSource {
+        role: AssetRole::RockPile,
+        archive: "graphics.drs",
+        id: 1034,
+        frames: 7,
+        interpretation: "seven plain grey rock piles for visual rocks",
         terrain_topology: None,
     },
 ];
