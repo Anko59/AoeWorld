@@ -5,7 +5,7 @@ use crate::{
 use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, TileCoord};
 use std::collections::BTreeMap;
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
-const TERRAIN_NATIVE_DIAMOND_WIDTH: f32 = 96.0;
+pub(crate) const TERRAIN_NATIVE_DIAMOND_WIDTH: f32 = 96.0;
 const TERRAIN_NATIVE_DIAMOND_HEIGHT: f32 = 48.0;
 
 /// Builds a bounded layer of local terrain sprites beneath world entities.

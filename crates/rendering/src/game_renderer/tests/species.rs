@@ -103,10 +103,13 @@ fn native_signed_and_outside_anchors_preserve_body_overhang_and_removal() {
             "offscreen contact, visible foliage"
         );
         let drawn = fixture::drawn(&art, &[resource]);
+        // Native 96-pixel-tile art grows with the 128-pixel world tile.
+        let world = |pixels: f32| pixels * (128.0 / 96.0);
         assert!(
             drawn
                 .iter()
-                .any(|(_, frame, _, _)| frame.size == native.size && frame.anchor == anchor)
+                .any(|(_, frame, _, _)| frame.size == native.size.map(world)
+                    && frame.anchor == anchor.map(world))
         );
         assert!(
             fixture::drawn(&art, &[]).is_empty(),

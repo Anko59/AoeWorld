@@ -153,9 +153,11 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
     // The counts are deterministic for this fixture (no margin is applied):
     // one reserved layer vector, one ring vector per selected unit, the sort
     // index/scratch. Raising a bound needs a measured justification.
-    assert_eq!(layers.len(), 12_514, "{report}");
+    // Art at the world's tile scale (4/3 of native) brings three more
+    // edge sprites into view: 12,517 layers of 240 bytes, two vectors each.
+    assert_eq!(layers.len(), 12_517, "{report}");
     assert_eq!(reallocs, 0, "{report}");
     assert!(allocs <= 102, "{report}");
-    assert!(bytes <= 6_592_800, "{report}");
+    assert!(bytes <= 6_593_520, "{report}");
     assert!(peak <= 3_205_440, "{report}");
 }
