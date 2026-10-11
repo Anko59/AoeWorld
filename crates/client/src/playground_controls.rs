@@ -105,6 +105,13 @@ fn pan_camera(mut camera: Camera, config: WorldConfig, delta: [f64; 2]) -> Camer
 
 // Wheel zoom is browser UI arithmetic, not deterministic simulation state.
 // Use the host exponential once per event instead of retaining a WASM libm root.
+fn toggle_grid(client: &mut Client) {
+    client.grid = !client.grid;
+    if let Some(button) = client.document.get_element_by_id("grid") {
+        let _ = button.set_attribute("aria-pressed", if client.grid { "true" } else { "false" });
+    }
+}
+
 fn wheel_zoom(zoom: f64, delta: f64) -> f64 {
     zoom * js_sys::Math::exp(-delta * 0.0015)
 }
@@ -280,7 +287,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.selected = None;
                 client.drag = None;
             }
-            2 => client.grid = !client.grid,
+            2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
             _ => return,
         }
@@ -301,10 +308,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if let Some(button) = shared.borrow().document.get_element_by_id(id) {
             let target = shared.clone();
             let callback = Closure::<dyn FnMut(Event)>::new(move |_| match action {
-                0 => {
-                    let grid = target.borrow().grid;
-                    target.borrow_mut().grid = !grid;
-                }
+                0 => toggle_grid(&mut target.borrow_mut()),
                 1 => center_on_primary(&mut target.borrow_mut()),
                 2 => reconnect(target.clone()),
                 3 => {

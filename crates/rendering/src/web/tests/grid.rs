@@ -48,33 +48,19 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     };
     game.upload_game_atlas(&art, vec![255; crate::GAME_ATLAS_BYTES])
         .unwrap();
-    let projection = aoe_core::Camera {
-        center: camera.center,
-        zoom: camera.zoom,
-        viewport: camera.viewport,
-        focus_elevation_meters: camera.focus_elevation_meters,
-    };
-    let config = aoe_core::WorldConfig::new(70_000, 70_000, aoe_core::Seed(0)).unwrap();
-    let bounds = projection.visible_tiles_at_height(config, 1.0, 800.0);
-    let count = game_grid::grid_sprites(camera, bounds).len();
+    let surfaces = crate::surface_mesh::projected_surface_triangles(&terrain, camera);
+    let segments = game_grid::grid_segments(&surfaces, camera.zoom);
+    let count = game_grid::grid_sprites(&segments, camera.viewport).len();
     assert!(count > 0);
     let mut pixels = Vec::new();
     for enabled in [false, true, false] {
-        game.render_prepared_world(
-            &art,
-            &terrain,
-            &[],
-            &[],
-            &[],
-            camera,
-            0,
-            enabled.then_some(bounds),
-        )
-        .unwrap();
+        game.render_prepared_world(&art, &terrain, &surfaces, &[], &[], camera, 0, enabled)
+            .unwrap();
         let GameRenderer::WebGpu(renderer) = &game else {
             unreachable!()
         };
-        pixels.push(gpu_pixel(renderer, if enabled { count } else { 0 }).await);
+        let lines = if enabled { count } else { 0 };
+        pixels.push(gpu_pixel(renderer, surfaces.len() + lines).await);
     }
     assert_ne!(pixels[0], pixels[1]);
     assert_eq!(pixels[0], pixels[2]);
@@ -138,7 +124,8 @@ async fn gpu_pixel(renderer: &Renderer, count: usize) -> [u8; 4] {
         wgpu::TexelCopyTextureInfo {
             texture: &target,
             mip_level: 0,
-            origin: wgpu::Origin3d { x: 64, y: 64, z: 0 },
+            // The tile border from the screen centre to (128, 96) covers (96, 80).
+            origin: wgpu::Origin3d { x: 96, y: 80, z: 0 },
             aspect: wgpu::TextureAspect::All,
         },
         wgpu::TexelCopyBufferInfo {

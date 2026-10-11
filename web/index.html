@@ -13,6 +13,7 @@
     #controls { position: fixed; top: 14px; right: 14px; z-index: 2; display: flex; gap: 7px; }
     button { color: #eef6dc; background: #243c25dd; border: 1px solid #78915d; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #3e5a35; }
+    button[aria-pressed="true"] { color: #172516; background: #d2e5a7; }
     #status { position: fixed; left: 14px; bottom: 14px; z-index: 2; padding: 7px 10px; color: #dce9c9; background: #142314d9; border: 1px solid #60764d; border-radius: 4px; pointer-events: none; }
     #connection { color: #d2e5a7; }
     #status { max-width: calc(100vw - 220px); max-height: 100px; overflow: hidden; }
@@ -52,7 +53,7 @@
       <button id="creator-toggle" type="button" aria-label="Open map creator" title="Map creator">⌖</button>
       <button id="fullscreen" type="button" aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
       <button id="recenter" type="button" aria-label="Center on primary unit" title="Center unit">⌾</button>
-      <button id="grid" type="button" aria-label="Toggle isometric grid" title="Grid">▦</button>
+      <button id="grid" type="button" aria-label="Toggle isometric grid" aria-pressed="false" title="Grid (G)">▦</button>
       <button id="overview-toggle" type="button" aria-label="Show whole map" aria-expanded="false" title="Whole map (M)">Map</button>
       <button id="reconnect" type="button" aria-label="Reconnect to server" title="Reconnect">↻</button>
     </nav>

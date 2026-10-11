@@ -243,14 +243,7 @@ impl GameRenderer {
     ) -> Result<bool, String> {
         let surfaces = projected_surface_triangles(terrain, camera);
         self.render_prepared_world(
-            art,
-            terrain,
-            &surfaces,
-            resources,
-            units,
-            camera,
-            animation,
-            grid.then(|| game_grid::viewport_bounds(camera)),
+            art, terrain, &surfaces, resources, units, camera, animation, grid,
         )
     }
 
@@ -263,7 +256,7 @@ impl GameRenderer {
         units: &[SceneUnit],
         camera: SceneCamera,
         animation: usize,
-        grid: Option<aoe_core::TileRect>,
+        grid: bool,
     ) -> Result<bool, String> {
         let surfaces = surfaces.iter().copied().map(|mut triangle| {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
@@ -291,8 +284,11 @@ impl GameRenderer {
                     }
                 })
                 .collect::<Vec<_>>();
-            if let Some(bounds) = grid {
-                instances.extend(game_grid::grid_sprites(camera, bounds));
+            if grid {
+                instances.extend(game_grid::grid_sprites(
+                    &grid_segments(&layers, camera),
+                    camera.viewport,
+                ));
             }
             return match self {
                 Self::WebGpu(renderer) => renderer
@@ -320,16 +316,23 @@ impl GameRenderer {
                     presentation,
                     &layers,
                     camera,
-                    false,
+                    grid,
                 )?;
-                if let Some(bounds) = grid {
-                    game_grid::draw_grid(context, camera, bounds);
-                }
                 Ok(true)
             }
             _ => unreachable!(),
         }
     }
+}
+
+fn grid_segments(layers: &[WorldLayer], camera: SceneCamera) -> Vec<[aoe_core::ScreenPoint; 2]> {
+    game_grid::grid_segments(
+        layers.iter().filter_map(|layer| match layer {
+            WorldLayer::Surface(triangle) => Some(triangle),
+            _ => None,
+        }),
+        camera.zoom,
+    )
 }
 
 fn legacy_page<'a>(
