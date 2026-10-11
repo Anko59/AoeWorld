@@ -38,6 +38,17 @@ at 512 chunks and 128 MiB, with at most 64 concurrent requests. Height metadata
 and candidate coordinates each have a separate 65,536-entry ceiling; very large
 views remain bounded rather than allocating in proportion to map area.
 
+The minimap and whole-map overview draw one strategic raster per package from
+`GET /maps/{hash}/minimap`. The server samples the composed landscape query
+that also produces chunks, at one sample per tile up to 512 per axis, so the
+raster cannot disagree with the world. The body is `AWMM`, a little-endian
+axis, two zero bytes and one byte per sample: terrain class (grass, dry grass,
+forest, soil, sand, rock, snow, ice, shore, river, lake, ocean) in the low
+nibble and north-west relief shade in the high nibble, at most 262,152 bytes.
+One raster is generated at a time off the async runtime within 30 seconds,
+never partially, and the four most recent are cached. The client rejects any
+other shape and keeps its schematic map; it requests no chunks for the map.
+
 `aoe-map` is the environment-independent boundary for frozen geographic map
 identity. It validates the 600 CE request, physical compression and bounded
 virtual dimensions, canonicalizes equivalent ratios and longitudes, and
