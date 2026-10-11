@@ -182,7 +182,7 @@ pub(crate) fn surface_instance(
         depths[index] = (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt)
             - depth_origin) as f32;
     }
-    let landscape = matches!(triangle.material, 0 | 1 | 2 | 6)
+    let landscape = triangle.vegetated()
         && triangle.tint <= 3
         && !triangle.skirt
         && triangle.appearance & 1 != 0;
@@ -198,17 +198,50 @@ pub(crate) fn surface_instance(
     // origin tile and its layer materials; the fragment resolves each frame.
     let tiled = (triangle.texture_mode == crate::surface_mesh::directory::TILED).then(|| {
         let local = crate::surface_mesh::directory::locals(triangle).map(|l| l.map(|v| v as f32));
+        let mix = triangle.mix;
+        let share =
+            |corner: usize| f32::from(u16::from(mix[corner]) | u16::from(mix[3 + corner]) << 8);
+        let full = crate::surface_mesh::mix::support::packed(triangle);
+        let sheets = full.map(crate::surface_mesh::mix::support::palette);
+        let palette = sheets.map(crate::surface_mesh::mix::support::palette_words);
+        let mode = if full.is_some() {
+            3.0
+        } else {
+            match mix {
+                [0, 0, 0, 0, 0, 0] => 0.0,
+                [_, _, _, 0, 0, 0] => 1.0,
+                _ => 2.0,
+            }
+        };
         let layers = triangle
             .texture_materials
             .unwrap_or([triangle.material; 3])
             .map(u32::from);
+        let third = sheets.map_or(layers[2], |p| {
+            p.into_iter().filter(|material| *material != 15).count() as u32
+        });
         (
             [local[0][0], local[0][1], local[1][0], local[1][1]],
-            [[local[2][0], local[2][1], 0.0, 0.0], [0.0; 4]],
+            // Modes 1/2 carry overlay and middle shares. Mode 3 carries four
+            // observations per corner and the palette in the two spare words.
+            [
+                [
+                    local[2][0],
+                    local[2][1],
+                    mode,
+                    palette.map_or(0.0, |p| p[0]),
+                ],
+                [
+                    full.map_or(share(0), |p| f32::from(p[0])),
+                    full.map_or(share(1), |p| f32::from(p[1])),
+                    full.map_or(share(2), |p| f32::from(p[2])),
+                    palette.map_or(0.0, |p| p[1]),
+                ],
+            ],
             [
                 triangle.texture_tile[0] as u32,
                 triangle.texture_tile[1] as u32,
-                layers[0] | layers[1] << 8 | layers[2] << 16,
+                layers[0] | layers[1] << 8 | third << 16,
             ],
         )
     });
@@ -239,10 +272,7 @@ pub(crate) fn surface_instance(
                 tiled.map_or(uv.page, |packet| packet.2[0]),
                 tiled.map_or(blend.map_or(0, |a| a[0].page), |packet| packet.2[1]),
                 tiled.map_or(blend.map_or(0, |a| a[1].page), |packet| packet.2[2]),
-                if matches!(triangle.material, 0 | 1 | 2 | 6)
-                    && triangle.tint <= 3
-                    && !triangle.skirt
-                {
+                if triangle.vegetated() && triangle.tint <= 3 && !triangle.skirt {
                     (triangle.appearance & !crate::surface_mesh::landscape::INTERPOLATED_FLOOR)
                         | if floors.is_some() {
                             crate::surface_mesh::landscape::INTERPOLATED_FLOOR

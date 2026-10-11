@@ -16,7 +16,7 @@ extern "C" {
     #[wasm_bindgen(js_name = AoeWebGl)]
     type GlBridge;
     #[wasm_bindgen(constructor, catch, js_class = AoeWebGl)]
-    fn create(canvas: &HtmlCanvasElement) -> Result<GlBridge, JsValue>;
+    fn create(canvas: &HtmlCanvasElement, sources: &JsValue) -> Result<GlBridge, JsValue>;
     #[wasm_bindgen(method, catch)]
     fn upload(this: &GlBridge, pixels: &Uint8Array) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch)]
@@ -27,6 +27,12 @@ extern "C" {
     fn dispose(this: &GlBridge);
 }
 
+#[wasm_bindgen(module = "/src/game_renderer/webgl/shaders.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = terrainShaders)]
+    fn terrain_shaders() -> JsValue;
+}
+
 pub struct WebGlRenderer {
     bridge: GlBridge,
 }
@@ -34,7 +40,7 @@ pub struct WebGlRenderer {
 impl WebGlRenderer {
     pub(super) fn new(canvas: &HtmlCanvasElement) -> Result<Self, String> {
         Ok(Self {
-            bridge: GlBridge::create(canvas).map_err(error)?,
+            bridge: GlBridge::create(canvas, &terrain_shaders()).map_err(error)?,
         })
     }
 

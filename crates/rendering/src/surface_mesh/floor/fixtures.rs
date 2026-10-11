@@ -26,6 +26,7 @@ pub(crate) fn faces(interpolated: bool) -> [ProjectedSurfaceTriangle; 2] {
         })),
         floor_strengths: interpolated
             .then(|| indices.map(|i| if i == 1 || i == 2 { 255 } else { 0 })),
+        mix: [0; 6],
         texture_mode: 0,
         tint: 0,
         texture_uv: Some(address(0)),

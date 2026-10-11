@@ -350,6 +350,7 @@ fn triangle(
     ProjectedSurfaceTriangle {
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         points: std::array::from_fn(|index| SurfacePoint {
             world: [0.0, 0.0, elevation[index]],
             screen: ScreenPoint {

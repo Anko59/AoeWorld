@@ -121,6 +121,7 @@ fn terrain_instance_sentinel_cannot_match_atlas_uv_rectangles() {
     let triangle = ProjectedSurfaceTriangle {
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         points: [
             surface_point([0.0, 0.0]),
             surface_point([128.0, 0.0]),
@@ -234,6 +235,7 @@ fn capacity_surface() -> ProjectedSurfaceTriangle {
     ProjectedSurfaceTriangle {
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         points: [
             surface_point([0.0, 0.0]),
             surface_point([64.0, 0.0]),

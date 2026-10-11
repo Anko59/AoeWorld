@@ -50,6 +50,16 @@ pub(crate) fn floor_weights(word: u32) -> [f32; 3] {
 /// Vegetative-only transform. Procedural rock/snow/ice/water keep their exact
 /// existing kernels. Integer packet decoding and one byte rounding match GPUs.
 pub(crate) fn texel(samples: [[u8; 4]; 3], weights: [f32; 3], tint: u8, word: u32) -> [u8; 4] {
+    blend(
+        samples.map(|sample| sample.map(f32::from)),
+        weights,
+        tint,
+        word,
+    )
+}
+
+/// The same kernel over unrounded layer colours (mixed procedural ground).
+pub(crate) fn blend(samples: [[f32; 4]; 3], weights: [f32; 3], tint: u8, word: u32) -> [u8; 4] {
     let palette = ((word >> 1) & 7).min(5) as usize;
     let scales = [
         [990, 1000, 970],
@@ -68,9 +78,8 @@ pub(crate) fn texel(samples: [[u8; 4]; 3], weights: [f32; 3], tint: u8, word: u3
     };
     let mut result = [0; 4];
     for c in 0..4 {
-        let mut value = f32::from(samples[0][c]) * weights[0]
-            + f32::from(samples[1][c]) * weights[1]
-            + f32::from(samples[2][c]) * weights[2];
+        let mut value =
+            samples[0][c] * weights[0] + samples[1][c] * weights[1] + samples[2][c] * weights[2];
         if c < 3 {
             value *= shade * (scales[palette][c] as f32 / 1000.0) * (1.0 - 0.12 * canopy);
         }

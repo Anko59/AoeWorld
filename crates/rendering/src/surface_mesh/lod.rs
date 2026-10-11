@@ -133,6 +133,7 @@ pub fn projected_surface_triangles(
                         color,
                         appearance,
                         floor_strengths: None,
+                        mix: [0; 6],
                         tile,
                         skirt: false,
                         material: if sample.surface.water == 0
@@ -193,6 +194,7 @@ pub fn projected_surface_triangles(
     debug_assert!(result.len() <= MAX_SURFACE_TRIANGLES);
     appearance::assign_materials(&mut result, terrain);
     floor::assign(&mut result, terrain);
+    mix::assign(&mut result, terrain);
     // Painter order is an average-depth approximation. Picking below uses the
     // depth at the hit point, so exact terrain-to-terrain occlusion is still
     // limited until the shared depth-buffer path lands.

@@ -99,6 +99,7 @@ pub(crate) fn faces(left: u8, right: u8) -> [ProjectedSurfaceTriangle; 2] {
         material: left,
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         texture_mode: 0,
         tint: 0,
         texture_uv: None,

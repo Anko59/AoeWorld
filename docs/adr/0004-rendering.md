@@ -223,6 +223,67 @@ retain a distinct scene DTO and visible client collection, but are deliberately
 omitted from drawing while reviewed decoration mappings remain empty. They are
 never proxied into resources, gatherables, blockers or economy objects.
 
+## Ground mixing between every material pair
+
+Only grass against forest soil used to blend: map tiles always carry appearance
+metadata, and that branch of `apply_terrain_textures` chose grass plus the
+forest bed and returned before the per-vertex material splat; rock, snow, ice
+and mud faces dropped their vertex materials because their procedural look was
+one tint per face. `surface_mesh/mix.rs` replaces both gaps for map scenes.
+
+Each displayed vertex takes the share of every ground sheet among its four
+incident land tiles (water, cliffs and metadata-free samples are not
+observations). A quad whose four corner supports see one sheet keeps its
+existing path. A face in a quad that sees several becomes a world-tiled face (mode 6) with
+layers ordered by `mix::rank`, low to high: ice, rock, mud, sand, dirt, dry
+grass, grass, snow. The lowest is the base and the highest the overlay, so both
+sides of a border draw the same pair. The representative palette comes from all
+four quad corners in that fixed priority order, so its two triangles agree. Ordinary borders sample the base,
+a middle material or forest-floor bed, and the overlay. A quad with more than
+three ground sheets, or three sheets plus a bed, retains every vertex observation
+and evaluates every nonzero ground layer before applying the bed.
+
+Ordinary corner shares are u8 (k/4 of the incident tiles) and travel in the tiled
+packet's free words: `terrain_blend[0].z` is the mode (1 bed, 2 middle
+material) and `terrain_blend[1].xyz` one exact integer per corner, overlay
+share plus 256 × middle share. Bed strengths reuse the interpolated floor word.
+The fragment thresholds the interpolated share `s` with world-anchored noise
+`n`: `clamp((s - 0.5) * 4 + 0.5 + (n - 0.5) * 2.6, 0, 1)`. A share of zero or
+one stays exact for any noise, so pure ground is untouched and the band is
+about half a tile soft, meandering up to 0.6 tile around the tile edge. `n` is
+two octaves of value noise on integer lattices (one and four cells per tile)
+hashed from the fragment's world tile, identical in WGSL, GLSL and Canvas and
+at every zoom and mesh LOD. Weights are cumulative thresholds (`1 - m`,
+`m - o`, `o`) for three materials and `(1-b)(1-o)`, `b`, `(1-b)o` with a bed,
+so a face with two materials meets a face with three without a seam.
+
+Junction mode 3 stores four material nibbles per vertex (15 means absent) in
+`terrain_blend[1].xyz`. Two spare words, `terrain_blend[0].w` and
+`terrain_blend[1].w`, carry up to twelve ordered material nibbles as exact
+24-bit integers. Mode 3 reuses the unused overlay-material byte for the palette
+count; the fragment loop uses that varying bound to avoid twelve-way filtered
+sample unrolling in drivers. The vertex shader passes the observations and order flat in
+the existing rectangle varyings, and barycentric coordinates plus bed strength
+in the existing weights varying. Each fragment reconstructs the same rounded
+corner shares and cumulative thresholds as ordinary borders. Zero-share layers
+have zero weight, so differing off-edge materials cannot change shared-edge
+colours. Canvas uses the same observations and order. The triangle reuses its
+unused third rectangle for these observations and remains 240 bytes.
+
+Procedural rock, snow, ice and mud are evaluated per layer from the layer's
+scene material (the packet's material bytes) before blending; face tints 5–10
+remain only for faces that are entirely one procedural material, and the two
+agree where they meet. Mixed faces keep face shading (tint 0–3), the minification
+kernel on every sampled layer, and the ecological palette only when the face's own
+tile is vegetative. Ordinary mixed faces pay two directory texels and up to
+five taps per layer plus eight lattice hashes. Junctions additionally decode
+three four-nibble observations per layer and resolve each nonzero sheet.
+No Sprite112 field, texture,
+binding or varying is added, and the triangle stays 240 bytes (six spare bytes
+hold the shares). Land against water is unchanged: water sheets and shores
+belong to the water renderer. Borders are still one mesh face wide on coarse
+LODs, and long straight biome edges are a map-generation property.
+
 ## Direct scene emission
 
 The production scene builder now appends the shared sprite emitter directly
