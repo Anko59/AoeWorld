@@ -204,6 +204,7 @@ impl GameWorld {
                 self.units[index].order = Some(order);
                 still_moving.push(id);
             }
+            self.plan_route_ahead(index, &mut planner_allowance);
             changed.push(self.units[index].state);
         }
         still_moving.sort_unstable();
@@ -223,8 +224,8 @@ impl GameWorld {
             return None;
         }
         let budget = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
-        if let Some(outcome) = self.navigation_cache.get(origin, destination, budget) {
-            self.planning_budget -= budget;
+        if let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget) {
+            self.planning_budget -= work;
             return Some(MapRoutePlan::Outcome(outcome));
         }
         if self.active_planner_count >= MAX_ACTIVE_ROUTE_PLANNERS
@@ -239,32 +240,31 @@ impl GameWorld {
         if budget == 0 {
             return Some(MapRoutePlan::Pending(Some(planner)));
         }
-        match self
+        let result = self
             .terrain
-            .poll_route_planner(&mut planner, budget, &|| false)?
-        {
+            .poll_route_planner(&mut planner, budget, &|| false)?;
+        // Orders issued later in this tick plan from what this one left.
+        self.refund_unused_planning(budget, 0, &planner);
+        let work = planner.work();
+        let cached = |world: &mut Self, outcome: MovementOutcome| {
+            world
+                .navigation_cache
+                .insert(origin, destination, work, outcome.clone());
+            Some(MapRoutePlan::Outcome(outcome))
+        };
+        match result {
             RoutePlannerPoll::Pending => Some(MapRoutePlan::Pending(Some(planner))),
             RoutePlannerPoll::Path(path) if planner.is_terminal() => {
-                let outcome = MovementOutcome::Path(path);
-                self.navigation_cache
-                    .insert(origin, destination, budget, outcome.clone());
-                Some(MapRoutePlan::Outcome(outcome))
+                cached(self, MovementOutcome::Path(path))
             }
             RoutePlannerPoll::Path(path) => Some(MapRoutePlan::Segment(path, Some(planner))),
-            RoutePlannerPoll::Complete => Some(MapRoutePlan::SearchLimit),
+            RoutePlannerPoll::Complete | RoutePlannerPoll::SearchLimit => {
+                Some(MapRoutePlan::SearchLimit)
+            }
             RoutePlannerPoll::InvalidDestination => {
-                let outcome = MovementOutcome::InvalidDestination;
-                self.navigation_cache
-                    .insert(origin, destination, budget, outcome.clone());
-                Some(MapRoutePlan::Outcome(outcome))
+                cached(self, MovementOutcome::InvalidDestination)
             }
-            RoutePlannerPoll::Unreachable => {
-                let outcome = MovementOutcome::Unreachable;
-                self.navigation_cache
-                    .insert(origin, destination, budget, outcome.clone());
-                Some(MapRoutePlan::Outcome(outcome))
-            }
-            RoutePlannerPoll::SearchLimit => Some(MapRoutePlan::SearchLimit),
+            RoutePlannerPoll::Unreachable => cached(self, MovementOutcome::Unreachable),
             RoutePlannerPoll::Environment(error) => Some(MapRoutePlan::Environment(error)),
         }
     }
@@ -280,10 +280,11 @@ impl GameWorld {
                 .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
                 .map_or(SegmentAdvance::Stopped(None), SegmentAdvance::Next);
         }
+        // A planner with planned segments left emits one without searching.
         let needs_search = self.units[index]
             .planner
             .as_ref()
-            .is_none_or(RoutePlanner::requires_search_slot);
+            .is_none_or(|planner| !planner.has_route_continuation());
         if needs_search && (*allowance == 0 || self.planner_capacity_exhausted(index)) {
             return SegmentAdvance::Planning;
         }
@@ -299,9 +300,11 @@ impl GameWorld {
                 MAX_ROUTE_WORK_PER_ORDER,
             )
         });
+        let work_before = planner.work();
         let result = self
             .terrain
             .poll_route_planner(&mut planner, budget, &|| false);
+        self.refund_unused_planning(budget, work_before, &planner);
         match result {
             Some(RoutePlannerPoll::Path(path)) => {
                 let mut route = VecDeque::from(path.tiles);
@@ -312,7 +315,7 @@ impl GameWorld {
                     .pop_front()
                     .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
                 self.units[index].route = route;
-                if planner.has_route_continuation() {
+                if !planner.is_terminal() || planner.has_route_continuation() {
                     self.store_planner(index, Some(planner));
                 }
                 next.map_or(
@@ -341,6 +344,42 @@ impl GameWorld {
             }
             None => SegmentAdvance::Stopped(Some(GameWorldError::InvalidTerrain)),
         }
+    }
+
+    /// Plans the leg after the one a moving unit is walking, from this
+    /// mover's share of the tick budget, so the unit does not pause between
+    /// legs. A search that fails here is reported when the unit has used the
+    /// segments already planned.
+    fn plan_route_ahead(&mut self, index: usize, allowance: &mut u32) {
+        if self.units[index].order.is_none()
+            || *allowance == 0
+            || !self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(RoutePlanner::wants_lookahead)
+            || self.planner_capacity_exhausted(index)
+        {
+            return;
+        }
+        let budget = self.take_planning_budget_share(allowance);
+        let Some(mut planner) = self.take_planner(index) else {
+            return;
+        };
+        let work_before = planner.work();
+        self.terrain
+            .plan_route_ahead(&mut planner, budget, &|| false);
+        self.refund_unused_planning(budget, work_before, &planner);
+        self.store_planner(index, Some(planner));
+    }
+
+    /// A planner rarely needs its whole share for one leg; what it did not
+    /// spend returns to the tick budget for the movers after it.
+    fn refund_unused_planning(&mut self, budget: u32, work_before: u32, planner: &RoutePlanner) {
+        let spent = planner.work().saturating_sub(work_before);
+        self.planning_budget = self
+            .planning_budget
+            .saturating_add(budget.saturating_sub(spent))
+            .min(MAX_ROUTE_WORK_PER_TICK);
     }
 
     fn planner_capacity_exhausted(&self, index: usize) -> bool {

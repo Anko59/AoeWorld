@@ -197,3 +197,6 @@ fn fixed_wall_without_a_gateway_is_proven_disconnected() {
     assert!(planner.work() < 100_000);
     assert!(planner.peak_retained_entries() <= MAX_ROUTE_PLANNER_NODES);
 }
+
+#[path = "far_orders.rs"]
+mod far_orders_tests;

@@ -28,6 +28,7 @@ fn bounded_start_outcomes_remain_distinct_and_unqualified() {
         local_component: None,
         native_local_orders: Vec::new(),
         routes: Vec::new(),
+        far_routes: Vec::new(),
         live_activation: false,
         hardware_qualified: false,
     };
@@ -238,7 +239,9 @@ fn synthetic_rejected_local_order_does_not_become_an_arrival() {
 fn native_order_case_labels_and_original_endpoints_are_fixed_not_adaptive() {
     let origin = TileCoord::new(9999, 9999);
     let cases = movement::ORDER_CASES;
-    assert_eq!(cases.len(), 2);
+    assert_eq!(cases.len(), 3);
+    assert_eq!(cases[2].distance_tiles(), 1024);
+    assert_eq!(cases[2].maximum_ticks(), 20_480);
     assert_eq!(cases[0].distance_tiles(), 32);
     assert_eq!(cases[0].maximum_ticks(), 2048);
     assert_eq!(cases[1].distance_tiles(), LOCAL_DISTANCE);

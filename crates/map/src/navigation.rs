@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod planner;
 pub use planner::{
-    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, RoutePlanner,
-    RoutePlannerPoll,
+    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
+    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
@@ -298,7 +298,7 @@ fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
     let dx = u64::from((from.x - to.x).unsigned_abs());
     let dy = u64::from((from.y - to.y).unsigned_abs());
     let diagonal = dx.min(dy);
-    diagonal * u64::from(DIAGONAL_COST) + (dx - diagonal) * u64::from(ORTHOGONAL_COST)
+    diagonal * u64::from(DIAGONAL_COST) + (dx.max(dy) - diagonal) * u64::from(ORTHOGONAL_COST)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

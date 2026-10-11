@@ -105,3 +105,35 @@ start/forest captures are observed above. Longer/global traversal, army movement
 broader water/coast/relief visuals, the canonical 512-chunk eviction/memory gate
 and dedicated hardware remain unqualified. Candidate activation occurred only in
 the disposable qualification server; default France activation remains unchanged.
+
+## Far orders and the planner the game uses (#258)
+
+`make map-country-probe` now also orders the unit 1,024 tiles east, south, west
+and north (20,480-tick cap), and reports for every native order the tick the
+unit first left its origin, the ticks it stood waiting for its planner, and a
+bounded flood fill from the destination. The `routes` and `far_routes` entries
+are planned by the leg-wise planner native movement uses, at 16,384 work units
+per poll, with the work before the first segment, total work and peak retained
+entries; the separate 4,096-expansion direct search is no longer reported, so a
+route result cannot disagree with what a native order achieves.
+
+On `cbea757ced9b9bbf15cf64980b97c96bfc35b31a0b6ca38005146d53c2b90632` (start
+`(9999,9999)`) before the change: the 32-tile order east never moved and failed
+after 291 ticks, the 128-tile orders south and north waited six ticks, and the
+direct routes south and north exceeded their budget. After it, every accepted
+order moves on its first tick: 32 tiles S/W/N arrive in 427 ticks; 128 tiles
+E/S/W/N in 1,829/1,707/1,804/1,751; 1,024 tiles E/S/N in 14,629/15,315/14,275
+with no planner wait (west is rejected: its fixed endpoint is not passable).
+The four 128-tile routes are paths of 129 or 130 tiles from 1,413 to 7,550 work
+units; the three 1,024-tile routes are 1,028 to 1,072 tiles from 31,191 to
+63,911 work units, at most 6,723 before the first segment and 3,982 retained
+entries.
+
+The 32-tile order east still fails, and is explained: its destination
+`(10031,9999)` is passable but its flood fill completes at one tile, an
+enclosed pocket no outside unit can enter. The unit now starts on tick 5, walks
+to the nearest tile it can reach, six tiles away, and stops with
+`PathBudgetExceeded` at tick 464, because an unbounded surrounding component
+cannot be proven disconnected within one capped search. These are simulation
+ticks of one unit on one candidate, not measured 20 Hz time or hardware
+qualification.
