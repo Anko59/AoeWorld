@@ -133,7 +133,9 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             if sprite.color.w == -3.0 {
                 if tiled {
                     out.rect2 = sheet((sprite.pages.z >> 8u) & 255u);
-                    out.rect3 = sheet((sprite.pages.z >> 16u) & 255u);
+                    if u32(sprite.terrain_blend[0].z) != 3u {
+                        out.rect3 = sheet((sprite.pages.z >> 16u) & 255u);
+                    }
                 } else {
                     out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
                     out.uv3 = terrain_atlas_uv(sprite.terrain_blend[1], atlas_uv);
@@ -153,6 +155,10 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                     if tiled && mode != 0u {
                         let share = u32(sprite.terrain_blend[1][corner]);
                         out.weights = vec3<f32>(f32(share & 255u) / 255.0, f32(share >> 8u) / 255.0, floor_strength);
+                        if mode == 3u {
+                            out.rect = vec4<f32>(sprite.terrain_blend[0].w, sprite.terrain_blend[1].w, f32((sprite.pages.z >> 16u) & 255u), 0.0);
+                            out.weights = vec3<f32>(weights[corner].xy, floor_strength);
+                        }
                         out.solid |= 8u * mode;
                     }
                 }
@@ -273,6 +279,18 @@ fn edge(share: f32, noise: f32) -> f32 {
     return clamp((share - 0.5) * 4.0 + 0.5 + (noise - 0.5) * 2.6, 0.0, 1.0);
 }
 
+// One vertex's canonical rounded share from four material observations.
+fn junction_share(word: u32, material: u32) -> f32 {
+    var present = 0u;
+    var matching = 0u;
+    for (var slot = 0u; slot < 4u; slot++) {
+        let cell = (word >> (slot * 4u)) & 15u;
+        present += select(0u, 1u, cell != 15u);
+        matching += select(0u, 1u, cell == material);
+    }
+    return f32((matching * 255u + present / 2u) / max(present, 1u)) / 255.0;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Derivatives are uniform and evaluated before any branch/discard.
@@ -285,10 +303,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let blend = (in.solid & 3u) == 3u;
     let landscape = (in.pages.w & 1u) != 0u;
     let mixing = in.solid >= 8u;
+    let junction = in.solid >= 24u;
     let cell = floor(in.uv);
     let inside = in.uv - cell;
     let tile = vec2<i32>(bitcast<i32>(in.pages.x), bitcast<i32>(in.pages.y)) + vec2<i32>(cell);
-    if (in.solid & 4u) != 0u {
+    if (in.solid & 4u) != 0u && !junction {
         if in.rect.y < 1.0 {
             discard;
         }
@@ -304,12 +323,41 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
     var texel: vec4<f32>;
-    if in.solid == 0u || !landscape {
+    if junction {
+        texel = vec4<f32>(0.0);
+    } else if in.solid == 0u || !landscape {
         texel = textureSampleLevel(sprite_atlas, sprite_sampler, first.uv, i32(first.page), 0.0);
     } else {
         texel = terrain_sample(first.uv, first.page, first.rect, first.dx, first.dy);
     }
-    if mixing {
+    if junction {
+        let noise = 0.6 * value(tile, inside, 1) + 0.4 * value(tile, inside, 4);
+        let bary = vec3<f32>(in.weights.xy, 1.0 - in.weights.x - in.weights.y);
+        let local = vec2<f32>(0.5 + 0.5 * (inside.x - inside.y), 0.5 * (inside.x + inside.y));
+        let gx = vec2<f32>(0.5 * (first.dx.x - first.dx.y), 0.5 * (first.dx.x + first.dx.y));
+        let gy = vec2<f32>(0.5 * (first.dy.x - first.dy.y), 0.5 * (first.dy.x + first.dy.y));
+        var cumulative = 0.0;
+        var previous = 0.0;
+        // A varying bound keeps drivers from unrolling twelve filtered samples.
+        for (var index = min(u32(in.rect.z), 12u); index > 0u; index--) {
+            let slot = index - 1u;
+            let word = u32(in.rect[slot / 6u]);
+            let material = (word >> ((slot % 6u) * 4u)) & 15u;
+            if material == 15u { continue; }
+            let shares = vec3<f32>(junction_share(u32(in.rect3.x), material), junction_share(u32(in.rect3.y), material), junction_share(u32(in.rect3.z), material));
+            cumulative += dot(shares, bary);
+            let threshold = edge(cumulative, noise);
+            let weight = (threshold - previous) * (1.0 - in.weights.z);
+            previous = threshold;
+            if weight <= 0.0 { continue; }
+            let layer = tiled_layer(sheet(material), tile, local, gx, gy);
+            texel += mixed(terrain_sample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy), material) * weight;
+        }
+        if in.weights.z > 0.0 {
+            let bed = tiled_layer(in.rect2, tile, local, gx, gy);
+            texel += terrain_sample(bed.uv, bed.page, bed.rect, bed.dx, bed.dy) * in.weights.z;
+        }
+    } else if mixing {
         let noise = 0.6 * value(tile, inside, 1) + 0.4 * value(tile, inside, 4);
         let over = edge(in.weights.x, noise);
         var weights = vec3<f32>((1.0 - in.weights.z) * (1.0 - over), in.weights.z, (1.0 - in.weights.z) * over);

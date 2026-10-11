@@ -1,13 +1,16 @@
 //! Soft borders between every pair of ground materials.
 //!
 //! Each displayed vertex takes the share of every ground material among its
-//! four incident source tiles. A face whose vertices see more than one
-//! material draws up to three layers, ordered by `rank`: the base, an optional
+//! four incident source tiles. A quad whose corners see more than one
+//! material draws layers ordered by `rank`: the base, an optional
 //! middle material or the forest-floor bed, and the overlay. Shares pass
 //! through a world-anchored noisy threshold, so a border is a soft irregular
 //! band centred on the tile edge, identical from both sides and at every zoom.
+//! Junctions retain every observation and evaluate cumulative weights in that
+//! same order, so omitted zero-share layers cannot change an edge colour.
 //! Displayed vertices only: no resident-world material map is built.
 use super::*;
+pub(crate) mod support;
 
 #[cfg(test)]
 pub(crate) mod fixture;
@@ -42,7 +45,7 @@ pub(crate) fn vegetative(material: u8) -> bool {
 impl ProjectedSurfaceTriangle {
     /// Faces drawn through the appearance word: palette, bed and filtered sheets.
     pub(crate) fn vegetated(&self) -> bool {
-        vegetative(self.material) || self.mix != [0; 6]
+        vegetative(self.material) || self.mix != [0; 6] || self.appearance & support::FULL != 0
     }
 }
 
@@ -115,9 +118,21 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         let cells = triangle
             .points
             .map(|point| support[keys.get(vertex(point)).expect("displayed mix vertex")]);
+        // Both triangles span the same axis-aligned patch bounds. Inspect all
+        // four quad corners, never frequency counts from a triangle's third vertex.
+        let points = triangle.points.map(vertex);
+        let bounds = [0, 1].map(|axis| {
+            points.iter().fold([i32::MAX, i32::MIN], |bounds, point| {
+                [bounds[0].min(point[axis]), bounds[1].max(point[axis])]
+            })
+        });
+        let quad = [[0, 0], [1, 0], [1, 1], [0, 1]].map(|corner| {
+            support[keys
+                .get([bounds[0][corner[0]], bounds[1][corner[1]]])
+                .expect("displayed quad corner")]
+        });
         let seen = || {
-            cells
-                .iter()
+            quad.iter()
                 .flatten()
                 .map(|cell| cell.0)
                 .filter(|material| *material != MISSING)
@@ -131,11 +146,13 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         if base == over {
             continue;
         }
-        let count = |material: u8| seen().filter(|seen| *seen == material).count();
         let middle = seen()
             .filter(|material| *material != base && *material != over)
-            .max_by_key(|material| (count(*material), rank(*material)))
+            .max_by_key(|material| rank(*material))
             .unwrap_or(base);
+        let full = seen()
+            .any(|material| material != base && material != middle && material != over)
+            || (middle != base && quad.iter().flatten().any(|cell| cell.1 != 0));
         let mut floors = [0; 3];
         for (corner, cell) in cells.iter().enumerate() {
             let present = cell.iter().filter(|cell| cell.0 != MISSING).count() as u32;
@@ -152,6 +169,9 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 ((floor + present / 2).checked_div(present).unwrap_or(0)) as u16,
             );
         }
+        if full {
+            support::retain(triangle, cells);
+        }
         triangle.texture_materials = Some([base, middle, over]);
         triangle.floor_strengths = Some(floors);
     }
@@ -160,16 +180,18 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
 /// Selects the three sheets of a mixed face. Such a face always samples by
 /// world tile, so its packet has room for the shares and the noise is anchored.
 pub(super) fn texture(triangle: &mut ProjectedSurfaceTriangle, art: &GameArt) -> bool {
-    if triangle.mix == [0; 6] {
+    if triangle.mix == [0; 6] && triangle.appearance & support::FULL == 0 {
         return false;
     }
+    let full = support::packed(triangle).is_some();
+    let observations = triangle.texture_blend;
     let [base, middle, over] = triangle.texture_materials.unwrap_or([triangle.material; 3]);
-    // Three layers: a forest-floor bed takes the middle one whenever it shows,
-    // and a third material then folds into the base under the leaf litter.
+    // Ordinary borders use three samples. Junctions keep the bed here and
+    // retain all ground observations in the otherwise unused third rectangle.
     let bed = triangle
         .floor_strengths
         .is_some_and(|floors| floors != [0; 3]);
-    let second = if bed || triangle.mix[3..] == [0; 3] {
+    let second = if full || bed || triangle.mix[3..] == [0; 3] {
         triangle.mix[3..].fill(0);
         if art.terrain[6].is_empty() { 2 } else { 6 }
     } else {
@@ -180,15 +202,24 @@ pub(super) fn texture(triangle: &mut ProjectedSurfaceTriangle, art: &GameArt) ->
     };
     let (Some(a), Some(b), Some(c)) = (frame(base), frame(second), frame(over)) else {
         triangle.mix = [0; 6];
+        triangle.appearance &= !support::FULL;
+        triangle.texture_blend = None;
         return false;
     };
     triangle.texture_materials = Some([base, second, over]);
     triangle.texture_mode = directory::TILED;
     triangle.texture_uv = Some(a);
-    triangle.texture_blend = Some([b, c]);
+    triangle.texture_blend = Some([
+        b,
+        if full {
+            observations.map_or(c, |addresses| addresses[1])
+        } else {
+            c
+        },
+    ]);
     if !vegetative(triangle.material) {
         // Bare ground keeps face shading but no ecological palette or canopy.
-        triangle.appearance = 1 | 5 << 1;
+        triangle.appearance = (triangle.appearance & support::FULL) | 1 | 5 << 1;
     }
     true
 }

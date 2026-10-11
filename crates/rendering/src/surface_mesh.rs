@@ -48,6 +48,7 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
     pub(crate) texture_uv: Option<AtlasAddress>,
+    /// Junction mode reuses the third rectangle for three packed observations.
     pub(crate) texture_blend: Option<[AtlasAddress; 2]>,
     pub(crate) texture_tile: [i32; 2],
     pub(crate) texture_materials: Option<[u8; 3]>,

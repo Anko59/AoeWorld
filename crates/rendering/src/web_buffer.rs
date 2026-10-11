@@ -201,27 +201,47 @@ pub(crate) fn surface_instance(
         let mix = triangle.mix;
         let share =
             |corner: usize| f32::from(u16::from(mix[corner]) | u16::from(mix[3 + corner]) << 8);
-        let mode = match mix {
-            [0, 0, 0, 0, 0, 0] => 0.0,
-            [_, _, _, 0, 0, 0] => 1.0,
-            _ => 2.0,
+        let full = crate::surface_mesh::mix::support::packed(triangle);
+        let sheets = full.map(crate::surface_mesh::mix::support::palette);
+        let palette = sheets.map(crate::surface_mesh::mix::support::palette_words);
+        let mode = if full.is_some() {
+            3.0
+        } else {
+            match mix {
+                [0, 0, 0, 0, 0, 0] => 0.0,
+                [_, _, _, 0, 0, 0] => 1.0,
+                _ => 2.0,
+            }
         };
         let layers = triangle
             .texture_materials
             .unwrap_or([triangle.material; 3])
             .map(u32::from);
+        let third = sheets.map_or(layers[2], |p| {
+            p.into_iter().filter(|material| *material != 15).count() as u32
+        });
         (
             [local[0][0], local[0][1], local[1][0], local[1][1]],
-            // A mixed face adds its mode (1 bed, 2 middle material) and one
-            // exact integer per corner: overlay share plus 256 × middle share.
+            // Modes 1/2 carry overlay and middle shares. Mode 3 carries four
+            // observations per corner and the palette in the two spare words.
             [
-                [local[2][0], local[2][1], mode, 0.0],
-                [share(0), share(1), share(2), 0.0],
+                [
+                    local[2][0],
+                    local[2][1],
+                    mode,
+                    palette.map_or(0.0, |p| p[0]),
+                ],
+                [
+                    full.map_or(share(0), |p| f32::from(p[0])),
+                    full.map_or(share(1), |p| f32::from(p[1])),
+                    full.map_or(share(2), |p| f32::from(p[2])),
+                    palette.map_or(0.0, |p| p[1]),
+                ],
             ],
             [
                 triangle.texture_tile[0] as u32,
                 triangle.texture_tile[1] as u32,
-                layers[0] | layers[1] << 8 | layers[2] << 16,
+                layers[0] | layers[1] << 8 | third << 16,
             ],
         )
     });

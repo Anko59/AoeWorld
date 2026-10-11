@@ -233,15 +233,17 @@ one tint per face. `surface_mesh/mix.rs` replaces both gaps for map scenes.
 
 Each displayed vertex takes the share of every ground sheet among its four
 incident land tiles (water, cliffs and metadata-free samples are not
-observations). A face whose vertices see one sheet keeps its existing path.
-A face that sees several becomes a world-tiled face (mode 6) with three
+observations). A quad whose four corner supports see one sheet keeps its
+existing path. A face in a quad that sees several becomes a world-tiled face (mode 6) with
 layers ordered by `mix::rank`, low to high: ice, rock, mud, sand, dirt, dry
 grass, grass, snow. The lowest is the base and the highest the overlay, so both
-sides of a border draw the same pair. The middle layer is the forest-floor bed
-whenever its corner strengths are nonzero, otherwise a third material; with a
-bed, a third material folds into the base under the leaf litter.
+sides of a border draw the same pair. The representative palette comes from all
+four quad corners in that fixed priority order, so its two triangles agree. Ordinary borders sample the base,
+a middle material or forest-floor bed, and the overlay. A quad with more than
+three ground sheets, or three sheets plus a bed, retains every vertex observation
+and evaluates every nonzero ground layer before applying the bed.
 
-Corner shares are u8 (k/4 of the incident tiles) and travel in the tiled
+Ordinary corner shares are u8 (k/4 of the incident tiles) and travel in the tiled
 packet's free words: `terrain_blend[0].z` is the mode (1 bed, 2 middle
 material) and `terrain_blend[1].xyz` one exact integer per corner, overlay
 share plus 256 × middle share. Bed strengths reuse the interpolated floor word.
@@ -255,13 +257,28 @@ at every zoom and mesh LOD. Weights are cumulative thresholds (`1 - m`,
 `m - o`, `o`) for three materials and `(1-b)(1-o)`, `b`, `(1-b)o` with a bed,
 so a face with two materials meets a face with three without a seam.
 
+Junction mode 3 stores four material nibbles per vertex (15 means absent) in
+`terrain_blend[1].xyz`. Two spare words, `terrain_blend[0].w` and
+`terrain_blend[1].w`, carry up to twelve ordered material nibbles as exact
+24-bit integers. Mode 3 reuses the unused overlay-material byte for the palette
+count; the fragment loop uses that varying bound to avoid twelve-way filtered
+sample unrolling in drivers. The vertex shader passes the observations and order flat in
+the existing rectangle varyings, and barycentric coordinates plus bed strength
+in the existing weights varying. Each fragment reconstructs the same rounded
+corner shares and cumulative thresholds as ordinary borders. Zero-share layers
+have zero weight, so differing off-edge materials cannot change shared-edge
+colours. Canvas uses the same observations and order. The triangle reuses its
+unused third rectangle for these observations and remains 240 bytes.
+
 Procedural rock, snow, ice and mud are evaluated per layer from the layer's
 scene material (the packet's material bytes) before blending; face tints 5–10
 remain only for faces that are entirely one procedural material, and the two
 agree where they meet. Mixed faces keep face shading (tint 0–3), the minification
-kernel on all three layers, and the ecological palette only when the face's own
-tile is vegetative. Cost: mixed faces alone pay two directory texels and up to
-five taps per layer plus eight lattice hashes; no Sprite112 field, texture,
+kernel on every sampled layer, and the ecological palette only when the face's own
+tile is vegetative. Ordinary mixed faces pay two directory texels and up to
+five taps per layer plus eight lattice hashes. Junctions additionally decode
+three four-nibble observations per layer and resolve each nonzero sheet.
+No Sprite112 field, texture,
 binding or varying is added, and the triangle stays 240 bytes (six spare bytes
 hold the shares). Land against water is unchanged: water sheets and shores
 belong to the water renderer. Borders are still one mesh face wide on coarse

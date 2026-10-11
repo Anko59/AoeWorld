@@ -8,6 +8,8 @@ use crate::{
 const WATER_TINT: [u8; 3] = [38, 113, 190];
 #[path = "canvas_raster/filter.rs"]
 mod filter;
+#[path = "canvas_raster/junction.rs"]
+mod junction;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
@@ -22,6 +24,7 @@ pub(super) fn raster_surface(
         return; // Every sampled alpha would be zero, including water/blend tint.
     }
     let blend = triangle.texture_blend;
+    let full = mix::support::packed(triangle).map(|packed| (packed, mix::support::palette(packed)));
     let appearance = triangle.appearance;
     let landscape =
         appearance != 0 && triangle.tint <= 3 && triangle.vegetated() && !triangle.skirt;
@@ -91,7 +94,17 @@ pub(super) fn raster_surface(
                 second += plane.x[1];
                 continue;
             }
-            let source = if let Some(sampler) = texture {
+            let source = if let (Some(_), Some((packed, palette))) = (texture, full) {
+                junction::sample(
+                    triangle,
+                    atlas,
+                    packed,
+                    palette,
+                    weights,
+                    gradient,
+                    floor_endpoints,
+                )
+            } else if let Some(sampler) = texture {
                 let interpolate = |corners: [[f64; 2]; 3]| {
                     [0, 1].map(|axis| {
                         corners[0][axis] * weights[0]
