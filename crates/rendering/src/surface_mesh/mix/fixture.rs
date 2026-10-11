@@ -69,6 +69,7 @@ pub(crate) fn art() -> GameArt {
         grass: terrain[0].clone(),
         terrain,
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

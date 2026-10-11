@@ -32,6 +32,63 @@ fn mesh(terrain: &[SceneTerrain], zoom: f64) -> Vec<ProjectedSurfaceTriangle> {
     projected_surface_triangles(terrain, camera)
 }
 
+fn assert_water_side_layers_unchanged(material: u8, kind: u8) {
+    // The wet tile touches both grass and sand, so ground support contains
+    // multiple materials even though the water face must retain its own path.
+    let mut terrain = vec![sample(0, 0, material), sample(1, 0, 0), sample(0, 1, 3)];
+    terrain[0].surface.water = kind;
+    let art = crate::surface_mesh::water_fixture::art(true);
+    let mut faces = mesh(&terrain, 1.0);
+    // Metadata-free water takes the existing water-only vertex/layer path.
+    terrain[0].appearance = None;
+    let mut reference = mesh(&terrain, 1.0);
+    apply_terrain_textures(&mut faces, &art);
+    apply_terrain_textures(&mut reference, &art);
+    let wet = |face: &&ProjectedSurfaceTriangle| !face.skirt && face.tile == [0, 0];
+    let water_faces = faces.iter().filter(wet).collect::<Vec<_>>();
+    let reference_faces = reference.iter().filter(wet).collect::<Vec<_>>();
+    assert_eq!(water_faces.len(), 2);
+    for (face, expected) in water_faces.iter().zip(reference_faces) {
+        assert_eq!(face.mix, [0; 6], "material {material}, kind {kind}");
+        assert_eq!(face.texture_materials, expected.texture_materials);
+        assert_eq!(face.texture_uv, expected.texture_uv);
+        assert_eq!(face.texture_blend, expected.texture_blend);
+        assert_eq!(face.texture_mode, expected.texture_mode);
+        assert_eq!(face.tint, expected.tint);
+        assert!(face.texture_uv.is_some());
+        assert_eq!(face.texture_materials, Some([material; 3]));
+    }
+    let land = faces
+        .iter()
+        .filter(|face| !face.skirt && face.tile != [0, 0]);
+    let mut land_count = 0;
+    for face in land {
+        land_count += 1;
+        assert!(
+            face.texture_materials
+                .unwrap()
+                .into_iter()
+                .all(|layer| { !crate::surface_mesh::appearance::water_material(layer) }),
+            "water/Ford layer on land beside material {material}, kind {kind}"
+        );
+    }
+    assert_eq!(land_count, 4);
+}
+
+#[wasm_bindgen_test]
+fn lake_ocean_and_river_depth_faces_keep_water_layers_beside_mixed_land() {
+    for kind in 1..=3 {
+        for material in [5, 10, 11] {
+            assert_water_side_layers_unchanged(material, kind);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn ford_faces_keep_water_layers_and_never_supply_ground_layers() {
+    assert_water_side_layers_unchanged(12, 0);
+}
+
 /// Overlay share by displayed vertex; a vertex must agree on every face.
 fn shares(faces: &[ProjectedSurfaceTriangle]) -> BTreeMap<[i32; 2], u8> {
     let mut shares = BTreeMap::new();
