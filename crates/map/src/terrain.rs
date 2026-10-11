@@ -29,6 +29,7 @@ pub use landscape_data::{
 mod provider;
 mod resources;
 mod surface;
+mod vegetation;
 use elevation::PreparedElevation;
 pub use surface::{EdgePassability, SurfaceDiagonal, SurfaceKind, TileSurface};
 

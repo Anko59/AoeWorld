@@ -10,89 +10,56 @@ fn generator() -> MapChunkGenerator {
 }
 
 #[test]
-fn openings_are_seeded_irregular_variable_and_confined_to_their_cells() {
+fn trail_nodes_are_seeded_jittered_and_confined_to_their_cells() {
     let terrain = generator();
-    let mut active = 0;
-    let mut widths = BTreeSet::new();
-    let mut heights = BTreeSet::new();
-    let mut jittered = false;
-    for cell_y in 0..12 {
-        for cell_x in 0..12 {
-            let cell = (cell_x, cell_y);
-            let shape = opening_geometry_for_cell(&terrain, cell);
-            active += 1;
-            let bounds = shape.vertices.iter().fold(
-                (i32::MAX, i32::MAX, i32::MIN, i32::MIN),
-                |bounds, vertex| {
-                    (
-                        bounds.0.min(vertex.x),
-                        bounds.1.min(vertex.y),
-                        bounds.2.max(vertex.x),
-                        bounds.3.max(vertex.y),
-                    )
-                },
-            );
-            assert!(bounds.0 >= cell_x * OPENING_GRID_TILES);
-            assert!(bounds.1 >= cell_y * OPENING_GRID_TILES);
-            assert!(bounds.2 < (cell_x + 1) * OPENING_GRID_TILES);
-            assert!(bounds.3 < (cell_y + 1) * OPENING_GRID_TILES);
-            widths.insert(bounds.2 - bounds.0);
-            heights.insert(bounds.3 - bounds.1);
-            let regular_center = TileCoord::new(
+    let mut offsets = BTreeSet::new();
+    for cell_y in -2..12 {
+        for cell_x in -2..12 {
+            let center = node_center(&terrain, (cell_x, cell_y));
+            let regular = TileCoord::new(
                 cell_x * OPENING_GRID_TILES + OPENING_GRID_TILES / 2,
                 cell_y * OPENING_GRID_TILES + OPENING_GRID_TILES / 2,
             );
-            let center = shape_center(&terrain, cell);
-            jittered |= center != regular_center;
-            assert!(opening_contains(&terrain, center));
+            assert!(center.x.abs_diff(regular.x) <= 40 && center.y.abs_diff(regular.y) <= 40);
+            let tile = terrain
+                .forest_opening_center_at(regular)
+                .expect("node tile");
+            assert!(tile.x.abs_diff(center.x) <= 16 && tile.y.abs_diff(center.y) <= 16);
+            offsets.insert((center.x - regular.x, center.y - regular.y));
         }
     }
-    assert_eq!(active, 144, "every lattice cell has an opening node");
-    assert!(widths.len() >= 12, "opening widths: {widths:?}");
-    assert!(heights.len() >= 12, "opening heights: {heights:?}");
-    assert!(jittered);
-    assert!(!opening_contains(&terrain, TileCoord::new(-1, -1)));
-}
-
-fn shape_center(generator: &MapChunkGenerator, cell: (i32, i32)) -> TileCoord {
-    opening_center(cell_layout(generator, cell), cell)
+    assert!(
+        offsets.len() > 150,
+        "nodes must not sit on a regular lattice"
+    );
+    assert_ne!(
+        node_center(&terrain, (3, 3)),
+        node_center(&MapChunkGenerator::new([18; 32], 5, 1_024), (3, 3))
+    );
 }
 
 #[test]
-fn procedural_paths_bend_between_openings_and_reserve_routes() {
+fn only_the_starting_glade_and_its_connector_are_reserved() {
     let terrain = generator();
-    let mut links = 0;
-    for cell_y in -2..12 {
-        for cell_x in -2..12 {
-            for axis in 0..=1 {
-                let Some(segment) = trail_segment(&terrain, (cell_x, cell_y), axis) else {
-                    continue;
-                };
-                links += 1;
-                assert!(opening_contains(&terrain, segment.start));
-                assert!(opening_contains(&terrain, segment.end));
-                for point in [segment.start, segment.bend, segment.end] {
-                    assert!(procedural_trail_contains(&terrain, point));
-                    assert!(terrain.landscape_reservations_at(point).route);
-                }
-                assert!(near_segment(
-                    segment.start,
-                    segment.bend,
-                    segment.start,
-                    segment.half_width
-                ));
-                assert!(near_segment(
-                    segment.bend,
-                    segment.end,
-                    segment.end,
-                    segment.half_width
-                ));
-            }
+    let center = TileCoord::new(511, 511);
+    let reservations = terrain.landscape_reservations_at(center);
+    assert!(reservations.start && reservations.route);
+    assert!(!starting_glade(&terrain, TileCoord::new(511 + 28, 511)));
+    let (mut glade, mut routes) = (0, 0);
+    for y in 0..1_024 {
+        for x in 0..1_024 {
+            let reservations = terrain.landscape_reservations_at(TileCoord::new(x, y));
+            glade += usize::from(reservations.start);
+            routes += usize::from(reservations.route);
+            assert!(!reservations.resource_approach);
         }
     }
-    assert_eq!(links, 2 * 14 * 14, "every lattice edge is a trail");
-    let reservations = terrain.landscape_reservations_at(TileCoord::new(-500, -500));
-    assert!(!reservations.route && !reservations.start);
+    // One glade of radius 18..=26 and one connector about five tiles wide:
+    // no opening lattice and no trail network is reserved.
+    assert!((900..2_300).contains(&glade), "glade={glade}");
+    assert!((5..1_400).contains(&routes), "routes={routes}");
+    let far = terrain.landscape_reservations_at(TileCoord::new(-500, -500));
+    assert!(!far.route && !far.start);
 }
 
 #[test]

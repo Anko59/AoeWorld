@@ -3,42 +3,74 @@ use std::collections::VecDeque;
 // Only fixtures allocate arrays. The production module has no arrays/storage
 // proportional to the world. Singletons use real neighboring world queries,
 // not clipped grid neighbors that would invent isolated trees on fixture edges.
-pub(super) fn fixture(p: Patches, size: usize, mask: impl Fn(i32, i32) -> Input) -> Metrics {
+pub(super) struct Fixture {
+    pub size: usize,
+    pub samples: Vec<DensitySample>,
+    pub metrics: Metrics,
+}
+pub(super) fn fixture(
+    p: Patches,
+    size: usize,
+    mask: impl Fn(i32, i32) -> Input,
+    wildness: impl Fn(i64, i64) -> u16,
+) -> Fixture {
     let mut m = Metrics::default();
-    let mut trees = vec![false; size * size];
+    let mut samples = Vec::with_capacity(size * size);
     for y in 0..size {
         for x in 0..size {
             let (wx, wy) = (x as i32 - 128, y as i32 - 128);
-            let s = p.sample(wx, wy, &mask);
-            trees[y * size + x] = s.tree;
+            let s = p.sample(wx, wy, &mask, &wildness);
             m.area += usize::from(s.zone != Zone::Exterior);
             m.core += usize::from(s.zone == Zone::Core);
             m.core_trees += usize::from(s.zone == Zone::Core && s.tree);
-            m.exterior += usize::from(s.zone == Zone::Exterior);
             m.exterior_trees += usize::from(s.zone == Zone::Exterior && s.tree);
             m.trees += usize::from(s.tree);
+            m.glades += usize::from(s.opening == Opening::Glade);
+            m.trails += usize::from(s.opening == Opening::Trail);
             if s.tree {
                 let connected = (-1..=1).any(|dy| {
-                    (-1..=1)
-                        .any(|dx| (dx != 0 || dy != 0) && p.sample(wx + dx, wy + dy, &mask).tree)
+                    (-1..=1).any(|dx| {
+                        (dx != 0 || dy != 0) && p.sample(wx + dx, wy + dy, &mask, &wildness).tree
+                    })
                 });
                 m.singletons += usize::from(!connected);
             }
+            samples.push(s);
         }
     }
-    m.largest_tree = component(&trees, size, true, true);
-    m.largest_open = component(&trees, size, false, false);
-    m
+    let canopy: Vec<bool> = samples.iter().map(|s| s.zone != Zone::Exterior).collect();
+    let (stands, _) = components(&canopy, size, true, true);
+    m.largest_stand = stands.iter().copied().max().unwrap_or(0);
+    let forest: Vec<bool> = samples
+        .iter()
+        .map(|s| s.zone != Zone::Exterior || s.opening != Opening::None)
+        .collect();
+    let (forests, _) = components(&forest, size, true, true);
+    m.largest_forest = forests.iter().copied().max().unwrap_or(0);
+    let (open, _) = components(&canopy, size, false, false);
+    m.open = size * size - m.area;
+    m.largest_open = open.iter().copied().max().unwrap_or(0);
+    Fixture {
+        size,
+        samples,
+        metrics: m,
+    }
 }
-fn component(trees: &[bool], size: usize, target: bool, diagonal: bool) -> usize {
-    let mut seen = vec![false; trees.len()];
+/// Component sizes and each cell's component index (`usize::MAX` elsewhere).
+pub(super) fn components(
+    cells: &[bool],
+    size: usize,
+    target: bool,
+    diagonal: bool,
+) -> (Vec<usize>, Vec<usize>) {
+    let mut label = vec![usize::MAX; cells.len()];
+    let mut sizes = Vec::new();
     let mut queue = VecDeque::new();
-    let mut largest = 0;
-    for root in 0..trees.len() {
-        if seen[root] || trees[root] != target {
+    for root in 0..cells.len() {
+        if label[root] != usize::MAX || cells[root] != target {
             continue;
         }
-        seen[root] = true;
+        label[root] = sizes.len();
         queue.push_back(root);
         let mut count = 0;
         while let Some(i) = queue.pop_front() {
@@ -53,14 +85,14 @@ fn component(trees: &[bool], size: usize, target: bool, diagonal: bool) -> usize
                         continue;
                     }
                     let n = y as usize * size + x as usize;
-                    if !seen[n] && trees[n] == target {
-                        seen[n] = true;
+                    if label[n] == usize::MAX && cells[n] == target {
+                        label[n] = sizes.len();
                         queue.push_back(n);
                     }
                 }
             }
         }
-        largest = largest.max(count);
+        sizes.push(count);
     }
-    largest
+    (sizes, label)
 }

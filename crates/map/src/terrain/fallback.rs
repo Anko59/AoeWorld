@@ -5,20 +5,14 @@ use super::{
     Biome, GroundMaterial, MapChunkGenerator, Provenance, Tile, WaterKind, compression_fallback,
     quantize_game_height, signed_noise, surface, unsigned_noise,
 };
-use crate::biome_rules::{biome_from_potential_class, material_for};
+use crate::biome_rules::material_for;
 use aoe_core::TileCoord;
 
 impl MapChunkGenerator {
     /// Undecorated terrain for neighbor queries; never samples landscape or
     /// objects. Fallback noise is evaluated only for fields without a source.
     pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
-        let (biome, vegetation_provenance) = self
-            .biome
-            .as_ref()
-            .and_then(|biome| biome.class_at(tile, self.width_tiles))
-            .and_then(biome_from_potential_class)
-            .map(|biome| (biome, Provenance::SourceDerived))
-            .unwrap_or_else(|| (fallback_biome(self, tile), Provenance::Fallback));
+        let (biome, vegetation_provenance) = self.sample_biome_with_provenance(tile);
         let elevation = self.elevation.as_ref().and_then(|elevation| {
             let height = elevation.height_at(tile, self.width_tiles)?;
             let corner_heights = elevation
@@ -73,6 +67,26 @@ impl MapChunkGenerator {
                 && material != GroundMaterial::Ice
                 && surface.walkable(),
         }
+    }
+}
+
+impl MapChunkGenerator {
+    /// Dense base biome with nodata samples filled from the nearest usable class.
+    fn sample_biome_with_provenance(&self, tile: TileCoord) -> (Biome, Provenance) {
+        let Some(biome) = self.biome.as_ref() else {
+            return (fallback_biome(self, tile), Provenance::Fallback);
+        };
+        let filled = super::vegetation::filled_biome(self, tile, biome.samples_per_axis(), |at| {
+            Ok::<_, std::convert::Infallible>(biome.class_at(at, self.width_tiles))
+        });
+        match filled {
+            Ok(biome) => biome,
+            Err(never) => match never {},
+        }
+    }
+
+    pub(super) fn sample_biome(&self, tile: TileCoord) -> Biome {
+        self.sample_biome_with_provenance(tile).0
     }
 }
 

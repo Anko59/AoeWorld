@@ -1,7 +1,7 @@
-//! Exact simulation fixture topology probe, without changing route budgets.
+//! Exact simulation fixture topology probe: forests never wall off the start.
 use super::*;
-use crate::navigation::{DIAGONAL_COST, ORTHOGONAL_COST};
 use crate::{EdgePassability, MapPackage, MapRequest};
+use std::collections::VecDeque;
 
 fn exact_fixture() -> MapChunkGenerator {
     let package = MapPackage::new(
@@ -42,115 +42,58 @@ fn exact_fixture() -> MapChunkGenerator {
     generator
 }
 
-fn clear(generator: &MapChunkGenerator, position: TileCoord) {
-    let point = generator
-        .landscape_point_with_cancel(position, &|| false)
-        .unwrap()
-        .unwrap();
-    assert!(
-        generator.landscape_reservations_at(position).route,
-        "unreserved fanout at {position:?}"
-    );
-    assert!(
-        point.tile.terrain.passable,
-        "physical obstacle at {position:?}: {point:?}"
-    );
-    assert_ne!(
-        point.tile.terrain.material,
-        GroundMaterial::Mud,
-        "unexpected movement-cost multiplier at {position:?}"
-    );
-    assert!(
-        point.resource.is_none(),
-        "blocking resource at {position:?}: {point:?}"
-    );
-    assert!(
-        generator
-            .object_at_with_cancel(position, &|| false)
-            .unwrap()
-            .is_none(),
-        "object disagrees at {position:?}"
-    );
-    let appearance = point.tile.appearance;
-    assert_eq!(
-        (appearance.floor_strength, appearance.canopy_strength),
-        (0, 0),
-        "forest mask at {position:?}"
-    );
-}
-
 #[test]
-fn exact_simulation_fixture_has_clear_octile_optimal_fanout_to_every_opening() {
+fn exact_simulation_fixture_start_reaches_every_map_edge_on_open_ground() {
     let generator = exact_fixture();
+    let side = generator.width_tiles;
     let origin = TileCoord::new(255, 255);
-    let mut targets = 0;
-    for dy in -1..=1 {
-        for dx in -1..=1 {
-            let target = generator
-                .forest_opening_center_at(TileCoord::new(origin.x + dx * 192, origin.y + dy * 192))
-                .unwrap();
-            if origin.x.abs_diff(target.x).max(origin.y.abs_diff(target.y)) < 64 {
+    let walkable = |position: TileCoord| {
+        generator
+            .landscape_point_with_cancel(position, &|| false)
+            .unwrap()
+            .is_some_and(|point| point.tile.terrain.passable && point.resource.is_none())
+    };
+    assert!(walkable(origin));
+    assert!(generator.landscape_reservations_at(origin).start);
+    let mut seen = vec![false; (side * side) as usize];
+    let mut queue = VecDeque::from([origin]);
+    seen[(origin.y * side + origin.x) as usize] = true;
+    let mut reached = 0usize;
+    while let Some(tile) = queue.pop_front() {
+        reached += 1;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let next = TileCoord::new(tile.x + dx, tile.y + dy);
+            if next.x < 0 || next.y < 0 || next.x >= side || next.y >= side {
                 continue;
             }
-            targets += 1;
-            let steps = origin.x.abs_diff(target.x).max(origin.y.abs_diff(target.y));
-            let mut previous = origin;
-            let mut cost = 0_u64;
-            clear(&generator, origin);
-            for step in 1..=steps {
-                let position = TileCoord::new(
-                    origin.x
-                        + ((i64::from(target.x - origin.x) * i64::from(step)) / i64::from(steps))
-                            as i32,
-                    origin.y
-                        + ((i64::from(target.y - origin.y) * i64::from(step)) / i64::from(steps))
-                            as i32,
-                );
-                clear(&generator, position);
+            let index = (next.y * side + next.x) as usize;
+            if !seen[index] && walkable(next) {
                 assert_eq!(
                     generator
-                        .edge_between_with_cancel(previous, position, &|| false)
+                        .edge_between_with_cancel(tile, next, &|| false)
                         .unwrap(),
-                    EdgePassability::Passable,
-                    "edge {previous:?}->{position:?}, target {target:?}"
+                    EdgePassability::Passable
                 );
-                if previous.x != position.x && previous.y != position.y {
-                    for corner in [
-                        TileCoord::new(previous.x, position.y),
-                        TileCoord::new(position.x, previous.y),
-                    ] {
-                        clear(&generator, corner);
-                        assert_eq!(
-                            generator
-                                .edge_between_with_cancel(previous, corner, &|| false)
-                                .unwrap(),
-                            EdgePassability::Passable
-                        );
-                        assert_eq!(
-                            generator
-                                .edge_between_with_cancel(corner, position, &|| false)
-                                .unwrap(),
-                            EdgePassability::Passable
-                        );
-                    }
-                    cost += u64::from(DIAGONAL_COST);
-                } else {
-                    cost += u64::from(ORTHOGONAL_COST);
-                }
-                previous = position;
+                seen[index] = true;
+                queue.push_back(next);
             }
-            let x = u64::from(origin.x.abs_diff(target.x));
-            let y = u64::from(origin.y.abs_diff(target.y));
-            assert_eq!(
-                cost,
-                x.min(y) * u64::from(DIAGONAL_COST) + x.abs_diff(y) * u64::from(ORTHOGONAL_COST),
-                "route must have exact octile-optimal cost to {target:?}"
-            );
-            eprintln!(
-                "exact clear fanout target={target:?} tiles={steps} optimal_cost={cost}, key={:?}",
-                generator.geography_key
-            );
         }
     }
-    assert!(targets >= 8);
+    let mut trees = 0;
+    let edge = |x: i32, y: i32| seen[(y * side + x) as usize];
+    assert!((0..side).any(|i| edge(i, 0)) && (0..side).any(|i| edge(i, side - 1)));
+    assert!((0..side).any(|i| edge(0, i)) && (0..side).any(|i| edge(side - 1, i)));
+    for y in 0..side {
+        for x in 0..side {
+            let point = generator
+                .landscape_point_with_cancel(TileCoord::new(x, y), &|| false)
+                .unwrap()
+                .unwrap();
+            trees += usize::from(point.resource.is_some());
+        }
+    }
+    eprintln!("reached={reached} blockers={trees} of {}", side * side);
+    assert!(trees > 10_000, "fixture must contain forests");
+    // Unreached walkable tiles are single gaps inside dense stands.
+    assert!((reached + trees) * 100 >= 97 * (side * side) as usize);
 }

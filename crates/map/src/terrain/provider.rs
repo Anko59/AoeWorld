@@ -3,8 +3,7 @@ use super::fallback::{fallback_biome, fallback_height, fallback_water, water_fro
 use super::{GroundMaterial, MapChunkGenerator, Provenance, Tile, WaterKind, surface};
 use crate::{
     ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
-    HydrologyEvidenceMethod, PageLayer,
-    biome_rules::{biome_from_potential_class, material_for},
+    HydrologyEvidenceMethod, PageLayer, biome_rules::material_for,
 };
 use aoe_core::TileCoord;
 
@@ -29,15 +28,7 @@ pub(super) fn sample_base_tile(
     let compression = generator
         .provider_compression
         .ok_or(EnvironmentPageError::Invalid)?;
-    let biome = if let Some(axis) = environment.vegetation_samples_per_axis() {
-        let class = sample_biome_class(generator, axis, tile, cancelled)?;
-        class
-            .and_then(biome_from_potential_class)
-            .map(|biome| (biome, Provenance::SourceDerived))
-            .unwrap_or_else(|| (fallback_biome(generator, tile), Provenance::Fallback))
-    } else {
-        (fallback_biome(generator, tile), Provenance::Fallback)
-    };
+    let biome = sample_biome_with_provenance(generator, tile, cancelled)?;
     let (
         geographic_height_centimeters,
         mut game_height_level,
@@ -216,6 +207,33 @@ fn sample_water(
         page.ocean_coverage_percent[index],
         page.inland_coverage_percent[index],
     )))
+}
+
+/// Base biome with nodata samples filled from the nearest usable class.
+fn sample_biome_with_provenance(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(super::Biome, Provenance), EnvironmentPageError> {
+    let axis = generator
+        .provider_environment
+        .as_ref()
+        .ok_or(EnvironmentPageError::Invalid)?
+        .vegetation_samples_per_axis();
+    match axis {
+        Some(axis) => super::vegetation::filled_biome(generator, tile, axis, |position| {
+            sample_biome_class(generator, axis, position, cancelled)
+        }),
+        None => Ok((fallback_biome(generator, tile), Provenance::Fallback)),
+    }
+}
+
+pub(super) fn sample_biome(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<super::Biome, EnvironmentPageError> {
+    sample_biome_with_provenance(generator, tile, cancelled).map(|biome| biome.0)
 }
 
 /// Raw potential-vegetation class; page failures and cancellation propagate.

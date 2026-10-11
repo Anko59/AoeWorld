@@ -236,58 +236,58 @@ fn starts_routes_history_and_resource_approaches_share_the_same_forest_mask() {
 }
 
 #[test]
-fn seeded_start_connections_clear_full_neighbor_segments_without_changing_source_geometry() {
+fn start_connector_is_stable_never_carries_resources_and_keeps_source_geometry() {
     let generator = flat(1, 512);
-    let origin = TileCoord::new(255, 255);
     let repeated = flat(1, 512);
-    for dy in -1..=1 {
-        for dx in -1..=1 {
-            let target = generator
-                .forest_opening_center_at(TileCoord::new(origin.x + dx * 192, origin.y + dy * 192))
+    let (mut routes, mut cleared) = (0, 0);
+    for y in 96..416 {
+        for x in 96..416 {
+            let position = TileCoord::new(x, y);
+            let reserved = generator.landscape_reservations_at(position);
+            assert_eq!(reserved, repeated.landscape_reservations_at(position));
+            if !reserved.route {
+                continue;
+            }
+            routes += 1;
+            let point = generator
+                .landscape_point_with_cancel(position, &|| false)
+                .unwrap()
                 .unwrap();
-            let steps = origin
-                .x
-                .abs_diff(target.x)
-                .max(origin.y.abs_diff(target.y))
-                .max(1);
-            for step in 0..=steps {
-                let position = TileCoord::new(
-                    origin.x
-                        + ((i64::from(target.x - origin.x) * i64::from(step)) / i64::from(steps))
-                            as i32,
-                    origin.y
-                        + ((i64::from(target.y - origin.y) * i64::from(step)) / i64::from(steps))
-                            as i32,
-                );
-                let reserved = generator.landscape_reservations_at(position);
-                assert!(
-                    reserved.route,
-                    "entire seeded start-node segment must be reserved"
-                );
-                assert_eq!(reserved, repeated.landscape_reservations_at(position));
-                if step % 32 == 0 || step == steps {
-                    let point = generator
-                        .landscape_point_with_cancel(position, &|| false)
-                        .unwrap()
-                        .unwrap();
-                    let appearance = point.tile.appearance;
-                    assert_eq!(
-                        (appearance.canopy_strength, appearance.floor_strength),
-                        (0, 0)
-                    );
-                    assert!(point.resource.is_none());
-                    assert!(point.decoration.is_none());
-                    let source = generator.sample_base_tile(position);
-                    assert_eq!(
-                        point.tile.terrain.geographic_height_centimeters,
-                        source.geographic_height_centimeters
-                    );
-                    assert_eq!(point.tile.terrain.surface, source.surface);
-                    assert_eq!(point.tile.terrain.passable, source.passable);
-                }
+            assert!(point.decoration.is_none());
+            assert!(
+                point
+                    .resource
+                    .is_none_or(|resource| resource.node.object == ObjectKind::Tree)
+            );
+            let source = generator.sample_base_tile(position);
+            assert_eq!(
+                point.tile.terrain.geographic_height_centimeters,
+                source.geographic_height_centimeters
+            );
+            assert_eq!(point.tile.terrain.surface, source.surface);
+            assert_eq!(point.tile.terrain.passable, source.passable);
+            // Inside a large forest the connector is open ground.
+            let dense = generator
+                .evaluate_landscape_with_cancel(
+                    position,
+                    LandscapePolicy {
+                        wildness_per_thousand: Some(1000),
+                        support_per_thousand: 1000,
+                    },
+                    &|tile| generator.landscape_reservations_at(tile),
+                    &|| false,
+                )
+                .unwrap()
+                .unwrap()
+                .density;
+            if dense.opening != crate::landscape_patches::Opening::None {
+                cleared += 1;
+                assert_eq!((dense.tree, dense.canopy_per_thousand), (false, 0));
             }
         }
     }
+    assert!(routes > 5, "the start connector must exist: {routes}");
+    assert!(cleared > 0, "a large forest at the start must be crossed");
 }
 
 #[derive(Debug)]

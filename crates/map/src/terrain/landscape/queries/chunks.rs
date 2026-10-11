@@ -114,6 +114,7 @@ impl MapChunkGenerator {
             &shared_reservations,
             cancelled,
             &|position| memo.base(position)?.ok_or(EnvironmentPageError::Invalid),
+            &|cx, cy| memo.wildness(cx, cy),
         )?
         else {
             return Ok(None);
@@ -127,7 +128,9 @@ impl MapChunkGenerator {
             appearance,
         };
         let reserved = shared_reservations(position)?;
-        let node = if !reserved.route && !reserved.start {
+        // Large-forest glades and trails stay free of blocking resources.
+        let open = sample.density.opening != crate::landscape_patches::Opening::None;
+        let node = if !reserved.route && !reserved.start && !open {
             memo.resource(position, base)?
         } else {
             None

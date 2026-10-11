@@ -3,7 +3,6 @@
 //! synthesized.
 use super::*;
 use crate::landscape_ecology::Reservations;
-use crate::landscape_patches::Region;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LandscapePoint {
@@ -66,14 +65,15 @@ impl MapChunkGenerator {
         )
     }
 
-    /// Shared start/opening/route reservations. These clear canopy, floor, trees
-    /// and dressing together before filtering. Resource approaches are added by
-    /// the composer, from base terrain only. Actual physical exits remain subject
-    /// to source passability and require geographic qualification.
+    /// Shared start reservations: the starting glade always clears canopy,
+    /// floor, trees and dressing; its connectors are corridors cleared only
+    /// inside large forests. Resource approaches are added by the composer,
+    /// from base terrain only. Actual physical exits remain subject to source
+    /// passability and require geographic qualification.
     pub fn landscape_reservations_at(&self, tile: TileCoord) -> Reservations {
         Reservations {
-            route: landscape::procedural_trail_contains(self, tile),
-            start: landscape::opening_contains(self, tile),
+            route: landscape::starting_connector_contains(self, tile),
+            start: landscape::starting_glade(self, tile),
             resource_approach: false,
         }
     }
@@ -105,15 +105,10 @@ impl MapChunkGenerator {
     }
 }
 
-fn default_policy(_: TileCoord, base: Tile) -> LandscapePolicy {
-    let region = match base.biome {
-        Biome::Temperate => Region::Moderate,
-        Biome::Boreal => Region::Heavy,
-        Biome::Tropical => Region::Exceptional,
-        _ => Region::Sparse,
-    };
+/// Forest amount follows the source signal; support is full below the treeline.
+fn default_policy(_: TileCoord, _: Tile) -> LandscapePolicy {
     LandscapePolicy {
-        region,
+        wildness_per_thousand: None,
         support_per_thousand: 1000,
     }
 }

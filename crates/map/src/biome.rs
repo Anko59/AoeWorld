@@ -65,6 +65,10 @@ impl PreparedBiome {
         }
     }
 
+    pub(crate) fn samples_per_axis(&self) -> u16 {
+        self.samples_per_axis
+    }
+
     pub(crate) fn class_at(&self, tile: TileCoord, width_tiles: i32) -> Option<u8> {
         let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
         let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
