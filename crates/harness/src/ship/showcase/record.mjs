@@ -163,7 +163,8 @@ const WEBGPU_ARGS = [
 ];
 const browser = await chromium.launch(plan.renderer === "webgpu" ? { args: WEBGPU_ARGS } : {});
 const context = await browser.newContext({
-  viewport: { width: 1280, height: 720 },
+  // `large` films a desktop-sized page; the video stays 1280×720.
+  viewport: plan.viewport === "large" ? { width: 1920, height: 1080 } : { width: 1280, height: 720 },
   recordVideo: { dir, size: { width: 1280, height: 720 } },
   serviceWorkers: "block",
 });

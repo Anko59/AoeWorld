@@ -254,6 +254,7 @@ impl AppOrigin {
 pub(crate) struct Plan<'a> {
     pub(crate) title: &'a str,
     pub(crate) renderer: super::Renderer,
+    pub(crate) viewport: super::Viewport,
     /// Every origin the take may reach, each served from its own socket;
     /// empty for card and terminal takes, which need no network at all.
     pub(crate) origins: Vec<Bridged>,
@@ -299,6 +300,7 @@ pub(crate) fn plan<'a>(
     Ok(Plan {
         title: &board.title,
         renderer: board.renderer,
+        viewport: board.viewport,
         origins: origins.bridged(),
         scenes,
     })
