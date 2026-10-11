@@ -295,16 +295,22 @@ fn high_band_gravel_share_is_identical_across_grass_families() {
     // Paired tiles use the same wear field: there is no independent sampling
     // noise. A zero-tile (zero share) tolerance is therefore justified.
     for seed in 0..12 {
-        for band in [NativeHeightBand::Subalpine, NativeHeightBand::Alpine, NativeHeightBand::Nival] {
+        for band in [
+            NativeHeightBand::Subalpine,
+            NativeHeightBand::Alpine,
+            NativeHeightBand::Nival,
+        ] {
             for land_use in [LandUse::Uncleared, LandUse::Grazing, LandUse::Crop] {
                 let mut counts = [0; 3];
                 for y in 0..128 {
                     for x in 0..128 {
                         let tile = TileCoord::new(4_013 + x, -9_107 + y);
-                        let gravel = [TemperateGrass, DryGrass, LushGrass].map(|base| {
-                            vary(seed, tile, base, band, land_use) == Gravel
-                        });
-                        assert_eq!(gravel, [gravel[0]; 3], "seed {seed} {band:?} {land_use:?} {tile:?}");
+                        let gravel = [TemperateGrass, DryGrass, LushGrass]
+                            .map(|base| vary(seed, tile, base, band, land_use) == Gravel);
+                        assert_eq!(
+                            gravel, [gravel[0]; 3],
+                            "seed {seed} {band:?} {land_use:?} {tile:?}"
+                        );
                         for (count, present) in counts.iter_mut().zip(gravel) {
                             *count += usize::from(present);
                         }

@@ -99,3 +99,12 @@ they vary with scheduling. The dedicated hardware environment and
 qualification are **not established**; 20 Hz simulation and 60 FPS rendering
 have not been qualified for real gameplay. Future pathfinding, combat,
 economy, and fog of war require representative workloads before acceptance.
+
+Repeated map chunk timings and deterministic ground-variety work bounds are
+recorded in [ground variety evidence](geodata/landscape/ground-variety.md).
+`AOE_MAP_SAMPLES=15 make map-perf` benchmarks a fixed synthetic chunk in release
+mode; adding `AOE_MAP_PACKAGE=/path/to/hash.json` selects its prepared center
+chunk. Raw samples and provenance go to `reports/perf/map-chunk.json` and `.md`.
+Package loading and warmup are excluded; this does not qualify server paging
+or dedicated hardware. Without `AOE_MAP_SAMPLES`, the existing five-chunk
+fallback sampling remains available.

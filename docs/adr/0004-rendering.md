@@ -315,7 +315,7 @@ Scene materials 13–16 support ground variety (grass and dirt mix, worn
 grass, lush grass, gravel), drawn from optional art groups 7–10; a pack without
 a sheet draws dry grass, grass, grass or sand. The three grassy ones carry the
 ecological palette like grass; none is procedural. The directory holds seventeen
-material headers. No generator emits the new materials yet. Junction nibbles 5 and 6 encode scene materials 15 and 16;
+material headers. Junction nibbles 5 and 6 encode scene materials 15 and 16;
 water and the forest bed never supply ground observations, and 15 stays empty.
 
 ## Direct scene emission

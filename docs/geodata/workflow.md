@@ -262,7 +262,10 @@ make map-test
 AOE_MAP_REQUEST=/data/request.json make map-perf
 ```
 
-`map-test` covers the deterministic map model. `map-perf` samples the bounded
+Repeated composed-chunk timing is also available through `AOE_MAP_SAMPLES`;
+see [ground variety evidence](landscape/ground-variety.md).
+
+`map-test` covers the deterministic map model. Without that variable, `map-perf` samples the bounded
 procedural fallback at corners and center and labels its output
 `synthetic_fallback_sampling`. It is useful for a quick regression signal but
 does not demonstrate a source-backed RTS workload or dedicated-hardware

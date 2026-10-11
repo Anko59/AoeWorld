@@ -200,7 +200,12 @@ fn map_verify() -> Result<(), String> {
     Ok(())
 }
 
+mod map_perf;
+
 fn map_perf() -> Result<(), String> {
+    if env::var_os("AOE_MAP_SAMPLES").is_some() {
+        return map_perf::run();
+    }
     let request = read_request()?;
     let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
         .map_err(|error| error.to_string())?;

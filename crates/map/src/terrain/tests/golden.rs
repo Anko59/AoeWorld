@@ -130,8 +130,8 @@ const FOREST_ROUTES: (usize, &str) = (
     "47e23b8803057e8fe8aaaa69589b63aee292ab0f4d137c6f9a44ed8c10b91cf3",
 );
 
-// Current chunks retain Lake/Ocean kinds at shallow rims. Correcting that
-// serialized field changes these digests, but not the flat forest route pin.
+// Current generation bytes pin the only live wire format. Drawn-sheet variety
+// changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
     "1f68bd6d1896966fa8d7df3b24a45209d4b45b621ec4e2ea12c162a33f2d0255",
     "ecf308800b39593c23cc6e86f0c029277fe2e751ae6a983d63746d0326df1799",
@@ -153,7 +153,7 @@ fn default_package_generated_chunk_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
+        "47807de0cb4883cafeb2e5d482ae1faa5ea4614e5499d735f1321142130a750b"
     );
 }
 
