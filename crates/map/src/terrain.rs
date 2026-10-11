@@ -28,6 +28,7 @@ pub use landscape_data::{
 };
 mod provider;
 mod resources;
+mod shoreline;
 mod surface;
 mod vegetation;
 use elevation::PreparedElevation;

@@ -12,8 +12,9 @@ pub struct LandscapePoint {
 }
 
 impl MapChunkGenerator {
-    /// Physical terrain only. Composition changes material, not
-    /// passability, surface or height; overlays remain a caller concern.
+    /// Physical terrain only. Composition changes material and marks the
+    /// shallow rim, never passability, surface or height; overlays remain a
+    /// caller concern.
     pub(super) fn base_physical_tile_with_cancel(
         &self,
         tile: TileCoord,
@@ -29,6 +30,44 @@ impl MapChunkGenerator {
             provider::sample_base_tile(self, tile, cancelled).map(Some)
         } else {
             Ok(Some(self.sample_base_tile(tile)))
+        }
+    }
+
+    /// Shaped physical water kind without elevation, biome or composition;
+    /// `None` outside the map.
+    pub(super) fn base_water_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
+            return Ok(None);
+        }
+        if self.provider.is_some() {
+            provider::water::water_kind(self, tile, cancelled).map(Some)
+        } else {
+            Ok(Some(self.dense_water(tile).0))
+        }
+    }
+
+    /// Conservative reach test: `false` proves that no tile within `radius`
+    /// tiles is water, without sampling those tiles.
+    pub(super) fn water_possible_near(
+        &self,
+        tile: TileCoord,
+        radius: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if self.provider.is_some() {
+            provider::water::water_near(self, tile, radius, cancelled)
+        } else {
+            Ok(self.dense_water_near(tile, radius))
         }
     }
 
@@ -75,6 +114,7 @@ impl MapChunkGenerator {
             route: landscape::starting_connector_contains(self, tile),
             start: landscape::starting_glade(self, tile),
             resource_approach: false,
+            shore: false,
         }
     }
 

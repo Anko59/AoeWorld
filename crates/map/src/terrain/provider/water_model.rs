@@ -7,7 +7,7 @@ use crate::{
 };
 use aoe_core::TileCoord;
 
-type ModeledWater = (HydrologyKind, Option<i32>, WaterModelProvenance);
+pub(super) type ModeledWater = (HydrologyKind, Option<i32>, WaterModelProvenance);
 type TypedWaterEvidence = (
     Option<HydrologyObservation>,
     Option<u8>,
@@ -18,6 +18,7 @@ pub(super) fn sample_typed_evidence(
     generator: &super::MapChunkGenerator,
     samples: u16,
     tile: TileCoord,
+    with_cover: bool,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<TypedWaterEvidence, EnvironmentPageError> {
     let (source_x, source_y) = source_coordinate(tile.x, tile.y, samples, generator.width_tiles)?;
@@ -46,28 +47,47 @@ pub(super) fn sample_typed_evidence(
     let observation = observation_page
         .observation(index)
         .map_err(|_| EnvironmentPageError::Corrupt)?;
-    let cover_page = load_page(
-        generator,
-        EnvironmentPageKey {
-            layer: PageLayer::ModernLandCover,
-            level: 0,
-            x,
-            y,
-        },
-        cancelled,
-    )?;
-    let cover_page = match cover_page.as_ref() {
-        EnvironmentPage::ModernLandCover(page) => page,
-        _ => return Err(EnvironmentPageError::Corrupt),
+    let class = if with_cover {
+        let cover_page = load_page(
+            generator,
+            EnvironmentPageKey {
+                layer: PageLayer::ModernLandCover,
+                level: 0,
+                x,
+                y,
+            },
+            cancelled,
+        )?;
+        let cover_page = match cover_page.as_ref() {
+            EnvironmentPage::ModernLandCover(page) => page,
+            _ => return Err(EnvironmentPageError::Corrupt),
+        };
+        if (cover_page.width, cover_page.height)
+            != (observation_page.width, observation_page.height)
+        {
+            return Err(EnvironmentPageError::Corrupt);
+        }
+        Some(
+            cover_page
+                .class_at(index)
+                .map_err(|_| EnvironmentPageError::Corrupt)?,
+        )
+    } else {
+        None
     };
-    if (cover_page.width, cover_page.height) != (observation_page.width, observation_page.height) {
-        return Err(EnvironmentPageError::Corrupt);
-    }
-    let class = cover_page
-        .class_at(index)
-        .map_err(|_| EnvironmentPageError::Corrupt)?;
-    let modeled = observation_page
-        .water_model
+    Ok((
+        Some(observation),
+        class,
+        modeled_at(observation_page, index)?,
+    ))
+}
+
+/// Modeled water of one evidence cell, if the page carries a water model.
+pub(super) fn modeled_at(
+    page: &crate::HydrologyEvidencePage,
+    index: usize,
+) -> Result<Option<ModeledWater>, EnvironmentPageError> {
+    page.water_model
         .as_ref()
         .map(|model| {
             let kind = model
@@ -86,8 +106,7 @@ pub(super) fn sample_typed_evidence(
                 .map_err(|_| EnvironmentPageError::Corrupt)?;
             Ok::<_, EnvironmentPageError>((kind, level, provenance))
         })
-        .transpose()?;
-    Ok((Some(observation), Some(class), modeled))
+        .transpose()
 }
 
 pub(super) fn apply_to_tile(

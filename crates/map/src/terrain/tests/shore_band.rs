@@ -224,11 +224,14 @@ fn modeled_river(key: u8) -> MapChunkGenerator {
 fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
     for key in [81, 82, 83] {
         let tiles = composed(&modeled_river(key));
+        // Cell centres are protected core water of one connected river.
         let component = super::shoreline::water_component(&tiles, (16 * CELL, 0));
-        assert!(
-            component[(20 * CELL * WIDTH + 24 * CELL) as usize],
-            "key {key}: modeled river is cut"
-        );
+        for (sx, sy) in [(16, 10), (16, 20), (20, 20), (24, 20)] {
+            assert!(
+                component[(sy * CELL * WIDTH + sx * CELL) as usize],
+                "key {key}: modeled river is cut before cell {sx},{sy}"
+            );
+        }
         let mut banks = 0;
         let mut straight_rows = std::collections::BTreeSet::new();
         for y in 0..WIDTH {

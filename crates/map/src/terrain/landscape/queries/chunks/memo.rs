@@ -12,16 +12,25 @@ struct Entry {
 /// One 192-tile cell and its wildness.
 type CellWildness = ((i64, i64), u16);
 
-pub(super) type PointMemo<'a> = Memo<'a, 25>;
-pub(super) type ChunkMemo<'a> = Memo<'a, 1296>;
+pub(super) type PointMemo<'a> = Memo<'a, 25, 49>;
+pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 1444>;
 
-pub(super) struct Memo<'a, const N: usize> {
+/// Base tiles keep a two-tile halo. Water kinds keep three: the shore band
+/// of a neighbor reads water two tiles beyond that neighbor.
+const WATER_HALO: i64 = 1;
+
+pub(super) struct Memo<'a, const N: usize, const W: usize> {
     generator: &'a MapChunkGenerator,
     origin: TileCoord,
     side: i64,
     cancelled: &'a dyn Fn() -> bool,
     entries: RefCell<[Entry; N]>,
     cells: RefCell<[Option<CellWildness>; 16]>,
+    water: RefCell<[Option<crate::WaterKind>; W]>,
+    shores: RefCell<[Option<Shore>; N]>,
+    /// A point query asks the source whether any water is in reach before
+    /// sampling its neighbors; a chunk shares those samples between tiles.
+    probe_reach: bool,
     origins: RefCell<resources::Origins>,
 }
 
@@ -38,6 +47,9 @@ impl<'a> PointMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
             cells: RefCell::new([None; 16]),
+            water: RefCell::new([None; 49]),
+            shores: RefCell::new([None; 25]),
+            probe_reach: true,
             origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
@@ -56,12 +68,15 @@ impl<'a> ChunkMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 1296]),
             cells: RefCell::new([None; 16]),
+            water: RefCell::new([None; 1444]),
+            shores: RefCell::new([None; 1296]),
+            probe_reach: false,
             origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
 }
 
-impl<const N: usize> Memo<'_, N> {
+impl<const N: usize, const W: usize> Memo<'_, N, W> {
     fn index(&self, position: TileCoord) -> Option<usize> {
         let x = i64::from(position.x) - i64::from(self.origin.x);
         let y = i64::from(position.y) - i64::from(self.origin.y);
@@ -175,6 +190,10 @@ impl<const N: usize> Memo<'_, N> {
         Ok(None)
     }
 }
+
+#[path = "memo/shore.rs"]
+mod shore;
+pub(super) use shore::Shore;
 
 #[path = "memo/tests.rs"]
 #[cfg(test)]

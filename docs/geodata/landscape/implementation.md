@@ -112,6 +112,44 @@ fallback provenance. Only when none exists does the seeded no-source biome
 noise apply; its 32-tile cells used to appear as chunk-aligned squares of
 unrelated biomes inside real forest.
 
+### Shorelines and shore band
+
+Water is never read as raw source cells. Prepared categorical coverage (128
+samples in overview packages), modeled vector hydrology and the seeded
+no-source lake and river blocks all pass through one deterministic shaping
+step (`crates/map/src/terrain/shoreline.rs`). A tile blends the wet/dry state
+of its four surrounding source cells bilinearly and compares that wetness
+with a noisy threshold around one half, so corners are rounded, staircases
+become diagonals and straight runs gain bays and headlands. It is pure integer
+arithmetic on world coordinates, keyed by the geography key only: chunks,
+halos and point queries agree by construction and the procedural seed never
+moves water.
+
+These are modelling choices, not observed geography:
+
+| Choice | Value |
+| --- | --- |
+| Shaped grids | Cells at least three tiles wide; finer grids keep their exact nearest-sample water |
+| Protected core | Wetness at or above 0.92 is always water, at or below 0.08 always land (0.82/0.18 for three-tile cells) |
+| Shoreline reach | At most 0.42 source cells from the half-wet contour, always inside the cells that hold the source boundary |
+| Threshold noise | Bilinear value noise at 2.5 cells (32%), 0.8 cells (30%) and five tiles (38%, at most two tiles), through a monotonic soft gain |
+| Diagonal cell pairs | Joined by a ridge so rasterised channels are not cut at corners |
+| Beach and bank | Passable land with water at squared tile distance five or less: sand beside lake, ocean or shallow water, mud beside rivers; rock, snow and ice shores keep their material |
+| Shallow rim | Lake or ocean water touching land in its eight-neighborhood becomes `Shallow` with the `Shore` material; rivers keep their kind |
+
+Cell centres of wet cells and the segments joining four-adjacent wet cells lie
+in the protected core, so source lakes and rivers stay connected; detached
+ponds or islets may appear only inside the shoreline reach. Modeled water
+keeps its surface level, kind and provenance from the wet cell that owns the
+tile; a water corner rounded off the model falls back to categorical coverage.
+
+Shaping is physical: it decides `water`, and therefore passability, edges,
+start search and navigation. The shore band is composition: the beach and
+bank clear canopy, forest floor, trees and decorations like any other
+reservation and change only material; the shallow rim changes water kind and
+material but stays impassable. Shore is walkable, water is not. Both reuse the
+existing sand, mud and shore materials, so no renderer change is involved.
+
 ### Tree visual families
 
 Source-backed tree families are part of generation. Raw potential natural

@@ -109,7 +109,7 @@ fn near_segment(start: TileCoord, end: TileCoord, point: TileCoord, radius: i32)
     cross * cross <= radius_squared * length_squared
 }
 
-fn mix64(mut value: u64) -> u64 {
+pub(super) fn mix64(mut value: u64) -> u64 {
     value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
     value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);

@@ -1,7 +1,6 @@
 use crate::{
     ENVIRONMENT_PAGE_SAMPLES, EnvironmentError, FieldPyramid, WaterPage, ordered_water_page_root,
 };
-use aoe_core::TileCoord;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -67,15 +66,13 @@ impl PreparedWater {
         }
     }
 
-    pub(crate) fn coverage_at(&self, tile: TileCoord, width_tiles: i32) -> Option<WaterCoverage> {
-        let tile_axis = u64::try_from(width_tiles.checked_sub(1)?).ok()?;
-        let source_axis = u64::from(self.samples_per_axis.checked_sub(1)?);
-        let x =
-            u16::try_from((u64::try_from(tile.x).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
-        let y =
-            u16::try_from((u64::try_from(tile.y).ok()? * source_axis + tile_axis / 2) / tile_axis)
-                .ok()?;
+    pub(crate) fn samples_per_axis(&self) -> u16 {
+        self.samples_per_axis
+    }
+
+    /// Coverage of one level-zero source cell.
+    pub(crate) fn cell(&self, x: i64, y: i64) -> Option<WaterCoverage> {
+        let (x, y) = (u16::try_from(x).ok()?, u16::try_from(y).ok()?);
         let page_size = u16::from(ENVIRONMENT_PAGE_SAMPLES);
         let page = self.pages.get(&(x / page_size, y / page_size))?;
         let local_x = usize::from(x % page_size);

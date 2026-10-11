@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 pub(super) const WIDTH: i32 = 257;
 pub(super) const CELL: i32 = 8;
-/// Modelling bound, not geography: the warp moves a shoreline by at most
-/// `0.4 * cell + 1` tiles (4.2 tiles for the eight-tile fixture cell).
-pub(super) const WARP_TILES: i32 = 5;
+/// Modelling bound, not geography: threshold noise keeps a shoreline within
+/// 0.42 cells (3.4 tiles for the eight-tile fixture cell) of the source one.
+pub(super) const SHAPE_TILES: i32 = 4;
 /// Bilinear thresholding additionally rounds corners by at most half a cell.
 pub(super) const CORNER_TILES: i32 = CELL / 2;
 
@@ -196,10 +196,10 @@ fn straight_source_coast_becomes_a_bounded_irregular_shoreline() {
         let mut first_water = Vec::new();
         for y in 0..WIDTH {
             for x in 0..WIDTH {
-                if x < 124 - WARP_TILES {
+                if x < 124 - SHAPE_TILES {
                     assert!(!wet(&tiles, x, y), "key {key}: water far inland at {x},{y}");
                 }
-                if x >= 124 + WARP_TILES {
+                if x >= 124 + SHAPE_TILES {
                     assert!(wet(&tiles, x, y), "key {key}: land far offshore at {x},{y}");
                 }
             }
@@ -236,15 +236,21 @@ fn shoreline_is_deterministic_and_keyed_by_geography() {
     assert_ne!(water(41), water(42));
 }
 
+/// Source staircase: ocean south-east of the anti-diagonal through the map
+/// centre, one eight-tile step per source cell.
+fn staircase_coast(key: u8) -> MapChunkGenerator {
+    coast(key, &|sx, sy| (if sx + sy >= 32 { 100 } else { 0 }, 0))
+}
+
 #[test]
 fn shoreline_is_seam_free_between_chunks_and_point_queries() {
-    let generator = straight_coast(41);
-    // The unshaped coast (x = 124) and its warp cross the chunk border x = 128.
-    let mut shoreline_tiles_on_both_sides = [false; 2];
-    for (cx, cy) in [(3, 2), (4, 2), (3, 3), (4, 3)] {
+    let generator = staircase_coast(41);
+    // The coast (x + y = 252) crosses these four chunks.
+    for (cx, cy) in [(3, 4), (4, 3), (2, 5), (5, 2)] {
         let chunk = generator
             .landscape_chunk_with_cancel(cx, cy, &|| false)
             .expect("chunk");
+        let mut kinds = [false; 2];
         for tile in &chunk.tiles {
             let point = generator
                 .landscape_point_with_cancel(tile.tile, &|| false)
@@ -254,19 +260,39 @@ fn shoreline_is_seam_free_between_chunks_and_point_queries() {
                 point.tile, *tile,
                 "chunk {cx},{cy} disagrees with its point"
             );
-            assert_eq!(
-                generator.tile_at(tile.tile).map(|terrain| terrain.water),
-                Some(tile.terrain.water)
+            assert_eq!(generator.tile_at(tile.tile), Some(tile.terrain));
+            kinds[usize::from(tile.terrain.water != WaterKind::None)] = true;
+        }
+        assert_eq!(kinds, [true; 2], "chunk {cx},{cy} holds no shoreline");
+    }
+}
+
+#[test]
+fn source_staircase_coast_becomes_a_diagonal_shoreline_without_long_steps() {
+    for key in [41, 42, 43] {
+        let tiles = composed(&staircase_coast(key));
+        let first_water = (40..216)
+            .map(|y| (0..WIDTH).find(|x| wet(&tiles, *x, y)).expect("coast"))
+            .collect::<Vec<_>>();
+        // Unshaped, seven of eight rows repeat the column above and the
+        // eighth jumps by eight tiles.
+        let repeated = first_water
+            .windows(2)
+            .filter(|pair| pair[0] == pair[1])
+            .count();
+        assert!(
+            repeated * 100 < first_water.len() * 55,
+            "key {key}: {repeated} of {} rows repeat a column",
+            first_water.len()
+        );
+        for (index, x) in first_water.iter().enumerate() {
+            let y = index as i32 + 40;
+            assert!(
+                (x + y - 252).abs() <= CELL + SHAPE_TILES,
+                "key {key}: coast at {x},{y} left the source diagonal"
             );
-            if tile.terrain.water != WaterKind::None && tile.tile.x < 128 {
-                shoreline_tiles_on_both_sides[0] = true;
-            }
-            if tile.terrain.water == WaterKind::None && tile.tile.x >= 128 {
-                shoreline_tiles_on_both_sides[1] = true;
-            }
         }
     }
-    assert_eq!(shoreline_tiles_on_both_sides, [true; 2]);
 }
 
 #[test]
@@ -285,14 +311,14 @@ fn rectangular_source_lake_is_rounded_but_stays_where_the_source_puts_it() {
             )
         });
         let tiles = composed(&generator);
-        let reach = WARP_TILES + CORNER_TILES;
+        let reach = SHAPE_TILES + CORNER_TILES;
         let mut area = 0;
         for y in 0..WIDTH {
             for x in 0..WIDTH {
                 let water = wet(&tiles, x, y);
                 area += i32::from(water);
                 let outside = (left - x).max(x - right).max(top - y).max(y - bottom);
-                if outside > WARP_TILES {
+                if outside > SHAPE_TILES {
                     assert!(
                         !water,
                         "key {key}: water {outside} tiles outside at {x},{y}"
@@ -303,9 +329,37 @@ fn rectangular_source_lake_is_rounded_but_stays_where_the_source_puts_it() {
                 }
             }
         }
-        // Right angles are gone: each unshaped corner tile is dry land.
-        for (x, y) in [(left, top), (right, top), (left, bottom), (right, bottom)] {
-            assert!(!wet(&tiles, x, y), "key {key}: square corner at {x},{y}");
+        // Right angles are gone: the four unshaped 4x4 corner blocks (64
+        // water tiles) are partly land, and neither the west shore nor the
+        // north shore is one straight line.
+        let corner_water = [
+            (left, top),
+            (right - 3, top),
+            (left, bottom - 3),
+            (right - 3, bottom - 3),
+        ]
+        .into_iter()
+        .flat_map(|(x, y)| (0..4).flat_map(move |dy| (0..4).map(move |dx| (x + dx, y + dy))))
+        .filter(|(x, y)| wet(&tiles, *x, *y))
+        .count();
+        assert!(
+            corner_water < 56,
+            "key {key}: square corners keep {corner_water}/64"
+        );
+        let mut west = (top + 8..bottom - 8)
+            .map(|y| (0..WIDTH).find(|x| wet(&tiles, *x, y)).expect("lake row"))
+            .collect::<Vec<_>>();
+        let mut north = (left + 8..right - 8)
+            .map(|x| {
+                (0..WIDTH)
+                    .find(|y| wet(&tiles, x, *y))
+                    .expect("lake column")
+            })
+            .collect::<Vec<_>>();
+        for shore in [&mut west, &mut north] {
+            shore.sort_unstable();
+            shore.dedup();
+            assert!(shore.len() >= 3, "key {key}: straight lake shore {shore:?}");
         }
         let source_area = (right - left + 1) * (bottom - top + 1);
         assert!(
@@ -339,6 +393,9 @@ fn one_cell_wide_source_rivers_stay_connected_through_bends_and_diagonal_steps()
             (0, if channel(sx, sy) { coverage } else { 0 })
         });
         let tiles = composed(&generator);
+        // Every source cell centre is protected core water, and all of them
+        // share one eight-connected body. Detached ponds beside the channel
+        // are allowed; cuts are not.
         let component = water_component(&tiles, (4 * CELL, 16 * CELL));
         for (sx, sy) in (0..33).flat_map(|sy| (0..33).map(move |sx| (sx, sy))) {
             if channel(sx, sy) {
@@ -358,8 +415,8 @@ fn one_cell_wide_source_rivers_stay_connected_through_bends_and_diagonal_steps()
                             .flat_map(|sy| (0..33).map(move |sx| (sx, sy)))
                             .any(|(sx, sy)| {
                                 channel(sx, sy)
-                                    && (x - i32::from(sx) * CELL).abs() <= CELL + WARP_TILES
-                                    && (y - i32::from(sy) * CELL).abs() <= CELL + WARP_TILES
+                                    && (x - i32::from(sx) * CELL).abs() <= CELL / 2 + SHAPE_TILES
+                                    && (y - i32::from(sy) * CELL).abs() <= CELL / 2 + SHAPE_TILES
                             });
                     assert!(near, "key {key}: stray water at {x},{y}");
                 }
