@@ -19,17 +19,12 @@ const MAX_TEXT_CHARS: usize = 500;
 const MAX_SELECTOR_CHARS: usize = 512;
 const MAX_KEY_CHARS: usize = 32;
 const MAX_PATH_BYTES: usize = 2048;
-/// The recorder's viewport is 1280×720; a larger offset cannot land.
+/// The recorder's page is at most 1920×1080; a larger offset cannot land.
 const MAX_POSITION_PX: u32 = 4096;
 /// Largest `delta_y` of one wheel event; several steps make a longer turn.
 const MAX_WHEEL_DELTA: u32 = 2000;
 
-/// One action on the filmed page, written `{"click": "<selector>"}`,
-/// `{"click_at": {"selector": "#minimap", "x": 37, "y": 63}}` (CSS pixels
-/// from the element's top-left corner), `{"select": {"selector": "#map",
-/// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
-/// "y": 360, "delta_y": -400}}` (one wheel event over that position),
-/// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
+/// Mouse button of a `click_at` step.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Button {
@@ -38,6 +33,13 @@ pub(crate) enum Button {
     Right,
 }
 
+/// One action on the filmed page, written `{"click": "<selector>"}`,
+/// `{"click_at": {"selector": "#minimap", "x": 37, "y": 63}}` (CSS pixels
+/// from the element's top-left corner; add `"button": "right"` for a
+/// context click), `{"select": {"selector": "#map",
+/// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
+/// "y": 360, "delta_y": -400}}` (one wheel event over that position),
+/// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
