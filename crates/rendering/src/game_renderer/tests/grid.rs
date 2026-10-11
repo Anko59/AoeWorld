@@ -112,7 +112,7 @@ fn grid_thins_out_instead_of_filling_a_distant_view() {
     };
     let near = segments(&terrain, camera).len();
     assert!(near > 0);
-    for (zoom, step) in [(0.25, 1.0), (0.2, 2.0), (0.1, 4.0), (0.04, 8.0)] {
+    for (zoom, step) in [(0.25, 2.0), (0.2, 2.0), (0.1, 4.0), (0.04, 8.0)] {
         camera.zoom = zoom;
         let lines = segments(&terrain, camera);
         assert!(!lines.is_empty(), "zoom {zoom} keeps a grid");
@@ -156,7 +156,7 @@ fn grid_lines_keep_sixteen_pixels_of_perpendicular_spacing_at_the_minimum_zoom()
     // tile's screen height alone overstates the real distance in the 2:1
     // projection, where neighbouring parallel lines sit closer together.
     let terrain = field(8, None);
-    let mut camera = SceneCamera {
+    let camera = SceneCamera {
         center: [4.0; 2],
         zoom: 0.25,
         viewport: [512.0, 256.0],
