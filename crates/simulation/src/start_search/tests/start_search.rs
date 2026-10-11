@@ -4,6 +4,8 @@ use super::*;
 mod composed_forest;
 #[path = "exit_certificate.rs"]
 mod exit_certificate;
+#[path = "lake_regions.rs"]
+mod lake_regions;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,
