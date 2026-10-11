@@ -284,12 +284,11 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
                 .any(|resource| resource.node.object == ObjectKind::Tree)
         );
         if expected == NativeHeightBand::Alpine {
-            assert!(
-                scene
-                    .tiles
-                    .iter()
-                    .all(|t| t.terrain.material == GroundMaterial::Rock)
-            );
+            // Bare rock, broken by gravel and soil as drawn variety only.
+            assert!(scene.tiles.iter().all(|t| matches!(
+                t.terrain.material,
+                GroundMaterial::Rock | GroundMaterial::Gravel | GroundMaterial::Dirt
+            )));
         }
         if expected == NativeHeightBand::Nival {
             assert!(
@@ -369,4 +368,50 @@ fn historical_clearings_cannot_be_refilled_by_decorations() {
             .iter()
             .any(|resource| resource.node.object == ObjectKind::Tree)
     );
+}
+
+#[test]
+fn ground_variety_changes_only_the_drawn_sheet_and_stays_in_its_family() {
+    use GroundMaterial::{Dirt, DryGrass, GrassDirt, Gravel, Sand, WornGrass};
+    let families: [(u8, &[GroundMaterial]); 2] = [
+        (20, &[DryGrass, GrassDirt, Dirt, WornGrass]),
+        (27, &[Sand, Gravel, Dirt]),
+    ];
+    for (class, family) in families {
+        let generator = fixture(512, class, 20_000);
+        let mut seen = Vec::new();
+        for (x, y) in [(0, 0), (3, 5), (7, 7)] {
+            let chunk = candidate(&generator, x, y);
+            assert_eq!(chunk.tiles.len(), 1024);
+            for tile in &chunk.tiles {
+                let base = generator
+                    .landscape_base_at(tile.tile, &|| false)
+                    .expect("source")
+                    .expect("in bounds");
+                // Heights, surface, water, biome, provenance and passability
+                // are the base tile's: variety is not a physical input.
+                let mut physical = tile.terrain;
+                physical.material = base.material;
+                assert_eq!(physical, base);
+                assert!(family.contains(&tile.terrain.material), "class {class}");
+                if !seen.contains(&tile.terrain.material) {
+                    seen.push(tile.terrain.material);
+                }
+                // Seamless: a single point query draws the same sheet.
+                if tile.tile.x % 32 == 31 || tile.tile.y % 32 == 0 {
+                    let point = generator
+                        .evaluate_landscape_point_with_cancel(
+                            tile.tile,
+                            &policy,
+                            &|_| Reservations::default(),
+                            &|| false,
+                        )
+                        .expect("source")
+                        .expect("in bounds");
+                    assert_eq!(point.tile, *tile);
+                }
+            }
+        }
+        assert!(seen.len() >= 3, "class {class} shows {seen:?}");
+    }
 }

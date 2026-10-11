@@ -133,40 +133,28 @@ const FOREST_ROUTES: (usize, &str) = (
 // Current chunks retain Lake/Ocean kinds at shallow rims. Correcting that
 // serialized field changes these digests, but not the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "0c794f57b93c119cd7ad5216a009d12737c02f36eeb39a87a01b463fd26d1dbf",
-    "d627fdb49eec91d2fa8aec7422a5c6864b5ac86d92d17a7ca84f09f3d224657d",
-    "4c40c238716779c1f3d3759559995424d6cb00c2c2ec9cf48b173e0fa45b9416",
+    "1f68bd6d1896966fa8d7df3b24a45209d4b45b621ec4e2ea12c162a33f2d0255",
+    "ecf308800b39593c23cc6e86f0c029277fe2e751ae6a983d63746d0326df1799",
+    "fc2edb936af1172eac794affc0c9f36617ea14a5c2362d54e5d5bfece950f243",
 ];
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "35f4f5370283d8d65d16214bbd8a26985afa03edd55349db55a5f45f8640599d";
+    "a7c9b467bad6228d96f1da5fdbab0ec3f9fc867022bc51775b4b204018648468";
 
-/// The optional ground sheets are load-time plumbing: no generator rule
-/// emits their materials, so adding or removing the sheets cannot change
-/// what is generated. The darker-grass sheet draws over the pre-existing
-/// `LushGrass` material, which Tropical fallback tiles already carry.
 #[test]
-fn sheet_plumbing_emits_none_of_the_new_ground_materials() {
-    const SHEET_ONLY_MATERIALS: [GroundMaterial; 3] = [
-        GroundMaterial::GrassDirt,
-        GroundMaterial::WornGrass,
-        GroundMaterial::Gravel,
-    ];
+fn default_package_generated_chunk_content_is_pinned() {
     let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-    let fallbacks = [1, 17, 991].map(|seed| MapChunkGenerator::new([23; 32], seed, 512));
-    for generator in [package.generator()].into_iter().chain(fallbacks) {
-        for (x, y) in [(0, 0), (7, 7), (15, 15)] {
-            let scene = generator
-                .landscape_chunk_with_cancel(x, y, &|| false)
-                .expect("chunk");
-            assert!(
-                scene
-                    .tiles
-                    .iter()
-                    .all(|tile| !SHEET_ONLY_MATERIALS.contains(&tile.terrain.material)),
-                "chunk ({x},{y}) emitted a sheet-only ground material"
-            );
-        }
+    let generator = package.generator();
+    let mut digest = blake3::Hasher::new();
+    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+        let scene = generator
+            .landscape_chunk_with_cancel(x, y, &|| false)
+            .expect("chunk");
+        digest.update(format!("{scene:?}").as_bytes());
     }
+    assert_eq!(
+        digest.finalize().to_hex().as_str(),
+        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
+    );
 }
 
 /// Regression pin of the current generation on scene content rather than

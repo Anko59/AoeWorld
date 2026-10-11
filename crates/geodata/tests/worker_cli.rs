@@ -317,3 +317,47 @@ fn worker_inspects_and_prepares_real_local_raster() {
         json!([2500, 2500, 2500, 2500])
     );
 }
+
+#[test]
+fn repeated_chunk_perf_records_raw_samples_and_rejects_unbounded_work() {
+    let fixture = Fixture::new();
+    let perf = success(run(
+        &fixture.0,
+        &["map-perf"],
+        &[("AOE_MAP_SAMPLES", "3")],
+        b"",
+    ));
+    assert_eq!(perf["evidence_class"], "synthetic_chunk_fixture");
+    assert_eq!(perf["coordinate"], json!([1, 1]));
+    assert_eq!(perf["tiles_per_chunk"], 1024);
+    assert_eq!(perf["chunks_per_sample"], 16);
+    assert_eq!(perf["sample_nanoseconds"].as_array().unwrap().len(), 3);
+    assert!(perf["median_nanoseconds_per_chunk"].as_u64().unwrap() > 0);
+    assert_eq!(
+        perf["materials"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|v| v.as_u64().unwrap())
+            .sum::<u64>(),
+        1024
+    );
+    assert_eq!(
+        perf,
+        serde_json::from_slice::<Value>(
+            &fs::read(fixture.0.join("reports/perf/map-chunk.json")).unwrap()
+        )
+        .unwrap()
+    );
+    for samples in ["0", "201", "invalid"] {
+        failure(
+            run(
+                &fixture.0,
+                &["map-perf"],
+                &[("AOE_MAP_SAMPLES", samples)],
+                b"",
+            ),
+            "AOE_MAP_SAMPLES must be 3..=200",
+        );
+    }
+}
