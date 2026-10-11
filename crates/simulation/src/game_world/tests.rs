@@ -469,5 +469,6 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
     assert_eq!(world.active_mover_count(), 0);
 }
 
+mod far_orders;
 mod physical_movement;
 mod routes;
