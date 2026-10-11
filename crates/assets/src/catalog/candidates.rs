@@ -30,12 +30,8 @@ const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> Candidate
 
 /// Metadata-confirmed contiguous ranges; no topology or gameplay approval yet.
 /// In particular, 100 frames is NOT evidence of a seamless 10×10 sheet.
-pub const UNAPPROVED_SOURCES: [CandidateSource; 16] = [
+pub const UNAPPROVED_SOURCES: [CandidateSource; 12] = [
     graphics(2304, 9, "possible conifer shadows; pairing unverified"),
-    terrain(15001, 100, "grass"),
-    terrain(15009, 100, "grass"),
-    terrain(15006, 100, "grass"),
-    terrain(15017, 100, "beach"),
     terrain(15024, 64, "ice; topology unverified, not implicitly 8×8"),
     graphics(226, 25, "cliff; placeholder frames require review"),
     graphics(227, 25, "cliff; anomalous tall frame requires review"),
@@ -70,7 +66,7 @@ mod tests {
                     .any(|source| source.archive == candidate.archive && source.id == candidate.id)
             );
         }
-        assert_eq!(UNAPPROVED_SOURCES.len(), 16);
+        assert_eq!(UNAPPROVED_SOURCES.len(), 12);
         assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
         assert!(
             !OPTIONAL_RESOURCE_SOURCES

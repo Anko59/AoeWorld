@@ -44,7 +44,10 @@ pub(super) fn sample(
         }
     };
     for material in palette.into_iter().filter(|m| *m != 15) {
-        accumulate(material, weights[usize::from(material)] * (1.0 - bed));
+        accumulate(
+            mix::support::material(material),
+            weights[usize::from(material)] * (1.0 - bed),
+        );
     }
     accumulate(
         triangle

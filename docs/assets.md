@@ -37,7 +37,7 @@ periodic sheets add medium water 15016, deep water 15015 and marsh shallows
 15014. The latter is renderer wiring for `Ford` only: no terrain generator
 emits it yet, and ford generation belongs to separate river work. Generated
 shallow water remains impassable. A pack without an optional sheet draws the
-shallow sheet in its place. Catalog v6 retains the removal of paved 15018
+shallow sheet in its place. Catalog v7 retains the removal of paved 15018
 from the natural rock role: natural rock requires procedural neutral ground,
 not paving. The renderer owns that fallback's appearance. Frame count alone
 is never topology. The map client selects those groups from
@@ -46,8 +46,11 @@ frames 0–9 as nonperiodic coordinate-stable forest-soil frames. Landscape fore
 blend this native leaf litter with grass, dry grass or authoritative dirt; only
 absent optional forest art retains the prior dirt fallback. These reviewed frames
 are not qualified as a seamless periodic sheet. Metadata-free material 6 selection is unchanged.
-The periodic groups retain all 100 frames. Catalog v6 selects at most 978 frames:
-810 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
+Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
+grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
+pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
+The periodic groups retain all 100 frames. Catalog v7 selects at most 1,378 frames:
+1,210 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;

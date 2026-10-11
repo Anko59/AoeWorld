@@ -217,9 +217,8 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
     ]
 }
 
-/// Frames and authored topology a scene material samples. Groups 0–6 are the
-/// art's terrain groups, group 7 the grass fallback for an absent group and
-/// groups 8–10 the optional water depth sheets.
+/// Frames and topology: terrain groups 0–10, grass fallback 11,
+/// and optional water depth sheets 12–14.
 pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
@@ -227,7 +226,7 @@ pub(crate) fn terrain_group(
     // Rock and snow deliberately reuse dirt detail, not paving or ice art.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
-    // deep and ford shallows use their optional sheet (groups 8-10), else
+    // deep and ford shallows use their optional sheet (groups 12-14), else
     // that same shallow sheet.
     let depth = match material {
         5 => Some(0),
@@ -238,19 +237,25 @@ pub(crate) fn terrain_group(
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
     if let Some(slot) = depth {
         let sheet = &art.water_depth[slot];
-        return Some((8 + slot, &sheet.0, sheet.1));
+        return Some((12 + slot, &sheet.0, sheet.1));
     }
     let material = usize::from(match material {
         4 | 7 | 9 => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
+        // Ground variety (scene 13–16, groups 7–10) draws its base sheet when
+        // a pack lacks the variant: dry grass, grass, grass and sand.
+        13..=16 if !art.terrain[usize::from(material) - 6].is_empty() => material - 6,
+        13 => 1,
+        14 | 15 => 0,
+        16 => 3,
         _ => material,
     });
     match art.terrain.get(material) {
         Some(frames) if !frames.is_empty() => {
             Some((material, frames, art.terrain_topology[material]))
         }
-        _ if !art.grass.is_empty() => Some((7, &art.grass, art.terrain_topology[0])),
+        _ if !art.grass.is_empty() => Some((11, &art.grass, art.terrain_topology[0])),
         _ => None,
     }
 }

@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::Shallows as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::Gravel as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -53,7 +53,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (978 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (1,378 total).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -105,7 +105,7 @@ fn source_present(manifest: &Manifest, source: &str) -> bool {
     manifest.frames.iter().any(|frame| frame.source == source)
 }
 
-const TERRAIN_ROLES: [AssetRole; 7] = [
+const TERRAIN_ROLES: [AssetRole; 11] = [
     AssetRole::TemperateGrass,
     AssetRole::DryGrass,
     AssetRole::Dirt,
@@ -113,6 +113,10 @@ const TERRAIN_ROLES: [AssetRole; 7] = [
     AssetRole::Rock,
     AssetRole::Water,
     AssetRole::ForestFloor,
+    AssetRole::GrassDirt,
+    AssetRole::WornGrass,
+    AssetRole::LushGrass,
+    AssetRole::Gravel,
 ];
 
 /// Optional depth sheets in renderer order: medium, deep, ford shallows.
@@ -152,7 +156,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     }
     let mut selected = Vec::new();
     let mut domains = Vec::new();
-    let mut terrain_topology = [None; 7];
+    let mut terrain_topology = [None; 11];
     let mut depth_topology = [None; 3];
     // Catalog roles are bounded, not a dynamic startup search tree. The browser
     // oracle covers every selected role and the intentionally absent rock role.

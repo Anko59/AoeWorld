@@ -330,6 +330,7 @@ void main() {
                 weight = (threshold - previous) * (1.0 - vWeights.z);
                 previous = threshold;
                 if (weight <= 0.0) continue;
+                material = material == 5u ? 15u : (material == 6u ? 16u : material);
                 header = sheet(material);
             } else { weight = vWeights.z; header = vRect2; material = (vPages.z >> 8u) & 255u; }
         } else {

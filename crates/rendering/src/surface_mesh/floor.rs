@@ -1,5 +1,6 @@
 //! Displayed-vertex field only: four incident source cells, no resident-world map.
 use super::*;
+#[path = "floor/tests/fixtures.rs"]
 #[cfg(test)]
 mod fixtures;
 #[cfg(test)]

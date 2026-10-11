@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 6;
+pub const VERSION: u8 = 7;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 978;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_378;
 
 /// Paving 15018 is not natural rock. No imported rock sheet is approved.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -40,6 +40,10 @@ pub enum AssetRole {
     WaterMedium,
     WaterDeep,
     Shallows,
+    GrassDirt,
+    WornGrass,
+    LushGrass,
+    Gravel,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,7 +216,11 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
 /// layout; a pack without one draws the shallow sheet in its place, never a
 /// flat tint. Shallows is renderer wiring only: no terrain generator emits
 /// Ford yet. Ford generation belongs to separate river work.
-pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 4] = [
+/// The four ground-variety sheets were reviewed as 10×10 periodic montages in
+/// the same x-major, reversed-y order as the required sheets: grass and dirt
+/// mix 15006, grass with brown patches 15009, darker grass 15001 and pebbly
+/// beach 15017. A pack without one draws its base sheet instead.
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 8] = [
     SpriteSource {
         role: AssetRole::ForestFloor,
         archive: "terrain.drs",
@@ -254,7 +262,33 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 4] = [
             rows: 10,
         }),
     },
+    variety(
+        AssetRole::GrassDirt,
+        15006,
+        "10x10 periodic grass and dirt mix",
+    ),
+    variety(
+        AssetRole::WornGrass,
+        15009,
+        "10x10 periodic grass with brown patches",
+    ),
+    variety(AssetRole::LushGrass, 15001, "10x10 periodic darker grass"),
+    variety(AssetRole::Gravel, 15017, "10x10 periodic pebbly beach"),
 ];
+
+const fn variety(role: AssetRole, id: u32, interpretation: &'static str) -> SpriteSource {
+    SpriteSource {
+        role,
+        archive: "terrain.drs",
+        id,
+        frames: 100,
+        interpretation,
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
+    }
+}
 
 /// Object roles without reviewed source art. Keep this empty while every
 /// supported resource role has an approved source mapping.
@@ -265,145 +299,6 @@ pub const UNAVAILABLE_RESOURCE_ART: [&str; 0] = [];
 #[cfg(test)]
 mod private_pack;
 
+#[path = "catalog/tests/contract.rs"]
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
-        let mut roles = REQUIRED_RENDER_SOURCES
-            .iter()
-            .chain(OPTIONAL_RESOURCE_SOURCES.iter())
-            .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-            .map(|source| source.role)
-            .collect::<Vec<_>>();
-        roles.sort_unstable();
-        roles.dedup();
-        assert_eq!(
-            roles.len(),
-            REQUIRED_RENDER_SOURCES.len()
-                + OPTIONAL_RESOURCE_SOURCES.len()
-                + OPTIONAL_TERRAIN_SOURCES.len()
-        );
-        assert!(
-            REQUIRED_RENDER_SOURCES
-                .iter()
-                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
-                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-                .all(|source| source.frames > 0)
-        );
-        assert_eq!(VERSION, 6);
-        assert_eq!(AssetRole::StoneDeposit as usize, 13);
-        assert_eq!(AssetRole::TreeConifer as usize, 14);
-        assert_eq!(AssetRole::TreePalm as usize, 15);
-        assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
-        assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
-        assert_eq!(AssetRole::WaterMedium as usize, 16);
-        assert_eq!(AssetRole::Shallows as usize, 18);
-        // Water depth sheets: light shallow water stays the required sheet;
-        // medium, deep and walkable marsh shallows are optional periodic sheets.
-        assert_eq!(REQUIRED_RENDER_SOURCES[6].id, 15002);
-        assert_eq!(
-            OPTIONAL_TERRAIN_SOURCES[1..]
-                .iter()
-                .map(|source| (
-                    source.role,
-                    source.id,
-                    source.frames,
-                    source.terrain_topology
-                ))
-                .collect::<Vec<_>>(),
-            [
-                (AssetRole::WaterMedium, 15016),
-                (AssetRole::WaterDeep, 15015),
-                (AssetRole::Shallows, 15014),
-            ]
-            .map(|(role, id)| (
-                role,
-                id,
-                100,
-                Some(TerrainFrameTopology::PeriodicXMajorReversedY {
-                    columns: 10,
-                    rows: 10
-                })
-            ))
-        );
-        assert_eq!(
-            REQUIRED_RENDER_SOURCES
-                .iter()
-                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
-                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-                .map(|source| source.frames as usize)
-                .sum::<usize>(),
-            MAX_REVIEWED_FRAMES as usize
-        );
-    }
-
-    #[test]
-    fn paving_is_not_approved_as_natural_rock() {
-        assert!(
-            REQUIRED_RENDER_SOURCES
-                .iter()
-                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
-                .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-                .all(|source| source.role != AssetRole::Rock && source.id != 15018)
-        );
-        assert!(NATURAL_ROCK_FALLBACK.contains("procedural"));
-        assert_eq!(
-            OPTIONAL_TERRAIN_SOURCES[0].terrain_topology,
-            Some(TerrainFrameTopology::CoordinateStableAccents)
-        );
-    }
-
-    #[test]
-    fn manifest_reference_preserves_the_drs_type_tag() {
-        assert_eq!(
-            OPTIONAL_RESOURCE_SOURCES[0].manifest_source(),
-            "graphics.drs:[32, 112, 108, 115]:4652"
-        );
-    }
-
-    #[test]
-    fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
-        assert_eq!(
-            OPTIONAL_RESOURCE_SOURCES
-                .iter()
-                .map(|source| (source.role, source.id, source.frames))
-                .collect::<Vec<_>>(),
-            vec![
-                (AssetRole::WoodTree, 4652, 14),
-                (AssetRole::WoodTreeShadow, 2296, 14),
-                (AssetRole::ForageBush, 2560, 4),
-                (AssetRole::GoldDeposit, 4479, 7),
-                (AssetRole::StoneDeposit, 4482, 7),
-                (AssetRole::TreeConifer, 4654, 9),
-                (AssetRole::TreePalm, 4653, 13),
-            ]
-        );
-    }
-
-    #[test]
-    fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
-        assert!(
-            REQUIRED_RENDER_SOURCES
-                .iter()
-                .filter(|source| matches!(
-                    source.role,
-                    AssetRole::TemperateGrass
-                        | AssetRole::DryGrass
-                        | AssetRole::Dirt
-                        | AssetRole::Sand
-                        | AssetRole::Water
-                ))
-                .all(|source| source.terrain_topology
-                    == Some(TerrainFrameTopology::PeriodicXMajorReversedY {
-                        columns: 10,
-                        rows: 10
-                    })
-                    && source
-                        .terrain_topology
-                        .unwrap()
-                        .supports_frames(source.frames))
-        );
-    }
-}
+mod tests;

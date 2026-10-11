@@ -1,9 +1,9 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v6 keeps approved art separate from discovery. Required sources remain
+Catalog v7 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
-prefixes and three optional water depth sheets bring the ceiling to 978 frames
-(810 terrain/168 objects).
+prefixes, three water depth sheets and four ground-variety sheets bring the ceiling
+to 1,378 frames (1,210 terrain/168 objects).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -23,18 +23,18 @@ No original pixels, generated manifests, or screenshots are public fixtures.
 | Conifers 4654 | graphics.drs | 9 | All nine originals inspected. Wood family 2 uses only healthy [1,2,3,4,7,8]; bare 0/6 and autumn 5 excluded. Selected-body alpha silhouette, not unqualified 2304. |
 | Possible shadows 2304 | graphics.drs | 9 | Frame 3 screenshot shows shadow-shaped art, 80×168, hotspot (66,153). Equal counts do not establish pairing with 4654. |
 | Palms 4653 | graphics.drs | 13 | All originals inspected. Wood family 4 uses singles [0,1,2,3,5,6,8,10,11,12], not clumps 4/7/9. Signed/outside hotspots preserved, including frame 0 (20,175) on 88×168. Selected-body alpha silhouette, not 2300 or broadleaf 2296. |
-| Grasses 15001/15009/15006 | terrain.drs | 100 each | All 97×49, hotspot (0,0). Names are proposals; no seam or color review here. |
-| Beach 15017 | terrain.drs | 100 | 97×49, hotspot (0,0); shore compatibility unreviewed. |
+| Grasses 15001/15009/15006 | terrain.drs | 100 each | Promoted in v7. All 97×49, hotspot (0,0). Montages in x-major, reversed-y order tile without seams: 15001 darker grass, 15009 grass with brown patches, 15006 grass and dirt mix. |
+| Beach 15017 | terrain.drs | 100 | Promoted in v7 as gravel: 97×49, hotspot (0,0), seamless pebbly montage. Shore compatibility remains unreviewed. |
 | Ice 15024 | terrain.drs | 64 | 97×49, hotspot (0,0). Neither 100-frame indexing nor assumed 8×8 periodicity is justified. |
 | Cliffs 226–234 | graphics.drs | 25 each | Mixed bounds include 1×1/2×3 placeholders and far-away hotspots. 227 includes a 329×718 frame. Must inspect valid variants and placement before use. |
 | Cliff 235 | graphics.drs | 1 | 154×79, hotspot (96,32); metadata only. |
 
-The remaining 19 discovery entries live in `catalog::candidates::UNAPPROVED_SOURCES`;
-conifer/palm prefixes alone have moved to the reviewed optional load list. Their
+The remaining 12 discovery entries live in `catalog::candidates::UNAPPROVED_SOURCES`;
+conifer/palm prefixes and the four ground sheets have moved to the reviewed optional load list. Their
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 978 actual extents through the runtime packer; the
+test separately feeds all 1,378 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -60,7 +60,7 @@ rendering only; generated shallow water and river margins stay impassable.
 
 Faces between two classes blend their sheets through the same per-vertex
 splat as land materials; water never blends with land across the shore. No
-water or shore face uses a procedural flat tint. Beach 15017 stays a candidate:
+water or shore face uses a procedural flat tint. Gravel 15017 is approved only for land:
 the shore band uses reviewed sand 15010. Animation is not implemented.
 
 ## Natural rock correction
