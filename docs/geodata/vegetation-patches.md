@@ -15,7 +15,8 @@ combined history, water, and vegetation correction documents within the
 worker's 64 KiB request envelope.
 
 `historical_biome` sets a supported potential-natural-vegetation class;
-`unknown` writes source class zero, which keeps procedural fallback explicit.
+`unknown` writes source class zero: the tile then takes the nearest usable
+class within 32 samples, or the procedural fallback when there is none.
 `modern_observation` is retained as cited context but never substitutes for
 a year-600 reconstruction. No patch is generated automatically for a
 demonstration. Corrections are applied before pyramid reduction. Their

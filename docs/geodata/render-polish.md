@@ -42,10 +42,11 @@ viewport sizes; these views may scale a native tile over multiple source tiles.
 
 Forest layout, clearings, trails and ground appearance come from the single
 composed landscape described in [the landscape reference](landscape/implementation.md):
-coherent ecological patches, a starting glade, a 192-tile opening lattice with
-bent trails, and matching canopy/forest-floor appearance. Its reservations clear
-procedural resources, never water or cliffs. These are procedural forest tracks,
-not historically sourced roads.
+groves and forests sized by the real-world forest signal, a starting glade,
+glades and bent trails inside large forests only, and matching
+canopy/forest-floor appearance. Its reservations clear procedural resources,
+never water or cliffs. These are procedural forest tracks, not historically
+sourced roads.
 
 Every accepted start needs a clear 5×5 footprint, at least 256 reachable tiles
 and a certified terrain/resource-crossable exit route at least 64 tiles away on

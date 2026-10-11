@@ -39,16 +39,18 @@ no-source fallback maps alike; fallback relief, water and biome noise is only
 the base input to the same composition. Authoritative typed, scalar, chunk,
 resource and blocking queries share that composer.
 
-- Shared reservations: a starting glade, a seeded 192-tile opening lattice in
-  which every cell has an opening, bent trails between openings, and direct
-  start connectors to the eight surrounding openings. Reservations clear every
-  appearance channel and procedural resources, never water or cliffs.
-- Ecological patches: coherent jittered patches with sparse, moderate, heavy and
-  exceptional densities. Sparse savanna is a separate mode.
-- Historical parcels: coherent integer parcels realize HYDE crop and grazing
+- Shared reservations: a starting glade, which always clears every appearance
+  channel and procedural resources, and one connector from it to the trail
+  node of its cell, which is a corridor cleared only inside a large forest.
+  Neither changes water or cliffs.
+- Forest stands: analytic forests and groves whose number and size follow the
+  real-world forest signal; see [forest amount](#forest-amount-and-large-forests).
+  Sparse savanna is a separate mode whose density follows the same signal.
+- Historical parcels: coherent integer parcels classify HYDE crop and grazing
   over source-valid land, without biome, forest or placed-tree input. Combined
-  fractions cap at 100, retaining crop first. Correlated clipping cannot promise
-  exact source ratios; coverage evidence is retained and reported.
+  fractions cap at 100, retaining crop first. Parcels keep dressing off farmed
+  cells but no longer cut stands: the same fractions already set how forested
+  a region is, and parcel-shaped holes were rectangular artifacts in forests.
 - Appearance: coherent canopy and forest-floor strengths, ecological palette,
   exposure and height band. Temperate-summer modeling uses source-height bands
   (1000/1800/2500/3500 m) and a 2300 m temperate/boreal/woodland treeline; it
@@ -59,6 +61,56 @@ resource and blocking queries share that composer.
 Non-tree resources need a free cardinal neighbor satisfying the physical
 height/passability rules, and dressing cannot refill crop, grazing, non-land or
 reserved cells.
+
+### Forest amount and large forests
+
+Forest amount is driven by "wildness", the share of potential forest that
+survived in the year 600, in thousandths, evaluated once per 192-tile cell as
+the mean of four probes 48 tiles around the cell centre:
+
+- the potential-natural-vegetation biome says whether forest can grow
+  (temperate, boreal and tropical 100%, Mediterranean woodland 55%, savanna
+  for its scattered trees, treeless biomes 0);
+- HYDE crop plus grazing percent, plus a quarter of the population per square
+  kilometre, is the cleared share. It maps piecewise-linearly to wildness:
+  0 → 1000, 2 → 860, 5 → 680, 8 → 540, 12 → 420, 20 → 260, 35 → 120,
+  60 → 40, 100 → 0;
+- without a historical observation the biome default applies (temperate 500,
+  boreal 750, tropical 850) with a seeded ±300 variation per cell, so maps
+  without history still have more and less forested regions.
+
+Modern land cover is not an input. Wildness is a modeling input for stand
+number and size, not an observation of where individual stands stood.
+
+Stands are analytic shapes in one continuously warped world coordinate space
+(64- and 20-tile lattices, at most 15 tiles per axis), never clipped by a
+cell, chunk or source-sample boundary:
+
+| Stand | Lattice | Size | Where |
+| --- | --- | --- | --- |
+| Grove | 48 tiles, ±18 jitter | Two lobes, radius 5–18 tiles | Presence 0–42% of lattice cells from bilinearly interpolated wildness, scaled 0.5–1.5 by a continuous clumping field |
+| Forest | 192 tiles, one per cell | Three lobes, main radius 26–70 tiles | From wildness 350; always present from 750 |
+| Large forest | — | Main radius ≥ 48 tiles: about 9,000 tiles, 100 tiles across | Only from about wildness 600 |
+
+Glades and paths exist only in large forests: a hub glade at the cell's trail
+node, one to three interior glades linked to the hub, and trails about five
+tiles wide from the node to the four neighboring nodes. They are cleared only inside
+the large-forest domain (its lobes plus an 8-tile apron), so groves and
+smaller forests are solid and every large forest is crossed. Blocking
+resources are not placed on glades or trails.
+
+Measured on 768-tile uniform fixtures over 16 seeds (canopy share, largest
+forest including its own glades and paths): wildness 60 about 1% and under
+900 tiles; 450 about 8–17%; 700 about 25–35% and 12,000–25,000 tiles; 1000
+about 43–51% and 34,000–88,000 tiles, with at least 98% of the open ground
+outside stands in one four-connected region. The remainder is small pockets
+sealed between overlapping lobes.
+
+A vegetation sample without a usable class (source nodata, typically beside
+lakes and coasts) takes the nearest usable class within 32 samples and keeps
+fallback provenance. Only when none exists does the seeded no-source biome
+noise apply; its 32-tile cells used to appear as chunk-aligned squares of
+unrelated biomes inside real forest.
 
 ### Tree visual families
 
@@ -152,11 +204,12 @@ and one object/unit, at most 2,048 selected frames; account CPU/restoration copi
 and decode to at most 1 MiB. Compact chunks decode to at most 128 KiB. Overflow
 and missing required pages fail.
 
-Forest fixtures require 16 seeds, boundary and clearing cases, 85–95% core
-density, at most 1% exterior occupancy and fewer than 1% eight-neighbor
-singletons. Sparse/moderate/heavy/exceptional patch areas target 10–20%, 25–40%,
-45–60%, 65–80% of suitable land before exclusions. Report actual post-exclusion
-coverage and connected open space; sparse savanna is separate.
+Forest fixtures require 16 seeds, 85–95% core density, no exterior occupancy,
+fewer than 1% eight-neighbor singletons, canopy share rising with wildness
+within the bounds above, no straight axis-aligned stand edge of a chunk side,
+no glade or path outside a large forest, and connected open ground at
+wildness 1000. Report actual coverage and connected open space on real
+packages; sparse savanna is separate.
 
 Record commands and outcomes for each stage; no synthetic pass qualifies France.
 A handoff states the exact revision and tree state, hooks, focused gates,

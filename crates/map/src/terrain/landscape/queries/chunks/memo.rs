@@ -9,6 +9,9 @@ struct Entry {
     candidate: Option<Option<ResourceNode>>,
 }
 
+/// One 192-tile cell and its wildness.
+type CellWildness = ((i64, i64), u16);
+
 pub(super) type PointMemo<'a> = Memo<'a, 25>;
 pub(super) type ChunkMemo<'a> = Memo<'a, 1296>;
 
@@ -18,6 +21,7 @@ pub(super) struct Memo<'a, const N: usize> {
     side: i64,
     cancelled: &'a dyn Fn() -> bool,
     entries: RefCell<[Entry; N]>,
+    cells: RefCell<[Option<CellWildness>; 16]>,
     origins: RefCell<resources::Origins>,
 }
 
@@ -33,6 +37,7 @@ impl<'a> PointMemo<'a> {
             side: 5,
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
+            cells: RefCell::new([None; 16]),
             origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
@@ -50,6 +55,7 @@ impl<'a> ChunkMemo<'a> {
             side: i64::from(CHUNK_TILES) + 4,
             cancelled,
             entries: RefCell::new([Entry::default(); 1296]),
+            cells: RefCell::new([None; 16]),
             origins: RefCell::new(resources::Origins::new(generator)),
         }
     }
@@ -61,6 +67,24 @@ impl<const N: usize> Memo<'_, N> {
         let y = i64::from(position.y) - i64::from(self.origin.y);
         ((0..self.side).contains(&x) && (0..self.side).contains(&y))
             .then_some((y * self.side + x) as usize)
+    }
+    /// Wildness of one 192-tile cell, direct-mapped: a point or chunk reads at
+    /// most a 4x4 block of cells, so each is derived from the source once.
+    pub(super) fn wildness(&self, cx: i64, cy: i64) -> Result<u16, EnvironmentPageError> {
+        if (self.cancelled)() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let slot = (cy.rem_euclid(4) * 4 + cx.rem_euclid(4)) as usize;
+        if let Some((cell, value)) = self.cells.borrow()[slot]
+            && cell == (cx, cy)
+        {
+            return Ok(value);
+        }
+        let value = self
+            .generator
+            .landscape_cell_wildness(cx, cy, self.cancelled)?;
+        self.cells.borrow_mut()[slot] = Some(((cx, cy), value));
+        Ok(value)
     }
     pub(super) fn base(&self, position: TileCoord) -> Result<Option<Tile>, EnvironmentPageError> {
         // Cancellation is observed even on a hit. Do not retain source errors.

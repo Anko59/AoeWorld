@@ -1,11 +1,16 @@
 //! Shared landscape eligibility from undecorated terrain and historical parcels.
-//! Region/support are explicit modeling policy, not modern land-cover or an inferred historical observation.
+//! Support is explicit modeling policy, not modern land-cover or an inferred
+//! historical observation. Crop and grazing parcels no longer cut stands: the
+//! same historical fractions already set how forested a region is, and
+//! parcel-shaped holes were rectangular artifacts inside forests.
 use crate::historical_parcels::LandUse;
-use crate::landscape_patches::{Fitness, Input, Mode, Region};
+use crate::landscape_patches::{Fitness, Input, Mode};
 use crate::{Biome, GroundMaterial, Tile, WaterKind};
 
 /// Reservations must be realized before descriptor singleton filtering, so a
 /// later tree-only removal cannot disagree with forest floor/canopy occupancy.
+/// `start` and `resource_approach` always clear vegetation; `route` is a
+/// corridor cleared only where it crosses a large forest.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Reservations {
     pub route: bool,
@@ -29,7 +34,6 @@ pub struct Assessment {
 
 pub fn assess(
     base: Tile,
-    region: Region,
     support_per_thousand: u16,
     historical_land_use: LandUse,
     reservations: Reservations,
@@ -38,9 +42,7 @@ pub fn assess(
         return Err(EcologyError::SupportOutOfRange);
     }
     let mode = match base.biome {
-        Biome::Temperate | Biome::Boreal | Biome::Tropical | Biome::Woodland => {
-            Mode::Forest(region)
-        }
+        Biome::Temperate | Biome::Boreal | Biome::Tropical | Biome::Woodland => Mode::Forest,
         Biome::Savanna => Mode::SparseSavanna,
         Biome::Steppe | Biome::Desert | Biome::Tundra | Biome::Alpine | Biome::Polar => {
             Mode::Treeless
@@ -57,10 +59,7 @@ pub fn assess(
             GroundMaterial::Rock | GroundMaterial::Sand | GroundMaterial::Ice
         )
         && mode != Mode::Treeless;
-    let excluded = matches!(
-        historical_land_use,
-        LandUse::Crop | LandUse::Grazing | LandUse::Nonland
-    ) || reservations.route
+    let excluded = historical_land_use == LandUse::Nonland
         || reservations.resource_approach
         || reservations.start;
     Ok(Assessment {
@@ -71,6 +70,7 @@ pub fn assess(
                 support_per_thousand,
             },
             eligible: !excluded,
+            corridor: reservations.route,
         },
         historical_land_use,
     })

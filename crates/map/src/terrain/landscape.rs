@@ -1,43 +1,41 @@
-//! Shared procedural reservations: the central starting glade, seeded opening
-//! nodes on a 192-tile lattice and the trails joining them. They clear
-//! vegetation only; source water and cliffs still decide actual traversal.
+//! Shared procedural reservations around the start: the central starting
+//! glade and one connector to the trail node of its cell. The glade always
+//! clears vegetation; the connector is a corridor that the forest descriptor
+//! clears only where it crosses a large forest, joining a start inside one to
+//! that forest's hub and trails. Trail nodes and
+//! the trails between them belong to `landscape_patches`. Source water and
+//! cliffs still decide actual traversal.
 use super::{MapChunkGenerator, geometry};
+use crate::landscape_patches::{CELL_TILES, Patches};
 use aoe_core::TileCoord;
 
-const OPENING_GRID_TILES: i32 = 192;
-const OPENING_CENTER_JITTER: i32 = 30;
+const OPENING_GRID_TILES: i32 = CELL_TILES as i32;
 
 impl MapChunkGenerator {
-    /// Pure, bounded lookup of the procedural opening in this tile's cell.
-    /// A node is not a claim that source water or cliffs are traversable.
+    /// Pure, bounded lookup of the trail-node tile of this tile's 192-tile
+    /// cell (the cell is taken in tile space; the node itself lives in the
+    /// forest descriptor's warped space). A node is not a claim that source water or cliffs are traversable, and
+    /// its hub glade exists only inside a large forest.
     pub fn forest_opening_center_at(&self, tile: TileCoord) -> Option<TileCoord> {
-        let cell = (
-            tile.x.div_euclid(OPENING_GRID_TILES),
-            tile.y.div_euclid(OPENING_GRID_TILES),
+        let (x, y) = Patches::new(self.geography_key, self.procedural_seed).node_tile(
+            i64::from(tile.x.div_euclid(OPENING_GRID_TILES)),
+            i64::from(tile.y.div_euclid(OPENING_GRID_TILES)),
         );
-        Some(opening_center(cell_layout(self, cell), cell))
+        Some(TileCoord::new(clamp_tile(x), clamp_tile(y)))
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct OpeningGeometry {
-    vertices: [TileCoord; 16],
+fn node_center(generator: &MapChunkGenerator, cell: (i32, i32)) -> TileCoord {
+    let (x, y) = Patches::new(generator.geography_key, generator.procedural_seed)
+        .node(i64::from(cell.0), i64::from(cell.1));
+    TileCoord::new(clamp_tile(x), clamp_tile(y))
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct TrailSegment {
-    start: TileCoord,
-    bend: TileCoord,
-    end: TileCoord,
-    half_width: i32,
+fn clamp_tile(value: i64) -> i32 {
+    value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
-pub(super) fn opening_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    starting_glade(generator, tile)
-        || geometry::point_in_polygon(&opening_geometry(generator, tile).vertices, tile)
-}
-
-fn starting_glade(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
+pub(super) fn starting_glade(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
     let width = generator.width_tiles.max(1);
     let center = TileCoord::new((width - 1) / 2, (width - 1) / 2);
     if tile.x.abs_diff(center.x) > 27 || tile.y.abs_diff(center.y) > 27 {
@@ -67,155 +65,28 @@ fn starting_glade(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
     geometry::point_in_polygon(&vertices, tile)
 }
 
-fn opening_geometry(generator: &MapChunkGenerator, tile: TileCoord) -> OpeningGeometry {
-    opening_geometry_for_cell(
-        generator,
-        (
-            tile.x.div_euclid(OPENING_GRID_TILES),
-            tile.y.div_euclid(OPENING_GRID_TILES),
-        ),
-    )
-}
-
-fn opening_geometry_for_cell(generator: &MapChunkGenerator, cell: (i32, i32)) -> OpeningGeometry {
-    let layout = cell_layout(generator, cell);
-    let kind = layout % 1_000;
-    // Every lattice cell has an opening node; most are small.
-    let minimum_radius = if (300..760).contains(&kind) { 31 } else { 19 };
-    let radius_span = if minimum_radius == 19 { 13 } else { 22 };
-    let base_radius = minimum_radius + ((layout >> 12) % radius_span) as i32;
-    let center = opening_center(layout, cell);
-    let x_scale = 70 + ((mix64(layout ^ 0x2a5d_3c91) >> 11) % 43) as i32;
-    let y_scale = 70 + ((mix64(layout ^ 0x7c4a_1e63) >> 9) % 43) as i32;
-    let radii: [i32; 16] = std::array::from_fn(|vertex| {
-        let jitter = ((mix64(layout ^ vertex as u64) >> 17) % 9) as i32 - 4;
-        base_radius + jitter
-    });
-    let vertices = std::array::from_fn(|vertex| {
-        let (direction_x, direction_y) = geometry::DIRECTIONS[vertex];
-        let offset_x = i64::from(direction_x) * i64::from(radii[vertex]) * i64::from(x_scale)
-            / (geometry::DIRECTION_SCALE * 100);
-        let offset_y = i64::from(direction_y) * i64::from(radii[vertex]) * i64::from(y_scale)
-            / (geometry::DIRECTION_SCALE * 100);
-        TileCoord::new(
-            center
-                .x
-                .saturating_add(i32::try_from(offset_x).unwrap_or(0)),
-            center
-                .y
-                .saturating_add(i32::try_from(offset_y).unwrap_or(0)),
-        )
-    });
-    OpeningGeometry { vertices }
-}
-
-fn cell_layout(generator: &MapChunkGenerator, cell: (i32, i32)) -> u64 {
-    geometry::cell_value(generator, b"forest-opening-layout-v1", cell, 0)
-}
-
-fn opening_center(layout: u64, cell: (i32, i32)) -> TileCoord {
-    let offset = |value: u64| {
-        (value % u64::from((OPENING_CENTER_JITTER * 2 + 1) as u8)) as i32 - OPENING_CENTER_JITTER
-    };
-    TileCoord::new(
-        cell.0
-            .saturating_mul(OPENING_GRID_TILES)
-            .saturating_add(OPENING_GRID_TILES / 2)
-            .saturating_add(offset(mix64(layout ^ 0x4d83_1b27))),
-        cell.1
-            .saturating_mul(OPENING_GRID_TILES)
-            .saturating_add(OPENING_GRID_TILES / 2)
-            .saturating_add(offset(mix64(layout ^ 0x9e31_705b))),
-    )
-}
-
-pub(super) fn procedural_trail_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
-    if starting_connector_contains(generator, tile) {
-        return true;
-    }
-    let cell_x = tile.x.div_euclid(OPENING_GRID_TILES);
-    let cell_y = tile.y.div_euclid(OPENING_GRID_TILES);
-    [
-        ((cell_x, cell_y), 0),
-        ((cell_x.saturating_sub(1), cell_y), 0),
-        ((cell_x, cell_y), 1),
-        ((cell_x, cell_y.saturating_sub(1)), 1),
-    ]
-    .into_iter()
-    .filter_map(|(cell, axis)| trail_segment(generator, cell, axis))
-    .any(|segment| {
-        near_segment(segment.start, segment.bend, tile, segment.half_width)
-            || near_segment(segment.bend, segment.end, tile, segment.half_width)
-    })
-}
-
-fn trail_segment(
-    generator: &MapChunkGenerator,
-    cell: (i32, i32),
-    axis: u8,
-) -> Option<TrailSegment> {
-    let start_layout = cell_layout(generator, cell);
-    let connection = mix64(start_layout ^ (u64::from(axis) << 48));
-    let neighbor = if axis == 0 {
-        (cell.0.saturating_add(1), cell.1)
-    } else {
-        (cell.0, cell.1.saturating_add(1))
-    };
-    let end_layout = cell_layout(generator, neighbor);
-    let start = opening_center(start_layout, cell);
-    let end = opening_center(end_layout, neighbor);
-    let sign = if connection & 1 == 0 { -1 } else { 1 };
-    let bend_offset = sign * (7 + ((connection >> 19) % 13) as i32);
-    let bend = if axis == 0 {
-        TileCoord::new(
-            midpoint(start.x, end.x),
-            midpoint(start.y, end.y).saturating_add(bend_offset),
-        )
-    } else {
-        TileCoord::new(
-            midpoint(start.x, end.x).saturating_add(bend_offset),
-            midpoint(start.y, end.y),
-        )
-    };
-    Some(TrailSegment {
-        start,
-        bend,
-        end,
-        half_width: 2 + ((connection >> 32) % 2) as i32,
-    })
-}
-
-fn starting_connector_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
+pub(super) fn starting_connector_contains(generator: &MapChunkGenerator, tile: TileCoord) -> bool {
     let coordinate = (generator.width_tiles.max(1) - 1) / 2;
     let center = TileCoord::new(coordinate, coordinate);
     // Reject far-away tiles before hashing; no map-wide allocation or source
     // search during sampling.
-    let reach = OPENING_GRID_TILES + OPENING_GRID_TILES / 2 + OPENING_CENTER_JITTER;
+    let reach = OPENING_GRID_TILES + 16;
     if tile.x.abs_diff(center.x) > reach as u32 || tile.y.abs_diff(center.y) > reach as u32 {
         return false;
     }
+    // The connector lives in the descriptor's warped space, like its
+    // trails, so it ends exactly on the node's hub glade.
+    let patches = Patches::new(generator.geography_key, generator.procedural_seed);
+    let warped = |tile: TileCoord| {
+        let (x, y) = patches.warped(i64::from(tile.x), i64::from(tile.y));
+        TileCoord::new(clamp_tile(x), clamp_tile(y))
+    };
+    let start = warped(center);
     let cell = (
-        coordinate.div_euclid(OPENING_GRID_TILES),
-        coordinate.div_euclid(OPENING_GRID_TILES),
+        start.x.div_euclid(OPENING_GRID_TILES),
+        start.y.div_euclid(OPENING_GRID_TILES),
     );
-    // Dense coherent forests have no scattered-tree shortcuts through bent
-    // graph edges. Connect the starting glade directly to its seeded
-    // surrounding opening nodes so a bounded planner can leave toward a
-    // destination. This remains only a shared vegetation reservation.
-    for dy in -1..=1 {
-        for dx in -1..=1 {
-            let neighbor = (cell.0.saturating_add(dx), cell.1.saturating_add(dy));
-            let end = opening_center(cell_layout(generator, neighbor), neighbor);
-            if near_segment(center, end, tile, 3) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn midpoint(left: i32, right: i32) -> i32 {
-    (i64::from(left) + i64::from(right)).div_euclid(2) as i32
+    near_segment(start, node_center(generator, cell), warped(tile), 2)
 }
 
 fn near_segment(start: TileCoord, end: TileCoord, point: TileCoord, radius: i32) -> bool {
