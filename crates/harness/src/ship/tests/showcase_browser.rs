@@ -390,3 +390,20 @@ fn steps_may_turn_the_mouse_wheel_over_an_element() {
         );
     }
 }
+
+#[test]
+fn a_storyboard_may_ask_for_a_desktop_sized_page() {
+    let default = Storyboard::parse(&browser_board("/", "")).unwrap();
+    let json =
+        serde_json::to_value(plan(&default, &[3500, 3000], &origins(&default)).unwrap()).unwrap();
+    assert_eq!(json["viewport"], "default");
+
+    let text = browser_board("/", "").replacen('{', r#"{"viewport":"large","#, 1);
+    let large = Storyboard::parse(&text).unwrap();
+    let json =
+        serde_json::to_value(plan(&large, &[3500, 3000], &origins(&large)).unwrap()).unwrap();
+    assert_eq!(json["viewport"], "large");
+
+    let unknown = browser_board("/", "").replacen('{', r#"{"viewport":"4k","#, 1);
+    assert!(Storyboard::parse(&unknown).is_err());
+}
