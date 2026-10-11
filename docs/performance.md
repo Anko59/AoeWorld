@@ -89,7 +89,10 @@ size comparison. Their reviewed initial baselines live in `baselines/perf/`;
 without changing the baselines. The WASM size baseline was re-taken on
 2026-10-10 at 228410 B (from 217240 B, set by #6), the size of the tree that
 reverts #208 and #221: both existed only to fit a 5% gate that had 37 B left,
-one by moving WebGPU out of Rust. A baseline moves only in its own reviewed
+one by moving WebGPU out of Rust. It was re-taken on 2026-10-11 at 236275 B,
+measured on `dev` ba5417c: the growth is merged product code (world-anchored
+terrain texels and their frame directory, #268), and the allowance left could
+not hold the next reviewed features. A baseline moves only in its own reviewed
 change, with the reason recorded here. These measured deterministic comparisons pass
 locally. Encoded network bytes and tick durations are informational because
 they vary with scheduling. The dedicated hardware environment and
