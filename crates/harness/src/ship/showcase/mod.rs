@@ -77,6 +77,10 @@ pub(crate) struct Storyboard {
     /// same software WebGPU flags as the `webgpu` browser-test project.
     #[serde(default)]
     pub(crate) renderer: Renderer,
+    /// Page size of the take: 1280×720, or `large` for 1920×1080 scaled into
+    /// the same 1280×720 video (behaviour that depends on a desktop window).
+    #[serde(default)]
+    pub(crate) viewport: Viewport,
     pub(crate) scenes: Vec<Scene>,
 }
 
@@ -86,6 +90,14 @@ pub(crate) enum Renderer {
     #[default]
     Default,
     Webgpu,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Viewport {
+    #[default]
+    Default,
+    Large,
 }
 
 fn default_voice() -> String {
