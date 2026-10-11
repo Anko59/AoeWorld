@@ -58,7 +58,9 @@ resource and blocking queries share that composer.
 - Appearance: coherent canopy and forest-floor strengths, ecological palette,
   exposure and height band. Temperate-summer modeling uses source-height bands
   (1000/1800/2500/3500 m) and a 2300 m temperate/boreal/woodland treeline; it
-  changes surface appearance, never heights, passability or provenance.
+  changes surface appearance, never heights, passability or provenance. Snow
+  and rock ground follow the snow line (see [mountains](#mountains)), not the
+  bands.
 - Ground variety: the way Age of Empires II maps mix related terrains, open
   ground carries irregular patches of a second and third sheet from its own
   family. Temperate grass has worn-grass rings around a grass and dirt mix with
@@ -121,6 +123,29 @@ Tests bound cliff coverage to 1–12% on the 768-tile alpine fixture (grades
 up to 22%). At least 99.9% of passable ground belongs to one four-connected
 region reaching all four edges, with remaining pockets at most 36 tiles;
 the same connectivity bounds hold around an isolated cone and hollow.
+
+Snow and bare rock follow an estimated warmest-month temperature, not biome
+cells. Packages carry no temperature or precipitation field (a climate source
+is proposed in issue #274), so one function, `warmest_month_millicelsius`,
+estimates it from latitude and elevation: 22 °C at sea level at 46°, 0.65 °C
+colder per degree toward the pole, 6.5 °C colder per kilometre. Latitude comes
+from the package's centre and the tile's north-south position; a map without
+a geographic request uses 46°. A real climate field can replace that function.
+
+- Snow lies on walkable ground where the estimate is at most 4 °C: a snow
+  line of about 2,770 m at 46°, 100 m lower per degree toward the pole, 5,200 m
+  at most, 1,230 m at 61.5° and below sea level from about 74°.
+- Bare rock lies where it is at most 7.5 °C (about 540 m below the snow),
+  unless the ground carries forest floor; no forest stands on either.
+- Tundra vegetation is a second cold signal and lowers both lines by 150 m.
+- Each line is moved by its own continuous world-anchored noise (40-, 13- and
+  5-tile octaves, at most 384 m), so the edge wanders (over 100 tiles on the
+  4% test slope) and follows no chunk, elevation-sample or vegetation-cell
+  boundary.
+
+Boreal and tundra lowlands below the line are summer grass and heath, where
+they used to be snow in vegetation-cell squares; southern Finland at sea
+level is green. Polar ice stays impassable `Ice`.
 
 ### Forest amount and large forests
 

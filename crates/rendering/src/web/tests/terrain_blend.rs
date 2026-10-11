@@ -169,7 +169,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         standing: Vec::new(),
         grass: vec![frame(0)],
         terrain: std::array::from_fn(|_| vec![frame(0)]),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),

@@ -20,7 +20,7 @@ fn art() -> GameArt {
         standing: Vec::new(),
         grass: Vec::new(),
         terrain: Default::default(),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 8],
         water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),

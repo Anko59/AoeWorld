@@ -137,6 +137,7 @@ const FALLBACK_DIGESTS: [&str; 3] = [
     "ecf308800b39593c23cc6e86f0c029277fe2e751ae6a983d63746d0326df1799",
     "fc2edb936af1172eac794affc0c9f36617ea14a5c2362d54e5d5bfece950f243",
 ];
+// Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
     "a7c9b467bad6228d96f1da5fdbab0ec3f9fc867022bc51775b4b204018648468";
 

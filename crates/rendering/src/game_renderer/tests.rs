@@ -36,7 +36,7 @@ fn synthetic_art() -> GameArt {
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
         scenery: Default::default(),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         water_depth: Default::default(),
     }
 }

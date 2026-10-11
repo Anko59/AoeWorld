@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Art groups: grass, dry grass, dirt, sand, (unused paving), water, forest floor.
-const COLORS: [[u8; 4]; 7] = [
+const COLORS: [[u8; 4]; 8] = [
     [40, 170, 30, 255],
     [150, 150, 60, 255],
     [180, 130, 70, 255],
@@ -20,6 +20,7 @@ const COLORS: [[u8; 4]; 7] = [
     [0, 0, 0, 0],
     [30, 90, 200, 255],
     [110, 65, 25, 255],
+    [75, 120, 170, 255],
 ];
 /// Columns of scene material, west to east: the last one continues eastwards.
 /// Case 5 is a forest (material 6, full floor) against sand; case 6 has three
@@ -59,7 +60,7 @@ fn frame(group: usize) -> GameFrame {
 }
 
 pub(crate) fn art() -> GameArt {
-    let mut terrain: [Vec<GameFrame>; 11] = Default::default();
+    let mut terrain: [Vec<GameFrame>; 12] = Default::default();
     for group in [0, 1, 2, 3, 5, 6] {
         terrain[group] = vec![frame(group)];
     }
@@ -68,7 +69,7 @@ pub(crate) fn art() -> GameArt {
         standing: Vec::new(),
         grass: terrain[0].clone(),
         terrain,
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),
@@ -78,6 +79,20 @@ pub(crate) fn art() -> GameArt {
 }
 
 pub(crate) fn atlas() -> Vec<u8> {
+    atlas_for(&art())
+}
+
+fn snow_art() -> GameArt {
+    let mut art = art();
+    art.terrain[7] = vec![frame(7)];
+    art
+}
+
+pub(crate) fn snow_atlas() -> Vec<u8> {
+    atlas_for(&snow_art())
+}
+
+fn atlas_for(art: &GameArt) -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     for (group, color) in COLORS.iter().enumerate() {
         for y in 4..7 {
@@ -86,7 +101,7 @@ pub(crate) fn atlas() -> Vec<u8> {
             }
         }
     }
-    assert_eq!(crate::write_terrain_directory(&art(), &mut atlas), Ok(()));
+    assert_eq!(crate::write_terrain_directory(art, &mut atlas), Ok(()));
     atlas
 }
 
@@ -134,6 +149,12 @@ pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     faces
 }
 
+pub(crate) fn snow_scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
+    let mut faces = projected_surface_triangles(&terrain(case), camera(case));
+    apply_terrain_textures(&mut faces, &snow_art());
+    faces
+}
+
 /// The flat colour a scene material shows on its own.
 fn color(material: u8) -> [f32; 4] {
     let group = match material {
@@ -151,6 +172,17 @@ fn color(material: u8) -> [f32; 4] {
 /// Independent of the mesh: columns depend on x only, so every share is the
 /// linear interpolation of its two neighbouring vertex columns.
 pub(crate) fn expected(case: usize, probe: usize) -> [u8; 4] {
+    expected_for(case, probe, false)
+}
+
+fn expected_for(case: usize, probe: usize, native_snow: bool) -> [u8; 4] {
+    let color = |material| {
+        if native_snow && matches!(material, 7 | 8) {
+            COLORS[7].map(f32::from)
+        } else {
+            color(material)
+        }
+    };
     let camera = camera(case);
     let [x, y] = PROBES[probe];
     let world = aoe_core::Camera {
@@ -236,6 +268,17 @@ pub(crate) fn assert_soft(case: usize, pixel: &dyn Fn(u32, u32) -> [u8; 4]) {
         assert!(
             u32::from(step) * 3 <= u32::from(span) * 2,
             "case {case}: hard step {pair:?}"
+        );
+    }
+}
+
+/// Native blue snow/ice must survive each mixed edge, without procedural tint.
+pub(crate) fn assert_snow_probe(case: usize, probe: usize, actual: [u8; 4]) {
+    let expected = expected_for(case, probe, true);
+    for channel in 0..4 {
+        assert!(
+            actual[channel].abs_diff(expected[channel]) <= 2,
+            "native snow case {case} probe {probe}: {actual:?}, expected {expected:?}"
         );
     }
 }

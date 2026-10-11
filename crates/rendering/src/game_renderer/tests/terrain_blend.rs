@@ -203,7 +203,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
                 _ => 0,
             })]
         }),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
@@ -309,7 +309,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         standing: Vec::new(),
         grass: Vec::new(),
         terrain: Default::default(),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),

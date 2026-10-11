@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 8;
+pub const VERSION: u8 = 9;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_403;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_467;
 
 /// Paving 15018 is not natural rock. No imported rock sheet is approved.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -45,6 +45,7 @@ pub enum AssetRole {
     LushGrass,
     Gravel,
     CliffFace,
+    Snow,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -232,7 +233,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 8] = [
 /// the same x-major, reversed-y order as the required sheets: grass and dirt
 /// mix 15006, grass with brown patches 15009, darker grass 15001 and pebbly
 /// beach 15017. A pack without one draws its base sheet instead.
-pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 8] = [
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 9] = [
     SpriteSource {
         role: AssetRole::ForestFloor,
         archive: "terrain.drs",
@@ -286,6 +287,17 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 8] = [
     ),
     variety(AssetRole::LushGrass, 15001, "10x10 periodic darker grass"),
     variety(AssetRole::Gravel, 15017, "10x10 periodic pebbly beach"),
+    SpriteSource {
+        role: AssetRole::Snow,
+        archive: "terrain.drs",
+        id: 15024,
+        frames: 64,
+        interpretation: "8x8 periodic snow and ice field in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 8,
+            rows: 8,
+        }),
+    },
 ];
 
 const fn variety(role: AssetRole, id: u32, interpretation: &'static str) -> SpriteSource {

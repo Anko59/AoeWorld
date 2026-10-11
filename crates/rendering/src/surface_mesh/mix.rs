@@ -295,6 +295,15 @@ pub(crate) fn weights(shares: [f32; 3], middle: bool, noise: f32) -> [f32; 3] {
     }
 }
 
+/// Preserve authored snow/ice texels at mixed borders and junctions.
+pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32) -> [f32; 4] {
+    if appearance & super::landscape::NATIVE_SNOW != 0 && matches!(material, 7 | 8) {
+        texel.map(f32::from)
+    } else {
+        layer(texel, material)
+    }
+}
+
 /// One layer's colour before blending: procedural rock, snow, ice and mud are
 /// dirt or water detail on a neutral base, every other sheet is itself.
 pub(crate) fn layer(texel: [u8; 4], material: u8) -> [f32; 4] {

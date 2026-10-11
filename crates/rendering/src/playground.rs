@@ -50,9 +50,9 @@ pub struct GameArt {
     /// dirt/water detail.
     /// Map binding stays in the client so the renderer remains independent
     /// from geographic map contracts.
-    pub terrain: [Vec<GameFrame>; 11],
+    pub terrain: [Vec<GameFrame>; 12],
     /// Authored sheet topology; never infer a repeating sheet from frame count.
-    pub terrain_topology: [Option<TerrainTopology>; 11],
+    pub terrain_topology: [Option<TerrainTopology>; 12],
     /// Optional water depth sheets beside `terrain[5]`, the light shallow
     /// sheet: medium water, deep water and walkable marsh shallows (fords).
     /// An empty sheet draws the shallow sheet, never a flat tint.

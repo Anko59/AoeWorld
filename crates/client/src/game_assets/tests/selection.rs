@@ -29,7 +29,7 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert_eq!(ranges[AssetRole::Rock as usize], None);
-    assert_eq!(ROLE_SLOTS, 24);
+    assert_eq!(ROLE_SLOTS, 25);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }

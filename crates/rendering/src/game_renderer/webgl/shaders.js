@@ -197,7 +197,9 @@ vec3 ground(vec3 rgb, uint kind) {
     else if (kind != 5u && kind != 7u && kind != 12u) return rgb;
     return base + dot(rgb, vec3(1.0 / 3.0)) * amount;
 }
-vec4 mixed(vec4 texel, uint material) {
+vec4 mixed(vec4 texel, uint material, uint appearance) {
+    uint scene = material & 15u;
+    if ((appearance & 2147483648u) != 0u && (scene == 7u || scene == 8u)) return texel;
     uint kind = 0u;
     switch (material & 15u) {
         case 4u: kind = 5u; break;
@@ -343,7 +345,7 @@ void main() {
         if (tiled) layer = tiledLayer(header, tile, local, gx, gy);
         vec4 sampled = landscape ? terrainSample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy)
                                 : textureLod(atlas, vec3(layer.uv, float(layer.page)), 0.0);
-        if (mixing) sampled = mixed(sampled, material);
+        if (mixing) sampled = mixed(sampled, material, vPages.w);
         if (single) texel = sampled; else texel += sampled * weight;
     }
     result = shaded(texel, vColor, vTint, vPages.w);

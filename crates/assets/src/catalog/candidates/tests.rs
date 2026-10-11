@@ -17,19 +17,12 @@ fn discovery_is_unique_bounded_and_not_a_reviewed_load_list() {
                 .any(|source| source.archive == candidate.archive && source.id == candidate.id)
         );
     }
-    assert_eq!(UNAPPROVED_SOURCES.len(), 11);
+    assert_eq!(UNAPPROVED_SOURCES.len(), 10);
     assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
     assert!(
         !OPTIONAL_RESOURCE_SOURCES
             .iter()
             .any(|source| matches!(source.id, 2300 | 2304))
     );
-    assert_eq!(
-        UNAPPROVED_SOURCES
-            .iter()
-            .find(|source| source.id == 15024)
-            .unwrap()
-            .observed_frames,
-        64
-    );
+    assert!(!UNAPPROVED_SOURCES.iter().any(|source| source.id == 15024));
 }

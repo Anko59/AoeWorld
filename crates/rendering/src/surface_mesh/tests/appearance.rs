@@ -76,6 +76,28 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
     };
     let mut art = test_art(frame);
     art.terrain[4][0].atlas.uv[0] = 0.9; // Deliberately distinct paving sentinel.
+    // A pack with the snow sheet draws snow and ice from it, untinted.
+    art.terrain[7][0].atlas.uv[0] = 0.7;
+    for material in [7, 8] {
+        let sample = SceneTerrain {
+            appearance: None,
+            position: [0.5, 0.5],
+            material,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+        };
+        let mut triangles =
+            projected_surface_triangles(&[sample], camera([0.5, 0.5], 1.0, [256.0, 128.0]));
+        let before = triangles.clone();
+        apply_terrain_textures(&mut triangles, &art);
+        for (old, new) in before.iter().zip(&triangles) {
+            assert_eq!(new.tint, old.tint);
+            assert_eq!(new.texture_uv, Some(art.terrain[7][0].atlas));
+            assert!(new.texture_blend.is_none());
+        }
+    }
+    // Without the sheet they keep the procedural tints.
+    art.terrain[7].clear();
     for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9)] {
         for ramp in [false, true] {
             let tint = base_tint + if ramp { 16 } else { 0 };

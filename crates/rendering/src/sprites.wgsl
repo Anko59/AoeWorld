@@ -243,7 +243,11 @@ fn ground(rgb: vec3<f32>, kind: u32) -> vec3<f32> {
 }
 
 // #if mixing
-fn mixed(texel: vec4<f32>, material: u32) -> vec4<f32> {
+fn mixed(texel: vec4<f32>, material: u32, appearance: u32) -> vec4<f32> {
+    let scene = material & 15u;
+    if (appearance & 2147483648u) != 0u && (scene == 7u || scene == 8u) {
+        return texel;
+    }
     var kind = 0u;
     switch material & 15u {
         case 4u: { kind = 5u; }
@@ -427,7 +431,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             sample = textureSampleLevel(sprite_atlas, sprite_sampler, layer.uv, i32(layer.page), 0.0);
         }
         // #if mixing
-        if mixing { sample = mixed(sample, material); }
+        if mixing { sample = mixed(sample, material, in.pages.w); }
         // #endif
         if single { texel = sample; } else { texel += sample * weight; }
     }
