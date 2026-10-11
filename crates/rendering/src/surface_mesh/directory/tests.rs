@@ -10,7 +10,7 @@ fn directory_resolves_every_material_tile_to_the_cpu_selected_frame() {
         for y in -13..13 {
             for x in -13..13 {
                 assert_eq!(
-                    frame(&atlas, material, [x, y]),
+                    fixture::frame(&atlas, material, [x, y]),
                     terrain_texture_frame(&art, material, [x, y]).map(|frame| frame.atlas),
                     "material {material} tile {x},{y}"
                 );
@@ -20,7 +20,7 @@ fn directory_resolves_every_material_tile_to_the_cpu_selected_frame() {
     // A wrapped accent hash and the extreme coordinates stay in range.
     for tile in [[i32::MIN, i32::MIN], [i32::MAX, i32::MIN], [i32::MAX; 2]] {
         assert_eq!(
-            frame(&atlas, 2, tile),
+            fixture::frame(&atlas, 2, tile),
             terrain_texture_frame(&art, 2, tile).map(|frame| frame.atlas)
         );
     }
@@ -32,7 +32,7 @@ fn directory_refuses_occupied_reserved_rows_and_skips_art_without_terrain() {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     atlas[..4].copy_from_slice(&[255; 4]); // The reserved white origin is not directory space.
     crate::write_terrain_directory(&art, &mut atlas).expect("free reserved rows");
-    assert!(frame(&atlas, 0, [0, 0]).is_some());
+    assert!(fixture::frame(&atlas, 0, [0, 0]).is_some());
     assert_eq!(atlas[..4], [255; 4]);
     assert!(
         atlas[2 * 2048 * 4..].iter().all(|byte| *byte == 0),
@@ -48,7 +48,7 @@ fn directory_refuses_occupied_reserved_rows_and_skips_art_without_terrain() {
     occupied[44] = 9;
     crate::write_terrain_directory(&art, &mut occupied).expect("nothing to write");
     assert_eq!(occupied[44], 9);
-    assert_eq!(frame(&occupied, 0, [0, 0]), None);
+    assert_eq!(fixture::frame(&occupied, 0, [0, 0]), None);
 }
 
 #[wasm_bindgen_test]

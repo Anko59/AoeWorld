@@ -89,6 +89,11 @@ pub(crate) fn art() -> GameArt {
     }
 }
 
+/// Resolves a world tile through the written atlas directory, as shaders do.
+pub(crate) fn frame(atlas: &[u8], material: u8, tile: [i32; 2]) -> Option<AtlasAddress> {
+    super::sheet(atlas, material).map(|sheet| sheet.frame(atlas, tile))
+}
+
 pub(crate) fn atlas() -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
     for (material, count) in [(0, usize::from(SHEET[0] * SHEET[1])), (2, ACCENTS)] {
