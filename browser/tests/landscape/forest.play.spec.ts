@@ -49,7 +49,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     page.on("response", async (response) => {
       if (!response.url().includes("/chunks/") || !response.ok()) return;
       const body = await response.json();
-      if (body.payload_hex?.startsWith("04") && fetched.size < 64)
+      if (body.payload_hex?.startsWith("05") && fetched.size < 64)
         fetched.add(response.url());
     });
     await page.goto("/");
@@ -103,7 +103,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     expect(pkg.environment.vegetation.levels).toHaveLength(1);
     const chunkResponse = await request.get(`/maps/${hash}/chunks/8/8`);
     expect(chunkResponse.ok()).toBeTruthy();
-    expect((await chunkResponse.json()).payload_hex).toMatch(/^04/);
+    expect((await chunkResponse.json()).payload_hex).toMatch(/^05/);
     // Activation retires the old world; the existing UI explicitly requires a
     // reconnect to join its replacement. Wait until reset cleared the old token.
     await expect(page.locator("#connection")).toHaveText(/reconnect/);

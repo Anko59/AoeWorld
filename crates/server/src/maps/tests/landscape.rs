@@ -32,7 +32,7 @@ async fn composed_chunks_use_the_current_format_and_authoritative_resources() {
         .await
         .expect("chunk")
         .0;
-    assert!(generated.payload_hex.starts_with("04"));
+    assert!(generated.payload_hex.starts_with("05"));
     let scene = generated.decode().expect("composed decode");
     assert_eq!(scene.tiles.len(), 18 * 18);
     let generator = package.generator();

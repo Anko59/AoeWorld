@@ -175,15 +175,15 @@ function targetEvidence(
   expect(chunk.payload_hex).toMatch(/^[0-9a-f]+$/);
   expect(chunk.payload_hex.length).toBeLessThanOrEqual(2_097_152);
   const bytes = Buffer.from(chunk.payload_hex, "hex");
-  expect(bytes[0]).toBe(3);
+  expect(bytes[0]).toBe(5);
   const count = bytes.readUInt16LE(1);
   expect(count).toBeGreaterThan(0);
   expect(count).toBeLessThanOrEqual(1024);
   const resourceCount = bytes.readUInt16LE(3);
   expect(resourceCount).toBeLessThanOrEqual(1024);
-  const resourceOffset = 7 + count * 37;
+  const resourceOffset = 7 + count * 35;
   if (bytes.length < resourceOffset + resourceCount * 22)
-    throw new Error("Truncated real codec3 terrain/resources");
+    throw new Error("Truncated real codec5 terrain/resources");
   const woodFamilies: Record<string, { count: number; variants: number[] }> =
     {};
   for (let index = 0; index < resourceCount; index++) {
@@ -199,23 +199,22 @@ function targetEvidence(
     woodFamilies[family] = entry;
   }
   for (let index = 0; index < count; index++) {
-    const offset = 7 + index * 37;
+    const offset = 7 + index * 35;
     if (
       bytes.readInt32LE(offset + 20) !== target[0] ||
       bytes.readInt32LE(offset + 24) !== target[1]
     )
       continue;
-    const material = bytes.readUInt32LE(offset + 14) & 15;
+    const material = bytes.readUInt32LE(offset + 14) & 31;
     expect(material).toBe(3); // Published wire GroundMaterial::ForestFloor, not scene slot6.
-    expect(bytes[offset + 28]).toBe(1);
-    const canopy = bytes.readUInt16LE(offset + 29);
-    const floor = bytes.readUInt16LE(offset + 31);
+    const canopy = bytes.readUInt16LE(offset + 28);
+    const floor = bytes.readUInt16LE(offset + 30);
     expect(canopy).toBeGreaterThan(0);
     expect(canopy).toBeLessThanOrEqual(1000);
     expect(floor).toBeGreaterThan(0);
     expect(floor).toBeLessThanOrEqual(1000);
     return {
-      codec: 3,
+      codec: 5,
       material: "ForestFloor",
       canopy,
       floor,
@@ -224,9 +223,9 @@ function targetEvidence(
       woodFamilies,
       geographicHeightCentimeters: bytes.readInt32LE(offset),
       movementLevel: bytes.readInt16LE(offset + 4),
-      palette: bytes[offset + 33],
-      exposure: bytes[offset + 34],
-      heightBand: bytes[offset + 35],
+      palette: bytes[offset + 32],
+      exposure: bytes[offset + 33],
+      heightBand: bytes[offset + 34],
     };
   }
   throw new Error("Supplied target absent from real source chunk");

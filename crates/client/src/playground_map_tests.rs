@@ -32,6 +32,21 @@ fn water_depth_classes_keep_their_scene_materials() {
     assert_eq!(terrain_material(GroundMaterial::Ford), 12);
 }
 
+#[test]
+fn ground_variety_sheets_have_their_own_scene_materials() {
+    let variety = [
+        (GroundMaterial::GrassDirt, 13),
+        (GroundMaterial::WornGrass, 14),
+        (GroundMaterial::LushGrass, 15),
+        (GroundMaterial::Gravel, 16),
+    ];
+    for (material, scene) in variety {
+        assert_eq!(terrain_material(material), scene);
+    }
+    assert_eq!(terrain_material(GroundMaterial::TemperateGrass), 0);
+    assert_eq!(terrain_material(GroundMaterial::Dirt), 2);
+}
+
 #[path = "playground_map/resource_viewport_tests.rs"]
 mod resource_viewport;
 

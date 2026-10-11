@@ -211,7 +211,7 @@ fn production_runtime_activates_the_same_persisted_provider_twice() {
             let reply = tokio::task::spawn_blocking(move || http(address, request)).await.unwrap();
             assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
             let body: serde_json::Value = serde_json::from_str(reply.split_once("\r\n\r\n").unwrap().1).unwrap();
-            assert!(body["payload_hex"].as_str().unwrap().starts_with("04"));
+            assert!(body["payload_hex"].as_str().unwrap().starts_with("05"));
             // Activation retires the previous world and its controller session.
             let _ = socket.close(None).await;
         }

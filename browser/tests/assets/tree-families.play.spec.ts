@@ -141,7 +141,7 @@ function treeChunk(x: number, y: number, populated = true) {
         family,
       ])
     : [];
-  const bytes = [3, 0, 4, positions.length, 0, 0, 0];
+  const bytes = [5, 0, 4, positions.length, 0, 0, 0];
   const push = (value: number, count: number) => {
     for (let byte = 0; byte < count; byte++)
       bytes.push((value >>> (byte * 8)) & 255);
@@ -151,11 +151,11 @@ function treeChunk(x: number, y: number, populated = true) {
       push(0, 4);
       push(0, 2);
       for (let corner = 0; corner < 4; corner++) push(0, 2);
-      push(1 << 20, 4);
+      push(1 << 21, 4);
       push(0, 2);
       push(cx * 32 + lx, 4);
       push(cy * 32 + ly, 4);
-      for (let absent = 0; absent < 9; absent++) bytes.push(0);
+      for (let absent = 0; absent < 7; absent++) bytes.push(0);
     }
   positions.forEach(([tx = 0, ty = 0, family = 0], index) => {
     push((index + 1) * 2, 4);

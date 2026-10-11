@@ -12,7 +12,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         standing: Vec::new(),
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
-        terrain_topology: [None; 7],
+        terrain_topology: [None; 11],
         water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),

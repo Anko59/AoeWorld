@@ -90,7 +90,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
         standing: Vec::new(),
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
-        terrain_topology: [None; 7],
+        terrain_topology: [None; 11],
         water_depth: Default::default(),
         resources: std::array::from_fn(|index| if index == 0 { vec![frame] } else { Vec::new() }),
         tree_shadows: Vec::new(),
