@@ -55,6 +55,21 @@ impl MapChunkGenerator {
         .unwrap_or_else(|never| match never {})
     }
 
+    /// Conservative: `true` proves only lake or ocean water within `radius`
+    /// tiles. Seeded fallback water is always scanned instead.
+    pub(super) fn dense_open_water_near(&self, tile: TileCoord, radius: i32) -> bool {
+        let Some(water) = &self.water else {
+            return false;
+        };
+        let grid = CellGrid::source(water.samples_per_axis(), self.width_tiles);
+        shoreline::all_wet_near(grid, tile, radius, &mut |x, y| {
+            Ok::<_, Infallible>(water.cell(x, y).is_some_and(|coverage| {
+                open_coverage(coverage.ocean_percent, coverage.inland_percent)
+            }))
+        })
+        .unwrap_or_else(|never| match never {})
+    }
+
     /// Undecorated terrain for neighbor queries; never samples landscape or
     /// objects. Fallback noise is evaluated only for fields without a source.
     pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
@@ -142,6 +157,11 @@ pub(super) fn water_from_coverage(ocean: u8, inland: u8) -> (WaterKind, Provenan
             _ => (WaterKind::Lake, Provenance::SourceDerived),
         },
     }
+}
+
+/// Coverage that `water_from_coverage` reads as lake or ocean.
+pub(super) fn open_coverage(ocean: u8, inland: u8) -> bool {
+    ocean > 50 || (ocean == 0 && inland > 50)
 }
 
 pub(super) fn fallback_height(generator: &MapChunkGenerator, tile: TileCoord) -> i32 {

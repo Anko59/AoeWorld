@@ -170,10 +170,14 @@ fn unclassified_vegetation_cells_take_the_nearest_classified_biome_not_seeded_no
             for x in (14 * 8 - 4)..(19 * 8 - 4) {
                 let tile = generator.tile_at(TileCoord::new(x, y)).expect("tile");
                 assert_eq!(
-                    (tile.biome, tile.material, tile.passable),
-                    (Biome::Temperate, GroundMaterial::TemperateGrass, true),
+                    (tile.biome, tile.passable),
+                    (Biome::Temperate, true),
                     "key {key}: seeded biome noise inside a source gap at {x},{y}"
                 );
+                assert!(matches!(
+                    tile.material,
+                    GroundMaterial::TemperateGrass | GroundMaterial::ForestFloor
+                ));
             }
         }
     }

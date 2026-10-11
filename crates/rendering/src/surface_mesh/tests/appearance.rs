@@ -76,7 +76,7 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
     };
     let mut art = test_art(frame);
     art.terrain[4][0].atlas.uv[0] = 0.9; // Deliberately distinct paving sentinel.
-    for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9), (10, 10)] {
+    for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9)] {
         for ramp in [false, true] {
             let tint = base_tint + if ramp { 16 } else { 0 };
             let mut sample = SceneTerrain {

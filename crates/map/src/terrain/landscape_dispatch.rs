@@ -71,6 +71,28 @@ impl MapChunkGenerator {
         }
     }
 
+    /// Conservative depth test: `true` proves that every tile within
+    /// `radius` tiles is lake or ocean water, without sampling those tiles.
+    pub(super) fn open_water_certain_near(
+        &self,
+        tile: TileCoord,
+        radius: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let inside = |value: i32| value >= radius && value < self.width_tiles - radius;
+        if !inside(tile.x) || !inside(tile.y) {
+            return Ok(false);
+        }
+        if self.provider.is_some() {
+            provider::water::open_water_near(self, tile, radius, cancelled)
+        } else {
+            Ok(self.dense_open_water_near(tile, radius))
+        }
+    }
+
     /// Terrain and immutable node from one composition. Failed queries are
     /// returned directly and never cached here.
     pub fn tile_and_node_with_cancel(

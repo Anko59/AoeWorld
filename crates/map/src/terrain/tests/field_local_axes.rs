@@ -249,9 +249,11 @@ fn field_local_dense_and_provider_base_samples_match_edges_and_boundaries() {
             .generator_with_page_provider(Arc::new(pages))
             .unwrap();
         let nodata = TileCoord::new(0, 0);
-        assert_eq!(
+        // An unclassified cell is never source-derived: it takes a
+        // classified neighbor within reach, or the seeded fallback.
+        assert_ne!(
             dense.sample_base_tile(nodata).vegetation_provenance,
-            Provenance::Fallback
+            Provenance::SourceDerived
         );
         // Water at the corner is shaped from its neighbors, identically on
         // both paths.

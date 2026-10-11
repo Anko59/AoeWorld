@@ -6,44 +6,74 @@ pub(super) fn assign_materials(
     triangles: &mut [ProjectedSurfaceTriangle],
     terrain: &[SceneTerrain],
 ) {
-    let mut keys = crate::WorldKeyIndex::default();
-    let mut materials = Vec::new();
-    for triangle in triangles.iter().filter(|triangle| blendable(triangle)) {
-        for point in triangle.points {
-            let index = keys.entry(material_tile(point));
-            if index == materials.len() {
-                materials.push((triangle.material, None));
-            } else {
-                let value: &mut (u8, Option<u8>) = &mut materials[index];
-                value.0 = value.0.min(triangle.material);
-            }
-        }
-    }
-    debug_assert!(materials.len() <= MAX_SURFACE_TRIANGLES * 3);
-    for sample in terrain {
-        if sample.surface.water == 0 && sample.surface.kind != SceneTerrainSurface::CLIFF {
-            if let Some(index) = keys.get(tile_key(sample.position)) {
-                materials[index].1 = Some(sample.material);
-            }
-        }
-    }
-    for triangle in triangles {
-        if blendable(triangle) {
-            let mut vertex_materials = [triangle.material; 3];
-            for index in 0..3 {
-                let point = triangle.points[index];
-                if let Some(slot) = keys.get(material_tile(point)) {
-                    let (fallback, source) = materials[slot];
-                    vertex_materials[index] = source.unwrap_or(fallback);
+    // Land and water own separate vertex materials: water classes blend with
+    // each other and land materials with each other, never across the shore.
+    for wet in [false, true] {
+        let mut keys = crate::WorldKeyIndex::default();
+        let mut materials = Vec::new();
+        for triangle in triangles.iter().filter(|triangle| blendable(triangle, wet)) {
+            for point in triangle.points {
+                let index = keys.entry(material_tile(point));
+                if index == materials.len() {
+                    materials.push((triangle.material, None));
+                } else {
+                    let value: &mut (u8, Option<u8>) = &mut materials[index];
+                    value.0 = fallback(value.0, triangle.material);
                 }
             }
-            triangle.texture_materials = Some(vertex_materials);
+        }
+        debug_assert!(materials.len() <= MAX_SURFACE_TRIANGLES * 3);
+        for sample in terrain {
+            if water_material(sample.material) == wet
+                && (wet || sample.surface.water == 0)
+                && sample.surface.kind != SceneTerrainSurface::CLIFF
+            {
+                if let Some(index) = keys.get(tile_key(sample.position)) {
+                    materials[index].1 = Some(sample.material);
+                }
+            }
+        }
+        for triangle in triangles.iter_mut() {
+            if blendable(triangle, wet) {
+                let mut vertex_materials = [triangle.material; 3];
+                for index in 0..3 {
+                    let point = triangle.points[index];
+                    if let Some(slot) = keys.get(material_tile(point)) {
+                        let (fallback, source) = materials[slot];
+                        vertex_materials[index] = source.unwrap_or(fallback);
+                    }
+                }
+                triangle.texture_materials = Some(vertex_materials);
+            }
         }
     }
 }
 
-fn blendable(triangle: &ProjectedSurfaceTriangle) -> bool {
-    triangle.texture_materials.is_some()
+fn blendable(triangle: &ProjectedSurfaceTriangle, wet: bool) -> bool {
+    triangle.texture_materials.is_some() && water_material(triangle.material) == wet
+}
+
+/// Scene materials drawn with water art: medium 5, shallow 10, deep 11 and
+/// ford shallows 12.
+pub(crate) fn water_material(material: u8) -> bool {
+    matches!(material, 5 | 10..=12)
+}
+
+/// Material of a vertex whose owning tile is not displayed or is across the
+/// shore: the lowest land code, or the shallowest water class.
+fn fallback(current: u8, candidate: u8) -> u8 {
+    let rank = |material| match material {
+        10 => 0,
+        12 => 1,
+        5 => 2,
+        11 => 3,
+        other => 4 + other,
+    };
+    if rank(candidate) < rank(current) {
+        candidate
+    } else {
+        current
+    }
 }
 
 fn material_tile(point: SurfacePoint) -> [i32; 2] {
@@ -74,14 +104,13 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         // Natural rock/cliffs and snow are procedural dirt-derived appearances,
         // never imported paving or ice. Keep their low-contrast transform local
         // to the whole face until per-material splat transforms are supported.
-        if matches!(triangle.material, 4 | 7..=10) {
+        if matches!(triangle.material, 4 | 7..=9) {
             triangle.texture_materials = None;
             let ramp = triangle.tint == 1 || matches!(triangle.tint, 21..=26);
             triangle.tint = match triangle.material {
                 7 => 6,
                 8 => 8,
                 9 => 9,
-                10 => 10,
                 _ if triangle.skirt || matches!(triangle.tint, 7 | 23) => 7,
                 _ if matches!(triangle.tint, 2 | 12) => 12,
                 _ => 5,
@@ -94,7 +123,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         if triangle.texture_materials.is_some_and(|materials| {
             materials
                 .into_iter()
-                .any(|material| matches!(material, 4 | 7..=10))
+                .any(|material| matches!(material, 4 | 7..=9))
         }) {
             triangle.texture_materials = None;
         }
@@ -186,16 +215,31 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 }
 
 /// Frames and authored topology a scene material samples. Groups 0–6 are the
-/// art's terrain groups; group 7 is the grass fallback for an absent group.
+/// art's terrain groups, group 7 the grass fallback for an absent group and
+/// groups 8–10 the optional water depth sheets.
 pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
     // Rock and snow deliberately reuse dirt detail, not paving or ice art.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
+    // Water classes: the light shallow sheet is terrain group 5; medium,
+    // deep and ford shallows use their optional sheet (groups 8-10), else
+    // that same shallow sheet.
+    let depth = match material {
+        5 => Some(0),
+        11 => Some(1),
+        12 => Some(2),
+        _ => None,
+    }
+    .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
+    if let Some(slot) = depth {
+        let sheet = &art.water_depth[slot];
+        return Some((8 + slot, &sheet.0, sheet.1));
+    }
     let material = usize::from(match material {
         4 | 7 | 9 => 2,
-        8 | 10 => 5,
+        8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
         _ => material,
     });

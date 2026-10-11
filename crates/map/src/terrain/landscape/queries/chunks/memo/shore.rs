@@ -1,9 +1,10 @@
-//! Shore band from shaped physical water. Modelling choices, not geography:
-//! land within one to three tiles of open water is beach (sand) or river
-//! bank (mud), and lake or ocean water within one or two tiles of land is a
-//! shallow rim. Both widths vary smoothly along the shore so the band is not
-//! a constant-width outline. Rivers keep their kind to the bank so narrow
-//! channels stay rivers.
+//! Shore band and water depth from shaped physical water. Modelling choices,
+//! not geography: land within one to three tiles of open water is beach
+//! (sand) or river bank (mud); lake or ocean water within one or two tiles of
+//! land is a shallow rim, medium water reaches five to seven tiles from land
+//! and everything beyond is deep. All widths vary smoothly along the shore so
+//! no band is a constant-width outline. Rivers keep their kind to the bank:
+//! shallow beside land, medium midstream, never deep.
 use super::*;
 use crate::WaterKind;
 use crate::terrain::shoreline;
@@ -17,26 +18,34 @@ pub(in super::super) enum Shore {
     Bank,
     /// Lake or ocean water near land.
     Shallow,
+    /// River water touching its bank: shallow art, river kind.
+    Margin,
+    /// Lake or ocean water with no land within the medium reach.
+    Deep,
 }
 
-/// Widest band in tiles, and its offsets with their squared distance,
-/// nearest first.
+/// Widest land band in tiles; the water scan reaches `DEPTH_REACH` tiles.
+/// `BAND` holds every offset with its squared distance, nearest first.
 const BAND_REACH: i32 = 3;
-const BAND: [(i32, i32, i32); 36] = band();
+pub(in super::super) const DEPTH_REACH: i32 = 7;
+const BAND_LIMIT: i32 = 50;
+const BAND: [(i32, i32, i32); 160] = band();
 /// Squared reach of a narrow, ordinary and wide band: one tile, two tiles or
 /// a knight's step, three tiles or a (3, 1) step.
 const REACH: [i32; 3] = [2, 5, 10];
+/// Squared reach of medium water: five, six or seven tiles from land.
+const MEDIUM: [i32; 3] = [25, 36, BAND_LIMIT];
 const WIDTH_LATTICE_TILES: i64 = 9;
 
-const fn band() -> [(i32, i32, i32); 36] {
-    let mut offsets = [(0, 0, 0); 36];
+const fn band() -> [(i32, i32, i32); 160] {
+    let mut offsets = [(0, 0, 0); 160];
     let mut count = 0;
     let mut distance = 1;
-    while distance <= 10 {
-        let mut dy = -BAND_REACH;
-        while dy <= BAND_REACH {
-            let mut dx = -BAND_REACH;
-            while dx <= BAND_REACH {
+    while distance <= BAND_LIMIT {
+        let mut dy = -DEPTH_REACH;
+        while dy <= DEPTH_REACH {
+            let mut dx = -DEPTH_REACH;
+            while dx <= DEPTH_REACH {
                 if dx * dx + dy * dy == distance {
                     offsets[count] = (dx, dy, distance);
                     count += 1;
@@ -47,7 +56,7 @@ const fn band() -> [(i32, i32, i32); 36] {
         }
         distance += 1;
     }
-    assert!(count == 36);
+    assert!(count == 160);
     offsets
 }
 
@@ -115,10 +124,11 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                 _ => Ok(None),
             };
         let key = self.generator.shoreline_key();
-        let width = |domain: u64, narrow: i64, wide: i64| {
+        let step = |domain: u64, narrow: i64, wide: i64| {
             let value = shoreline::variation(key, domain, position, WIDTH_LATTICE_TILES);
-            REACH[usize::from(value > narrow) + usize::from(value > wide)]
+            usize::from(value > narrow) + usize::from(value > wide)
         };
+        let width = |domain: u64, narrow: i64, wide: i64| REACH[step(domain, narrow, wide)];
         match base.water {
             WaterKind::None => {
                 if self.probe_reach
@@ -142,19 +152,44 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                 Ok(Shore::None)
             }
             WaterKind::Lake | WaterKind::Ocean => {
+                if self.probe_reach
+                    && self.generator.open_water_certain_near(
+                        position,
+                        DEPTH_REACH,
+                        self.cancelled,
+                    )?
+                {
+                    return Ok(Shore::Deep);
+                }
                 // One tile, or two where the rim widens; never three.
-                let reach = width(7, 0, i64::MAX);
+                let rim = width(7, 0, i64::MAX);
+                let medium = MEDIUM[step(8, -350, 350)];
                 for (dx, dy, distance) in BAND {
-                    if distance > reach {
+                    if distance > medium {
                         break;
                     }
                     if neighbor(dx, dy)? == Some(WaterKind::None) {
-                        return Ok(Shore::Shallow);
+                        return Ok(if distance <= rim {
+                            Shore::Shallow
+                        } else {
+                            Shore::None
+                        });
+                    }
+                }
+                Ok(Shore::Deep)
+            }
+            WaterKind::River => {
+                for (dx, dy, distance) in BAND {
+                    if distance > REACH[0] {
+                        break;
+                    }
+                    if neighbor(dx, dy)? == Some(WaterKind::None) {
+                        return Ok(Shore::Margin);
                     }
                 }
                 Ok(Shore::None)
             }
-            WaterKind::River | WaterKind::Shallow => Ok(Shore::None),
+            WaterKind::Shallow => Ok(Shore::None),
         }
     }
 }

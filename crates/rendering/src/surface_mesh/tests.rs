@@ -71,7 +71,8 @@ fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
                 page: 0,
                 uv: [0.2, 0.3, 0.04, 0.06],
             })
-            && triangle.tint == 4
+            // Water art is drawn as authored: no procedural water tint.
+            && triangle.tint == 0
     }));
     assert_eq!(
         triangle_texture_coordinates(0),
@@ -406,13 +407,8 @@ fn water_beside_raised_land_shares_a_shore_edge_without_a_cliff_skirt() {
     );
     assert_eq!(triangles.len(), 4);
     assert!(triangles.iter().all(|triangle| !triangle.skirt));
-    assert_eq!(
-        triangles
-            .iter()
-            .filter(|triangle| triangle.tint == 4)
-            .count(),
-        2
-    );
+    // Shallow water keeps its own sheet untinted.
+    assert!(triangles.iter().all(|triangle| triangle.tint == 0));
     for shore in [[1.0, 0.0, 2.0], [1.0, 1.0, 2.0]] {
         for tile_x in 0..=1 {
             assert!(

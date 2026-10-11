@@ -137,6 +137,9 @@ These are modelling choices, not observed geography:
 | Diagonal cell pairs | Joined by a ridge so rasterised channels are not cut at corners |
 | Beach and bank | Passable land within one to three tiles of water (always one, usually two, three where the band widens): sand beside lake, ocean or shallow water, mud beside rivers; rock, snow and ice shores keep their material |
 | Shallow rim | Lake or ocean water within one or two tiles of land becomes `Shallow` with the `Shore` material; rivers keep their kind |
+| Medium water | Lake or ocean water whose nearest land is beyond the rim and within five, six or seven tiles (varying along the shore) keeps the `Water` material |
+| Deep water | Lake or ocean water with no land within that medium reach takes the `DeepWater` material |
+| River depth | River water touching its bank takes the `Shore` material, midstream water `Water`; rivers are never deep |
 
 The warped segments joining four-adjacent wet cell centres lie in the
 protected core, wide enough that the nearest tile row is always water, so
@@ -149,8 +152,9 @@ Shaping is physical: it decides `water`, and therefore passability, edges,
 start search and navigation. The shore band is composition: the beach and
 bank clear canopy, forest floor, trees and decorations like any other
 reservation and change only material; the shallow rim changes water kind and
-material but stays impassable. Shore is walkable, water is not. Both reuse the
-existing sand, mud and shore materials, so no renderer change is involved.
+material but stays impassable, and depth changes only material. Shore is
+walkable, water is not. The renderer draws `Shore`, `Water`, `DeepWater` and
+`Ford` with their own water sheets (see [landscape art](../../assets/landscape.md)).
 
 ### Tree visual families
 

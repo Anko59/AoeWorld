@@ -2,7 +2,9 @@
 //! through the shared shoreline shaping, never as raw nearest cells.
 use super::helpers::{load_page, page_index};
 use super::water_model::{self, ModeledWater};
-use crate::terrain::fallback::{fallback_water, fallback_water_near, water_from_coverage};
+use crate::terrain::fallback::{
+    fallback_water, fallback_water_near, open_coverage, water_from_coverage,
+};
 use crate::terrain::shoreline::{self, CellGrid};
 use crate::terrain::{MapChunkGenerator, Provenance, WaterKind, surface};
 use crate::{
@@ -227,5 +229,41 @@ pub(in crate::terrain) fn water_near(
     let grid = CellGrid::source(index.samples_per_axis, generator.width_tiles);
     shoreline::any_wet_near(grid, tile, radius, &mut |x, y| {
         cells.modeled(x, y).map(|model| model.is_some())
+    })
+}
+
+/// Conservative: `true` proves only lake or ocean water within `radius`
+/// tiles. Modeled hydrology decides wherever it is present, because a cited
+/// correction can dry categorical water.
+pub(in crate::terrain) fn open_water_near(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    radius: i32,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<bool, EnvironmentPageError> {
+    let environment = generator
+        .provider_environment
+        .as_ref()
+        .ok_or(EnvironmentPageError::Invalid)?;
+    if let Some(index) = &environment.hydrology_evidence {
+        let mut cells = Cells::new(generator, PageLayer::HydrologyEvidence, cancelled);
+        let grid = CellGrid::source(index.samples_per_axis, generator.width_tiles);
+        return shoreline::all_wet_near(grid, tile, radius, &mut |x, y| {
+            cells.modeled(x, y).map(|model| {
+                model.is_some_and(|model| {
+                    matches!(model.0, HydrologyKind::Ocean | HydrologyKind::Lake)
+                })
+            })
+        });
+    }
+    let Some(axis) = environment.water_samples_per_axis() else {
+        return Ok(false);
+    };
+    let mut cells = Cells::new(generator, PageLayer::Water, cancelled);
+    let grid = CellGrid::source(axis, generator.width_tiles);
+    shoreline::all_wet_near(grid, tile, radius, &mut |x, y| {
+        cells
+            .coverage(x, y)
+            .map(|(ocean, inland)| open_coverage(ocean, inland))
     })
 }

@@ -212,7 +212,7 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
     assert_eq!(tile.game_height_level, 12);
     assert_eq!(tile.surface.corner_game_height_levels, [12; 4]);
     assert_eq!(tile.surface.kind, SurfaceKind::Plateau);
-    assert_eq!(tile.material, GroundMaterial::Water);
+    assert_eq!(tile.material, GroundMaterial::DeepWater);
     assert!(!tile.passable);
 
     let corrected_land = generator

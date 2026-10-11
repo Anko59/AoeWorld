@@ -98,6 +98,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
             grass: base.grass.clone(),
             terrain: base.terrain.clone(),
             terrain_topology: base.terrain_topology,
+            water_depth: base.water_depth.clone(),
             resources: base.resources.clone(),
             tree_shadows: base.tree_shadows.clone(),
             tree_families: base.tree_families.clone(),

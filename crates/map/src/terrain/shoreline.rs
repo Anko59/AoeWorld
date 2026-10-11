@@ -290,6 +290,17 @@ pub(super) fn any_wet_near<E>(
     Ok(false)
 }
 
+/// Conservative depth test: `true` proves that every tile within `radius`
+/// tiles of `tile` samples only wet cells and is therefore water.
+pub(super) fn all_wet_near<E>(
+    grid: CellGrid,
+    tile: TileCoord,
+    radius: i32,
+    wet: &mut impl FnMut(i64, i64) -> Result<bool, E>,
+) -> Result<bool, E> {
+    any_wet_near(grid, tile, radius, &mut |x, y| wet(x, y).map(|wet| !wet)).map(|dry| !dry)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

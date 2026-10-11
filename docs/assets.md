@@ -32,7 +32,10 @@ To inspect a pack in the local app, start `make dev` with
 3008/3004 and five reviewed imported terrain groups: temperate grass 15008,
 dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
 10×10 periodic topology explicitly, indexed x-major with reversed y so
-neighboring source edges meet. Catalog v5 retains the removal of paved 15018 from the natural
+neighboring source edges meet. Water 15002 is the light shallow sheet; optional
+periodic sheets add medium water 15016, deep water 15015 and the walkable marsh
+shallows 15014 used for fords, and a pack without one draws the shallow sheet
+in its place. Catalog v6 retains the removal of paved 15018 from the natural
 rock role: natural rock requires procedural neutral ground, not paving. The
 renderer owns that fallback's appearance. Frame count alone is never topology. The map client selects those groups from
 semantic terrain chunks. Optional native Forest/g_for terrain 15011 contributes
@@ -40,8 +43,8 @@ frames 0–9 as nonperiodic coordinate-stable forest-soil frames. Landscape fore
 blend this native leaf litter with grass, dry grass or authoritative dirt; only
 absent optional forest art retains the prior dirt fallback. These reviewed frames
 are not qualified as a seamless periodic sheet. Metadata-free material 6 selection is unchanged.
-The five periodic groups retain all 100 frames. Catalog v5 selects at most 678 frames:
-510 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
+The periodic groups retain all 100 frames. Catalog v6 selects at most 978 frames:
+810 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;

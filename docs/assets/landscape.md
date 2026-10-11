@@ -1,8 +1,9 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v5 keeps approved art separate from discovery. Required sources remain
+Catalog v6 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
-prefixes add 22 frames to the prior 656 ceiling: 678 total (510 terrain/168 objects).
+prefixes and three optional water depth sheets bring the ceiling to 978 frames
+(810 terrain/168 objects).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -24,8 +25,6 @@ No original pixels, generated manifests, or screenshots are public fixtures.
 | Palms 4653 | graphics.drs | 13 | All originals inspected. Wood family 4 uses singles [0,1,2,3,5,6,8,10,11,12], not clumps 4/7/9. Signed/outside hotspots preserved, including frame 0 (20,175) on 88×168. Selected-body alpha silhouette, not 2300 or broadleaf 2296. |
 | Grasses 15001/15009/15006 | terrain.drs | 100 each | All 97×49, hotspot (0,0). Names are proposals; no seam or color review here. |
 | Beach 15017 | terrain.drs | 100 | 97×49, hotspot (0,0); shore compatibility unreviewed. |
-| Shallows 15014 | terrain.drs | 100 | 97×49, hotspot (0,0); depth mapping unreviewed. |
-| Water 15015/15016 | terrain.drs | 100 each | 97×49, hotspot (0,0); seams, animation, and depth roles unreviewed. |
 | Ice 15024 | terrain.drs | 64 | 97×49, hotspot (0,0). Neither 100-frame indexing nor assumed 8×8 periodicity is justified. |
 | Cliffs 226–234 | graphics.drs | 25 each | Mixed bounds include 1×1/2×3 placeholders and far-away hotspots. 227 includes a 329×718 frame. Must inspect valid variants and placement before use. |
 | Cliff 235 | graphics.drs | 1 | 154×79, hotspot (96,32); metadata only. |
@@ -35,7 +34,7 @@ conifer/palm prefixes alone have moved to the reviewed optional load list. Their
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 678 actual extents through the runtime packer; the
+test separately feeds all 978 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -43,6 +42,23 @@ it uses original pack art with synthetic flat terrain/resources, asserts all thr
 backends and visible pixel removal, not generated ecosystem/source fidelity. Loader
 absence uses the existing healthy broadleaf fallback; present incomplete,
 duplicate or corrupt sources fail rather than masquerading as absence.
+
+## Water depth sheets
+
+Inspected in the local pack as 7×7-tile periodic patches; all four are 100
+frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
+
+| Sheet | Look | Scene material | Used for |
+| --- | --- | --- | --- |
+| Water 15002 (required) | Light turquoise | 10 | Shallow rim of lakes and seas, river margins, shallow source water |
+| Water 15016 (optional) | Medium blue | 5 | Water five to seven tiles from land at most; midstream river water |
+| Water 15015 (optional) | Dark blue | 11 | Open water beyond the medium reach |
+| Shallows 15014 (optional) | Green marsh with lilies | 12 | Walkable fords |
+
+Faces between two classes blend their sheets through the same per-vertex
+splat as land materials; water never blends with land across the shore. No
+water or shore face uses a procedural flat tint. Beach 15017 stays a candidate:
+the shore band uses reviewed sand 15010. Animation is not implemented.
 
 ## Natural rock correction
 
