@@ -18,20 +18,23 @@ pub struct NavigationCacheUsage {
 struct Key {
     origin: TileCoord,
     destination: TileCoord,
-    max_expansions: u32,
 }
 
 #[derive(Debug)]
 struct Entry {
     outcome: MovementOutcome,
+    /// Planner work that produced the outcome from a fresh search.
+    work: u32,
     bytes: usize,
     last_used: u64,
 }
 
 /// Bounded, non-canonical cache of already-planned map segments. Its byte
 /// limit accounts for logical entry and path payload bytes; allocator and
-/// BTreeMap metadata remain outside the reported budget. The caller still
-/// accounts for its planning budget before consulting the cache.
+/// BTreeMap metadata remain outside the reported budget. An entry records the
+/// planner work its outcome cost and answers only a caller that could afford
+/// that work; the caller charges it, so a hit and a fresh search leave the
+/// same canonical planning budget.
 #[derive(Debug)]
 pub(crate) struct NavigationCache {
     entries: BTreeMap<Key, Entry>,
@@ -60,18 +63,18 @@ impl NavigationCache {
         &mut self,
         origin: TileCoord,
         destination: TileCoord,
-        max_expansions: u32,
-    ) -> Option<MovementOutcome> {
+        budget: u32,
+    ) -> Option<(MovementOutcome, u32)> {
         self.clock = self.clock.saturating_add(1);
         self.entries
             .get_mut(&Key {
                 origin,
                 destination,
-                max_expansions,
             })
+            .filter(|entry| entry.work <= budget)
             .map(|entry| {
                 entry.last_used = self.clock;
-                entry.outcome.clone()
+                (entry.outcome.clone(), entry.work)
             })
     }
 
@@ -79,7 +82,7 @@ impl NavigationCache {
         &mut self,
         origin: TileCoord,
         destination: TileCoord,
-        max_expansions: u32,
+        work: u32,
         outcome: MovementOutcome,
     ) {
         if matches!(outcome, MovementOutcome::BudgetExceeded) {
@@ -88,7 +91,6 @@ impl NavigationCache {
         let key = Key {
             origin,
             destination,
-            max_expansions,
         };
         let bytes = outcome_bytes(&outcome);
         if bytes > self.limit_bytes {
@@ -116,6 +118,7 @@ impl NavigationCache {
             key,
             Entry {
                 outcome,
+                work,
                 bytes,
                 last_used: self.clock,
             },

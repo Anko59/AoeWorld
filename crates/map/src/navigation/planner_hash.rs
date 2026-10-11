@@ -20,6 +20,18 @@ impl RoutePlanner {
         hash.update(&self.max_work.to_le_bytes());
         hash.update(&self.work.to_le_bytes());
         hash.update(&self.expansions.to_le_bytes());
+        hash.update(&self.leg_origin.x.to_le_bytes());
+        hash.update(&self.leg_origin.y.to_le_bytes());
+        hash.update(&self.leg_work.to_le_bytes());
+        match self.leg_best {
+            None => hash.update(&[0]),
+            Some((tile, remaining)) => {
+                hash.update(&[1]);
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+                hash.update(&remaining.to_le_bytes())
+            }
+        };
         hash.update(&[self.validation_step]);
         hash_usize(hash, self.route_cursor);
         hash.update(&self.route_position.x.to_le_bytes());

@@ -170,6 +170,10 @@ fn simultaneous_far_orders_all_move_on_the_first_tick() {
             );
         }
     }
+    // All twelve left their first spatial chunk together; each must still be
+    // indexed exactly once (a stale bucket slot used to panic here).
+    let (indexed, _) = world.query(TileRect::from_xywh(0, 0, WIDTH, WIDTH));
+    assert_eq!(indexed.len(), units.len());
 }
 
 #[test]

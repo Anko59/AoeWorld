@@ -31,15 +31,6 @@ impl ReconstructionState {
 }
 
 impl RoutePlanner {
-    pub(super) fn reconstruction_has_free_step(&self) -> bool {
-        self.reconstruction
-            .as_ref()
-            .is_some_and(|reconstruction| match reconstruction.phase {
-                ReconstructionPhase::Backtrace => reconstruction.current == self.origin,
-                ReconstructionPhase::Convert { next_index } => next_index == 0,
-            })
-    }
-
     pub(super) fn advance_reconstruction(
         &mut self,
         cancelled: &dyn Fn() -> bool,
@@ -55,7 +46,7 @@ impl RoutePlanner {
                 let Some(current) = self.reconstruction.as_ref().map(|state| state.current) else {
                     return Err(Terminal::Unreachable);
                 };
-                if current == self.origin {
+                if current == self.leg_origin {
                     let Some(next_index) = self
                         .reconstruction
                         .as_ref()
@@ -151,14 +142,26 @@ impl RoutePlanner {
         Ok(())
     }
 
+    /// Joins the finished leg to the planned route and drops its frontier.
     fn complete_reconstruction(&mut self) -> Result<(), Terminal> {
         let Some(reconstruction) = self.reconstruction.take() else {
             return Err(Terminal::Unreachable);
         };
-        self.route_directions = Some(reconstruction.directions);
-        self.route_costs = reconstruction.costs;
+        let Some(leg_end) = reconstruction.reverse_tiles.first().copied() else {
+            return Err(Terminal::Unreachable);
+        };
+        let mut directions = self.route_directions.take().unwrap_or_default();
+        let emitted = self.route_cursor.min(directions.len());
+        directions.drain(..emitted);
+        self.route_costs
+            .drain(..emitted.min(self.route_costs.len()));
+        directions.extend(reconstruction.directions);
+        self.route_costs.extend(reconstruction.costs);
+        self.route_directions = Some(directions);
         self.route_cursor = 0;
-        self.route_position = self.origin;
+        self.leg_origin = leg_end;
+        self.leg_work = 0;
+        self.leg_best = None;
         self.search = None;
         self.update_peak_retained_entries();
         if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {

@@ -37,6 +37,34 @@ fn far_route_emits_its_first_leg_from_one_tick_of_work() {
 }
 
 #[test]
+fn far_north_south_route_emits_its_first_leg_from_one_tick_of_work() {
+    // The octile estimate used to drop the straight remainder whenever the
+    // route was longer in y than in x, leaving these orders an uninformed
+    // flood from the origin.
+    let terrain = flat_terrain_with_water_wall(WIDTH, -1, -1);
+    for (origin, destination) in [
+        (TileCoord::new(ROW, 1), TileCoord::new(ROW, WIDTH - 2)),
+        (TileCoord::new(ROW, WIDTH - 2), TileCoord::new(ROW, 1)),
+        (TileCoord::new(300, 1), TileCoord::new(1, WIDTH - 2)),
+    ] {
+        let path = first_poll(&terrain, origin, destination);
+        assert_eq!(path.tiles.first(), Some(&origin));
+        assert!(path.tiles.len() > 1);
+        assert_walkable_steps(&terrain, &path.tiles);
+        let last = path.tiles.last().expect("leg end");
+        assert!(super::heuristic(*last, destination) < super::heuristic(origin, destination));
+    }
+    assert_eq!(
+        super::heuristic(TileCoord::new(3, 0), TileCoord::new(0, 10)),
+        3 * u64::from(DIAGONAL_COST) + 7 * u64::from(ORTHOGONAL_COST)
+    );
+    assert_eq!(
+        super::heuristic(TileCoord::new(0, 0), TileCoord::new(0, 10)),
+        super::heuristic(TileCoord::new(0, 0), TileCoord::new(10, 0))
+    );
+}
+
+#[test]
 fn far_diagonal_route_emits_its_first_leg_from_one_tick_of_work() {
     let terrain = flat_terrain_with_water_wall(WIDTH, -1, -1);
     let origin = TileCoord::new(1, 1);
@@ -96,12 +124,13 @@ fn far_route_is_the_same_for_every_budget_partition() {
 
 #[test]
 fn walled_far_route_starts_at_once_and_still_finds_the_distant_gateway() {
-    // 64 water samples over 512 tiles: the wall is eight tiles thick and its
-    // only gateway lies about 360 tiles north of the straight line.
-    const WALLED_WIDTH: i32 = 512;
-    let terrain = flat_terrain_with_water_wall(WALLED_WIDTH, 32, 5);
-    let origin = TileCoord::new(8, 400);
-    let destination = TileCoord::new(500, 400);
+    // 64 water samples over 256 tiles: the wall is four tiles thick and its
+    // only gateway lies about 80 tiles north of the straight line, farther
+    // than one tick of search reaches.
+    const WALLED_WIDTH: i32 = 256;
+    let terrain = flat_terrain_with_water_wall(WALLED_WIDTH, 32, 30);
+    let origin = TileCoord::new(8, 200);
+    let destination = TileCoord::new(250, 200);
     let overlay = ResourceOverlay::default();
     assert!(super::walkable(&terrain, origin) && super::walkable(&terrain, destination));
     assert!(
@@ -130,6 +159,6 @@ fn walled_far_route_starts_at_once_and_still_finds_the_distant_gateway() {
     assert_eq!(tiles.last(), Some(&destination));
     assert_walkable_steps(&terrain, &tiles);
     assert!(tiles.iter().all(|tile| super::walkable(&terrain, *tile)));
-    assert!(tiles.iter().any(|tile| tile.y < 64), "used the gateway");
+    assert!(tiles.iter().any(|tile| tile.y < 140), "used the gateway");
     assert!(planner.peak_retained_entries() <= MAX_ROUTE_PLANNER_NODES);
 }

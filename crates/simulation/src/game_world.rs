@@ -429,12 +429,14 @@ impl GameWorld {
         let Some(ids) = self.chunks.get_mut(&old) else {
             return;
         };
-        let displaced = ids.swap_remove(slot);
-        if displaced != self.units[index].state.id {
-            let displaced_index = self.lookup[&displaced];
+        // `swap_remove` puts the bucket's last unit into the vacated slot.
+        ids.swap_remove(slot);
+        let displaced = ids.get(slot).copied();
+        let emptied = ids.is_empty();
+        if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
             self.units[displaced_index].bucket_slot = slot;
         }
-        if ids.is_empty() {
+        if emptied {
             self.chunks.remove(&old);
         }
         let new_slot = self.chunks.entry(bucket).or_default().len();

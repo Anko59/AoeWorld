@@ -254,6 +254,19 @@ impl Terrain {
         Some(planner.poll(generator, overlay, budget, cancelled))
     }
 
+    /// Spends `budget` on the leg after the planned one; see
+    /// [`RoutePlanner::plan_ahead`]. Uniform worlds have no planner.
+    pub fn plan_route_ahead(
+        &self,
+        planner: &mut RoutePlanner,
+        budget: u32,
+        cancelled: &dyn Fn() -> bool,
+    ) {
+        if let Self::Map { generator, overlay } = self {
+            planner.plan_ahead(generator, overlay, budget, cancelled);
+        }
+    }
+
     /// Counts a connected walkable component without allocating map-scale
     /// state. Callers choose the stopping threshold (for example 256 tiles
     /// for a playable starting area).

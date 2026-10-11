@@ -2,7 +2,7 @@
 use super::{ORDINARY_ACTIVATION_SEARCH_CHUNKS, SourceQualificationError};
 use crate::{PageResidency, load_map_packages};
 use aoe_core::TileCoord;
-use aoe_map::{EnvironmentPageProvider, LayerProvenance, MapPackage, MovementOutcome};
+use aoe_map::{EnvironmentPageProvider, LayerProvenance, MapPackage, RoutePlannerPoll};
 use aoe_simulation::{GameWorld, StartSearchResult};
 use serde::Serialize;
 use std::{path::Path, sync::Arc};
@@ -27,8 +27,26 @@ pub struct SourceCountryProbe {
     pub local_component: Option<component::ComponentObservation>,
     pub native_local_orders: Vec<movement::NativeLocalOrder>,
     pub routes: Vec<CountryRouteProbe>,
+    /// The planner alone on the 1,024-tile destinations of the far orders.
+    pub far_routes: Vec<PlannedRoute>,
     pub live_activation: bool,
     pub hardware_qualified: bool,
+}
+
+/// One order planned by the planner native movement uses, leg by leg.
+#[derive(Clone, Debug, Serialize)]
+pub struct PlannedRoute {
+    pub destination: [i32; 2],
+    pub outcome: &'static str,
+    /// Tiles of the proven route; for `budget_exceeded` or `unreachable`, of
+    /// the partial route a unit walks before its planner gives up.
+    pub path_tiles: usize,
+    /// Deterministic work spent before the first segment was emitted; the
+    /// simulation spends at most 16,384 per tick.
+    pub first_segment_work: Option<u32>,
+    pub total_work: u32,
+    /// Peak logical entries retained (frontier, records, route).
+    pub peak_retained_entries: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,6 +54,7 @@ pub struct CountryRouteProbe {
     pub destination: [i32; 2],
     pub outcome: &'static str,
     pub path_tiles: usize,
+    pub planner: PlannedRoute,
     pub endpoint_neighbourhood: Vec<TileObservation>,
     pub straight_line: StraightLineProbe,
 }
@@ -74,6 +93,7 @@ pub fn run_source_country_probe(
     let mut start_neighbourhood = Vec::new();
     let mut local_component = None;
     let mut native_local_orders = Vec::new();
+    let mut far_routes = Vec::new();
     if let Some([x, y]) = start {
         let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() else {
             return Err(SourceQualificationError::UnsupportedPackage);
@@ -88,20 +108,13 @@ pub fn run_source_country_probe(
         // Preserve planner calls and ordering before collecting extra observations.
         for (dx, dy) in DIRECTIONS {
             let destination = TileCoord::new(x + dx * LOCAL_DISTANCE, y + dy * LOCAL_DISTANCE);
-            let (outcome, path_tiles) = match world
-                .terrain()
-                .route_outcome(TileCoord::new(x, y), destination)
-            {
-                Some(MovementOutcome::Path(path)) => ("path", path.tiles.len()),
-                Some(MovementOutcome::InvalidDestination) => ("invalid_destination", 0),
-                Some(MovementOutcome::Unreachable) => ("unreachable", 0),
-                Some(MovementOutcome::BudgetExceeded) => ("budget_exceeded", 0),
-                None => ("no_map_planner", 0),
-            };
+            let planner = planned_route(world.terrain(), TileCoord::new(x, y), destination)?;
+            let (outcome, path_tiles) = (planner.outcome, planner.path_tiles);
             routes.push(CountryRouteProbe {
                 destination: [destination.x, destination.y],
                 outcome,
                 path_tiles,
+                planner,
                 endpoint_neighbourhood: diagnostics.neighbourhood(destination)?,
                 straight_line: diagnostics.straight_line(TileCoord::new(x, y), (dx, dy))?,
             });
@@ -112,6 +125,10 @@ pub fn run_source_country_probe(
             world.config(),
             TileCoord::new(x, y),
         )?);
+        for direction in DIRECTIONS {
+            let far = movement::OrderCase::Far1024.destination(TileCoord::new(x, y), direction);
+            far_routes.push(planned_route(world.terrain(), TileCoord::new(x, y), far)?);
+        }
         native_local_orders = movement::observe(&package, &provider, TileCoord::new(x, y))?;
     }
     Ok(SourceCountryProbe {
@@ -128,10 +145,55 @@ pub fn run_source_country_probe(
         local_component,
         native_local_orders,
         routes,
+        far_routes,
         live_activation: false,
         hardware_qualified: false,
     })
 }
+
+/// Plans a route with the planner native orders use, leg by leg, so this
+/// result agrees with what a unit ordered to the same destination achieves.
+fn planned_route(
+    terrain: &aoe_simulation::Terrain,
+    origin: TileCoord,
+    destination: TileCoord,
+) -> Result<PlannedRoute, SourceQualificationError> {
+    let mut route = PlannedRoute {
+        destination: [destination.x, destination.y],
+        outcome: "no_map_planner",
+        path_tiles: 0,
+        first_segment_work: None,
+        total_work: 0,
+        peak_retained_entries: 0,
+    };
+    let Some(mut planner) =
+        terrain.route_planner(origin, destination, aoe_map::MAX_ROUTE_PLANNER_WORK)
+    else {
+        return Ok(route);
+    };
+    route.outcome = loop {
+        // Every poll emits a segment, ends, or spends one tick of work.
+        match terrain.poll_route_planner(&mut planner, PLANNER_TICK_WORK, &|| false) {
+            Some(RoutePlannerPoll::Path(path)) => {
+                route.first_segment_work.get_or_insert(planner.work());
+                route.path_tiles = route.path_tiles.max(1) + path.tiles.len().saturating_sub(1);
+            }
+            Some(RoutePlannerPoll::Pending) => {}
+            Some(RoutePlannerPoll::Complete) => break "path",
+            Some(RoutePlannerPoll::InvalidDestination) => break "invalid_destination",
+            Some(RoutePlannerPoll::Unreachable) => break "unreachable",
+            Some(RoutePlannerPoll::SearchLimit) => break "budget_exceeded",
+            Some(RoutePlannerPoll::Environment(error)) => return Err(error.into()),
+            None => break "no_map_planner",
+        }
+    };
+    route.total_work = planner.work();
+    route.peak_retained_entries = planner.peak_retained_entries();
+    Ok(route)
+}
+
+/// The simulation's shared route work per tick (`MAX_ROUTE_WORK_PER_TICK`).
+const PLANNER_TICK_WORK: u32 = 16_384;
 
 fn supported_country(package: &MapPackage) -> bool {
     package.request.year_ce == 600

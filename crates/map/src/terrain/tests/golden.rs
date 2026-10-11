@@ -123,9 +123,11 @@ fn forest_generator() -> MapChunkGenerator {
         .unwrap()
 }
 
+// All eight: before the octile estimate counted the straight remainder of a
+// route longer in y than in x, four of these exhausted the search budget.
 const FOREST_ROUTES: (usize, &str) = (
     8,
-    "b454653517e738af3e3f80582d545503d5564a493fab1129ab484a63214e7bd2",
+    "47e23b8803057e8fe8aaaa69589b63aee292ab0f4d137c6f9a44ed8c10b91cf3",
 );
 
 const FALLBACK_DIGESTS: [&str; 3] = [

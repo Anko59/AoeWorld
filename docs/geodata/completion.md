@@ -88,6 +88,26 @@ the 12.8 million per-search cap could consume up to 782 fully allocated ticks
 delay. A 100 km order spans 50,000 two-meter tiles and remains a separate
 qualification target.
 
+Far orders are now planned leg by leg (#258). The whole-route search above made
+a unit wait until the complete route was proven, and its octile estimate dropped
+the straight remainder of any route longer in y than in x, so north-south
+orders flooded outward from the origin until the 524,288-entry cap. The estimate
+now counts that remainder, and one exact search is committed as soon as it
+closes the destination, a tile 48 straight tiles nearer, or, after 65,536 work
+units, the nearest tile closed so far (the best partial route; with none yet, the
+first nearer tile it closes). Each leg ends strictly nearer the destination, the
+frontier of a finished leg is dropped, and the next leg is searched from the
+moving unit's share of the 16,384 work units per tick while fewer than 64 planned
+steps remain, so the 12,800,000 and 524,288 caps now bound one leg. On the
+France candidate `cbea757c…` (20,000 tiles) the fixed 1,024-tile orders east,
+south and north moved on their first tick, never waited for the planner and
+arrived in 14,629, 15,315 and 14,275 ticks; their planner used 31,191 to 63,911
+work units in total, at most 6,723 before the first segment, and at most 3,982
+retained entries. Legs are exact but their concatenation is not a shortest
+route, and a barrier wider than one capped search can flood (a few hundred
+tiles) still ends in `PathBudgetExceeded` after the unit has walked to the
+nearest tile it found; a coarse map-scale graph remains future work.
+
 M8 native geodata fixtures are reviewed in
 [PR #22](https://github.com/Anko59/AoeWorld/pull/22), revision
 `d849e94ff5fd2d172ced61c52f88f3dbee4039e2`. Local raster/vector/ZIP and bounded

@@ -4,18 +4,29 @@ use aoe_core::TileCoord;
 
 #[path = "planner_hash.rs"]
 mod hash;
+#[path = "planner/legs.rs"]
+mod legs;
 #[path = "planner/reconstruction.rs"]
 mod reconstruction;
 #[path = "planner/search.rs"]
 mod search;
 use reconstruction::{ReconstructionPhase, ReconstructionState};
-use search::{ActiveExpansion, SearchState};
+use search::SearchState;
 
 /// Maximum logical entries retained by one route planner across its search
 /// frontier, score/parent records, backtrace, and route continuation.
 pub const MAX_ROUTE_PLANNER_NODES: usize = 524_288;
-/// Maximum deterministic queue pops, neighbor probes, and reconstruction steps per order.
+/// Maximum deterministic queue pops and neighbor probes of one leg search.
+/// Reconstruction steps are charged as work but bounded by the route length.
 pub const MAX_ROUTE_PLANNER_WORK: u32 = 12_800_000;
+/// A leg is committed as soon as the search closes a tile this many straight
+/// tiles nearer the destination, so an order of any length starts from the
+/// work of one short search and plans the rest while the unit walks.
+pub const ROUTE_LEG_PROGRESS_TILES: u32 = 48;
+/// A leg search that has spent this much work commits the nearest tile it has
+/// closed (the best partial route) instead of keeping the unit waiting. With no
+/// nearer tile yet, it keeps searching and commits the first one it closes.
+pub const ROUTE_LEG_COMMIT_WORK: u32 = 65_536;
 /// A retained route can contain at most this many tile centers.
 pub const MAX_ROUTE_TILES: usize = 65_536;
 const MAX_SEGMENT_STEPS: usize = 32;
@@ -26,6 +37,11 @@ pub struct RoutePlanner {
     destination: TileCoord,
     max_work: u32,
     work: u32,
+    /// Where the planned route ends and the next leg search starts.
+    leg_origin: TileCoord,
+    leg_work: u32,
+    /// Closed tile nearest the destination in this leg, with its heuristic.
+    leg_best: Option<(TileCoord, u64)>,
     expansions: u32,
     validation_step: u8,
     search: Option<SearchState>,
@@ -59,6 +75,8 @@ pub enum RoutePlannerPoll {
     Pending,
     /// One proven path segment. The planner remains live until the final
     /// segment is emitted; callers keep it to continue without replanning.
+    /// A far order is planned leg by leg: its segments first cover a proven
+    /// partial route toward the destination.
     Path(Path),
     /// The final segment was already emitted on an earlier poll.
     Complete,
@@ -76,6 +94,9 @@ impl RoutePlanner {
             destination,
             max_work: max_work.min(MAX_ROUTE_PLANNER_WORK),
             work: 0,
+            leg_origin: origin,
+            leg_work: 0,
+            leg_best: None,
             expansions: 0,
             validation_step: 0,
             search: None,
@@ -107,10 +128,14 @@ impl RoutePlanner {
         self.terminal.is_some()
     }
 
-    /// True while this planner occupies a heavy search slot. A completed
-    /// compact route continuation does not consume a search slot.
+    /// True while this planner occupies a heavy search slot: before its first
+    /// leg and while a later leg's frontier is retained. Between legs it holds
+    /// only its compact route continuation.
     pub fn requires_search_slot(&self) -> bool {
-        self.terminal.is_none() && self.route_directions.is_none()
+        self.terminal.is_none()
+            && (self.route_directions.is_none()
+                || self.search.is_some()
+                || self.reconstruction.is_some())
     }
 
     pub fn has_route_continuation(&self) -> bool {
@@ -124,6 +149,8 @@ impl RoutePlanner {
         self.reconstruction.is_some()
     }
 
+    /// Emits the next proven segment, searching the next leg with `budget`
+    /// only when no planned segment is left.
     pub fn poll(
         &mut self,
         terrain: &MapChunkGenerator,
@@ -131,135 +158,37 @@ impl RoutePlanner {
         budget: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> RoutePlannerPoll {
-        if let Some(terminal) = self.terminal {
+        if let Some(terminal) = self.terminal
+            && !self.has_route_continuation()
+        {
             return terminal.result();
         }
         if cancelled() {
-            return self.finish_terminal(Terminal::Environment(EnvironmentPageError::Cancelled));
+            return self.cancel();
         }
-        if self.route_directions.is_some() {
+        if self.has_route_continuation() || self.route_is_complete() {
             return self.emit_segment();
         }
         if budget == 0 {
             return RoutePlannerPoll::Pending;
         }
-
-        let mut remaining = budget;
-        while remaining > 0 {
-            if self.work >= self.max_work && !self.reconstruction_has_free_step() {
-                return self.finish_terminal(Terminal::SearchLimit);
-            }
-            if self.reconstruction.is_some() {
-                let previous_work = self.work;
-                if let Err(error) = self.advance_reconstruction(cancelled) {
-                    return self.finish_terminal(error);
-                }
-                if self.work > previous_work {
-                    remaining -= 1;
-                }
-                if self.route_directions.is_some() {
-                    if cancelled() {
-                        return self.finish_terminal(Terminal::Environment(
-                            EnvironmentPageError::Cancelled,
-                        ));
-                    }
-                    if self.route_directions.as_ref().is_some_and(Vec::is_empty) {
-                        self.terminal = Some(Terminal::Complete);
-                        return RoutePlannerPoll::Path(Path {
-                            tiles: vec![self.origin],
-                            cost: 0,
-                        });
-                    }
-                    return self.emit_segment();
-                }
-                continue;
-            }
-            if self.validation_step < 2 {
-                let tile = if self.validation_step == 0 {
-                    self.origin
-                } else {
-                    self.destination
-                };
-                self.work += 1;
-                remaining -= 1;
-                self.validation_step += 1;
-                match search::checked_walkable(terrain, overlay, tile, cancelled) {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        return self.finish_terminal(Terminal::InvalidDestination);
-                    }
-                    Err(error) => return self.finish_terminal(error),
-                }
-                continue;
-            }
-            if self.search.is_none() {
-                self.search = Some(SearchState::new(self.origin, self.destination));
-                self.update_peak_retained_entries();
-            }
-            let Some(mut search) = self.search.take() else {
-                return self.finish_terminal(Terminal::SearchLimit);
-            };
-
-            if let Some(mut active) = search.active {
-                if active.next_neighbor == 8 {
-                    search.active = None;
-                    self.expansions = self.expansions.saturating_add(1);
-                    self.search = Some(search);
-                    continue;
-                }
-                let offset = search::neighbor_offset(active.next_neighbor);
-                active.next_neighbor += 1;
-                search.active = Some(active);
-                self.work += 1;
-                remaining -= 1;
-                let context =
-                    search::ExpansionContext::new(self.destination, terrain, overlay, cancelled);
-                match context.expand_neighbor(&mut search, active, offset) {
-                    Ok(()) => {}
-                    Err(error) => return self.finish_terminal(error),
-                }
-                self.search = Some(search);
-                self.update_peak_retained_entries();
-                if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {
-                    return self.finish_terminal(Terminal::SearchLimit);
-                }
-                continue;
-            }
-
-            let Some(current) = search.open.pop_first() else {
-                return self.finish_terminal(Terminal::Unreachable);
-            };
-            self.work += 1;
-            remaining -= 1;
-            let Some(record) = search.records.get(&current.tile).copied() else {
-                self.search = Some(search);
-                continue;
-            };
-            if current.cost != super::priority_cost(record.cost) {
-                self.search = Some(search);
-                continue;
-            }
-            if current.tile == self.destination {
-                self.search = Some(search);
-                if self.retained_entries().saturating_add(1) > MAX_ROUTE_PLANNER_NODES {
-                    return self.finish_terminal(Terminal::SearchLimit);
-                }
-                self.reconstruction = Some(ReconstructionState::new(self.destination));
-                self.update_peak_retained_entries();
-                if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {
-                    return self.finish_terminal(Terminal::SearchLimit);
-                }
-                continue;
-            }
-            search.active = Some(ActiveExpansion {
-                tile: current.tile,
-                cost: record.cost,
-                next_neighbor: 0,
-            });
-            self.search = Some(search);
-            self.update_peak_retained_entries();
+        if let Err(terminal) = self.search_leg(terrain, overlay, budget, cancelled) {
+            return self.finish_terminal(terminal);
         }
-        RoutePlannerPoll::Pending
+        if !self.has_route_continuation() && !self.route_is_complete() {
+            return RoutePlannerPoll::Pending;
+        }
+        if cancelled() {
+            return self.cancel();
+        }
+        if self.origin == self.destination {
+            self.terminal = Some(Terminal::Complete);
+            return RoutePlannerPoll::Path(Path {
+                tiles: vec![self.origin],
+                cost: 0,
+            });
+        }
+        self.emit_segment()
     }
 
     fn emit_segment(&mut self) -> RoutePlannerPoll {
@@ -267,7 +196,7 @@ impl RoutePlanner {
             return RoutePlannerPoll::Pending;
         };
         if self.route_cursor >= directions.len() {
-            self.terminal = Some(Terminal::Complete);
+            self.terminal.get_or_insert(Terminal::Complete);
             return RoutePlannerPoll::Complete;
         }
         let end = self
@@ -290,8 +219,8 @@ impl RoutePlanner {
             cost = cost.saturating_add(u64::from(self.route_costs[index]));
         }
         self.route_cursor = end;
-        if self.route_cursor == directions.len() {
-            self.terminal = Some(Terminal::Complete);
+        if self.route_cursor == directions.len() && self.leg_origin == self.destination {
+            self.terminal.get_or_insert(Terminal::Complete);
         }
         RoutePlannerPoll::Path(Path { tiles, cost })
     }
@@ -321,14 +250,23 @@ impl RoutePlanner {
         self.peak_retained_entries = self.peak_retained_entries.max(self.retained_entries());
     }
 
+    /// Ends the search. Planned segments not yet emitted stay valid: `poll`
+    /// hands them out before it reports the terminal result.
     fn finish_terminal(&mut self, terminal: Terminal) -> RoutePlannerPoll {
         self.search = None;
         self.reconstruction = None;
-        self.route_directions = None;
-        self.route_costs.clear();
-        self.route_cursor = 0;
+        self.leg_best = None;
+        if !self.has_route_continuation() {
+            self.route_directions = None;
+            self.route_costs.clear();
+            self.route_cursor = 0;
+        }
         self.terminal = Some(terminal);
         terminal.result()
+    }
+
+    fn cancel(&mut self) -> RoutePlannerPoll {
+        self.finish_terminal(Terminal::Environment(EnvironmentPageError::Cancelled))
     }
 }
 
