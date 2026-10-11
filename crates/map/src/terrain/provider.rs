@@ -1,14 +1,15 @@
 use super::elevation::{AxisPosition, bilinear_height, source_axis_position};
-use super::fallback::{fallback_biome, fallback_height, fallback_water, water_from_coverage};
+use super::fallback::{fallback_biome, fallback_height};
 use super::{GroundMaterial, MapChunkGenerator, Provenance, Tile, WaterKind, surface};
 use crate::{
-    ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
-    HydrologyEvidenceMethod, PageLayer, biome_rules::material_for,
+    ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey, PageLayer,
+    biome_rules::material_for,
 };
 use aoe_core::TileCoord;
 
 mod helpers;
 mod history;
+pub(super) mod water;
 mod water_model;
 
 pub(super) use history::sample_land_use_observation;
@@ -52,38 +53,15 @@ pub(super) fn sample_base_tile(
             Provenance::Fallback,
         )
     };
-    let (mut water, mut water_provenance) = if let Some(axis) = environment.water_samples_per_axis()
-    {
-        let coverage = sample_water(generator, axis, tile, cancelled)?;
-        coverage
-            .map(|(ocean, inland)| water_from_coverage(ocean, inland))
-            .unwrap_or((WaterKind::None, Provenance::SourceDerived))
-    } else {
-        (fallback_water(generator, tile), Provenance::Fallback)
-    };
-    let (hydrology_observation, modern_land_cover_class, modeled_water) =
-        if let Some(index) = &environment.hydrology_evidence {
-            water_model::sample_typed_evidence(generator, index.samples_per_axis, tile, cancelled)?
-        } else {
-            (None, None, None)
-        };
-    water_model::apply_to_tile(
-        modeled_water,
+    let sample = water::sample(generator, environment, tile, true, cancelled)?;
+    let (water, water_provenance) = water::resolve(
+        &sample,
         compression,
-        &mut water,
         &mut game_height_level,
         &mut surface_kind,
-        &mut water_provenance,
     );
-    if water == WaterKind::Lake
-        && modeled_water.is_none()
-        && hydrology_observation.is_some_and(|observation| {
-            observation.kind == crate::HydrologyKind::River
-                && observation.method == HydrologyEvidenceMethod::HydroRiversBufferedCorridor
-        })
-    {
-        water = WaterKind::River;
-    }
+    let (hydrology_observation, modern_land_cover_class) =
+        (sample.observation, sample.modern_land_cover_class);
     let material = match water {
         WaterKind::None => material_for(biome.0, geographic_height_centimeters),
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -179,34 +157,6 @@ fn provider_elevation(
         cancelled,
     )?;
     elevation_value(&page, source_x, source_y)
-}
-
-fn sample_water(
-    generator: &MapChunkGenerator,
-    samples: u16,
-    tile: TileCoord,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Option<(u8, u8)>, EnvironmentPageError> {
-    let (source_x, source_y) = source_coordinate(tile.x, tile.y, samples, generator.width_tiles)?;
-    let page = load_page(
-        generator,
-        EnvironmentPageKey {
-            layer: PageLayer::Water,
-            level: 0,
-            x: source_x / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-            y: source_y / u16::from(ENVIRONMENT_PAGE_SAMPLES),
-        },
-        cancelled,
-    )?;
-    let page = match page.as_ref() {
-        EnvironmentPage::Water(page) => page,
-        _ => return Err(EnvironmentPageError::Corrupt),
-    };
-    let index = page_index(page.width, page.height, source_x, source_y)?;
-    Ok(Some((
-        page.ocean_coverage_percent[index],
-        page.inland_coverage_percent[index],
-    )))
 }
 
 /// Base biome with nodata samples filled from the nearest usable class.

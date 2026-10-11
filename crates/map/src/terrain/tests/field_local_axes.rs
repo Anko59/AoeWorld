@@ -249,11 +249,26 @@ fn field_local_dense_and_provider_base_samples_match_edges_and_boundaries() {
             .generator_with_page_provider(Arc::new(pages))
             .unwrap();
         let nodata = TileCoord::new(0, 0);
+        // Class 0 at the corner takes its first usable neighbor, class 4
+        // (Woodland), while retaining exact fallback provenance on both paths.
+        for base in [
+            dense.sample_base_tile(nodata),
+            provider::sample_base_tile(&lazy, nodata, &|| false).unwrap(),
+        ] {
+            assert_eq!(
+                (base.biome, base.vegetation_provenance),
+                (Biome::Woodland, Provenance::Fallback),
+                "axes {axes:?}: filled vegetation at {nodata:?}"
+            );
+        }
+        // Water at the corner is shaped from its neighbors, identically on
+        // both paths.
         assert_eq!(
-            dense.sample_base_tile(nodata).vegetation_provenance,
-            Provenance::Fallback
+            dense.sample_base_tile(nodata).water,
+            provider::sample_base_tile(&lazy, nodata, &|| false)
+                .unwrap()
+                .water
         );
-        assert_eq!(dense.sample_base_tile(nodata).water, WaterKind::None);
         let edge = dense.width_tiles - 1;
         for y in [0, 1, 31, 32, 63, 64, edge] {
             for x in [0, 1, 31, 32, 63, 64, edge] {

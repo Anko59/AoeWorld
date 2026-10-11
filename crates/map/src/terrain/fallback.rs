@@ -1,14 +1,75 @@
 //! Dense base terrain: bound vector fields where present and the seeded
 //! no-source fallback relief, water and biome elsewhere. The composed
 //! landscape decorates this base; it is never a separate generation path.
+use super::landscape::mix64;
+use super::shoreline::{self, CellGrid};
 use super::{
     Biome, GroundMaterial, MapChunkGenerator, Provenance, Tile, WaterKind, compression_fallback,
     quantize_game_height, signed_noise, surface, unsigned_noise,
 };
 use crate::biome_rules::material_for;
 use aoe_core::TileCoord;
+use std::convert::Infallible;
+
+const LAKE_BLOCKS: CellGrid = CellGrid::blocks(16);
+const RIVER_BLOCKS: CellGrid = CellGrid::blocks(4);
 
 impl MapChunkGenerator {
+    /// Geography-only key of the shoreline warp; the procedural seed never
+    /// moves water.
+    pub(super) fn shoreline_key(&self) -> u64 {
+        self.geography_key
+            .chunks_exact(8)
+            .fold(0x73_686f_7265_6c69, |key, part| {
+                mix64(key ^ u64::from_le_bytes(part.try_into().unwrap_or([0; 8])))
+            })
+    }
+
+    /// Shaped water of the dense (pageless) fields or the seeded fallback.
+    pub(super) fn dense_water(&self, tile: TileCoord) -> (WaterKind, Provenance) {
+        let Some(water) = &self.water else {
+            return (fallback_water(self, tile), Provenance::Fallback);
+        };
+        let grid = CellGrid::source(water.samples_per_axis(), self.width_tiles);
+        shoreline::sample(self.shoreline_key(), grid, tile, &mut |x, y| {
+            Ok::<_, Infallible>(water.cell(x, y).and_then(|coverage| {
+                let water = water_from_coverage(coverage.ocean_percent, coverage.inland_percent);
+                (water.0 != WaterKind::None).then_some(water)
+            }))
+        })
+        .unwrap_or_else(|never| match never {})
+        .unwrap_or((WaterKind::None, Provenance::SourceDerived))
+    }
+
+    /// Conservative: `false` proves no dense water within `radius` tiles.
+    pub(super) fn dense_water_near(&self, tile: TileCoord, radius: i32) -> bool {
+        let Some(water) = &self.water else {
+            return fallback_water_near(self, tile, radius);
+        };
+        let grid = CellGrid::source(water.samples_per_axis(), self.width_tiles);
+        shoreline::any_wet_near(grid, tile, radius, &mut |x, y| {
+            Ok::<_, Infallible>(water.cell(x, y).is_some_and(|coverage| {
+                coverage.ocean_percent != 0 || coverage.inland_percent != 0
+            }))
+        })
+        .unwrap_or_else(|never| match never {})
+    }
+
+    /// Conservative: `true` proves only lake or ocean water within `radius`
+    /// tiles. Seeded fallback water is always scanned instead.
+    pub(super) fn dense_open_water_near(&self, tile: TileCoord, radius: i32) -> bool {
+        let Some(water) = &self.water else {
+            return false;
+        };
+        let grid = CellGrid::source(water.samples_per_axis(), self.width_tiles);
+        shoreline::all_wet_near(grid, tile, radius, &mut |x, y| {
+            Ok::<_, Infallible>(water.cell(x, y).is_some_and(|coverage| {
+                open_coverage(coverage.ocean_percent, coverage.inland_percent)
+            }))
+        })
+        .unwrap_or_else(|never| match never {})
+    }
+
     /// Undecorated terrain for neighbor queries; never samples landscape or
     /// objects. Fallback noise is evaluated only for fields without a source.
     pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
@@ -40,12 +101,7 @@ impl MapChunkGenerator {
             };
         // Elevation cannot identify water: inland depressions can be dry, while
         // coastlines require independent, coherent water geometry.
-        let (water, water_provenance) = self
-            .water
-            .as_ref()
-            .and_then(|water| water.coverage_at(tile, self.width_tiles))
-            .map(|coverage| water_from_coverage(coverage.ocean_percent, coverage.inland_percent))
-            .unwrap_or_else(|| (fallback_water(self, tile), Provenance::Fallback));
+        let (water, water_provenance) = self.dense_water(tile);
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -103,6 +159,11 @@ pub(super) fn water_from_coverage(ocean: u8, inland: u8) -> (WaterKind, Provenan
     }
 }
 
+/// Coverage that `water_from_coverage` reads as lake or ocean.
+pub(super) fn open_coverage(ocean: u8, inland: u8) -> bool {
+    ocean > 50 || (ocean == 0 && inland > 50)
+}
+
 pub(super) fn fallback_height(generator: &MapChunkGenerator, tile: TileCoord) -> i32 {
     signed_noise(
         generator.geography_key,
@@ -114,28 +175,46 @@ pub(super) fn fallback_height(generator: &MapChunkGenerator, tile: TileCoord) ->
     .saturating_add(signed_noise(generator.geography_key, b"relief-detail", tile.x, tile.y) / 8)
 }
 
+fn seeded_lake(generator: &MapChunkGenerator, x: i64, y: i64) -> bool {
+    unsigned_noise(generator.geography_key, b"water", x as i32, y as i32).is_multiple_of(97)
+}
+
+fn seeded_river(generator: &MapChunkGenerator, x: i64, y: i64) -> bool {
+    unsigned_noise(generator.geography_key, b"river", x as i32, y as i32).is_multiple_of(521)
+}
+
+/// Seeded 16-tile lake and 4-tile river blocks, shaped like source cells.
 pub(super) fn fallback_water(generator: &MapChunkGenerator, tile: TileCoord) -> WaterKind {
-    if unsigned_noise(
-        generator.geography_key,
-        b"water",
-        tile.x.div_euclid(16),
-        tile.y.div_euclid(16),
-    )
-    .is_multiple_of(97)
-    {
+    let key = generator.shoreline_key();
+    let wet = |blocks, seeded: fn(&MapChunkGenerator, i64, i64) -> bool| {
+        shoreline::sample(key, blocks, tile, &mut |x, y| {
+            Ok::<_, Infallible>(seeded(generator, x, y).then_some(()))
+        })
+        .unwrap_or_else(|never| match never {})
+        .is_some()
+    };
+    if wet(LAKE_BLOCKS, seeded_lake) {
         WaterKind::Lake
-    } else if unsigned_noise(
-        generator.geography_key,
-        b"river",
-        tile.x.div_euclid(4),
-        tile.y.div_euclid(4),
-    )
-    .is_multiple_of(521)
-    {
+    } else if wet(RIVER_BLOCKS, seeded_river) {
         WaterKind::River
     } else {
         WaterKind::None
     }
+}
+
+/// Conservative: `false` proves no seeded water within `radius` tiles.
+pub(super) fn fallback_water_near(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    radius: i32,
+) -> bool {
+    let near = |blocks, seeded: fn(&MapChunkGenerator, i64, i64) -> bool| {
+        shoreline::any_wet_near(blocks, tile, radius, &mut |x, y| {
+            Ok::<_, Infallible>(seeded(generator, x, y))
+        })
+        .unwrap_or_else(|never| match never {})
+    };
+    near(LAKE_BLOCKS, seeded_lake) || near(RIVER_BLOCKS, seeded_river)
 }
 
 pub(super) fn fallback_biome(generator: &MapChunkGenerator, tile: TileCoord) -> Biome {

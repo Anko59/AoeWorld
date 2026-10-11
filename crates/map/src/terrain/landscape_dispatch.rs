@@ -12,8 +12,9 @@ pub struct LandscapePoint {
 }
 
 impl MapChunkGenerator {
-    /// Physical terrain only. Composition changes material, not
-    /// passability, surface or height; overlays remain a caller concern.
+    /// Physical terrain only. Composition changes material and marks the
+    /// shallow rim, never water kind, passability, surface or height;
+    /// overlays remain a caller concern.
     pub(super) fn base_physical_tile_with_cancel(
         &self,
         tile: TileCoord,
@@ -29,6 +30,66 @@ impl MapChunkGenerator {
             provider::sample_base_tile(self, tile, cancelled).map(Some)
         } else {
             Ok(Some(self.sample_base_tile(tile)))
+        }
+    }
+
+    /// Shaped physical water kind without elevation, biome or composition;
+    /// `None` outside the map.
+    pub(super) fn base_water_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
+            return Ok(None);
+        }
+        if self.provider.is_some() {
+            provider::water::water_kind(self, tile, cancelled).map(Some)
+        } else {
+            Ok(Some(self.dense_water(tile).0))
+        }
+    }
+
+    /// Conservative reach test: `false` proves that no tile within `radius`
+    /// tiles is water, without sampling those tiles.
+    pub(super) fn water_possible_near(
+        &self,
+        tile: TileCoord,
+        radius: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if self.provider.is_some() {
+            provider::water::water_near(self, tile, radius, cancelled)
+        } else {
+            Ok(self.dense_water_near(tile, radius))
+        }
+    }
+
+    /// Conservative depth test: `true` proves that every tile within
+    /// `radius` tiles is lake or ocean water, without sampling those tiles.
+    pub(super) fn open_water_certain_near(
+        &self,
+        tile: TileCoord,
+        radius: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let inside = |value: i32| value >= radius && value < self.width_tiles - radius;
+        if !inside(tile.x) || !inside(tile.y) {
+            return Ok(false);
+        }
+        if self.provider.is_some() {
+            provider::water::open_water_near(self, tile, radius, cancelled)
+        } else {
+            Ok(self.dense_open_water_near(tile, radius))
         }
     }
 
@@ -75,6 +136,7 @@ impl MapChunkGenerator {
             route: landscape::starting_connector_contains(self, tile),
             start: landscape::starting_glade(self, tile),
             resource_approach: false,
+            shore: false,
         }
     }
 

@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::TreePalm as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::Shallows as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -53,7 +53,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (678 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (978 total).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -115,6 +115,13 @@ const TERRAIN_ROLES: [AssetRole; 7] = [
     AssetRole::ForestFloor,
 ];
 
+/// Optional depth sheets in renderer order: medium, deep, ford shallows.
+const WATER_DEPTH_ROLES: [AssetRole; 3] = [
+    AssetRole::WaterMedium,
+    AssetRole::WaterDeep,
+    AssetRole::Shallows,
+];
+
 fn renderer_topology(topology: TerrainFrameTopology) -> TerrainTopology {
     match topology {
         TerrainFrameTopology::PeriodicXMajorReversedY { columns, rows } => {
@@ -146,6 +153,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     let mut selected = Vec::new();
     let mut domains = Vec::new();
     let mut terrain_topology = [None; 7];
+    let mut depth_topology = [None; 3];
     // Catalog roles are bounded, not a dynamic startup search tree. The browser
     // oracle covers every selected role and the intentionally absent rock role.
     let mut ranges: RoleRanges = std::array::from_fn(|_| None);
@@ -172,8 +180,14 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             let terrain_slot = TERRAIN_ROLES
                 .iter()
                 .position(|role| *role == selection.role);
+            let depth_slot = WATER_DEPTH_ROLES
+                .iter()
+                .position(|role| *role == selection.role);
             let domain = if let Some(slot) = terrain_slot {
                 terrain_topology[slot] = selection.terrain_topology.map(renderer_topology);
+                AtlasDomain::Terrain
+            } else if let Some(slot) = depth_slot {
+                depth_topology[slot] = selection.terrain_topology.map(renderer_topology);
                 AtlasDomain::Terrain
             } else {
                 AtlasDomain::Objects
@@ -241,6 +255,9 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,
+            water_depth: std::array::from_fn(|slot| {
+                (group(WATER_DEPTH_ROLES[slot]), depth_topology[slot])
+            }),
             resources: [
                 group(AssetRole::ForageBush),
                 group(AssetRole::WoodTree),

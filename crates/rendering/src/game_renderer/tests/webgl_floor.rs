@@ -40,3 +40,17 @@ fn webgl_shared_floor_gradient_seam_and_manual_packet_fallback() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn webgl_water_depth_classes_draw_their_sheets_and_blend_at_borders() {
+    use crate::surface_mesh::water_fixture as fixture;
+    let (canvas, mut renderer) = target(&fixture::atlas());
+    for (left, right) in fixture::pairs() {
+        let faces = fixture::faces(left, right);
+        let mut packets = faces.map(|face| instance(&face));
+        render(&mut renderer, &mut packets);
+        for [x, y] in fixture::PROBES {
+            assert_pixel(&canvas, x, y, fixture::expected(left, right, x));
+        }
+    }
+}

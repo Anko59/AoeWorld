@@ -122,7 +122,9 @@ async fn preview_endpoint_returns_source_backed_terrain_samples() {
     assert!(preview.minimum_height_centimeters < 0);
     assert!(preview.maximum_height_centimeters > 0);
     assert!(preview.cells.iter().any(|cell| {
-        cell.water == WaterKind::Lake as u8 && cell.material == GroundMaterial::Water as u8
+        cell.water == WaterKind::Lake as u8
+            && (cell.material == GroundMaterial::Water as u8
+                || cell.material == GroundMaterial::DeepWater as u8)
     }));
 }
 

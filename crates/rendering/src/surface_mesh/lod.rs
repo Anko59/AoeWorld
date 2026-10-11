@@ -149,9 +149,7 @@ pub fn projected_surface_triangles(
                         } else {
                             texture_mode(sample.surface.triangulation, order as u8)
                         },
-                        tint: if sample.surface.water == 1 {
-                            4
-                        } else if sample.surface.water != 0 {
+                        tint: if sample.surface.water != 0 {
                             0
                         } else {
                             match sample.surface.kind {
@@ -163,9 +161,10 @@ pub fn projected_surface_triangles(
                         texture_uv: None,
                         texture_blend: None,
                         texture_tile,
-                        texture_materials: (sample.surface.water == 0
-                            && sample.surface.kind != SceneTerrainSurface::CLIFF)
-                            .then_some([sample.material; 3]),
+                        texture_materials: (sample.surface.kind != SceneTerrainSurface::CLIFF
+                            && (sample.surface.water == 0
+                                || appearance::water_material(sample.material)))
+                        .then_some([sample.material; 3]),
                         pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
                         order: order as u8,
                     });

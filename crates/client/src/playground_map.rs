@@ -369,6 +369,8 @@ fn terrain_material(material: GroundMaterial) -> u8 {
         GroundMaterial::Sand => 3,
         GroundMaterial::Rock => 4,
         GroundMaterial::Water => 5,
+        GroundMaterial::DeepWater => 11,
+        GroundMaterial::Ford => 12,
     }
 }
 

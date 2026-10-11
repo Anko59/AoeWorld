@@ -82,6 +82,7 @@ pub(crate) fn art() -> GameArt {
         grass,
         terrain,
         terrain_topology,
+        water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

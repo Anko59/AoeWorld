@@ -15,6 +15,8 @@ mod native_canvas_tests;
 mod shore_tests;
 #[path = "tests/terrain_texture.rs"]
 mod terrain_texture_tests;
+#[path = "tests/water_depth.rs"]
+mod water_depth_tests;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -25,6 +27,7 @@ fn test_art(frame: GameFrame) -> GameArt {
         grass: vec![frame],
         terrain: std::array::from_fn(|_| vec![frame]),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -68,7 +71,8 @@ fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
                 page: 0,
                 uv: [0.2, 0.3, 0.04, 0.06],
             })
-            && triangle.tint == 4
+            // Water art is drawn as authored: no procedural water tint.
+            && triangle.tint == 0
     }));
     assert_eq!(
         triangle_texture_coordinates(0),
@@ -403,13 +407,8 @@ fn water_beside_raised_land_shares_a_shore_edge_without_a_cliff_skirt() {
     );
     assert_eq!(triangles.len(), 4);
     assert!(triangles.iter().all(|triangle| !triangle.skirt));
-    assert_eq!(
-        triangles
-            .iter()
-            .filter(|triangle| triangle.tint == 4)
-            .count(),
-        2
-    );
+    // Shallow water keeps its own sheet untinted.
+    assert!(triangles.iter().all(|triangle| triangle.tint == 0));
     for shore in [[1.0, 0.0, 2.0], [1.0, 1.0, 2.0]] {
         for tile_x in 0..=1 {
             assert!(

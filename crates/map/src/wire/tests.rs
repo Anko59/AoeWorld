@@ -245,7 +245,7 @@ fn worldcover_evidence_codes_round_trip_every_documented_class() {
 
 #[test]
 fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
-    for value in 0..=11 {
+    for value in 0..=13 {
         assert!(ground_material(value).is_ok(), "material {value}");
     }
     for value in 0..=9 {
@@ -272,7 +272,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     for value in 0..=5 {
         assert!(palette_from(value).is_ok(), "palette {value}");
     }
-    assert_eq!(ground_material(12), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(ground_material(14), Err(CompactChunkError::InvalidEnum));
     assert_eq!(biome(10), Err(CompactChunkError::InvalidEnum));
     assert_eq!(provenance(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(water_kind(5), Err(CompactChunkError::InvalidEnum));

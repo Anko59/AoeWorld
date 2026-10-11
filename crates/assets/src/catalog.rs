@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 5;
+pub const VERSION: u8 = 6;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 678;
+pub const MAX_REVIEWED_FRAMES: u32 = 978;
 
 /// Paving 15018 is not natural rock. No imported rock sheet is approved.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -37,6 +37,9 @@ pub enum AssetRole {
     StoneDeposit,
     TreeConifer,
     TreePalm,
+    WaterMedium,
+    WaterDeep,
+    Shallows,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,7 +129,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
         archive: "terrain.drs",
         id: 15002,
         frames: 100,
-        interpretation: "10x10 periodic water texture atlas in x-major, reversed-y order",
+        interpretation: "10x10 periodic light shallow-water atlas in x-major, reversed-y order",
         terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
             columns: 10,
             rows: 10,
@@ -202,15 +205,56 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
 
 /// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only
 /// frames 0..10 as coordinate-stable accents, not a complete periodic grid.
-/// Optional so older partial packs keep their explicit dirt fallback.
-pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 1] = [SpriteSource {
-    role: AssetRole::ForestFloor,
-    archive: "terrain.drs",
-    id: 15011,
-    frames: 10,
-    interpretation: "ten coordinate-stable forest-floor accents; seamless full sheet unapproved",
-    terrain_topology: Some(TerrainFrameTopology::CoordinateStableAccents),
-}];
+/// Optional so partial packs keep their explicit dirt fallback.
+///
+/// Water depth: required water 15002 is the light shallow sheet. Medium
+/// 15016, deep 15015 and marsh shallows 15014 are periodic sheets of the same
+/// layout; a pack without one draws the shallow sheet in its place, never a
+/// flat tint. Shallows is renderer wiring only: no terrain generator emits
+/// Ford yet. Ford generation belongs to separate river work.
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 4] = [
+    SpriteSource {
+        role: AssetRole::ForestFloor,
+        archive: "terrain.drs",
+        id: 15011,
+        frames: 10,
+        interpretation: "ten coordinate-stable forest-floor accents; seamless full sheet unapproved",
+        terrain_topology: Some(TerrainFrameTopology::CoordinateStableAccents),
+    },
+    SpriteSource {
+        role: AssetRole::WaterMedium,
+        archive: "terrain.drs",
+        id: 15016,
+        frames: 100,
+        interpretation: "10x10 periodic medium-water atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
+    },
+    SpriteSource {
+        role: AssetRole::WaterDeep,
+        archive: "terrain.drs",
+        id: 15015,
+        frames: 100,
+        interpretation: "10x10 periodic deep-water atlas in x-major, reversed-y order",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
+    },
+    SpriteSource {
+        role: AssetRole::Shallows,
+        archive: "terrain.drs",
+        id: 15014,
+        frames: 100,
+        interpretation: "10x10 periodic marsh-shallows atlas in x-major, reversed-y order; renderer mapping only, no generated fords",
+        terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+            columns: 10,
+            rows: 10,
+        }),
+    },
+];
 
 /// Object roles without reviewed source art. Keep this empty while every
 /// supported resource role has an approved source mapping.
@@ -248,12 +292,42 @@ mod tests {
                 .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 5);
+        assert_eq!(VERSION, 6);
         assert_eq!(AssetRole::StoneDeposit as usize, 13);
         assert_eq!(AssetRole::TreeConifer as usize, 14);
         assert_eq!(AssetRole::TreePalm as usize, 15);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
+        assert_eq!(AssetRole::WaterMedium as usize, 16);
+        assert_eq!(AssetRole::Shallows as usize, 18);
+        // Water depth sheets: light shallow water stays the required sheet;
+        // medium, deep and walkable marsh shallows are optional periodic sheets.
+        assert_eq!(REQUIRED_RENDER_SOURCES[6].id, 15002);
+        assert_eq!(
+            OPTIONAL_TERRAIN_SOURCES[1..]
+                .iter()
+                .map(|source| (
+                    source.role,
+                    source.id,
+                    source.frames,
+                    source.terrain_topology
+                ))
+                .collect::<Vec<_>>(),
+            [
+                (AssetRole::WaterMedium, 15016),
+                (AssetRole::WaterDeep, 15015),
+                (AssetRole::Shallows, 15014),
+            ]
+            .map(|(role, id)| (
+                role,
+                id,
+                100,
+                Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+                    columns: 10,
+                    rows: 10
+                })
+            ))
+        );
         assert_eq!(
             REQUIRED_RENDER_SOURCES
                 .iter()

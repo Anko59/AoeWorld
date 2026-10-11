@@ -48,6 +48,7 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         grass: vec![frame(0)],
         terrain: std::array::from_fn(|_| vec![frame(0)]),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -141,6 +142,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
     };
     let camera = SceneCamera {
         center: [0.0; 2],

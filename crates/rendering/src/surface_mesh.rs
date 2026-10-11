@@ -16,6 +16,9 @@ pub use lod::projected_surface_triangles;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "surface_mesh/tests/water_fixture.rs"]
+pub(crate) mod water_fixture;
 
 pub const MAX_SURFACE_TILES: usize = 4_096;
 pub const MAX_SURFACE_TRIANGLES: usize = MAX_SURFACE_TILES * 6;

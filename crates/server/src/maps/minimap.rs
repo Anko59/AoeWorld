@@ -129,7 +129,10 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
         GroundMaterial::Rock => MinimapClass::Rock,
         GroundMaterial::Snow => MinimapClass::Snow,
         GroundMaterial::Ice => MinimapClass::Ice,
-        GroundMaterial::Shore | GroundMaterial::Water => MinimapClass::Shore,
+        GroundMaterial::Shore
+        | GroundMaterial::Water
+        | GroundMaterial::DeepWater
+        | GroundMaterial::Ford => MinimapClass::Shore,
     }
 }
 

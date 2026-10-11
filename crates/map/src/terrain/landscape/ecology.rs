@@ -16,6 +16,8 @@ pub struct Reservations {
     pub route: bool,
     pub resource_approach: bool,
     pub start: bool,
+    /// Beach or river bank beside shaped water.
+    pub shore: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,7 +63,8 @@ pub fn assess(
         && mode != Mode::Treeless;
     let excluded = historical_land_use == LandUse::Nonland
         || reservations.resource_approach
-        || reservations.start;
+        || reservations.start
+        || reservations.shore;
     Ok(Assessment {
         input: Input {
             mode,

@@ -204,6 +204,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
             })]
         }),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -308,6 +309,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         grass: Vec::new(),
         terrain: Default::default(),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
@@ -406,4 +408,36 @@ fn canvas_multiplies_shadow_sprite_tint_and_alpha_like_webgpu() {
 
     assert_eq!(pixel(&presentation.color_buffer, 64, 64), [20, 37, 18, 255]);
     assert_eq!(presentation.depth_buffer[64 * 128 + 64], 1.0);
+}
+
+#[wasm_bindgen_test]
+fn canvas_water_depth_classes_draw_their_sheets_and_blend_at_borders() {
+    use crate::surface_mesh::water_fixture as fixture;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = fixture::atlas();
+    for (left, right) in fixture::pairs() {
+        let faces = fixture::faces(left, right);
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &faces.map(WorldLayer::Surface),
+            test_camera(),
+            false,
+        )
+        .unwrap();
+        for [x, y] in fixture::PROBES {
+            let actual = pixel(&presentation.color_buffer, x, y);
+            let expected = fixture::expected(left, right, x);
+            assert!(
+                actual
+                    .into_iter()
+                    .zip(expected)
+                    .all(|(actual, expected)| actual.abs_diff(expected) <= 1),
+                "water {left}/{right} at {x}: {actual:?}, expected {expected:?}"
+            );
+        }
+    }
 }

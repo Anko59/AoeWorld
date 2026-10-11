@@ -28,6 +28,7 @@ pub use landscape_data::{
 };
 mod provider;
 mod resources;
+mod shoreline;
 mod surface;
 mod vegetation;
 use elevation::PreparedElevation;
@@ -53,8 +54,15 @@ pub enum GroundMaterial {
     Mud,
     Snow,
     Ice,
+    /// Shallow water art: the rim of open water, river margins and wetlands.
     Shore,
+    /// Medium-depth water.
     Water,
+    /// Open water with no land within the medium reach.
+    DeepWater,
+    /// Renderer mapping for walkable river shallows. No terrain generator
+    /// emits this material yet; ford generation belongs to separate river work.
+    Ford,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

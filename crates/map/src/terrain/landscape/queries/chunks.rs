@@ -80,13 +80,13 @@ impl MapChunkGenerator {
         self.evaluate_landscape_point_with_memo(position, policy_at, reserved_at, cancelled, &memo)
     }
 
-    fn evaluate_landscape_point_with_memo<const N: usize>(
+    fn evaluate_landscape_point_with_memo<const N: usize, const W: usize>(
         &self,
         position: TileCoord,
         policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
         reserved_at: &dyn Fn(TileCoord) -> Reservations,
         cancelled: &dyn Fn() -> bool,
-        memo: &memo::Memo<'_, N>,
+        memo: &memo::Memo<'_, N, W>,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let effective_policy = |position, base: Tile| {
             let mut policy = policy_at(position, base);
@@ -106,6 +106,10 @@ impl MapChunkGenerator {
         let shared_reservations = |position| {
             let mut reservations = reserved_at(position);
             reservations.resource_approach |= memo.reserved(position)?;
+            reservations.shore |= matches!(
+                memo.shore(position)?,
+                memo::Shore::Beach | memo::Shore::Bank
+            );
             Ok(reservations)
         };
         let Some((sample, base)) = self.evaluate_landscape_inner_with_base(
@@ -122,6 +126,21 @@ impl MapChunkGenerator {
         let appearance = appearance(base, sample.density);
         let mut terrain = base;
         terrain.material = material(base, appearance);
+        // Shore band: appearance on land, a shallow rim in open water. It
+        // never changes water kind, passability, heights or the shaped outline.
+        match memo.shore(position)? {
+            memo::Shore::None => {}
+            memo::Shore::Shallow | memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
+            memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
+            shore if base.passable && soft_ground(terrain.material) => {
+                terrain.material = if shore == memo::Shore::Bank {
+                    GroundMaterial::Mud
+                } else {
+                    GroundMaterial::Sand
+                };
+            }
+            _ => {}
+        }
         let tile = LandscapeTile {
             tile: position,
             terrain,
@@ -174,6 +193,7 @@ impl MapChunkGenerator {
             && !reserved.route
             && !reserved.start
             && !reserved.resource_approach
+            && !reserved.shore
         {
             let roll = unsigned_noise(
                 self.geography_key,
@@ -358,6 +378,14 @@ fn appearance(base: Tile, density: DensitySample) -> LandscapeAppearance {
         exposure,
         height_band,
     }
+}
+
+/// Rock, snow and ice shores stay as they are; everything else takes the band.
+const fn soft_ground(material: GroundMaterial) -> bool {
+    !matches!(
+        material,
+        GroundMaterial::Rock | GroundMaterial::Snow | GroundMaterial::Ice
+    )
 }
 
 fn material(base: Tile, appearance: LandscapeAppearance) -> GroundMaterial {
