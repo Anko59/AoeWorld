@@ -120,7 +120,8 @@ fn lazy_objects_preserve_materialized_order_and_every_packet_bit() {
                 actual.iter().map(|(_, _, _, id)| *id).collect::<Vec<_>>(),
                 expected_ids
             );
-            assert!(actual.iter().all(|(_, _, depth, _)| *depth == 1.0));
+            // Ground depth 1.0 plus the shared 1.5 clearance over the ground.
+            assert!(actual.iter().all(|(_, _, depth, _)| *depth == 2.5));
         }
     }
 }

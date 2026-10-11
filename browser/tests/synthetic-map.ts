@@ -2,16 +2,19 @@ import type { Page } from "@playwright/test";
 
 const CHUNK_TILES = 32;
 
+/** `true` plants a tree on every tile of flat ground; a predicate picks tiles. */
+export type SyntheticTrees = boolean | ((x: number, y: number) => boolean);
+
 export async function activateSyntheticMap(
   page: Page,
-  denseResources = false,
+  denseResources: SyntheticTrees = false,
   center: readonly [number, number] = [8192, 8192],
 ): Promise<string> {
   const chunkX = Math.round(center[0] / CHUNK_TILES);
   const chunkY = Math.round(center[1] / CHUNK_TILES);
   const contentHash = "01".repeat(32);
   const chunk = JSON.stringify(
-    denseResources
+    denseResources === true
       ? Array.from({ length: 81 }, (_, index) =>
           syntheticChunk(
             chunkX - 4 + (index % 9),
@@ -20,11 +23,13 @@ export async function activateSyntheticMap(
           ),
         )
       : [
-          syntheticChunk(chunkX - 1, chunkY - 1),
-          syntheticChunk(chunkX, chunkY - 1),
-          syntheticChunk(chunkX - 1, chunkY),
-          syntheticChunk(chunkX, chunkY),
-        ],
+          [-1, -1],
+          [0, -1],
+          [-1, 0],
+          [0, 0],
+        ].map(([x = 0, y = 0]) =>
+          syntheticChunk(chunkX + x, chunkY + y, denseResources),
+        ),
   );
   await page.evaluate(
     async ([hash, chunkJson]) => {
@@ -43,7 +48,7 @@ export async function activateSyntheticMap(
 export function syntheticChunk(
   x: number,
   y: number,
-  denseResources = false,
+  denseResources: SyntheticTrees = false,
 ): {
   x: number;
   y: number;
@@ -51,10 +56,15 @@ export function syntheticChunk(
 } {
   // Chunk format 4: header, then per tile 20 terrain bytes, explicit world
   // coordinates and 7 appearance bytes; resources carry a visual family.
+  const trees: [number, number][] = [];
+  const planted = denseResources === true ? () => true : denseResources;
+  for (let tileY = y * CHUNK_TILES; tileY < (y + 1) * CHUNK_TILES; tileY++)
+    for (let tileX = x * CHUNK_TILES; tileX < (x + 1) * CHUNK_TILES; tileX++)
+      if (planted && planted(tileX, tileY)) trees.push([tileX, tileY]);
   const bytes = [
     4,
     ...u16(CHUNK_TILES * CHUNK_TILES),
-    ...u16(denseResources ? 1024 : 0),
+    ...u16(trees.length),
     ...u16(0),
   ];
   for (let localY = 0; localY < CHUNK_TILES; localY += 1) {
@@ -73,18 +83,11 @@ export function syntheticChunk(
       bytes.push(...u16(0), ...u16(0), 0, 1, 0);
     }
   }
-  if (denseResources) {
-    for (let localY = 0; localY < 32; localY++) {
-      for (let localX = 0; localX < 32; localX++) {
-        const tx = x * 32 + localX;
-        const ty = y * 32 + localY;
-        const id = BigInt(ty) * 524288n + BigInt(tx) * 2n;
-        for (let b = 0n; b < 8n; b++)
-          bytes.push(Number((id >> (8n * b)) & 255n));
-        // Wood tree, 100 units, variant 0, broadleaf family.
-        bytes.push(...i32(tx), ...i32(ty), 1, 0, ...u16(100), 0, 1);
-      }
-    }
+  for (const [tx, ty] of trees) {
+    const id = BigInt(ty) * 524288n + BigInt(tx) * 2n;
+    for (let b = 0n; b < 8n; b++) bytes.push(Number((id >> (8n * b)) & 255n));
+    // Wood tree, 100 units, variant 0, broadleaf family.
+    bytes.push(...i32(tx), ...i32(ty), 1, 0, ...u16(100), 0, 1);
   }
   return { x, y, payload_hex: bytes.map(hexByte).join("") };
 }
