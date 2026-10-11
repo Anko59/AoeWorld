@@ -142,7 +142,13 @@ pub fn projected_surface_triangles(
                         } else {
                             sample.material
                         },
-                        texture_mode: texture_mode(sample.surface.triangulation, order as u8),
+                        // Several world tiles under one face: sample per fragment
+                        // by world tile, never one origin frame stretched over all.
+                        texture_mode: if texture_step > 1 {
+                            directory::TILED
+                        } else {
+                            texture_mode(sample.surface.triangulation, order as u8)
+                        },
                         tint: if sample.surface.water == 1 {
                             4
                         } else if sample.surface.water != 0 {

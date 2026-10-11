@@ -8,21 +8,23 @@ use crate::{
     SceneTerrainSurface, TerrainTopology,
 };
 
-const SIZE: [u32; 2] = [9, 5];
+const SIZE: [u32; 2] = [5, 3];
 const SHEET: [u16; 2] = [4, 3];
 const ACCENTS: usize = 5;
 pub(crate) const CASES: usize = 5;
+// Chosen offline: every probe is clear of tile and texel edges at both zooms,
+// in distinct far-zoom tiles at every position inside a coarse texture patch.
 pub(crate) const PROBES: [[u32; 2]; 10] = [
-    [52, 59],
-    [58, 60],
-    [67, 59],
-    [75, 61],
-    [55, 63],
-    [70, 64],
-    [53, 67],
-    [61, 68],
-    [68, 66],
-    [74, 69],
+    [26, 58],
+    [28, 72],
+    [29, 48],
+    [42, 46],
+    [46, 74],
+    [48, 57],
+    [56, 82],
+    [57, 58],
+    [78, 50],
+    [81, 40],
 ];
 
 /// Expected RGBA and whether blue (the in-frame texel position) is exact.
@@ -40,7 +42,7 @@ fn texel(material: u8, index: usize, at: [u32; 2]) -> [u8; 4] {
     [
         30 + 18 * index as u8,
         if material == 0 { 40 } else { 200 },
-        10 + 25 * at[0] as u8 + 3 * at[1] as u8,
+        10 + 40 * at[0] as u8 + 15 * at[1] as u8,
         255,
     ]
 }
@@ -107,7 +109,7 @@ pub(crate) fn atlas() -> Vec<u8> {
 pub(crate) fn camera(case: usize) -> SceneCamera {
     SceneCamera {
         center: [0.37, -0.21],
-        zoom: if case == 0 { 1.0 } else { 1.0 / 24.0 },
+        zoom: if case == 0 { 0.5 } else { 1.0 / 40.0 },
         viewport: [128.0; 2],
         focus_elevation_meters: 0.0,
     }
@@ -137,7 +139,7 @@ fn reference(material: u8, world: [f64; 2]) -> Option<[u8; 4]> {
     let mut at = [0; 2];
     for axis in 0..2 {
         let position = 0.5 + diamond[axis] * f64::from(SIZE[axis] - 1);
-        if !(0.08..0.92).contains(&local[axis]) || !(0.12..0.88).contains(&position.fract()) {
+        if !(0.06..0.94).contains(&local[axis]) || !(0.1..0.9).contains(&position.fract()) {
             return None;
         }
         at[axis] = position as u32;
@@ -146,12 +148,13 @@ fn reference(material: u8, world: [f64; 2]) -> Option<[u8; 4]> {
     Some(texel(material, index, at))
 }
 
-/// 0: grass, native zoom, one face per tile. 1: grass, far zoom, coarse patches.
+/// 0: grass, near zoom, one face per tile. 1: grass, far zoom, coarse patches.
 /// 2: dirt, far zoom, few tiles so the mesh stays fine. 3: dirt, far zoom,
 /// coarse. 4: grass with a full forest floor, far zoom, coarse, filtered bed.
 pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     let material = if matches!(case, 2 | 3) { 2 } else { 0 };
-    let reach = if matches!(case, 0 | 2) { 7 } else { 48 };
+    // Few tiles keep one face per tile; the wide map needs 2×2-tile texture patches.
+    let reach = if matches!(case, 0 | 2) { 24 } else { 64 };
     let appearance = (case == 4).then_some(SceneTerrainAppearance {
         canopy_strength: 0,
         floor_strength: 1000,
@@ -180,8 +183,8 @@ pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     assert_eq!(coarse, matches!(case, 1 | 3 | 4), "mesh LOD premise");
     apply_terrain_textures(&mut faces, &art());
     assert!(
-        expected(case).iter().flatten().count() >= 5,
-        "too few unambiguous probes in case {case}"
+        expected(case).iter().all(Option::is_some),
+        "ambiguous probe in case {case}"
     );
     faces
 }

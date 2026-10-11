@@ -27,7 +27,7 @@ fn canvas_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
         for (probe, [x, y]) in fixture::PROBES.into_iter().enumerate() {
             let actual = pixel(&presentation.color_buffer, x, y);
             fixture::assert_probe(case, probe, actual, 0);
-            if matches!(case, 2 | 3) && fixture::expected(case)[probe].is_some() {
+            if matches!(case, 2 | 3) {
                 dirt.push(actual);
             }
         }

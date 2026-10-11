@@ -170,7 +170,8 @@ fn triangle(mode: u8, tint: u8, textured: bool, blend: bool) -> ProjectedSurface
 #[wasm_bindgen_test]
 fn canvas_surface_kernel_preserves_texture_blend_water_and_depth_bits() {
     let atlas = atlas();
-    for mode in 0..8 {
+    // Mode 6 resolves frames from the atlas directory; the reference has none.
+    for mode in (0..8).filter(|mode| *mode != crate::surface_mesh::directory::TILED) {
         for tint in [0, 1, 2, 3, 4, 11] {
             for (textured, blend) in [(false, false), (true, false), (true, true)] {
                 let triangle = triangle(mode, tint, textured, blend);

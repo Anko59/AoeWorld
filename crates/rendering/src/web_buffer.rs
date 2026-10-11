@@ -193,6 +193,25 @@ pub(crate) fn surface_instance(
     };
     let second = points[1];
     let third = points[2];
+    let blend = triangle.texture_blend;
+    // A face over several world tiles carries its corners in tile units, its
+    // origin tile and its layer materials; the fragment resolves each frame.
+    let tiled = (triangle.texture_mode == crate::surface_mesh::directory::TILED).then(|| {
+        let local = crate::surface_mesh::directory::locals(triangle).map(|l| l.map(|v| v as f32));
+        let layers = triangle
+            .texture_materials
+            .unwrap_or([triangle.material; 3])
+            .map(u32::from);
+        (
+            [local[0][0], local[0][1], local[1][0], local[1][1]],
+            [[local[2][0], local[2][1], 0.0, 0.0], [0.0; 4]],
+            [
+                triangle.texture_tile[0] as u32,
+                triangle.texture_tile[1] as u32,
+                layers[0] | layers[1] << 8 | layers[2] << 16,
+            ],
+        )
+    });
     match triangle.texture_uv {
         Some(uv) => Sprite {
             position: points[0],
@@ -201,31 +220,25 @@ pub(crate) fn surface_instance(
                 third[0],
                 third[1],
                 f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
-                if triangle.texture_blend.is_some() {
-                    -3.0
-                } else {
-                    -1.0
-                },
+                if blend.is_some() { -3.0 } else { -1.0 },
             ],
-            uv: uv.uv,
+            uv: tiled.map_or(uv.uv, |packet| packet.0),
             depths: [
                 depths[0],
                 depths[1],
                 depths[2],
                 floors.map_or(0.0, crate::surface_mesh::landscape::pack_floors),
             ],
-            terrain_blend: triangle
-                .texture_blend
-                .map(|addresses| addresses.map(|address| address.uv))
-                .unwrap_or([[0.0; 4]; 2]),
+            terrain_blend: tiled.map_or(
+                blend
+                    .map(|addresses| addresses.map(|address| address.uv))
+                    .unwrap_or([[0.0; 4]; 2]),
+                |packet| packet.1,
+            ),
             pages: [
-                uv.page,
-                triangle
-                    .texture_blend
-                    .map_or(0, |addresses| addresses[0].page),
-                triangle
-                    .texture_blend
-                    .map_or(0, |addresses| addresses[1].page),
+                tiled.map_or(uv.page, |packet| packet.2[0]),
+                tiled.map_or(blend.map_or(0, |a| a[0].page), |packet| packet.2[1]),
+                tiled.map_or(blend.map_or(0, |a| a[1].page), |packet| packet.2[2]),
                 if matches!(triangle.material, 0 | 1 | 2 | 6)
                     && triangle.tint <= 3
                     && !triangle.skirt

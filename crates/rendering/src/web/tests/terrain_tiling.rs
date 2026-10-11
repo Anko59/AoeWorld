@@ -11,15 +11,15 @@ async fn webgpu_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
         renderer
             .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
             .unwrap();
-        for half in 0..2 {
-            let probes: [[u32; 2]; 5] = std::array::from_fn(|i| fixture::PROBES[half * 5 + i]);
-            let pixels = read_pixels(&renderer, faces.len() as u32, probes).await;
-            for (index, actual) in pixels.into_iter().enumerate() {
-                let probe = half * 5 + index;
-                fixture::assert_probe(case, probe, actual, 1);
-                if matches!(case, 2 | 3) && fixture::expected(case)[probe].is_some() {
-                    dirt.push(actual);
-                }
+        // One bounded readback per case: the zoom pair (0, 1) and the mesh LOD
+        // pair (2, 3) each share five probes, together covering all ten.
+        let half = case / 2 % 2;
+        let probes: [[u32; 2]; 5] = std::array::from_fn(|i| fixture::PROBES[half * 5 + i]);
+        let pixels = read_pixels(&renderer, faces.len() as u32, probes).await;
+        for (index, actual) in pixels.into_iter().enumerate() {
+            fixture::assert_probe(case, half * 5 + index, actual, 1);
+            if matches!(case, 2 | 3) {
+                dirt.push(actual);
             }
         }
     }

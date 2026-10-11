@@ -134,7 +134,10 @@ impl GameRenderer {
 
     /// Takes the only WASM copy of the atlas. GPU tiers release it after
     /// upload; Canvas keeps it as its raster source without duplicating it.
-    pub fn upload_game_atlas(&mut self, pixels: Vec<u8>) -> Result<(), String> {
+    /// The art's terrain frame directory is written into the atlas first, so
+    /// every tier resolves a world tile to its native frame from the same bytes.
+    pub fn upload_game_atlas(&mut self, art: &GameArt, mut pixels: Vec<u8>) -> Result<(), String> {
+        crate::write_terrain_directory(art, &mut pixels)?;
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(&pixels),
             Self::WebGl(renderer) => renderer.upload(&pixels),

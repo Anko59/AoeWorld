@@ -302,7 +302,17 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         source_atlas: Vec::new(),
         presentation: CanvasPresentation::new(128, 128),
     };
-    renderer.upload_game_atlas(blend_atlas()).unwrap();
+    let art = GameArt {
+        walking: Vec::new(),
+        standing: Vec::new(),
+        grass: Vec::new(),
+        terrain: Default::default(),
+        terrain_topology: [None; 7],
+        resources: Default::default(),
+        tree_shadows: Vec::new(),
+        tree_families: Default::default(),
+    };
+    renderer.upload_game_atlas(&art, blend_atlas()).unwrap();
     let GameRenderer::Canvas {
         atlas,
         source_atlas,

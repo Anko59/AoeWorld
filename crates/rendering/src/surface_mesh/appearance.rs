@@ -98,6 +98,17 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }) {
             triangle.texture_materials = None;
         }
+        // A face over several tiles samples each tile's own frame, so its layers
+        // differ whenever their sheets do, whatever the origin tile happens to show.
+        let tiled = triangle.texture_mode == directory::TILED;
+        let distinct = |first: u8, second: u8, a: &AtlasAddress, b: &AtlasAddress| {
+            if tiled {
+                terrain_group(art, first).map(|group| group.0)
+                    != terrain_group(art, second).map(|group| group.0)
+            } else {
+                a != b
+            }
+        };
         if triangle.appearance & 1 != 0
             && matches!(triangle.material, 0 | 1 | 2 | 6)
             && triangle.tint <= 3
@@ -123,7 +134,10 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
             triangle.texture_uv = a;
             // Identical coherent addresses need one sample, not three reads of
             // the same bed (especially once each minified read is filtered).
-            triangle.texture_blend = a.zip(b).filter(|(a, b)| a != b).map(|(a, b)| [b, a]);
+            triangle.texture_blend = a
+                .zip(b)
+                .filter(|(a, b)| distinct(primary, bed, a, b))
+                .map(|(a, b)| [b, a]);
             continue;
         }
         let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
@@ -134,7 +148,12 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         triangle.texture_uv = frames[0];
         triangle.texture_blend = match frames {
-            [Some(a), Some(b), Some(c)] if a != b || a != c => Some([b, c]),
+            [Some(a), Some(b), Some(c)]
+                if distinct(materials[0], materials[1], &a, &b)
+                    || distinct(materials[0], materials[2], &a, &c) =>
+            {
+                Some([b, c])
+            }
             _ => None,
         };
     }
@@ -166,34 +185,53 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
     ]
 }
 
-pub(crate) fn terrain_texture_frame(
+/// Frames and authored topology a scene material samples. Groups 0–6 are the
+/// art's terrain groups; group 7 is the grass fallback for an absent group.
+pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
-    tile: [i32; 2],
-) -> Option<GameFrame> {
+) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
     // Rock and snow deliberately reuse dirt detail, not paving or ice art.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
-    let material = match material {
+    let material = usize::from(match material {
         4 | 7 | 9 => 2,
         8 | 10 => 5,
         6 if art.terrain[6].is_empty() => 2,
         _ => material,
-    };
-    let (frames, topology) = match art.terrain.get(usize::from(material)) {
-        Some(frames) if !frames.is_empty() => (frames, art.terrain_topology[usize::from(material)]),
-        _ => (&art.grass, art.terrain_topology[0]),
-    };
-    if frames.is_empty() {
-        return None;
+    });
+    match art.terrain.get(material) {
+        Some(frames) if !frames.is_empty() => {
+            Some((material, frames, art.terrain_topology[material]))
+        }
+        _ if !art.grass.is_empty() => Some((7, &art.grass, art.terrain_topology[0])),
+        _ => None,
     }
-    let index = topology
-        .and_then(|topology| topology.periodic_frame(tile[0], tile[1], frames.len()))
+}
+
+/// The frame a world tile owns: authored sheet phase, else a coordinate hash.
+pub(crate) fn frame_index(
+    topology: Option<crate::TerrainTopology>,
+    tile: [i32; 2],
+    frames: usize,
+) -> usize {
+    topology
+        .and_then(|topology| topology.periodic_frame(tile[0], tile[1], frames))
         .unwrap_or_else(|| {
             tile[0]
                 .wrapping_mul(7)
                 .wrapping_add(tile[1].wrapping_mul(13))
                 .unsigned_abs() as usize
-                % frames.len()
-        });
-    frames.get(index).copied()
+                % frames
+        })
+}
+
+pub(crate) fn terrain_texture_frame(
+    art: &GameArt,
+    material: u8,
+    tile: [i32; 2],
+) -> Option<GameFrame> {
+    let (_, frames, topology) = terrain_group(art, material)?;
+    frames
+        .get(frame_index(topology, tile, frames.len()))
+        .copied()
 }

@@ -23,12 +23,6 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     );
     assert_eq!(cleared.draw_calls, 0);
     let mut game = GameRenderer::WebGpu(Box::new(renderer));
-    game.upload_game_atlas(vec![
-        255;
-        (3 * crate::GAME_ATLAS_SIDE * crate::GAME_ATLAS_SIDE * 4)
-            as usize
-    ])
-    .unwrap();
     let camera = SceneCamera {
         center: [35_000.0; 2],
         zoom: 1.0,
@@ -52,6 +46,8 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
     };
+    game.upload_game_atlas(&art, vec![255; crate::GAME_ATLAS_BYTES])
+        .unwrap();
     let projection = aoe_core::Camera {
         center: camera.center,
         zoom: camera.zoom,
