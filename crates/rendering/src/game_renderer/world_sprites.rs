@@ -2,6 +2,9 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "scenery.rs"]
+mod scenery;
+
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
     if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
@@ -16,6 +19,9 @@ pub fn scene_resource_presentation(
     art: &GameArt,
     resource: SceneResource,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
+    if resource.kind == SceneResource::CLIFF {
+        return scenery::frame(art, resource).map(|(frame, _)| (frame, None));
+    }
     if resource.kind == 1 {
         let family = match resource.visual_family {
             2 => Some((&art.tree_families[0], 9, &[1_u8, 2, 3, 4, 7, 8][..])),
@@ -97,7 +103,15 @@ pub(super) fn emit_world_sprite_frames(
         .iter()
         .filter_map(|resource| {
             scene_resource_presentation(art, *resource).map(|(frame, shadow)| {
-                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
+                WorldObject::Resource(
+                    *resource,
+                    if resource.kind == SceneResource::CLIFF {
+                        frame
+                    } else {
+                        world_frame(frame)
+                    },
+                    shadow.map(world_frame),
+                )
             })
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
@@ -108,6 +122,28 @@ pub(super) fn emit_world_sprite_frames(
                 continue;
             };
             let depth = object_depth(object);
+            if resource.kind == SceneResource::CLIFF {
+                // Lies on the ground: no shadow, and it only just covers the
+                // terrain under it so units in front stay visible.
+                if let Some(mut sprite) =
+                    scene_sprite(frame, resource.position, resource.elevation_meters, camera)
+                {
+                    if scenery::frame(art, resource).is_some_and(|(_, mirror)| mirror) {
+                        sprite.uv[0] += sprite.uv[2];
+                        sprite.uv[2] = -sprite.uv[2];
+                    }
+                    emit((
+                        sprite,
+                        scaled(frame, camera.zoom as f32),
+                        depth
+                            + SceneResource::CLIFF_DEPTH_BIAS
+                            + SceneResource::CLIFF_DEPTH_LIFT
+                                * f64::from(resource.visual_family >> 6),
+                        object.stable_id(),
+                    ));
+                }
+                continue;
+            }
             if let Some(shadow_frame) = paired_shadow {
                 if let Some(sprite) = scene_sprite(
                     shadow_frame,
@@ -223,7 +259,13 @@ const GROUND_CLEARANCE: f64 = 1.5;
 
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    surface_depth([position[0], position[1], object.elevation_meters()]) + GROUND_CLEARANCE
+    surface_depth([position[0], position[1], object.elevation_meters()])
+        + if matches!(object, WorldObject::Resource(resource, _, _) if resource.kind == SceneResource::CLIFF)
+        {
+            0.0
+        } else {
+            GROUND_CLEARANCE
+        }
 }
 
 #[derive(Clone, Copy)]
@@ -308,7 +350,11 @@ pub(super) fn resource_sprite_bounds(
     camera: SceneCamera,
 ) -> Option<[f64; 4]> {
     sprite_screen_bounds(
-        world_frame(frame),
+        if resource.kind == SceneResource::CLIFF {
+            frame
+        } else {
+            world_frame(frame)
+        },
         resource.position,
         resource.elevation_meters,
         camera,

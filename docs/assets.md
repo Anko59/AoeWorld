@@ -49,8 +49,8 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v7 selects at most 1,378 frames:
-1,210 terrain and 168 objects. Runtime packing remains three 2048² RGBA pages/48 MiB,
+The periodic groups retain all 100 frames. Catalog v8 selects at most 1,403 frames:
+1,210 terrain and 193 objects including cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;

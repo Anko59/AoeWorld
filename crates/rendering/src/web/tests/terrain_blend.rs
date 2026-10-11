@@ -174,6 +174,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     };
     art.terrain[2] = vec![frame(1)];
     art.terrain[6] = vec![frame(2)];

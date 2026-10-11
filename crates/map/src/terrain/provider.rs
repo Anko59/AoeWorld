@@ -30,6 +30,7 @@ pub(super) fn sample_base_tile(
         .provider_compression
         .ok_or(EnvironmentPageError::Invalid)?;
     let biome = sample_biome_with_provenance(generator, tile, cancelled)?;
+    let mut source_corners = None;
     let (
         geographic_height_centimeters,
         mut game_height_level,
@@ -38,6 +39,7 @@ pub(super) fn sample_base_tile(
     ) = if environment.samples_per_axis > 0 {
         let (height, corners) =
             sample_elevation(generator, environment.samples_per_axis, tile, cancelled)?;
+        source_corners = Some(corners);
         (
             height,
             super::quantize_game_height(height, compression),
@@ -62,6 +64,12 @@ pub(super) fn sample_base_tile(
     );
     let (hydrology_observation, modern_land_cover_class) =
         (sample.observation, sample.modern_land_cover_class);
+    if water == WaterKind::None
+        && let Some(corners) = source_corners
+        && cliff_from_corners(generator, tile, corners, cancelled)?.is_some()
+    {
+        surface_kind.kind = surface::SurfaceKind::Cliff;
+    }
     let material = match water {
         WaterKind::None => material_for(biome.0, geographic_height_centimeters),
         WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
@@ -83,6 +91,43 @@ pub(super) fn sample_base_tile(
             && material != GroundMaterial::Ice
             && surface_kind.walkable(),
     })
+}
+
+fn cliff_from_corners(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    corners: [i32; 4],
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Option<super::relief::CliffPiece>, EnvironmentPageError> {
+    let samples = generator
+        .provider_environment
+        .as_ref()
+        .ok_or(EnvironmentPageError::Invalid)?
+        .samples_per_axis;
+    let compression = generator
+        .provider_compression
+        .ok_or(EnvironmentPageError::Invalid)?;
+    super::relief::cliff_at(generator, tile, corners, compression, &|x, y| {
+        sample_bilinear_elevation(generator, x, y, samples, AxisPosition::Corner, cancelled)
+    })
+}
+
+/// Cliff piece of a tile for the composer; none without an elevation field.
+pub(super) fn cliff_piece(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Option<super::relief::CliffPiece>, EnvironmentPageError> {
+    let samples = generator
+        .provider_environment
+        .as_ref()
+        .ok_or(EnvironmentPageError::Invalid)?
+        .samples_per_axis;
+    if samples == 0 {
+        return Ok(None);
+    }
+    let (_, corners) = sample_elevation(generator, samples, tile, cancelled)?;
+    cliff_from_corners(generator, tile, corners, cancelled)
 }
 
 fn sample_elevation(

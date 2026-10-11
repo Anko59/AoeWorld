@@ -17,7 +17,7 @@ fn discovery_is_unique_bounded_and_not_a_reviewed_load_list() {
                 .any(|source| source.archive == candidate.archive && source.id == candidate.id)
         );
     }
-    assert_eq!(UNAPPROVED_SOURCES.len(), 12);
+    assert_eq!(UNAPPROVED_SOURCES.len(), 11);
     assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
     assert!(
         !OPTIONAL_RESOURCE_SOURCES

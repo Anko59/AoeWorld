@@ -35,6 +35,7 @@ fn art() -> GameArt {
         ],
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
         water_depth: Default::default(),
     }
 }

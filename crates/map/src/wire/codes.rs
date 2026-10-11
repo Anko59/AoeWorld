@@ -240,6 +240,7 @@ pub(super) fn decoration_from(value: u8) -> Result<DecorationFamily, CompactChun
         1 => Ok(DecorationFamily::Grass),
         2 => Ok(DecorationFamily::Stone),
         3 => Ok(DecorationFamily::Deadwood),
+        4 => Ok(DecorationFamily::Cliff),
         _ => Err(CompactChunkError::InvalidEnum),
     }
 }

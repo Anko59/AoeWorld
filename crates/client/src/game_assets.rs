@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::Gravel as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::CliffFace as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -53,7 +53,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-// Startup-only lists are bounded by reviewed catalogue frame counts (1,378 total).
+// Startup-only lists are bounded by reviewed catalogue frame counts (`MAX_REVIEWED_FRAMES`).
 // Insertion sorting avoids generic quicksort code for these small lists; do not
 // reuse this helper for unbounded or per-frame data.
 #[inline(never)]
@@ -270,6 +270,9 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             ],
             tree_shadows: group(AssetRole::WoodTreeShadow),
             tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
+            scenery: aoe_rendering::SceneryArt {
+                cliff_faces: group(AssetRole::CliffFace),
+            },
         },
         pixels,
     ))

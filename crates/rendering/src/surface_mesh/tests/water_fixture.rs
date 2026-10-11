@@ -71,6 +71,7 @@ pub(crate) fn art(depth: bool) -> GameArt {
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     }
 }
 

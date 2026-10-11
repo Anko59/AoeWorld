@@ -9,7 +9,7 @@ mod playground;
 #[cfg(target_arch = "wasm32")]
 pub use playground::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
-    GameArt, GameFrame, TerrainTopology, resource_frame_index,
+    GameArt, GameFrame, SceneryArt, TerrainTopology, resource_frame_index,
 };
 
 #[cfg(target_arch = "wasm32")]

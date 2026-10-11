@@ -65,6 +65,7 @@ impl SceneTerrainSurface {
     }
 }
 
+/// A resource node, or one piece of scenery when `kind` is a scenery kind.
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneResource {
     pub id: u64,
@@ -74,6 +75,32 @@ pub struct SceneResource {
     /// Semantic family, never automatic artwork approval. Zero is generic.
     pub visual_family: u8,
     pub elevation_meters: f64,
+}
+
+impl SceneResource {
+    /// One horizontal band of a cliff piece. The piece lies on the ground, so
+    /// it is drawn as `CLIFF_BANDS` strips that are depth-sorted at their own
+    /// ground row: units in front of a row are drawn over it, units behind it
+    /// under it. `visual_family` packs the downhill screen octant (bits 0-2),
+    /// the band (bits 3-5) and a depth lift (bits 6-7) for ground that rises
+    /// above the piece centre inside the row.
+    pub const CLIFF: u8 = 16;
+    pub const CLIFF_BANDS: u8 = 8;
+    /// Ground distance in `x + y` tiles covered by one band.
+    pub const CLIFF_BAND_SPAN: f64 = 0.875;
+    /// Depth by which a band always covers the ground under it.
+    pub const CLIFF_DEPTH_BIAS: f64 = 0.6;
+    /// Additional depth per lift level.
+    pub const CLIFF_DEPTH_LIFT: f64 = 0.8;
+
+    /// Ground offset on both axes of a band's near edge from the piece centre.
+    pub fn cliff_band_offset(band: u8) -> f64 {
+        (f64::from(band) + 1.0 - f64::from(Self::CLIFF_BANDS) / 2.0) * Self::CLIFF_BAND_SPAN / 2.0
+    }
+
+    pub fn cliff_family(facing: u8, band: u8, lift: u8) -> u8 {
+        (facing & 7) | ((band & 7) << 3) | (lift.min(3) << 6)
+    }
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.

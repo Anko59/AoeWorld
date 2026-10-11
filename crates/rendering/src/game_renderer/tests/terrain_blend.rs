@@ -208,6 +208,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     };
     for palette in 0..6 {
         for floor_strength in [0, 650, 1000] {
@@ -313,6 +314,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     };
     renderer.upload_game_atlas(&art, blend_atlas()).unwrap();
     let GameRenderer::Canvas {

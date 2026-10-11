@@ -95,6 +95,7 @@ pub(crate) fn forest_faces(
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     };
     let mut faces = faces(gradient);
     for face in &mut faces {
