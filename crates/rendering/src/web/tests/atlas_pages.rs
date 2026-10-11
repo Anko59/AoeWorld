@@ -88,18 +88,25 @@ async fn webgpu_array_same_uv_primary_blends_and_page_two_body_shadow_pixels() {
 }
 
 #[wasm_bindgen_test]
-fn gameplay_grid_and_selection_use_page_two_white_and_reserved_zero() {
+fn selection_uses_page_two_white_and_grid_lines_are_solid_packets() {
     let camera = crate::SceneCamera {
         center: [0.5; 2],
         zoom: 1.0,
         viewport: [128.0; 2],
         focus_elevation_meters: 0.0,
     };
-    let grid = crate::game_grid::grid_sprites(camera, crate::game_grid::viewport_bounds(camera));
+    let point = |x, y| aoe_core::ScreenPoint { x, y };
+    let grid = crate::game_grid::grid_sprites(&[[point(0.0, 32.0), point(64.0, 64.0)]], [128.0; 2]);
     let ring = crate::game_grid::selection_ring(camera, [0.5; 2], 0.0);
-    assert!(!grid.is_empty());
+    assert_eq!(grid.len(), 2);
     assert_eq!(ring.len(), crate::game_grid::SELECTION_RING_SPRITES);
-    for sprite in grid.iter().chain(ring.iter().map(|(sprite, _)| sprite)) {
+    for (sprite, _) in &ring {
         assert_eq!(sprite.pages, [2, 0, 0, 0]);
+    }
+    // Solid surface packets never sample the atlas: colour and alpha ride in uv.
+    for sprite in &grid {
+        assert_eq!(sprite.color[3], -2.0);
+        assert_eq!(sprite.pages, [0; 4]);
+        assert!(sprite.uv[3] > 0.0 && sprite.uv[3] < 1.0);
     }
 }

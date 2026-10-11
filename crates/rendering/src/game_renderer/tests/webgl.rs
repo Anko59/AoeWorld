@@ -150,7 +150,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
     };
     assert!(
         !renderer
-            .render_prepared_world(&art, &[], &[], &[], &[], camera, 0, None)
+            .render_prepared_world(&art, &[], &[], &[], &[], camera, 0, false)
             .unwrap()
     );
 }
