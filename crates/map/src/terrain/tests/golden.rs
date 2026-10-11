@@ -51,10 +51,28 @@ fn flat_forest_routes_from_the_start_glade_are_pinned() {
         (0, 1),
         (1, 1),
     ] {
-        let destination = terrain
+        let node = terrain
             .forest_opening_center_at(TileCoord::new(origin.x + dx * 192, origin.y + dy * 192))
-            .expect("seeded opening node");
-        let outcome = crate::find_path(&terrain, origin, destination, 8_192);
+            .expect("seeded trail node");
+        // A node is open only inside a large forest: route to the nearest
+        // tile of its row with open ground all around it (a lone gap between
+        // the trees of a dense stand is not a destination).
+        let open = |tile: TileCoord| {
+            terrain
+                .tile_and_node_with_cancel(tile, &|| false)
+                .expect("flat source")
+                .is_some_and(|(tile, node)| tile.passable && node.is_none())
+        };
+        let destination = (0..96)
+            .flat_map(|offset| [node.x - offset, node.x + offset])
+            .map(|x| TileCoord::new(x.clamp(1, 510), node.y.clamp(1, 510)))
+            .find(|tile| {
+                (-1..=1).all(|dy| (-1..=1).all(|dx| open(TileCoord::new(tile.x + dx, tile.y + dy))))
+            })
+            .expect("open ground beside every node");
+        // Whole-map budget: the pin is that forests never wall a node off,
+        // not how cheaply a detour around one is found.
+        let outcome = crate::find_path(&terrain, origin, destination, 262_144);
         paths += usize::from(matches!(outcome, crate::MovementOutcome::Path(_)));
         digest.update(format!("{destination:?}{outcome:?}").as_bytes());
     }
@@ -106,14 +124,14 @@ fn forest_generator() -> MapChunkGenerator {
 }
 
 const FOREST_ROUTES: (usize, &str) = (
-    4,
-    "1b05ba270a9ff1317cddfc754e03a9082a633a084a95192b6621eaba5e07d7d0",
+    8,
+    "b454653517e738af3e3f80582d545503d5564a493fab1129ab484a63214e7bd2",
 );
 
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "f5e146356df5c83faaf912d9eeccbef022d691f554b4e966a25963ccff8e86ae",
-    "0f1cbb2d43b0339368ba5f871268d2dcf39a797d44fa648bb56c49ae02cbd865",
-    "0e7ecae1c83b6e3fab3abc7d824cdf3f6478472f68e0efc8c34d7eaa9c857437",
+    "857f6095fbefef3b457e5c855288ea0b7b4ced35281f0d2d456b3846fec0d386",
+    "ac1c4bee7695b5f9678a356240d317f8e558379e0a1cc6d70609b8433f6d3814",
+    "a586d18717ca3fcf8540c523d26e6c3f27dbec947de68509b1bb73fe9723c460",
 ];
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "247a1e0fa48aa4f5bd6ccea78f9f6fb49eb5e243f2ba01736fd5c625f9b00733";
+    "81bdd420157f991c9a7ab6134ca1bd577b38caf954200bf0998872fb31c574d5";

@@ -58,7 +58,7 @@ fn fixture(width: i32, class: u8, height: i32) -> MapChunkGenerator {
 }
 fn policy(_: TileCoord, _: Tile) -> LandscapePolicy {
     LandscapePolicy {
-        region: Region::Heavy,
+        wildness_per_thousand: Some(1000),
         support_per_thousand: 1000,
     }
 }
@@ -137,7 +137,7 @@ fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing()
         start: position.y.rem_euclid(32) < 4,
         ..Reservations::default()
     };
-    let mut deposits = 0;
+    let (mut deposits, mut corridors) = (0, 0);
     for y in 0..4 {
         for x in 0..4 {
             let scene = generator
@@ -146,7 +146,22 @@ fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing()
                 .expect("bounded");
             for tile in &scene.tiles {
                 let r = reserved(tile.tile);
-                if r.route
+                // A route is a corridor: it clears only inside a large forest.
+                let corridor = r.route
+                    && generator
+                        .evaluate_landscape_with_cancel(
+                            tile.tile,
+                            policy(tile.tile, tile.terrain),
+                            &reserved,
+                            &|| false,
+                        )
+                        .expect("source")
+                        .expect("bounded")
+                        .density
+                        .opening
+                        != crate::landscape_patches::Opening::None;
+                corridors += usize::from(corridor);
+                if corridor
                     || r.start
                     || generator
                         .landscape_resource_reserved(tile.tile, &|| false)
@@ -166,8 +181,10 @@ fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing()
                 }
             }
             for resource in &scene.resources {
-                assert!(!reserved(resource.node.tile).route && !reserved(resource.node.tile).start);
+                let r = reserved(resource.node.tile);
+                assert!(!r.start);
                 if resource.node.object != ObjectKind::Tree {
+                    assert!(!r.route);
                     deposits += 1;
                     assert!(
                         generator
@@ -186,6 +203,10 @@ fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing()
     assert!(
         deposits > 0,
         "fixture must exercise non-tree resource reservations"
+    );
+    assert!(
+        corridors > 100,
+        "fixture must exercise large-forest corridors"
     );
 }
 
@@ -330,7 +351,11 @@ fn historical_clearings_cannot_be_refilled_by_decorations() {
         1,
         [((0, 0), page)].into(),
     )));
-    let scene = candidate(&generator, 0, 0);
+    // Fully cropped country has no wildness left: the source signal, not a
+    // parcel mask, keeps it free of forest.
+    let scene = generator
+        .landscape_chunk_with_cancel(0, 0, &|| false)
+        .expect("source");
     assert!(scene.decorations.is_empty());
     assert!(
         scene

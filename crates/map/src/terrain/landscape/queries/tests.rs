@@ -6,9 +6,12 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[path = "tests/wildness.rs"]
+mod wildness;
+
 fn policy() -> LandscapePolicy {
     LandscapePolicy {
-        region: Region::Heavy,
+        wildness_per_thousand: Some(1000),
         support_per_thousand: 1000,
     }
 }
@@ -130,7 +133,7 @@ fn raw_history_status_survives_candidate_evaluation_on_dense_and_provider_inputs
                 sample.historical_observation.expect("observation").coverage,
                 page.coverage.first().copied()
             );
-            if matches!(expected, LandUse::Crop | LandUse::Nonland) {
+            if expected == LandUse::Nonland {
                 assert!(!sample.density.tree);
                 assert_eq!(sample.density.forest_floor_per_thousand, 0);
             }
@@ -157,7 +160,7 @@ fn candidate_queries_do_not_modify_default_tile_or_resource_results() {
                 )
                 .expect("source")
                 .expect("bounded");
-            if x % 32 < 8 || sample.historical_land_use == LandUse::Crop {
+            if sample.density.opening != crate::landscape_patches::Opening::None {
                 assert!(!sample.density.tree);
                 assert_eq!(sample.density.forest_floor_per_thousand, 0);
             } else {

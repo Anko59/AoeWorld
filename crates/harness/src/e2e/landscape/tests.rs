@@ -27,9 +27,19 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
     let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() else {
         panic!("prepared fixture must use map terrain")
     };
-    // The central chunks hold the starting glade and its connectors; probe a
-    // forest chunk between the glade and the surrounding opening nodes.
-    let chunk = generator.chunk(4, 4).expect("dense forest chunk");
+    // Forest amount follows the fixture's wildness cell by cell: probe the
+    // first chunk that lies in a stand.
+    let trees = |chunk: &aoe_map::Chunk| {
+        chunk
+            .resources
+            .iter()
+            .filter(|node| node.object == aoe_map::ObjectKind::Tree)
+            .count()
+    };
+    let chunk = (0..256)
+        .map(|index| generator.chunk(index % 16, index / 16).expect("chunk"))
+        .find(|chunk| trees(chunk) > 100)
+        .expect("dense forest chunk");
     assert!(
         chunk
             .tiles
@@ -37,14 +47,6 @@ fn prepared_identity_start_and_authoritative_movement_are_bounded() {
             .all(|tile| tile.biome == aoe_map::Biome::Temperate
                 && tile.geographic_height_centimeters == 0
                 && tile.water == aoe_map::WaterKind::None)
-    );
-    assert!(
-        chunk
-            .resources
-            .iter()
-            .filter(|node| node.object == aoe_map::ObjectKind::Tree)
-            .count()
-            > 100
     );
     let config = world.config();
     let search = world

@@ -39,6 +39,17 @@ fn classed(seed: u64, width: i32, class: Option<u8>) -> MapChunkGenerator {
     with_class(flat(seed, width), class)
 }
 
+/// First chunk holding more than ten trees: forests no longer cover every chunk.
+fn forested(generator: &MapChunkGenerator) -> (i32, i32) {
+    (0..64)
+        .map(|index| (index % 8, index / 8))
+        .find(|(x, y)| {
+            let trees = scene(generator, *x, *y).resources.into_iter();
+            trees.filter(|r| r.node.object == ObjectKind::Tree).count() > 10
+        })
+        .expect("forested chunk")
+}
+
 fn scene(generator: &MapChunkGenerator, x: i32, y: i32) -> LandscapeChunk {
     generator
         .landscape_chunk_with_cancel(x, y, &|| false)
@@ -104,7 +115,8 @@ fn tree_families_follow_source_classes_and_other_resources_stay_generic() {
 fn conifer_classes_emit_family_two() {
     for class in [8, 15, 17] {
         let generator = classed(1, 256, Some(class));
-        let chunk = scene(&generator, 0, 0);
+        let (x, y) = forested(&generator);
+        let chunk = scene(&generator, x, y);
         let trees = chunk
             .resources
             .iter()
@@ -257,7 +269,8 @@ fn provider_source_classes_match_dense_and_failures_propagate() {
         mixed_source.landscape_chunk_with_cancel(0, 0, &|| true),
         Err(EnvironmentPageError::Cancelled)
     );
-    let tree = scene(&mixed_source, 0, 0)
+    let (x, y) = forested(&mixed_source);
+    let tree = scene(&mixed_source, x, y)
         .resources
         .into_iter()
         .find(|resource| resource.node.object == ObjectKind::Tree)
