@@ -30,6 +30,14 @@ const MAX_WHEEL_DELTA: u32 = 2000;
 /// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
 /// "y": 360, "delta_y": -400}}` (one wheel event over that position),
 /// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Button {
+    #[default]
+    Left,
+    Right,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
@@ -38,6 +46,9 @@ pub(crate) enum Step {
         selector: String,
         x: u32,
         y: u32,
+        /// `"button": "right"` issues a context click, e.g. a unit order.
+        #[serde(default)]
+        button: Button,
     },
     Select {
         selector: String,
@@ -71,7 +82,7 @@ impl Step {
 
     fn validate(&self) -> Result<(), String> {
         match self {
-            Self::ClickAt { selector, x, y } => {
+            Self::ClickAt { selector, x, y, .. } => {
                 Self::Click(selector.clone()).validate()?;
                 if *x > MAX_POSITION_PX || *y > MAX_POSITION_PX {
                     return Err(format!(
@@ -90,6 +101,7 @@ impl Step {
                     selector: selector.clone(),
                     x: *x,
                     y: *y,
+                    button: Button::Left,
                 }
                 .validate()?;
                 if *delta_y == 0 || delta_y.unsigned_abs() > MAX_WHEEL_DELTA {
