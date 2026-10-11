@@ -11,6 +11,8 @@ mod filter_pixels;
 mod floor_pixels;
 #[path = "species/webgl.rs"]
 mod species_pixels;
+#[path = "tiling/webgl.rs"]
+mod tiling_pixels;
 
 #[wasm_bindgen_test]
 fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {

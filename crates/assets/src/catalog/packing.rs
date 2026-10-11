@@ -14,6 +14,8 @@ pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
 pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 50,331,648 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 2048;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
+// Rows and columns 0–1 stay unallocated on every page. The renderer stores its
+// terrain frame directory in rows 0–1 of page 0; never place frames there.
 const START: u16 = 2;
 const GAP: u16 = 1;
 

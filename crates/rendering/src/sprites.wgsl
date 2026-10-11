@@ -69,6 +69,18 @@ fn terrain_atlas_uv(rect: vec4<f32>, local: vec2<f32>) -> vec2<f32> {
     return rect.xy + pixel * 0.5 + local * max(rect.zw - pixel, vec2<f32>(0.0));
 }
 
+// Terrain frame directory in rows 0-1 of page 0 (surface_mesh/directory.rs).
+fn directory(entry: u32) -> vec4<f32> {
+    return floor(textureLoad(sprite_atlas, vec2<u32>(entry % 2048u, entry / 2048u), 0u, 0u) * 255.0 + 0.5);
+}
+
+// One scene material's first frame entry, frame count, sheet columns and rows.
+fn sheet(material: u32) -> vec4<f32> {
+    let a = directory(1u + 2u * material);
+    let b = directory(2u + 2u * material);
+    return vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
+}
+
 fn terrain_tint(kind: u32) -> vec3<f32> {
     switch kind {
         case 1u: { return vec3<f32>(0.92, 0.92, 0.92); }
@@ -105,13 +117,27 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         } else {
             let code = u32(sprite.color.z);
             let atlas_uv = terrain_uv(code % 8u, corner);
+            // Mode 6 spans several world tiles: corners travel in tile units and
+            // each fragment resolves the frame its own world tile owns.
+            let tiled = code % 8u == 6u;
             out.uv = terrain_atlas_uv(sprite.uv, atlas_uv);
             out.color = vec4<f32>(terrain_tint(code / 8u), 1.0);
             out.solid = 1u;
             out.tint_kind = code / 8u;
+            if tiled {
+                let locals = array<vec2<f32>, 3>(sprite.uv.xy, sprite.uv.zw, sprite.terrain_blend[0].xy);
+                out.uv = locals[corner];
+                out.rect = sheet(sprite.pages.z & 255u);
+                out.solid = 5u;
+            }
             if sprite.color.w == -3.0 {
-                out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
-                out.uv3 = terrain_atlas_uv(sprite.terrain_blend[1], atlas_uv);
+                if tiled {
+                    out.rect2 = sheet((sprite.pages.z >> 8u) & 255u);
+                    out.rect3 = sheet((sprite.pages.z >> 16u) & 255u);
+                } else {
+                    out.uv2 = terrain_atlas_uv(sprite.terrain_blend[0], atlas_uv);
+                    out.uv3 = terrain_atlas_uv(sprite.terrain_blend[1], atlas_uv);
+                }
                 let weights = array<vec3<f32>, 3>(
                     vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
                 out.weights = weights[corner];
@@ -122,7 +148,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                     }
                     out.weights = vec3<f32>(1.0 - floor_strength, floor_strength, 0.0);
                 }
-                out.solid = 3u;
+                out.solid |= 2u;
             }
         }
     } else {
@@ -159,30 +185,87 @@ fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: 
     return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, center.a);
 }
 
+struct Layer {
+    uv: vec2<f32>,
+    page: u32,
+    rect: vec4<f32>,
+    dx: vec2<f32>,
+    dy: vec2<f32>,
+};
+
+// World-anchored layer: this fragment's world tile selects its native frame.
+// Euclidean remainder over the whole signed range, in unsigned arithmetic.
+fn wrap(value: i32, period: u32) -> u32 {
+    return ((bitcast<u32>(value) ^ 2147483648u) % period + period - 2147483648u % period) % period;
+}
+
+fn tiled_layer(header: vec4<f32>, tile: vec2<i32>, local: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> Layer {
+    let columns = u32(header.z);
+    let rows = u32(header.w);
+    let hash = bitcast<u32>(tile.x) * 7u + bitcast<u32>(tile.y) * 13u;
+    var index = select(hash, ~hash + 1u, hash > 2147483648u) % u32(max(header.y, 1.0));
+    if columns > 0u && rows > 0u {
+        index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
+    }
+    let entry = u32(header.x) + 2u * index;
+    let a = directory(entry);
+    let b = directory(entry + 1u);
+    let high = u32(b.z);
+    let size = vec2<f32>(textureDimensions(sprite_atlas));
+    var layer: Layer;
+    layer.rect = vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + f32(high & 15u) * 256.0, b.y + f32(high >> 4u) * 256.0) / size.xyxy;
+    layer.page = u32(b.w);
+    let span = max(layer.rect.zw - 1.0 / size, vec2<f32>(0.0));
+    layer.uv = layer.rect.xy + 0.5 / size + local * span;
+    layer.dx = gx * span;
+    layer.dy = gy * span;
+    return layer;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Derivatives are uniform and evaluated before any branch/discard.
-    let dx = dpdx(in.uv); let dy = dpdy(in.uv);
-    let dx2 = dpdx(in.uv2); let dy2 = dpdy(in.uv2);
-    let dx3 = dpdx(in.uv3); let dy3 = dpdy(in.uv3);
+    var first = Layer(in.uv, in.pages.x, in.rect, dpdx(in.uv), dpdy(in.uv));
+    var second = Layer(in.uv2, in.pages.y, in.rect2, dpdx(in.uv2), dpdy(in.uv2));
+    var third = Layer(in.uv3, in.pages.z, in.rect3, dpdx(in.uv3), dpdy(in.uv3));
     if in.solid == 2u {
         return in.color;
     }
-    var texel: vec4<f32>;
-    if in.solid == 0u || (in.pages.w & 1u) == 0u {
-        texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
-    } else {
-        texel = terrain_sample(in.uv, in.pages.x, in.rect, dx, dy);
+    let blend = (in.solid & 3u) == 3u;
+    let landscape = (in.pages.w & 1u) != 0u;
+    if (in.solid & 4u) != 0u {
+        if in.rect.y < 1.0 {
+            discard;
+        }
+        let cell = floor(in.uv);
+        let inside = in.uv - cell;
+        let tile = vec2<i32>(bitcast<i32>(in.pages.x), bitcast<i32>(in.pages.y)) + vec2<i32>(cell);
+        let local = vec2<f32>(0.5 + 0.5 * (inside.x - inside.y), 0.5 * (inside.x + inside.y));
+        let gx = vec2<f32>(0.5 * (first.dx.x - first.dx.y), 0.5 * (first.dx.x + first.dx.y));
+        let gy = vec2<f32>(0.5 * (first.dy.x - first.dy.y), 0.5 * (first.dy.x + first.dy.y));
+        first = tiled_layer(in.rect, tile, local, gx, gy);
+        if blend {
+            second = tiled_layer(in.rect2, tile, local, gx, gy);
+            if !landscape {
+                third = tiled_layer(in.rect3, tile, local, gx, gy);
+            }
+        }
     }
-    if in.solid == 3u {
-        if (in.pages.w & 1u) != 0u {
+    var texel: vec4<f32>;
+    if in.solid == 0u || !landscape {
+        texel = textureSampleLevel(sprite_atlas, sprite_sampler, first.uv, i32(first.page), 0.0);
+    } else {
+        texel = terrain_sample(first.uv, first.page, first.rect, first.dx, first.dy);
+    }
+    if blend {
+        if landscape {
             texel = texel * in.weights.x
-                + terrain_sample(in.uv2, in.pages.y, in.rect2, dx2, dy2) * in.weights.y
+                + terrain_sample(second.uv, second.page, second.rect, second.dx, second.dy) * in.weights.y
                 + texel * in.weights.z;
         } else {
             texel = texel * in.weights.x
-                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv2, i32(in.pages.y), 0.0) * in.weights.y
-                + textureSampleLevel(sprite_atlas, sprite_sampler, in.uv3, i32(in.pages.z), 0.0) * in.weights.z;
+                + textureSampleLevel(sprite_atlas, sprite_sampler, second.uv, i32(second.page), 0.0) * in.weights.y
+                + textureSampleLevel(sprite_atlas, sprite_sampler, third.uv, i32(third.page), 0.0) * in.weights.z;
         }
     }
     if texel.a <= 0.0 {

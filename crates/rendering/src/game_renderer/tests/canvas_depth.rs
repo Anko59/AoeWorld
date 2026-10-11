@@ -7,6 +7,8 @@ mod species_pixels;
 mod terrain_blend;
 #[path = "terrain_filter.rs"]
 mod terrain_filter;
+#[path = "tiling/canvas.rs"]
+mod tiling_pixels;
 
 use super::*;
 use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};

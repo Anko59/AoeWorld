@@ -6,10 +6,12 @@ use aoe_core::{Camera, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
+pub(crate) mod directory;
 pub(crate) mod floor;
 pub(crate) mod landscape;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
+pub use directory::write_terrain_directory;
 pub use lod::projected_surface_triangles;
 
 #[cfg(test)]

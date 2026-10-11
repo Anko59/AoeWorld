@@ -164,7 +164,44 @@ nearest sampling (one read, or three for base-material blends). New
 cross-backend pixels pin contrast attenuation, nearest/magnified controls,
 transparent/partial-alpha behavior, rectangle/page isolation and unchanged depth
 bits/picking. This is not a full mip pyramid, severe-zoom antialiasing guarantee,
-coarse-LOD world-frequency fix, frame-cadence or dedicated-hardware qualification.
+frame-cadence or dedicated-hardware qualification.
+
+## World-anchored terrain texels
+
+A world tile shows the same native frame and texels at every zoom and mesh LOD.
+A face covering one tile keeps its CPU-selected rectangle. A coarse face covering
+several tiles (texture mode 6) must not stretch its origin tile's frame over all
+of them, which changed pattern scale with zoom and popped at LOD switches (#213).
+Its packet carries the three corners in tile units (uv, terrain_blend[0].xy), the
+origin tile (pages.x/y as signed bits) and its three layer materials (pages.z
+bytes). Each fragment floors its interpolated position to a world tile, selects
+that tile's frame by the authored sheet phase or the coordinate hash, and samples
+the native diamond at the tile-local position. Blend weights, floor endpoints,
+tints, the appearance word and the bounded minification kernel are unchanged;
+the kernel's footprint comes from the continuous tile-space derivative, and its
+taps stay clamped to the selected frame.
+
+Frame rectangles come from a terrain directory inside the atlas itself. The
+packer never allocates rows 0–1 of a page (placements start at texel 2), so
+`write_terrain_directory` stores, in those rows of page 0, two RGBA8 header
+texels per scene material (first entry, frame count, sheet columns and rows)
+and two texels per frame (origin; extent and page). At most 4,095 entries
+(16,380 bytes) of existing atlas storage are used: no texture, binding, uniform,
+upload, Sprite112 field or interstage varying is added, and WebGL2 restoration
+re-uploads the same bytes. `GameRenderer::upload_game_atlas` writes it from the
+art; occupied reserved rows or unaligned terrain rectangles fail the upload, and
+art without terrain frames writes nothing. WGSL, GLSL and Canvas decode the same
+bytes; the vertex stage reads the three headers once per face, the fragment two
+directory texels per layer. Frame selection uses unsigned arithmetic so signed
+tile coordinates wrap identically on every backend. A tiled face whose atlas has
+no directory draws nothing instead of a wrong frame.
+
+Cross-backend pixels pin a periodic sheet and coordinate-stable accents at a
+near and a far zoom, one tile per face against 2×2-tile patches under one camera,
+and a filtered forest-floor bed layer. Coarse heights, per-cell appearance and
+per-vertex material ownership still follow the mesh LOD; only texel anchoring is
+fixed. Without a mip pyramid, far-zoom texels remain point/quadrant sampled.
+The map-less diagnostic background still scales its sprites by aggregation cell.
 
 Resource family zero (`Generic`, non-tree resources) keeps the base variant
 selection. Wood family 2 uses

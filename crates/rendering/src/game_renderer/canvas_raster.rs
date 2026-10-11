@@ -1,7 +1,8 @@
 use crate::{
     GAME_ATLAS_SIDE,
     surface_mesh::{
-        ProjectedSurfaceTriangle, SurfacePoint, surface_render_depth, triangle_texture_coordinates,
+        ProjectedSurfaceTriangle, SurfacePoint, directory, surface_render_depth,
+        triangle_texture_coordinates,
     },
 };
 const WATER_TINT: [u8; 3] = [38, 113, 190];
@@ -30,7 +31,22 @@ pub(super) fn raster_surface(
     let floor_endpoints = triangle
         .floor_strengths
         .map(|values| values.map(|value| f32::from(value) / 255.0));
-    let local_uv = triangle_texture_coordinates(triangle.texture_mode);
+    // A face over several world tiles resolves each pixel's own tile frame from
+    // the atlas directory; without one there is nothing truthful to sample.
+    let tiled = if texture.is_some() && triangle.texture_mode == directory::TILED {
+        let layers = triangle.texture_materials.unwrap_or([triangle.material; 3]);
+        let sheets = layers.map(|material| directory::sheet(atlas, material));
+        let (Some(first), Some(second), Some(third)) = (sheets[0], sheets[1], sheets[2]) else {
+            return;
+        };
+        Some((directory::locals(triangle), [first, second, third]))
+    } else {
+        None
+    };
+    let local_uv = match tiled {
+        Some((locals, _)) => locals.map(directory::diamond),
+        None => triangle_texture_coordinates(triangle.texture_mode),
+    };
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
     };
@@ -78,14 +94,30 @@ pub(super) fn raster_surface(
                 continue;
             }
             let source = if let Some(sampler) = texture {
-                let local = [
-                    local_uv[0][0] * weights[0]
-                        + local_uv[1][0] * weights[1]
-                        + local_uv[2][0] * weights[2],
-                    local_uv[0][1] * weights[0]
-                        + local_uv[1][1] * weights[1]
-                        + local_uv[2][1] * weights[2],
-                ];
+                let interpolate = |corners: [[f64; 2]; 3]| {
+                    [0, 1].map(|axis| {
+                        corners[0][axis] * weights[0]
+                            + corners[1][axis] * weights[1]
+                            + corners[2][axis] * weights[2]
+                    })
+                };
+                let mut local = interpolate(local_uv);
+                let (mut sampler, mut blend) = (sampler, blend);
+                let (mut primary_filter, mut secondary_filter) = (primary_filter, secondary_filter);
+                if let Some((locals, sheets)) = tiled {
+                    let position = interpolate(locals);
+                    let cell = position.map(f64::floor);
+                    let tile = [0, 1]
+                        .map(|axis| triangle.texture_tile[axis].wrapping_add(cell[axis] as i32));
+                    local = directory::diamond([position[0] - cell[0], position[1] - cell[1]]);
+                    sampler = sheets[0].frame(atlas, tile);
+                    blend =
+                        blend.map(|_| [sheets[1].frame(atlas, tile), sheets[2].frame(atlas, tile)]);
+                    if landscape {
+                        primary_filter = filter::offsets(sampler, gradient);
+                        secondary_filter = blend.and_then(|b| filter::offsets(b[0], gradient));
+                    }
+                }
                 let mut sample = filter::sample(atlas, sampler, local, primary_filter);
                 if let Some([second, third]) = blend {
                     let samples = [

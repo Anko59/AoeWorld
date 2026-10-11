@@ -70,6 +70,14 @@ vec2 terrainAtlasUv(vec4 rect, vec2 local) {
     vec2 pixel = 1.0 / vec2(textureSize(atlas, 0).xy);
     return rect.xy + pixel * .5 + local * max(rect.zw - pixel, vec2(0));
 }
+// Terrain frame directory in rows 0-1 of page 0 (surface_mesh/directory.rs).
+vec4 directory(uint entry) {
+    return floor(texelFetch(atlas, ivec3(int(entry % 2048u), int(entry / 2048u), 0), 0) * 255.0 + .5);
+}
+vec4 sheet(uint material) {
+    vec4 a = directory(1u + 2u * material), b = directory(2u + 2u * material);
+    return vec4(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
+}
 vec3 terrainTint(uint kind) {
     if (kind == 1u) return vec3(.92);
     if (kind == 2u) return vec3(.78);
@@ -97,13 +105,25 @@ void main() {
         } else {
             uint code = uint(color.z);
             vec2 local = terrainUv(code % 8u, corner);
+            bool tiled = code % 8u == 6u;
             vUv = terrainAtlasUv(uv, local);
             vColor = vec4(terrainTint(code / 8u), 1);
             vSolid = 1u;
             vTint = code / 8u;
+            if (tiled) {
+                vec2 locals[3] = vec2[3](uv.xy, uv.zw, terrainBlend0.xy);
+                vUv = locals[corner];
+                vRect = sheet(pages.z & 255u);
+                vSolid = 5u;
+            }
             if (color.w == -3.0) {
-                vUv2 = terrainAtlasUv(terrainBlend0, local);
-                vUv3 = terrainAtlasUv(terrainBlend1, local);
+                if (tiled) {
+                    vRect2 = sheet((pages.z >> 8u) & 255u);
+                    vRect3 = sheet((pages.z >> 16u) & 255u);
+                } else {
+                    vUv2 = terrainAtlasUv(terrainBlend0, local);
+                    vUv3 = terrainAtlasUv(terrainBlend1, local);
+                }
                 vec3 weights[3] = vec3[3](vec3(1,0,0), vec3(0,1,0), vec3(0,0,1));
                 vWeights = weights[corner];
                 if ((pages.w & 1u) != 0u) {
@@ -113,7 +133,7 @@ void main() {
                     }
                     vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
                 }
-                vSolid = 3u;
+                vSolid |= 2u;
             }
         }
     } else {
@@ -160,26 +180,64 @@ vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     if (sum.a == 0.0) return center;
     return vec4(floor(sum.rgb / sum.a + .5) / 255.0, center.a);
 }
+struct Layer { vec2 uv; uint page; vec4 rect; vec2 dx; vec2 dy; };
+vec4 directory(uint entry) {
+    return floor(texelFetch(atlas, ivec3(int(entry % 2048u), int(entry / 2048u), 0), 0) * 255.0 + .5);
+}
+// Euclidean remainder over the whole signed range, in defined unsigned arithmetic.
+uint wrap(int value, uint period) {
+    return ((uint(value) ^ 2147483648u) % period + period - 2147483648u % period) % period;
+}
+Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
+    uint columns = uint(header.z), rows = uint(header.w);
+    uint hash = uint(tile.x) * 7u + uint(tile.y) * 13u;
+    uint index = (hash > 2147483648u ? ~hash + 1u : hash) % uint(max(header.y, 1.0));
+    if (columns > 0u && rows > 0u) {
+        index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
+    }
+    uint entry = uint(header.x) + 2u * index;
+    vec4 a = directory(entry), b = directory(entry + 1u);
+    uint high = uint(b.z);
+    vec2 size = vec2(textureSize(atlas, 0).xy);
+    vec4 rect = vec4(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + float(high & 15u) * 256.0, b.y + float(high >> 4u) * 256.0) / size.xyxy;
+    vec2 span = max(rect.zw - 1.0 / size, vec2(0));
+    return Layer(rect.xy + .5 / size + local * span, uint(b.w), rect, gx * span, gy * span);
+}
 void main() {
-    vec2 dx=dFdx(vUv), dy=dFdy(vUv);
-    vec2 dx2=dFdx(vUv2), dy2=dFdy(vUv2);
-    vec2 dx3=dFdx(vUv3), dy3=dFdy(vUv3);
+    Layer first = Layer(vUv, vPages.x, vRect, dFdx(vUv), dFdy(vUv));
+    Layer second = Layer(vUv2, vPages.y, vRect2, dFdx(vUv2), dFdy(vUv2));
+    Layer third = Layer(vUv3, vPages.z, vRect3, dFdx(vUv3), dFdy(vUv3));
     if (vSolid == 2u) {
         result = vColor;
         return;
     }
+    bool blend = (vSolid & 3u) == 3u;
+    bool landscape = (vPages.w & 1u) != 0u;
+    if ((vSolid & 4u) != 0u) {
+        if (vRect.y < 1.0) discard;
+        vec2 cell = floor(vUv), inside = vUv - cell;
+        ivec2 tile = ivec2(int(vPages.x), int(vPages.y)) + ivec2(cell);
+        vec2 local = vec2(.5 + .5 * (inside.x - inside.y), .5 * (inside.x + inside.y));
+        vec2 gx = vec2(.5 * (first.dx.x - first.dx.y), .5 * (first.dx.x + first.dx.y));
+        vec2 gy = vec2(.5 * (first.dy.x - first.dy.y), .5 * (first.dy.x + first.dy.y));
+        first = tiledLayer(vRect, tile, local, gx, gy);
+        if (blend) {
+            second = tiledLayer(vRect2, tile, local, gx, gy);
+            if (!landscape) third = tiledLayer(vRect3, tile, local, gx, gy);
+        }
+    }
     vec4 texel;
-    if (vSolid == 0u || (vPages.w & 1u) == 0u) texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
-    else texel = terrainSample(vUv, vPages.x, vRect, dx, dy);
-    if (vSolid == 3u) {
-        if ((vPages.w & 1u) != 0u) {
+    if (vSolid == 0u || !landscape) texel = textureLod(atlas, vec3(first.uv, float(first.page)), 0.0);
+    else texel = terrainSample(first.uv, first.page, first.rect, first.dx, first.dy);
+    if (blend) {
+        if (landscape) {
             texel = texel * vWeights.x
-                  + terrainSample(vUv2, vPages.y, vRect2, dx2, dy2) * vWeights.y
+                  + terrainSample(second.uv, second.page, second.rect, second.dx, second.dy) * vWeights.y
                   + texel * vWeights.z;
         } else {
             texel = texel * vWeights.x
-                  + textureLod(atlas, vec3(vUv2, float(vPages.y)), 0.0) * vWeights.y
-                  + textureLod(atlas, vec3(vUv3, float(vPages.z)), 0.0) * vWeights.z;
+                  + textureLod(atlas, vec3(second.uv, float(second.page)), 0.0) * vWeights.y
+                  + textureLod(atlas, vec3(third.uv, float(third.page)), 0.0) * vWeights.z;
         }
     }
     if (texel.a <= 0.0) discard;
