@@ -453,6 +453,7 @@ fn triangle(
     ProjectedSurfaceTriangle {
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         points,
         color,
         tile: [0, 0],

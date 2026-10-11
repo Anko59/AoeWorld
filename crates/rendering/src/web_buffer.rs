@@ -182,7 +182,7 @@ pub(crate) fn surface_instance(
         depths[index] = (crate::surface_mesh::surface_render_depth(point.world, triangle.skirt)
             - depth_origin) as f32;
     }
-    let landscape = matches!(triangle.material, 0 | 1 | 2 | 6)
+    let landscape = triangle.vegetated()
         && triangle.tint <= 3
         && !triangle.skirt
         && triangle.appearance & 1 != 0;
@@ -239,10 +239,7 @@ pub(crate) fn surface_instance(
                 tiled.map_or(uv.page, |packet| packet.2[0]),
                 tiled.map_or(blend.map_or(0, |a| a[0].page), |packet| packet.2[1]),
                 tiled.map_or(blend.map_or(0, |a| a[1].page), |packet| packet.2[2]),
-                if matches!(triangle.material, 0 | 1 | 2 | 6)
-                    && triangle.tint <= 3
-                    && !triangle.skirt
-                {
+                if triangle.vegetated() && triangle.tint <= 3 && !triangle.skirt {
                     (triangle.appearance & !crate::surface_mesh::landscape::INTERPOLATED_FLOOR)
                         | if floors.is_some() {
                             crate::surface_mesh::landscape::INTERPOLATED_FLOOR

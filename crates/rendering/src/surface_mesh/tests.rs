@@ -9,6 +9,8 @@ mod equivalence_tests;
 mod floor_tests;
 #[path = "tests/landscape.rs"]
 mod landscape_tests;
+#[path = "tests/mix.rs"]
+mod mix_tests;
 #[path = "tests/native_canvas.rs"]
 mod native_canvas_tests;
 #[path = "tests/shore.rs"]

@@ -11,6 +11,7 @@ pub(crate) mod floor;
 pub(crate) mod landscape;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
+pub(crate) mod mix;
 pub use directory::write_terrain_directory;
 pub use lod::projected_surface_triangles;
 
@@ -42,6 +43,8 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) appearance: u32,
     /// Three canonical rounded u8 endpoints; Some opts into floor interpolation.
     pub(crate) floor_strengths: Option<[u8; 3]>,
+    /// Overlay then middle shares per corner (`mix`); all zero means unmixed.
+    pub(crate) mix: [u8; 6],
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
     pub(crate) texture_uv: Option<AtlasAddress>,
@@ -378,6 +381,7 @@ fn append_edge_skirt(
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
         floor_strengths: None,
+        mix: [0; 6],
         points: [points[0], points[1], points[2]],
         color,
         tile,
@@ -395,6 +399,7 @@ fn append_edge_skirt(
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
         floor_strengths: None,
+        mix: [0; 6],
         points: [points[0], points[2], points[3]],
         color,
         tile,

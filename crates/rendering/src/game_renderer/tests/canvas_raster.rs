@@ -129,6 +129,7 @@ fn triangle(mode: u8, tint: u8, textured: bool, blend: bool) -> ProjectedSurface
     ProjectedSurfaceTriangle {
         appearance: 0,
         floor_strengths: None,
+        mix: [0; 6],
         points: std::array::from_fn(|index| SurfacePoint {
             world: [
                 index as f64 * 5.0,

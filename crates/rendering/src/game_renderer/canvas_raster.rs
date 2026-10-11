@@ -23,10 +23,8 @@ pub(super) fn raster_surface(
     }
     let blend = triangle.texture_blend;
     let appearance = triangle.appearance;
-    let landscape = appearance != 0
-        && triangle.tint <= 3
-        && matches!(triangle.material, 0 | 1 | 2 | 6)
-        && !triangle.skirt;
+    let landscape =
+        appearance != 0 && triangle.tint <= 3 && triangle.vegetated() && !triangle.skirt;
     // Canonical endpoints are already quantized; normalize once per Canvas surface.
     let floor_endpoints = triangle
         .floor_strengths

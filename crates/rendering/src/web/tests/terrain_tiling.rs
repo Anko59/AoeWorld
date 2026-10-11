@@ -27,3 +27,22 @@ async fn webgpu_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
     assert_eq!(fine, coarse);
     renderer.device.destroy();
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_blends_every_ground_material_pair_across_a_noisy_border() {
+    use crate::surface_mesh::mix::fixture as mix;
+    let mut renderer = surface_renderer_with_atlas(&mix::atlas()).await;
+    for case in 0..mix::CASES {
+        let faces = mix::scene(case);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        // One bounded readback per case; even and odd cases cover all ten probes.
+        let probes: [[u32; 2]; 5] = std::array::from_fn(|i| mix::PROBES[i * 2 + case % 2]);
+        let pixels = read_pixels(&renderer, faces.len() as u32, probes).await;
+        for (index, actual) in pixels.into_iter().enumerate() {
+            mix::assert_probe(case, index * 2 + case % 2, actual, 2);
+        }
+    }
+    renderer.device.destroy();
+}

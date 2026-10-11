@@ -133,6 +133,7 @@ pub fn projected_surface_triangles(
                         color,
                         appearance,
                         floor_strengths: None,
+                        mix: [0; 6],
                         tile,
                         skirt: false,
                         material: if sample.surface.water == 0
