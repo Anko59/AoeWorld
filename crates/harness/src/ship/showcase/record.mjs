@@ -137,8 +137,8 @@ async function steps(page, scene) {
   for (const step of scene.steps ?? []) {
     if ("click" in step) await page.click(step.click, { timeout: 10_000 });
     else if ("click_at" in step) {
-      const { selector, x, y } = step.click_at;
-      await page.click(selector, { position: { x, y }, timeout: 10_000 });
+      const { selector, x, y, button } = step.click_at;
+      await page.click(selector, { position: { x, y }, button, timeout: 10_000 });
     } else if ("wheel" in step) {
       const { selector, x, y, delta_y } = step.wheel;
       await page.hover(selector, { position: { x, y }, timeout: 10_000 });

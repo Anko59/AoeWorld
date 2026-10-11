@@ -407,3 +407,17 @@ fn a_storyboard_may_ask_for_a_desktop_sized_page() {
     let unknown = browser_board("/", "").replacen('{', r#"{"viewport":"4k","#, 1);
     assert!(Storyboard::parse(&unknown).is_err());
 }
+
+#[test]
+fn click_at_may_use_the_right_mouse_button() {
+    let steps = r##"{"click_at":{"selector":"canvas","x":640,"y":360,"button":"right"}},{"click_at":{"selector":"canvas","x":1,"y":1}}"##;
+    let board = Storyboard::parse(&browser_board("/", steps)).unwrap();
+    let json =
+        serde_json::to_value(plan(&board, &[3500, 3000], &origins(&board)).unwrap()).unwrap();
+    let planned = &json["scenes"][1]["steps"];
+    assert_eq!(planned[0]["click_at"]["button"], "right");
+    assert_eq!(planned[1]["click_at"]["button"], "left");
+
+    let bad = r##"{"click_at":{"selector":"canvas","x":1,"y":1,"button":"middle"}}"##;
+    assert!(Storyboard::parse(&browser_board("/", bad)).is_err());
+}
