@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::TreePalm as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::Shallows as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -113,6 +113,13 @@ const TERRAIN_ROLES: [AssetRole; 7] = [
     AssetRole::Rock,
     AssetRole::Water,
     AssetRole::ForestFloor,
+];
+
+/// Optional depth sheets in renderer order: medium, deep, ford shallows.
+const WATER_DEPTH_ROLES: [AssetRole; 3] = [
+    AssetRole::WaterMedium,
+    AssetRole::WaterDeep,
+    AssetRole::Shallows,
 ];
 
 fn renderer_topology(topology: TerrainFrameTopology) -> TerrainTopology {
@@ -241,6 +248,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,
+            water_depth: Default::default(),
             resources: [
                 group(AssetRole::ForageBush),
                 group(AssetRole::WoodTree),

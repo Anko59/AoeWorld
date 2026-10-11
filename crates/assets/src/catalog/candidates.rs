@@ -73,7 +73,7 @@ mod tests {
                     .any(|source| source.archive == candidate.archive && source.id == candidate.id)
             );
         }
-        assert_eq!(UNAPPROVED_SOURCES.len(), 19);
+        assert_eq!(UNAPPROVED_SOURCES.len(), 16);
         assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
         assert!(
             !OPTIONAL_RESOURCE_SOURCES

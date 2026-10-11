@@ -37,6 +37,9 @@ pub enum AssetRole {
     StoneDeposit,
     TreeConifer,
     TreePalm,
+    WaterMedium,
+    WaterDeep,
+    Shallows,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -248,12 +251,42 @@ mod tests {
                 .chain(OPTIONAL_TERRAIN_SOURCES.iter())
                 .all(|source| source.frames > 0)
         );
-        assert_eq!(VERSION, 5);
+        assert_eq!(VERSION, 6);
         assert_eq!(AssetRole::StoneDeposit as usize, 13);
         assert_eq!(AssetRole::TreeConifer as usize, 14);
         assert_eq!(AssetRole::TreePalm as usize, 15);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].id, 15011);
         assert_eq!(OPTIONAL_TERRAIN_SOURCES[0].frames, 10);
+        assert_eq!(AssetRole::WaterMedium as usize, 16);
+        assert_eq!(AssetRole::Shallows as usize, 18);
+        // Water depth sheets: light shallow water stays the required sheet;
+        // medium, deep and walkable marsh shallows are optional periodic sheets.
+        assert_eq!(REQUIRED_RENDER_SOURCES[6].id, 15002);
+        assert_eq!(
+            OPTIONAL_TERRAIN_SOURCES[1..]
+                .iter()
+                .map(|source| (
+                    source.role,
+                    source.id,
+                    source.frames,
+                    source.terrain_topology
+                ))
+                .collect::<Vec<_>>(),
+            [
+                (AssetRole::WaterMedium, 15016),
+                (AssetRole::WaterDeep, 15015),
+                (AssetRole::Shallows, 15014),
+            ]
+            .map(|(role, id)| (
+                role,
+                id,
+                100,
+                Some(TerrainFrameTopology::PeriodicXMajorReversedY {
+                    columns: 10,
+                    rows: 10
+                })
+            ))
+        );
         assert_eq!(
             REQUIRED_RENDER_SOURCES
                 .iter()

@@ -54,8 +54,14 @@ pub enum GroundMaterial {
     Mud,
     Snow,
     Ice,
+    /// Shallow water art: the rim of open water, river margins and wetlands.
     Shore,
+    /// Medium-depth water.
     Water,
+    /// Open water with no land within the medium reach.
+    DeepWater,
+    /// Walkable river shallows: a ford.
+    Ford,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

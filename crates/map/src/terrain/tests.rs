@@ -7,6 +7,7 @@ mod golden;
 mod historical_field_axis;
 mod shore_band;
 mod shoreline;
+mod water_depth;
 
 fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)

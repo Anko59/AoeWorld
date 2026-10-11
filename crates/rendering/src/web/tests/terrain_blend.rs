@@ -26,6 +26,23 @@ async fn webgpu_restored_native_forest_soil_endpoints_gradient_seam_and_dirt_pri
 }
 
 #[wasm_bindgen_test]
+async fn webgpu_water_depth_classes_draw_their_sheets_and_blend_at_borders() {
+    use crate::surface_mesh::water_fixture as fixture;
+    let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
+    for (left, right) in fixture::pairs() {
+        let faces = fixture::faces(left, right);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        let pixels = read_pixels(&renderer, 2, fixture::PROBES).await;
+        for ([x, _], pixel) in fixture::PROBES.into_iter().zip(pixels) {
+            assert_pixel(pixel, fixture::expected(left, right, x));
+        }
+    }
+    renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
 async fn webgpu_shared_floor_gradient_seam_and_manual_packet_fallback() {
     use crate::surface_mesh::floor as fixture;
     let mut renderer = surface_renderer().await;
@@ -153,6 +170,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         grass: vec![frame(0)],
         terrain: std::array::from_fn(|_| vec![frame(0)]),
         terrain_topology: [None; 7],
+        water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),

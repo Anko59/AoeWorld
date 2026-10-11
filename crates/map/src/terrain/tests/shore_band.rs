@@ -136,7 +136,10 @@ fn lakes_get_a_walkable_sand_beach_of_the_modelled_width_and_a_shallow_rim() {
                     deep += 1;
                     assert!(land > NARROW, "deep water touches land at {x},{y}");
                     assert_eq!(tile.water, WaterKind::Lake, "open water at {x},{y}");
-                    assert_eq!(tile.material, GroundMaterial::Water);
+                    assert!(matches!(
+                        tile.material,
+                        GroundMaterial::Water | GroundMaterial::DeepWater
+                    ));
                     narrow_rim |= land <= ORDINARY;
                 }
             }
@@ -194,7 +197,7 @@ fn units_walk_the_beach_around_a_lake_and_never_through_it() {
 }
 
 /// One modeled river column (evidence axis 33) on dry categorical water.
-fn modeled_river(key: u8) -> MapChunkGenerator {
+pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
     let (mut environment, mut pages) = environment(33, 8, &|_, _| (0, 0));
     let river = |sx: u16, sy: u16| (sx == 16 && sy <= 20) || (sy == 20 && (16..=24).contains(&sx));
     let cells = (0..33_u16).flat_map(|sy| (0..33_u16).map(move |sx| (sx, sy)));

@@ -7,6 +7,7 @@ const terrainSourceColors = {
   dirt: [166, 92, 48],
   cliff: [92, 82, 105],
   water: [32, 104, 210],
+  medium: [18, 60, 150],
   shore: [218, 185, 92],
 } as const;
 
@@ -16,15 +17,12 @@ const terrainSourceAccents = {
   dirt: [115, 54, 30],
   cliff: [44, 42, 64],
   water: [80, 160, 220],
+  medium: [46, 96, 176],
   shore: [164, 119, 54],
 } as const;
 
 const tint = (source: readonly number[], factor: number) =>
   source.map((value) => Math.round(value * factor));
-const blendWater = (source: readonly number[]) =>
-  source.map((value, index) =>
-    Math.round(value * 0.86 + ([38, 113, 190][index] ?? 0) * 0.14),
-  );
 
 // Independent fixture oracle: normalized arithmetic-mean dirt luminance feeds
 // natural rock (.18 + .55 * luma), then face lighting, with one byte rounding.
@@ -35,12 +33,6 @@ const naturalRock = (source: readonly number[], shade: number) => {
   const gray = Math.round((0.18 + 0.55 * luminance(source)) * shade * 255);
   return [gray, gray, gray];
 };
-// Typed Shore is a wet boundary, not dry Sand/15010: raw water detail feeds
-// (.22, .36, .33) + .25 * luma, without the open-water blue tint.
-const wetShore = (source: readonly number[]) =>
-  [0.22, 0.36, 0.33].map((base) =>
-    Math.round((base + 0.25 * luminance(source)) * 255),
-  );
 
 // Keep unused 15018 paving art in the atlas as an adversarial source sentinel.
 // These are forbidden rendered colors, deliberately outside the positive palette.
@@ -59,10 +51,12 @@ export const syntheticSurfaceColors = {
   cliff: naturalRock(terrainSourceColors.dirt, 0.78),
   cliffAccent: naturalRock(terrainSourceAccents.dirt, 0.78),
   skirt: naturalRock(terrainSourceColors.dirt, 0.72),
-  water: blendWater(terrainSourceColors.water),
-  waterAccent: blendWater(terrainSourceAccents.water),
-  shore: wetShore(terrainSourceColors.water),
-  shoreAccent: wetShore(terrainSourceAccents.water),
+  // Water is drawn as authored, never tinted: medium water uses its own
+  // sheet 15016 and typed Shore the light shallow sheet 15002.
+  water: terrainSourceColors.medium,
+  waterAccent: terrainSourceAccents.medium,
+  shore: terrainSourceColors.water,
+  shoreAccent: terrainSourceAccents.water,
   ring: [242, 217, 89],
 } as const;
 
@@ -156,6 +150,19 @@ const terrainSources = new Map<number, TerrainSource>([
       tiled: true,
     },
   ],
+  [
+    15016,
+    {
+      x: 1_300,
+      y: 600,
+      width: 25,
+      height: 45,
+      base: terrainSourceColors.medium,
+      accent: terrainSourceAccents.medium,
+      frameCount: 100,
+      tiled: true,
+    },
+  ],
 ]);
 
 /** Public CI uses original generated fixtures; local runs use the real pack. */
@@ -203,7 +210,7 @@ export async function gameAssets(
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
-    ...[15008, 15007, 15000, 15010, 15018, 15002].map((id) => [
+    ...[15008, 15007, 15000, 15010, 15018, 15002, 15016].map((id) => [
       "terrain",
       id,
       100,

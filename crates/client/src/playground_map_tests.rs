@@ -24,6 +24,14 @@ fn snow_ice_mud_and_shallows_have_distinct_scene_materials() {
     assert_eq!(terrain_material(GroundMaterial::Rock), 4);
 }
 
+#[wasm_bindgen_test]
+fn water_depth_classes_keep_their_scene_materials() {
+    assert_eq!(terrain_material(GroundMaterial::Shore), 10);
+    assert_eq!(terrain_material(GroundMaterial::Water), 5);
+    assert_eq!(terrain_material(GroundMaterial::DeepWater), 11);
+    assert_eq!(terrain_material(GroundMaterial::Ford), 12);
+}
+
 #[path = "playground_map/resource_viewport_tests.rs"]
 mod resource_viewport;
 
