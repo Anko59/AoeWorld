@@ -93,6 +93,25 @@ struct Report {
     result: &'static str,
 }
 
+/// Bound for one `cargo test` invocation, build included.
+const CARGO_DEADLINE: Duration = Duration::from_secs(600);
+/// Whole-suite bound inside the browser. The runner defaults to 20 s, which
+/// the 145-test rendering suite no longer fits on a CI runner.
+const SUITE_TIMEOUT_SECONDS: &str = "300";
+
+fn runner_environment<'a>(remote: &'a str, capabilities: &'a str) -> [(&'static str, &'a str); 5] {
+    [
+        ("WASM_BINDGEN_USE_BROWSER", "1"),
+        ("CHROMEDRIVER_REMOTE", remote),
+        (
+            "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER",
+            "wasm-bindgen-test-runner",
+        ),
+        ("WASM_BINDGEN_TEST_WEBDRIVER_JSON", capabilities),
+        ("WASM_BINDGEN_TEST_TIMEOUT", SUITE_TIMEOUT_SECONDS),
+    ]
+}
+
 pub fn run() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let port = unused_port()?;
@@ -102,15 +121,7 @@ pub fn run() -> Result<()> {
     let capabilities = capabilities
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
-    let environment = [
-        ("WASM_BINDGEN_USE_BROWSER", "1"),
-        ("CHROMEDRIVER_REMOTE", remote.as_str()),
-        (
-            "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER",
-            "wasm-bindgen-test-runner",
-        ),
-        ("WASM_BINDGEN_TEST_WEBDRIVER_JSON", capabilities),
-    ];
+    let environment = runner_environment(&remote, capabilities);
     for arguments in [
         vec![
             "test",
@@ -144,7 +155,7 @@ pub fn run() -> Result<()> {
             "--lib",
         ],
     ] {
-        process::run_with_env("cargo", &arguments, &environment, Duration::from_secs(600))?;
+        process::run_with_env("cargo", &arguments, &environment, CARGO_DEADLINE)?;
     }
     let report = Report {
         version: 1,
@@ -174,6 +185,17 @@ fn git(first: &str, second: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_suites_get_more_than_the_runner_default_of_twenty_seconds() {
+        let environment = runner_environment("http://127.0.0.1:1/", "caps.json");
+        let timeout = environment
+            .iter()
+            .find(|(name, _)| *name == "WASM_BINDGEN_TEST_TIMEOUT")
+            .map(|(_, value)| value.parse::<u64>().expect("seconds"))
+            .expect("whole-suite timeout");
+        assert!(timeout >= 120 && timeout < CARGO_DEADLINE.as_secs());
+    }
 
     #[test]
     fn current_checkout_has_report_identity_and_a_free_local_port() {
