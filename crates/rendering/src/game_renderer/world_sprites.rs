@@ -96,8 +96,9 @@ pub(super) fn emit_world_sprite_frames(
     let objects = resources
         .iter()
         .filter_map(|resource| {
-            scene_resource_presentation(art, *resource)
-                .map(|(frame, shadow)| WorldObject::Resource(*resource, frame, shadow))
+            scene_resource_presentation(art, *resource).map(|(frame, shadow)| {
+                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
+            })
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
 
@@ -152,7 +153,8 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         }
         let (direction, flipped) = sprite_direction(unit.facing);
-        let frame = frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }];
+        let frame =
+            world_frame(frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }]);
         let scale = camera.zoom as f32;
         let width = f64::from(frame.size[0]) * camera.zoom;
         let height = f64::from(frame.size[1]) * camera.zoom;
@@ -203,9 +205,25 @@ pub(super) fn emit_world_sprite_frames(
     }
 }
 
+/// Art frames are authored for the original 96 by 48 pixel tile diamond, so
+/// they grow with the terrain to this world's `ISO_TILE_WIDTH`.
+fn world_frame(frame: GameFrame) -> GameFrame {
+    scaled(
+        frame,
+        aoe_core::ISO_TILE_WIDTH as f32 / crate::terrain::TERRAIN_NATIVE_DIAMOND_WIDTH,
+    )
+}
+
+/// Depth by which an object clears the ground it stands on. A frame reaches
+/// below its hotspot (a gold pile by half its height), where flat ground is
+/// nearer the viewer by one depth unit per 32 pixels; the tallest reviewed
+/// overhang is 43 pixels. One shared offset keeps objects ordered among
+/// themselves, and a one-level rise in front (two units) still hides them.
+const GROUND_CLEARANCE: f64 = 1.5;
+
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    surface_depth([position[0], position[1], object.elevation_meters()])
+    surface_depth([position[0], position[1], object.elevation_meters()]) + GROUND_CLEARANCE
 }
 
 #[derive(Clone, Copy)]
@@ -289,7 +307,12 @@ pub(super) fn resource_sprite_bounds(
     frame: GameFrame,
     camera: SceneCamera,
 ) -> Option<[f64; 4]> {
-    sprite_screen_bounds(frame, resource.position, resource.elevation_meters, camera)
+    sprite_screen_bounds(
+        world_frame(frame),
+        resource.position,
+        resource.elevation_meters,
+        camera,
+    )
 }
 
 fn sprite_screen_bounds(
