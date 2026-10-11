@@ -53,12 +53,14 @@ impl ProjectedSurfaceTriangle {
 /// and metadata-free samples are not observations.
 fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
     let appearance = sample.appearance?;
-    if sample.surface.water != 0 || sample.surface.kind == SceneTerrainSurface::CLIFF {
+    if sample.surface.water != 0
+        || appearance::water_material(sample.material)
+        || sample.surface.kind == SceneTerrainSurface::CLIFF
+    {
         return None;
     }
     let material = match sample.material {
         0 | 6 => u8::from(matches!(appearance.palette, 3 | 4)),
-        5 | 10 => return None,
         material => material,
     };
     let floor = if vegetative(sample.material) {
@@ -71,6 +73,7 @@ fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
 
 fn eligible(triangle: &ProjectedSurfaceTriangle) -> bool {
     triangle.appearance & 1 != 0
+        && !appearance::water_material(triangle.material)
         && !triangle.skirt
         && triangle.tint <= 3
         && triangle.texture_materials.is_some()

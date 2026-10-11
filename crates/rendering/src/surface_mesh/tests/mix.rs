@@ -77,7 +77,7 @@ fn assert_water_side_layers_unchanged(material: u8, kind: u8) {
 
 #[wasm_bindgen_test]
 fn lake_ocean_and_river_depth_faces_keep_water_layers_beside_mixed_land() {
-    for kind in 1..=3 {
+    for kind in 1..=4 {
         for material in [5, 10, 11] {
             assert_water_side_layers_unchanged(material, kind);
         }
