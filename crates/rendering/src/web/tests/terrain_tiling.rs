@@ -46,3 +46,24 @@ async fn webgpu_blends_every_ground_material_pair_across_a_noisy_border() {
     }
     renderer.device.destroy();
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_four_material_junction_has_matching_pixels_on_every_shared_edge() {
+    use crate::surface_mesh::mix::fixture::{self as mix, junction};
+    let mut renderer = surface_renderer_with_atlas(&mix::atlas()).await;
+    let mut results = Vec::new();
+    for pair in junction::edge_pairs() {
+        let mut pixels = [[0; 4]; 2];
+        for (index, face) in pair.iter().enumerate() {
+            renderer
+                .render_world_layers(&[*face], &[], [0.0, 0.0, 0.0, 1.0])
+                .unwrap();
+            pixels[index] = read_pixels(&renderer, 1, [[64, 64]]).await[0];
+        }
+        results.push((pair, pixels));
+    }
+    renderer.device.destroy();
+    for (pair, pixels) in results {
+        junction::assert_edge(&pair, pixels);
+    }
+}

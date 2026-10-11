@@ -225,3 +225,40 @@ fn noisy_threshold_keeps_pure_ground_pure_and_weights_normalized() {
     assert!(mix::weights([0.5, 0.0, 0.0], false, 0.9)[2] > 0.9);
     assert!(mix::weights([0.5, 0.0, 0.0], false, 0.1)[2] < 0.1);
 }
+
+#[wasm_bindgen_test]
+fn four_material_quad_uses_identical_layers_and_shares_on_its_diagonal() {
+    let faces = mix::fixture::junction::scene();
+    let quad = faces
+        .iter()
+        .filter(|face| face.tile == [0, 0])
+        .collect::<Vec<_>>();
+    assert_eq!(quad.len(), 2);
+    assert_eq!(quad[0].texture_materials, quad[1].texture_materials);
+    let palette = |face: &ProjectedSurfaceTriangle| {
+        let packet = crate::web::surface_instance(face, [128.0; 2], 0.0);
+        [packet.terrain_blend[0][3], packet.terrain_blend[1][3]]
+    };
+    assert_eq!(
+        palette(quad[0]),
+        palette(quad[1]),
+        "ordered junction sheets"
+    );
+    assert_eq!(
+        mix::fixture::junction::diagonal_colour(quad[0]),
+        mix::fixture::junction::diagonal_colour(quad[1])
+    );
+    for world in [[0.0, 0.0, 0.0], [1.0, 1.0, 0.0]] {
+        let corner = |face: &ProjectedSurfaceTriangle| {
+            face.points
+                .iter()
+                .position(|point| point.world == world)
+                .unwrap()
+        };
+        let (a, b) = (corner(quad[0]), corner(quad[1]));
+        assert_eq!(
+            [quad[0].mix[a], quad[0].mix[3 + a]],
+            [quad[1].mix[b], quad[1].mix[3 + b]]
+        );
+    }
+}

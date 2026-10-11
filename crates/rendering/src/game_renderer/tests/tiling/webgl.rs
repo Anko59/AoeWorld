@@ -35,3 +35,16 @@ fn webgl_blends_every_ground_material_pair_across_a_noisy_border() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn webgl_four_material_junction_has_matching_pixels_on_every_shared_edge() {
+    use crate::surface_mesh::mix::fixture::{self as mix, junction};
+    let (canvas, mut renderer) = target(&mix::atlas());
+    for pair in junction::edge_pairs() {
+        let pixels = pair.map(|face| {
+            render(&mut renderer, &mut [instance(&face)]);
+            pixel(&canvas, 64, 64)
+        });
+        junction::assert_edge(&pair, pixels);
+    }
+}

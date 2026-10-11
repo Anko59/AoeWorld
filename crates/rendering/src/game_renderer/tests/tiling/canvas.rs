@@ -67,3 +67,27 @@ fn canvas_blends_every_ground_material_pair_across_a_noisy_border() {
         mix::assert_soft(case, &|x, y| pixel(&presentation.color_buffer, x, y));
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_four_material_junction_has_matching_pixels_on_every_shared_edge() {
+    use crate::surface_mesh::mix::fixture::{self as mix, junction};
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = mix::atlas();
+    for pair in junction::edge_pairs() {
+        let pixels = pair.map(|face| {
+            canvas_depth::render_canvas_world(
+                &canvas,
+                &context,
+                &atlas,
+                &mut presentation,
+                &[WorldLayer::Surface(face)],
+                junction::camera(),
+                false,
+            )
+            .unwrap();
+            pixel(&presentation.color_buffer, 64, 64)
+        });
+        junction::assert_edge(&pair, pixels);
+    }
+}

@@ -1,6 +1,8 @@
 //! Border probes shared by the three renderer pixel tests. Synthetic flat
 //! frames only: any colour between two materials is the blend itself.
 use super::{layer, noise, rank, weights};
+#[path = "../tests/junction.rs"]
+pub(crate) mod junction;
 use crate::surface_mesh::{
     ProjectedSurfaceTriangle, apply_terrain_textures, landscape, projected_surface_triangles,
 };
