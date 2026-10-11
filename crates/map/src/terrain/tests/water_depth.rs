@@ -25,16 +25,28 @@ fn nearest_land(tiles: &[LandscapeTile], x: i32, y: i32) -> Option<i32> {
 }
 
 fn big_lake(key: u8) -> MapChunkGenerator {
+    big_water(key, WaterKind::Lake)
+}
+
+fn big_water(key: u8, kind: WaterKind) -> MapChunkGenerator {
     coast(key, &|sx, sy| {
-        let lake = (6..=26).contains(&sx) && (6..=26).contains(&sy);
-        (0, if lake { 100 } else { 0 })
+        let coverage = if (6..=26).contains(&sx) && (6..=26).contains(&sy) {
+            100
+        } else {
+            0
+        };
+        match kind {
+            WaterKind::Ocean => (coverage, 0),
+            WaterKind::Lake => (0, coverage),
+            _ => unreachable!("open-water fixture"),
+        }
     })
 }
 
 #[test]
 fn open_water_grades_from_a_shallow_rim_through_medium_to_deep() {
-    for key in [61, 62] {
-        let generator = big_lake(key);
+    for (key, kind) in [(61, WaterKind::Lake), (62, WaterKind::Ocean)] {
+        let generator = big_water(key, kind);
         let tiles = composed(&generator);
         let (mut shallow, mut medium, mut deep) = (0, 0, 0);
         for y in 0..WIDTH {
@@ -44,20 +56,33 @@ fn open_water_grades_from_a_shallow_rim_through_medium_to_deep() {
                     continue;
                 }
                 assert!(!tile.passable, "open water is never walkable at {x},{y}");
+                let base = provider::sample_base_tile(&generator, TileCoord::new(x, y), &|| false)
+                    .expect("source water");
+                // Composition changes only the drawn material, preserving the
+                // kind and every physical/evidence field read by consumers.
+                assert_eq!(base.water, kind, "source kind at {x},{y}");
+                assert_eq!(
+                    Tile {
+                        material: base.material,
+                        ..tile
+                    },
+                    base,
+                    "depth changed more than material at {x},{y}"
+                );
                 let land = nearest_land(&tiles, x, y);
                 match (tile.water, tile.material) {
-                    (WaterKind::Shallow, GroundMaterial::Shore) => {
+                    (water, GroundMaterial::Shore) if water == kind => {
                         shallow += 1;
                         assert!(land.is_some_and(|land| land <= RIM), "rim at {x},{y}");
                     }
-                    (WaterKind::Lake, GroundMaterial::Water) => {
+                    (water, GroundMaterial::Water) if water == kind => {
                         medium += 1;
                         assert!(
                             land.is_some_and(|land| land > 2 && land <= MEDIUM_WIDE),
                             "medium water {land:?} from land at {x},{y}"
                         );
                     }
-                    (WaterKind::Lake, GroundMaterial::DeepWater) => {
+                    (water, GroundMaterial::DeepWater) if water == kind => {
                         deep += 1;
                         assert!(
                             land.is_none_or(|land| land > MEDIUM_NARROW),

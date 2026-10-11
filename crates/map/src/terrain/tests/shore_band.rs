@@ -127,7 +127,8 @@ fn lakes_get_a_walkable_sand_beach_of_the_modelled_width_and_a_shallow_rim() {
             } else {
                 assert!(!tile.passable, "water is never walkable at {x},{y}");
                 let land = nearest_land(&tiles, x, y);
-                if tile.water == WaterKind::Shallow {
+                assert_eq!(tile.water, WaterKind::Lake, "lake kind at {x},{y}");
+                if tile.material == GroundMaterial::Shore {
                     shallow += 1;
                     assert!(land <= ORDINARY, "rim {land} from land at {x},{y}");
                     assert_eq!(tile.material, GroundMaterial::Shore);
