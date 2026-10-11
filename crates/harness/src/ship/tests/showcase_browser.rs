@@ -367,3 +367,26 @@ fn steps_may_click_inside_an_element_and_choose_a_select_option() {
         );
     }
 }
+
+#[test]
+fn steps_may_turn_the_mouse_wheel_over_an_element() {
+    let steps = r##"{"wheel":{"selector":"canvas","x":640,"y":360,"delta_y":-400}}"##;
+    let board = Storyboard::parse(&browser_board("/", steps)).unwrap();
+    let json =
+        serde_json::to_value(plan(&board, &[3500, 3000], &origins(&board)).unwrap()).unwrap();
+    let wheel = &json["scenes"][1]["steps"][0]["wheel"];
+    assert_eq!(wheel["selector"], "canvas");
+    assert_eq!(wheel["delta_y"], -400);
+
+    for bad in [
+        r##"{"wheel":{"selector":"","x":1,"y":1,"delta_y":100}}"##,
+        r##"{"wheel":{"selector":"canvas","x":5000,"y":1,"delta_y":100}}"##,
+        r##"{"wheel":{"selector":"canvas","x":1,"y":1,"delta_y":0}}"##,
+        r##"{"wheel":{"selector":"canvas","x":1,"y":1,"delta_y":2001}}"##,
+    ] {
+        assert!(
+            Storyboard::parse(&browser_board("/", bad)).is_err(),
+            "{bad}"
+        );
+    }
+}
