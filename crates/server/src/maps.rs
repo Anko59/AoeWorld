@@ -19,6 +19,11 @@ mod height_bounds;
 pub(crate) use height_bounds::height_bounds;
 #[cfg(test)]
 use height_bounds::{HeightBoundsError, package_height_bounds};
+mod minimap;
+pub(crate) use minimap::MinimapCache;
+use minimap::minimap;
+mod routes;
+pub(super) use routes::routes;
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;

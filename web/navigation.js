@@ -1,4 +1,6 @@
-// The strategic map is fixed-size; it never requests detailed world chunks.
+// The strategic map is one bounded raster per map; it never requests detailed world chunks.
+import { MAX_MINIMAP_BYTES, decodeMinimap, minimapWorldPoint } from '/minimap.js';
+
 export function initNavigation() {
   const panel = document.getElementById('minimap');
   const svg = document.getElementById('minimap-map');
@@ -17,7 +19,7 @@ export function initNavigation() {
   let dragging = null;
   let mapHash = null;
   let request = null;
-  let coarse = false;
+  let samples = 0;
   let panImpulse = [0, 0];
 
   function overview(value) {
@@ -25,7 +27,7 @@ export function initNavigation() {
     panel.classList.toggle('expanded', value);
     toggle.setAttribute('aria-expanded', String(value));
     toggle.setAttribute('aria-label', value ? 'Close whole map' : 'Show whole map');
-    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${coarse ? 'coarse terrain (16×16)' : 'schematic'}`;
+    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? `terrain (${samples}×${samples})` : 'schematic'}`;
     if (value) svg.focus();
   }
   toggle.addEventListener('click', () => overview(!expanded));
@@ -66,16 +68,8 @@ export function initNavigation() {
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
   function target(event) {
-    const rect = svg.getBoundingClientRect();
     // SVG uses a square meet viewport, including letterboxing when expanded.
-    const side = Math.min(rect.width, rect.height);
-    const left = rect.left + (rect.width - side) / 2;
-    const top = rect.top + (rect.height - side) / 2;
-    if (side <= 0) return;
-    pending = [
-      Math.max(0, Math.min(world[0] - 1, (event.clientX - left) / side * world[0])),
-      Math.max(0, Math.min(world[1] - 1, (event.clientY - top) / side * world[1])),
-    ];
+    pending = minimapWorldPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world) ?? pending;
   }
   svg.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
@@ -115,28 +109,24 @@ export function initNavigation() {
     pending = [NaN, NaN];
     request?.abort();
     image.removeAttribute('href');
-    coarse = false;
+    samples = 0;
     overview(expanded);
     if (!hash) return;
     const controller = new AbortController();
     request = controller;
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 45000);
     try {
-      const response = await fetch(`/maps/${hash}/preview`, { signal: controller.signal });
-      if (!response.ok) return;
-      const data = await response.json();
-      if (mapHash !== hash || data.samples_per_axis !== 16 || data.cells?.length !== 256) return;
+      const response = await fetch(`/maps/${hash}/minimap`, { signal: controller.signal });
+      if (!response.ok || Number(response.headers.get('content-length') ?? 0) > MAX_MINIMAP_BYTES) return;
+      const raster = decodeMinimap(await response.arrayBuffer());
+      if (mapHash !== hash || !raster) return;
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 16;
+      canvas.width = canvas.height = raster.samples;
       const context = canvas.getContext('2d');
       if (!context) return;
-      const colors = ['#668447', '#759553', '#926f46', '#bda065', '#877969', '#89a877', '#705b3f', '#887969'];
-      data.cells.forEach((cell, index) => {
-        context.fillStyle = cell.water !== 0 ? '#34677d' : !cell.passable ? '#9b9590' : colors[cell.material] ?? '#668447';
-        context.fillRect(index % 16, Math.floor(index / 16), 1, 1);
-      });
+      context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
       image.setAttribute('href', canvas.toDataURL());
-      coarse = true;
+      samples = raster.samples;
       overview(expanded);
     } catch (error) {
       if (error.name !== 'AbortError') console.warn('Minimap terrain unavailable; using schematic', error);

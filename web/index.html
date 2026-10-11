@@ -19,10 +19,10 @@
     #minimap { position: fixed; right: 14px; bottom: 14px; z-index: 2; width: 184px; padding: 6px; background: #142314ed; border: 1px solid #78915d; border-radius: 5px; }
     #minimap-title { margin: 0 0 4px; font-size: 11px; }
     #minimap-map { display: block; width: 100%; height: 170px; background: #253c2c; cursor: crosshair; touch-action: none; outline-offset: 2px; }
-    #minimap-terrain { image-rendering: pixelated; }
     #minimap-close { display: none; }
     #minimap.expanded { top: 62px; left: 14px; width: auto; bottom: 14px; z-index: 4; display: flex; flex-direction: column; }
     #minimap.expanded #minimap-map { flex: 1; min-height: 0; }
+    #minimap.expanded #minimap-terrain { image-rendering: pixelated; }
     #minimap.expanded #minimap-close { display: block; position: absolute; right: 8px; top: 4px; }
     #minimap-hint { margin: 4px 0 0; font-size: 10px; color: #c8d8ae; }
     @media (max-width: 600px) { #minimap { width: 132px; } #minimap-map { height: 118px; } #status { max-width: calc(100vw - 166px); font-size: 11px; } }
@@ -61,7 +61,7 @@
       <button id="minimap-close" type="button" aria-label="Close map overview">Close</button>
       <svg id="minimap-map" viewBox="0 0 256 256" role="img" tabindex="0" aria-label="Whole map navigation. Click or drag to move the view; arrow keys jump across the map.">
         <rect width="256" height="256" fill="#253c2c"></rect>
-        <image id="minimap-terrain" width="256" height="256" pointer-events="none"></image>
+        <image id="minimap-terrain" width="256" height="256" preserveAspectRatio="none" pointer-events="none"></image>
         <polygon id="minimap-viewport" fill="#f4d57744" stroke="#f4d577" stroke-width="1" pointer-events="none"></polygon>
         <circle id="minimap-primary" r="3" fill="#61c8ff" stroke="#102c39" pointer-events="none"></circle>
         <circle id="minimap-camera" r="2" fill="#ffe58d" pointer-events="none"></circle>

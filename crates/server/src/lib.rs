@@ -71,6 +71,7 @@ pub struct AppState {
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
     page_residencies: Arc<RwLock<page_residency::Registry>>,
     terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
+    minimaps: Arc<Mutex<maps::MinimapCache>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
 }
@@ -99,6 +100,7 @@ impl AppState {
             map_packages: Arc::new(RwLock::new(map_packages)),
             page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
             terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
+            minimaps: Arc::new(Mutex::new(maps::MinimapCache::default())),
             map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
         })
@@ -299,24 +301,7 @@ pub fn app(state: AppState) -> Router {
     let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
-        .route("/maps/estimate", post(maps::estimate))
-        .route("/maps/footprint", post(maps::footprint))
-        .route("/maps/jobs", get(maps::list_jobs).post(maps::create_job))
-        .route("/maps/jobs/{job_id}", get(maps::job_status))
-        .route("/maps/jobs/{job_id}/cancel", post(maps::cancel_job))
-        .route("/maps/activate", post(maps::activate))
-        .route("/maps/reset", post(maps::reset))
-        .route("/maps", get(maps::list))
-        .route(
-            "/maps/{content_hash}/height-bounds",
-            get(maps::height_bounds),
-        )
-        .route("/maps/{content_hash}/preview", get(maps::preview))
-        .route(
-            "/maps/{content_hash}",
-            get(maps::package).post(maps::activate_package),
-        )
-        .route("/maps/{content_hash}/chunks/{x}/{y}", get(maps::chunk))
+        .merge(maps::routes())
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
