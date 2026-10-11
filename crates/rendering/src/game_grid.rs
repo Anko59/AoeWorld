@@ -1,8 +1,15 @@
-use crate::{GAME_ATLAS_SIDE, SceneCamera, surface_mesh::surface_depth, web::Sprite};
-use aoe_core::{Camera, MAX_WORLD_DIMENSION_TILES, ScreenPoint, TileRect, WorldConfig};
+use crate::{
+    GAME_ATLAS_SIDE, SceneCamera,
+    surface_mesh::{ProjectedSurfaceTriangle, surface_depth},
+    web::Sprite,
+};
+use aoe_core::{Camera, ISO_TILE_HEIGHT, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
-const GRID_COLOR: [f32; 4] = [0.75, 0.9, 0.6, 0.22];
+/// Straight-alpha overlay colour; `draw_grid` spells the same value for Canvas.
+const GRID_COLOR: [f32; 4] = [0.05, 0.08, 0.03, 0.6];
+/// Screen pixels kept between neighbouring parallel lines.
+const GRID_MIN_SPACING: f64 = 16.0;
 pub(crate) const SELECTION_RING_SPRITES: usize = 32;
 
 pub(crate) fn selection_ring(
@@ -36,28 +43,73 @@ pub(crate) fn selection_ring(
     sprites
 }
 
-pub(crate) fn viewport_bounds(camera: SceneCamera) -> TileRect {
-    let config = WorldConfig {
-        width_tiles: MAX_WORLD_DIMENSION_TILES,
-        height_tiles: MAX_WORLD_DIMENSION_TILES,
-        ..WorldConfig::default()
-    };
-    camera_projection(camera).visible_tiles_at_height(config, 1.0, camera.focus_elevation_meters)
+/// Borders of the drawn terrain cells, so the overlay follows the mesh's
+/// heights and level of detail. Every border comes from the cell on its
+/// positive side; lines closer than `GRID_MIN_SPACING` thin out by twos.
+pub(crate) fn grid_segments<'a>(
+    surfaces: impl IntoIterator<Item = &'a ProjectedSurfaceTriangle>,
+    zoom: f64,
+) -> Vec<[ScreenPoint; 2]> {
+    let mut step = 1.0;
+    while step * ISO_TILE_HEIGHT * zoom < GRID_MIN_SPACING && step < 1e9 {
+        step *= 2.0;
+    }
+    let mut segments = Vec::new();
+    for triangle in surfaces.into_iter().filter(|triangle| !triangle.skirt) {
+        let points = triangle.points;
+        for index in 0..3 {
+            let [start, end, apex] = [
+                points[index],
+                points[(index + 1) % 3],
+                points[(index + 2) % 3],
+            ];
+            for axis in 0..2 {
+                let line = start.world[axis];
+                if line == end.world[axis]
+                    && apex.world[axis] > line
+                    && line.rem_euclid(step) == 0.0
+                {
+                    segments.push([start.screen, end.screen]);
+                }
+            }
+        }
+    }
+    segments
 }
 
-pub(crate) fn grid_sprites(camera: SceneCamera, bounds: TileRect) -> Vec<Sprite> {
-    let lines = grid_lines(camera, bounds);
-    let mut sprites = Vec::new();
-    for (start, end) in lines {
-        add_line(&mut sprites, start, end, camera.viewport);
+/// One-pixel lines as two solid, alpha-blended surface triangles each.
+pub(crate) fn grid_sprites(segments: &[[ScreenPoint; 2]], viewport: [f64; 2]) -> Vec<Sprite> {
+    let mut sprites = Vec::with_capacity(segments.len() * 2);
+    for [start, end] in segments {
+        let corner = |point: &ScreenPoint, offset: f64| {
+            to_clip(
+                ScreenPoint {
+                    x: point.x,
+                    y: point.y + offset,
+                },
+                viewport,
+            )
+        };
+        let far = corner(end, 0.5);
+        for [second, third] in [[corner(start, 0.5), far], [far, corner(end, -0.5)]] {
+            sprites.push(Sprite {
+                position: corner(start, -0.5),
+                radius: second,
+                color: [third[0], third[1], 0.0, -2.0],
+                uv: GRID_COLOR,
+                depths: [f32::INFINITY; 4],
+                terrain_blend: [[0.0; 4]; 2],
+                pages: [0; 4],
+            });
+        }
     }
     sprites
 }
 
-pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, camera: SceneCamera, bounds: TileRect) {
+pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, segments: &[[ScreenPoint; 2]]) {
     context.begin_path();
-    context.set_stroke_style_str("rgba(220,235,170,.22)");
-    for (start, end) in grid_lines(camera, bounds) {
+    context.set_stroke_style_str("rgba(13,20,8,.6)");
+    for [start, end] in segments {
         context.move_to(start.x, start.y);
         context.line_to(end.x, end.y);
     }
@@ -70,139 +122,6 @@ fn camera_projection(camera: SceneCamera) -> Camera {
         zoom: camera.zoom,
         viewport: camera.viewport,
         focus_elevation_meters: camera.focus_elevation_meters,
-    }
-}
-
-fn grid_lines(camera: SceneCamera, visible: TileRect) -> Vec<(ScreenPoint, ScreenPoint)> {
-    if !camera.zoom.is_finite() || camera.zoom <= 0.0 {
-        return Vec::new();
-    }
-    let projection = camera_projection(camera);
-    let min_x = visible.min.x;
-    let max_x = visible.max.x;
-    let min_y = visible.min.y;
-    let max_y = visible.max.y;
-    // At most 128 lines per axis, even if a caller supplies the whole world.
-    let step_x = (i64::from(max_x) - i64::from(min_x)).max(0) / 127 + 1;
-    let step_y = (i64::from(max_y) - i64::from(min_y)).max(0) / 127 + 1;
-    let mut lines = Vec::new();
-    for index in 0..128 {
-        let x = i64::from(min_x) + i64::from(index) * step_x;
-        if x > i64::from(max_x) {
-            break;
-        }
-        let x = x as i32;
-        add_clipped_line(
-            &mut lines,
-            projection.world_to_screen_at_height(
-                [f64::from(x), f64::from(min_y)],
-                camera.focus_elevation_meters,
-            ),
-            projection.world_to_screen_at_height(
-                [f64::from(x), f64::from(max_y)],
-                camera.focus_elevation_meters,
-            ),
-            camera.viewport,
-        );
-    }
-    for index in 0..128 {
-        let y = i64::from(min_y) + i64::from(index) * step_y;
-        if y > i64::from(max_y) {
-            break;
-        }
-        let y = y as i32;
-        add_clipped_line(
-            &mut lines,
-            projection.world_to_screen_at_height(
-                [f64::from(min_x), f64::from(y)],
-                camera.focus_elevation_meters,
-            ),
-            projection.world_to_screen_at_height(
-                [f64::from(max_x), f64::from(y)],
-                camera.focus_elevation_meters,
-            ),
-            camera.viewport,
-        );
-    }
-    lines
-}
-
-fn add_clipped_line(
-    lines: &mut Vec<(ScreenPoint, ScreenPoint)>,
-    start: ScreenPoint,
-    end: ScreenPoint,
-    viewport: [f64; 2],
-) {
-    if let Some(line) = clip_line(start, end, viewport) {
-        lines.push(line);
-    }
-}
-
-fn clip_line(
-    start: ScreenPoint,
-    end: ScreenPoint,
-    viewport: [f64; 2],
-) -> Option<(ScreenPoint, ScreenPoint)> {
-    let dx = end.x - start.x;
-    let dy = end.y - start.y;
-    let mut first: f64 = 0.0;
-    let mut last: f64 = 1.0;
-    for (p, q) in [
-        (-dx, start.x),
-        (dx, viewport[0] - start.x),
-        (-dy, start.y),
-        (dy, viewport[1] - start.y),
-    ] {
-        if p == 0.0 {
-            if q < 0.0 {
-                return None;
-            }
-            continue;
-        }
-        let ratio = q / p;
-        if p < 0.0 {
-            if ratio > last {
-                return None;
-            }
-            first = first.max(ratio);
-        } else {
-            if ratio < first {
-                return None;
-            }
-            last = last.min(ratio);
-        }
-    }
-    Some((
-        ScreenPoint {
-            x: start.x + dx * first,
-            y: start.y + dy * first,
-        },
-        ScreenPoint {
-            x: start.x + dx * last,
-            y: start.y + dy * last,
-        },
-    ))
-}
-
-fn add_line(sprites: &mut Vec<Sprite>, start: ScreenPoint, end: ScreenPoint, viewport: [f64; 2]) {
-    let distance = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
-    // 256 lines * 256 dots bounds temporary overlay instances to 65,536.
-    let steps = (distance / 8.0).ceil().clamp(1.0, 255.0) as usize;
-    for step in 0..=steps {
-        let amount = f64::from(step as u32) / f64::from(steps as u32);
-        let point = ScreenPoint {
-            x: start.x + (end.x - start.x) * amount,
-            y: start.y + (end.y - start.y) * amount,
-        };
-        sprites.push(Sprite {
-            position: to_clip(point, viewport),
-            radius: pixel_radius(viewport, 2.0),
-            color: GRID_COLOR,
-            uv: solid_uv(),
-            depths: [f32::INFINITY; 4],
-            terrain_blend: [[0.0; 4]; 2],
-            pages: [2, 0, 0, 0],
-        });
     }
 }
 

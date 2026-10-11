@@ -89,13 +89,6 @@ pub(in super::super) fn render_if_changed(
         return Ok(false);
     }
 
-    let grid_bounds = grid.then(|| {
-        client.camera.visible_tiles_at_height(
-            client.config,
-            1.0,
-            client.camera.focus_elevation_meters,
-        )
-    });
     let result = {
         let Client { renderer, art, .. } = client;
         renderer.render_prepared_world(
@@ -106,7 +99,7 @@ pub(in super::super) fn render_if_changed(
             units,
             camera,
             animation,
-            grid_bounds,
+            grid,
         )
     };
     if !result? {
