@@ -21,18 +21,34 @@ const MAX_KEY_CHARS: usize = 32;
 const MAX_PATH_BYTES: usize = 2048;
 /// The recorder's viewport is 1280×720; a larger offset cannot land.
 const MAX_POSITION_PX: u32 = 4096;
+/// Largest `delta_y` of one wheel event; several steps make a longer turn.
+const MAX_WHEEL_DELTA: u32 = 2000;
 
 /// One action on the filmed page, written `{"click": "<selector>"}`,
 /// `{"click_at": {"selector": "#minimap", "x": 37, "y": 63}}` (CSS pixels
 /// from the element's top-left corner), `{"select": {"selector": "#map",
-/// "value": "<option value>"}}`, `{"key": "Enter"}`, `{"text": "typed"}` or
-/// `{"wait_ms": 500}`.
+/// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
+/// "y": 360, "delta_y": -400}}` (one wheel event over that position),
+/// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
     Click(String),
-    ClickAt { selector: String, x: u32, y: u32 },
-    Select { selector: String, value: String },
+    ClickAt {
+        selector: String,
+        x: u32,
+        y: u32,
+    },
+    Select {
+        selector: String,
+        value: String,
+    },
+    Wheel {
+        selector: String,
+        x: u32,
+        y: u32,
+        delta_y: i32,
+    },
     Key(String),
     Text(String),
     WaitMs(u32),
@@ -43,7 +59,11 @@ impl Step {
     /// starts the hold only after the steps ran.
     pub(crate) fn planned_ms(&self) -> u64 {
         match self {
-            Self::Click(_) | Self::ClickAt { .. } | Self::Select { .. } | Self::Key(_) => 0,
+            Self::Click(_)
+            | Self::ClickAt { .. }
+            | Self::Select { .. }
+            | Self::Wheel { .. }
+            | Self::Key(_) => 0,
             Self::Text(text) => TYPE_MS * text.chars().count() as u64,
             Self::WaitMs(ms) => u64::from(*ms),
         }
@@ -56,6 +76,25 @@ impl Step {
                 if *x > MAX_POSITION_PX || *y > MAX_POSITION_PX {
                     return Err(format!(
                         "click positions are limited to {MAX_POSITION_PX} px"
+                    ));
+                }
+                Ok(())
+            }
+            Self::Wheel {
+                selector,
+                x,
+                y,
+                delta_y,
+            } => {
+                Self::ClickAt {
+                    selector: selector.clone(),
+                    x: *x,
+                    y: *y,
+                }
+                .validate()?;
+                if *delta_y == 0 || delta_y.unsigned_abs() > MAX_WHEEL_DELTA {
+                    return Err(format!(
+                        "a wheel step turns 1 to {MAX_WHEEL_DELTA} px either way"
                     ));
                 }
                 Ok(())

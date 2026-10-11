@@ -139,6 +139,10 @@ async function steps(page, scene) {
     else if ("click_at" in step) {
       const { selector, x, y } = step.click_at;
       await page.click(selector, { position: { x, y }, timeout: 10_000 });
+    } else if ("wheel" in step) {
+      const { selector, x, y, delta_y } = step.wheel;
+      await page.hover(selector, { position: { x, y }, timeout: 10_000 });
+      await page.mouse.wheel(0, delta_y);
     } else if ("select" in step) {
       await page.selectOption(step.select.selector, step.select.value, { timeout: 10_000 });
     }
