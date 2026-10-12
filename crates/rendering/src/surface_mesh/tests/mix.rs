@@ -420,3 +420,38 @@ fn snow_ramps_have_diffuse_shading_and_match_their_mixed_border() {
         );
     }
 }
+
+#[wasm_bindgen_test]
+fn natural_rock_uses_gravel_detail_at_both_zooms_with_a_dirt_fallback() {
+    let frame = |group: usize| GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [group as f32 / 16.0, 0.0, 0.01, 0.01],
+        },
+        size: [97.0, 49.0],
+        anchor: [0.0, 0.0],
+    };
+    let mut art = test_art(frame(0));
+    art.terrain[2] = vec![frame(2)];
+    art.terrain[10] = vec![frame(10)];
+    for zoom in [1.0, 0.64] {
+        let rock = terrain_texture_frame(&art, 4, [-3, 8]).expect("natural rock");
+        assert_eq!(rock.atlas, frame(10).atlas);
+        for other in [0, 7] {
+            let mut faces = mesh(&halves(4, other), zoom);
+            apply_terrain_textures(&mut faces, &art);
+            assert!(faces.iter().any(|face| face.mix != [0; 6]));
+            assert!(faces.iter().any(|face| face.material == 4
+                && face.mix == [0; 6]
+                && face.texture_uv == Some(frame(10).atlas)));
+        }
+    }
+    art.terrain[10].clear();
+    let fallback = terrain_texture_frame(&art, 4, [-3, 8]).expect("dirt fallback");
+    assert_eq!(fallback.atlas, frame(2).atlas);
+    let dark = mix::art_layer([40, 80, 110, 255], 4, 0, 0);
+    let light = mix::art_layer([170, 200, 240, 255], 4, 0, 0);
+    assert!(light[0] - dark[0] > 60.0, "pebble contrast must survive");
+    assert_eq!(light[0], light[1]);
+    assert_eq!(light[1], light[2]);
+}
