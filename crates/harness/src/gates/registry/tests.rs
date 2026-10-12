@@ -2,6 +2,7 @@ use super::*;
 use serde_json::{Value, json};
 mod classification;
 mod job_mapping;
+mod placement;
 
 fn proposal() -> Value {
     serde_json::from_slice(include_bytes!("../../../../../gates/registry.json"))
@@ -195,28 +196,6 @@ fn everything_is_mandatory_and_must_cover_every_suite() {
 }
 
 #[test]
-fn docs_do_not_select_code_via_static_flag_or_dependency_broadening() {
-    let registry = registry();
-    let impact = registry.classify(&paths(&["docs/testing.md", "README.md"]));
-    assert_eq!(impact.suites, suite_set(&["docs", "static"]));
-    let plan = registry.plan(Cadence::Pr, &impact.suites).unwrap();
-    assert_eq!(
-        plan.gates,
-        paths(&["docs-check", "fmt-check", "structure-check"])
-    );
-    assert!(plan.jobs["static"]);
-    for name in [
-        "native-coverage",
-        "browser",
-        "target-performance",
-        "fuzz-smoke",
-    ] {
-        assert!(!plan.jobs[name]);
-    }
-    assert!(!plan.gates.contains(&"release-source-check".into()));
-}
-
-#[test]
 fn protected_instructions_precede_docs_even_if_proposal_omits_pattern() {
     let mut value = proposal();
     value["suites"][0]["paths"] = json!([]);
@@ -384,6 +363,7 @@ fn preflight_remains_full_for_docs_and_source_checks_do_not_leak_into_pr() {
     for gate in [
         "fmt-check",
         "structure-check",
+        "test-placement",
         "architecture-check",
         "docs-check",
         "lint",

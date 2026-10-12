@@ -55,6 +55,12 @@ enum Command {
         command: DevCommand,
     },
     StructureCheck,
+    TestPlacement {
+        #[arg(long)]
+        index: bool,
+        #[arg(long, conflicts_with = "index")]
+        revision: Option<String>,
+    },
     ArchitectureCheck,
     ContractsCheck,
     DocsCheck,
@@ -247,6 +253,19 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             DevCommand::Logs => dev::logs()?,
         },
         Command::StructureCheck => policy::structure(Path::new("."))?,
+        Command::TestPlacement { index, revision } => {
+            let kind = revision.map_or_else(
+                || {
+                    if index {
+                        gates::scopes::Kind::Index
+                    } else {
+                        gates::scopes::Kind::Working
+                    }
+                },
+                gates::scopes::Kind::Commit,
+            );
+            gates::placement::check(Path::new("."), kind)?;
+        }
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::ContractsCheck => println!("{}", gates::contracts::check(Path::new("."))?),
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
@@ -477,24 +496,5 @@ fn main() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_validation_includes_the_fuzz_workspace() {
-        assert_eq!(
-            format_invocations(false),
-            [
-                vec!["fmt", "--all"],
-                vec!["fmt", "--manifest-path", "fuzz/Cargo.toml"],
-            ]
-        );
-        assert_eq!(
-            format_invocations(true),
-            [
-                vec!["fmt", "--all", "--", "--check"],
-                vec!["fmt", "--manifest-path", "fuzz/Cargo.toml", "--", "--check"],
-            ]
-        );
-    }
-}
+#[path = "gates/placement/main_tests.rs"]
+mod main_tests;
