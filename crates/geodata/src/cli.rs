@@ -113,6 +113,8 @@ fn map_generate() -> Result<(), String> {
         Ok("vectors") => aoe_geodata::OverviewHydrologyMode::Vectors,
         _ => return Err("AOE_MAP_HYDROLOGY_MODE must be automatic, none or vectors".to_owned()),
     };
+    // Required options are pure checks; reject them before projecting the footprint.
+    let output = package_path()?;
     let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
     let axes = aoe_geodata::OverviewFieldAxes::LANDSCAPE;
     let cancelled = AtomicBool::new(false);
@@ -125,7 +127,6 @@ fn map_generate() -> Result<(), String> {
         &cancelled,
     )
     .map_err(|error| error.to_string())?;
-    let output = package_path()?;
     let cache = cache()?;
     let mut sources = overview_sources().map_err(|error| error.to_string())?;
     if plan.has_vectors() {
