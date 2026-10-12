@@ -96,10 +96,10 @@ impl<R: Read + std::os::fd::AsFd> Pipe<R> {
 
     #[cfg(test)]
     fn poll(&mut self) -> io::Result<()> {
-        self.poll_retaining(None)
+        self.poll_retaining(None::<&mut fs::File>)
     }
 
-    fn poll_retaining(&mut self, mut retained: Option<&mut fs::File>) -> io::Result<()> {
+    fn poll_retaining<W: Write>(&mut self, mut retained: Option<&mut W>) -> io::Result<()> {
         if self.eof {
             return Ok(());
         }
@@ -134,25 +134,26 @@ pub(crate) fn capture_command(
     deadline: Duration,
     cancellation: &Cancellation,
 ) -> Captured {
-    capture_with_stdout(command, deadline, cancellation, None)
+    capture_with_stdout(command, deadline, cancellation, None::<&mut fs::File>)
 }
 
-/// Retain complete stdout in a caller-owned local file, alongside the bounded tails.
+/// Retain stdout in a caller-owned writer, alongside the bounded tails.
+/// Writer errors terminate capture; the caller can enforce retention limits.
 /// Local file writes are synchronous; this is not a hostile filesystem boundary.
 pub(crate) fn capture_command_retaining_stdout(
     command: Command,
     deadline: Duration,
     cancellation: &Cancellation,
-    stdout: &mut fs::File,
+    stdout: &mut impl Write,
 ) -> Captured {
     capture_with_stdout(command, deadline, cancellation, Some(stdout))
 }
 
-fn capture_with_stdout(
+fn capture_with_stdout<W: Write>(
     mut command: Command,
     deadline: Duration,
     cancellation: &Cancellation,
-    mut retained: Option<&mut fs::File>,
+    mut retained: Option<&mut W>,
 ) -> Captured {
     let started = Instant::now();
     let empty = |exit| Captured {
@@ -228,7 +229,7 @@ fn capture_with_stdout(
             }
             if let Err(error) = stdout
                 .poll_retaining(retained.as_deref_mut())
-                .and_then(|()| stderr.poll_retaining(None))
+                .and_then(|()| stderr.poll_retaining(None::<&mut fs::File>))
             {
                 let _ = child.terminate();
                 break CaptureExit::Monitor(error);
@@ -265,7 +266,7 @@ fn capture_with_stdout(
         while !(stdout.eof && stderr.eof) && drain_started.elapsed() < Duration::from_millis(200) {
             if let Err(error) = stdout
                 .poll_retaining(retained.as_deref_mut())
-                .and_then(|()| stderr.poll_retaining(None))
+                .and_then(|()| stderr.poll_retaining(None::<&mut fs::File>))
             {
                 exit = CaptureExit::Monitor(error);
                 break;

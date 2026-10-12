@@ -6,6 +6,140 @@ use super::{
 use crate::ship::{duel::run as duel, git};
 use std::{fs, time::Duration};
 
+#[path = "duel/fixes.rs"]
+mod fixes;
+
+#[test]
+fn unrelated_red_failures_are_refused_without_launching_the_implementer() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for overridden in [false, true] {
+        let (_temp, root) = fixture("true");
+        let (_env, mut options) = setup(&root, "happy");
+        options.rounds = 1;
+        if overridden {
+            options.check = Some("make duel-check".into());
+        }
+        fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
+        fs::write(root.join("Makefile"), "duel-check:\n\t@echo '{\"passed\":false,\"tests\":[\"aoe-x::other$$existing\"],\"failed\":[\"aoe-x::other$$existing\"],\"untouched\":[]}' > .cache/duel/check.json\n\t@exit 1\n").unwrap();
+        run(&root, &["add", "Makefile"]);
+        run(&root, &["commit", "-qm", "unrelated check"]);
+        let before = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+        let error = duel(&root, "Task", &options).unwrap_err();
+        assert!(
+            error.contains("tester-authored") && error.contains("aoe-x::other$existing"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join(".cache/calls")).unwrap(),
+            "tester\n"
+        );
+        assert_eq!(git::git(&root, &["rev-parse", "HEAD"]).unwrap(), before);
+        assert!(git::subject(&root).is_ok());
+    }
+}
+
+#[test]
+fn red_matches_integration_binaries_and_unit_module_paths_in_changed_files() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for (path, failing, accepted) in [
+        ("crates/x/tests/changed.rs", "aoe-x::changed$existing", true),
+        ("crates/x/tests/changed.rs", "aoe-x::other$existing", false),
+        (
+            "crates/x/tests/changed.rs",
+            "aoe-y::changed$existing",
+            false,
+        ),
+        (
+            "crates/x/src/foo/tests.rs",
+            "aoe-x::lib$foo::tests::existing",
+            true,
+        ),
+        (
+            "crates/x/src/foo/tests.rs",
+            "aoe-x::lib$bar::tests::existing",
+            false,
+        ),
+        (
+            "crates/x/src/foo_tests.rs",
+            "aoe-x::lib$foo_tests::existing",
+            true,
+        ),
+    ] {
+        let (_temp, root) = fixture("true");
+        let (_env, mut options) = setup(&root, "never");
+        options.rounds = 1;
+        fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
+        fs::write(
+            root.join("crates/x/Cargo.toml"),
+            "[package]\nname='aoe-x'\n",
+        )
+        .unwrap();
+        let escaped_failure = failing.replace('$', "$$");
+        fs::write(root.join("Makefile"), format!("duel-check:\n\t@echo '{{\"passed\":false,\"tests\":[\"{escaped_failure}\"],\"failed\":[\"{escaped_failure}\"],\"untouched\":[]}}' > .cache/duel/check.json\n\t@exit 1\n")).unwrap();
+        run(&root, &["add", "Makefile", "crates/x/Cargo.toml"]);
+        run(&root, &["commit", "-qm", "identified check"]);
+        let runtime = root.join(".cache/bin/codex");
+        let script = fs::read_to_string(&runtime).unwrap().replace(
+            "printf '#[test]\\nfn task_test() {}\\n' > crates/x/src/tests.rs",
+            &format!(
+                "mkdir -p {}; printf '#[test]\\nfn existing() {{}}\\n' > {path}",
+                root.join(path).parent().unwrap().display()
+            ),
+        );
+        fs::write(runtime, script).unwrap();
+        let error = duel(&root, "Task", &options).unwrap_err();
+        let calls = fs::read_to_string(root.join(".cache/calls")).unwrap();
+        if accepted {
+            assert!(error.contains("3 attempts"), "{error}");
+            assert_eq!(calls.matches("implementer").count(), 3);
+        } else {
+            assert!(
+                error.contains("tester-authored") && error.contains(failing),
+                "{error}"
+            );
+            assert_eq!(calls, "tester\n");
+        }
+    }
+}
+
+#[test]
+fn test_compile_defect_report_stops_after_one_implementer_and_keeps_tests() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_temp, root) = fixture("true");
+    let (_env, mut options) = setup(&root, "happy");
+    options.rounds = 1;
+    fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
+    fs::write(root.join("Makefile"), "duel-check:\n\t@echo '{\"passed\":false,\"build_failed\":true,\"tests\":[],\"failed\":[],\"untouched\":[]}' > .cache/duel/check.json\n\t@echo syntax-error\n\t@exit 1\n").unwrap();
+    run(&root, &["add", "Makefile"]);
+    run(&root, &["commit", "-qm", "build check"]);
+    let runtime = root.join(".cache/bin/codex");
+    let script = fs::read_to_string(&runtime).unwrap().replace(
+        "implementer:*) echo green > crates/x/src/lib.rs ;;",
+        "implementer:*) echo 'DUEL_TEST_BUILD_ERROR: syntax error in tests.rs'; exit 0 ;;",
+    );
+    fs::write(runtime, script).unwrap();
+    let error = duel(&root, "Task", &options).unwrap_err();
+    assert!(error.contains("syntax error in tests.rs"), "{error}");
+    assert_eq!(
+        fs::read_to_string(root.join(".cache/calls")).unwrap(),
+        "tester\nimplementer\n"
+    );
+    assert!(
+        git::git(&root, &["log", "-1", "--format=%B"])
+            .unwrap()
+            .contains("Harness-Phase: tests")
+    );
+    let prompts = fs::read_to_string(root.join(".cache/prompts")).unwrap();
+    assert!(prompts.contains("other than missing production code"));
+    assert!(prompts.contains("DUEL_TEST_BUILD_ERROR:"));
+}
+
 #[test]
 fn a_failing_attack_runs_a_second_red_green_pair() {
     let _lock = ENV_LOCK
@@ -263,4 +397,56 @@ if test "$DUEL_STUB" = failed; then exit 100; fi
     assert!(calls.lines().all(|s| s.starts_with("nextest run ")
         && s.ends_with("-p aoe-x")
         && !s.contains("--workspace")));
+}
+
+#[test]
+fn retained_nextest_output_overflow_is_unavailable_and_bounded_on_disk() {
+    use crate::ship::duel::focus;
+    use std::os::unix::fs::PermissionsExt;
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_temp, root) = fixture("true");
+    let (_env, _) = setup(&root, "happy");
+    let cargo = root.join(".cache/bin/cargo");
+    fs::write(&cargo, "#!/bin/sh\nif test \"$DUEL_STUB\" = line; then head -c 1048577 /dev/zero; else i=0; while test \"$i\" -lt 17; do head -c 1048575 /dev/zero; printf '\\n'; i=$((i+1)); done; fi\n").unwrap();
+    fs::set_permissions(cargo, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[package]\nname='aoe-x'\n",
+    )
+    .unwrap();
+    fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
+    run(&root, &["add", "crates/x/Cargo.toml"]);
+    run(&root, &["commit", "-qm", "package"]);
+    let base = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    fs::write(
+        root.join("crates/x/src/tests.rs"),
+        "#[test]\nfn task_test() {}\n",
+    )
+    .unwrap();
+    let _base = Env::set(&[
+        ("HARNESS_DUEL_BASE", base),
+        ("HARNESS_DUEL_REVISION", "".into()),
+    ]);
+    for mode in ["line", "total"] {
+        let _mode = Env::set(&[("DUEL_STUB", mode.into())]);
+        assert!(focus::execute(&root).is_err());
+        let report: focus::CheckReport =
+            serde_json::from_slice(&fs::read(root.join(".cache/duel/check.json")).unwrap())
+                .unwrap();
+        let reason = report.unavailable.unwrap();
+        assert!(
+            reason.contains("nextest JSON") && reason.contains("limit"),
+            "{reason}"
+        );
+        assert!(!report.passed && !report.build_failed);
+        let length = fs::metadata(root.join(".cache/duel/nextest.jsonl"))
+            .unwrap()
+            .len();
+        assert!(length <= 16 * 1024 * 1024, "{length}");
+        if mode == "line" {
+            assert!(length <= 1024 * 1024, "{length}");
+        }
+    }
 }

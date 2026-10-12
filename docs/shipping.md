@@ -165,29 +165,46 @@ runtime's configured defaults. pi accepts `provider/model`.
 
 The driver launches a tester with the project hooks and `AOE_AGENT_ROLE=tester`,
 checks every changed path is a test outside protected classes, and runs the
-check red. Only a failed check leads to a `Tests: <task first line>` commit,
+check red. Only a failed build or a failing test belonging to a test file the
+tester added or changed that round leads to a `Tests: <task first line>` commit,
 with `Harness-Phase: tests`. The implementer receives the task, tester report
 and failing output tail, writes production only, and gets three attempts to
 turn the check green. The driver commits that implementation with
 `Harness-Phase: implementation`. Commits use the configured Git identity and
-name the runtime/model in a `Co-Authored-By` trailer; Git hooks stay active.
+name the runtime/model in a `Co-Authored-By` trailer. Each duel commit runs the
+Git pre-commit hook (`make pre-commit`); preflight and the wider shipping gates
+run in `make ship`, while both role prompts require only the focused check.
+
+A failed build is red because a test may name production APIs not written yet.
+If tests cannot compile for a reason other than missing production code (such
+as a syntax error in a test), the implementer stops and reports
+`DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with
+that message immediately, keeping the tests commit and working changes.
 
 `DUEL_ROUNDS` defaults to 2 and accepts 1–4 total rounds. Later tester runs
 attack the implementation; no new test or a passing attack ends successfully
-and passing attack edits are discarded. Round one's empty or passing tests
-fail. Role violations restore to the last driver commit and name offending
-paths. Exhausted green attempts keep the tests commit and working changes for
-the main session to finish. A launch timeout is a failure, never red evidence.
+and passing attack edits are discarded. A check with only unrelated failing
+tests is treated like passing tests, and the summary names those failures.
+Round one's empty or passing tests fail. Role violations restore to the last
+driver commit and name offending paths. Exhausted green attempts keep the tests
+commit and working changes for the main session to finish. A launch timeout is
+a failure, never red evidence.
 
 The default command is `make duel-check HARNESS_DUEL_BASE=<round-start commit>`.
 It runs through Docker and selects only Cargo packages owning tester-changed
 files (`cargo nextest run -p <package>`) and exact changed browser spec files.
-Mixed changes run both. Red means a selected package fails to build or at least
-one selected test fails; green means every selected check passes.
+Browser fixtures under `browser/tests/` select all browser specs. Mixed changes
+run both. Fuzz targets in their separate workspace and other unsupported paths
+stop before the implementer launches and require `DUEL_CHECK` (for example
+`make fuzz-smoke`). Red means a selected package fails to build or at least
+one failing test belongs to a tester-changed file, matched by nextest binary id
+or module path, or browser test location; green means every selected check passes.
 `DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
 Both role prompts name the exact check and forbid preflight or whole-suite runs;
-the driver and `make ship` own wider gates. Each agent and check gets
-`DUEL_BUDGET_MINUTES` (default 60); the process group is killed on expiry.
+the driver and `make ship` own wider gates. Retained nextest JSON is limited to
+16 MiB total and 1 MiB per line; exceeding either makes the check unavailable.
+Each agent and check gets `DUEL_BUDGET_MINUTES` (default 60); the process group
+is killed on expiry.
 
 A green failure is compared with the original pre-duel revision when all failed
 tests are demonstrably untouched. If those same tests fail there, the driver

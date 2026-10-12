@@ -162,6 +162,11 @@ pub(crate) fn names(report: &CheckReport) -> String {
 pub(super) fn override_report(output: &str, passed: bool) -> CheckReport {
     let mut report = super::focus::rust_results(output);
     report.passed = passed;
+    report.build_failed = !passed
+        && report.tests.is_empty()
+        && output
+            .lines()
+            .any(|line| line.trim_start().starts_with("error: could not compile "));
     if report.failed.is_empty() {
         for line in output.lines().map(str::trim) {
             if let Some(status) = line

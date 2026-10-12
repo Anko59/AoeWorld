@@ -6,9 +6,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fs,
-    io::{BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
     path::Path,
     process::Command,
     time::Duration,
@@ -28,87 +28,7 @@ pub(crate) struct CheckReport {
     pub(crate) locations: BTreeMap<String, (String, usize)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Scope {
-    pub(crate) packages: Vec<String>,
-    pub(crate) specs: Vec<String>,
-    pub(crate) paths: Vec<String>,
-    pub(crate) manifests: Vec<String>,
-}
-impl Scope {
-    pub(crate) fn from_paths(root: &Path, paths: &[String]) -> git::Result<Self> {
-        let mut packages = BTreeSet::new();
-        let mut manifests = BTreeSet::new();
-        let mut specs = BTreeSet::new();
-        for path in paths {
-            if path.ends_with(".spec.ts") || path.ends_with(".test.ts") {
-                if !path.starts_with("browser/") {
-                    return Err(format!("spec outside browser: {path}"));
-                }
-                specs.insert(path.clone());
-                continue;
-            }
-            let mut owner = root.join(path);
-            let mut found = false;
-            while owner.pop() && owner.starts_with(root) {
-                let manifest = owner.join("Cargo.toml");
-                if !manifest.is_file() {
-                    continue;
-                }
-                let value: toml::Value =
-                    toml::from_str(&fs::read_to_string(&manifest).map_err(|e| e.to_string())?)
-                        .map_err(|e| format!("{e}"))?;
-                if let Some(name) = value
-                    .get("package")
-                    .and_then(|p| p.get("name"))
-                    .and_then(|v| v.as_str())
-                {
-                    packages.insert(name.to_owned());
-                    manifests.insert(
-                        manifest
-                            .strip_prefix(root)
-                            .map_err(|e| e.to_string())?
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                return Err(format!("no Cargo package owns test path: {path}"));
-            }
-        }
-        if packages.is_empty() && specs.is_empty() {
-            return Err("no focused tests selected".into());
-        }
-        Ok(Self {
-            packages: packages.into_iter().collect(),
-            manifests: manifests.into_iter().collect(),
-            specs: specs.into_iter().collect(),
-            paths: paths.to_vec(),
-        })
-    }
-    pub(crate) fn cargo_args(&self) -> Vec<String> {
-        let mut args: Vec<String> = [
-            "nextest",
-            "run",
-            "--locked",
-            "--no-fail-fast",
-            "--message-format",
-            "libtest-json",
-            "--message-format-version",
-            "0.1",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-        for package in &self.packages {
-            args.extend(["-p".into(), package.clone()]);
-        }
-        args
-    }
-}
+pub(crate) use super::scope::Scope;
 
 pub(crate) fn spec_filter(path: &str) -> String {
     let escaped: String = path
@@ -215,7 +135,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
             return Err(error);
         }
     };
-    if revision.is_none() {
+    if revision.is_none() && !report.build_failed && !report.failed.is_empty() {
         report.untouched = super::baseline::untouched(&root, &base, &scope, &report.failed)?;
     }
     save(&cache, &report)?;
@@ -252,7 +172,11 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     };
     if !scope.packages.is_empty() {
         let log = cache.join("nextest.jsonl");
-        let mut file = fs::File::create(&log).map_err(|e| e.to_string())?;
+        let mut file = NextestOutput {
+            file: fs::File::create(&log).map_err(|e| e.to_string())?,
+            total: 0,
+            line: 0,
+        };
         let mut command = Command::new("cargo");
         command
             .args(scope.cargo_args())
@@ -267,6 +191,9 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             &Cancellation::default(),
             &mut file,
         );
+        if let CaptureExit::Monitor(error) = &captured.exit {
+            return Err(format!("nextest JSON retention unavailable: {error}"));
+        }
         // Stream the retained JSON so failures cannot disappear from a bounded output tail.
         for line in BufReader::new(fs::File::open(log).map_err(|e| e.to_string())?).lines() {
             let result = rust_results(&line.map_err(|e| e.to_string())?);
@@ -329,6 +256,39 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     report.failed.sort();
     report.failed.dedup();
     Ok(report)
+}
+
+struct NextestOutput {
+    file: fs::File,
+    total: usize,
+    line: usize,
+}
+impl Write for NextestOutput {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.total + bytes.len() > 16 * 1024 * 1024 {
+            return Err(io::Error::other(
+                "nextest JSON total limit exceeded (16 MiB)",
+            ));
+        }
+        let mut line = self.line;
+        for &byte in bytes {
+            if byte == b'\n' {
+                line = 0;
+            } else {
+                line += 1;
+            }
+            if line > 1024 * 1024 {
+                return Err(io::Error::other("nextest JSON line limit exceeded (1 MiB)"));
+            }
+        }
+        self.file.write_all(bytes)?;
+        self.total += bytes.len();
+        self.line = line;
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
 }
 pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
     let value: serde_json::Value =

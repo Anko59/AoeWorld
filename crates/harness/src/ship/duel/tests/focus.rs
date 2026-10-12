@@ -2,8 +2,66 @@ use super::{focus, tree};
 use std::fs;
 
 #[test]
+fn fixture_scopes_run_browser_specs_and_separate_fuzz_scopes_need_an_override() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("browser/tests/nested")).unwrap();
+    for path in [
+        "browser/tests/play.spec.ts",
+        "browser/tests/nested/a.test.ts",
+    ] {
+        fs::write(temp.path().join(path), "test('a', () => {});").unwrap();
+    }
+    let scope = focus::Scope::from_paths(temp.path(), &["browser/tests/fixtures/seed.json".into()])
+        .unwrap();
+    assert!(scope.packages.is_empty());
+    assert_eq!(
+        scope.specs,
+        [
+            "browser/tests/nested/a.test.ts",
+            "browser/tests/play.spec.ts"
+        ]
+    );
+    fs::create_dir_all(temp.path().join("fuzz/fuzz_targets")).unwrap();
+    fs::write(
+        temp.path().join("fuzz/Cargo.toml"),
+        "[package]\nname='fuzz'\n[workspace]\n",
+    )
+    .unwrap();
+    let error =
+        focus::Scope::from_paths(temp.path(), &["fuzz/fuzz_targets/a.rs".into()]).unwrap_err();
+    assert!(
+        error.contains("set DUEL_CHECK") && error.contains("make fuzz-smoke"),
+        "{error}"
+    );
+    let error =
+        focus::Scope::from_paths(temp.path(), &["crates/core/tests/data.json".into()]).unwrap_err();
+    assert!(error.contains("set DUEL_CHECK"), "{error}");
+}
+
+#[test]
+fn no_failures_need_no_baseline_provenance_scan() {
+    let temp = tempfile::tempdir().unwrap();
+    let scope = focus::Scope {
+        packages: vec!["absent".into()],
+        specs: vec![],
+        paths: vec![],
+        manifests: vec!["absent/Cargo.toml".into()],
+    };
+    assert!(
+        super::baseline::untouched(temp.path(), "unavailable", &scope, &[])
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn focused_scope_selects_owning_packages_and_exact_specs_including_mixed_changes() {
     let temp = tempfile::tempdir().unwrap();
+    fs::write(
+        temp.path().join("Cargo.toml"),
+        "[workspace]\nmembers=['crates/core','crates/other']\n",
+    )
+    .unwrap();
     for (dir, name) in [("core", "aoe-core"), ("other", "aoe-other")] {
         fs::create_dir_all(temp.path().join(format!("crates/{dir}/tests"))).unwrap();
         fs::write(
@@ -89,6 +147,11 @@ fn untouched_detection_keeps_changed_tests_and_helpers_out_of_the_exemption() {
         tests::{fixture, run},
     };
     let (_temp, root) = fixture("true");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers=['crates/x']\n",
+    )
+    .unwrap();
     fs::create_dir_all(root.join("crates/x/tests")).unwrap();
     fs::write(
         root.join("crates/x/Cargo.toml"),

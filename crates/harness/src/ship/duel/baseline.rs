@@ -84,6 +84,9 @@ pub(crate) fn untouched(
     scope: &Scope,
     failures: &[String],
 ) -> git::Result<Vec<String>> {
+    if failures.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut functions = Vec::new();
     for manifest in &scope.manifests {
         let directory = root
@@ -235,6 +238,11 @@ pub(crate) fn override_untouched(
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-    let scope = Scope::from_paths(root, &paths)?;
+    let scope = Scope {
+        packages: Vec::new(),
+        specs: Vec::new(),
+        paths: Vec::new(),
+        manifests: paths,
+    };
     untouched(root, base, &scope, failures)
 }

@@ -38,6 +38,7 @@ impl Drop for Env {
 
 pub(super) fn setup(root: &Path, mode: &str) -> (Env, Options) {
     fs::create_dir_all(root.join(".cache/bin")).unwrap();
+    fs::create_dir_all(root.join(".cache/duel")).unwrap();
     fs::create_dir_all(root.join(".codex")).unwrap();
     fs::create_dir_all(root.join("crates/x/src")).unwrap();
     fs::write(root.join(".gitignore"), ".cache/\n").unwrap();
@@ -48,12 +49,22 @@ pub(super) fn setup(root: &Path, mode: &str) -> (Env, Options) {
     .unwrap();
     fs::write(root.join("crates/x/src/lib.rs"), "old\n").unwrap();
     fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers=['crates/x']\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[package]\nname='aoe-x'\nversion='0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(
         root.join("Makefile"),
         r#"duel-check test-unit test-e2e:
 	@echo check-tail
 	@echo checked >> .cache/checks
 	@mkdir -p .cache/duel
-	@echo '{"passed":false,"tests":["task_test"],"failed":["task_test"],"untouched":[]}' > .cache/duel/check.json
+	@echo '{"passed":false,"tests":["task_test"],"failed":["task_test"],"untouched":[],"locations":{"task_test":["browser/tests/play.spec.ts",1]}}' > .cache/duel/check.json
 	@grep -q green crates/x/src/lib.rs
 	@if test "$$DUEL_STUB" = attack && grep -q attack crates/x/src/tests.rs 2>/dev/null; then grep -q healed crates/x/src/lib.rs; fi
 	@echo '{"passed":true,"tests":["task_test"],"failed":[],"untouched":[]}' > .cache/duel/check.json
@@ -78,7 +89,7 @@ case "$AOE_AGENT_ROLE:$DUEL_STUB" in
  tester:timeout) sleep 30; echo late > .cache/late ;;
  tester:exit) echo failure; exit 3 ;;
  tester:staged) echo bad > crates/x/src/lib.rs; git add crates/x/src/lib.rs ;;
- tester:space) mkdir -p "crates/x/tests"; echo test > "crates/x/tests/space name.rs" ;;
+ tester:space) mkdir -p "crates/x/tests"; printf '#[test]\nfn task_test() {}\n' > "crates/x/tests/space name.rs" ;;
  tester:browser) mkdir -p browser/tests; echo test > browser/tests/play.spec.ts ;;
  tester:moved-head) git commit -qm moved --allow-empty ;;
  tester:symlink) ln -s lib.rs crates/x/src/tests.rs ;;

@@ -1,11 +1,16 @@
 //! Main-session driver: a tester's red tests, then an implementer's green code.
+mod authored;
 mod baseline;
 mod config;
+#[cfg(test)]
+#[path = "tests/fixes.rs"]
+mod fixes_tests;
 pub(crate) mod focus;
 #[cfg(test)]
 #[path = "tests/focus.rs"]
 mod focus_tests;
 mod runner;
+mod scope;
 mod specs;
 pub(crate) mod stages;
 #[cfg(test)]
@@ -90,6 +95,12 @@ fn rounds(
             summary.push_str("Attack wrote no new test; duel complete.\n");
             return Ok(());
         }
+        if options.check.is_none()
+            && let Err(error) = focus::Scope::from_paths(root, &paths)
+        {
+            tree::restore(root, &head)?;
+            return Err(error);
+        }
         let red = runner::check(root, options, command, options.check.is_none());
         tree::validate(root, true, &head, branch)?;
         let (red_report, tail) = match red {
@@ -104,12 +115,24 @@ fn rounds(
             if red_report.passed { "PASS" } else { "FAIL" },
             runner::names(&red_report)
         ));
-        if red_report.passed {
+        let authored_red =
+            red_report.build_failed || authored::has_failure(root, &paths, &red_report)?;
+        if red_report.passed || !authored_red {
             tree::restore(root, &head)?;
+            let unrelated = if red_report.passed {
+                String::new()
+            } else {
+                format!(
+                    "; no tester-authored failing test; unrelated failures: {}",
+                    runner::names(&red_report)
+                )
+            };
             if round == 1 {
-                return Err("tests already pass at red (restored)".into());
+                return Err(format!("tests already pass at red{unrelated} (restored)"));
             }
-            summary.push_str("attack tests already pass; attack dropped.\n");
+            summary.push_str(&format!(
+                "attack tests already pass{unrelated}; attack dropped.\n"
+            ));
             return Ok(());
         }
         let tests = tree::commit(
@@ -124,13 +147,22 @@ fn rounds(
         let mut green = false;
         for attempt in 1..=3 {
             let prompt = format!(
-                "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the implementation.\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
+                "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}. If the tests cannot compile for a reason other than missing production code (for example a syntax error in a test), stop and report `DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with that message instead of retrying.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the implementation.\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
             );
             let (exit, report) = runner::agent(root, options, "implementer", &prompt)?;
             summary.push_str(&format!(
                 "\nImplementer last report (attempt {attempt}):\n{report}\n"
             ));
             tree::validate(root, false, &tests, branch)?;
+            if let Some(reason) = report
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("DUEL_TEST_BUILD_ERROR:"))
+            {
+                return Err(format!(
+                    "test build error: {}; tests commit stays, working tree kept",
+                    reason.trim()
+                ));
+            }
             if !matches!(exit, CaptureExit::Success) {
                 return Err(format!(
                     "implementer did not finish: {exit:?}; tests commit stays, working tree kept"
@@ -139,7 +171,10 @@ fn rounds(
             let checked = runner::check(root, options, command, options.check.is_none());
             tree::validate(root, false, &tests, branch)?;
             let (mut checked, tail) = checked?;
-            if options.check.is_some() && checked.untouched.is_empty() && !checked.failed.is_empty()
+            if options.check.is_some()
+                && !checked.build_failed
+                && checked.untouched.is_empty()
+                && !checked.failed.is_empty()
             {
                 checked.untouched = baseline::override_untouched(root, &head, &checked.failed)?;
             }
