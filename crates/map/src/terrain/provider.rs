@@ -65,8 +65,8 @@ pub(super) fn sample_base_tile(
     let (hydrology_observation, modern_land_cover_class) =
         (sample.observation, sample.modern_land_cover_class);
     if water == WaterKind::None
-        && let Some(corners) = source_corners
-        && cliff_from_corners(generator, tile, corners, cancelled)?.is_some()
+        && source_corners.is_some()
+        && cliff_from_corners(generator, tile, cancelled)?.is_some()
     {
         surface_kind.kind = surface::SurfaceKind::Cliff;
     }
@@ -96,7 +96,6 @@ pub(super) fn sample_base_tile(
 fn cliff_from_corners(
     generator: &MapChunkGenerator,
     tile: TileCoord,
-    corners: [i32; 4],
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<super::relief::CliffPiece>, EnvironmentPageError> {
     let samples = generator
@@ -104,12 +103,20 @@ fn cliff_from_corners(
         .as_ref()
         .ok_or(EnvironmentPageError::Invalid)?
         .samples_per_axis;
+    // A one-sample field is constant across every cell; no corner reads.
+    if samples <= 1 {
+        return Ok(None);
+    }
     let compression = generator
         .provider_compression
         .ok_or(EnvironmentPageError::Invalid)?;
-    super::relief::cliff_at(generator, tile, corners, compression, &|x, y| {
+    let piece = super::relief::cliff_at(generator, tile, compression, &|x, y| {
         sample_bilinear_elevation(generator, x, y, samples, AxisPosition::Corner, cancelled)
-    })
+    })?;
+    if piece.is_some() && !generator.cliff_cell_is_dry(tile, cancelled)? {
+        return Ok(None);
+    }
+    Ok(piece)
 }
 
 /// Cliff piece of a tile for the composer; none without an elevation field.
@@ -126,8 +133,7 @@ pub(super) fn cliff_piece(
     if samples == 0 {
         return Ok(None);
     }
-    let (_, corners) = sample_elevation(generator, samples, tile, cancelled)?;
-    cliff_from_corners(generator, tile, corners, cancelled)
+    cliff_from_corners(generator, tile, cancelled)
 }
 
 fn sample_elevation(

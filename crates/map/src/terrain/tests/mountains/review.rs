@@ -65,15 +65,9 @@ fn extreme_height_ramps_do_not_overflow_cliff_detection() {
             let height =
                 |cx: i32, _: i32| Ok::<_, ()>(if cx <= west { i32::MAX } else { i32::MIN });
             pieces += usize::from(
-                cliff_relief::cliff_at(
-                    &generator,
-                    tile,
-                    [i32::MAX, i32::MIN, i32::MIN, i32::MAX],
-                    ratio,
-                    &height,
-                )
-                .unwrap()
-                .is_some(),
+                cliff_relief::cliff_at(&generator, tile, ratio, &height)
+                    .unwrap()
+                    .is_some(),
             );
         }
     }
@@ -87,12 +81,12 @@ fn a_flat_tile_inside_a_steep_contour_cell_has_the_same_piece() {
     let mut pieces = 0;
     for y in (601..631).step_by(3) {
         for x in (100..130).step_by(3) {
-            let anchor = TileCoord::new(x, y);
-            let height = |cx: i32, _: i32| Ok::<_, ()>(if cx <= x - 1 { 900 } else { 0 });
+            let height = |cx: i32, _: i32| Ok::<_, ()>(if cx < x { 900 } else { 0 });
             let steep =
-                cliff_relief::cliff_at(&generator, anchor, [900, 0, 0, 900], ratio, &height)
+                cliff_relief::cliff_at(&generator, TileCoord::new(x - 1, y), ratio, &height)
                     .unwrap();
-            let flat = cliff_relief::cliff_at(&generator, anchor, [0; 4], ratio, &height).unwrap();
+            let flat = cliff_relief::cliff_at(&generator, TileCoord::new(x + 1, y), ratio, &height)
+                .unwrap();
             assert_eq!(steep, flat, "eligibility belongs to the cell");
             pieces += usize::from(steep.is_some());
         }
@@ -147,6 +141,7 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
         (100, 0, WaterKind::Ocean),
         (0, 100, WaterKind::Lake),
         (0, 30, WaterKind::Shallow),
+        (0, 100, WaterKind::River),
     ] {
         let mut dense = plane(-432, 0);
         let wet = WaterPage {
@@ -181,7 +176,7 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
                 ordered_page_root: root,
             }],
         };
-        let environment = PreparedEnvironment {
+        let mut environment = PreparedEnvironment {
             samples_per_axis: 16,
             geographic_millimeters_per_sample: 2_880_000,
             elevation: pyramid(crate::ordered_page_root(std::slice::from_ref(&elevation)).unwrap()),
@@ -190,18 +185,62 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
             )),
             ..PreparedEnvironment::default()
         };
-        let pages = [
+        let mut pages: BTreeMap<_, _> = [
             EnvironmentPage::Elevation(elevation),
             EnvironmentPage::Water(wet),
         ]
         .into_iter()
         .map(|page| (page.key(), Arc::new(page)))
         .collect();
+        if expected == WaterKind::River {
+            let hydrology = crate::HydrologyEvidencePage {
+                level: 0,
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+                kind: vec![crate::HydrologyKind::River as u8],
+                method: vec![crate::HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8],
+                water_model: None,
+            };
+            let cover = crate::ModernLandCoverPage {
+                level: 0,
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+                worldcover_class: vec![10],
+            };
+            environment.hydrology_evidence = Some(crate::HydrologyEvidenceIndex {
+                samples_per_axis: 1,
+                page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
+                world_cover_year: crate::WORLD_COVER_OBSERVATION_YEAR,
+                policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
+                hydrology_page_root: crate::ordered_hydrology_page_root(std::slice::from_ref(
+                    &hydrology,
+                ))
+                .unwrap(),
+                modern_land_cover_page_root: crate::ordered_modern_land_cover_page_root(
+                    std::slice::from_ref(&cover),
+                )
+                .unwrap(),
+                water_model: None,
+            });
+            for page in [
+                EnvironmentPage::HydrologyEvidence(hydrology),
+                EnvironmentPage::ModernLandCover(cover),
+            ] {
+                pages.insert(page.key(), Arc::new(page));
+            }
+        }
         let mut provider = dense.clone();
         provider.provider = Some(Arc::new(Pages(pages)));
         provider.provider_environment = Some(Arc::new(environment));
         provider.provider_compression = Some(Ratio::new(30, 1).unwrap());
         for generator in [&dense, &provider] {
+            if expected == WaterKind::River && generator.provider.is_none() {
+                continue;
+            }
             let mut mixed = 0;
             for y in (601..661).step_by(3) {
                 for x in (160..220).step_by(3) {

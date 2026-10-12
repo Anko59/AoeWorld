@@ -3,7 +3,8 @@
 //! tile cell of impassable ground that carries one cliff sprite. Pieces sit
 //! where a contour level crosses a steep cell, so a line of pieces follows the
 //! real contour. Lines are broken by passes and never close around a summit.
-//! Relief depends on the geography key only, never on the procedural seed.
+//! Relief and passes use geography only. The reserved start cells are the
+//! sole exception: the forest connector follows the procedural forest seed.
 use super::{MapChunkGenerator, landscape};
 use crate::{EnvironmentPageError, Ratio};
 use aoe_core::TileCoord;
@@ -42,26 +43,19 @@ pub(super) fn game_centimeters(height: i32, compression: Ratio) -> i64 {
     i64::from(height) * i64::from(compression.denominator) / i64::from(compression.numerator.max(1))
 }
 
-/// Largest rise along a tile edge in game centimetres.
-pub(super) fn tile_rise(corners: [i32; 4], compression: Ratio) -> i64 {
-    let game = corners.map(|height| game_centimeters(height, compression));
-    (0..4)
-        .map(|index| (game[index] - game[(index + 1) % 4]).abs())
-        .max()
-        .unwrap_or(0)
-}
-
-/// Cliff piece covering `tile`, from the tile's own corner heights and a
-/// corner-height lookup of the same field. Water is the caller's concern.
+/// Whole-cell cliff detection from the bound corner-height field. Water is
+/// checked by both source adapters before promoting terrain or emitting art.
 pub(super) fn cliff_at<E>(
     generator: &MapChunkGenerator,
     tile: TileCoord,
-    corners: [i32; 4],
     compression: Ratio,
     corner_height: &dyn Fn(i32, i32) -> Result<i32, E>,
 ) -> Result<Option<CliffPiece>, E> {
-    // A tile far below the steep grade cannot lie in a steep cell.
-    if tile_rise(corners, compression) * i64::from(CLIFF_CELL_TILES) * 2 < STEEP_CELL_RISE {
+    if tile.x < 0
+        || tile.y < 0
+        || tile.x >= generator.width_tiles
+        || tile.y >= generator.width_tiles
+    {
         return Ok(None);
     }
     let cell = (
@@ -79,7 +73,8 @@ pub(super) fn cliff_at<E>(
     }
     let rise_x = (heights[1] + heights[2] - heights[0] - heights[3]) / 2;
     let rise_y = (heights[3] + heights[2] - heights[0] - heights[1]) / 2;
-    if rise_x * rise_x + rise_y * rise_y < STEEP_CELL_RISE * STEEP_CELL_RISE {
+    let (gradient_x, gradient_y) = (i128::from(rise_x), i128::from(rise_y));
+    if gradient_x * gradient_x + gradient_y * gradient_y < i128::from(STEEP_CELL_RISE).pow(2) {
         return Ok(None);
     }
     let lowest = heights.into_iter().min().unwrap_or(0);
@@ -95,9 +90,10 @@ pub(super) fn cliff_at<E>(
     if smooth(key, i64::from(cell.0), i64::from(cell.1), PASS_PERIOD_CELLS) < PASS_SHARE {
         return Ok(None);
     }
-    if landscape::starting_glade(generator, tile)
-        || landscape::starting_connector_contains(generator, tile)
-    {
+    if cell_tiles(tile).any(|position| {
+        landscape::starting_glade(generator, position)
+            || landscape::starting_connector_contains(generator, position)
+    }) {
         return Ok(None);
     }
     let variant = (landscape::mix64(key ^ pair(i64::from(cell.0), i64::from(cell.1))) >> 24) as u8;
@@ -159,19 +155,49 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<CliffPiece>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
         if self.provider.is_some() {
             return super::provider::cliff_piece(self, tile, cancelled);
         }
         let Some(elevation) = self.elevation.as_ref() else {
             return Ok(None);
         };
-        let Some(corners) = elevation.corner_heights(tile, self.width_tiles) else {
-            return Ok(None);
-        };
-        cliff_at(self, tile, corners, elevation.compression, &|x, y| {
+        let piece = cliff_at(self, tile, elevation.compression, &|x, y| {
             elevation
                 .corner(x, y, self.width_tiles)
                 .ok_or(EnvironmentPageError::Invalid)
-        })
+        })?;
+        if piece.is_some() && !self.cliff_cell_is_dry(tile, cancelled)? {
+            return Ok(None);
+        }
+        Ok(piece)
+    }
+}
+
+/// Shared footprint for reservations and physical water, including cell edges.
+fn cell_tiles(tile: TileCoord) -> impl Iterator<Item = TileCoord> {
+    let west = tile.x.div_euclid(CLIFF_CELL_TILES) * CLIFF_CELL_TILES;
+    let north = tile.y.div_euclid(CLIFF_CELL_TILES) * CLIFF_CELL_TILES;
+    (0..CLIFF_CELL_TILES).flat_map(move |dy| {
+        (0..CLIFF_CELL_TILES).map(move |dx| TileCoord::new(west + dx, north + dy))
+    })
+}
+
+impl MapChunkGenerator {
+    /// No base-terrain recursion: read resolved physical water only. A partial
+    /// edge cell is excluded too, because a sprite needs its whole footprint.
+    pub(super) fn cliff_cell_is_dry(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        for position in cell_tiles(tile) {
+            if self.base_water_with_cancel(position, cancelled)? != Some(super::WaterKind::None) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }

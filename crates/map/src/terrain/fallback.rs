@@ -103,16 +103,9 @@ impl MapChunkGenerator {
         // coastlines require independent, coherent water geometry.
         let (water, water_provenance) = self.dense_water(tile);
         if water == WaterKind::None
-            && let Some(elevation) = self.elevation.as_ref()
-            && let Some(corners) = elevation.corner_heights(tile, self.width_tiles)
+            && matches!(self.cliff_piece_with_cancel(tile, &|| false), Ok(Some(_)))
         {
-            let piece =
-                super::relief::cliff_at(self, tile, corners, elevation.compression, &|x, y| {
-                    elevation.corner(x, y, self.width_tiles).ok_or(())
-                });
-            if matches!(piece, Ok(Some(_))) {
-                surface.kind = surface::SurfaceKind::Cliff;
-            }
+            surface.kind = surface::SurfaceKind::Cliff;
         }
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),

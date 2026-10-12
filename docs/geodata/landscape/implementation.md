@@ -83,7 +83,12 @@ reserved cells.
 ### Mountains
 
 Cliffs are relief, part of the physical base terrain, and depend on the
-geography only (never on the procedural seed). The model is the Age of
+relief; the only non-geographic input is the reserved start area. The
+starting glade uses geography and the central start position; its connector
+also uses the procedural forest seed to reach that forest layout's hub.
+Cliff exclusion depends only on whether any tile in the cell is reserved.
+Pass noise and sprite variants use the geography key and world cell
+coordinates, never the procedural seed. The model is the Age of
 Empires II one, because that is the art the pack has: a cliff is a row of
 pieces, each a three-by-three tile cell of impassable ground (`SurfaceKind::
 Cliff`) that carries one cliff sprite as a `Cliff` decoration on its centre
@@ -96,20 +101,26 @@ centimetres (source height divided by the compression):
 - steep: the rise across the cell is at least 8% (48 cm over 600 cm);
 - on a contour: one of the contour levels, every 8 game metres, lies between
   its lowest and highest corner, so consecutive pieces follow the real contour
-  and lines are 20 to 50 tiles apart;
+  with spacing determined by the source slope;
 - facing the camera: the downhill direction is south, southwest, west, east
   or southeast on screen. Slopes that fall away to the northwest, north or
   northeast stay open, so a contour closing around a summit or a hollow is
   never walled all the way round;
-- not a pass: a continuous world-anchored noise (12-tile wavelength) keeps
-  about 45% of every contour open, in gaps at least one piece wide;
-- dry land outside the starting glade and its connector.
+- not a pass: continuous world-anchored noise (12-tile wavelength) leaves
+  cells open when its value is below 116 of 256, in gaps at least one piece wide;
+- all nine tiles are dry land outside the starting glade and its connector;
+  any river, lake, ocean or shallow water (including a future ford) rejects
+  the whole cell. Reserved cells receive no cliff face or additional blocking.
 
-Everything else on a slope is an ordinary passable ramp. Elevation steeper
-than a 35% source grade is still impassable `Cliff` terrain without a sprite.
-On the 768-tile alpine fixture (grades up to 22%) 10% of the tiles are cliff
-and all passable ground is one four-connected region reaching all four edges;
-the same holds around an isolated cone and an isolated hollow.
+Other slope tiles retain their ordinary physical surface. Elevation steeper
+than a 35% source grade is independently impassable `Cliff` terrain and may
+carry a sprite when the whole cell meets the contour rules above; the
+50% planar-slope test pins these visible faces. Start exclusions do not
+make independently impassable source terrain traversable.
+Tests bound cliff coverage to 1–12% on the 768-tile alpine fixture (grades
+up to 22%). At least 99.9% of passable ground belongs to one four-connected
+region reaching all four edges, with remaining pockets at most 36 tiles;
+the same connectivity bounds hold around an isolated cone and hollow.
 
 ### Forest amount and large forests
 
