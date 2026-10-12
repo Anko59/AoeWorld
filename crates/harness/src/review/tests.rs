@@ -218,11 +218,13 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
         config.model_for(Tier::High, Runtime::Claude, false).effort,
         "high"
     );
-    // Codex's highest effort is xhigh: the bump never invents one it refuses.
+    // The Codex average model runs at medium, so the high tier bumps it to high.
     assert_eq!(
         config.model_for(Tier::High, Runtime::Codex, false).effort,
-        "xhigh"
+        "high"
     );
+    // Codex's highest effort is xhigh: the bump never invents one it refuses.
+    assert_eq!(bump("codex", "xhigh"), "xhigh");
     assert_eq!(config.tiers[&Tier::Max].personas.len(), 5);
     assert_eq!(bump("claude", "max"), "max");
     assert_eq!(bump("codex", "high"), "xhigh");
