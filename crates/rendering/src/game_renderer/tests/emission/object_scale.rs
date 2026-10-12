@@ -164,7 +164,11 @@ fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
         selected: false,
         elevation_meters: 0.0,
     };
-    let drawn = world_sprite_frames(&art(), &ground(), &[resource(2)], &[unit], camera(1.0), 0);
+    // The deepest reviewed art: gold variant 3 reaches 32 native rows below
+    // its hotspot (52 - 20), not the shared fixture's 20.
+    let mut art = art();
+    art.resources[2] = vec![frame([82.0, 52.0], [38.0, 20.0])];
+    let drawn = world_sprite_frames(&art, &ground(), &[resource(2)], &[unit], camera(1.0), 0);
     let pile =
         drawn.iter().find(|entry| entry.3 == 3).unwrap().2 - surface_depth([10.5, 10.5, 0.0]);
     let rider =
@@ -176,6 +180,40 @@ fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
     assert!(pile * 32.0 >= 32.0 * WORLD, "clearance {pile}");
     // A one-level rise in front of an object (two depth units) still hides it.
     assert!(pile < 2.0, "clearance {pile}");
+    // The stated overhang is really covered: at zoom 1 the pile's lowest row
+    // lies 32 * WORLD pixels below the hotspot, where flat ground has gained
+    // 32 * WORLD / 32 = WORLD depth units, and it must still be drawn there.
+    let document = web_sys::window().unwrap().document().unwrap();
+    let canvas = document
+        .create_element("canvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .unwrap();
+    canvas.set_width(512);
+    canvas.set_height(512);
+    let context = context(&canvas).unwrap();
+    let mut renderer = GameRenderer::Canvas {
+        canvas: canvas.clone(),
+        context: context.clone(),
+        atlas: [None, None, None],
+        // White art over flat-coloured ground.
+        source_atlas: vec![255; crate::GAME_ATLAS_BYTES],
+        presentation: CanvasPresentation::new(512, 512),
+    };
+    renderer
+        .render_world(&art, &ground(), &[resource(2)], &[], camera(1.0), 0, false)
+        .unwrap();
+    let white =
+        |x: f64, y: f64| context.get_image_data(x, y, 1.0, 1.0).unwrap().data().0 == [255; 4];
+    let lowest_row = (256.0 + 32.0 * WORLD).floor();
+    assert!(
+        white(256.0, lowest_row),
+        "the lowest row of the deepest reviewed art is drawn over nearer ground"
+    );
+    assert!(
+        !white(256.0, lowest_row + 4.0),
+        "nothing of the pile is drawn below its lowest row"
+    );
 }
 
 #[wasm_bindgen_test]
