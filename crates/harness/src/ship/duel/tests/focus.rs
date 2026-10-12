@@ -28,7 +28,7 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
         "{\"type\":\"test\",\"event\":\"ok\",\"name\":\"aoe-x::check$first\"}\n{\"type\":\"test\",\"event\":\"ignored\",\"name\":\"aoe-x::check$nested::second\"}\n",
     );
     green.passed = true;
-    let error = super::green::validate(root, &paths, &red, &green).unwrap_err();
+    let error = super::green::validate(root, &paths, None, &red, &green).unwrap_err();
     assert_eq!(
         error,
         "the tester's tests did not run: aoe-x::check$nested::second"
@@ -38,23 +38,23 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
         ..Default::default()
     };
     assert!(
-        super::green::validate(root, &paths, &build_red, &green)
+        super::green::validate(root, &paths, None, &build_red, &green)
             .unwrap_err()
             .contains("check.rs::nested::second")
     );
     green.tests.push("aoe-y::check$nested::second".into());
-    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    assert!(super::green::validate(root, &paths, None, &build_red, &green).is_err());
     green
         .tests
         .push("aoe-x::check$other::nested::second".into());
-    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    assert!(super::green::validate(root, &paths, None, &build_red, &green).is_err());
     green.tests.push("aoe-x::check$nested::second".into());
     green.failed.push("aoe-x::check$nested::second".into());
-    assert!(super::green::validate(root, &paths, &red, &green).is_err());
-    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    assert!(super::green::validate(root, &paths, None, &red, &green).is_err());
+    assert!(super::green::validate(root, &paths, None, &build_red, &green).is_err());
     green.failed.clear();
-    assert!(super::green::validate(root, &paths, &red, &green).is_ok());
-    assert!(super::green::validate(root, &paths, &build_red, &green).is_ok());
+    assert!(super::green::validate(root, &paths, None, &red, &green).is_ok());
+    assert!(super::green::validate(root, &paths, None, &build_red, &green).is_ok());
     fs::write(
         root.join(&paths[0]),
         "#[test] fn first() {}\nmod nested { #[test] fn first() {} }\n",
@@ -65,13 +65,13 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
         ..Default::default()
     };
     assert!(
-        super::green::validate(root, &paths, &build_red, &alias)
+        super::green::validate(root, &paths, None, &build_red, &alias)
             .unwrap_err()
             .contains("check.rs::first")
     );
     fs::write(root.join(&paths[0]), "fn helper() {}\n").unwrap();
     assert!(
-        super::green::validate(root, &paths, &build_red, &green)
+        super::green::validate(root, &paths, None, &build_red, &green)
             .unwrap_err()
             .contains(&paths[0])
     );
@@ -87,7 +87,7 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
         fs::write(&output, format!(r#"{{"errors":[],"suites":[{{"specs":[{{"file":"play.spec.ts","line":1,"title":"works","tests":[{{"projectName":"canvas","status":"{status}"}}]}}]}}]}}"#)).unwrap();
         let browser = focus::browser_results(&output).unwrap();
         assert_eq!(
-            super::green::validate(root, &browser_paths, &build_red, &browser).is_ok(),
+            super::green::validate(root, &browser_paths, None, &build_red, &browser).is_ok(),
             expected
         );
         let browser_red = focus::CheckReport {
@@ -95,7 +95,7 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
             ..Default::default()
         };
         assert_eq!(
-            super::green::validate(root, &browser_paths, &browser_red, &browser).is_ok(),
+            super::green::validate(root, &browser_paths, None, &browser_red, &browser).is_ok(),
             expected
         );
     }
@@ -106,7 +106,7 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
     .unwrap();
     let browser = focus::browser_results(&output).unwrap();
     assert!(
-        super::green::validate(root, &browser_paths, &build_red, &browser)
+        super::green::validate(root, &browser_paths, None, &build_red, &browser)
             .unwrap_err()
             .contains("missing")
     );
@@ -451,10 +451,10 @@ fn green_ignores_unrelated_tests_that_already_failed_at_red() {
     let green = focus::rust_results(
         "{\"type\":\"test\",\"event\":\"ok\",\"name\":\"aoe-x::check$first\"}\n{\"type\":\"test\",\"event\":\"failed\",\"name\":\"aoe-x::other$old\"}\n",
     );
-    assert!(super::green::validate(root, &paths, &red, &green).is_ok());
+    assert!(super::green::validate(root, &paths, None, &red, &green).is_ok());
     // The tester's own test still has to pass.
     let green = focus::rust_results(
         "{\"type\":\"test\",\"event\":\"failed\",\"name\":\"aoe-x::check$first\"}\n",
     );
-    assert!(super::green::validate(root, &paths, &red, &green).is_err());
+    assert!(super::green::validate(root, &paths, None, &red, &green).is_err());
 }

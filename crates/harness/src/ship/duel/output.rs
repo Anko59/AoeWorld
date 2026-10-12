@@ -17,6 +17,23 @@ pub(crate) fn run_directory(cache: &Path) -> io::Result<PathBuf> {
         .keep())
 }
 
+/// Remove retained `run-*` directories except the `keep` newest.
+pub(crate) fn prune(cache: &Path, keep: usize) -> io::Result<()> {
+    let mut runs = Vec::new();
+    for entry in fs::read_dir(cache)? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with("run-") && entry.file_type()?.is_dir() {
+            runs.push((entry.metadata()?.modified()?, entry.path()));
+        }
+    }
+    runs.sort();
+    let excess = runs.len().saturating_sub(keep);
+    for (_, path) in runs.into_iter().take(excess) {
+        fs::remove_dir_all(path)?;
+    }
+    Ok(())
+}
+
 pub(crate) struct JsonOutput {
     file: fs::File,
     label: &'static str,

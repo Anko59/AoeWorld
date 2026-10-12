@@ -28,8 +28,6 @@ follow it rather than rephrasing the command to get past it.
   `gates/registry.json` selects for the change. Red results come back to you;
   fix them without weakening a test, gate or baseline.
 
-Product work goes through `make duel` or follows the same tests-first order.
-
 ## Shipping
 
 Commit on a feature branch (the pre-commit hook runs `make pre-commit`), then

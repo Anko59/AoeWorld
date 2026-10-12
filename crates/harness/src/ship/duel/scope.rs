@@ -15,7 +15,10 @@ impl Scope {
         let mut packages = BTreeSet::new();
         let mut manifests = BTreeSet::new();
         let mut specs = BTreeSet::new();
-        for path in paths {
+        let mut unmapped = None;
+        'paths: for path in paths {
+            // Fixtures and testdata ride on their package's check when one owns them.
+            let lenient = !path.ends_with(".rs");
             let unsupported = || {
                 format!(
                     "unsupported focused test path: {path}; set DUEL_CHECK (for example `make fuzz-smoke` for fuzz targets)"
@@ -35,7 +38,7 @@ impl Scope {
                 browser_specs(root, &root.join("browser/tests"), &mut specs)?;
                 continue;
             }
-            if !path.ends_with(".rs") || !crate::agents::is_test_path(path) {
+            if !crate::agents::is_test_path(path) {
                 return Err(unsupported());
             }
             let mut owner = root.join(path);
@@ -72,6 +75,10 @@ impl Scope {
                                     .any(|m| m.as_str() == Some(relative.as_ref()))
                             })
                     {
+                        if lenient {
+                            unmapped.get_or_insert(unsupported());
+                            continue 'paths;
+                        }
                         return Err(unsupported());
                     }
                     packages.insert(name.to_owned());
@@ -87,11 +94,15 @@ impl Scope {
                 }
             }
             if !found {
+                if lenient {
+                    unmapped.get_or_insert(unsupported());
+                    continue;
+                }
                 return Err(unsupported());
             }
         }
         if packages.is_empty() && specs.is_empty() {
-            return Err("no focused tests selected".into());
+            return Err(unmapped.unwrap_or_else(|| "no focused tests selected".into()));
         }
         Ok(Self {
             packages: packages.into_iter().collect(),

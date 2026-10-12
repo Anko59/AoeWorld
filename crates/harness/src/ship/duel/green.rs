@@ -6,6 +6,7 @@ use std::{fs, path::Path};
 pub(super) fn validate(
     root: &Path,
     paths: &[String],
+    base: Option<&str>,
     red: &CheckReport,
     green: &CheckReport,
 ) -> git::Result<()> {
@@ -37,8 +38,14 @@ pub(super) fn validate(
                 fs::read_to_string(root.join(path)).map_err(|e| unidentified(e.to_string()))?;
             if path.ends_with(".rs") {
                 let functions = authored::functions(&source).map_err(unidentified)?;
-                defined += functions.len();
-                for function in &functions {
+                // Only what this round added or changed must run: untouched, ignored or
+                // cfg-gated tests of the same file are not the tester's.
+                let old =
+                    base.and_then(|base| git::git(root, &["show", &format!("{base}:{path}")]).ok());
+                let required =
+                    authored::added_functions(&source, old.as_deref()).map_err(unidentified)?;
+                defined += required.len();
+                for function in &required {
                     let mut ran = false;
                     for name in &passed {
                         let reported = name

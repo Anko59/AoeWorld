@@ -2,6 +2,9 @@
 mod authored;
 mod baseline;
 mod browser;
+#[cfg(test)]
+#[path = "tests/closing.rs"]
+mod closing_tests;
 mod config;
 #[cfg(test)]
 #[path = "tests/fixes.rs"]
@@ -41,6 +44,8 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     let subject = git::subject(&root)?;
     browser::reset(&root)?;
+    let cache = root.join(".cache/duel");
+    clean(output::prune(&cache, 0));
     let mut summary = format!(
         "# Duel: {}\n\nBranch: {}\nRuntime: {} / {}\n",
         task.lines().next().unwrap_or("Task"),
@@ -50,6 +55,17 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     );
     summary.push_str(&format!("\nTask:\n{task}\n"));
     let result = rounds(&root, task, options, &subject.branch, &mut summary);
+    // Keep only the last run's logs for the summary, and drop the comparison build.
+    clean(output::prune(&cache, 1));
+    clean(
+        fs::remove_dir_all(cache.join("baseline-target")).or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        }),
+    );
     match &result {
         Ok(()) => summary.push_str("\nResult: PASS. Main session: read the diff, film the change with make showcase, then make ship.\n"),
         Err(error) => summary.push_str(&format!("\nResult: FAIL: {error}\nMain session: inspect git diff and the last commit, finish the failing implementation with the same tests, rerun the check, then commit before filming and make ship.\n")),
@@ -61,6 +77,12 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     fs::write(&path, &summary).map_err(|e| e.to_string())?;
     println!("{summary}\nSummary: {}", path.display());
     result.map(|()| summary)
+}
+
+fn clean(result: std::io::Result<()>) {
+    if let Err(error) = result {
+        eprintln!("duel: cannot clean .cache/duel: {error}");
+    }
 }
 
 fn rounds(
@@ -183,7 +205,7 @@ fn rounds(
             tree::validate(root, false, &tests, branch)?;
             let (mut checked, mut tail) = checked?;
             let tests_ran = if options.check.is_none() {
-                match green::validate(root, &paths, &red_report, &checked) {
+                match green::validate(root, &paths, Some(&head), &red_report, &checked) {
                     Ok(()) => true,
                     Err(error) => {
                         checked.passed = false;

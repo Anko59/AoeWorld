@@ -1,8 +1,7 @@
 //! Compare named untouched failures with the original pre-duel source.
-use super::focus::Scope;
+use super::{authored, focus::Scope};
 use crate::ship::git;
 use std::{fs, path::Path, process::Command};
-use syn::spanned::Spanned;
 
 pub(crate) fn export(root: &Path, revision: &str) -> git::Result<tempfile::TempDir> {
     if !matches!(revision.len(), 40 | 64) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -143,55 +142,35 @@ fn collect(
             let Ok(parsed) = syn::parse_file(&current) else {
                 continue;
             };
-            let old_functions = old
+            let old_parsed = old.as_deref().and_then(|s| syn::parse_file(s).ok());
+            let old_functions = old_parsed
                 .as_ref()
-                .and_then(|s| syn::parse_file(s).ok())
                 .map(|p| bodies(&p.items, old.as_deref().unwrap_or("")))
                 .unwrap_or_default();
+            // Changes outside test functions may change shared helpers or attributes:
+            // only exempt a function if all other source bytes remain identical.
+            let rest_unchanged = old_parsed
+                .as_ref()
+                .zip(old.as_deref())
+                .is_some_and(|(p, s)| {
+                    without_tests(s, &p.items) == without_tests(&current, &parsed.items)
+                });
             for (name, body) in bodies(&parsed.items, &current) {
                 let unchanged = old_functions.iter().any(|(n, b)| n == &name && b == &body);
-                // Changes outside test functions may change shared helpers or attributes:
-                // only exempt a function if all other source bytes remain identical.
-                let current_rest = without_tests(&current, &parsed.items);
-                let old_rest = old
-                    .as_ref()
-                    .and_then(|s| syn::parse_file(s).ok().map(|p| without_tests(s, &p.items)));
-                functions.push((
-                    name,
-                    unchanged && old_rest.as_deref() == Some(current_rest.as_str()),
-                ));
+                functions.push((name, unchanged && rest_unchanged));
             }
         }
     }
     Ok(())
 }
 fn ranges(items: &[syn::Item]) -> Vec<(String, usize, usize)> {
-    let mut result = Vec::new();
-    for item in items {
-        match item {
-            syn::Item::Fn(f)
-                if f.attrs.iter().any(|a| {
-                    a.path()
-                        .segments
-                        .last()
-                        .is_some_and(|s| s.ident.to_string().contains("test"))
-                }) =>
-            {
-                result.push((
-                    f.sig.ident.to_string(),
-                    f.span().start().line,
-                    f.span().end().line,
-                ))
-            }
-            syn::Item::Mod(m) => {
-                if let Some((_, items)) = &m.content {
-                    result.extend(ranges(items));
-                }
-            }
-            _ => (),
-        }
-    }
-    result
+    authored::test_fns(items)
+        .into_iter()
+        .map(|t| {
+            let simple = t.name.rsplit("::").next().unwrap_or(&t.name).to_owned();
+            (simple, t.start, t.end)
+        })
+        .collect()
 }
 fn bodies(items: &[syn::Item], source: &str) -> Vec<(String, String)> {
     let lines: Vec<_> = source.lines().collect();

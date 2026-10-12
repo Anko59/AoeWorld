@@ -1,4 +1,6 @@
 //! Red requires a failure identified in a file changed by this round's tester.
+mod modules;
+use self::modules::{crate_roots, module_path, unit_target};
 use super::focus::CheckReport;
 use crate::ship::git;
 use std::{
@@ -122,32 +124,50 @@ fn has_failure_with_notes(
                         return Ok(true);
                     }
                 } else if let Some(module) = relative.strip_prefix("src/") {
-                    let module = module
-                        .trim_end_matches(".rs")
-                        .trim_end_matches("/mod")
-                        .replace('/', "::");
-                    let unit_target = target.is_empty()
-                        || target == "lib"
-                        || target == package
-                        || target == package.replace('-', "_")
-                        || value
-                            .get("lib")
-                            .and_then(|l| l.get("name"))
-                            .and_then(|n| n.as_str())
-                            == Some(target)
-                        || value
-                            .get("bin")
-                            .and_then(|b| b.as_array())
-                            .is_some_and(|bins| {
-                                bins.iter()
-                                    .any(|b| b.get("name").and_then(|n| n.as_str()) == Some(target))
-                            });
-                    if unit_target
-                        && functions
-                            .iter()
-                            .any(|f| function.trim() == format!("{module}::{f}"))
-                    {
-                        return Ok(true);
+                    if !unit_target(&value, package, target) {
+                        break;
+                    }
+                    let function = function.trim();
+                    match module_path(&directory, &value, &root.join(path)) {
+                        Some(module) => {
+                            if functions.iter().any(|f| {
+                                function
+                                    == if module.is_empty() {
+                                        f.clone()
+                                    } else {
+                                        format!("{module}::{f}")
+                                    }
+                            }) {
+                                return Ok(true);
+                            }
+                        }
+                        None if crate_roots(&directory, &value).iter().any(|r| {
+                            fs::read_to_string(r).is_ok_and(|s| syn::parse_file(&s).is_ok())
+                        }) =>
+                        {
+                            // A readable tree that never mounts this file (macro or include!): match the test by its name.
+                            if functions
+                                .iter()
+                                .any(|f| function.rsplit("::").next() == f.rsplit("::").next())
+                            {
+                                notes.push(format!(
+                                    "Module of {path} unresolved for {name}; falling back to test function names"
+                                ));
+                                return Ok(true);
+                            }
+                        }
+                        None => {
+                            let module = module
+                                .trim_end_matches(".rs")
+                                .trim_end_matches("/mod")
+                                .replace('/', "::");
+                            if functions
+                                .iter()
+                                .any(|f| function == format!("{module}::{f}"))
+                            {
+                                return Ok(true);
+                            }
+                        }
                     }
                 }
                 break;
@@ -270,7 +290,62 @@ pub(super) fn functions(source: &str) -> git::Result<Vec<String>> {
     Ok(functions)
 }
 
-fn test_functions(items: &[syn::Item], prefix: &str, functions: &mut Vec<String>) {
+/// Tests this round added or changed that a focused run executes: no `#[ignore]`
+/// and no `cfg` other than `test`. `old` is the file at the round's base.
+pub(super) fn added_functions(source: &str, old: Option<&str>) -> git::Result<Vec<String>> {
+    let parsed = syn::parse_file(source).map_err(|e| e.to_string())?;
+    let before: Vec<(String, String)> = old
+        .and_then(|old| {
+            let parsed = syn::parse_file(old).ok()?;
+            Some(bodies(old, &test_fns(&parsed.items)))
+        })
+        .unwrap_or_default();
+    let current = test_fns(&parsed.items);
+    Ok(bodies(source, &current)
+        .into_iter()
+        .zip(&current)
+        .filter(|((name, body), test)| {
+            !test.skipped && !before.contains(&(name.clone(), body.clone()))
+        })
+        .map(|((name, _), _)| name)
+        .collect())
+}
+
+fn bodies(source: &str, tests: &[TestFn]) -> Vec<(String, String)> {
+    let lines: Vec<_> = source.lines().collect();
+    tests
+        .iter()
+        .map(|t| (t.name.clone(), lines[t.start - 1..t.end].join("\n")))
+        .collect()
+}
+
+/// A test function with its qualified name, source lines and whether a plain run skips it.
+pub(super) struct TestFn {
+    pub(super) name: String,
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) skipped: bool,
+}
+
+/// The one test-function detector: any attribute whose last segment contains "test".
+pub(super) fn test_fns(items: &[syn::Item]) -> Vec<TestFn> {
+    let mut result = Vec::new();
+    collect_tests(items, "", false, &mut result);
+    result
+}
+
+fn gated(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("ignore")
+            || a.path().is_ident("cfg")
+                && a.meta
+                    .require_list()
+                    .is_ok_and(|list| list.tokens.to_string() != "test")
+    })
+}
+
+fn collect_tests(items: &[syn::Item], prefix: &str, skipped: bool, result: &mut Vec<TestFn>) {
+    use syn::spanned::Spanned;
     for item in items {
         match item {
             syn::Item::Fn(f)
@@ -281,14 +356,26 @@ fn test_functions(items: &[syn::Item], prefix: &str, functions: &mut Vec<String>
                         .is_some_and(|s| s.ident.to_string().contains("test"))
                 }) =>
             {
-                functions.push(format!("{prefix}{}", f.sig.ident));
+                result.push(TestFn {
+                    name: format!("{prefix}{}", f.sig.ident),
+                    start: f.span().start().line,
+                    end: f.span().end().line,
+                    skipped: skipped || gated(&f.attrs),
+                });
             }
             syn::Item::Mod(m) => {
                 if let Some((_, items)) = &m.content {
-                    test_functions(items, &format!("{prefix}{}::", m.ident), functions);
+                    let skipped = skipped || gated(&m.attrs);
+                    collect_tests(items, &format!("{prefix}{}::", m.ident), skipped, result);
                 }
             }
             _ => (),
         }
     }
+}
+
+fn test_functions(items: &[syn::Item], prefix: &str, functions: &mut Vec<String>) {
+    let mut tests = Vec::new();
+    collect_tests(items, prefix, false, &mut tests);
+    functions.extend(tests.into_iter().map(|t| t.name));
 }

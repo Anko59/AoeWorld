@@ -1,7 +1,11 @@
 //! Check staged, unstaged and untracked paths, including both sides of renames.
 use crate::{
     agents::{is_test_path, protected_path},
-    ship::{duel::authored, git, test_first::inline},
+    ship::{
+        duel::{authored, specs},
+        git,
+        test_first::inline,
+    },
 };
 use std::{collections::BTreeSet, path::Path, process::Command};
 
@@ -128,10 +132,23 @@ fn source(root: &Path, object: &str) -> git::Result<String> {
     }
 }
 
+/// Test names of a Rust file or Playwright spec; `None` when a spec cannot be read.
+fn test_names(path: &str, source: &str) -> git::Result<Option<Vec<String>>> {
+    if path.ends_with(".rs") {
+        return authored::functions(source).map(Some);
+    }
+    Ok(specs::definitions(source).map(|d| d.into_iter().map(|(title, _)| title).collect()))
+}
+
 fn validate_test_names(root: &Path, head: &str, paths: &[String]) -> git::Result<()> {
     let mut removed = BTreeSet::new();
-    for path in paths.iter().filter(|p| p.ends_with(".rs")) {
-        let before = authored::functions(&source(root, &format!("{head}:{path}"))?)?;
+    for path in paths
+        .iter()
+        .filter(|p| p.ends_with(".rs") || p.ends_with(".spec.ts") || p.ends_with(".test.ts"))
+    {
+        let Some(before) = test_names(path, &source(root, &format!("{head}:{path}"))?)? else {
+            continue;
+        };
         if before.is_empty() {
             continue;
         }
@@ -141,13 +158,16 @@ fn validate_test_names(root: &Path, head: &str, paths: &[String]) -> git::Result
             String::new()
         };
         for after in [working, source(root, &format!(":{path}"))?] {
-            let names = authored::functions(&after)?;
-            removed.extend(
-                before
-                    .iter()
-                    .filter(|n| !names.contains(n))
-                    .map(|n| format!("{path}::{n}")),
-            );
+            let Some(names) = test_names(path, &after)? else {
+                continue;
+            };
+            for name in &before {
+                // Titles may repeat: every occurrence must remain.
+                let count = |names: &[String]| names.iter().filter(|n| *n == name).count();
+                if count(&names) < count(&before) {
+                    removed.insert(format!("{path}::{name}"));
+                }
+            }
         }
     }
     if removed.is_empty() {
