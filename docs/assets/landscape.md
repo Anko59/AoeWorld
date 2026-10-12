@@ -66,9 +66,10 @@ the shore band uses reviewed sand 15010. Animation is not implemented.
 ## Cliff pieces
 
 Cliff decorations draw group 226. The downhill screen direction selects the
-face: south uses slots 4,5,15,17,19 (rim on both upper edges), southwest 1,2,16
-(rim on the upper-right edge), west 3,18,24; southeast and east mirror the
-southwest and west faces. Every piece draws its whole upright source frame
+face: southwest/west uses slots 1,2,18 (upper-right ridge), southeast/east
+4,5,16 (upper-left ridge), and front-facing corners 3,15,17,19,24 join both
+ridges. Opposing faces use native art rather than mirroring the sun direction.
+Every piece draws its whole upright source frame
 through the shared object path at native art scale times 128/96, with the raw
 hotspot and shared ground clearance. No ground-plane strips or extra shadows
 are emitted. Cell tops retain surrounding ground; only vertical skirts are
