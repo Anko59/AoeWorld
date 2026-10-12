@@ -46,3 +46,28 @@ fn continuously_readable_pipe_has_per_poll_quota_and_read_errors_surface() {
             .contains("fixture pipe read failed")
     );
 }
+
+#[test]
+fn retained_stdout_keeps_early_failure_names_beyond_the_bounded_tail() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("stdout");
+    let mut file = fs::File::create(&path).unwrap();
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "printf 'early_failure\n'; head -c 100000 /dev/zero; printf 'last\n'; exit 1",
+    ]);
+    let captured = capture_command_retaining_stdout(
+        command,
+        Duration::from_secs(5),
+        &Cancellation::default(),
+        &mut file,
+    );
+    assert!(matches!(captured.exit, CaptureExit::Failed(Some(1))));
+    assert!(captured.truncated);
+    assert!(captured.stdout.ends_with(b"last\n"));
+    let bytes = fs::read(path).unwrap();
+    assert!(bytes.starts_with(b"early_failure\n"));
+    assert!(bytes.ends_with(b"last\n"));
+    assert!(bytes.len() > LOG_LIMIT);
+}

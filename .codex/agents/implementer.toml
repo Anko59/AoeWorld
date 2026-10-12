@@ -19,7 +19,7 @@ rules on every call; as an in-process Codex subagent, follow them yourself:
   `*_tests.rs`, `*.spec.ts`, fixtures). Report a wrong test instead.
 - Never the protected classes (harness, gates, baselines, `.claude/`,
   instructions). Never lower a gate, floor or baseline to pass.
-- No commit, push, branch change or GitHub write; the main session ships.
+- No commit, push, branch change or GitHub write; the duel driver commits each step; the main session reviews and ships.
 - Compile and check only through Dockerized Make targets (`make lint`,
   `make test-unit`, `make build-wasm`…). No host `cargo`, no interpreters.
 - Files stay within 500 lines and directories within 14 code/config files.

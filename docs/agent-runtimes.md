@@ -23,6 +23,14 @@ implementer, reviewer) as its own headless process with `AOE_AGENT_ROLE` set
 cannot change it, so the role holds on every runtime. An in-process subagent of
 Codex, dsh or pi that the harness did not launch is judged as the main session.
 
+`make duel` runs tester then implementer with Claude Code, Codex or pi; dsh
+is not supported yet. The driver commits red tests and green implementations;
+the main session reads the diff, films the change and ships
+([duel](shipping.md#tester-and-implementer-make-duel)). Each launched role is
+killed if it exceeds `DUEL_BUDGET_MINUTES` (default 60). Codex work launches use
+`danger-full-access` so Dockerized Make targets can reach Docker; the inline
+project hooks remain active and enforce the role.
+
 ## Setting up each runtime
 
 - **Claude Code:** nothing to do; `.claude/settings.json` is committed.
@@ -161,8 +169,8 @@ computed command names and write targets, network tools and non-localhost
 (`PAGER`, `EDITOR`, `GIT_SSH_COMMAND`, `LD_PRELOAD`, `PATH`…) unless set to a
 no-op, sed `w`/`e` and awk redirection or `system()`, writers behind `xargs` or
 `find -exec`, whole-tree unpacking or recursive copies into the checkout, Make
-targets that belong to a person (`hooks-install`, `bootstrap`, releases) and
-Make variables other than `AOE_*`, `HARNESS_*`, `REVIEW_*`, `SHIP_*`. Every other command
+targets that belong to a person (`duel`, `hooks-install`, `bootstrap`, releases) and
+`DUEL_*` variables and Make variables other than `AOE_*`, `HARNESS_*`, `REVIEW_*`, `SHIP_*`. Every other command
 must be on a short read-mostly allow-list.
 
 Agents do not program the shell. The only shell state an agent may set is a
@@ -237,8 +245,8 @@ of this is a hostile same-user boundary:
   authenticated launcher identity. In-process subagents of Codex, dsh and pi are
   judged as the main session unless the harness launched them. Rust inline `#[cfg(test)]` modules inside production files are not
   separated by file ownership; keep tests in `tests.rs`/`tests/` modules.
-- Hidden (sealed) tests, the test-first workflow script and canaries for each
-  rule are not built yet. `make ship` (per-commit evidence) and its review gate
+- Hidden (sealed) tests and canaries for each rule are not built yet. The
+  local test-first driver is `make duel`; it is not a sealed judge. `make ship` (per-commit evidence) and its review gate
   are described in [shipping](shipping.md) and [review](review.md).
 - Read, Grep and Glob are not intercepted: nothing in the repository is secret
   from an agent.

@@ -9,7 +9,7 @@ make ship SHIP_TITLE='One-line title' SHIP_BODY=/path/to/description.md
 
 The agent policy denies `git push` and `gh pr create` to every role (see
 [agent runtimes](agent-runtimes.md)). Tester, implementer and reviewer agents do
-not ship; the session that ran them reviews, commits and ships.
+not ship; the duel driver commits each step and the main session reviews and ships.
 
 ## What `make ship` does
 
@@ -146,6 +146,112 @@ CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks
 pass. No agent runs a merge command.
 
+## Tester and implementer: make duel
+
+Product work starts with the main session's driver on a clean feature branch:
+
+```sh
+make duel DUEL_TASK=.cache/task.md DUEL_RUNTIME=codex
+```
+
+The task is a regular UTF-8 file at most 64 KiB; its first line titles the
+commits (at most 72 characters, shortened at a word boundary with “…”). The full
+task stays in both commit bodies. Keep it outside tracked changes (for example under `.cache/`).
+`DUEL_RUNTIME` supports `claude`, `codex` and `pi`; dsh is not supported yet.
+When present, `CLAUDECODE`, `CODEX_THREAD_ID`/`CODEX_CI` or `PI_CODING_AGENT`
+identify the calling runtime; absent or ambiguous markers require an explicit choice. `DUEL_MODEL`
+and `DUEL_EFFORT` select a model and reasoning effort; absent values use the
+runtime's configured defaults. pi accepts `provider/model`.
+
+The driver launches a tester with the project hooks and `AOE_AGENT_ROLE=tester`,
+checks every changed path is a test outside protected classes and refuses
+deleted or renamed existing Rust test functions (body edits remain reviewable), then runs the
+check red. Only a failed build or a failing test belonging to a test file the
+tester added or changed that round leads to a `Tests: <task first line>` commit,
+with `Harness-Phase: tests`. The implementer receives the task, tester report
+and failing output tail, writes production only, and gets three attempts to
+turn the check green. The driver commits that implementation with
+`Harness-Phase: implementation`. Commits use the configured Git identity and
+name the runtime/model in a `Co-Authored-By` trailer, with `noreply@anthropic.com`
+for Claude, `noreply@openai.com` for Codex and neutral `noreply@example.com` for pi. Before staging a commit,
+the driver runs `make hooks-check`; failure stops with `run make hooks-install`.
+Each duel commit runs the
+Git pre-commit hook (`make pre-commit`); preflight and the wider shipping gates
+run in `make ship`, while both role prompts require only the focused check.
+
+A package compile error reported by Cargo is red because a test may name
+production APIs not written yet. A missing nextest command, invalid arguments,
+or another failure without compile errors or failing-test events makes the
+check unavailable and refuses the step without committing.
+If tests cannot compile for a reason other than missing production code (such
+as a syntax error in a test), the implementer stops and reports
+`DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with
+that message immediately, keeping the tests commit and working changes.
+
+`DUEL_ROUNDS` defaults to 2 and accepts 1–4 total rounds. Later tester runs
+attack the implementation; no new test or a passing attack ends successfully
+and passing attack edits are discarded. A default check with only unrelated failing
+tests is treated like passing tests, and the summary names those failures.
+Round one's empty or passing tests fail. Role violations restore to the last
+driver commit and name offending paths. Implementers may change production lines
+in a file containing inline tests, but cannot change any line in an item under
+a `cfg` mentioning `test` outside `not(...)`, or any part of a `#[test]`-style function, including
+its attributes and body. Malformed product token streams skip inline validation;
+the focused compiler check reports the failure and the implementer can retry. Testers
+still edit test files only. Exhausted green attempts keep the tests
+commit and working changes for the main session to finish. A launch timeout is
+a failure, never red evidence.
+
+The default command is `make duel-check HARNESS_DUEL_BASE=<round-start commit>`.
+It runs through Docker and selects only Cargo packages owning tester-changed
+files (`cargo nextest run -p <package>`) and exact changed browser spec files.
+Browser fixtures under `browser/tests/` select all browser specs. Mixed changes
+run both. Fuzz targets in their separate workspace and other unsupported paths
+stop before the implementer launches and require `DUEL_CHECK` (for example
+`make fuzz-smoke`). Red means a selected package fails to build or at least
+one failing test belongs to a tester-changed file, matched by nextest binary id
+or module path, or browser test location; green means every selected check passes
+and every name that failed at red is reported as passed. After a red build
+failure, every test defined in the test files the tester changed that round must
+run and pass (at least one). Missing or skipped tests refuse green with
+`the tester's tests did not run: <names/files>`; this also blocks the pre-existing
+failure exemption below.
+Integration failures follow the target's declared module path to the defining
+file, which must have changed that round. Unresolved sources fall back to a
+changed integration target; the summary records that fallback.
+`DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
+For an explicit override, a normal nonzero exit is red and exit zero is green;
+the red-test execution requirement does not apply. Named failures are reported when available but are not required, including
+for fuzz runtime crashes. The main session chooses this check and its scope.
+Both role prompts name the exact check and forbid preflight or whole-suite runs;
+the driver and `make ship` own wider gates. Browser dependencies are prepared on
+the first browser check and reused for subsequent checks and baseline exports
+during that duel. Each check retains nextest and Playwright JSON in a fresh
+random directory under `.cache/duel/run-*`, with exclusive file creation that
+refuses existing files and symlinks. The check prints the retained paths.
+Retained nextest and Playwright JSON are limited to 16 MiB
+total and 1 MiB per line; exceeding either makes the check unavailable.
+Each agent and check gets `DUEL_BUDGET_MINUTES` (default 60); the process group
+is killed on expiry.
+
+A default focused green failure is compared with the original pre-duel revision
+when all failed tests are demonstrably untouched. If those same tests fail there, the driver
+records `pre-existing failure: <names>` and commits without relaunching the
+implementer. Unknown/build failures or changed tests cannot receive this exemption.
+The focused check still reports FAIL; the summary records the exception.
+
+The summary includes the full task, runtime/model, each round's red/green results
+with test names, commits, output tails and each agent's last report. It appears
+on stdout and in `.cache/duel/<branch>.md`, replacing branch slashes with `_`;
+the driver prints that path last, including on failure. The main session then
+reads the diff, films the change with `make showcase` and runs `make ship`.
+`duel` and all `DUEL_*` variables are main-session only. Protected harness work
+follows the same tests-first order in the main session because these roles
+cannot edit the harness itself. This is local workflow evidence, not a sealed
+CI proof that a particular assertion failed for the task's intended reason.
+Coverage is measured by `make coverage`; runtime launches in harness tests are
+stubs, so use a real task separately to verify a live runtime.
+
 ## Test-first
 
 A pre-commit that stages only test files runs clippy without test targets, so
@@ -160,7 +266,7 @@ description's "For AI" part and into the facts every reviewer reads:
 - each commit classified as tests-only, product, mixed or other, where product
   code is any non-test file under `crates/` except `crates/harness/`; changed
   lines that all lie inside `#[cfg(test)]` items of a product file count as
-  test changes (brace counting, not parsing), and such files are listed, since
+  test changes (Rust token and item spans), and such files are listed, since
   the rule is tests in test files; a merge is listed as `merge (<kind>)` from
   its diff against its first parent;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,

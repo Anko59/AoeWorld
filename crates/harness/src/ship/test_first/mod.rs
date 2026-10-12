@@ -5,7 +5,7 @@
 //! build-time files changed, and any `Harness-Test-First: exempt —
 //! <reason>` trailer. It informs the reviewers and the description; it never
 //! refuses a ship.
-mod inline;
+pub(crate) mod inline;
 #[cfg(test)]
 mod inline_tests;
 #[cfg(test)]

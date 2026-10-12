@@ -51,7 +51,7 @@ command that needs it ([credentials](docs/credentials.md)). Never print it.
 
 Delegate test-first work to the agents in `.claude/agents/`: `tester` writes
 failing tests only, `implementer` writes production code only, `reviewer` only
-reads. They never commit or push; the main session reviews, commits and ships.
+reads. They never commit or push; the duel driver commits each step and the main session reviews and ships.
 Built-in read-only agents (`Explore`, `Plan`) are held to the reviewer's rules.
 Any other agent may work outside the protected classes (harness, gates,
 baselines, `.claude/`, instructions), which only the main session edits.

@@ -1,5 +1,5 @@
-//! How the harness starts an agent runtime headless (smoke checks today; the
-//! test-first duel and reviews later). Every launch carries the role in
+//! Headless runtime launches: the bounded smoke probe and editing work for
+//! the tester → implementer duel. Every launch carries the role in
 //! `AOE_AGENT_ROLE`, which the judge trusts over the runtime's own `agent_type`.
 //!
 //! Codex reads `.codex/` from the main repository root, not from a linked
@@ -71,6 +71,92 @@ pub(crate) fn command(
         .current_dir(root)
         .env("AOE_AGENT_ROLE", role);
     Ok(command)
+}
+
+/// Editing launch with the project hooks active; no smoke-only turn/tool limit.
+pub(crate) fn work(
+    runtime: Runtime,
+    root: &Path,
+    role: &str,
+    prompt: &str,
+    model: Option<&str>,
+    effort: Option<&str>,
+) -> Result<Command, String> {
+    if runtime == Runtime::Dsh {
+        return Err("dsh is not supported yet for duel".into());
+    }
+    let mut c = if runtime == Runtime::Claude {
+        let mut c = Command::new("claude");
+        c.args([
+            "-p",
+            "--output-format",
+            "json",
+            "--permission-mode",
+            "dontAsk",
+            "--allowedTools=Read,Grep,Glob,Bash,Edit,Write,MultiEdit",
+            "--max-turns",
+            "200",
+        ]);
+        if root.join(format!(".claude/agents/{role}.md")).is_file() {
+            c.args(["--agent", role]);
+        }
+        c
+    } else {
+        // Reuse the smoke's trust and inline-hook setup, replacing its prompt.
+        let smoke = command(runtime, root, role, "")?;
+        let mut c = Command::new(smoke.get_program());
+        let args: Vec<_> = smoke.get_args().collect();
+        for arg in &args[..args.len() - 1] {
+            c.arg(if *arg == "workspace-write" {
+                std::ffi::OsStr::new("danger-full-access")
+            } else {
+                arg
+            });
+        }
+        c
+    };
+    if runtime == Runtime::Codex {
+        c.args(["-c", "approval_policy=\"never\""]);
+    }
+    if let Some(model) = model {
+        match runtime {
+            Runtime::Codex => {
+                c.args(["-m", model]);
+            }
+            Runtime::Pi => {
+                if let Some((provider, model)) = model.split_once('/') {
+                    c.args(["--provider", provider, "--model", model]);
+                } else {
+                    c.args(["--model", model]);
+                }
+            }
+            _ => {
+                c.args(["--model", model]);
+            }
+        }
+    }
+    if let Some(effort) = effort {
+        match runtime {
+            Runtime::Codex => {
+                c.arg("-c")
+                    .arg(format!("model_reasoning_effort={}", toml_string(effort)));
+            }
+            Runtime::Pi => {
+                c.args(["--thinking", effort]);
+            }
+            _ => {
+                c.args(["--effort", effort]);
+            }
+        }
+    }
+    c.arg(prompt).current_dir(root).env("AOE_AGENT_ROLE", role);
+    // Git hooks can launch the main session, but their index must not leak into agents.
+    for (name, _) in std::env::vars_os() {
+        if name.as_encoded_bytes().starts_with(b"GIT_") {
+            c.env_remove(name);
+        }
+    }
+    Ok(c)
 }
 
 /// The dsh patch that mounts the Claude hooks bridge, without a model.

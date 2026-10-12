@@ -48,3 +48,19 @@ fn only_the_main_session_runs_nightly_triage() {
     }
     allowed(&fixture, Role::Main, "make nightly-triage");
 }
+
+#[test]
+fn duel_and_its_variables_belong_only_to_main() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer, Role::Other] {
+        denied(&fixture, role, "make duel");
+        denied(&fixture, role, "make test-unit DUEL_CHECK=true");
+        denied(&fixture, role, "DUEL_RUNTIME=codex make test-unit");
+    }
+    allowed(
+        &fixture,
+        Role::Main,
+        "make duel DUEL_TASK=task.md DUEL_CHECK='make test-unit'",
+    );
+    allowed(&fixture, Role::Main, "DUEL_RUNTIME=codex make duel");
+}
