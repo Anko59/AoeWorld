@@ -168,3 +168,24 @@ fn sheet_plumbing_emits_none_of_the_new_ground_materials() {
         }
     }
 }
+
+/// The same guard on scene content rather than transport bytes: the wire
+/// format changes in this revision, the generated scenes must not. Like the
+/// pins above it is the current-generation digest, regenerated on any
+/// deliberate generation change, not a compatibility fixture.
+#[test]
+fn default_package_generated_scene_content_is_pinned() {
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let generator = package.generator();
+    let mut digest = blake3::Hasher::new();
+    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+        let scene = generator
+            .landscape_chunk_with_cancel(x, y, &|| false)
+            .expect("chunk");
+        digest.update(format!("{scene:?}").as_bytes());
+    }
+    assert_eq!(
+        digest.finalize().to_hex().as_str(),
+        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
+    );
+}
