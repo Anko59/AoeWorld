@@ -133,11 +133,8 @@ impl MapChunkGenerator {
         };
         let appearance = appearance(base, sample.density);
         let mut terrain = base;
-        terrain.material = material(
-            base,
-            appearance,
-            self.ground_cover(position, base.geographic_height_centimeters, base.biome),
-        );
+        let cover = self.ground_cover(position, base.geographic_height_centimeters, base.biome);
+        terrain.material = material(base, appearance, cover);
         // Shore band: appearance on land, a shallow rim in open water. It
         // never changes water kind, passability, heights or the shaped outline.
         let shore = memo.shore(position)?;
@@ -154,8 +151,9 @@ impl MapChunkGenerator {
             }
             _ => {}
         }
-        if base.passable && matches!(shore, memo::Shore::None) {
-            // Drawn variety only: nothing physical is decided from this sheet.
+        if base.passable && matches!(shore, memo::Shore::None) && cover.is_none() {
+            // Climatic snow/rock is authoritative. Uncovered ground retains
+            // drawn variety; nothing physical is decided from this sheet.
             terrain.material = variety::vary(
                 variety::seed(self.geography_key, self.procedural_seed),
                 position,

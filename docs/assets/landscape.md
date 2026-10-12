@@ -86,6 +86,8 @@ two percent, with the same colour on pure faces and mixed borders. Ice (material
 blue authored colours. The native-ice flag avoids per-pixel directory checks.
 Both layers blend through the ordinary soft ground mixer with rock and grass;
 packs without the ice sheet retain their procedural detail fallback.
+Climatic snow and bare rock stay authoritative over drawn variety, so the rock
+band keeps grey gravel and no forage; uncovered ground retains dev variety.
 
 Forage bushes are filtered against composed ground after snow-line and shore
 selection: none stands on rock, snow or ice. Mineral deposits are retained.

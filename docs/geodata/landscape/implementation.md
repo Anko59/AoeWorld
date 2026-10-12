@@ -72,7 +72,8 @@ resource and blocking queries share that composer.
   5 and 2 tiles; 23 and 9 tiles; a 70-tile regional drift) decide it from the
   world tile alone, so patches are seamless across chunks and follow no chunk
   or sample grid. Forest floor, mud, snow, ice, shore, water and unwalkable
-  tiles are never varied. It is decided last and read by nothing: heights,
+  tiles and climatic snow/rock cover are never varied. Uncovered ground keeps
+  drawn variety. It is decided last and read by nothing: heights,
   water, passability, movement cost, resources and vegetation are unchanged.
 - Decorations are non-blocking and never become resources, blockers or
   economy objects. A cliff decoration is only the sprite of terrain that is
