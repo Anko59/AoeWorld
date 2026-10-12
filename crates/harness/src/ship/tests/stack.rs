@@ -39,7 +39,9 @@ fn the_base_is_dev_or_an_unprotected_other_branch() {
 
 #[test]
 fn only_an_open_harness_pull_request_can_be_a_base() {
-    let parent = stack::parent_from("parent", &[harness_pr(12, "OPEN")]).unwrap();
+    let parent = stack::parent_from("parent", &[harness_pr(12, "OPEN")])
+        .unwrap()
+        .unwrap();
     assert_eq!(
         parent,
         Parent {
@@ -49,8 +51,9 @@ fn only_an_open_harness_pull_request_can_be_a_base() {
         }
     );
     // An earlier closed attempt does not hide the open one.
-    let parent =
-        stack::parent_from("parent", &[harness_pr(3, "CLOSED"), harness_pr(12, "OPEN")]).unwrap();
+    let parent = stack::parent_from("parent", &[harness_pr(3, "CLOSED"), harness_pr(12, "OPEN")])
+        .unwrap()
+        .unwrap();
     assert_eq!(parent.number, 12);
 
     let merged = stack::parent_from("parent", &[harness_pr(12, "MERGED")]).unwrap_err();
@@ -62,8 +65,10 @@ fn only_an_open_harness_pull_request_can_be_a_base() {
     assert!(merged.contains("SHIP_BASE=dev"), "{merged}");
     let closed = stack::parent_from("parent", &[harness_pr(12, "CLOSED")]).unwrap_err();
     assert!(closed.contains("closed") && closed.contains("rebase onto origin/dev"));
-    let unknown = stack::parent_from("parent", &[]).unwrap_err();
-    assert!(unknown.contains("no pull request"), "{unknown}");
+    assert!(
+        stack::parent_from("parent", &[]).unwrap().is_none(),
+        "a missing PR permits local review ahead"
+    );
 
     let mut foreign = harness_pr(12, "OPEN");
     foreign.cross_repository = true;
