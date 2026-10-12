@@ -63,7 +63,17 @@ fn snow_lies_above_a_line_with_a_natural_edge_and_rock_below_it() {
                     "rock at {metres} m"
                 );
             }
-            assert!(metres > 1_700 || *material == GroundMaterial::TemperateGrass);
+            assert!(
+                metres > 1_700
+                    || matches!(
+                        material,
+                        GroundMaterial::TemperateGrass
+                            | GroundMaterial::WornGrass
+                            | GroundMaterial::GrassDirt
+                            | GroundMaterial::LushGrass
+                            | GroundMaterial::Dirt
+                    )
+            );
         }
         // Easternmost snow of the row: where the snow line crosses it.
         edges.push(
@@ -154,6 +164,10 @@ fn cold_lowlands_are_summer_country_not_snow_squares() {
                 GroundMaterial::TemperateGrass
                     | GroundMaterial::DryGrass
                     | GroundMaterial::ForestFloor
+                    | GroundMaterial::WornGrass
+                    | GroundMaterial::GrassDirt
+                    | GroundMaterial::LushGrass
+                    | GroundMaterial::Dirt
             )),
             "class {class}"
         );
@@ -273,5 +287,51 @@ fn forage_bushes_follow_the_composed_ground_and_never_stand_on_rock_or_snow() {
     assert!(
         bushes > 0 && ores > 0,
         "vegetated forage and mineral deposits remain"
+    );
+}
+
+#[test]
+fn visual_variety_keeps_climatic_rock_and_snow_cover_and_no_forage_in_it() {
+    use crate::terrain::relief::Cover;
+    let mut counts = [0; 2];
+    for height in [2400, 3300] {
+        let generator = level(height, 13, 46);
+        for y in 18..22 {
+            for x in 6..10 {
+                let chunk = generator
+                    .landscape_chunk_with_cancel(x, y, &|| false)
+                    .expect("chunk");
+                for tile in &chunk.tiles {
+                    let Some(cover) = generator.ground_cover(
+                        tile.tile,
+                        tile.terrain.geographic_height_centimeters,
+                        tile.terrain.biome,
+                    ) else {
+                        continue;
+                    };
+                    let (slot, expected) = match cover {
+                        Cover::Rock => (0, GroundMaterial::Rock),
+                        Cover::Snow => (1, GroundMaterial::Snow),
+                    };
+                    counts[slot] += 1;
+                    assert_eq!(
+                        tile.terrain.material, expected,
+                        "climatic cover at {:?}",
+                        tile.tile
+                    );
+                    assert!(
+                        !chunk
+                            .resources
+                            .iter()
+                            .any(|resource| resource.node.tile == tile.tile
+                                && resource.node.object == ObjectKind::ForageBush)
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        counts.into_iter().all(|count| count > 10_000),
+        "rock and snow controls: {counts:?}"
     );
 }

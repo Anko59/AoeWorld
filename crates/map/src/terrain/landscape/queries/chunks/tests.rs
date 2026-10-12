@@ -287,13 +287,28 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
         // the rock line around 2,230 m.
         let expected_ground: &[GroundMaterial] = match expected {
             NativeHeightBand::Nival => &[GroundMaterial::Snow],
-            NativeHeightBand::Alpine => &[GroundMaterial::Snow, GroundMaterial::Rock],
+            NativeHeightBand::Alpine => &[
+                GroundMaterial::Snow,
+                GroundMaterial::Rock,
+                GroundMaterial::Gravel,
+                GroundMaterial::Dirt,
+            ],
             NativeHeightBand::Subalpine => &[
                 GroundMaterial::Snow,
                 GroundMaterial::Rock,
                 GroundMaterial::TemperateGrass,
+                GroundMaterial::WornGrass,
+                GroundMaterial::GrassDirt,
+                GroundMaterial::LushGrass,
+                GroundMaterial::Dirt,
+                GroundMaterial::Gravel,
             ],
-            _ => &[GroundMaterial::DryGrass],
+            _ => &[
+                GroundMaterial::DryGrass,
+                GroundMaterial::WornGrass,
+                GroundMaterial::GrassDirt,
+                GroundMaterial::Dirt,
+            ],
         };
         assert!(
             scene
