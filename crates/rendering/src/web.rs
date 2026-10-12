@@ -1,8 +1,6 @@
 use crate::surface_mesh::ProjectedSurfaceTriangle;
 use aoe_protocol::EntityState;
 use bytemuck::{Pod, Zeroable};
-#[cfg(test)]
-use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
 use wgpu::SurfaceTarget;
 const CAPACITY: usize = 16_384;

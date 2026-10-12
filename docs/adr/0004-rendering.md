@@ -287,8 +287,10 @@ LODs, and long straight biome edges are a map-generation property.
 
 The shared shader compiles into ordinary and ground-mixing programs. SwiftShader
 showed substantial ordinary-frame overhead from the larger fragment program
-even when its mixing branch was inactive. A compile-time constant removes the
-mixer from the ordinary program in both WGSL and GLSL. Contiguous instance runs
+even when its mixing branch was inactive. Rust build-time source assembly removes
+mixing-only WGSL sections before module compilation; the ordinary module has no
+mixing functions or junction branches. GLSL specializes with a compile-time
+constant. Contiguous instance runs
 choose their program without regrouping or changing painter order, depth ties,
 or alpha coverage. Both programs use the same buffers, atlas, bindings and
 Sprite112 layout. WebGPU creates the mixed pipeline only when needed and counts
@@ -300,8 +302,14 @@ frame resolution and texture reads. Tap offsets come from loop bits and
 procedural kinds from a switch, avoiding indexed fragment temporary arrays.
 Canvas makes the same ordinary-mix weight decisions before sampling. The exact
 two-octave field remains per fragment to retain the existing noisy-border pixels.
-The dense-sprite regression compares completed GPU work with a one-read oracle
-on the same device; it is a relative synthetic budget, not hardware qualification.
+The earlier dense-sprite timing regression measured 526.5 ms for production
+against 142.8 ms for a one-read oracle locally. Shared-runner scheduling makes
+that ratio unsuitable as a test verdict. Its replacement inspects the exact
+WGSL passed to WebGPU, excluding mixing helpers/branches from the ordinary
+module and requiring one sample with no directory reads in the sprite arm.
+Actual renderer runs and equal-depth alpha readbacks pin program selection and
+painter order. These deterministic contracts do not qualify frame cadence or
+dedicated-hardware performance.
 
 ## Direct scene emission
 

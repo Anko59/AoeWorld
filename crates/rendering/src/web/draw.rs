@@ -1,4 +1,4 @@
-//! Compiler specialization keeps the ground mixer off ordinary GPU primitives.
+//! Source specialization keeps the ground mixer off ordinary GPU primitives.
 //! Contiguous runs preserve painter order, depth ties and transparent coverage.
 use super::Sprite;
 use std::{borrow::Cow, ops::Range};
@@ -21,14 +21,22 @@ pub(super) fn draw_ranges(instances: &[Sprite]) -> Vec<(Range<u32>, bool)> {
     ranges
 }
 
+pub(super) fn shader_source(mixed: bool) -> &'static str {
+    // These are the build-assembled modules supplied verbatim to WebGPU.
+    if mixed {
+        include_str!(concat!(env!("OUT_DIR"), "/mixing.wgsl"))
+    } else {
+        include_str!(concat!(env!("OUT_DIR"), "/ordinary.wgsl"))
+    }
+}
+
 pub(super) fn pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
     mixed: bool,
 ) -> wgpu::RenderPipeline {
-    let code = include_str!("../sprites.wgsl");
-    let source = Cow::Owned(format!("const ground_mixing: bool = {mixed};\n{code}"));
+    let source = Cow::Borrowed(shader_source(mixed));
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("shared world shader"),
         source: wgpu::ShaderSource::Wgsl(source),

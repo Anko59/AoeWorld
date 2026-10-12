@@ -143,8 +143,9 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                         floor_strength = f32((u32(sprite.depths.w) >> (corner * 8u)) & 255u) / 255.0;
                     }
                     out.weights = vec3<f32>(1.0 - floor_strength, floor_strength, 0.0);
+                    // #if mixing
                     let mode = u32(sprite.terrain_blend[0].z);
-                    if ground_mixing && tiled && mode != 0u {
+                    if tiled && mode != 0u {
                         let share = u32(sprite.terrain_blend[1][corner]);
                         out.weights = vec3<f32>(f32(share & 255u) / 255.0, f32(share >> 8u) / 255.0, floor_strength);
                         if mode == 3u {
@@ -153,6 +154,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
                         }
                         out.solid |= 8u * mode;
                     }
+                    // #endif
                 }
                 out.solid |= 2u;
             }
@@ -240,6 +242,7 @@ fn ground(rgb: vec3<f32>, kind: u32) -> vec3<f32> {
     return base + dot(rgb, vec3<f32>(1.0 / 3.0)) * amount;
 }
 
+// #if mixing
 fn mixed(texel: vec4<f32>, material: u32) -> vec4<f32> {
     var kind = 0u;
     switch material & 15u {
@@ -289,6 +292,7 @@ fn junction_share(word: u32, material: u32) -> f32 {
     }
     return f32((matching * 255u + present / 2u) / max(present, 1u)) / 255.0;
 }
+// #endif
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -306,8 +310,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.solid == 2u { return in.color; }
     let blend = (in.solid & 3u) == 3u;
     let landscape = (in.pages.w & 1u) != 0u;
-    let mixing = ground_mixing && in.solid >= 8u;
-    let junction = ground_mixing && in.solid >= 24u;
+    // #if mixing
+    let mixing = in.solid >= 8u;
+    let junction = in.solid >= 24u;
+    // #endif
     let tiled = (in.solid & 4u) != 0u;
     var inside = vec2<f32>(0.0);
     var tile = vec2<i32>(0);
@@ -315,7 +321,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var gx = vec2<f32>(0.0);
     var gy = vec2<f32>(0.0);
     if tiled {
+        // #if mixing
         if !junction && in.rect.y < 1.0 { discard; }
+        // #else
+        if in.rect.y < 1.0 { discard; }
+        // #endif
         let cell = floor(in.uv);
         inside = in.uv - cell;
         tile = vec2<i32>(bitcast<i32>(in.pages.x), bitcast<i32>(in.pages.y)) + vec2<i32>(cell);
@@ -323,15 +333,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         gx = vec2<f32>(0.5 * (dx.x - dx.y), 0.5 * (dx.x + dx.y));
         gy = vec2<f32>(0.5 * (dy.x - dy.y), 0.5 * (dy.x + dy.y));
     }
+    // #if mixing
     let single = !blend || (landscape && !mixing && (in.weights.y <= 0.0 || in.weights.y >= 1.0));
+    // #else
+    let single = !blend || (landscape && (in.weights.y <= 0.0 || in.weights.y >= 1.0));
+    // #endif
     let bed_only = blend && single && in.weights.y >= 1.0;
     var weights = vec3<f32>(1.0, 0.0, 0.0);
     var count = 1u;
     if blend && !single {
         weights = in.weights;
         count = 3u;
+        // #if mixing
         if landscape && !mixing { count = 2u; }
+        // #else
+        if landscape { count = 2u; }
+        // #endif
     }
+    // #if mixing
     var noise = 0.5;
     if mixing && !junction {
         let middle = in.weights.x + in.weights.y;
@@ -356,17 +375,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let bary = vec3<f32>(in.weights.xy, 1.0 - in.weights.x - in.weights.y);
     var cumulative = 0.0;
     var previous = 0.0;
+    // #endif
     var texel = vec4<f32>(0.0);
     for (var index = 0u; index < count; index++) {
         var layer = Layer(in.uv, in.pages.x, in.rect, dx, dy);
         var header = in.rect;
+        // #if mixing
         var material = 0u;
+        // #endif
         var weight = 1.0;
         if single {
             if bed_only {
                 layer = Layer(in.uv2, in.pages.y, in.rect2, dx2, dy2);
                 header = in.rect2;
             }
+        // #if mixing
         } else if junction {
             if index < ground_count {
                 let slot = ground_count - 1u - index;
@@ -385,11 +408,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 header = in.rect2;
                 material = (in.pages.z >> 8u) & 255u;
             }
+        // #endif
         } else {
             weight = weights[index];
             if index == 1u { layer = Layer(in.uv2, in.pages.y, in.rect2, dx2, dy2); header = in.rect2; }
             if index == 2u { layer = Layer(in.uv3, in.pages.z, in.rect3, dx3, dy3); header = in.rect3; }
+            // #if mixing
             material = (in.pages.z >> (index * 8u)) & 255u;
+            // #endif
         }
         if weight <= 0.0 { continue; }
         if tiled { layer = tiled_layer(header, tile, local, gx, gy); }
@@ -399,7 +425,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         } else {
             sample = textureSampleLevel(sprite_atlas, sprite_sampler, layer.uv, i32(layer.page), 0.0);
         }
+        // #if mixing
         if mixing { sample = mixed(sample, material); }
+        // #endif
         if single { texel = sample; } else { texel += sample * weight; }
     }
     return shaded(texel, in.color, in.tint_kind, in.pages.w);
