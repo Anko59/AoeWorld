@@ -185,7 +185,7 @@ Proving in CI that the tests ran red then green remains
   not every `pr`-cadence gate: browser, WASM, fuzz and target performance
   gates run in CI, whose `required` check gates the merge. Coverage is not
   a `pr` gate: it takes 18 to 34 minutes, so it runs on every push to `dev`
-  and nightly, where a drop is seen within one merge.
+  or `main` and nightly, where a drop is seen within one merge.
 - Gates run in the checkout as written (`make <gate>`), not in an exported
   commit snapshot: ignored files and caches take part, and an edit reverted
   between the before and after checks is not seen.

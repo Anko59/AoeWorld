@@ -176,11 +176,13 @@ fn selection(
     revision: String,
     base: Option<String>,
     paths: Vec<String>,
+    pull_request: bool,
 ) -> Result<Selection, Box<dyn Error>> {
     let suites = classify(registry, &paths).suites;
-    // A pull request (it has a base) runs the `pr` cadence; a push to dev or
-    // main runs `ci`, which adds the slow gates that need not block a merge.
-    let cadence = if base.is_some() {
+    // A pull request runs the `pr` cadence even when its base cannot be
+    // resolved; a push to dev or main runs `ci`, which adds the slow gates
+    // that need not block a merge.
+    let cadence = if pull_request {
         Cadence::Pr
     } else {
         Cadence::Ci
@@ -235,7 +237,7 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
         },
         None => (None, Vec::new()),
     };
-    let mut manifest = selection(&registry, revision, base, paths)?;
+    let mut manifest = selection(&registry, revision, base, paths, requested_base.is_some())?;
     manifest.requested_base = requested_base;
     Ok(manifest)
 }
