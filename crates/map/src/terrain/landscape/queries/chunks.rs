@@ -101,6 +101,14 @@ impl MapChunkGenerator {
             {
                 policy.support_per_thousand = 0;
             }
+            // No forest on snow or bare rock, wherever the snow line is.
+            if policy.support_per_thousand <= 1000
+                && self
+                    .ground_cover(position, base.geographic_height_centimeters, base.biome)
+                    .is_some()
+            {
+                policy.support_per_thousand = 0;
+            }
             policy
         };
         let shared_reservations = |position| {
@@ -125,7 +133,8 @@ impl MapChunkGenerator {
         };
         let appearance = appearance(base, sample.density);
         let mut terrain = base;
-        terrain.material = material(base, appearance);
+        let cover = self.ground_cover(position, base.geographic_height_centimeters, base.biome);
+        terrain.material = material(base, appearance, cover);
         // Shore band: appearance on land, a shallow rim in open water. It
         // never changes water kind, passability, heights or the shaped outline.
         let shore = memo.shore(position)?;
@@ -142,8 +151,9 @@ impl MapChunkGenerator {
             }
             _ => {}
         }
-        if base.passable && matches!(shore, memo::Shore::None) {
-            // Drawn variety only: nothing physical is decided from this sheet.
+        if base.passable && matches!(shore, memo::Shore::None) && cover.is_none() {
+            // Climatic snow/rock is authoritative. Uncovered ground retains
+            // drawn variety; nothing physical is decided from this sheet.
             terrain.material = variety::vary(
                 variety::seed(self.geography_key, self.procedural_seed),
                 position,
@@ -161,7 +171,11 @@ impl MapChunkGenerator {
         // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
         let node = if !reserved.route && !reserved.start && !open {
-            memo.resource(position, base)?
+            // Resource candidates use the source/base biome. Forage also
+            // needs the final ground after snow-line and shore composition.
+            memo.resource(position, base)?.filter(|node| {
+                node.object != ObjectKind::ForageBush || soft_ground(terrain.material)
+            })
         } else {
             None
         };
@@ -410,30 +424,33 @@ const fn soft_ground(material: GroundMaterial) -> bool {
     )
 }
 
-fn material(base: Tile, appearance: LandscapeAppearance) -> GroundMaterial {
+/// Snow lies on everything walkable above the snow line, forest floor under
+/// canopy, bare rock in the band below the snow. Cold biomes below the snow
+/// line are summer grass and heath, not snow.
+fn material(
+    base: Tile,
+    appearance: LandscapeAppearance,
+    cover: Option<crate::terrain::relief::Cover>,
+) -> GroundMaterial {
+    use crate::terrain::relief::Cover;
     if base.water != crate::WaterKind::None || base.material == GroundMaterial::Ice {
         return base.material;
     }
-    if matches!(
-        base.biome,
-        Biome::Temperate | Biome::Boreal | Biome::Woodland | Biome::Alpine
-    ) {
-        match appearance.height_band {
-            NativeHeightBand::Nival => return GroundMaterial::Snow,
-            NativeHeightBand::Alpine => return GroundMaterial::Rock,
-            _ => {}
-        }
+    if cover == Some(Cover::Snow) {
+        return GroundMaterial::Snow;
     }
     if appearance.floor_strength > 0 {
         return GroundMaterial::ForestFloor;
     }
-    if base.material == GroundMaterial::ForestFloor {
-        return GroundMaterial::DryGrass;
+    if cover == Some(Cover::Rock) {
+        return GroundMaterial::Rock;
     }
-    if base.biome == Biome::Boreal && base.material == GroundMaterial::Snow {
-        return GroundMaterial::TemperateGrass;
+    match base.material {
+        GroundMaterial::ForestFloor => GroundMaterial::DryGrass,
+        GroundMaterial::Snow if base.biome == Biome::Boreal => GroundMaterial::TemperateGrass,
+        GroundMaterial::Snow => GroundMaterial::DryGrass,
+        material => material,
     }
-    base.material
 }
 
 #[path = "chunks/tests.rs"]

@@ -33,7 +33,7 @@ pub fn write_terrain_directory(art: &crate::GameArt, atlas: &mut [u8]) -> Result
         return Err("Invalid game atlas size".into());
     }
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
-    let mut starts = [0_usize; 15];
+    let mut starts = [0_usize; 16];
     for material in 0..MATERIALS {
         let Some((group, frames, topology)) = terrain_group(art, material as u8) else {
             continue;

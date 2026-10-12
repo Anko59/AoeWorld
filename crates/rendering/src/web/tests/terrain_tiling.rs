@@ -67,3 +67,21 @@ async fn webgpu_four_material_junction_has_matching_pixels_on_every_shared_edge(
         junction::assert_edge(&pair, pixels);
     }
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
+    use crate::surface_mesh::mix::fixture as mix;
+    let mut renderer = surface_renderer_with_atlas(&mix::snow_atlas()).await;
+    for case in [2, 3, 7, 8] {
+        let faces = mix::snow_scene(case);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        let probes: [[u32; 2]; 5] = std::array::from_fn(|i| mix::PROBES[i * 2 + case % 2]);
+        let pixels = read_pixels(&renderer, faces.len() as u32, probes).await;
+        for (i, actual) in pixels.into_iter().enumerate() {
+            mix::assert_snow_probe(case, i * 2 + case % 2, actual);
+        }
+    }
+    renderer.device.destroy();
+}

@@ -283,21 +283,39 @@ fn temperate_summer_treeline_and_savanna_never_get_dense_forest_dressing() {
                 .iter()
                 .any(|resource| resource.node.object == ObjectKind::Tree)
         );
-        if expected == NativeHeightBand::Alpine {
-            // Bare rock, broken by gravel and soil as drawn variety only.
-            assert!(scene.tiles.iter().all(|t| matches!(
-                t.terrain.material,
-                GroundMaterial::Rock | GroundMaterial::Gravel | GroundMaterial::Dirt
-            )));
-        }
-        if expected == NativeHeightBand::Nival {
-            assert!(
-                scene
-                    .tiles
-                    .iter()
-                    .all(|t| t.terrain.material == GroundMaterial::Snow)
-            );
-        }
+        // At the default latitude the snow line wanders around 2,770 m and
+        // the rock line around 2,230 m.
+        let expected_ground: &[GroundMaterial] = match expected {
+            NativeHeightBand::Nival => &[GroundMaterial::Snow],
+            NativeHeightBand::Alpine => &[
+                GroundMaterial::Snow,
+                GroundMaterial::Rock,
+                GroundMaterial::Gravel,
+                GroundMaterial::Dirt,
+            ],
+            NativeHeightBand::Subalpine => &[
+                GroundMaterial::Snow,
+                GroundMaterial::Rock,
+                GroundMaterial::TemperateGrass,
+                GroundMaterial::WornGrass,
+                GroundMaterial::GrassDirt,
+                GroundMaterial::LushGrass,
+                GroundMaterial::Dirt,
+                GroundMaterial::Gravel,
+            ],
+            _ => &[
+                GroundMaterial::DryGrass,
+                GroundMaterial::WornGrass,
+                GroundMaterial::GrassDirt,
+                GroundMaterial::Dirt,
+            ],
+        };
+        assert!(
+            scene
+                .tiles
+                .iter()
+                .all(|tile| expected_ground.contains(&tile.terrain.material))
+        );
     }
     let generator = fixture(128, 16, 100);
     let mut trees = 0;

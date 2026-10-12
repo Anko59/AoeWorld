@@ -44,9 +44,11 @@ pub(super) fn sample(
             continue;
         }
         let frame = sheets[index].frame(atlas, tile);
-        samples[index] = mix::layer(
+        samples[index] = mix::art_layer(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             materials[index],
+            triangle.appearance,
+            triangle.tint,
         );
     }
     crate::surface_mesh::landscape::blend(samples, weights, triangle.tint, triangle.appearance)

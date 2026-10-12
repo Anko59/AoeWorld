@@ -23,13 +23,15 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 8);
+    assert_eq!(VERSION, 9);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
     assert_eq!(AssetRole::Gravel as usize, 22);
+    assert_eq!(AssetRole::Snow as usize, 24);
+    assert_eq!(OPTIONAL_TERRAIN_SOURCES[8].id, 15024);
     assert_eq!(
-        OPTIONAL_TERRAIN_SOURCES[4..]
+        OPTIONAL_TERRAIN_SOURCES[4..8]
             .iter()
             .map(|source| (source.role, source.id, source.frames))
             .collect::<Vec<_>>(),
@@ -40,7 +42,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             (AssetRole::Gravel, 15017, 100),
         ]
     );
-    assert!(OPTIONAL_TERRAIN_SOURCES[4..].iter().all(|source| {
+    assert!(OPTIONAL_TERRAIN_SOURCES[4..8].iter().all(|source| {
         source
             .terrain_topology
             .is_some_and(|topology| topology.supports_frames(source.frames))

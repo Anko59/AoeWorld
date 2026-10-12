@@ -48,3 +48,19 @@ fn webgl_four_material_junction_has_matching_pixels_on_every_shared_edge() {
         junction::assert_edge(&pair, pixels);
     }
 }
+
+#[wasm_bindgen_test]
+fn webgl_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
+    use crate::surface_mesh::mix::fixture as mix;
+    let (canvas, mut renderer) = target(&mix::snow_atlas());
+    for case in [2, 3, 7, 8] {
+        let mut packets = mix::snow_scene(case)
+            .iter()
+            .map(instance)
+            .collect::<Vec<_>>();
+        render(&mut renderer, &mut packets);
+        for (probe, [x, y]) in mix::PROBES.into_iter().enumerate() {
+            mix::assert_snow_probe(case, probe, pixel(&canvas, x, y));
+        }
+    }
+}

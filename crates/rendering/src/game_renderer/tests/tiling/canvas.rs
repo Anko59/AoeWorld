@@ -91,3 +91,31 @@ fn canvas_four_material_junction_has_matching_pixels_on_every_shared_edge() {
         junction::assert_edge(&pair, pixels);
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
+    use crate::surface_mesh::mix::fixture as mix;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = mix::snow_atlas();
+    for case in [2, 3, 7, 8] {
+        let layers = mix::snow_scene(case)
+            .into_iter()
+            .map(WorldLayer::Surface)
+            .collect::<Vec<_>>();
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &layers,
+            mix::camera(case),
+            false,
+        )
+        .unwrap();
+        for (probe, [x, y]) in mix::PROBES.into_iter().enumerate() {
+            mix::assert_snow_probe(case, probe, pixel(&presentation.color_buffer, x, y));
+        }
+        mix::assert_soft(case, &|x, y| pixel(&presentation.color_buffer, x, y));
+    }
+}

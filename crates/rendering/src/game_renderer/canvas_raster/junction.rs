@@ -35,9 +35,11 @@ pub(super) fn sample(
             return;
         };
         let frame = sheet.frame(atlas, tile);
-        let texel = mix::layer(
+        let texel = mix::art_layer(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             material,
+            triangle.appearance,
+            triangle.tint,
         );
         for channel in 0..4 {
             color[channel] += texel[channel] * weight;

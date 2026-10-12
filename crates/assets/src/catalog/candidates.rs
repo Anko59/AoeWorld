@@ -10,15 +10,6 @@ pub struct CandidateSource {
     pub proposed_use: &'static str,
 }
 
-const fn terrain(id: u32, frames: u32, proposed_use: &'static str) -> CandidateSource {
-    CandidateSource {
-        archive: "terrain.drs",
-        id,
-        observed_frames: frames,
-        proposed_use,
-    }
-}
-
 const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> CandidateSource {
     CandidateSource {
         archive: "graphics.drs",
@@ -30,9 +21,8 @@ const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> Candidate
 
 /// Metadata-confirmed contiguous ranges; no topology or gameplay approval yet.
 /// In particular, 100 frames is NOT evidence of a seamless 10×10 sheet.
-pub const UNAPPROVED_SOURCES: [CandidateSource; 11] = [
+pub const UNAPPROVED_SOURCES: [CandidateSource; 10] = [
     graphics(2304, 9, "possible conifer shadows; pairing unverified"),
-    terrain(15024, 64, "ice; topology unverified, not implicitly 8×8"),
     graphics(227, 25, "cliff; anomalous tall frame requires review"),
     graphics(228, 25, "cliff; placeholder frames require review"),
     graphics(229, 25, "cliff; placeholder frames require review"),

@@ -26,7 +26,7 @@ fn art() -> GameArt {
         standing: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],
         grass: Vec::new(),
         terrain: std::array::from_fn(|_| Vec::new()),
-        terrain_topology: [None; 11],
+        terrain_topology: [None; 12],
         resources: [
             vec![frame([71.0, 50.0], [42.0, 39.0])],
             vec![frame([119.0, 143.0], [52.0, 142.0])],

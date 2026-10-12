@@ -9,6 +9,9 @@ use super::{MapChunkGenerator, landscape};
 use crate::{EnvironmentPageError, Ratio};
 use aoe_core::TileCoord;
 
+mod cover;
+pub(crate) use cover::Cover;
+
 /// Side of one cliff piece in tiles, the footprint of the original sprites.
 pub(crate) const CLIFF_CELL_TILES: i32 = 3;
 /// Contour interval in game centimetres: eight game metres, four tile widths.

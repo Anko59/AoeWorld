@@ -76,6 +76,28 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
     };
     let mut art = test_art(frame);
     art.terrain[4][0].atlas.uv[0] = 0.9; // Deliberately distinct paving sentinel.
+    // The ice sheet becomes white snow; frozen water keeps its authored colour.
+    art.terrain[11][0].atlas.uv[0] = 0.7;
+    for material in [7, 8] {
+        let sample = SceneTerrain {
+            appearance: None,
+            position: [0.5, 0.5],
+            material,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+        };
+        let mut triangles =
+            projected_surface_triangles(&[sample], camera([0.5, 0.5], 1.0, [256.0, 128.0]));
+        let before = triangles.clone();
+        apply_terrain_textures(&mut triangles, &art);
+        for (old, new) in before.iter().zip(&triangles) {
+            assert_eq!(new.tint, if material == 7 { 6 } else { old.tint });
+            assert_eq!(new.texture_uv, Some(art.terrain[11][0].atlas));
+            assert!(new.texture_blend.is_none());
+        }
+    }
+    // Without the sheet they keep the procedural tints.
+    art.terrain[11].clear();
     for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9)] {
         for ramp in [false, true] {
             let tint = base_tint + if ramp { 16 } else { 0 };
@@ -115,7 +137,9 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
     let ice = procedural_tint(source, 8);
     assert_eq!(rock[0], rock[1]);
     assert_eq!(rock[1], rock[2]);
-    assert!(snow[0] > 198 && snow[0].abs_diff(snow[2]) <= 1);
+    assert!(
+        snow[0] > 210 && snow[0] < snow[1] && snow[1] < snow[2] && snow[0].abs_diff(snow[2]) <= 9
+    );
     assert!(ice[2] > ice[0] + 40);
     for tint in 5..=10 {
         assert_eq!(procedural_tint(source, tint)[3], 123);
@@ -126,7 +150,7 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
 fn procedural_ramp_kernel_preserves_alpha_and_rounds_luminance_once() {
     let profiles = [
         (5, [0.18; 3], 0.55, 1.0),
-        (6, [0.78, 0.79, 0.78], 0.12, 1.0),
+        (6, [0.82, 0.835, 0.85], 0.14, 1.0),
         (7, [0.18; 3], 0.55, 0.72),
         (8, [0.42, 0.57, 0.65], 0.20, 1.0),
         (9, [0.10, 0.08, 0.05], 0.35, 1.0),
@@ -148,8 +172,9 @@ fn procedural_ramp_kernel_preserves_alpha_and_rounds_luminance_once() {
                 assert_eq!(plateau[3], alpha);
                 assert_eq!(ramp[3], alpha);
                 for channel in 0..3 {
-                    let expected = ((base[channel] * 255.0 + detail * amount) * (face_shade * 0.92))
-                        .round() as u8;
+                    let expected = ((base[channel] * 255.0 + detail * amount)
+                        * (face_shade * if tint == 6 { 0.98 } else { 0.92 }))
+                    .round() as u8;
                     assert_eq!(ramp[channel], expected);
                     assert!(ramp[channel] < plateau[channel]);
                 }
@@ -435,4 +460,25 @@ fn art_subdivision_budget_holds_for_sparse_and_large_lod_inputs() {
             assert!(cells * 2 * divisions as usize * divisions as usize <= MAX_SURFACE_TRIANGLES);
         }
     }
+}
+
+#[wasm_bindgen_test]
+fn native_ice_detail_becomes_white_snow_with_faint_cool_relief_and_unchanged_alpha() {
+    use crate::surface_mesh::{landscape, mix};
+    let mut whites = Vec::new();
+    for source in [
+        [75, 120, 170, 255],
+        [160, 220, 255, 128],
+        [235, 245, 255, 255],
+    ] {
+        let snow = mix::art_layer(source, 7, landscape::NATIVE_ICE, 0);
+        let ice = mix::art_layer(source, 8, landscape::NATIVE_ICE, 0);
+        assert_eq!(ice, source.map(f32::from));
+        assert_eq!(snow[3], f32::from(source[3]));
+        assert!(snow[0] >= 225.0 && snow[2] <= 255.0, "white snow: {snow:?}");
+        assert!(snow[0] < snow[1] && snow[1] < snow[2]);
+        assert!(snow[2] - snow[0] < 9.0, "soft cool shading: {snow:?}");
+        whites.push(snow[0]);
+    }
+    assert!(whites[2] - whites[0] < 18.0, "cracks become faint relief");
 }

@@ -109,13 +109,20 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
             triangle.texture_materials = None;
             triangle.texture_blend = None;
         }
+        triangle.appearance &= !super::landscape::NATIVE_ICE;
         if mix::texture(triangle, art) {
+            if !art.terrain[11].is_empty() {
+                triangle.appearance |= super::landscape::NATIVE_ICE;
+            }
             continue;
         }
-        // Natural rock/cliffs and snow are procedural dirt-derived appearances,
-        // never imported paving or ice. Keep their low-contrast transform local
-        // to the whole face until per-material splat transforms are supported.
-        if matches!(triangle.material, 4 | 7..=9) {
+        // Snow always uses its white, faint-relief kernel, even over the ice
+        // sheet. Only actual ice preserves that sheet's blue authored colours.
+        // Mixed faces apply the same transform per layer before soft blending.
+        let procedural = |material: u8| {
+            matches!(material, 4 | 7 | 9) || (material == 8 && art.terrain[11].is_empty())
+        };
+        if procedural(triangle.material) {
             triangle.texture_materials = None;
             let ramp = triangle.tint == 1 || matches!(triangle.tint, 21..=26);
             triangle.tint = match triangle.material {
@@ -131,11 +138,10 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
                 triangle.tint += 16;
             }
         }
-        if triangle.texture_materials.is_some_and(|materials| {
-            materials
-                .into_iter()
-                .any(|material| matches!(material, 4 | 7..=9))
-        }) {
+        if triangle
+            .texture_materials
+            .is_some_and(|materials| materials.into_iter().any(procedural))
+        {
             triangle.texture_materials = None;
         }
         // A face over several tiles samples each tile's own frame, so its layers
@@ -207,7 +213,7 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
     let detail = (f32::from(texel[0]) + f32::from(texel[1]) + f32::from(texel[2])) / 3.0;
     let (base, amount, shade) = match tint {
         5 => ([0.18; 3], 0.55, 1.0),
-        6 => ([0.78, 0.79, 0.78], 0.12, 1.0),
+        6 => ([0.82, 0.835, 0.85], 0.14, 1.0),
         7 => ([0.18; 3], 0.55, 0.72),
         8 => ([0.42, 0.57, 0.65], 0.20, 1.0),
         9 => ([0.10, 0.08, 0.05], 0.35, 1.0),
@@ -216,7 +222,12 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
         _ => return texel,
     };
     // Combine face lighting before the sole byte rounding, not after tinting.
-    let shade = shade * if ramp { 0.92 } else { 1.0 };
+    let shade = shade
+        * if ramp {
+            if tint == 6 { 0.98 } else { 0.92 }
+        } else {
+            1.0
+        };
     [
         ((base[0] * 255.0 + detail * amount) * shade).round() as u8,
         ((base[1] * 255.0 + detail * amount) * shade).round() as u8,
@@ -225,16 +236,16 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
     ]
 }
 
-/// Frames and topology: terrain groups 0–10, grass fallback 11,
-/// and optional water depth sheets 12–14.
+/// Frames and topology: terrain groups 0–11, grass fallback 12,
+/// and optional water depth sheets 13–15.
 pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
-    // Rock and snow deliberately reuse dirt detail, not paving or ice art.
+    // Snow and ice use terrain group 11; natural rock uses gravel, else dirt.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
-    // deep and ford shallows use their optional sheet (groups 12-14), else
+    // deep and ford shallows use their optional sheet (groups 13-15), else
     // that same shallow sheet.
     let depth = match material {
         5 => Some(0),
@@ -245,9 +256,11 @@ pub(crate) fn terrain_group(
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
     if let Some(slot) = depth {
         let sheet = &art.water_depth[slot];
-        return Some((12 + slot, &sheet.0, sheet.1));
+        return Some((13 + slot, &sheet.0, sheet.1));
     }
     let material = usize::from(match material {
+        7 | 8 if !art.terrain[11].is_empty() => 11,
+        4 if !art.terrain[10].is_empty() => 10,
         4 | 7 | 9 => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
@@ -263,7 +276,7 @@ pub(crate) fn terrain_group(
         Some(frames) if !frames.is_empty() => {
             Some((material, frames, art.terrain_topology[material]))
         }
-        _ if !art.grass.is_empty() => Some((11, &art.grass, art.terrain_topology[0])),
+        _ if !art.grass.is_empty() => Some((12, &art.grass, art.terrain_topology[0])),
         _ => None,
     }
 }

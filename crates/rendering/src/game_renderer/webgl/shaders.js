@@ -190,14 +190,16 @@ Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
 vec3 ground(vec3 rgb, uint kind) {
     vec3 base = vec3(.18);
     float amount = .55;
-    if (kind == 6u) { base = vec3(.78,.79,.78); amount = .12; }
+    if (kind == 6u) { base = vec3(.82,.835,.85); amount = .14; }
     else if (kind == 8u) { base = vec3(.42,.57,.65); amount = .20; }
     else if (kind == 9u) { base = vec3(.10,.08,.05); amount = .35; }
     else if (kind == 10u) { base = vec3(.22,.36,.33); amount = .25; }
     else if (kind != 5u && kind != 7u && kind != 12u) return rgb;
     return base + dot(rgb, vec3(1.0 / 3.0)) * amount;
 }
-vec4 mixed(vec4 texel, uint material) {
+vec4 mixed(vec4 texel, uint material, uint appearance, uint tint) {
+    uint scene = material & 15u;
+    if ((appearance & 2147483648u) != 0u && scene == 8u) return texel;
     uint kind = 0u;
     switch (material & 15u) {
         case 4u: kind = 5u; break;
@@ -205,7 +207,9 @@ vec4 mixed(vec4 texel, uint material) {
         case 8u: kind = 8u; break;
         case 9u: kind = 9u; break;
     }
-    return vec4(ground(texel.rgb, kind), texel.a);
+    vec4 color = vec4(ground(texel.rgb, kind), texel.a);
+    if (scene == 7u && tint == 1u) color.rgb *= .98 / .92;
+    return color;
 }
 float lattice(ivec2 p) {
     uint hash = (uint(p.x) * 2654435761u) ^ (uint(p.y) * 2246822519u);
@@ -243,7 +247,7 @@ vec4 shaded(vec4 texel, vec4 color, uint tint, uint appearance) {
     bool ramp = tint >= 21u && tint <= 26u;
     uint kind = ramp ? tint - 16u : tint;
     if ((kind >= 5u && kind <= 10u) || kind == 12u) {
-        float shade = (kind == 7u ? .72 : kind == 12u ? .78 : 1.0) * (ramp ? .92 : 1.0);
+        float shade = (kind == 7u ? .72 : kind == 12u ? .78 : 1.0) * (ramp ? (kind == 6u ? .98 : .92) : 1.0);
         return vec4(ground(texel.rgb, kind) * shade, texel.a);
     }
     if ((appearance & 1u) != 0u && tint <= 3u) {
@@ -343,7 +347,7 @@ void main() {
         if (tiled) layer = tiledLayer(header, tile, local, gx, gy);
         vec4 sampled = landscape ? terrainSample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy)
                                 : textureLod(atlas, vec3(layer.uv, float(layer.page)), 0.0);
-        if (mixing) sampled = mixed(sampled, material);
+        if (mixing) sampled = mixed(sampled, material, vPages.w, vTint);
         if (single) texel = sampled; else texel += sampled * weight;
     }
     result = shaded(texel, vColor, vTint, vPages.w);

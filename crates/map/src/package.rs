@@ -273,6 +273,10 @@ impl MapPackage {
             self.request.seed,
             self.estimate.tiles_per_side as i32,
         )
+        .with_latitude(
+            self.request.center_latitude_e7,
+            self.estimate.geographic_millimeters_per_tile,
+        )
     }
 
     pub fn chunk_count_per_side(&self) -> u64 {
