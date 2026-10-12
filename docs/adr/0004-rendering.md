@@ -276,13 +276,32 @@ remain only for faces that are entirely one procedural material, and the two
 agree where they meet. Mixed faces keep face shading (tint 0–3), the minification
 kernel on every sampled layer, and the ecological palette only when the face's own
 tile is vegetative. Ordinary mixed faces pay two directory texels and up to
-five taps per layer plus eight lattice hashes. Junctions additionally decode
+five taps per contributing layer plus eight lattice hashes when a share is
+partial. Pure shares and a complete bed need no lattice evaluation. Junctions decode
 three four-nibble observations per layer and resolve each nonzero sheet.
 No Sprite112 field, texture,
 binding or varying is added, and the triangle stays 240 bytes (six spare bytes
 hold the shares). Land against water is unchanged: water sheets and shores
 belong to the water renderer. Borders are still one mesh face wide on coarse
 LODs, and long straight biome edges are a map-generation property.
+
+The shared shader compiles into ordinary and ground-mixing programs. SwiftShader
+showed substantial ordinary-frame overhead from the larger fragment program
+even when its mixing branch was inactive. A compile-time constant removes the
+mixer from the ordinary program in both WGSL and GLSL. Contiguous instance runs
+choose their program without regrouping or changing painter order, depth ties,
+or alpha coverage. Both programs use the same buffers, atlas, bindings and
+Sprite112 layout. WebGPU creates the mixed pipeline only when needed and counts
+that additional persistent resource; draw-call counters count the actual runs.
+WebGL restores both programs and the retained atlas on context restoration.
+
+Mixed layers share one filtered sampling body and skip zero-weight layers before
+frame resolution and texture reads. Tap offsets come from loop bits and
+procedural kinds from a switch, avoiding indexed fragment temporary arrays.
+Canvas makes the same ordinary-mix weight decisions before sampling. The exact
+two-octave field remains per fragment to retain the existing noisy-border pixels.
+The dense-sprite regression compares completed GPU work with a one-read oracle
+on the same device; it is a relative synthetic budget, not hardware qualification.
 
 ## Direct scene emission
 

@@ -1,6 +1,7 @@
 use crate::surface_mesh::ProjectedSurfaceTriangle;
 use aoe_protocol::EntityState;
 use bytemuck::{Pod, Zeroable};
+#[cfg(test)]
 use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
 use wgpu::SurfaceTarget;
@@ -12,6 +13,9 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 mod instance_buffer;
 pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
+#[path = "web/draw.rs"]
+mod draw;
+use draw::draw_ranges;
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
@@ -37,6 +41,8 @@ pub struct Renderer {
     pub(crate) queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub(crate) pipeline: wgpu::RenderPipeline,
+    mixed_pipeline: Option<wgpu::RenderPipeline>,
+    draws: Vec<(std::ops::Range<u32>, bool)>,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
     depth: wgpu::Texture,
@@ -90,10 +96,6 @@ impl Renderer {
             .ok_or("No compatible canvas format")?;
         surface.configure(&device, &config);
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("synthetic sprites"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("sprites.wgsl"))),
-        });
         let atlas = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("synthetic sprite atlas"),
             size: wgpu::Extent3d {
@@ -184,42 +186,7 @@ impl Renderer {
                 },
             ],
         });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("sprite pipeline layout"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("sprite pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        let pipeline = draw::pipeline(&device, &layout, config.format, false);
         let instances = InstanceBuffer::new(
             &device,
             &pipeline.get_bind_group_layout(0),
@@ -234,6 +201,8 @@ impl Renderer {
             queue,
             config,
             pipeline,
+            mixed_pipeline: None,
+            draws: Vec::new(),
             instances,
             _atlas: atlas,
             depth,
@@ -323,6 +292,15 @@ impl Renderer {
         }
         instances.extend_from_slice(sprites);
         normalize_depths(&mut instances);
+        self.draws = draw_ranges(&instances);
+        if self.mixed_pipeline.is_none() && self.draws.iter().any(|(_, mixed)| *mixed) {
+            self.mixed_pipeline = Some(draw::pipeline(
+                &self.device,
+                &self.pipeline.get_bind_group_layout(0),
+                self.config.format,
+                true,
+            ));
+        }
         self.instances.write(&self.queue, &instances);
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -333,7 +311,7 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
+                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
                     atlas_pages: self._atlas.size().depth_or_array_layers as usize,
                     atlas_uploads: 1,
                     atlas_bytes: self._atlas.width() as usize
@@ -349,7 +327,7 @@ impl Renderer {
                     visible: sprites.len(),
                     draw_calls: 0,
                     gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7,
+                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
                     atlas_pages: self._atlas.size().depth_or_array_layers as usize,
                     atlas_uploads: 1,
                     atlas_bytes: self._atlas.width() as usize
@@ -405,18 +383,16 @@ impl Renderer {
                 timestamp_writes: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.pipeline);
-            self.instances.set_on(&mut pass);
-            pass.draw(0..6, 0..instances.len() as u32);
+            self.draw_on(&mut pass, instances.len() as u32);
         }
         self.queue.submit(Some(encoder.finish()));
         self.queue.present(frame);
         Ok(Counters {
             did_present: true,
             visible: sprites.len(),
-            draw_calls: usize::from(!instances.is_empty()),
+            draw_calls: self.draws.len(),
             gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 7,
+            persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
             atlas_pages: self._atlas.size().depth_or_array_layers as usize,
             atlas_uploads: 1,
             atlas_bytes: self._atlas.width() as usize
@@ -424,6 +400,19 @@ impl Renderer {
                 * self._atlas.size().depth_or_array_layers as usize
                 * 4,
         })
+    }
+    pub(crate) fn draw_on(&self, pass: &mut wgpu::RenderPass<'_>, count: u32) {
+        for (range, mixed) in &self.draws {
+            assert!(range.end <= count, "draw exceeds instances");
+            let pipeline = if *mixed {
+                self.mixed_pipeline.as_ref().expect("mixed pipeline")
+            } else {
+                &self.pipeline
+            };
+            pass.set_pipeline(pipeline);
+            self.instances.set_on(pass);
+            pass.draw(0..6, range.clone());
+        }
     }
 }
 

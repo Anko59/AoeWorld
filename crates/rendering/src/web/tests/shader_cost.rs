@@ -39,7 +39,7 @@ fn reference_pipeline(renderer: &Renderer) -> wgpu::RenderPipeline {
         .next()
         .unwrap();
     let source = format!(
-        "{vertex}\n@fragment\nfn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {{\n let texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);\n if texel.a <= 0.0 {{ discard; }}\n return texel * in.color;\n}}\n"
+        "const ground_mixing: bool = false;\n{vertex}\n@fragment\nfn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {{\n let texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);\n if texel.a <= 0.0 {{ discard; }}\n return texel * in.color;\n}}\n"
     );
     let shader = renderer
         .device

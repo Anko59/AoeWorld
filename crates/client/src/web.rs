@@ -262,7 +262,12 @@ fn install_controls(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let name = chosen.value();
             let changed = changed.clone();
             spawn_local(async move {
-                if let Err(error) = change_scenario(&name).await {
+                // The old socket can close under backpressure while the POST
+                // still succeeds. Negotiate the new world on a fresh session.
+                if let Err(error) = change_scenario(&name)
+                    .await
+                    .and_then(|()| connect(changed.clone()))
+                {
                     changed.borrow_mut().status = format!("scenario change failed: {error:?}");
                 }
             });

@@ -246,8 +246,14 @@ fn value(tile: [i32; 2], inside: [f32; 2], cells: i32) -> f32 {
         t * t * (3.0 - 2.0 * t)
     });
     let (x1, y1) = (x.wrapping_add(1), y.wrapping_add(1));
-    let top = lattice(x, y) + (lattice(x1, y) - lattice(x, y)) * u;
-    let bottom = lattice(x, y1) + (lattice(x1, y1) - lattice(x, y1)) * u;
+    let (a, b, c, d) = (
+        lattice(x, y),
+        lattice(x1, y),
+        lattice(x, y1),
+        lattice(x1, y1),
+    );
+    let top = a + (b - a) * u;
+    let bottom = c + (d - c) * u;
     top + (bottom - top) * v
 }
 
@@ -257,7 +263,19 @@ pub(crate) fn noise(tile: [i32; 2], inside: [f32; 2]) -> f32 {
 }
 
 fn edge(share: f32, noise: f32) -> f32 {
+    if share <= 0.0 {
+        return 0.0;
+    }
+    if share >= 1.0 {
+        return 1.0;
+    }
     ((share - 0.5) * GAIN + 0.5 + (noise - 0.5) * REACH).clamp(0.0, 1.0)
+}
+
+/// Pure shares and a complete forest bed are independent of the noise lattice.
+pub(crate) fn needs_noise([over, mid, bed]: [f32; 3], middle: bool) -> bool {
+    let partial = |share: f32| share > 0.0 && share < 1.0;
+    (middle || bed < 1.0) && (partial(over) || (middle && partial(over + mid)))
 }
 
 /// Layer weights from the interpolated overlay share, middle share and bed.

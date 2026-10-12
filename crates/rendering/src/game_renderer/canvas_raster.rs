@@ -10,6 +10,8 @@ const WATER_TINT: [u8; 3] = [38, 113, 190];
 mod filter;
 #[path = "canvas_raster/junction.rs"]
 mod junction;
+#[path = "canvas_raster/mixing.rs"]
+mod mixing;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
@@ -104,6 +106,18 @@ pub(super) fn raster_surface(
                     gradient,
                     floor_endpoints,
                 )
+            } else if let Some((locals, sheets)) =
+                tiled.filter(|_| landscape && triangle.mix != [0; 6])
+            {
+                mixing::sample(
+                    triangle,
+                    atlas,
+                    locals,
+                    sheets,
+                    weights,
+                    gradient,
+                    floor_endpoints,
+                )
             } else if let Some(sampler) = texture {
                 let interpolate = |corners: [[f64; 2]; 3]| {
                     [0, 1].map(|axis| {
@@ -113,7 +127,6 @@ pub(super) fn raster_surface(
                     })
                 };
                 let mut local = interpolate(local_uv);
-                let mut mixed = None;
                 let (mut sampler, mut blend) = (sampler, blend);
                 let (mut primary_filter, mut secondary_filter) = (primary_filter, secondary_filter);
                 if let Some((locals, sheets)) = tiled {
@@ -128,12 +141,6 @@ pub(super) fn raster_surface(
                     if landscape {
                         primary_filter = filter::offsets(sampler, gradient);
                         secondary_filter = blend.and_then(|b| filter::offsets(b[0], gradient));
-                    }
-                    if let (true, Some([_, third])) = (landscape && triangle.mix != [0; 6], blend) {
-                        let inside = [0, 1].map(|axis| (position[axis] - cell[axis]) as f32);
-                        let third =
-                            filter::sample(atlas, third, local, filter::offsets(third, gradient));
-                        mixed = Some((third, mix::noise(tile, inside)));
                     }
                 }
                 let mut sample = filter::sample(atlas, sampler, local, primary_filter);
@@ -152,30 +159,7 @@ pub(super) fn raster_surface(
                         appearance,
                         weights,
                     );
-                    if let Some((third, noise)) = mixed {
-                        let share = |from: usize| {
-                            (0..3)
-                                .map(|i| {
-                                    f32::from(triangle.mix[from + i]) / 255.0 * weights[i] as f32
-                                })
-                                .sum::<f32>()
-                        };
-                        let layers = triangle.texture_materials.unwrap_or([triangle.material; 3]);
-                        sample = crate::surface_mesh::landscape::blend(
-                            [
-                                mix::layer(samples[0], layers[0]),
-                                mix::layer(samples[1], layers[1]),
-                                mix::layer(third, layers[2]),
-                            ],
-                            mix::weights(
-                                [share(0), share(3), floor[1]],
-                                triangle.mix[3..] != [0; 3],
-                                noise,
-                            ),
-                            triangle.tint,
-                            appearance,
-                        );
-                    } else if landscape {
+                    if landscape {
                         sample = crate::surface_mesh::landscape::texel(
                             samples,
                             floor,
