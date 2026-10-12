@@ -117,9 +117,7 @@ async fn gpu_pixel(renderer: &Renderer, count: usize) -> [u8; 4] {
             }),
             ..Default::default()
         });
-        pass.set_pipeline(&renderer.pipeline);
-        renderer.instances.set_on(&mut pass);
-        pass.draw(0..6, 0..count as u32);
+        renderer.draw_on(&mut pass, count as u32);
     }
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {

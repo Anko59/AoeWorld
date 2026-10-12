@@ -204,6 +204,38 @@ test("hotspot camera churn retains bounded browser timing and resources", async 
   }
 });
 
+test("scenario control recovers a diagnostics session after its socket closes", async ({
+  page,
+  request,
+}) => {
+  await page.addInitScript(() => {
+    const Original = window.WebSocket;
+    window.WebSocket = class extends Original {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        Reflect.set(window, "diagnosticsSocket", this);
+      }
+    };
+  });
+  await page.goto("/diagnostics.html");
+  const diagnostics = page.getByRole("status");
+  await expect(diagnostics).toContainText("connected");
+  try {
+    await page.getByLabel("Scenario").selectOption("target-hotspot");
+    await expect(diagnostics).toContainText("scenario: target-hotspot");
+    await page.evaluate(() => {
+      const socket = Reflect.get(window, "diagnosticsSocket") as WebSocket;
+      socket.close();
+    });
+    await expect(diagnostics).toContainText("disconnected");
+    await page.getByLabel("Scenario").selectOption("smoke");
+    await expect(diagnostics).toContainText("scenario: smoke");
+    await expect(diagnostics).toContainText(/\| connected(?:\s|$)/);
+  } finally {
+    expect((await request.post("/scenario/smoke")).ok()).toBe(true);
+  }
+});
+
 test("two sessions subscribe independently and reconnect", async ({
   browser,
 }) => {

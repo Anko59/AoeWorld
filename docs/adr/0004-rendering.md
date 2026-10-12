@@ -276,13 +276,40 @@ remain only for faces that are entirely one procedural material, and the two
 agree where they meet. Mixed faces keep face shading (tint 0–3), the minification
 kernel on every sampled layer, and the ecological palette only when the face's own
 tile is vegetative. Ordinary mixed faces pay two directory texels and up to
-five taps per layer plus eight lattice hashes. Junctions additionally decode
+five taps per contributing layer plus eight lattice hashes when a share is
+partial. Pure shares and a complete bed need no lattice evaluation. Junctions decode
 three four-nibble observations per layer and resolve each nonzero sheet.
 No Sprite112 field, texture,
 binding or varying is added, and the triangle stays 240 bytes (six spare bytes
 hold the shares). Land against water is unchanged: water sheets and shores
 belong to the water renderer. Borders are still one mesh face wide on coarse
 LODs, and long straight biome edges are a map-generation property.
+
+The shared shader compiles into ordinary and ground-mixing programs. SwiftShader
+showed substantial ordinary-frame overhead from the larger fragment program
+even when its mixing branch was inactive. Rust build-time source assembly removes
+mixing-only WGSL sections before module compilation; the ordinary module has no
+mixing functions or junction branches. GLSL specializes with a compile-time
+constant. Contiguous instance runs
+choose their program without regrouping or changing painter order, depth ties,
+or alpha coverage. Both programs use the same buffers, atlas, bindings and
+Sprite112 layout. WebGPU creates the mixed pipeline only when needed and counts
+that additional persistent resource; draw-call counters count the actual runs.
+WebGL restores both programs and the retained atlas on context restoration.
+
+Mixed layers share one filtered sampling body and skip zero-weight layers before
+frame resolution and texture reads. Tap offsets come from loop bits and
+procedural kinds from a switch, avoiding indexed fragment temporary arrays.
+Canvas makes the same ordinary-mix weight decisions before sampling. The exact
+two-octave field remains per fragment to retain the existing noisy-border pixels.
+The earlier dense-sprite timing regression measured 526.5 ms for production
+against 142.8 ms for a one-read oracle locally. Shared-runner scheduling makes
+that ratio unsuitable as a test verdict. Its replacement inspects the exact
+WGSL passed to WebGPU, excluding mixing helpers/branches from the ordinary
+module and requiring one sample with no directory reads in the sprite arm.
+Actual renderer runs and equal-depth alpha readbacks pin program selection and
+painter order. These deterministic contracts do not qualify frame cadence or
+dedicated-hardware performance.
 
 ## Direct scene emission
 
