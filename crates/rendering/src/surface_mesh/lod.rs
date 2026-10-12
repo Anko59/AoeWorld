@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::Camera;
+mod banks;
 mod landscape;
 
 #[cfg(test)]
@@ -49,6 +50,11 @@ pub fn projected_surface_triangles(
         }
     };
     let mut cells = vec![None; grid.width * grid.height];
+    let mut bank_cells = if size == 1 && terrain.iter().any(|s| s.surface.water == 3) {
+        vec![None; cells.len()]
+    } else {
+        Vec::new()
+    };
     let mut owners = if terrain.iter().any(|sample| sample.appearance.is_some()) {
         vec![None; cells.len()]
     } else {
@@ -68,6 +74,9 @@ pub fn projected_surface_triangles(
             sample: *sample,
             distance: dx.mul_add(dx, dy * dy),
         };
+        if !bank_cells.is_empty() {
+            landscape::retain_best(&mut bank_cells[index], candidate);
+        }
         // Canonical appearance considers all inputs before fine visibility;
         // the geometry winner still uses the unchanged fine visibility test.
         if sample.appearance.is_some() {
@@ -189,6 +198,13 @@ pub fn projected_surface_triangles(
     appearance::assign_materials(&mut result, terrain);
     floor::assign(&mut result, terrain);
     mix::assign(&mut result, terrain);
+    // Material support belongs to the original integer vertices. Bevel their
+    // presentation only after the ground and water sheets have been assigned.
+    if !bank_cells.is_empty() {
+        for triangle in result.iter_mut().filter(|t| !t.skirt) {
+            banks::round(&mut triangle.points, &bank_cells, grid, &camera);
+        }
+    }
     // Painter order is an average-depth approximation. Picking below uses the
     // depth at the hit point, so exact terrain-to-terrain occlusion is still
     // limited until the shared depth-buffer path lands.

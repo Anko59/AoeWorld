@@ -93,8 +93,12 @@ Ford material and passability remain explicit. Land banks use textured dirt
 in a noisy one-to-two-tile band, consumed by the existing shared ground mixer.
 Passable river banks keep Dirt above the snow line; bank composition takes
 precedence over snow cover as well as ground variety.
-Rounded mesh bank corners and shallow ford artwork belong to the later renderer
-change and are absent from this terrain stage.
+The renderer bevels shared convex and concave river-bank vertices by a quarter
+tile at the finest LOD. Straight edges, diagonal connections, cliffs, incomplete
+halos and unequal heights retain their exact corners. Both adjoining faces use
+the same moved vertex; simulation heights and passability remain unchanged.
+Fords use the required shallow-water sheet, including packs with optional depth
+and marsh sheets. Browser pixel tests check Canvas, WebGL2 and WebGPU.
 The minimap
 uses the same persisted lines with pixel-half-diagonal footprint discovery, so a
 sub-pixel river remains connected at strategic scale without widening its
