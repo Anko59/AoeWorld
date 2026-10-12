@@ -24,11 +24,17 @@ Harness and pi.
 
 | Tier | Reviewers (personas) | Rounds | Models |
 |---|---|---|---|
-| low | 1 (quick: correctness + test integrity) | 1 | average (Sonnet 5.5 medium, GPT‑6 Luna xhigh, GLM 5.3 Flash high) |
+| low | 1 (quick: correctness + test integrity) | 1 | average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
 | medium | 3 (correctness, spec, test integrity) | ≤ 3 until convergence | average |
 | high | 5 (adds hostile input, performance) | ≤ 3 | average, reasoning one step higher |
 | xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
 | max | 5 | ≤ 5 | strong |
+
+GPT‑6 Luna was the Codex family's `average` model until the owner rejected
+it as a reviewer: for days it graded working, verified changes 2–6/10 on
+contrived attacks. Codex now reviews on GPT‑6.1 Sol (medium) at the average and
+strong levels alike; use `make review-calibrate` (below) before trusting any
+other model as a reviewer.
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset, performance and map/geodata changes need `medium` (map and geodata still
@@ -76,7 +82,19 @@ and effort (`crates/harness/src/review/`).
 4. **Stop** when a round changes no status and adds no finding, when it adds
    no finding and leaves none disputed (asking again would repeat the same
    question), or at the tier's round cap.
-5. **Grade.** A fresh grader session writes a grade /10 and at most two plain
+5. **Arbiter** (tier high and above; full reviews only). After the rounds, a
+   fresh single session on the runtime's strong model (`AOE_AGENT_ROLE=reviewer`,
+   read-only, prompt `gates/review/arbiter.md`) sees every finding of severity
+   `major` or `critical` that is still `disputed` with the votes and their
+   evidence, and rules each `upheld` or `refuted`, citing code. Its ruling sets
+   the status (`confirmed` at the reported severity, no `partial` downgrade, or
+   `refuted`) and is stored with its reason as a vote of the reserved reviewer
+   `ARBITER`; the report shows it as `arbiter: …` under the finding. If the
+   arbiter gives no usable answer (after the one retry every session gets), or
+   skips a finding, that finding stays `disputed`, as at the lower tiers; the
+   review is still complete. Closing reviews have no arbiter: their votes ask
+   whether a fix landed, not whether a problem is real.
+6. **Grade.** A fresh grader session writes a grade /10 and at most two plain
    lines. Rust caps it: a confirmed critical finding, or a major or critical
    test-integrity one (weakened or gamed tests), caps it at 4; a confirmed
    major one at 7. A minor test-integrity finding (a small coverage gap) counts
@@ -88,6 +106,30 @@ The review **passes** when every session answered and the capped grade is at
 least `merge_grade` (8). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
+
+## Calibration
+
+`make review-calibrate [CALIBRATE_TIER=low] [CALIBRATE_RUNTIME=claude]
+[CALIBRATE_CASES=n]` (main session only) measures the reviewers instead of a
+change. `gates/review/seeds/<area>/<case>.json` holds about 30 small cases, a
+third clean refactors and features and the rest with one planted defect each:
+`correctness` (off-by-one, overflow, wrong boundary), `test-integrity`
+(loosened assertion, `#[ignore]`, special-cased test), `spec` (requirement
+unmet, scope creep), `hostile-input` (unbounded read, panic on malformed data)
+and `performance` (quadratic loop on a hot path). A case is a base file set, a
+unified diff, the task sentence and the expectation. Each one becomes a
+temporary git repository (policy files on its `origin/dev`, the diff as one
+commit) and gets the normal review at the chosen tier and runtime, outside
+the branch review budget. `CALIBRATE_CASES` takes a sample round-robin across
+the areas.
+
+It writes `reports/review/calibration.json` and `.md`: per area the planted
+defects found (recall: a standing finding of at least minor on the defect's
+file), per persona what it reported and what it raised on clean cases, and the
+clean cases wrongly blocked (a complete review that does not pass) with their
+grades. Cases whose review did not complete count as "no result", not as
+misses. It is a tool for tuning prompts, personas and models, not a gate, and
+a case set this small shows large differences only.
 
 ## What happens next
 

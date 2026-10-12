@@ -1,0 +1,70 @@
+{
+ "id": "performance-ts-spread-reduce",
+ "area": "performance",
+ "task": "Add `groupBy(rows, key)` for the table view; it runs on every render with up to 100,000 rows.",
+ "base": {
+  "package.json": [
+   "{ \"name\": \"seed\", \"version\": \"1.0.0\", \"scripts\": { \"test\": \"vitest run\" } }"
+  ],
+  "src/rows.test.ts": [
+   "import { expect, it } from \"vitest\";",
+   "import { totalScore } from \"./rows\";",
+   "",
+   "it(\"totals scores\", () => {",
+   "  expect(totalScore([{ team: \"a\", score: 2 }, { team: \"b\", score: 3 }])).toBe(5);",
+   "});"
+  ],
+  "src/rows.ts": [
+   "export interface Row {",
+   "  team: string;",
+   "  score: number;",
+   "}",
+   "",
+   "export function totalScore(rows: Row[]): number {",
+   "  return rows.reduce((sum, row) => sum + row.score, 0);",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/rows.test.ts b/src/rows.test.ts",
+  "--- a/src/rows.test.ts",
+  "+++ b/src/rows.test.ts",
+  "@@ -1,6 +1,11 @@",
+  " import { expect, it } from \"vitest\";",
+  "-import { totalScore } from \"./rows\";",
+  "+import { groupBy, totalScore } from \"./rows\";",
+  " ",
+  " it(\"totals scores\", () => {",
+  "   expect(totalScore([{ team: \"a\", score: 2 }, { team: \"b\", score: 3 }])).toBe(5);",
+  " });",
+  "+",
+  "+it(\"groups by team\", () => {",
+  "+  const rows = [{ team: \"a\", score: 1 }, { team: \"b\", score: 2 }, { team: \"a\", score: 3 }];",
+  "+  expect(groupBy(rows, \"team\")).toEqual({ a: [rows[0], rows[2]], b: [rows[1]] });",
+  "+});",
+  "diff --git a/src/rows.ts b/src/rows.ts",
+  "--- a/src/rows.ts",
+  "+++ b/src/rows.ts",
+  "@@ -6,3 +6,13 @@",
+  " export function totalScore(rows: Row[]): number {",
+  "   return rows.reduce((sum, row) => sum + row.score, 0);",
+  " }",
+  "+",
+  "+export function groupBy(rows: Row[], key: keyof Row): Record<string, Row[]> {",
+  "+  return rows.reduce(",
+  "+    (groups, row) => ({",
+  "+      ...groups,",
+  "+      [String(row[key])]: [...(groups[String(row[key])] ?? []), row],",
+  "+    }),",
+  "+    {} as Record<string, Row[]>,",
+  "+  );",
+  "+}"
+ ],
+ "expect": {
+  "defect": {
+   "area": "performance",
+   "file": "src/rows.ts",
+   "what": "the reduce copies the whole accumulator and the group array for every row, so 100,000 rows cost O(n^2)"
+  }
+ }
+}

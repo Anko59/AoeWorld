@@ -1,0 +1,52 @@
+{
+ "id": "clean-ts-lookup-refactor",
+ "area": "clean",
+ "task": "Replace the if-chain in `statusLabel` with a lookup table; behaviour and tests unchanged.",
+ "base": {
+  "package.json": [
+   "{ \"name\": \"seed\", \"version\": \"1.0.0\", \"scripts\": { \"test\": \"vitest run\" } }"
+  ],
+  "src/status.test.ts": [
+   "import { expect, it } from \"vitest\";",
+   "import { statusLabel } from \"./status\";",
+   "",
+   "it(\"labels every status\", () => {",
+   "  expect(statusLabel(\"idle\")).toBe(\"Idle\");",
+   "  expect(statusLabel(\"busy\")).toBe(\"Working\");",
+   "  expect(statusLabel(\"failed\")).toBe(\"Failed\");",
+   "});"
+  ],
+  "src/status.ts": [
+   "export type Status = \"idle\" | \"busy\" | \"failed\";",
+   "",
+   "export function statusLabel(status: Status): string {",
+   "  if (status === \"idle\") return \"Idle\";",
+   "  if (status === \"busy\") return \"Working\";",
+   "  return \"Failed\";",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/status.ts b/src/status.ts",
+  "--- a/src/status.ts",
+  "+++ b/src/status.ts",
+  "@@ -1,7 +1,11 @@",
+  " export type Status = \"idle\" | \"busy\" | \"failed\";",
+  " ",
+  "+const LABELS: Record<Status, string> = {",
+  "+  idle: \"Idle\",",
+  "+  busy: \"Working\",",
+  "+  failed: \"Failed\",",
+  "+};",
+  "+",
+  " export function statusLabel(status: Status): string {",
+  "-  if (status === \"idle\") return \"Idle\";",
+  "-  if (status === \"busy\") return \"Working\";",
+  "-  return \"Failed\";",
+  "+  return LABELS[status];",
+  " }"
+ ],
+ "expect": {
+  "clean": true
+ }
+}

@@ -16,7 +16,7 @@ const FIELD_LIMIT: usize = 1_500;
 const LISTING_LIMIT: usize = 40_000;
 
 /// The per-field budget when `count` fields share the listing.
-fn field_limit(count: usize) -> usize {
+pub(super) fn field_limit(count: usize) -> usize {
     FIELD_LIMIT.min(LISTING_LIMIT / count.max(1))
 }
 
@@ -30,11 +30,11 @@ pub(crate) struct Subject {
 }
 
 /// Personas, preamble and grader come from origin/dev, like the config.
-fn read(root: &Path, relative: &str) -> Result<String, String> {
+pub(super) fn read(root: &Path, relative: &str) -> Result<String, String> {
     super::trusted(root, relative)
 }
 
-fn cut(text: &str, limit: usize) -> &str {
+pub(super) fn cut(text: &str, limit: usize) -> &str {
     let mut end = limit.min(text.len());
     while !text.is_char_boundary(end) {
         end -= 1;
@@ -43,7 +43,7 @@ fn cut(text: &str, limit: usize) -> &str {
 }
 
 /// Build a prompt around the subject, shrinking the diff until it fits.
-fn fit(subject: &Subject, build: impl Fn(&str) -> String) -> Result<String, String> {
+pub(super) fn fit(subject: &Subject, build: impl Fn(&str) -> String) -> Result<String, String> {
     let mut limit = DIFF_LIMIT;
     loop {
         let prompt = build(&subject_text(subject, limit));

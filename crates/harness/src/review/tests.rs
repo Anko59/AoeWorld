@@ -218,11 +218,14 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
         config.model_for(Tier::High, Runtime::Claude, false).effort,
         "high"
     );
-    // Codex's highest effort is xhigh: the bump never invents one it refuses.
+    // Codex reviews on GPT-6.1 Sol, never Luna (docs/review.md).
+    let codex = config.model_for(Tier::High, Runtime::Codex, false);
     assert_eq!(
-        config.model_for(Tier::High, Runtime::Codex, false).effort,
-        "xhigh"
+        (codex.model.as_str(), codex.effort.as_str()),
+        ("gpt-6.1-sol", "high")
     );
+    // Codex's highest effort is xhigh: the bump never invents one it refuses.
+    assert_eq!(bump("codex", "xhigh"), "xhigh");
     assert_eq!(config.tiers[&Tier::Max].personas.len(), 5);
     assert_eq!(bump("claude", "max"), "max");
     assert_eq!(bump("codex", "high"), "xhigh");
@@ -297,6 +300,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
     assert!(report.markdown().contains("Incomplete review"));
 }
 
+mod arbiter;
 mod closing;
 mod flow;
 mod limits;

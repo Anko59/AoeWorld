@@ -1,0 +1,46 @@
+{
+ "id": "spec-ts-scope-creep-typo",
+ "area": "spec",
+ "task": "Fix the typo in the timeout error message (`recieved` to `received`); change nothing else.",
+ "base": {
+  "package.json": [
+   "{ \"name\": \"seed\", \"version\": \"1.0.0\", \"scripts\": { \"test\": \"vitest run\" } }"
+  ],
+  "src/client.test.ts": [
+   "import { expect, it } from \"vitest\";",
+   "import { DEFAULT_TIMEOUT_MS, timeoutMessage } from \"./client\";",
+   "",
+   "it(\"names the timeout\", () => {",
+   "  expect(timeoutMessage(500)).toContain(\"500 ms\");",
+   "  expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(0);",
+   "});"
+  ],
+  "src/client.ts": [
+   "export const DEFAULT_TIMEOUT_MS = 30_000;",
+   "",
+   "export function timeoutMessage(ms: number): string {",
+   "  return `No response recieved within ${ms} ms`;",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/client.ts b/src/client.ts",
+  "--- a/src/client.ts",
+  "+++ b/src/client.ts",
+  "@@ -1,5 +1,5 @@",
+  "-export const DEFAULT_TIMEOUT_MS = 30_000;",
+  "+export const DEFAULT_TIMEOUT_MS = 5_000;",
+  " ",
+  " export function timeoutMessage(ms: number): string {",
+  "-  return `No response recieved within ${ms} ms`;",
+  "+  return `No response received within ${ms} ms`;",
+  " }"
+ ],
+ "expect": {
+  "defect": {
+   "area": "spec",
+   "file": "src/client.ts",
+   "what": "the default timeout is silently cut from 30 s to 5 s in a typo-fix change"
+  }
+ }
+}

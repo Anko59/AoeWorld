@@ -60,6 +60,7 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     for file in [
         "gates/review/preamble.md",
         "gates/review/grader.md",
+        "gates/review/arbiter.md",
         "gates/review/personas/quick.md",
         "gates/review/personas/correctness.md",
         "gates/review/personas/spec.md",

@@ -66,7 +66,7 @@ pub(crate) struct Config {
     pub(crate) floors: BTreeMap<String, Tier>,
 }
 
-const PERSONAS: [&str; 6] = [
+pub(super) const PERSONAS: [&str; 6] = [
     "quick",
     "correctness",
     "spec",
@@ -147,6 +147,11 @@ impl Config {
             .filter_map(|suite| self.floors.get(suite).copied())
             .max()
             .unwrap_or(Tier::Low)
+    }
+
+    /// The arbiter's model: the runtime's strong one, at its own effort.
+    pub(crate) fn arbiter_model(&self, runtime: Runtime) -> Model {
+        self.models[runtime_key(runtime)].strong.clone()
     }
 
     /// The model for a review: a closing review (docs/review.md) runs on the

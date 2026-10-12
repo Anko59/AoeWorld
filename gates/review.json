@@ -68,8 +68,8 @@
     },
     "codex": {
       "average": {
-        "model": "gpt-6-luna",
-        "effort": "xhigh"
+        "model": "gpt-6.1-sol",
+        "effort": "medium"
       },
       "strong": {
         "model": "gpt-6.1-sol",

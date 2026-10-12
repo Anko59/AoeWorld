@@ -23,6 +23,8 @@ const PERSON_TARGETS: &[&str] = &[
     "ship-tools",
     // It posts a status and arms auto-merge: GitHub writes, main session only.
     "review-pr",
+    // It spends model sessions on the seed set: the main session only.
+    "review-calibrate",
     // It opens, comments on and closes nightly issues: CI and the main session.
     "nightly-triage",
 ];

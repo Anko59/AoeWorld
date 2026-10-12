@@ -1,0 +1,66 @@
+{
+ "id": "spec-port-zero-accepted",
+ "area": "spec",
+ "task": "Add `parse_port(text)` accepting only 1 to 65535 and returning `None` for anything else.",
+ "base": {
+  "Cargo.toml": [
+   "[package]",
+   "name = \"seed\"",
+   "version = \"0.1.0\"",
+   "edition = \"2021\""
+  ],
+  "src/lib.rs": [
+   "pub fn parse_host(text: &str) -> Option<&str> {",
+   "    let host = text.split(':').next()?;",
+   "    if host.is_empty() { None } else { Some(host) }",
+   "}",
+   "",
+   "#[cfg(test)]",
+   "mod tests {",
+   "    use super::*;",
+   "",
+   "    #[test]",
+   "    fn hosts() {",
+   "        assert_eq!(parse_host(\"example.org:80\"), Some(\"example.org\"));",
+   "        assert_eq!(parse_host(\":80\"), None);",
+   "    }",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/lib.rs b/src/lib.rs",
+  "--- a/src/lib.rs",
+  "+++ b/src/lib.rs",
+  "@@ -1,6 +1,11 @@",
+  " pub fn parse_host(text: &str) -> Option<&str> {",
+  "     let host = text.split(':').next()?;",
+  "     if host.is_empty() { None } else { Some(host) }",
+  "+}",
+  "+",
+  "+/// A TCP port from 1 to 65535.",
+  "+pub fn parse_port(text: &str) -> Option<u16> {",
+  "+    text.trim().parse::<u16>().ok()",
+  " }",
+  " ",
+  " #[cfg(test)]",
+  "@@ -12,4 +17,11 @@",
+  "         assert_eq!(parse_host(\"example.org:80\"), Some(\"example.org\"));",
+  "         assert_eq!(parse_host(\":80\"), None);",
+  "     }",
+  "+",
+  "+    #[test]",
+  "+    fn ports() {",
+  "+        assert_eq!(parse_port(\"8080\"), Some(8080));",
+  "+        assert_eq!(parse_port(\"65536\"), None);",
+  "+        assert_eq!(parse_port(\"abc\"), None);",
+  "+    }",
+  " }"
+ ],
+ "expect": {
+  "defect": {
+   "area": "spec",
+   "file": "src/lib.rs",
+   "what": "port 0 is accepted although only 1..=65535 is allowed, and no test covers it"
+  }
+ }
+}

@@ -24,11 +24,37 @@ pub(crate) fn review_for_branch(
     plan: &Plan,
 ) -> Result<Report> {
     let judge = std::env::var(trusted::JUDGE_REV).ok();
-    let policy = Policy::pin(root, judge.as_deref(), tier, runtime, plan)?;
+    review_judged(root, branch, judge.as_deref(), tier, runtime, task, plan)
+}
+
+/// The review of a throwaway repository of its own (`make review-calibrate`):
+/// the judge's commit lives in the real checkout, so its policy is that
+/// repository's origin/dev.
+pub(super) fn review_isolated(
+    root: &Path,
+    tier: Tier,
+    runtime: Runtime,
+    task: &str,
+) -> Result<Report> {
+    let branch = git::branch(root).unwrap_or_default();
+    review_judged(root, &branch, None, tier, runtime, task, &Plan::Full)
+}
+
+fn review_judged(
+    root: &Path,
+    branch: &str,
+    judge: Option<&str>,
+    tier: Tier,
+    runtime: Runtime,
+    task: &str,
+    plan: &Plan,
+) -> Result<Report> {
+    let policy = Policy::pin(root, judge, tier, runtime, plan)?;
     let live = Live {
         runtime,
         root,
         model: policy.model.clone(),
+        strong: policy.config.arbiter_model(runtime),
     };
     review_with_branch(root, branch, tier, &policy, task, plan, &live)
 }
