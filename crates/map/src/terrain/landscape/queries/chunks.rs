@@ -128,7 +128,8 @@ impl MapChunkGenerator {
         terrain.material = material(base, appearance);
         // Shore band: appearance on land, a shallow rim in open water. It
         // never changes water kind, passability, heights or the shaped outline.
-        match memo.shore(position)? {
+        let shore = memo.shore(position)?;
+        match shore {
             memo::Shore::None => {}
             memo::Shore::Shallow | memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
             memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
@@ -140,6 +141,16 @@ impl MapChunkGenerator {
                 };
             }
             _ => {}
+        }
+        if base.passable && matches!(shore, memo::Shore::None) {
+            // Drawn variety only: nothing physical is decided from this sheet.
+            terrain.material = variety::vary(
+                variety::seed(self.geography_key, self.procedural_seed),
+                position,
+                terrain.material,
+                appearance.height_band,
+                sample.historical_land_use,
+            );
         }
         let tile = LandscapeTile {
             tile: position,
@@ -420,3 +431,5 @@ mod tests;
 
 #[path = "chunks/families.rs"]
 mod families;
+#[path = "chunks/variety.rs"]
+mod variety;

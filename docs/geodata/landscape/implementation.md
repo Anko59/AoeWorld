@@ -59,6 +59,19 @@ resource and blocking queries share that composer.
   exposure and height band. Temperate-summer modeling uses source-height bands
   (1000/1800/2500/3500 m) and a 2300 m temperate/boreal/woodland treeline; it
   changes surface appearance, never heights, passability or provenance.
+- Ground variety: the way Age of Empires II maps mix related terrains, open
+  ground carries irregular patches of a second and third sheet from its own
+  family. Temperate grass has worn-grass rings around a grass and dirt mix with
+  small bare cores, plus broad darker (lush) patches; lush grass has lighter and
+  worn patches; dry grass has the mix, bare cores and greener patches; sand has
+  gravel and hardpan; rock has gravel and soil. Crop and grazing parcels are a
+  little more worn, and at the subalpine band and above grass breaks to gravel
+  instead of soil. Every grass family uses the same high-band threshold. Two integer value-noise fields on rotated lattices (about 11,
+  5 and 2 tiles; 23 and 9 tiles; a 70-tile regional drift) decide it from the
+  world tile alone, so patches are seamless across chunks and follow no chunk
+  or sample grid. Forest floor, mud, snow, ice, shore, water and unwalkable
+  tiles are never varied. It is decided last and read by nothing: heights,
+  water, passability, movement cost, resources and vegetation are unchanged.
 - Decorations are non-blocking and never become resources, blockers or
   economy objects.
 

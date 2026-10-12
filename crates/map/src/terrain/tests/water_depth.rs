@@ -200,8 +200,21 @@ fn unclassified_vegetation_cells_take_the_nearest_classified_biome_not_seeded_no
                     "key {key}: seeded biome noise inside a source gap at {x},{y}"
                 );
                 assert!(matches!(
-                    tile.material,
+                    provider::sample_base_tile(&generator, TileCoord::new(x, y), &|| false)
+                        .expect("classified base tile")
+                        .material,
                     GroundMaterial::TemperateGrass | GroundMaterial::ForestFloor
+                ));
+                // Drawn variety is applied after source classification; it
+                // stays in the temperate family, including small bare cores.
+                assert!(matches!(
+                    tile.material,
+                    GroundMaterial::TemperateGrass
+                        | GroundMaterial::ForestFloor
+                        | GroundMaterial::GrassDirt
+                        | GroundMaterial::WornGrass
+                        | GroundMaterial::LushGrass
+                        | GroundMaterial::Dirt
                 ));
             }
         }
