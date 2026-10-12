@@ -81,8 +81,8 @@ fn modern_water_is_consumable_without_rewriting_historical_land_use() {
     assert_eq!(
         modern
             .modern_water_override_at(4, 0, 2)
-            .expect("coarse river coverage before terrain composition"),
-        Some((0, 100))
+            .expect("river is drawn from geometry"),
+        None
     );
     assert_eq!(
         modern.modern_water_override_at(4, 2, 2).expect("water"),
@@ -196,8 +196,8 @@ fn modeled_water_correction_overrides_the_shared_coverage_without_promoting_rese
     assert_eq!(
         prepared
             .modern_water_override_at(2, 0, 1)
-            .expect("coarse river coverage before terrain composition"),
-        Some((0, 100))
+            .expect("river geometry"),
+        None
     );
 }
 

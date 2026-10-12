@@ -6,6 +6,7 @@ mod field_local_axes;
 mod golden;
 mod historical_field_axis;
 mod mountains;
+mod rivers;
 mod shore_band;
 mod shoreline;
 mod water_depth;

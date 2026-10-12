@@ -366,3 +366,5 @@ fn preview_coordinate_rejects_arithmetic_and_i32_overflow() {
     assert!(preview_coordinate(u64::MAX, u16::MAX).is_err());
     assert!(preview_coordinate(i32::MAX as u64 * 2, 15).is_err());
 }
+
+mod rivers;

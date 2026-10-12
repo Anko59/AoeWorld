@@ -138,7 +138,7 @@ fn rivers_are_shallow_at_the_bank_medium_midstream_and_never_deep() {
     for y in 0..WIDTH {
         for x in 0..WIDTH {
             let tile = at(&tiles, x, y).expect("tile").terrain;
-            if tile.water != WaterKind::River {
+            if tile.water != WaterKind::River || tile.material == GroundMaterial::Ford {
                 continue;
             }
             let bank = nearest_land(&tiles, x, y).is_some_and(|land| land <= 2);

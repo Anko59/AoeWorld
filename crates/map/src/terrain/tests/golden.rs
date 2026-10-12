@@ -160,3 +160,33 @@ fn default_package_generated_scene_content_is_pinned() {
         "64516dc8e1ee59516bd8fe18d7f06531d72381ab43551810a1cd4f95137d6802"
     );
 }
+
+/// Sheet selection and ground variety preserve physical terrain. Retain all
+/// generator/chunk cases from the former plumbing-only assertion.
+#[test]
+fn ground_sheet_plumbing_coexists_with_generated_variety() {
+    const DRAWN_MATERIALS: [GroundMaterial; 3] = [
+        GroundMaterial::GrassDirt,
+        GroundMaterial::WornGrass,
+        GroundMaterial::Gravel,
+    ];
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let fallbacks = [1, 17, 991].map(|seed| MapChunkGenerator::new([23; 32], seed, 512));
+    let mut observed = std::collections::BTreeSet::new();
+    for generator in [package.generator()].into_iter().chain(fallbacks) {
+        for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+            let scene = generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .expect("chunk");
+            for tile in scene.tiles {
+                if DRAWN_MATERIALS.contains(&tile.terrain.material) {
+                    assert!(tile.terrain.passable);
+                    assert_eq!(tile.terrain.water, WaterKind::None);
+                    observed.insert(tile.terrain.material as u8);
+                }
+            }
+        }
+    }
+    assert!(observed.contains(&(GroundMaterial::GrassDirt as u8)));
+    assert!(observed.contains(&(GroundMaterial::WornGrass as u8)));
+}

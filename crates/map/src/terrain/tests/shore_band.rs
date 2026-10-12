@@ -204,7 +204,21 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
     let cells = (0..33_u16).flat_map(|sy| (0..33_u16).map(move |sx| (sx, sy)));
     let kind = |wet: bool| if wet { HydrologyKind::River } else { HydrologyKind::Land } as u8;
     let hydrology = HydrologyEvidencePage {
-        river_segments: Vec::new(),
+        river_segments: [
+            (126, -1, 130, 80, 0, 81),
+            (130, 80, 126, 160, 81, 161),
+            (126, 160, 160, 162, 161, 195),
+            (160, 162, 192, 160, 195, 227),
+        ]
+        .into_iter()
+        .map(|(x, y, ex, ey, a, b)| crate::RiverSegment {
+            start: [x * 256, y * 256],
+            end: [ex * 256, ey * 256],
+            width_units: 8 * 256,
+            station_start: a * 256,
+            station_end: b * 256,
+        })
+        .collect(),
         level: 0,
         x: 0,
         y: 0,
@@ -276,7 +290,7 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
 }
 
 #[test]
-fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
+fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
     for key in [81, 82, 83] {
         let tiles = composed(&modeled_river(key));
         // One connected river passes every modeled cell.
@@ -296,20 +310,41 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
             for x in 0..WIDTH {
                 let tile = at(&tiles, x, y).expect("tile").terrain;
                 if tile.water == WaterKind::None {
-                    let near = in_band(&tiles, x, y, GroundMaterial::Mud);
+                    let near = in_band(&tiles, x, y, GroundMaterial::Dirt);
                     banks += i32::from(near);
                 } else {
                     // Rivers keep their kind to the bank: no shallow rim.
                     assert_eq!(tile.water, WaterKind::River, "river kind at {x},{y}");
                     assert_eq!(tile.water_provenance, Provenance::ModelDerived);
-                    assert_eq!(tile.game_height_level, -3);
-                    assert_eq!(tile.surface.corner_game_height_levels, [-3; 4]);
-                    assert!(!tile.passable);
+                    assert_eq!(tile.game_height_level, 0);
+                    assert_eq!(tile.surface.corner_game_height_levels, [0; 4]);
+                    assert_eq!(tile.passable, tile.material == GroundMaterial::Ford);
                 }
             }
         }
         assert!(banks > 200, "key {key}: {banks} bank tiles");
-        assert_eq!(width_varies(&tiles, GroundMaterial::Mud), (true, true));
+        let narrow = tiles.iter().any(|p| {
+            p.terrain.water == WaterKind::None
+                && p.terrain.material != GroundMaterial::Dirt
+                && nearest_water(&tiles, p.tile.x, p.tile.y, 3).is_some_and(|(d, _)| d <= 5)
+        });
+        let wide = tiles.iter().any(|p| {
+            p.terrain.material == GroundMaterial::Dirt
+                && nearest_water(&tiles, p.tile.x, p.tile.y, 3)
+                    .is_some_and(|(d, _)| d > 2 && d <= 5)
+        });
+        assert!(narrow && wide, "one- and two-tile bank stretches");
+        assert!(
+            tiles
+                .iter()
+                .all(|p| p.terrain.material != GroundMaterial::Mud)
+        );
+        assert!(
+            tiles
+                .iter()
+                .filter(|p| p.terrain.material == GroundMaterial::Dirt)
+                .all(|p| nearest_water(&tiles, p.tile.x, p.tile.y, 3).is_some_and(|(d, _)| d <= 5))
+        );
         assert!(
             straight_rows.len() >= 3,
             "key {key}: river bank is a straight line"
@@ -318,7 +353,7 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_mud_banks() {
 }
 
 #[test]
-fn seeded_fallback_rivers_have_mud_banks_only_beside_river_water() {
+fn seeded_fallback_rivers_have_textured_banks_only_beside_river_water() {
     let generator = MapChunkGenerator::new([23; 32], 1, 512);
     let mut tiles = std::collections::BTreeMap::new();
     for cy in 0..16 {
@@ -332,7 +367,7 @@ fn seeded_fallback_rivers_have_mud_banks_only_beside_river_water() {
     }
     let mut mud = 0;
     for (&(x, y), tile) in &tiles {
-        if tile.material != GroundMaterial::Mud {
+        if tile.material != GroundMaterial::Dirt {
             continue;
         }
         mud += 1;
