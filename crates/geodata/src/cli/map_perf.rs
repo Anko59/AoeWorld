@@ -37,6 +37,18 @@ fn command(args: &[&str]) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
+/// True median of already sorted, non-empty samples: the middle value, or
+/// the mean of the two middle values when the count is even.
+fn median(sorted: &[u64]) -> u64 {
+    debug_assert!(!sorted.is_empty());
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 1 {
+        sorted[middle]
+    } else {
+        (sorted[middle - 1] + sorted[middle]) / 2
+    }
+}
+
 pub(super) fn run() -> Result<(), String> {
     let samples = env::var("AOE_MAP_SAMPLES")
         .map_err(|e| e.to_string())?
@@ -121,7 +133,7 @@ pub(super) fn run() -> Result<(), String> {
         materials,
         chunks_per_sample: BATCH,
         sample_nanoseconds: times,
-        median_nanoseconds_per_chunk: sorted[samples / 2] / BATCH as u64,
+        median_nanoseconds_per_chunk: median(&sorted) / BATCH as u64,
     };
     fs::create_dir_all("reports/perf").map_err(|e| e.to_string())?;
     fs::write(
@@ -132,3 +144,6 @@ pub(super) fn run() -> Result<(), String> {
     fs::write("reports/perf/map-chunk.md", format!("# Chunk generation timing\n\nRevision: `{}`; dirty: {}; profile: {}; toolchain: {}.\n\n{} at {:?}: {} tiles, {} samples of {} chunks; median {} ns/chunk.\n\nPackage loading and warmup are excluded. Resident source pages and a synthetic fixture do not qualify server paging, finished RTS performance or dedicated hardware. Raw samples: `map-chunk.json`.\n", report.revision, report.dirty, report.profile, report.toolchain, report.evidence_class, report.coordinate, report.tiles_per_chunk, report.sample_nanoseconds.len(), BATCH, report.median_nanoseconds_per_chunk)).map_err(|e| e.to_string())?;
     print_json(&report)
 }
+
+#[cfg(test)]
+mod tests;
