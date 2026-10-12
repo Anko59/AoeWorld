@@ -66,13 +66,15 @@ the shore band uses reviewed sand 15010. Animation is not implemented.
 ## Cliff pieces
 
 Cliff decorations draw group 226. The downhill screen direction selects the
-face: south uses slots 4,5,15,19 (rim on both upper edges), southwest 1,2,16
+face: south uses slots 4,5,15,17,19 (rim on both upper edges), southwest 1,2,16
 (rim on the upper-right edge), west 3,18,24; southeast and east mirror the
-southwest and west faces. The sprite is enlarged by 128/97 like the ground
-art so it covers its three-by-three tile cell, has no shadow, and is drawn as
-eight horizontal bands that are depth-sorted at their own ground row, so a
-unit in front of a row is drawn over it. A pack without group 226 shows the
-impassable cells as bare rock-tinted ground.
+southwest and west faces. Every piece draws its whole upright source frame
+through the shared object path at native art scale times 128/96, with the raw
+hotspot and shared ground clearance. No ground-plane strips or extra shadows
+are emitted. Cell tops retain surrounding ground; only vertical skirts are
+rock. The runtime atlas restrains the trial cliff palette to warm neutral stone
+while retaining luminance relief and alpha; original pack pixels are unchanged. A pack without group 226 shows the impassable cells as bare
+rock-tinted ground.
 
 ## Natural rock correction
 

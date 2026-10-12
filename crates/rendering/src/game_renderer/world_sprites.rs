@@ -103,15 +103,7 @@ pub(super) fn emit_world_sprite_frames(
         .iter()
         .filter_map(|resource| {
             scene_resource_presentation(art, *resource).map(|(frame, shadow)| {
-                WorldObject::Resource(
-                    *resource,
-                    if resource.kind == SceneResource::CLIFF {
-                        frame
-                    } else {
-                        world_frame(frame)
-                    },
-                    shadow.map(world_frame),
-                )
+                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
             })
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
@@ -123,8 +115,8 @@ pub(super) fn emit_world_sprite_frames(
             };
             let depth = object_depth(object);
             if resource.kind == SceneResource::CLIFF {
-                // Lies on the ground: no shadow, and it only just covers the
-                // terrain under it so units in front stay visible.
+                // One upright face, using the same scale and ground clearance
+                // as other objects. The source has its own shading.
                 if let Some(mut sprite) =
                     scene_sprite(frame, resource.position, resource.elevation_meters, camera)
                 {
@@ -135,10 +127,7 @@ pub(super) fn emit_world_sprite_frames(
                     emit((
                         sprite,
                         scaled(frame, camera.zoom as f32),
-                        depth
-                            + SceneResource::CLIFF_DEPTH_BIAS
-                            + SceneResource::CLIFF_DEPTH_LIFT
-                                * f64::from(resource.visual_family >> 6),
+                        depth,
                         object.stable_id(),
                     ));
                 }
@@ -259,13 +248,7 @@ const GROUND_CLEARANCE: f64 = 1.5;
 
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    surface_depth([position[0], position[1], object.elevation_meters()])
-        + if matches!(object, WorldObject::Resource(resource, _, _) if resource.kind == SceneResource::CLIFF)
-        {
-            0.0
-        } else {
-            GROUND_CLEARANCE
-        }
+    surface_depth([position[0], position[1], object.elevation_meters()]) + GROUND_CLEARANCE
 }
 
 #[derive(Clone, Copy)]
@@ -350,11 +333,7 @@ pub(super) fn resource_sprite_bounds(
     camera: SceneCamera,
 ) -> Option<[f64; 4]> {
     sprite_screen_bounds(
-        if resource.kind == SceneResource::CLIFF {
-            frame
-        } else {
-            world_frame(frame)
-        },
+        world_frame(frame),
         resource.position,
         resource.elevation_meters,
         camera,

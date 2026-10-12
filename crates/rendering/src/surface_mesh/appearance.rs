@@ -24,10 +24,7 @@ pub(super) fn assign_materials(
         }
         debug_assert!(materials.len() <= MAX_SURFACE_TRIANGLES * 3);
         for sample in terrain {
-            if water_material(sample.material) == wet
-                && (wet || sample.surface.water == 0)
-                && sample.surface.kind != SceneTerrainSurface::CLIFF
-            {
+            if water_material(sample.material) == wet && (wet || sample.surface.water == 0) {
                 if let Some(index) = keys.get(tile_key(sample.position)) {
                     materials[index].1 = Some(sample.material);
                 }

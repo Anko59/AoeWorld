@@ -56,14 +56,11 @@ impl ProjectedSurfaceTriangle {
     }
 }
 
-/// The sheet a land tile shows and its forest-floor strength. Water, cliffs
+/// The sheet a land tile shows and its forest-floor strength. Water
 /// and metadata-free samples are not observations.
 fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
     let appearance = sample.appearance?;
-    if sample.surface.water != 0
-        || appearance::water_material(sample.material)
-        || sample.surface.kind == SceneTerrainSurface::CLIFF
-    {
+    if sample.surface.water != 0 || appearance::water_material(sample.material) {
         return None;
     }
     let material = match sample.material {

@@ -461,12 +461,6 @@ fn surface_color(sample: SceneTerrain) -> [f32; 3] {
     if sample.surface.kind == SceneTerrainSurface::RAMP {
         color = darken(color, 0.88);
     }
-    if sample.surface.kind == SceneTerrainSurface::CLIFF {
-        if sample.surface.water == 0 {
-            color = [0.40; 3];
-        }
-        color = darken(color, 0.78);
-    }
     color
 }
 
