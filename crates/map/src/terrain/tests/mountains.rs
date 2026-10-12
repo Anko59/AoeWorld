@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 mod cliffs;
+mod review;
 
 pub(super) const SIDE: i32 = 768;
 const SAMPLES: u16 = 16;
