@@ -38,7 +38,10 @@ in the way of the merge. It is `major` or `critical` only when a normal path
 reaches it: a package the current writer does produce, a request the map
 creator can send, an order a player can give. Likewise a missing second
 enforcement point for an invariant that one reachable path already enforces is
-`minor`. What blocks a product change is wrong behaviour in play or in the
+`minor`. None of this applies to input that arrives from outside the machine
+that generated the data: client protocol messages and WebSocket frames, URL
+parameters and request bodies keep their full severity when malformed or
+hostile. What blocks a product change is wrong behaviour in play or in the
 creator, a regression, an unmet stated requirement, or a broken or weakened
 test.
 
