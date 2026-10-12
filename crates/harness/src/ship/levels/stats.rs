@@ -1,18 +1,23 @@
 //! The distribution of levels over the last merged pull requests on dev,
-//! read from the `<!-- level: … -->` marker of each description.
+//! read from the level each published description names.
 use super::{super::describe::Level, Levels};
 use serde::Deserialize;
 use std::{collections::BTreeMap, path::Path};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// The level named by a description's `<!-- level: … -->` line.
+/// The level a description names: the `<!-- level: … -->` line of a body
+/// file, or the published form `## Gate evidence (`<sha>`, level <name>)`.
 pub(crate) fn marker(body: &str) -> Option<Level> {
     body.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix("<!-- level:")?
-            .strip_suffix("-->")
-            .and_then(Level::parse)
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("<!-- level:") {
+            return rest.strip_suffix("-->").and_then(Level::parse);
+        }
+        let (_, rest) = line
+            .strip_prefix("## Gate evidence")?
+            .rsplit_once(", level ")?;
+        Level::parse(rest.strip_suffix(')')?)
     })
 }
 

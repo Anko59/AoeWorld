@@ -280,3 +280,17 @@ fn the_embedded_limits_are_the_committed_file() {
 fn the_embedded_config_parses() {
     assert!(Levels::embedded().is_some());
 }
+
+#[test]
+fn a_published_description_names_its_level_in_the_gate_evidence_heading() {
+    // `make ship` publishes the level there; the body-file marker is dropped.
+    assert_eq!(
+        marker("## How\ntext\n## Gate evidence (`852eef2045d2`, level medium)\n| gate |"),
+        Some(Level::Medium)
+    );
+    assert_eq!(
+        marker("## Gate evidence (`852eef2045d2`, level huge)"),
+        None
+    );
+    assert_eq!(marker("## Gate evidence (`852eef2045d2`)"), None);
+}
