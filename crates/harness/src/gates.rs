@@ -178,7 +178,14 @@ fn selection(
     paths: Vec<String>,
 ) -> Result<Selection, Box<dyn Error>> {
     let suites = classify(registry, &paths).suites;
-    let plan = registry.plan(Cadence::Ci, &suites)?;
+    // A pull request (it has a base) runs the `pr` cadence; a push to dev or
+    // main runs `ci`, which adds the slow gates that need not block a merge.
+    let cadence = if base.is_some() {
+        Cadence::Pr
+    } else {
+        Cadence::Ci
+    };
+    let plan = registry.plan(cadence, &suites)?;
     // Dependency closure can include gates outside CI cadence. A manifest must
     // never promise work that none of its selected jobs actually executes.
     let executed: BTreeSet<_> = registry
