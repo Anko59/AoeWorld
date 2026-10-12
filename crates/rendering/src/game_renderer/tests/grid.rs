@@ -112,7 +112,7 @@ fn grid_thins_out_instead_of_filling_a_distant_view() {
     };
     let near = segments(&terrain, camera).len();
     assert!(near > 0);
-    for (zoom, step) in [(0.25, 1.0), (0.2, 2.0), (0.1, 4.0), (0.04, 8.0)] {
+    for (zoom, step) in [(0.25, 2.0), (0.2, 2.0), (0.1, 4.0), (0.04, 8.0)] {
         camera.zoom = zoom;
         let lines = segments(&terrain, camera);
         assert!(!lines.is_empty(), "zoom {zoom} keeps a grid");
@@ -147,6 +147,51 @@ fn grid_thins_out_instead_of_filling_a_distant_view() {
         let pixels = |clip: f32| f64::from(clip) * camera.viewport[1] / 2.0;
         let height = pixels(pair[0].position[1]) - pixels(pair[0].radius[1]);
         assert!((height - 1.0).abs() < 1e-3, "line is {height} px thick");
+    }
+}
+
+#[wasm_bindgen_test]
+fn grid_lines_keep_sixteen_pixels_of_perpendicular_spacing_at_the_minimum_zoom() {
+    // The zoom control clamps at 0.25, the worst case for line spacing; a
+    // tile's screen height alone overstates the real distance in the 2:1
+    // projection, where neighbouring parallel lines sit closer together.
+    let terrain = field(8, None);
+    let camera = SceneCamera {
+        center: [4.0; 2],
+        zoom: 0.25,
+        viewport: [512.0, 256.0],
+        focus_elevation_meters: 0.0,
+    };
+    let lines = segments(&terrain, camera);
+    assert!(!lines.is_empty(), "the minimum zoom still draws a grid");
+    // Perpendicular screen distance per world tile between neighbouring
+    // parallel lines of one family: the tile diamond's altitude,
+    // W * H / sqrt(W^2 + H^2), scaled by the zoom.
+    let per_tile = aoe_core::ISO_TILE_WIDTH * aoe_core::ISO_TILE_HEIGHT
+        / (aoe_core::ISO_TILE_WIDTH * aoe_core::ISO_TILE_WIDTH
+            + aoe_core::ISO_TILE_HEIGHT * aoe_core::ISO_TILE_HEIGHT)
+            .sqrt();
+    let mut kept = [
+        std::collections::BTreeSet::new(),
+        std::collections::BTreeSet::new(),
+    ];
+    for [start, end] in &lines {
+        let world =
+            [start, end].map(|point| projection(camera).screen_to_world_at_height(*point, 0.0));
+        let axis = usize::from((world[0][0] - world[1][0]).abs() > 0.5);
+        let line = world[0][axis].round();
+        assert!((world[1][axis] - line).abs() < 1e-6);
+        kept[axis].insert(line as i64);
+    }
+    for lines in &kept {
+        assert!(lines.len() > 1);
+        for pair in lines.iter().collect::<Vec<_>>().windows(2) {
+            let spacing = pair[1].abs_diff(*pair[0]) as f64 * per_tile * camera.zoom;
+            assert!(
+                spacing >= 16.0,
+                "kept lines {pair:?} are {spacing} px apart on screen"
+            );
+        }
     }
 }
 

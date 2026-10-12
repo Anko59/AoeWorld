@@ -3,7 +3,7 @@ use crate::{
     surface_mesh::{ProjectedSurfaceTriangle, surface_depth},
     web::Sprite,
 };
-use aoe_core::{Camera, ISO_TILE_HEIGHT, ScreenPoint};
+use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 /// Straight-alpha overlay colour; `draw_grid` spells the same value for Canvas.
@@ -51,7 +51,12 @@ pub(crate) fn grid_segments<'a>(
     zoom: f64,
 ) -> Vec<[ScreenPoint; 2]> {
     let mut step = 1.0;
-    while step * ISO_TILE_HEIGHT * zoom < GRID_MIN_SPACING && step < 1e9 {
+    // Neighbouring parallel lines of one family sit `step` world tiles apart,
+    // a perpendicular screen distance of W * H / sqrt(W^2 + H^2) per tile in
+    // the 2:1 projection — not the tile height, which overstates it.
+    let per_tile = ISO_TILE_WIDTH * ISO_TILE_HEIGHT
+        / (ISO_TILE_WIDTH * ISO_TILE_WIDTH + ISO_TILE_HEIGHT * ISO_TILE_HEIGHT).sqrt();
+    while step * per_tile * zoom < GRID_MIN_SPACING && step < 1e9 {
         step *= 2.0;
     }
     let mut segments = Vec::new();
