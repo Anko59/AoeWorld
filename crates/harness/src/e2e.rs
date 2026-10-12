@@ -49,12 +49,15 @@ struct BrowserContainer(String);
 /// Whole-suite bounds for one serial Playwright worker; each test keeps its own
 /// 30 s timeout, so a hang still fails fast. The suite is ~94 tests at ~3 s each:
 /// the release run reached 282 s of a former 300 s bound on dev (2026-10-10) and
-/// any new spec tipped it over. Coverage runs the same suite against an
-/// instrumented debug server.
+/// any new spec tipped it over; by 2026-10-12 the grid, object-scale, water
+/// and ground specs had grown it past the 600 s that replaced it (dev and pull
+/// requests failed on the bound alone). Splitting the suite into shards is
+/// tracked in issue 288; until then the bound is twice the measured run.
+/// Coverage runs the same suite against an instrumented debug server.
 fn browser_run_deadline(coverage: Option<&str>) -> Duration {
     match coverage {
-        Some("1") => Duration::from_secs(1200),
-        _ => Duration::from_secs(600),
+        Some("1") => Duration::from_secs(2400),
+        _ => Duration::from_secs(1200),
     }
 }
 
@@ -305,8 +308,8 @@ mod tests {
 
     #[test]
     fn the_instrumented_debug_server_gets_its_own_deadline() {
-        assert_eq!(browser_run_deadline(None), Duration::from_secs(600));
-        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(1200));
+        assert_eq!(browser_run_deadline(None), Duration::from_secs(1200));
+        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(2400));
     }
 
     #[test]
