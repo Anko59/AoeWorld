@@ -109,3 +109,43 @@ fn chunk_memo_does_not_retain_source_errors_or_fetch_outside_world() {
         );
     }
 }
+
+#[test]
+fn provider_chunk_cliff_evaluations_are_bounded_by_distinct_cells() {
+    let (mut generator, _) = generator(None);
+    let source = Arc::new(Source {
+        calls: AtomicUsize::new(0),
+        side: 2,
+        error: None,
+    });
+    generator.provider = Some(source.clone());
+    Arc::make_mut(generator.provider_environment.as_mut().unwrap()).samples_per_axis = 2;
+    let memo = ChunkMemo::new_chunk(&generator, TileCoord::new(34, 34), &|| false);
+    let mut cells = std::collections::BTreeSet::new();
+    for y in 32..68 {
+        for x in 32..68 {
+            let position = TileCoord::new(x, y);
+            assert!(memo.base(position).unwrap().is_some());
+            cells.insert((x / 3, y / 3));
+        }
+    }
+    // Each tile interpolates its height and four corners (20 page calls).
+    // Each cliff decision interpolates four cell corners (16 page calls).
+    // Flat dry input ensures there are no additional physical-water reads.
+    let calls = source.calls.load(Ordering::Relaxed);
+    let evaluations = (calls - 1296 * 20) / 16;
+    assert_eq!(cells.len(), 169);
+    assert!(evaluations > 0);
+    assert!(
+        evaluations <= cells.len(),
+        "{evaluations} evaluations for {} cells",
+        cells.len()
+    );
+    for y in 32..68 {
+        for x in 32..68 {
+            let position = TileCoord::new(x, y);
+            let expected = generator.landscape_base_at(position, &|| false).unwrap();
+            assert_eq!(memo.base(position).unwrap(), expected);
+        }
+    }
+}

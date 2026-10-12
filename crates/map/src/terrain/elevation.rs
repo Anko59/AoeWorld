@@ -44,6 +44,11 @@ impl PreparedElevation {
         ])
     }
 
+    /// Height at the shared tile corner `(x, y)`.
+    pub(super) fn corner(&self, x: i32, y: i32, width_tiles: i32) -> Option<i32> {
+        self.sample(x, y, width_tiles, AxisPosition::Corner)
+    }
+
     fn sample(&self, x: i32, y: i32, width_tiles: i32, position: AxisPosition) -> Option<i32> {
         let (x0, x1, x_remainder, denominator) =
             source_axis_position(x, self.samples_per_axis, width_tiles, position)?;

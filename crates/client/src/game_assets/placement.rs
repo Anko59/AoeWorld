@@ -102,7 +102,20 @@ pub(super) fn copy_plane(
                 source[from + 3],
             ];
             match plane {
-                Plane::Color => {}
+                Plane::Color => {
+                    // The trial's cliff palette is strongly orange. Keep its
+                    // luminance relief and alpha, with a restrained warm stone
+                    // chroma. Original pack pixels remain untouched.
+                    if frame.source == "graphics.drs:[32, 112, 108, 115]:226" {
+                        let luma = (54 * u32::from(value[0])
+                            + 183 * u32::from(value[1])
+                            + 19 * u32::from(value[2]))
+                            / 256;
+                        for channel in &mut value[..3] {
+                            *channel = ((82 * luma + 18 * u32::from(*channel) + 50) / 100) as u8;
+                        }
+                    }
+                }
                 Plane::Player if value[3] > 0 => {
                     let shade = 0.65 + f32::from(value[0].min(7)) / 7.0 * 0.35;
                     value = [

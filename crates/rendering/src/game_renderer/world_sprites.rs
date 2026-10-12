@@ -2,6 +2,9 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "scenery.rs"]
+mod scenery;
+
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
     if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
@@ -16,6 +19,9 @@ pub fn scene_resource_presentation(
     art: &GameArt,
     resource: SceneResource,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
+    if resource.kind == SceneResource::CLIFF {
+        return scenery::frame(art, resource).map(|(frame, _)| (frame, None));
+    }
     if resource.kind == 1 {
         let family = match resource.visual_family {
             2 => Some((&art.tree_families[0], 9, &[1_u8, 2, 3, 4, 7, 8][..])),
@@ -108,6 +114,25 @@ pub(super) fn emit_world_sprite_frames(
                 continue;
             };
             let depth = object_depth(object);
+            if resource.kind == SceneResource::CLIFF {
+                // One upright face, using the same scale and ground clearance
+                // as other objects. The source has its own shading.
+                if let Some(mut sprite) =
+                    scene_sprite(frame, resource.position, resource.elevation_meters, camera)
+                {
+                    if scenery::frame(art, resource).is_some_and(|(_, mirror)| mirror) {
+                        sprite.uv[0] += sprite.uv[2];
+                        sprite.uv[2] = -sprite.uv[2];
+                    }
+                    emit((
+                        sprite,
+                        scaled(frame, camera.zoom as f32),
+                        depth,
+                        object.stable_id(),
+                    ));
+                }
+                continue;
+            }
             if let Some(shadow_frame) = paired_shadow {
                 if let Some(sprite) = scene_sprite(
                     shadow_frame,

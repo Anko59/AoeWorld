@@ -195,6 +195,17 @@ impl MapChunkGenerator {
             None
         };
         let mut decoration = None;
+        if base.surface.kind == SurfaceKind::Cliff
+            && let Some(piece) = memo.cliff(position)?
+            && piece.anchor
+        {
+            decoration = Some(LandscapeDecoration {
+                tile: position,
+                family: DecorationFamily::Cliff,
+                variant: piece.variant,
+                orientation: piece.facing,
+            });
+        }
         if resource.is_none()
             && base.passable
             && !matches!(
@@ -400,7 +411,7 @@ const fn soft_ground(material: GroundMaterial) -> bool {
 }
 
 fn material(base: Tile, appearance: LandscapeAppearance) -> GroundMaterial {
-    if base.water != crate::WaterKind::None || !base.passable {
+    if base.water != crate::WaterKind::None || base.material == GroundMaterial::Ice {
         return base.material;
     }
     if matches!(

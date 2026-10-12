@@ -27,10 +27,7 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         let Some(appearance) = sample.appearance else {
             continue;
         };
-        if sample.surface.water != 0
-            || sample.surface.kind == SceneTerrainSurface::CLIFF
-            || !matches!(sample.material, 0 | 1 | 2 | 6)
-        {
+        if sample.surface.water != 0 || !matches!(sample.material, 0 | 1 | 2 | 6) {
             continue;
         }
         let tile = tile_key(sample.position);

@@ -44,3 +44,26 @@ pub(super) fn for_scene(client: &Client, scene: &scene::PreparedScene) -> Vec<Sc
         })
         .collect()
 }
+
+/// One whole upright sprite per cliff piece, standing on its centre tile.
+pub(super) fn scenery<'a>(
+    _client: &'a Client,
+    scene: &'a scene::PreparedScene,
+) -> impl Iterator<Item = SceneResource> + 'a {
+    scene
+        .decorations
+        .iter()
+        .filter(|decoration| decoration.family == aoe_map::DecorationFamily::Cliff as u8)
+        .map(|decoration| {
+            let [x, y] = decoration.position.map(|value| value.floor() as u64);
+            SceneResource {
+                // Odd identifiers never collide with resource nodes.
+                id: (y << 19) | (x << 1) | 1,
+                position: decoration.position,
+                kind: SceneResource::CLIFF,
+                visual_variant: decoration.visual_variant,
+                visual_family: decoration.orientation,
+                elevation_meters: decoration.elevation_meters,
+            }
+        })
+}

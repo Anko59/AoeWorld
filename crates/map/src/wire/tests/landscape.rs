@@ -81,7 +81,7 @@ fn trees_require_a_family_and_other_resources_are_generic() {
         (resource + 16, 4),
         (resource + 17, 5),
         (resource + 21, 5),
-        (decoration + 8, 4),
+        (decoration + 8, 5),
     ] {
         let mut bad = bytes.clone();
         bad[offset] = value;

@@ -46,6 +46,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     };
     game.upload_game_atlas(&art, vec![255; crate::GAME_ATLAS_BYTES])
         .unwrap();

@@ -134,3 +134,40 @@ fn partial_terrain_variant_sets_vary_on_both_axes() {
         terrain_texture_frame(&art, 1, [0, 1]).unwrap().atlas.uv
     );
 }
+
+#[wasm_bindgen_test]
+fn missing_cliff_art_keeps_impassable_cells_visibly_rock_at_both_zooms() {
+    let mut terrain = super::appearance_tests::map(32);
+    for tile in &mut terrain {
+        tile.material = 0;
+        tile.surface.kind = SceneTerrainSurface::CLIFF;
+    }
+    let frame = GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.2, 0.0, 0.01, 0.01],
+        },
+        size: [97.0, 49.0],
+        anchor: [48.0, 24.0],
+    };
+    for count in [0, 11] {
+        let mut art = test_art(frame);
+        art.scenery.cliff_faces = vec![frame; count];
+        for zoom in [1.0, 0.64] {
+            let mut triangles = projected_surface_triangles(
+                &terrain,
+                super::appearance_tests::camera([16.0, 16.0], zoom, [1280.0, 720.0]),
+            );
+            assert!(!triangles.is_empty());
+            apply_terrain_textures(&mut triangles, &art);
+            apply_terrain_textures(&mut triangles, &art);
+            for triangle in triangles {
+                assert!(!triangle.pickable);
+                assert_eq!(triangle.material, 4);
+                assert_eq!(triangle.tint, 12);
+                assert_eq!(triangle.texture_uv, Some(frame.atlas));
+                assert_eq!(triangle.mix, [0; 6]);
+            }
+        }
+    }
+}

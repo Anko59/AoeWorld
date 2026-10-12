@@ -80,10 +80,14 @@ pub enum DecorationFamily {
     Grass,
     Stone,
     Deadwood,
+    /// Sprite of a cliff piece on the centre tile of its impassable
+    /// three-by-three cell; orientation is the downhill screen octant.
+    Cliff,
 }
 
-/// Nonblocking visual dressing, with no resource identity, amount or simulation
-/// API. Orientation is one of eight directions (0..=7); variant is opaque.
+/// Visual dressing with no resource identity, amount or simulation API; it
+/// never blocks by itself (a cliff piece marks terrain that is impassable on
+/// its own). Orientation is one of eight directions (0..=7); variant is opaque.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LandscapeDecoration {

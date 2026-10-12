@@ -24,10 +24,7 @@ pub(super) fn assign_materials(
         }
         debug_assert!(materials.len() <= MAX_SURFACE_TRIANGLES * 3);
         for sample in terrain {
-            if water_material(sample.material) == wet
-                && (wet || sample.surface.water == 0)
-                && sample.surface.kind != SceneTerrainSurface::CLIFF
-            {
+            if water_material(sample.material) == wet && (wet || sample.surface.water == 0) {
                 if let Some(index) = keys.get(tile_key(sample.position)) {
                     materials[index].1 = Some(sample.material);
                 }
@@ -101,6 +98,17 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
+        // Physical cliff tops keep grass around the upright face. A pack with
+        // absent/incomplete face art still needs visible impassable rock.
+        if !triangle.pickable && !triangle.skirt && art.scenery.cliff_faces.len() != 25 {
+            triangle.material = 4;
+            triangle.tint = 2;
+            triangle.appearance = 0;
+            triangle.mix = [0; 6];
+            triangle.floor_strengths = None;
+            triangle.texture_materials = None;
+            triangle.texture_blend = None;
+        }
         if mix::texture(triangle, art) {
             continue;
         }

@@ -80,6 +80,10 @@ async fn instance_buffer_grows_at_capacity_boundaries_with_layer_pressure() {
         (supported, supported),
         (supported + 1, supported + 1),
     ] {
+        // Give WebDriver a browser turn between the three maximum-pressure
+        // frames. The runner's output scrape has its own thirty-second script
+        // deadline, independent of its three-hundred-second suite deadline.
+        browser_turn().await;
         let sprite_count = offset - surfaces.len();
         let Ok(required) = instance_buffer::required_instance_count(surfaces.len(), sprite_count)
         else {
@@ -99,12 +103,73 @@ async fn instance_buffer_grows_at_capacity_boundaries_with_layer_pressure() {
             counters.gpu_buffer_bytes,
             expected_capacity * std::mem::size_of::<Sprite>()
         );
+        submitted_frame(&renderer).await;
     }
     renderer.device.destroy();
     assert!(instance_buffer::required_instance_count(instance_buffer::MAX_CAPACITY, 0).is_ok());
     assert!(
         instance_buffer::required_instance_count(instance_buffer::MAX_CAPACITY + 1, 0).is_err()
     );
+}
+
+/// A macrotask, rather than a resolved Promise's microtask: output scraping
+/// must be able to run even when the test executor has more ready work.
+#[cfg(test)]
+async fn browser_turn() {
+    use std::{cell::Cell, rc::Rc, task::Poll};
+    let done = Rc::new(Cell::new(false));
+    let mut scheduled = false;
+    std::future::poll_fn(|context| {
+        if done.get() {
+            return Poll::Ready(());
+        }
+        if !scheduled {
+            scheduled = true;
+            let done = done.clone();
+            let waker = context.waker().clone();
+            let callback = wasm_bindgen::closure::Closure::once_into_js(move || {
+                done.set(true);
+                waker.wake();
+            });
+            web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0)
+                .unwrap();
+        }
+        Poll::Pending
+    })
+    .await;
+}
+
+/// Finish each submitted pressure frame before submitting the next one; retain
+/// all surface/object/ring/grid counts and every capacity and byte assertion.
+#[cfg(test)]
+async fn submitted_frame(renderer: &Renderer) {
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        task::Poll,
+    };
+    let done = Arc::new(AtomicBool::new(false));
+    let mut scheduled = false;
+    std::future::poll_fn(|context| {
+        if done.load(Ordering::Acquire) {
+            return Poll::Ready(());
+        }
+        if !scheduled {
+            scheduled = true;
+            let done = done.clone();
+            let waker = context.waker().clone();
+            renderer.queue.on_submitted_work_done(move || {
+                done.store(true, Ordering::Release);
+                waker.wake();
+            });
+        }
+        Poll::Pending
+    })
+    .await;
 }
 
 #[wasm_bindgen_test]

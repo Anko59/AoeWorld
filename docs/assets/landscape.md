@@ -1,9 +1,9 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v7 keeps approved art separate from discovery. Required sources remain
+Catalog v8 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
 prefixes, three water depth sheets and four ground-variety sheets bring the ceiling
-to 1,378 frames (1,210 terrain/168 objects).
+to 1,403 frames (1,210 terrain/193 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -26,15 +26,16 @@ No original pixels, generated manifests, or screenshots are public fixtures.
 | Grasses 15001/15009/15006 | terrain.drs | 100 each | Promoted in v7. All 97×49, hotspot (0,0). Montages in x-major, reversed-y order tile without seams: 15001 darker grass, 15009 grass with brown patches, 15006 grass and dirt mix. |
 | Beach 15017 | terrain.drs | 100 | Promoted in v7 as gravel: 97×49, hotspot (0,0), seamless pebbly montage. Shore compatibility remains unreviewed. |
 | Ice 15024 | terrain.drs | 64 | 97×49, hotspot (0,0). Neither 100-frame indexing nor assumed 8×8 periodicity is justified. |
-| Cliffs 226–234 | graphics.drs | 25 each | Mixed bounds include 1×1/2×3 placeholders and far-away hotspots. 227 includes a 329×718 frame. Must inspect valid variants and placement before use. |
+| Cliff faces 226 | graphics.drs | 25 | Reviewed over a three-by-three tile grid and promoted: slots 1,2,3,4,5,15,16,17,18,19,24 are rock faces falling toward the camera (270–308 × 136–156, hotspot at the footprint centre); the other fourteen slots are 1×1/2×3 placeholders. |
+| Cliffs 227–234 | graphics.drs | 25 each | 227 (slots 8,22,23) and 228 (10,11,20,21) are thin rims of cliffs seen from behind; 229–232 hold one corner piece each; 233/234 one small crag each. Mostly placeholders; 227 slot 7 is a 329×718 frame. Unpromoted. |
 | Cliff 235 | graphics.drs | 1 | 154×79, hotspot (96,32); metadata only. |
 
-The remaining 12 discovery entries live in `catalog::candidates::UNAPPROVED_SOURCES`;
+The remaining 11 discovery entries live in `catalog::candidates::UNAPPROVED_SOURCES`;
 conifer/palm prefixes and the four ground sheets have moved to the reviewed optional load list. Their
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 1,378 actual extents through the runtime packer; the
+test separately feeds all 1,403 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -62,6 +63,19 @@ Faces between two classes blend their sheets through the same per-vertex
 splat as land materials; water never blends with land across the shore. No
 water or shore face uses a procedural flat tint. Gravel 15017 is approved only for land:
 the shore band uses reviewed sand 15010. Animation is not implemented.
+## Cliff pieces
+
+Cliff decorations draw group 226. The downhill screen direction selects the
+face: southwest/west uses slots 1,2,18 (upper-right ridge), southeast/east
+4,5,16 (upper-left ridge), and front-facing corners 3,15,17,19,24 join both
+ridges. Opposing faces use native art rather than mirroring the sun direction.
+Every piece draws its whole upright source frame
+through the shared object path at native art scale times 128/96, with the raw
+hotspot and shared ground clearance. No ground-plane strips or extra shadows
+are emitted. Cell tops retain surrounding ground; only vertical skirts are
+rock. The runtime atlas restrains the trial cliff palette to warm neutral stone
+while retaining luminance relief and alpha; original pack pixels are unchanged. A pack without group 226 shows the impassable cells as bare
+rock-tinted ground.
 
 ## Natural rock correction
 

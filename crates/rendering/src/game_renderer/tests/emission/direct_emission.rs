@@ -4,6 +4,8 @@ use super::*;
 mod alloc_budget;
 #[path = "object_scale.rs"]
 mod object_scale;
+#[path = "scenery.rs"]
+mod scenery;
 
 const FNV: u64 = 0x0000_0100_0000_01b3;
 
@@ -104,6 +106,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
             resources: base.resources.clone(),
             tree_shadows: base.tree_shadows.clone(),
             tree_families: base.tree_families.clone(),
+            scenery: Default::default(),
         };
         match mode {
             1 => {

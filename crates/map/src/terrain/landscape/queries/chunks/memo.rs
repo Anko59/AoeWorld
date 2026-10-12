@@ -10,6 +10,8 @@ struct Entry {
 }
 
 /// One 192-tile cell and its wildness.
+type CliffCell = ((i32, i32), Option<crate::terrain::relief::CliffPiece>);
+
 type CellWildness = ((i64, i64), u16);
 
 pub(super) type PointMemo<'a> = Memo<'a, 25, 361>;
@@ -26,6 +28,7 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     cancelled: &'a dyn Fn() -> bool,
     entries: RefCell<[Entry; N]>,
     cells: RefCell<[Option<CellWildness>; 16]>,
+    cliffs: RefCell<[Option<CliffCell>; 169]>,
     water: RefCell<[Option<crate::WaterKind>; W]>,
     shores: RefCell<[Option<Shore>; N]>,
     /// A point query asks the source whether any water is in reach before
@@ -47,6 +50,7 @@ impl<'a> PointMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
             cells: RefCell::new([None; 16]),
+            cliffs: RefCell::new([None; 169]),
             water: RefCell::new([None; 361]),
             shores: RefCell::new([None; 25]),
             probe_reach: true,
@@ -68,6 +72,7 @@ impl<'a> ChunkMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 1296]),
             cells: RefCell::new([None; 16]),
+            cliffs: RefCell::new([None; 169]),
             water: RefCell::new([None; 2500]),
             shores: RefCell::new([None; 1296]),
             probe_reach: false,
@@ -112,13 +117,55 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         {
             return Ok(Some(base));
         }
-        let result = self.generator.landscape_base_at(position, self.cancelled)?;
+        let result =
+            if self.generator.provider.is_some() && self.generator.landscape_in_bounds(position) {
+                Some(provider::sample_base_tile_with_cliff(
+                    self.generator,
+                    position,
+                    self.cancelled,
+                    &|tile| self.cliff(tile),
+                )?)
+            } else {
+                self.generator.landscape_base_at(position, self.cancelled)?
+            };
         if let Some(index) = index
             && let Some(base) = result
         {
             self.entries.borrow_mut()[index].base = Some(base);
         }
         Ok(result)
+    }
+    /// A 36-tile halo intersects at most 13x13 three-tile cells. Direct mapping
+    /// is collision-free inside that halo; out-of-halo queries are not retained.
+    /// Cache dry and non-cliff decisions too, but never errors or cancellation.
+    pub(super) fn cliff(
+        &self,
+        position: TileCoord,
+    ) -> Result<Option<crate::terrain::relief::CliffPiece>, EnvironmentPageError> {
+        if (self.cancelled)() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let side = crate::terrain::relief::CLIFF_CELL_TILES;
+        let cell = (position.x.div_euclid(side), position.y.div_euclid(side));
+        let slot = (cell.1.rem_euclid(13) * 13 + cell.0.rem_euclid(13)) as usize;
+        let cached = self.cliffs.borrow()[slot];
+        let piece = if let Some((key, piece)) = cached
+            && key == cell
+        {
+            piece
+        } else {
+            let piece = self
+                .generator
+                .cliff_piece_with_cancel(position, self.cancelled)?;
+            if self.index(position).is_some() {
+                self.cliffs.borrow_mut()[slot] = Some((cell, piece));
+            }
+            piece
+        };
+        Ok(piece.map(|mut piece| {
+            piece.anchor = position.x.rem_euclid(side) == 1 && position.y.rem_euclid(side) == 1;
+            piece
+        }))
     }
     fn candidate(&self, position: TileCoord) -> Result<Option<ResourceNode>, EnvironmentPageError> {
         if (self.cancelled)() {

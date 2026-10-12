@@ -27,6 +27,7 @@ pub use landscape_data::{
     LandscapeResource, LandscapeTile, NativeExposure, NativeHeightBand, ResourceVisualFamily,
 };
 mod provider;
+mod relief;
 mod resources;
 mod shoreline;
 mod surface;

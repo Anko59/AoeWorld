@@ -5,6 +5,7 @@ mod elevation_interpolation;
 mod field_local_axes;
 mod golden;
 mod historical_field_axis;
+mod mountains;
 mod shore_band;
 mod shoreline;
 mod water_depth;

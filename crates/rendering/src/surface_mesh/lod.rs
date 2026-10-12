@@ -136,13 +136,9 @@ pub fn projected_surface_triangles(
                         mix: [0; 6],
                         tile,
                         skirt: false,
-                        material: if sample.surface.water == 0
-                            && sample.surface.kind == SceneTerrainSurface::CLIFF
-                        {
-                            4
-                        } else {
-                            sample.material
-                        },
+                        // Physical cliff cells keep their surrounding ground;
+                        // vertical skirts and upright sprites supply the rock face.
+                        material: sample.material,
                         // Several world tiles under one face: sample per fragment
                         // by world tile, never one origin frame stretched over all.
                         texture_mode: if texture_step > 1 {
@@ -155,16 +151,14 @@ pub fn projected_surface_triangles(
                         } else {
                             match sample.surface.kind {
                                 SceneTerrainSurface::RAMP => 1,
-                                SceneTerrainSurface::CLIFF => 2,
                                 _ => 0,
                             }
                         },
                         texture_uv: None,
                         texture_blend: None,
                         texture_tile,
-                        texture_materials: (sample.surface.kind != SceneTerrainSurface::CLIFF
-                            && (sample.surface.water == 0
-                                || appearance::water_material(sample.material)))
+                        texture_materials: (sample.surface.water == 0
+                            || appearance::water_material(sample.material))
                         .then_some([sample.material; 3]),
                         pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
                         order: order as u8,

@@ -81,7 +81,7 @@ impl MapChunkGenerator {
                 .unwrap_or([height; 4]);
             Some((height, corner_heights, elevation.compression))
         });
-        let (geographic_height_centimeters, game_height_level, surface, elevation_provenance) =
+        let (geographic_height_centimeters, game_height_level, mut surface, elevation_provenance) =
             match elevation {
                 Some((height, corner_heights, compression)) => (
                     height,
@@ -102,6 +102,11 @@ impl MapChunkGenerator {
         // Elevation cannot identify water: inland depressions can be dry, while
         // coastlines require independent, coherent water geometry.
         let (water, water_provenance) = self.dense_water(tile);
+        if water == WaterKind::None
+            && matches!(self.cliff_piece_with_cancel(tile, &|| false), Ok(Some(_)))
+        {
+            surface.kind = surface::SurfaceKind::Cliff;
+        }
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),
             WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,

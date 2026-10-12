@@ -73,11 +73,54 @@ resource and blocking queries share that composer.
   tiles are never varied. It is decided last and read by nothing: heights,
   water, passability, movement cost, resources and vegetation are unchanged.
 - Decorations are non-blocking and never become resources, blockers or
-  economy objects.
+  economy objects. A cliff decoration is only the sprite of terrain that is
+  impassable by itself (see [mountains](#mountains)).
 
 Non-tree resources need a free cardinal neighbor satisfying the physical
 height/passability rules, and dressing cannot refill crop, grazing, non-land or
 reserved cells.
+
+### Mountains
+
+Cliffs are relief, part of the physical base terrain, and depend on the
+relief; the only non-geographic input is the reserved start area. The
+starting glade uses geography and the central start position; its connector
+also uses the procedural forest seed to reach that forest layout's hub.
+Cliff exclusion depends only on whether any tile in the cell is reserved.
+Pass noise and sprite variants use the geography key and world cell
+coordinates, never the procedural seed. The model is the Age of
+Empires II one, because that is the art the pack has: a cliff is a row of
+pieces, each a three-by-three tile cell of impassable ground (`SurfaceKind::
+Cliff`) that carries one cliff sprite as a `Cliff` decoration on its centre
+tile. The terrain mesh keeps its real heights; no height step is invented.
+
+A cell of the world-anchored three-tile lattice is a cliff piece when all of
+these hold, evaluated from the four corner heights of the cell in game
+centimetres (source height divided by the compression):
+
+- steep: the rise across the cell is at least 8% (48 cm over 600 cm);
+- on a contour: one of the contour levels, every 8 game metres, lies between
+  its lowest and highest corner, so consecutive pieces follow the real contour
+  with spacing determined by the source slope;
+- facing the camera: the downhill direction is south, southwest, west, east
+  or southeast on screen. Slopes that fall away to the northwest, north or
+  northeast stay open, so a contour closing around a summit or a hollow is
+  never walled all the way round;
+- not a pass: continuous world-anchored noise (12-tile wavelength) leaves
+  cells open when its value is below 116 of 256, in gaps at least one piece wide;
+- all nine tiles are dry land outside the starting glade and its connector;
+  any river, lake, ocean or shallow water (including a future ford) rejects
+  the whole cell. Reserved cells receive no cliff face or additional blocking.
+
+Other slope tiles retain their ordinary physical surface. Elevation steeper
+than a 35% source grade is independently impassable `Cliff` terrain and may
+carry a sprite when the whole cell meets the contour rules above; the
+50% planar-slope test pins these visible faces. Start exclusions do not
+make independently impassable source terrain traversable.
+Tests bound cliff coverage to 1–12% on the 768-tile alpine fixture (grades
+up to 22%). At least 99.9% of passable ground belongs to one four-connected
+region reaching all four edges, with remaining pockets at most 36 tiles;
+the same connectivity bounds hold around an isolated cone and hollow.
 
 ### Forest amount and large forests
 
@@ -204,7 +247,7 @@ the renderer falls back to approved broadleaf frames (see
 | Header | 7 | Version u8; tile, resource and decoration counts u16 |
 | Tile | 35 | 20 terrain bytes (including 2 observation bytes), world x/y i32, canopy u16, floor u16, palette, exposure, height band |
 | Resource | 22 | 21 node bytes plus visual family |
-| Decoration | 11 | x, y, family, variant, orientation |
+| Decoration | 11 | x, y, family (0 shrub, 1 grass, 2 stone, 3 deadwood, 4 cliff piece), variant, orientation |
 
 At most 1,024 of each record decode to 69,639 bytes, below the 128 KiB limit.
 The decoder rejects invalid counts, lengths, enums, strengths and orientations,

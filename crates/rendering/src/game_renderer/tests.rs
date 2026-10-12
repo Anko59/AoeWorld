@@ -35,6 +35,7 @@ fn synthetic_art() -> GameArt {
         resources: std::array::from_fn(|_| vec![frame]),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
         terrain_topology: [None; 11],
         water_depth: Default::default(),
     }

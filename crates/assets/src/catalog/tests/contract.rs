@@ -23,7 +23,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 7);
+    assert_eq!(VERSION, 8);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -127,6 +127,7 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::StoneDeposit, 4482, 7),
             (AssetRole::TreeConifer, 4654, 9),
             (AssetRole::TreePalm, 4653, 13),
+            (AssetRole::CliffFace, 226, 25),
         ]
     );
 }

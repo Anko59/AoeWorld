@@ -32,6 +32,13 @@ pub struct GameFrame {
     pub anchor: [f32; 2],
 }
 
+/// Optional mountain scenery; an empty group means the pack has no such art.
+#[derive(Default)]
+pub struct SceneryArt {
+    /// Raw 25-slot cliff-face group; only the reviewed slots are drawn.
+    pub cliff_faces: Vec<GameFrame>,
+}
+
 pub struct GameArt {
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
@@ -57,6 +64,7 @@ pub struct GameArt {
     pub tree_shadows: Vec<GameFrame>,
     /// Optional raw conifer and palm prefixes; empty alone means unavailable.
     pub tree_families: [Vec<GameFrame>; 2],
+    pub scenery: SceneryArt,
 }
 
 impl Renderer {

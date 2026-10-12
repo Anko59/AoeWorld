@@ -65,6 +65,7 @@ impl SceneTerrainSurface {
     }
 }
 
+/// A resource node, or one piece of scenery when `kind` is a scenery kind.
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneResource {
     pub id: u64,
@@ -74,6 +75,11 @@ pub struct SceneResource {
     /// Semantic family, never automatic artwork approval. Zero is generic.
     pub visual_family: u8,
     pub elevation_meters: f64,
+}
+
+impl SceneResource {
+    /// One upright cliff face; visual_family is its downhill screen octant.
+    pub const CLIFF: u8 = 16;
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.

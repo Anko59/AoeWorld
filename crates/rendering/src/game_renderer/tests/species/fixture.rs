@@ -52,6 +52,7 @@ pub(crate) fn art() -> GameArt {
             (0..9).map(|i| frame(i * 16)).collect(),
             (0..13).map(|i| frame(192 + i * 16)).collect(),
         ],
+        scenery: Default::default(),
     }
 }
 pub(crate) fn atlas() -> Vec<u8> {

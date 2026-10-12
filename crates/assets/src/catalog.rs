@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 7;
+pub const VERSION: u8 = 8;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_378;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_403;
 
 /// Paving 15018 is not natural rock. No imported rock sheet is approved.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -44,6 +44,7 @@ pub enum AssetRole {
     WornGrass,
     LushGrass,
     Gravel,
+    CliffFace,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,7 +145,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 8] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -203,6 +204,17 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 7] = [
         id: 4653,
         frames: 13,
         interpretation: "single resource subset 0,1,2,3,5,6,8,10,11,12 only; alpha silhouette, no approved paired shadow",
+        terrain_topology: None,
+    },
+    // Visually reviewed against a three-by-three tile grid: eleven rock faces
+    // that fall toward the camera, hotspot at the centre of the footprint.
+    // The other fourteen slots are one-pixel placeholders and are never drawn.
+    SpriteSource {
+        role: AssetRole::CliffFace,
+        archive: "graphics.drs",
+        id: 226,
+        frames: 25,
+        interpretation: "camera-facing cliff faces 1,2,3,4,5,15,16,17,18,19,24 on a 3x3 tile footprint; other slots are placeholders",
         terrain_topology: None,
     },
 ];

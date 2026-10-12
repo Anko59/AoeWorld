@@ -95,6 +95,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
         resources: std::array::from_fn(|index| if index == 0 { vec![frame] } else { Vec::new() }),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     }
 }
 

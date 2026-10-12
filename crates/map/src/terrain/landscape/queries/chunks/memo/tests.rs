@@ -17,6 +17,7 @@ use std::{
 #[derive(Debug)]
 struct Source {
     calls: AtomicUsize,
+    side: u8,
     error: Option<EnvironmentPageError>,
 }
 impl EnvironmentPageProvider for Source {
@@ -34,15 +35,16 @@ impl EnvironmentPageProvider for Source {
             level: 0,
             x: 0,
             y: 0,
-            width: 1,
-            height: 1,
-            geographic_height_centimeters: vec![0],
+            width: self.side,
+            height: self.side,
+            geographic_height_centimeters: vec![0; usize::from(self.side).pow(2)],
         })))
     }
 }
 fn generator(error: Option<EnvironmentPageError>) -> (MapChunkGenerator, Arc<Source>) {
     let source = Arc::new(Source {
         calls: AtomicUsize::new(0),
+        side: 1,
         error,
     });
     let mut generator = MapChunkGenerator::new([17; 32], 1, 128);

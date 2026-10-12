@@ -73,6 +73,7 @@ pub(crate) fn art() -> GameArt {
         resources: Default::default(),
         tree_shadows: Vec::new(),
         tree_families: Default::default(),
+        scenery: Default::default(),
     }
 }
 

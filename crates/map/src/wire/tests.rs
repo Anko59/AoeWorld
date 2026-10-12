@@ -265,6 +265,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     for value in 0..=1 {
         assert!(diagonal(value).is_ok(), "diagonal {value}");
     }
+    assert!(decoration_from(4).is_ok(), "cliff piece");
     for value in 0..=3 {
         assert!(resource_kind(value).is_ok(), "resource {value}");
         assert!(decoration_from(value).is_ok(), "decoration {value}");
@@ -284,7 +285,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     assert_eq!(exposure_from(3), Err(CompactChunkError::InvalidEnum));
     assert_eq!(height_from(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(resource_family_from(5), Err(CompactChunkError::InvalidEnum));
-    assert_eq!(decoration_from(4), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(decoration_from(5), Err(CompactChunkError::InvalidEnum));
 }
 
 #[test]
