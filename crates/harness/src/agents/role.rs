@@ -69,7 +69,7 @@ impl Role {
     }
 
     /// Tester, Implementer and Reviewer never commit, push or move Git state:
-    /// the session that ran them reviews and ships.
+    /// the duel driver commits each step; the main session reviews and ships.
     pub(crate) fn duty_bound(self) -> bool {
         matches!(self, Self::Tester | Self::Implementer | Self::Reviewer)
     }

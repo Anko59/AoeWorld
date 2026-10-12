@@ -2,6 +2,10 @@
 
 Read [shipping](../../docs/shipping.md) and [review](../../docs/review.md).
 
+Product work starts with `make duel DUEL_TASK=<file> DUEL_RUNTIME=<runtime>`
+(or the same tests-first order). The driver commits each red-test and green-code
+step; read its summary and diff, then film the change before shipping.
+
 1. Commit on a feature branch; run `make review-floor` and pick the tier (never
    below it; higher for risky changes). Write the description file.
 2. `make ship SHIP_TITLE=… SHIP_BODY=<file> SHIP_TIER=<tier> SHIP_RUNTIME=<your runtime>`.

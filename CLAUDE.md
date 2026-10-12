@@ -28,6 +28,8 @@ follow it rather than rephrasing the command to get past it.
   `gates/registry.json` selects for the change. Red results come back to you;
   fix them without weakening a test, gate or baseline.
 
+Product work goes through `make duel` or follows the same tests-first order.
+
 ## Shipping
 
 Commit on a feature branch (the pre-commit hook runs `make pre-commit`), then
@@ -51,7 +53,7 @@ command that needs it ([credentials](docs/credentials.md)). Never print it.
 
 Delegate test-first work to the agents in `.claude/agents/`: `tester` writes
 failing tests only, `implementer` writes production code only, `reviewer` only
-reads. They never commit or push; the main session reviews, commits and ships.
+reads. They never commit or push; the duel driver commits each step and the main session reviews and ships.
 Built-in read-only agents (`Explore`, `Plan`) are held to the reviewer's rules.
 Any other agent may work outside the protected classes (harness, gates,
 baselines, `.claude/`, instructions), which only the main session edits.

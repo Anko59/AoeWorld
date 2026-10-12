@@ -5,6 +5,7 @@
 //! and, only on PASS, pushes the branch and creates or updates its pull request.
 //! The agent policy denies `git push` and `gh pr create` to every role.
 mod describe;
+mod duel;
 pub(crate) mod evidence;
 pub(crate) mod git;
 mod github;
@@ -33,6 +34,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(clap::Subcommand)]
 pub(crate) enum Commands {
+    /// Run tester red then implementer green and commit each step (DUEL_*).
+    Duel,
     /// Run the preflight gates at HEAD, record evidence, push and open or update the PR.
     Ship(Options),
     /// Print the evidence recorded for HEAD, if any.
@@ -112,6 +115,7 @@ impl Default for Options {
 pub(crate) fn execute(command: Commands) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
+        Commands::Duel => duel::execute(&root).map_err(Into::into),
         Commands::Ship(mut options) => {
             // `make ship` passes these through the environment, never through shell text.
             let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());

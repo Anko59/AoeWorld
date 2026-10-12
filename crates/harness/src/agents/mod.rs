@@ -30,7 +30,7 @@ mod tests;
 
 use context::{Access, Context};
 use role::Role;
-pub(crate) use role::is_test as is_test_path;
+pub(crate) use role::{is_test as is_test_path, protected as protected_path};
 use runtime::Call;
 pub(crate) use runtime::Runtime;
 

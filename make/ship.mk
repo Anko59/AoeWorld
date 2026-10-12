@@ -9,10 +9,19 @@
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
+export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: ship ship-status review review-floor review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
+.PHONY: duel duel-coverage ship ship-status review review-floor review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
+duel:
+	@.agents/hooks/harness.sh exec duel
+
+# Focused native coverage for the driver; full coverage and its floors stay in make coverage.
+duel-coverage: coverage-tools
+	@mkdir -p reports/coverage
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov test --locked -p aoe-harness --lcov --output-path reports/coverage/duel.lcov
+
 ship:
 	@.agents/hooks/harness.sh exec ship
 

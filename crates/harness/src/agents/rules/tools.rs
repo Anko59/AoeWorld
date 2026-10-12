@@ -69,6 +69,9 @@ pub(crate) fn assignment(context: &Context, name: &str, value: &Word) -> Verdict
             "setting `{name}` reconfigures Git, gh or Make around the gates; run the command without it"
         ));
     }
+    if context.role.is_agent() && name.starts_with("DUEL_") {
+        return Err("DUEL_* variables belong to the main session only".into());
+    }
     let noop = value.plain() && matches!(value.text.as_str(), "" | "cat" | "true" | ":");
     if context.role.is_agent() && (AGENT.contains(&name) || name.starts_with("DYLD_")) && !noop {
         return Err(format!(

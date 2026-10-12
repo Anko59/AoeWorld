@@ -21,7 +21,7 @@ The harness enforces these rules on every call:
   describe the code change you need for the Implementer instead.
 - Never the protected classes (harness, gates, baselines, `.claude/`,
   instructions), and never weaken an existing test.
-- No commit, push, branch change or GitHub write; the main session ships.
+- No commit, push, branch change or GitHub write; the duel driver commits each step; the main session reviews and ships.
 - Compile and run only through Dockerized Make targets (`make test-unit`,
   `make test-harness`, `make test-e2e`…). No host `cargo`, no interpreters.
 
