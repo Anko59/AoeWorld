@@ -16,7 +16,15 @@ pub(super) fn validate(
         .collect();
     let mut missing = Vec::new();
     if !red.build_failed {
-        missing.extend(red.failed.iter().filter(|n| !passed.contains(n)).cloned());
+        // Only the tester's own failures must turn green: a failure the red
+        // check marked untouched (a test the tester did not change) is
+        // pre-existing and reported as such, not required here.
+        missing.extend(
+            red.failed
+                .iter()
+                .filter(|n| !red.untouched.contains(n) && !passed.contains(n))
+                .cloned(),
+        );
     } else {
         let mut defined = 0;
         for path in paths {

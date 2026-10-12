@@ -423,3 +423,38 @@ fn overridden_nextest_check_names_do_not_include_changing_progress_counters() {
         ["plain_test"]
     );
 }
+
+#[test]
+fn green_ignores_unrelated_tests_that_already_failed_at_red() {
+    // `other.rs` is not a file the tester changed: its failure is pre-existing
+    // and must not be required to pass at green.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("crates/x/tests")).unwrap();
+    fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[package]\nname='aoe-x'\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates/x/tests/other.rs"),
+        "#[test]\nfn old() {}\n",
+    )
+    .unwrap();
+    let paths = vec!["crates/x/tests/check.rs".into()];
+    fs::write(root.join(&paths[0]), "#[test]\nfn first() {}\n").unwrap();
+    let red = focus::CheckReport {
+        failed: vec!["aoe-x::check$first".into(), "aoe-x::other$old".into()],
+        untouched: vec!["aoe-x::other$old".into()],
+        ..Default::default()
+    };
+    let green = focus::rust_results(
+        "{\"type\":\"test\",\"event\":\"ok\",\"name\":\"aoe-x::check$first\"}\n{\"type\":\"test\",\"event\":\"failed\",\"name\":\"aoe-x::other$old\"}\n",
+    );
+    assert!(super::green::validate(root, &paths, &red, &green).is_ok());
+    // The tester's own test still has to pass.
+    let green = focus::rust_results(
+        "{\"type\":\"test\",\"event\":\"failed\",\"name\":\"aoe-x::check$first\"}\n",
+    );
+    assert!(super::green::validate(root, &paths, &red, &green).is_err());
+}
