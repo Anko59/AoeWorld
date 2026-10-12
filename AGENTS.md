@@ -17,9 +17,11 @@ No backward compatibility before v1.0 (the owner's rule). There are no
 players and no data worth keeping: change formats, generators, schemas and
 protocols in place, keep exactly one current version, and regenerate local
 data instead of migrating it. Do not add legacy or "prior" versions, opt-in
-"V2" profiles beside the old path, version-gated branches, or golden fixtures
-that freeze old output; delete such code when you touch it. Old requirements
-saying otherwise (for example in #200) are void.
+"V2" profiles beside the old path, version-gated branches, or fixtures that
+keep a superseded version's output alive; delete such code when you touch it.
+A regression pin of the current output, regenerated whenever that output is
+changed on purpose, is not such a fixture. Old requirements saying otherwise
+(for example in #200) are void.
 
 Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you

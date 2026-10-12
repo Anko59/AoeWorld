@@ -30,8 +30,11 @@ wrong.
 
 Project rule (AGENTS.md): no backward compatibility before v1.0. A change
 that adds a legacy or "prior" version, an opt-in profile kept beside the old
-path, a version-gated branch, or a fixture freezing old output is a `major`
-finding; removing such code is never a regression in itself.
+path, a version-gated branch, or a fixture that keeps a superseded version's
+output alive is a `major` finding; removing such code is never a regression
+in itself. A regression pin of the current output (a digest or snapshot that
+is regenerated when the output is changed on purpose) is not such a fixture:
+neither adding one nor regenerating one is a finding under this rule.
 
 Severity:
 
