@@ -170,7 +170,12 @@ fn unavailable_ci_base_selects_all_and_retains_requested_identity() {
         let manifest = current_selection(Some(reference)).expect("conservative selection");
         assert_eq!(manifest.base, None);
         assert_eq!(manifest.requested_base.as_deref(), Some(reference));
-        assert!(manifest.jobs.values().all(|selected| *selected));
+        // Every pull-request job: a request with a base is a pull request even
+        // when the base cannot be resolved, so only coverage (push and nightly)
+        // stays out.
+        for (job, selected) in &manifest.jobs {
+            assert_eq!(*selected, job != "native-coverage", "{job}");
+        }
         assert!(manifest.gates.contains(&"fuzz-smoke".to_owned()));
     }
 }
