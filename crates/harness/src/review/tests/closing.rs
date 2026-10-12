@@ -56,34 +56,26 @@ fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report
 
 #[test]
 fn full_reviews_run_until_the_budget_is_spent() {
-    assert_eq!(BUDGET, 3);
-    let two = [
-        report("a", 1, 4, &[Severity::Major]),
-        report("b", 2, 7, &[Severity::Major]),
-    ];
-    assert!(matches!(next(&two, "c", NOW), Next::Review(Plan::Full)));
+    assert_eq!(BUDGET, 1);
+    assert!(matches!(next(&[], "a", NOW), Next::Review(Plan::Full)));
+    let mut incomplete = report("a", 1, 9, &[]);
+    incomplete.failures.push("no answer".into());
+    let mut history = vec![incomplete];
+    assert!(matches!(next(&history, "a", NOW), Next::Review(Plan::Full)));
+    history.push(report("a", 2, 7, &[Severity::Major]));
+    assert!(matches!(
+        next(&history, "b", NOW),
+        Next::Review(Plan::Closing { .. })
+    ));
     assert!(
-        matches!(next(&two, "b", NOW), Next::FixFirst(why) if why.contains("already failed")),
+        matches!(next(&history, "a", NOW), Next::FixFirst(why) if why.contains("already failed")),
         "a failed commit is never reviewed again: that would only fish for a grade"
     );
-    // A passing review settles everything before it.
-    let mut settled = vec![
-        report("a", 1, 4, &[]),
-        report("b", 2, 4, &[]),
-        report("c", 3, 4, &[]),
-        report("d", 4, 9, &[]),
-    ];
-    settled.push(report("e", 5, 6, &[]));
-    assert!(matches!(next(&settled, "f", NOW), Next::Review(Plan::Full)));
 }
 
 #[test]
-fn a_converging_branch_gets_one_closing_review_of_its_fixes() {
-    let history = [
-        report("a", 1, 4, &[Severity::Major, Severity::Major]),
-        report("b", 2, 7, &[Severity::Major]),
-        report("c", 3, 4, &[Severity::Major]),
-    ];
+fn one_failing_non_severe_full_review_carries_its_blockers_into_closing() {
+    let history = [report("c", 1, 7, &[Severity::Major, Severity::Major])];
     assert!(
         matches!(next(&history, "c", NOW), Next::FixFirst(why) if why.contains("fix and commit"))
     );
@@ -97,9 +89,12 @@ fn a_converging_branch_gets_one_closing_review_of_its_fixes() {
     let ids: Vec<&str> = prior.iter().map(|f| f.id.as_str()).collect();
     assert_eq!(
         ids,
-        ["P1", "P2", "P3", "P4"],
-        "every earlier blocking finding is re-verified"
+        ["P1", "P2"],
+        "every blocking finding from the full review is re-verified"
     );
+    for (carried, original) in prior.iter().zip(&history[0].findings) {
+        assert_eq!(carried.reported.claim, original.reported.claim);
+    }
     assert!(
         prior
             .iter()
@@ -126,34 +121,60 @@ fn closing(head: &str, finished: u64, carried: &[Severity], found: &[Severity]) 
     r
 }
 
-fn three_converging() -> Vec<Report> {
-    vec![
-        report("a", 1, 4, &[Severity::Major, Severity::Major]),
-        report("b", 2, 7, &[Severity::Major]),
-        report("c", 3, 4, &[Severity::Major]),
-    ]
+fn failed_full() -> Vec<Report> {
+    vec![report("c", 3, 7, &[Severity::Major])]
 }
 
 #[test]
 fn a_diverging_branch_is_split_without_a_person() {
-    let growing = [
-        report("a", 1, 4, &[Severity::Major]),
-        report("b", 2, 7, &[Severity::Major]),
-        report("c", 3, 6, &[Severity::Major, Severity::Major]),
-    ];
-    assert!(matches!(next(&growing, "d", NOW), Next::Split(why) if why.contains("from 1 to 2")));
-    let critical = [
-        report("a", 1, 4, &[Severity::Major]),
-        report("b", 2, 7, &[Severity::Major]),
-        report("c", 3, 4, &[Severity::Critical]),
-    ];
-    assert!(matches!(next(&critical, "d", NOW), Next::Split(why) if why.contains("critical")));
-    let mut reopened = three_converging();
+    let mut reopened = failed_full();
     reopened.push(closing("d", 4, &[Severity::Major], &[]));
     assert!(
         matches!(next(&reopened, "e", NOW), Next::Split(why) if why.contains("not shown fixed")),
         "a fix that did not fix splits the branch"
     );
+}
+
+#[test]
+fn a_severe_full_review_splits_at_once() {
+    let critical = [report("c", 1, 4, &[Severity::Critical])];
+    assert!(matches!(next(&critical, "d", NOW), Next::Split(why) if why.contains("critical")));
+    let mut weakened = report("c", 1, 4, &[Severity::Major]);
+    weakened.findings[0].reported.category = "test-integrity".into();
+    assert!(matches!(
+        next(&[weakened], "d", NOW),
+        Next::Split(why) if why.contains("major test weakening")
+    ));
+}
+
+#[test]
+fn a_passing_review_resets_the_history() {
+    for passed in [report("d", 4, 9, &[]), closing("d", 4, &[], &[])] {
+        let mut history = failed_full();
+        history.push(passed);
+        assert!(matches!(next(&history, "e", NOW), Next::Review(Plan::Full)));
+        history.push(report("e", 5, 6, &[]));
+        let Next::Review(Plan::Closing { since, prior }) = next(&history, "f", NOW) else {
+            panic!("the new full review spends the reset budget");
+        };
+        assert_eq!(since, "e");
+        assert!(prior.is_empty(), "findings before the pass are settled");
+    }
+}
+
+#[test]
+fn an_incomplete_closing_review_neither_counts_nor_moves_the_audit_base() {
+    let mut history = failed_full();
+    let mut incomplete = closing("d", 4, &[Severity::Critical], &[]);
+    incomplete.failures.push("no answer".into());
+    history.push(incomplete);
+    let Next::Review(Plan::Closing { since, prior }) = next(&history, "d", NOW) else {
+        panic!("the incomplete closing review may run again at the same commit");
+    };
+    assert_eq!(since, "c");
+    assert_eq!(prior.len(), 1);
+    assert_eq!(prior[0].reported.claim, "c claim 0");
+    assert_eq!(prior[0].reported.severity, Severity::Major);
 }
 
 #[test]
@@ -164,7 +185,11 @@ fn a_closing_review_passes_on_no_blocking_finding_not_on_the_grade() {
         closing.passes(),
         "a 6/10 with only minor findings left passes"
     );
-    assert!(closing.markdown().contains("Closing review"));
+    assert!(
+        closing
+            .markdown()
+            .contains("Closing review after one full review")
+    );
     closing.findings = report("d", 4, 9, &[Severity::Major]).findings;
     assert!(
         !closing.passes(),
@@ -262,29 +287,43 @@ fn an_undecided_carried_finding_fails_the_closing_review() {
 
 #[test]
 fn closing_reviews_then_a_split_end_a_converging_branch() {
-    assert_eq!(CLOSING_BUDGET, 2);
-    let mut history = three_converging();
-    let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
-    first.findings[0].status = Status::Refuted; // the carried one: shown fixed
-    history.push(first);
-    let Next::Review(Plan::Closing { since, prior }) = next(&history, "e", NOW) else {
-        panic!("a closing review that only finds new issues in the fixes earns another");
-    };
-    assert_eq!(since, "d");
-    assert!(
-        prior.iter().all(|f| f.reported.claim != "d claim 0"),
-        "a finding shown fixed is not carried again"
-    );
-    history.push(closing("e", 5, &[], &[Severity::Major]));
-    assert!(
-        matches!(next(&history, "f", NOW), Next::Split(why) if why.contains("2 closing reviews")),
-        "no unreviewed ending: the branch is split"
-    );
+    assert_eq!(CLOSING_BUDGET, 3);
+    let mut history = failed_full();
+    for (head, next_head, finished) in [("d", "e", 4), ("e", "f", 5), ("f", "g", 6)] {
+        let Next::Review(Plan::Closing { since, prior }) = next(&history, head, NOW) else {
+            panic!("each fix gets a closing review within the budget");
+        };
+        assert_eq!(since, history.last().unwrap().head);
+        assert_eq!(
+            prior.len(),
+            1,
+            "only the latest unsettled blocker is carried"
+        );
+        assert_eq!(prior[0].reported.claim, format!("{since} claim 0"));
+        let mut review = closing(head, finished, &[], &[Severity::Major]);
+        review.findings.extend(prior.into_iter().map(|mut f| {
+            f.status = Status::Refuted;
+            f
+        }));
+        history.push(review);
+        assert!(matches!(next(&history, head, NOW), Next::FixFirst(_)));
+        if head == "f" {
+            assert!(
+                matches!(next(&history, next_head, NOW), Next::Split(why) if why.contains("3 closing reviews")),
+                "the third failing closing review ends in a split, never unreviewed code"
+            );
+        } else {
+            assert!(matches!(
+                next(&history, next_head, NOW),
+                Next::Review(Plan::Closing { .. })
+            ));
+        }
+    }
 }
 
 #[test]
 fn an_undecided_carried_finding_counts_as_open() {
-    let mut history = three_converging();
+    let mut history = failed_full();
     let mut undecided = closing("d", 4, &[Severity::Major], &[]);
     undecided.findings[0].status = Status::Disputed;
     history.push(undecided);
@@ -320,7 +359,7 @@ fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
         r.passes(),
         "a carried finding left at minor passes the closing review"
     );
-    let mut history = three_converging();
+    let mut history = failed_full();
     history.push(r);
     assert!(
         !matches!(next(&history, "e", NOW), Next::Split(_)),
@@ -330,7 +369,7 @@ fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
     let mut upheld = closing("d", 4, &[Severity::Major], &[]);
     upheld.findings[0].status = Status::Confirmed;
     assert!(!upheld.passes(), "a carried major still confirmed blocks");
-    let mut history = three_converging();
+    let mut history = failed_full();
     history.push(upheld);
     assert!(
         matches!(next(&history, "e", NOW), Next::Split(why) if why.contains("not shown fixed"))
@@ -341,7 +380,7 @@ fn a_carried_finding_confirmed_only_as_minor_no_longer_blocks() {
 fn a_carried_finding_settled_as_minor_is_not_carried_again() {
     // The first closing review confirms carried P1 only as minor (partial
     // votes) but fails on a new major: the next plan must not reopen P1.
-    let mut history = three_converging();
+    let mut history = failed_full();
     let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
     first.findings[0].votes = finding(
         "P1",
@@ -357,7 +396,7 @@ fn a_carried_finding_settled_as_minor_is_not_carried_again() {
     .votes;
     first.findings[0].status = Status::Confirmed;
     // P1 is the last full review's major finding, carried into this review.
-    first.findings[0].reported = history[2].findings[0].reported.clone();
+    first.findings[0].reported = history[0].findings[0].reported.clone();
     assert!(
         !first.passes(),
         "the new major still fails the first closing review"
@@ -365,7 +404,7 @@ fn a_carried_finding_settled_as_minor_is_not_carried_again() {
     let settled = first.findings[0].reported.claim.clone();
     history.push(first);
     let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
-        panic!("a converging branch with one closing review left gets it");
+        panic!("a branch with closing reviews left gets another");
     };
     assert!(
         prior.iter().all(|f| f.reported.claim != settled),
@@ -377,9 +416,9 @@ fn a_carried_finding_settled_as_minor_is_not_carried_again() {
 fn settling_a_finding_never_hides_another_at_a_different_line() {
     // Closing review 1 settles carried P1 as minor and confirms a new major N
     // with the same file and claim at another line: N is carried next time.
-    let mut history = three_converging();
+    let mut history = failed_full();
     let mut first = closing("d", 4, &[Severity::Major], &[Severity::Major]);
-    first.findings[0].reported = history[2].findings[0].reported.clone();
+    first.findings[0].reported = history[0].findings[0].reported.clone();
     first.findings[0].votes = finding(
         "P1",
         CARRIED,
@@ -397,7 +436,7 @@ fn settling_a_finding_never_hides_another_at_a_different_line() {
     first.findings[1].reported.line = Some(80);
     history.push(first);
     let Next::Review(Plan::Closing { prior, .. }) = next(&history, "e", NOW) else {
-        panic!("a converging branch with one closing review left gets it");
+        panic!("a branch with closing reviews left gets another");
     };
     assert!(
         prior.iter().any(|f| f.reported.line == Some(80)),
