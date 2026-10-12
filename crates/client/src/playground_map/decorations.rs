@@ -45,25 +45,31 @@ pub(super) fn for_scene(client: &Client, scene: &scene::PreparedScene) -> Vec<Sc
         .collect()
 }
 
-/// One whole upright sprite per cliff piece, standing on its centre tile.
+/// Whole scenery sprites standing on their centre tile.
 pub(super) fn scenery<'a>(
     _client: &'a Client,
     scene: &'a scene::PreparedScene,
 ) -> impl Iterator<Item = SceneResource> + 'a {
-    scene
-        .decorations
-        .iter()
-        .filter(|decoration| decoration.family == aoe_map::DecorationFamily::Cliff as u8)
-        .map(|decoration| {
-            let [x, y] = decoration.position.map(|value| value.floor() as u64);
-            SceneResource {
-                // Odd identifiers never collide with resource nodes.
-                id: (y << 19) | (x << 1) | 1,
-                position: decoration.position,
-                kind: SceneResource::CLIFF,
-                visual_variant: decoration.visual_variant,
-                visual_family: decoration.orientation,
-                elevation_meters: decoration.elevation_meters,
-            }
+    scene.decorations.iter().filter_map(|decoration| {
+        let kind = if decoration.family == aoe_map::DecorationFamily::Cliff as u8 {
+            SceneResource::CLIFF
+        } else if decoration.family == aoe_map::DecorationFamily::Stone as u8 {
+            SceneResource::ROCK
+        } else {
+            return None;
+        };
+        let [x, y] = decoration.position.map(|value| value.floor() as u64);
+        Some(SceneResource {
+            id: (y << 19) | (x << 1) | 1,
+            position: decoration.position,
+            kind,
+            visual_variant: decoration.visual_variant,
+            visual_family: if kind == SceneResource::CLIFF {
+                decoration.orientation
+            } else {
+                0
+            },
+            elevation_meters: decoration.elevation_meters,
         })
+    })
 }

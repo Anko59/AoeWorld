@@ -237,11 +237,46 @@ impl MapChunkGenerator {
                 position.x,
                 position.y,
             ) ^ self.procedural_seed.rotate_left(29);
-            if roll % 100 < 3 {
-                let family = if sample.density.canopy_per_thousand > 0 {
+            // Loose rocks: bare rock, scree beside cliffs, a few elsewhere.
+            let rock_roll = (roll >> 24) % 1000;
+            if base.water == crate::WaterKind::None
+                && rock_roll < crate::terrain::relief::MAX_ROCK_PER_THOUSAND
+                && sample.density.canopy_per_thousand == 0
+            {
+                let mut beside_cliff = false;
+                for (dx, dy) in crate::terrain::relief::SCREE_REACH {
+                    let near = TileCoord::new(
+                        position.x.saturating_add(dx),
+                        position.y.saturating_add(dy),
+                    );
+                    if memo.base(near)?.is_some_and(|tile| {
+                        tile.surface.kind == SurfaceKind::Cliff
+                            && tile.geographic_height_centimeters
+                                > base.geographic_height_centimeters
+                    }) {
+                        beside_cliff = true;
+                        break;
+                    }
+                }
+                if rock_roll
+                    < self.rock_per_thousand(position, terrain.material, base.biome, beside_cliff)
+                {
+                    decoration = Some(LandscapeDecoration {
+                        tile: position,
+                        family: DecorationFamily::Stone,
+                        variant: (roll >> 8) as u8,
+                        orientation: ((roll >> 16) & 7) as u8,
+                    });
+                }
+            }
+            // Exposed ground carries rocks only, by the rule above.
+            let sheltered = sample.density.canopy_per_thousand > 0;
+            if decoration.is_none()
+                && roll % 100 < 3
+                && (sheltered || appearance.exposure != NativeExposure::Exposed)
+            {
+                let family = if sheltered {
                     DecorationFamily::Deadwood
-                } else if appearance.exposure == NativeExposure::Exposed {
-                    DecorationFamily::Stone
                 } else if matches!(base.biome, Biome::Woodland | Biome::Savanna) {
                     DecorationFamily::Shrub
                 } else {

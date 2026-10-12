@@ -148,6 +148,17 @@ Boreal and tundra lowlands below the line are summer grass and heath, where
 they used to be snow in vegetation-cell squares; southern Finland at sea
 level is green. Polar ice stays impassable `Ice`.
 
+Loose rocks are `Stone` decorations: visual only, never blocking, never a
+resource (gameplay stone keeps its own patch rules). An open tile without
+canopy or water carries one with a chance of 4.5% on bare rock, 28% within two
+tiles downhill of a cliff piece (scree), 0.8% on snow, 1% in steppe, savanna and dry woodland
+grass and 0.6% in desert sand, multiplied by a continuous 14-tile cluster
+field that is zero over about half the ground and up to two in a cluster. On
+the alpine fixture keeps scree at least twice as dense as bare rock and
+heavier below than above walls, with fewer stones on snow and none in lowland
+meadow; steppe has 0.6%, a fifth of its
+16-tile blocks bare. Exposed ground carries no other dressing.
+
 ### Forest amount and large forests
 
 Forest amount is driven by "wildness", the share of potential forest that

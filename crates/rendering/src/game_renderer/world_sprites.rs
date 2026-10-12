@@ -19,7 +19,7 @@ pub fn scene_resource_presentation(
     art: &GameArt,
     resource: SceneResource,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
-    if resource.kind == SceneResource::CLIFF {
+    if resource.kind >= SceneResource::CLIFF {
         return scenery::frame(art, resource).map(|(frame, _)| (frame, None));
     }
     if resource.kind == 1 {

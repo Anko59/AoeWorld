@@ -80,6 +80,8 @@ pub struct SceneResource {
 impl SceneResource {
     /// One upright cliff face; visual_family is its downhill screen octant.
     pub const CLIFF: u8 = 16;
+    /// A loose rock; visual_variant selects its pile and size.
+    pub const ROCK: u8 = 17;
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.

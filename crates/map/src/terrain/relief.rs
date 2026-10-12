@@ -11,6 +11,8 @@ use aoe_core::TileCoord;
 
 mod cover;
 pub(crate) use cover::Cover;
+mod rocks;
+pub(crate) use rocks::{MAX_ROCK_PER_THOUSAND, SCREE_REACH};
 
 /// Side of one cliff piece in tiles, the footprint of the original sprites.
 pub(crate) const CLIFF_CELL_TILES: i32 = 3;

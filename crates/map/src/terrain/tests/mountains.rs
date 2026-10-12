@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 mod cliffs;
 mod review;
+mod rocks;
 mod snow;
 
 pub(super) const SIDE: i32 = 768;

@@ -37,6 +37,8 @@ pub struct GameFrame {
 pub struct SceneryArt {
     /// Raw 25-slot cliff-face group; only the reviewed slots are drawn.
     pub cliff_faces: Vec<GameFrame>,
+    /// Grey rock piles drawn as loose rocks.
+    pub rocks: Vec<GameFrame>,
 }
 
 pub struct GameArt {
