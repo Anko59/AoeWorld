@@ -1,18 +1,17 @@
-//! Reuse of a passing review for the same change (identical file blobs)
+//! Reuse of a passing review for the same patch (exact changed bytes)
 //! after a rebase, including across bases: a review of a stacked branch
 //! against its parent answers for the same branch rebased onto dev after the
-//! parent merged, when Git's raw identity diff is byte-identical.
+//! parent moves or merges, when changed hunks, paths and modes still match.
 use super::{Report, base, report::directory};
 use crate::ship::git;
 use std::{fs, path::Path};
 
 impl Report {
     /// Copy an original passing review onto `head` when Git confirms the same
-    /// change (identical file blobs) and the reviewers were given the same
+    /// patch and the reviewers were given the same
     /// `task`. The change of `head` is taken against the current
-    /// origin/<base>; the source's against origin/dev for a review of dev, or
-    /// against the parent commit it recorded for a stacked review (the parent
-    /// branch may be gone once merged). The stored change fingerprint is
+    /// selected base; the source's against its recorded base commit (the parent
+    /// branch may have moved or be gone once merged). The stored change fingerprint is
     /// never consulted, and a reuse report can never become a source. By
     /// design only a review recorded for this same branch name is eligible,
     /// even when another branch holds an identical change: another branch's
@@ -49,16 +48,7 @@ impl Report {
             return Ok(None);
         }
         let target = base::current();
-        let target_commit = git::git(
-            root,
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                "--end-of-options",
-                &format!("refs/remotes/origin/{target}^{{commit}}"),
-            ],
-        )?;
+        let (target_commit, _) = git::base(root, &target, false)?;
         let floor = super::floor(root).map_err(|e| e.to_string())?;
         let tiers: Vec<&str> = tiers
             .iter()
@@ -135,15 +125,11 @@ fn full_id(sha: &str) -> bool {
     sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// The source's raw identity diff: against the current origin/dev for a
-/// review of dev, otherwise against the parent
-/// commit the stacked review recorded, whose merge base Git recomputes.
+/// Always use the recorded base, including for dev: a moved base must not
+/// change the source's original patch. Missing objects decline reuse.
 fn source_identity(root: &Path, source: &Report) -> Result<Vec<u8>, String> {
-    match source.base_branch.as_str() {
-        base::DEV => git::change_identity(root, base::DEV, &source.head).map(|(_, raw)| raw),
-        _ if full_id(&source.base) => {
-            git::change_identity_from(root, &source.base, &source.head).map(|(_, raw)| raw)
-        }
-        other => Err(format!("stacked review on {other} records no base commit")),
+    if !full_id(&source.base) {
+        return Err("review records no base commit".into());
     }
+    git::change_identity_from(root, &source.base, &source.head).map(|(_, patch)| patch)
 }

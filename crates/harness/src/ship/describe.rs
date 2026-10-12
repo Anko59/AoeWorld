@@ -347,7 +347,7 @@ pub(crate) fn render(
             .reused_from
             .as_deref()
             .map(|source| format!(
-                "Review of `{}` reused (same change, identical file blobs).\n\n",
+                "Review of `{}` reused (same patch).\n\n",
                 &source[..12.min(source.len())]
             ))
             .unwrap_or_default(),

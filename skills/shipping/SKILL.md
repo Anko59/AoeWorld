@@ -9,8 +9,9 @@ step; read its summary and diff, then film the change before shipping.
 1. Commit on a feature branch; run `make review-floor` and pick the tier (never
    below it; higher for risky changes). Write the description file.
 2. `make ship SHIP_TITLE=… SHIP_BODY=<file> SHIP_TIER=<tier> SHIP_RUNTIME=<your runtime>`.
-   A change that depends on an open harness pull request ships stacked on it
-   with `SHIP_BASE=<its branch>` (no auto-merge yet); after that parent merges,
+   A change can be reviewed ahead of a local parent with `SHIP_BASE=<its branch>`;
+   gates and review run, but publication waits for the parent's harness pull
+   request. Once it exists, ship stacked on it (no auto-merge yet); after it merges,
    rebase onto `origin/dev` and ship again with `SHIP_BASE=dev`
    ([stacked pull requests](../../docs/shipping.md#stacked-pull-requests)).
 3. Full review below 8/10: fix and commit every confirmed finding (never weaken a

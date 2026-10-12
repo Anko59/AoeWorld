@@ -23,13 +23,14 @@ use crate::{agents::Runtime, gates::registry::Registry, ship::git};
 pub(crate) use closing::Plan;
 use config::Config;
 pub(crate) use config::Tier;
-pub(crate) use entry::{review, review_for_branch};
+#[cfg(test)]
+pub(crate) use entry::review_on_base;
+pub(crate) use entry::{execute, review, review_for_branch};
 use protocol::{Answer, Cast, Finding, Grade, Status};
 pub(crate) use report::{Report, history};
 pub(crate) use session::Ask;
 use session::{Live, ask_checked, readable_answer, readable_grade};
 use std::{
-    fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -39,8 +40,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(clap::Subcommand)]
 pub(crate) enum Commands {
-    /// Run a tiered adversarial review of HEAD against origin/dev
-    /// (`make review`: REVIEW_TIER, REVIEW_RUNTIME, REVIEW_TASK).
+    /// Review HEAD against origin/dev or SHIP_BASE (a local parent is allowed).
+    /// `make review`: REVIEW_TIER, REVIEW_RUNTIME, REVIEW_TASK.
     Review {
         /// Defaults to REVIEW_TIER, then to the floor.
         #[arg(long, value_enum)]
@@ -59,68 +60,6 @@ pub(crate) enum Commands {
     /// false-positive tables (`make review-calibrate`: CALIBRATE_TIER,
     /// CALIBRATE_RUNTIME, CALIBRATE_CASES). A tool, not a gate.
     ReviewCalibrate,
-}
-
-pub(crate) fn execute(command: Commands) -> Result<()> {
-    let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
-    match command {
-        Commands::Review {
-            tier,
-            runtime,
-            task,
-        } => {
-            let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
-            let tier = match (tier, env("REVIEW_TIER")) {
-                (Some(tier), _) => tier,
-                (None, Some(name)) => clap::ValueEnum::from_str(&name, true).map_err(|_| {
-                    format!("REVIEW_TIER={name}: use low, medium, high, xhigh or max")
-                })?,
-                (None, None) => floor(&root)?,
-            };
-            let runtime = match (runtime, env("REVIEW_RUNTIME")) {
-                (Some(runtime), _) => runtime,
-                (None, Some(name)) => clap::ValueEnum::from_str(&name, true)
-                    .map_err(|_| format!("REVIEW_RUNTIME={name}: use claude, codex, dsh or pi"))?,
-                (None, None) => Runtime::Claude,
-            };
-            let task = task.or_else(|| env("REVIEW_TASK").map(PathBuf::from));
-            let task = match task {
-                Some(path) => fs::read_to_string(path)?,
-                None => String::new(),
-            };
-            // `make review` spends the same budget as `make ship`.
-            let head = git::git(&root, &["rev-parse", "HEAD"])?;
-            let plan = match closing::next(&history(&root, &git::branch(&root)?)?, &head, now()) {
-                closing::Next::Review(plan) => plan,
-                closing::Next::FixFirst(why)
-                | closing::Next::Split(why)
-                | closing::Next::Unavailable(why) => return Err(why.into()),
-            };
-            let report = review(&root, tier, runtime, &task, &plan)?;
-            println!("{}", report.markdown());
-            if report.passes() {
-                Ok(())
-            } else {
-                Err(if report.failures.is_empty() {
-                    format!(
-                        "review grade {}/10 is below {}",
-                        report.grade, report.merge_grade
-                    )
-                } else {
-                    format!(
-                        "review incomplete: {} session(s) gave no usable answer",
-                        report.failures.len()
-                    )
-                }
-                .into())
-            }
-        }
-        Commands::ReviewCalibrate => Ok(calibrate::from_env(&root)?),
-        Commands::ReviewFloor => {
-            println!("{}", floor(&root)?.name());
-            Ok(())
-        }
-    }
 }
 
 fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTreeSet<String>)> {
