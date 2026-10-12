@@ -27,6 +27,7 @@ mod vectors;
 #[path = "model.rs"]
 mod water_model;
 pub use vectors::prepare_hydrology_vectors;
+pub(crate) use vectors::{RiverFootprint, prepare_vectors_validated, project_river_footprint};
 
 #[cfg(test)]
 pub(crate) fn offline_vector_pages(
@@ -193,6 +194,7 @@ struct OpenTile {
 pub(crate) struct HydrologySourcePlan {
     worldcover: Vec<KnownSource>,
     sources: Vec<KnownSource>,
+    footprint: RiverFootprint,
 }
 
 /// Acquires and samples the bounded modern-water evidence stack. Sources are
@@ -259,7 +261,8 @@ pub(crate) fn preflight_hydrology(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
-    vectors::validate_vector_footprint(request, samples_per_axis, &AtomicBool::new(false))?;
+    let footprint = project_river_footprint(request, samples_per_axis, &AtomicBool::new(false))?;
+    footprint.check_binding(request, samples_per_axis)?;
     let bounds = request_bounds(request)?;
     worldcover_tile_ids(
         bounds.min_latitude,
@@ -292,6 +295,7 @@ pub(crate) fn preflight_hydrology(
     Ok(HydrologySourcePlan {
         worldcover,
         sources,
+        footprint,
     })
 }
 
@@ -338,7 +342,7 @@ fn prepare_with_plan(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
-    vectors::validate_vector_footprint(request, samples_per_axis, cancelled)?;
+    plan.footprint.check_binding(request, samples_per_axis)?;
     let cache = SourceCache::new(
         cache_root,
         crate::DownloadPolicy {

@@ -69,6 +69,7 @@ pub(super) struct Job {
     pub eta_seconds: Option<u64>,
     pub content_hash: Option<String>,
     pub error: Option<String>,
+    pub preparation_notes: Vec<aoe_map::PreparationNote>,
 }
 
 #[derive(Clone)]
@@ -177,6 +178,7 @@ impl Manager {
             progress: None,
             eta_seconds: None,
             content_hash: None,
+            preparation_notes: Vec::new(),
             error: None,
         };
         self.jobs.insert(
@@ -406,6 +408,7 @@ async fn finish(state: &AppState, id: u64, result: Result<MapPackage, String>) {
             match publication {
                 Ok((packages, package)) => {
                     let hash = package.content_hash_hex();
+                    entry.job.preparation_notes = package.preparation_notes.clone();
                     // Keep the registry guard until the durable outcome is saved.
                     publication_package = Some((packages, package));
                     entry.job.state = JobState::Completed;

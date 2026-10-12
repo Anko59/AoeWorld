@@ -45,6 +45,7 @@ impl OverviewFieldAxes {
 pub enum OverviewHydrologyMode {
     #[default]
     None,
+    Automatic,
     Vectors,
 }
 

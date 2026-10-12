@@ -44,9 +44,11 @@ those categories and do not imply finer water evidence.
 Detailed water preparation also samples every WorldCover 2021 tile intersecting
 the conservative request bounds, plus global HydroLAKES. The current HydroRIVERS
 input is the Europe/Middle East release. The opened pinned dataset's extent
-sets coverage; every preparation path rejects an uncovered projected footprint
-before cache access or input acquisition, then checks the opened extent against
-the same pinned metadata.
+sets coverage; every explicit hydrology path rejects an uncovered projected
+footprint before cache or input access. Automatic overview instead records that
+the area is outside river coverage and omits hydrology before acquiring overview
+inputs. Sampling reuses the bound preflight decision and checks the opened extent
+against the pinned metadata.
 These are modern evidence sources; they do not rewrite HYDE's circa-600 land-use
 estimates. Source locks record source metadata and SHA-256 digests.
 HydroSHEDS archives use reviewed pinned hashes. WorldCover's fixed release

@@ -106,40 +106,47 @@ fn map_estimate() -> Result<(), String> {
 fn map_generate() -> Result<(), String> {
     let request = read_request()?;
     let hydrology_mode = match env::var("AOE_MAP_HYDROLOGY_MODE").as_deref() {
-        Err(env::VarError::NotPresent) | Ok("none") => aoe_geodata::OverviewHydrologyMode::None,
+        Err(env::VarError::NotPresent) | Ok("automatic") => {
+            aoe_geodata::OverviewHydrologyMode::Automatic
+        }
+        Ok("none") => aoe_geodata::OverviewHydrologyMode::None,
         Ok("vectors") => aoe_geodata::OverviewHydrologyMode::Vectors,
-        _ => return Err("AOE_MAP_HYDROLOGY_MODE must be none or vectors".to_owned()),
+        _ => return Err("AOE_MAP_HYDROLOGY_MODE must be automatic, none or vectors".to_owned()),
     };
-    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
-        let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
-        let corrections = aoe_map::WaterCorrectionDocument::empty(request, axis)
-            .map_err(|error| error.to_string())?;
-        aoe_geodata::PreparedHydrology::validate_vectors_request(
-            request,
-            axis,
-            &corrections,
-            &AtomicBool::new(false),
-        )
-        .map_err(|error| error.to_string())?;
-    }
+    let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
+    let axes = aoe_geodata::OverviewFieldAxes::LANDSCAPE;
+    let cancelled = AtomicBool::new(false);
+    let plan = aoe_geodata::preflight_overview_hydrology(
+        hydrology_mode,
+        request,
+        axis,
+        axes,
+        None,
+        &cancelled,
+    )
+    .map_err(|error| error.to_string())?;
     let output = package_path()?;
     let cache = cache()?;
     let mut sources = overview_sources().map_err(|error| error.to_string())?;
-    if hydrology_mode == aoe_geodata::OverviewHydrologyMode::Vectors {
+    if plan.has_vectors() {
         sources.extend(aoe_geodata::hydrology_vector_sources());
     }
     print_acquisition_estimate(&cache, &sources)?;
-    let response = execute(WorkerRequest::PrepareOverviewDirectory {
-        cache_root: cache_root(),
-        output_directory: output,
-        request,
-        samples_per_axis: aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation,
-        field_axes: aoe_geodata::OverviewFieldAxes::LANDSCAPE,
-        hydrology_mode,
-        water_corrections: None,
-        historical_corrections: None,
-        vegetation_corrections: None,
-    })
+    let response = aoe_geodata::execute_overview_with_preflight(
+        WorkerRequest::PrepareOverviewDirectory {
+            cache_root: cache_root(),
+            output_directory: output,
+            request,
+            samples_per_axis: aoe_geodata::OverviewFieldAxes::LANDSCAPE.elevation,
+            field_axes: aoe_geodata::OverviewFieldAxes::LANDSCAPE,
+            hydrology_mode,
+            water_corrections: None,
+            historical_corrections: None,
+            vegetation_corrections: None,
+        },
+        plan,
+        &cancelled,
+    )
     .map_err(|error| error.to_string())?;
     let WorkerResponse::PreparedDirectory { package } = response else {
         return Err("map worker returned an unexpected directory response".to_owned());

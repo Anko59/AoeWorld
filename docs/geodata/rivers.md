@@ -1,14 +1,22 @@
 # River geometry and crossings
 
-The creator requests vector hydrology by default. Overview preparation adds
-the pinned HydroRIVERS Europe/Middle East and global HydroLAKES archives to
-the seven overview locks; detailed preparation already requests hydrology.
+The creator defaults to Automatic rivers and landscape overview preparation.
+Preflight includes the pinned HydroRIVERS Europe/Middle East and global
+HydroLAKES inputs where the whole footprint is covered. Outside that coverage,
+Automatic prepares the global overview without hydrology and records
+`preparation_notes: ["outside_river_coverage"]` in the package and job result;
+the creator displays the note. With rivers explicitly requires coverage and
+rejects an uncovered footprint. Without rivers explicitly requests an overview.
+Detailed regional elevation is an explicit choice and includes hydrology.
+
 Coverage uses the exact geographic extent recorded from the SHA-pinned river
-archive's shapefile header, with the 0.01-degree query padding removed. Preflight
-checks the projected footprint before acquisition; sampling checks the opened
-layer against that metadata and uses the same footprint validator. This removes the former western-Europe pilot box, including its
-exclusion of southern Finland. An extent check establishes the available
-regional file, not uniform completeness of its reach inventory.
+archive's shapefile header, inset by 0.01 degrees of query padding. The same
+projected-footprint check runs before cache or input access on every hydrology
+path. Its immutable decision is bound to the normalized request and grid and
+reused by execution, including the CLI; sampling does not project it again for
+coverage. The opened layer must match the pinned extent. This includes southern
+Finland and replaces the former pilot restriction. File coverage does not prove
+uniform completeness of the reach inventory.
 
 Hydrology pages persist projected source line segments in 1/256 tile units.
 Lines are simplified by at most a quarter tile and clipped to their page plus
@@ -31,12 +39,12 @@ This data stage persists and validates geometry; terrain composition and river
 presentation are separate changes. This stage adds no river terrain or rendering
 behavior.
 
-Every hydrology preparation route (vectors, full, detailed and overview vectors)
-uses the same pinned-extent footprint validator before any cache or input access.
-Requests outside coverage fail with `vector hydrology footprint is outside the
-pinned river dataset extent`; there is no silent no-river fallback. Overview
-preparation explicitly requesting no hydrology remains available worldwide.
-The opened dataset extent must equal the pinned metadata before sampling.
+Explicit hydrology outside coverage fails with `vector hydrology footprint is
+outside the pinned river dataset extent`. Automatic falls back only for this
+preflight coverage outcome, never for acquisition or sampling failures. Source
+errors fail the job. The single current package format requires the
+`preparation_notes` array, even when empty; its note affects content identity
+without changing the geography key. Regenerate packages; do not migrate them.
 
 Regenerate only from verified cached inputs using `make map-generate` with
 `AOE_MAP_HYDROLOGY_MODE=vectors`, then `make map-verify`. The geometry field is

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::atomic::AtomicBool};
 
 mod execution;
+mod hydrology;
 pub(crate) mod progress;
 mod scratch;
 use execution::execute;
@@ -77,9 +78,8 @@ pub(super) fn prepare(
         input["field_axes"] = serde_json::to_value(axes)
             .map_err(|error| format!("could not encode field axes: {error}"))?;
     }
-    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
-        input["hydrology_mode"] = serde_json::json!("vectors");
-    }
+    input["hydrology_mode"] =
+        serde_json::to_value(preparation.hydrology_mode).map_err(|error| error.to_string())?;
     let input = serde_json::to_vec(&input)
         .map_err(|error| format!("could not encode map-worker request: {error}"))?;
     let output = execute(worker, input, cancelled, || monitor.poll())?;
@@ -89,21 +89,8 @@ pub(super) fn prepare(
         preparation.samples_per_axis,
         preparation.field_axes,
     )?;
-    if preparation.hydrology_mode == crate::map_jobs::HydrologyMode::Vectors {
-        let index = package
-            .environment
-            .hydrology_evidence
-            .as_ref()
-            .ok_or("vector worker returned no typed hydrology")?;
-        if index.samples_per_axis != aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS
-            || index.water_model.is_none()
-            || package.source_locks.len() != VECTOR_OVERVIEW_SOURCE_LOCKS
-            || ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"].iter().any(|id|
-                !package.source_locks.iter().any(|lock| lock.id == *id && lock.preprocessing_version.contains(
-                    "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only")))
-        {
-            return Err("vector worker returned incompatible hydrology metadata".to_owned());
-        }
+    if preparation.mode == crate::map_jobs::PreparationMode::Overview {
+        hydrology::verify(&package, preparation.hydrology_mode)?;
     }
     Ok(package)
 }
@@ -166,126 +153,5 @@ pub(super) fn geographic_footprint(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn valid_source_response_cannot_silently_downgrade_sample_detail() {
-        let request = MapRequest::default();
-        let source = aoe_map::SourceLock {
-            id: "fixture".into(),
-            provider: "fixture".into(),
-            release: "v1".into(),
-            url: "https://example.invalid/fixture".into(),
-            sha256: [1; 32],
-            acquired_at: "fixture".into(),
-            native_resolution: "30 meters".into(),
-            crs: "EPSG:4326".into(),
-            vertical_datum: "EGM2008".into(),
-            license: "fixture".into(),
-            preprocessing_version: "v1".into(),
-        };
-        let environment = aoe_map::PreparedEnvironment {
-            samples_per_axis: 2,
-            geographic_millimeters_per_sample: 15_000_000,
-            page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
-            elevation: aoe_map::FieldPyramid {
-                levels: vec![
-                    aoe_map::PyramidLevel {
-                        samples_per_axis: 2,
-                        ordered_page_root: [1; 32],
-                    },
-                    aoe_map::PyramidLevel {
-                        samples_per_axis: 1,
-                        ordered_page_root: [2; 32],
-                    },
-                ],
-            },
-            water: None,
-            vegetation: None,
-            historical_land_use: None,
-            hydrology_evidence: None,
-        };
-        let package = MapPackage::with_prepared_environment(
-            aoe_map::MAP_SCHEMA_VERSION,
-            request,
-            vec![source],
-            aoe_map::ProjectionMetadata::default(),
-            aoe_map::EnvironmentalProvenance::default(),
-            environment,
-        )
-        .expect("source fixture");
-        let bytes = serde_json::to_vec(&serde_json::json!({
-            "operation": "prepared_directory", "package": package,
-        }))
-        .expect("worker response");
-        assert!(decode_prepared_output(&bytes, request, 2, None).is_ok());
-        let landscape_request = request;
-        let mut landscape_environment = package.environment.clone();
-        landscape_environment.water = Some(landscape_environment.elevation.clone());
-        landscape_environment.vegetation = Some(landscape_environment.elevation.clone());
-        landscape_environment.historical_land_use = Some(landscape_environment.elevation.clone());
-        let landscape = MapPackage::with_prepared_environment(
-            package.generator_version,
-            landscape_request,
-            package.source_locks.clone(),
-            package.projection.clone(),
-            package.provenance.clone(),
-            landscape_environment,
-        )
-        .expect("canonical metadata-only field fixture");
-        let bytes_landscape = serde_json::to_vec(&serde_json::json!({
-            "operation": "prepared_directory", "package": landscape,
-        }))
-        .expect("landscape response");
-        let axes = crate::map_jobs::OverviewFieldAxes {
-            elevation: 2,
-            vegetation: 2,
-            water: 2,
-            historical: 2,
-        };
-        assert!(decode_prepared_output(&bytes_landscape, landscape_request, 2, Some(axes)).is_ok());
-        for field in 0..4 {
-            let mut changed = axes;
-            match field {
-                0 => changed.elevation = 3,
-                1 => changed.vegetation = 3,
-                2 => changed.water = 3,
-                _ => changed.historical = 3,
-            }
-            assert!(
-                decode_prepared_output(&bytes_landscape, landscape_request, 2, Some(changed))
-                    .expect_err("silent field downgrade")
-                    .contains("different field axes")
-            );
-        }
-        assert!(
-            decode_prepared_output(&bytes, request, 1024, None)
-                .expect_err("wrong detail")
-                .contains("different preparation detail")
-        );
-    }
-
-    #[test]
-    fn directory_response_cannot_substitute_another_request_or_silent_fallback() {
-        let request = MapRequest::default();
-        let package =
-            MapPackage::new(aoe_map::MAP_SCHEMA_VERSION, request, Vec::new()).expect("package");
-        let output = serde_json::to_vec(&serde_json::json!({
-            "operation": "prepared_directory", "package": package,
-        }))
-        .expect("response");
-        let mut other = request;
-        other.seed += 1;
-        assert!(
-            decode_prepared_output(&output, other, 128, None)
-                .expect_err("different request")
-                .contains("different request")
-        );
-        assert!(
-            decode_prepared_output(&output, request, 128, None)
-                .expect_err("fallback")
-                .contains("no environmental sources")
-        );
-    }
-}
+#[path = "map_worker/tests/hydrology_response.rs"]
+mod tests;

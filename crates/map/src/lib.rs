@@ -53,8 +53,8 @@ pub use overlay::{
     ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot,
 };
 pub use package::{
-    EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, ProjectionMetadata,
-    SourceLock, VerticalDatum,
+    EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, PreparationNote,
+    ProjectionMetadata, SourceLock, VerticalDatum,
 };
 pub use request::{MapEstimate, MapRequest, MapRequestError, Ratio, ReconstructionProfile};
 pub use terrain::{

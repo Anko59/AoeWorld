@@ -33,7 +33,7 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, m
     key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''),
     request,
   });
-  const originalRequest = job => ({ ...job.request, preparation: job.preparation.mode === 'procedural_fallback' ? 'automatic' : job.preparation.mode });
+  const originalRequest = job => ({ ...job.request, preparation: job.preparation.mode === 'procedural_fallback' ? 'automatic' : job.preparation.mode, hydrology_mode: job.preparation.mode === 'detailed' ? 'vectors' : job.preparation.hydrology_mode ?? 'none' });
   const controls = () => {
     generate.disabled = busy || acceptedId !== null || submission !== null;
     retry.disabled = busy || (acceptedId === null && retryRequest === null);
@@ -106,6 +106,9 @@ export function initMapJobs({ readJson, controllerHeaders, preparationSummary, m
       estimate.textContent = value.start_available
         ? `${source} package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`
         : `${source} package available for preview: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\n${value.message || 'No suitable land start.'} Open its terrain preview; gameplay was not replaced.`;
+      if (completed.preparation_notes?.includes('outside_river_coverage')) {
+        estimate.textContent += '\nThis area is outside river coverage; the map uses overview water without rivers.';
+      }
       retryRequest = null;
     } catch (error) {
       estimate.className = 'error';

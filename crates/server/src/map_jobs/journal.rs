@@ -179,6 +179,11 @@ impl Manager {
                         percent: (state == JobState::Completed).then_some(100),
                         progress: None,
                         eta_seconds: (state == JobState::Completed).then_some(0),
+                        preparation_notes: hash
+                            .as_ref()
+                            .and_then(|hash| packages.get(hash))
+                            .map(|package| package.preparation_notes.clone())
+                            .unwrap_or_default(),
                         content_hash: hash,
                         error,
                     },

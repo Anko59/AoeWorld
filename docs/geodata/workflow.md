@@ -229,16 +229,20 @@ Directory-sync failure after rename reports uncertain crash durability in the
 server log while retaining the committed state. Partial geographic preparation
 files are not garbage-collected by this journal.
 
-The creator's Automatic detail mode selects regional Copernicus elevation for
-squares up to 120 km with centers within 75 degrees latitude and 170 degrees
-longitude. This conservative window avoids the regional worker's unsupported
-polar and wrapped footprints. The grid is a power of two between 128 and 4096
-samples, targeting 30 m spacing. Larger or edge-of-world selections explicitly
-use the 128-sample overview; a user may also select overview for a small map.
-Detailed mode rejects selections outside that window instead of silently
-downgrading them. Exact projected coverage and source/staging budgets are still
-checked by the worker before preparation. Water, vegetation and historical
-land use retain their current overview resolution, even with detailed elevation.
+The creator defaults to Automatic rivers and a landscape overview: elevation
+and history use 1024 samples; water and potential vegetation use 128. The worker
+checks river coverage before acquisition. Covered footprints add vector hydrology;
+uncovered ones keep the global overview and record `outside_river_coverage` in
+package and job preparation notes, displayed by the creator. Explicit With rivers
+rejects uncovered footprints; Without rivers requests the overview directly.
+
+Detailed regional elevation is an explicit choice and includes rivers. It
+supports squares up to 120 km with centers within 75 degrees latitude and 170
+degrees longitude, using a power-of-two grid of 128–4096 samples for approximately
+30 m spacing. With rivers plus Automatic detail may also select this regional
+path. Detailed requests reject unsupported windows and uncovered river
+footprints. Source errors never turn into a fallback. Water, vegetation and
+historical land use retain their overview resolution with detailed elevation.
 
 Estimates and active jobs expose the selected preparation mode, sample grid,
 spacing, and source limitations. Without a configured worker, Automatic remains

@@ -46,7 +46,7 @@ pub(crate) struct PreparationPlan {
 }
 
 fn creator_hydrology() -> HydrologyMode {
-    HydrologyMode::Vectors
+    HydrologyMode::Automatic
 }
 
 impl PreparationPlan {
@@ -73,6 +73,14 @@ impl PreparationPlan {
                 _ => Err("Source preparation requires a configured geographic worker.".to_owned()),
             };
         }
+        if input.preparation == PreparationPreference::Detailed
+            && input.hydrology_mode == HydrologyMode::None
+        {
+            return Err(
+                "Detailed preparation includes rivers; choose overview for a map without rivers."
+                    .to_owned(),
+            );
+        }
         // A conservative creator window stays within the regional worker's
         // unwrapped, nonpolar footprint. The worker still verifies exact
         // projection bounds, tile counts and source/staging quotas.
@@ -85,7 +93,9 @@ impl PreparationPlan {
             }
             PreparationPreference::Detailed => true,
             PreparationPreference::Overview => false,
-            PreparationPreference::Automatic => regional,
+            PreparationPreference::Automatic => {
+                regional && input.hydrology_mode == HydrologyMode::Vectors
+            }
         };
         // Overview packages always sample the independent landscape axes.
         let field_axes = (!detailed).then_some(OverviewFieldAxes::LANDSCAPE);
@@ -107,13 +117,15 @@ impl PreparationPlan {
             samples_per_axis: samples,
             field_axes,
             hydrology_mode: if detailed {
-                HydrologyMode::None
+                HydrologyMode::Vectors
             } else {
                 input.hydrology_mode
             },
             geographic_millimeters_per_sample: Some(sample_spacing(estimate, samples)),
             explanation: if detailed {
                 "Regional elevation: modern Copernicus GLO30, with GLO90 only where GLO30 is absent. Modern WorldCover and European/Middle Eastern hydrography are stored as observations; mapped river corridors and lake extents only refine existing inland overview water. Vegetation and year-600 land use retain overview grids. Reservoirs and uncertain water remain evidence, not historical water. Source errors fail the job."
+            } else if input.hydrology_mode == HydrologyMode::Automatic {
+                "Automatic landscape overview: include rivers where the whole footprint is covered. Else use global overview water and record that the area is outside river coverage. Coverage is decided before acquiring inputs; source errors fail the job."
             } else if input.hydrology_mode == HydrologyMode::Vectors {
                 "Landscape overview plus pinned HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Categorical ocean/water context remains 128; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. The footprint is verified against the pinned source coverage before acquisition; source errors fail the job."
             } else {

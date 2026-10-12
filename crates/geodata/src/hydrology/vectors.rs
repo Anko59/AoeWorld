@@ -86,13 +86,40 @@ pub fn prepare_hydrology_vectors(
     corrections
         .validate_for(request, samples_per_axis)
         .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
-    validate_vector_footprint(request, samples_per_axis, cancelled)?;
+    let footprint = project_river_footprint(request, samples_per_axis, cancelled)?;
+    footprint.check_binding(request, samples_per_axis)?;
+    prepare_vectors_validated(
+        cache_root,
+        footprint,
+        overview_elevation_pages,
+        overview_water_pages,
+        corrections,
+        cancelled,
+    )
+}
+
+pub(crate) fn prepare_vectors_validated(
+    cache_root: PathBuf,
+    footprint: RiverFootprint,
+    overview_elevation_pages: &[aoe_map::ElevationPage],
+    overview_water_pages: &[aoe_map::WaterPage],
+    corrections: WaterCorrectionDocument,
+    cancelled: &AtomicBool,
+) -> Result<PreparedHydrology, GeodataError> {
+    let request = footprint.request;
+    let samples_per_axis = footprint.axis;
+    footprint.check_binding(request, samples_per_axis)?;
+    check_cancelled(cancelled)?;
+    corrections
+        .validate_for(request, samples_per_axis)
+        .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     // Reject malformed supplied context before any cache or provider access.
     let elevation_context = super::overview_elevation_context(overview_elevation_pages)?;
     hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
         sources: hydrology_vector_sources(),
+        footprint,
     };
     check_cancelled(cancelled)?;
     let mut prepared = prepare_with_plan(
@@ -131,11 +158,47 @@ fn validate_vector_request(request: MapRequest, axis: u16) -> Result<MapRequest,
 // Check every cell's vertices, edge midpoints and center, not a degree approximation
 // or only four corners. Row-sized coordinate buffers retain the existing axis cap.
 // Coverage uses the SHA-pinned shapefile header extent, inset by query padding.
+#[derive(Clone, Debug)]
+pub(crate) struct RiverFootprint {
+    request: MapRequest,
+    axis: u16,
+    covered: bool,
+}
+
+impl RiverFootprint {
+    pub(crate) fn covered(&self) -> bool {
+        self.covered
+    }
+    pub(crate) fn check_binding(&self, request: MapRequest, axis: u16) -> Result<(), GeodataError> {
+        if request.normalized().ok() != Some(self.request) || axis != self.axis {
+            return Err(GeodataError::Preparation(
+                "hydrology preflight grid does not match sampling request",
+            ));
+        }
+        if !self.covered {
+            return Err(GeodataError::Preparation(
+                "vector hydrology footprint is outside the pinned river dataset extent",
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn validate_vector_footprint(
     request: MapRequest,
     axis: u16,
     cancelled: &AtomicBool,
 ) -> Result<(), GeodataError> {
+    project_river_footprint(request, axis, cancelled)?.check_binding(request, axis)
+}
+
+pub(crate) fn project_river_footprint(
+    request: MapRequest,
+    axis: u16,
+    cancelled: &AtomicBool,
+) -> Result<RiverFootprint, GeodataError> {
+    check_cancelled(cancelled)?;
+    let request = validate_vector_request(request, axis)?;
     let side = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
@@ -169,12 +232,18 @@ pub(super) fn validate_vector_footprint(
                 || !longitudes.contains(&lon)
                 || !latitudes.contains(&lat)
         }) {
-            return Err(GeodataError::Preparation(
-                "vector hydrology footprint is outside the pinned river dataset extent",
-            ));
+            return Ok(RiverFootprint {
+                request,
+                axis,
+                covered: false,
+            });
         }
     }
-    Ok(())
+    Ok(RiverFootprint {
+        request,
+        axis,
+        covered: true,
+    })
 }
 
 #[cfg(test)]

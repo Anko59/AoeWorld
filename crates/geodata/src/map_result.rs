@@ -94,13 +94,13 @@ pub enum WorkerResponse {
         distortion: ProjectionDistortion,
     },
     PreparedElevation {
-        environment: PreparedEnvironment,
+        environment: Box<PreparedEnvironment>,
         pages: Vec<ElevationPage>,
     },
     PreparedOverview(Box<PreparedOverview>),
     #[serde(rename = "prepared_directory")]
     PreparedDirectory {
-        package: MapPackage,
+        package: Box<MapPackage>,
     },
 }
 

@@ -52,6 +52,7 @@ struct StrictPackage {
     #[serde(deserialize_with = "nested::environment")]
     environment: PreparedEnvironment,
     content_hash: [u8; 32],
+    preparation_notes: Vec<PreparationNote>,
 }
 
 impl<'de> Deserialize<'de> for MapPackage {
@@ -74,6 +75,7 @@ impl<'de> Deserialize<'de> for MapPackage {
             provenance: raw.provenance,
             environment: raw.environment,
             content_hash: raw.content_hash,
+            preparation_notes: raw.preparation_notes,
         })
     }
 }
