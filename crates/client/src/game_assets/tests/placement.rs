@@ -194,7 +194,7 @@ fn source_groups_are_bounded_by_selection_not_sparse_page_id_and_do_not_reorder_
 }
 
 #[wasm_bindgen_test]
-fn reviewed_catalog_is_exactly_978_in_original_source_and_frame_order() {
+fn reviewed_catalog_is_exactly_1378_in_original_source_and_frame_order() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
     let mut frames = Vec::new();
@@ -223,7 +223,7 @@ fn reviewed_catalog_is_exactly_978_in_original_source_and_frame_order() {
             source_frames(&manifest, &source.manifest_source(), source.frames).unwrap()
         })
         .collect::<Vec<_>>();
-    assert_eq!(actual.len(), 978);
+    assert_eq!(actual.len(), 1378);
     assert_eq!(actual, expected);
     assert_eq!(TERRAIN_ROLES[4], AssetRole::Rock);
     assert_eq!(

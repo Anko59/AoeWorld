@@ -6,7 +6,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 fn directory_resolves_every_material_tile_to_the_cpu_selected_frame() {
     let art = fixture::art();
     let atlas = fixture::atlas();
-    for material in 0..=10 {
+    for material in 0..=16 {
         for y in -13..13 {
             for x in -13..13 {
                 assert_eq!(

@@ -133,9 +133,58 @@ const FOREST_ROUTES: (usize, &str) = (
 // Current chunks retain Lake/Ocean kinds at shallow rims. Correcting that
 // serialized field changes these digests, but not the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "45fca45cb4d406eb36cd220af43c6e123163add4cae9896eec4f6b4990a875eb",
-    "bc84c068e5aa351584a311bc608d0d9381a50518d0dc1d9ffe5b46c4618f33c6",
-    "fb81888dbeb175bb715916b890572a661bd4a4eb8f11329caba9b146b0c4a16e",
+    "0c794f57b93c119cd7ad5216a009d12737c02f36eeb39a87a01b463fd26d1dbf",
+    "d627fdb49eec91d2fa8aec7422a5c6864b5ac86d92d17a7ca84f09f3d224657d",
+    "4c40c238716779c1f3d3759559995424d6cb00c2c2ec9cf48b173e0fa45b9416",
 ];
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "fe07b5498340b1486e694efc1cab091e0813f05e2f2b7d62b010a9dcdd96a863";
+    "35f4f5370283d8d65d16214bbd8a26985afa03edd55349db55a5f45f8640599d";
+
+/// The optional ground sheets are load-time plumbing: no generator rule
+/// emits their materials, so adding or removing the sheets cannot change
+/// what is generated. The darker-grass sheet draws over the pre-existing
+/// `LushGrass` material, which Tropical fallback tiles already carry.
+#[test]
+fn sheet_plumbing_emits_none_of_the_new_ground_materials() {
+    const SHEET_ONLY_MATERIALS: [GroundMaterial; 3] = [
+        GroundMaterial::GrassDirt,
+        GroundMaterial::WornGrass,
+        GroundMaterial::Gravel,
+    ];
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let fallbacks = [1, 17, 991].map(|seed| MapChunkGenerator::new([23; 32], seed, 512));
+    for generator in [package.generator()].into_iter().chain(fallbacks) {
+        for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+            let scene = generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .expect("chunk");
+            assert!(
+                scene
+                    .tiles
+                    .iter()
+                    .all(|tile| !SHEET_ONLY_MATERIALS.contains(&tile.terrain.material)),
+                "chunk ({x},{y}) emitted a sheet-only ground material"
+            );
+        }
+    }
+}
+
+/// Regression pin of the current generation on scene content rather than
+/// transport bytes, so a wire-format change alone cannot move it. Regenerate
+/// it with any deliberate generation change, like the pins above.
+#[test]
+fn default_package_generated_scene_content_is_pinned() {
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let generator = package.generator();
+    let mut digest = blake3::Hasher::new();
+    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+        let scene = generator
+            .landscape_chunk_with_cancel(x, y, &|| false)
+            .expect("chunk");
+        digest.update(format!("{scene:?}").as_bytes());
+    }
+    assert_eq!(
+        digest.finalize().to_hex().as_str(),
+        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
+    );
+}

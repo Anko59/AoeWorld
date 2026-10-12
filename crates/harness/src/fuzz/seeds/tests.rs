@@ -58,7 +58,7 @@ fn seeds_reach_valid_parsers_and_preserve_discovered_inputs() {
     );
     for name in ["full-chunk-hex", "typed-tile-hex", "empty-hex"] {
         let encoded = chunk(name);
-        assert!(encoded.payload_hex.starts_with("04"), "{name}");
+        assert!(encoded.payload_hex.starts_with("05"), "{name}");
         let scene = encoded.decode().unwrap();
         assert_eq!(CompactChunk::encode(&scene).unwrap(), encoded);
         match name {

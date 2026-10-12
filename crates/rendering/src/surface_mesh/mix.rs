@@ -12,6 +12,7 @@
 use super::*;
 pub(crate) mod support;
 
+#[path = "mix/tests/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod fixture;
 
@@ -22,24 +23,30 @@ const GAIN: f32 = 4.0;
 const REACH: f32 = 2.6;
 
 /// Overlay order, low to high: a higher material spills over a lower one.
-/// Bare hard ground is lowest, vegetation creeps over it and snow covers all.
+/// Bare hard ground is lowest, vegetation creeps over it and snow covers all:
+/// ice, rock, gravel, mud, sand, dirt, grass and dirt mix, dry grass, worn
+/// grass, grass, lush grass, snow.
 pub(crate) fn rank(material: u8) -> u8 {
     match material {
         8 => 0,
         4 => 1,
-        9 => 2,
-        3 => 3,
-        2 => 4,
-        1 => 5,
-        0 => 6,
-        7 => 7,
-        _ => 8,
+        16 => 2,
+        9 => 3,
+        3 => 4,
+        2 => 5,
+        13 => 6,
+        1 => 7,
+        14 => 8,
+        0 => 9,
+        15 => 10,
+        7 => 11,
+        _ => 12,
     }
 }
 
 /// Materials that carry the ecological palette and the forest-floor bed.
 pub(crate) fn vegetative(material: u8) -> bool {
-    matches!(material, 0 | 1 | 2 | 6)
+    matches!(material, 0 | 1 | 2 | 6 | 13..=15)
 }
 
 impl ProjectedSurfaceTriangle {

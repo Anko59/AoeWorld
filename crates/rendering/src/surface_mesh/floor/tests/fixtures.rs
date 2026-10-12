@@ -90,7 +90,7 @@ pub(crate) fn forest_faces(
                 _ => 0,
             })]
         }),
-        terrain_topology: [None; 7],
+        terrain_topology: [None; 11],
         water_depth: Default::default(),
         resources: std::array::from_fn(|_| Vec::new()),
         tree_shadows: Vec::new(),

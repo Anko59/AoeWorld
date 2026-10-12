@@ -208,7 +208,7 @@ fn unsupported_and_malformed_payloads_do_not_enter_cache() {
         "03",
         "03ff",
         "03zz",
-        "04",
+        "05",
         "0100",
         "02ff",
         "0300000000000000",

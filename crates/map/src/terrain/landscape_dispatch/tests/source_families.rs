@@ -67,7 +67,7 @@ fn tree_families_follow_source_classes_and_other_resources_stay_generic() {
                 let generator = classed(seed, width, class);
                 let chunk = scene(&generator, x, y);
                 let encoded = CompactChunk::encode(&chunk).unwrap();
-                assert!(encoded.payload_hex.starts_with("04"));
+                assert!(encoded.payload_hex.starts_with("05"));
                 assert_eq!(encoded.decode().unwrap(), chunk);
                 for resource in &chunk.resources {
                     if resource.node.object != ObjectKind::Tree {
@@ -124,7 +124,7 @@ fn conifer_classes_emit_family_two() {
             .count();
         assert!(trees > 10);
         let encoded = CompactChunk::encode(&chunk).unwrap();
-        assert!(encoded.payload_hex.starts_with("04"));
+        assert!(encoded.payload_hex.starts_with("05"));
         assert_eq!(ResourceVisualFamily::Conifer as u8, 2);
         let decoded = encoded.decode().unwrap();
         assert!(

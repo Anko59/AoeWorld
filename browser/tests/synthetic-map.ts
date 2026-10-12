@@ -54,7 +54,7 @@ export function syntheticChunk(
   y: number;
   payload_hex: string;
 } {
-  // Chunk format 4: header, then per tile 20 terrain bytes, explicit world
+  // Chunk format 5: header, then per tile 20 terrain bytes, explicit world
   // coordinates and 7 appearance bytes; resources carry a visual family.
   const trees: [number, number][] = [];
   const planted = denseResources === true ? () => true : denseResources;
@@ -62,7 +62,7 @@ export function syntheticChunk(
     for (let tileX = x * CHUNK_TILES; tileX < (x + 1) * CHUNK_TILES; tileX++)
       if (planted && planted(tileX, tileY)) trees.push([tileX, tileY]);
   const bytes = [
-    4,
+    5,
     ...u16(CHUNK_TILES * CHUNK_TILES),
     ...u16(trees.length),
     ...u16(0),
@@ -77,7 +77,7 @@ export function syntheticChunk(
       );
       bytes.push(...i32(level * 100), ...i16(level));
       for (const height of corners) bytes.push(...i16(height));
-      bytes.push(...u32(denseResources ? 1 << 20 : properties(tileX, tileY)));
+      bytes.push(...u32(denseResources ? 1 << 21 : properties(tileX, tileY)));
       // No hydrology/land-cover evidence; open temperate lowland appearance.
       bytes.push(...u16(0), ...i32(tileX), ...i32(tileY));
       bytes.push(...u16(0), ...u16(0), 0, 1, 0);
@@ -105,20 +105,21 @@ function properties(x: number, y: number): number {
   const ramp = surface === "ramp";
   const water = surface === "water";
   const transition = surface === "shore";
+  // Five material bits: lush = 2, grass/dirt = 14, worn = 15, gravel = 16.
   const material = ramp ? 1 : cliff ? 6 : water ? 11 : transition ? 10 : 0;
   const waterKind = water ? 1 : transition ? 2 : 0;
   const surfaceKind = ramp ? 1 : cliff ? 2 : 0;
   const diagonal = (x + y) & 1;
   return (
     material |
-    (2 << 4) |
-    (3 << 8) |
-    (waterKind << 11) |
-    (3 << 14) |
-    (3 << 17) |
-    ((waterKind === 0 && surfaceKind !== 2 ? 1 : 0) << 20) |
-    (surfaceKind << 21) |
-    (diagonal << 23)
+    (2 << 5) |
+    (3 << 9) |
+    (waterKind << 12) |
+    (3 << 15) |
+    (3 << 18) |
+    ((waterKind === 0 && surfaceKind !== 2 ? 1 : 0) << 21) |
+    (surfaceKind << 22) |
+    (diagonal << 24)
   );
 }
 

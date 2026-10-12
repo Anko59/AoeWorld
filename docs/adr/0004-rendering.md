@@ -235,8 +235,8 @@ Each displayed vertex takes the share of every ground sheet among its four
 incident land tiles (water, cliffs and metadata-free samples are not
 observations). A quad whose four corner supports see one sheet keeps its
 existing path. A face in a quad that sees several becomes a world-tiled face (mode 6) with
-layers ordered by `mix::rank`, low to high: ice, rock, mud, sand, dirt, dry
-grass, grass, snow. The lowest is the base and the highest the overlay, so both
+layers ordered by `mix::rank`, low to high: ice, rock, gravel, mud, sand, dirt, grass and dirt mix, dry
+grass, worn grass, grass, lush grass, snow. The lowest is the base and the highest the overlay, so both
 sides of a border draw the same pair. The representative palette comes from all
 four quad corners in that fixed priority order, so its two triangles agree. Ordinary borders sample the base,
 a middle material or forest-floor bed, and the overlay. A quad with more than
@@ -310,6 +310,13 @@ module and requiring one sample with no directory reads in the sprite arm.
 Actual renderer runs and equal-depth alpha readbacks pin program selection and
 painter order. These deterministic contracts do not qualify frame cadence or
 dedicated-hardware performance.
+
+Scene materials 13–16 support ground variety (grass and dirt mix, worn
+grass, lush grass, gravel), drawn from optional art groups 7–10; a pack without
+a sheet draws dry grass, grass, grass or sand. The three grassy ones carry the
+ecological palette like grass; none is procedural. The directory holds seventeen
+material headers. No generator emits the new materials yet. Junction nibbles 5 and 6 encode scene materials 15 and 16;
+water and the forest bed never supply ground observations, and 15 stays empty.
 
 ## Direct scene emission
 

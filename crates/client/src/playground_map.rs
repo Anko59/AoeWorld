@@ -358,7 +358,11 @@ fn chunk_axis_len(total_tiles: i32, chunk: i32) -> usize {
 
 fn terrain_material(material: GroundMaterial) -> u8 {
     match material {
-        GroundMaterial::TemperateGrass | GroundMaterial::LushGrass => 0,
+        GroundMaterial::TemperateGrass => 0,
+        GroundMaterial::GrassDirt => 13,
+        GroundMaterial::WornGrass => 14,
+        GroundMaterial::LushGrass => 15,
+        GroundMaterial::Gravel => 16,
         GroundMaterial::DryGrass => 1,
         GroundMaterial::Snow => 7,
         GroundMaterial::Ice => 8,

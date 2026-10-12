@@ -5,10 +5,28 @@ use super::*;
 pub(crate) const FULL: u32 = 1 << 30;
 const EMPTY: u8 = 15;
 
+// Water-side 5 and forest-bed 6 never occur as ground observations. Reuse
+// those nibbles for the two scene materials above 14, preserving empty 15.
+fn code(material: u8) -> u8 {
+    match material {
+        15 => 5,
+        16 => 6,
+        other => other.min(EMPTY),
+    }
+}
+
+pub(crate) fn material(code: u8) -> u8 {
+    match code {
+        5 => 15,
+        6 => 16,
+        other => other,
+    }
+}
+
 pub(super) fn retain(triangle: &mut ProjectedSurfaceTriangle, cells: [[(u8, u16); 4]; 3]) {
     let packed = cells.map(|cells| {
         cells.iter().enumerate().fold(0_u16, |word, (slot, cell)| {
-            word | u16::from(cell.0.min(EMPTY)) << (slot * 4)
+            word | u16::from(code(cell.0)) << (slot * 4)
         })
     });
     let address = AtlasAddress {
@@ -48,7 +66,7 @@ pub(crate) fn palette(packed: [u16; 3]) -> [u8; 12] {
             }
         }
     }
-    result[..count].sort_unstable_by_key(|material| (rank(*material), *material));
+    result[..count].sort_unstable_by_key(|code| (rank(material(*code)), *code));
     result
 }
 

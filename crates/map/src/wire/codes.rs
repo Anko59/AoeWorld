@@ -24,6 +24,9 @@ pub(super) fn ground_material(value: u8) -> Result<GroundMaterial, CompactChunkE
         11 => Ok(GroundMaterial::Water),
         12 => Ok(GroundMaterial::DeepWater),
         13 => Ok(GroundMaterial::Ford),
+        14 => Ok(GroundMaterial::GrassDirt),
+        15 => Ok(GroundMaterial::WornGrass),
+        16 => Ok(GroundMaterial::Gravel),
         _ => Err(CompactChunkError::InvalidEnum),
     }
 }

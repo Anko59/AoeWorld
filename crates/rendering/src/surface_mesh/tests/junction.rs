@@ -15,11 +15,29 @@ pub(crate) fn camera() -> SceneCamera {
 }
 
 pub(crate) fn scene() -> Vec<ProjectedSurfaceTriangle> {
-    scene_with_bed(false)
+    scene_with_bed(false, false)
 }
 
-fn scene_with_bed(forest: bool) -> Vec<ProjectedSurfaceTriangle> {
-    let materials = [[8, 9, 9], [4, if forest { 0 } else { 7 }, 9], [4, 4, 8]];
+pub(crate) fn variety_scene() -> Vec<ProjectedSurfaceTriangle> {
+    scene_with_bed(false, true)
+}
+
+fn scene_with_bed(forest: bool, variety: bool) -> Vec<ProjectedSurfaceTriangle> {
+    let materials = [[8, 9, 9], [4, if forest { 0 } else { 7 }, 9], [4, 4, 8]].map(|row| {
+        row.map(|material| {
+            if variety {
+                match material {
+                    8 => 16,
+                    4 => 13,
+                    9 => 14,
+                    7 => 15,
+                    _ => material,
+                }
+            } else {
+                material
+            }
+        })
+    });
     let terrain = (-1..=1)
         .flat_map(|y| {
             (-1..=1).map(move |x| SceneTerrain {
@@ -48,11 +66,14 @@ fn scene_with_bed(forest: bool) -> Vec<ProjectedSurfaceTriangle> {
 /// readback into background. The inset exceeds half a 1/16-pixel raster step
 /// while remaining below 0.1 pixel in this fixture; tolerances stay at two bytes.
 pub(crate) fn edge_pairs() -> Vec<[ProjectedSurfaceTriangle; 2]> {
-    [false, true].into_iter().flat_map(pairs_with_bed).collect()
+    [(false, false), (true, false), (false, true)]
+        .into_iter()
+        .flat_map(|(forest, variety)| pairs_with_bed(forest, variety))
+        .collect()
 }
 
-fn pairs_with_bed(forest: bool) -> Vec<[ProjectedSurfaceTriangle; 2]> {
-    let faces = scene_with_bed(forest);
+fn pairs_with_bed(forest: bool, variety: bool) -> Vec<[ProjectedSurfaceTriangle; 2]> {
+    let faces = scene_with_bed(forest, variety);
     let mut pairs = Vec::new();
     for (index, a) in faces.iter().enumerate() {
         for b in &faces[index + 1..] {
@@ -113,7 +134,12 @@ pub(crate) fn assert_edge(pair: &[ProjectedSurfaceTriangle; 2], pixels: [[u8; 4]
             0.0,
         ];
         let forest = pair[0].material == 0;
-        let colors = [8, 4, 9, if forest { 0 } else { 7 }].map(color);
+        let materials = if pair[0].material == 15 {
+            [16, 13, 14, 15]
+        } else {
+            [8, 4, 9, if forest { 0 } else { 7 }]
+        };
+        let colors = materials.map(color);
         let bed = if forest { 64.0 / 255.0 } else { 0.0 };
         let litter = super::layer(super::COLORS[6], 6);
         for pixel in pixels {

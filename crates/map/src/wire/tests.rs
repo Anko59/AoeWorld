@@ -20,7 +20,7 @@ fn generated_chunks_round_trip_with_typed_terrain_evidence() {
     });
     original.tiles[0].terrain.modern_land_cover_class = Some(40);
     let compact = CompactChunk::encode(&original).expect("encodes a map chunk");
-    assert!(compact.payload_hex.starts_with("04"));
+    assert!(compact.payload_hex.starts_with("05"));
     assert_eq!(
         compact.decoded_len().expect("decoded length"),
         HEADER_BYTES
@@ -120,7 +120,7 @@ fn every_typed_field_round_trips_and_the_maximum_chunk_stays_bounded() {
 fn only_the_current_version_byte_is_accepted() {
     let valid = bytes(&fixture(1));
     assert_eq!(valid[0], CHUNK_FORMAT_VERSION);
-    for version in [0, 1, 2, 3, 5, u8::MAX] {
+    for version in (0..=u8::MAX).filter(|version| *version != CHUNK_FORMAT_VERSION) {
         let mut other = valid.clone();
         other[0] = version;
         assert_eq!(
@@ -130,7 +130,7 @@ fn only_the_current_version_byte_is_accepted() {
     }
     let empty = fixture(0);
     let encoded = CompactChunk::encode(&empty).expect("empty");
-    assert_eq!(encoded.payload_hex, "04000000000000");
+    assert_eq!(encoded.payload_hex, "05000000000000");
     assert_eq!(encoded.decode().expect("empty decode"), empty);
 }
 
@@ -245,7 +245,7 @@ fn worldcover_evidence_codes_round_trip_every_documented_class() {
 
 #[test]
 fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
-    for value in 0..=13 {
+    for value in 0..=16 {
         assert!(ground_material(value).is_ok(), "material {value}");
     }
     for value in 0..=9 {
@@ -272,7 +272,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     for value in 0..=5 {
         assert!(palette_from(value).is_ok(), "palette {value}");
     }
-    assert_eq!(ground_material(14), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(ground_material(17), Err(CompactChunkError::InvalidEnum));
     assert_eq!(biome(10), Err(CompactChunkError::InvalidEnum));
     assert_eq!(provenance(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(water_kind(5), Err(CompactChunkError::InvalidEnum));
@@ -285,4 +285,36 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     assert_eq!(height_from(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(resource_family_from(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(decoration_from(4), Err(CompactChunkError::InvalidEnum));
+}
+
+#[test]
+fn five_bit_materials_round_trip_without_overlapping_any_biome() {
+    let mut chunk = fixture(1);
+    for material in 0..=16 {
+        for climate in 0..=9 {
+            chunk.tiles[0].terrain.material = ground_material(material).unwrap();
+            chunk.tiles[0].terrain.biome = biome(climate).unwrap();
+            let encoded = CompactChunk::encode(&chunk).expect("current material and biome");
+            assert_eq!(encoded.decode().unwrap(), chunk);
+        }
+    }
+}
+
+#[test]
+fn ground_sheet_codes_round_trip_without_changing_physical_flags() {
+    use crate::GroundMaterial::{GrassDirt, Gravel, LushGrass, WornGrass};
+    for (material, code) in [
+        (LushGrass, 2),
+        (GrassDirt, 14),
+        (WornGrass, 15),
+        (Gravel, 16),
+    ] {
+        let mut chunk = fixture(1);
+        chunk.tiles[0].terrain.material = material;
+        let encoded = CompactChunk::encode(&chunk).expect("new sheet");
+        let bytes = decode_hex(&encoded.payload_hex).expect("bytes");
+        let properties = u32::from_le_bytes(bytes[21..25].try_into().expect("properties"));
+        assert_eq!(properties & 31, code);
+        assert_eq!(encoded.decode().expect("current codec"), chunk);
+    }
 }

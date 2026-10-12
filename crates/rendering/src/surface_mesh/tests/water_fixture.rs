@@ -60,7 +60,7 @@ pub(crate) fn art(depth: bool) -> GameArt {
         standing: Vec::new(),
         grass: vec![frame(4)],
         terrain: std::array::from_fn(|slot| vec![frame(if slot == 5 { 0 } else { 4 })]),
-        terrain_topology: [None; 7],
+        terrain_topology: [None; 11],
         water_depth: std::array::from_fn(|slot| {
             if depth {
                 (vec![frame(slot + 1)], None)

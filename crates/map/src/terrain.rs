@@ -63,6 +63,10 @@ pub enum GroundMaterial {
     /// Renderer mapping for walkable river shallows. No terrain generator
     /// emits this material yet; ford generation belongs to separate river work.
     Ford,
+    /// Grass broken by bare soil; drawn variety only, like the two below.
+    GrassDirt,
+    WornGrass,
+    Gravel,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

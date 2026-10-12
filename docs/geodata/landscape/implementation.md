@@ -22,7 +22,7 @@ client chunk caches.
 | Map package schema (`MAP_SCHEMA_VERSION`) | 1 | Rejected by the strict reader |
 | Generation recipe (`GENERATION_RECIPE_VERSION`) | 1 | Rejected; regenerate the package |
 | Hydrology water model (`HYDROLOGY_WATER_MODEL_VERSION`) | 1 | Rejected |
-| Compact chunk (`CHUNK_FORMAT_VERSION`) | 4 | Leading byte rejected |
+| Compact chunk (`CHUNK_FORMAT_VERSION`) | 5 | Leading byte rejected |
 | Gameplay and top-level protocol `VERSION` | 1 | No negotiation |
 | Map job journal schema | 1 | Startup fails |
 
@@ -31,6 +31,10 @@ environment field declares its own axis in its first pyramid level, and every
 pyramid must end at one sample. Golden digests (chunk content, default package
 hash and terrain, routes, start tiles) pin the current output as regression
 guards, not as compatibility promises.
+
+Compact terrain properties use five material bits followed by the biome and
+physical flags, still inside the existing 32-bit word. This accommodates all
+seventeen current materials, including water depth, Ford and ground variety.
 
 ## Composed landscape
 
@@ -178,7 +182,7 @@ the renderer falls back to approved broadleaf frames (see
 
 ## Chunk wire
 
-`/maps/{hash}/chunks/{x}/{y}` always serves one compact format, version byte 4.
+`/maps/{hash}/chunks/{x}/{y}` always serves one compact format, version byte 5.
 `CompactChunk::encode`/`decode` take and return `LandscapeChunk`, with one
 `CompactChunkError` type. All fields are little-endian; appearance is mandatory.
 

@@ -120,12 +120,14 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
         return MinimapClass::Forest;
     }
     match terrain.material {
-        GroundMaterial::TemperateGrass | GroundMaterial::LushGrass => MinimapClass::Grass,
-        GroundMaterial::DryGrass => MinimapClass::DryGrass,
+        GroundMaterial::TemperateGrass | GroundMaterial::LushGrass | GroundMaterial::WornGrass => {
+            MinimapClass::Grass
+        }
+        GroundMaterial::DryGrass | GroundMaterial::GrassDirt => MinimapClass::DryGrass,
         GroundMaterial::ForestFloor | GroundMaterial::Dirt | GroundMaterial::Mud => {
             MinimapClass::Soil
         }
-        GroundMaterial::Sand => MinimapClass::Sand,
+        GroundMaterial::Sand | GroundMaterial::Gravel => MinimapClass::Sand,
         GroundMaterial::Rock => MinimapClass::Rock,
         GroundMaterial::Snow => MinimapClass::Snow,
         GroundMaterial::Ice => MinimapClass::Ice,

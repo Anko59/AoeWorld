@@ -2,7 +2,9 @@
 use super::*;
 use std::collections::BTreeMap;
 
-const LAND: [u8; 8] = [0, 1, 2, 3, 4, 7, 8, 9];
+/// Grass, dry grass, dirt, sand, rock, snow, ice, mud, then the variety
+/// sheets: grass and dirt mix, worn grass, lush grass and gravel.
+const LAND: [u8; 12] = [0, 1, 2, 3, 4, 7, 8, 9, 13, 14, 15, 16];
 
 fn sample(x: i32, y: i32, material: u8) -> SceneTerrain {
     SceneTerrain {
@@ -113,7 +115,7 @@ fn every_pair_of_land_materials_mixes_across_its_border() {
         anchor: [0.0, 0.0],
     };
     let mut art = test_art(frame(0));
-    for group in 0..7 {
+    for group in 0..11 {
         art.terrain[group] = vec![frame(group as u8)];
     }
     for west in LAND {
@@ -163,7 +165,8 @@ fn mixing_is_independent_of_input_order_mesh_lod_and_unmixed_scenes() {
     let mut terrain = (-40_i32..40)
         .flat_map(|y| {
             (-40_i32..40).map(move |x| {
-                let material = LAND[(x.div_euclid(5) * 3 + y.div_euclid(7)).rem_euclid(8) as usize];
+                let material =
+                    LAND[(x.div_euclid(5) * 3 + y.div_euclid(7)).rem_euclid(12) as usize];
                 sample(x, y, material)
             })
         })
@@ -317,5 +320,72 @@ fn four_material_quad_uses_identical_layers_and_shares_on_its_diagonal() {
             [quad[0].mix[a], quad[0].mix[3 + a]],
             [quad[1].mix[b], quad[1].mix[3 + b]]
         );
+    }
+}
+
+#[wasm_bindgen_test]
+fn variety_sheets_draw_their_own_art_or_fall_back_to_the_base_sheet() {
+    let frame = |group: usize| GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [group as f32 / 16.0, 0.0, 0.01, 0.01],
+        },
+        size: [97.0, 49.0],
+        anchor: [0.0, 0.0],
+    };
+    let pack = |missing: Option<usize>| {
+        let mut art = test_art(frame(0));
+        for group in 0..11 {
+            art.terrain[group] = vec![frame(group)];
+        }
+        if let Some(group) = missing {
+            art.terrain[group].clear();
+        }
+        art
+    };
+    let art = pack(None);
+    // Scene 13–16: grass and dirt mix, worn grass, lush grass, gravel.
+    for (material, group, base) in [(13, 7, 1), (14, 8, 0), (15, 9, 0), (16, 10, 3)] {
+        let own = terrain_texture_frame(&art, material, [3, -2]).expect("variety sheet");
+        assert_eq!(own.atlas, frame(group).atlas);
+        let partial = pack(Some(group));
+        let fallback = terrain_texture_frame(&partial, material, [3, -2]).expect("base sheet");
+        assert_eq!(fallback.atlas, frame(base).atlas, "material {material}");
+        // A uniform stretch of a variety sheet is one plain layer; the grassy
+        // ones keep the ecological palette, gravel does not.
+        let terrain = (-3..3)
+            .flat_map(|y| (-3..3).map(move |x| sample(x, y, material)))
+            .collect::<Vec<_>>();
+        let mut faces = mesh(&terrain, 1.0);
+        apply_terrain_textures(&mut faces, &art);
+        for face in &faces {
+            assert_eq!(face.mix, [0; 6]);
+            assert_eq!(face.texture_uv, Some(frame(group).atlas));
+            assert!(face.texture_blend.is_none());
+            assert_eq!(face.vegetated(), material != 16);
+        }
+    }
+    assert!(mix::rank(16) < mix::rank(3) && mix::rank(2) < mix::rank(13));
+    assert!(mix::rank(1) < mix::rank(14) && mix::rank(0) < mix::rank(15));
+}
+
+#[wasm_bindgen_test]
+fn variety_junction_retains_all_scene_materials_above_water_codes() {
+    let faces = mix::fixture::junction::variety_scene();
+    let quad = faces
+        .iter()
+        .filter(|face| face.tile == [0, 0])
+        .collect::<Vec<_>>();
+    assert_eq!(quad.len(), 2);
+    for face in quad {
+        let packed = mix::support::packed(face).expect("four-material junction");
+        let palette = mix::support::palette(packed);
+        let materials = palette
+            .into_iter()
+            .filter(|code| *code != 15)
+            .map(mix::support::material)
+            .collect::<Vec<_>>();
+        assert_eq!(materials, [16, 13, 14, 15]);
+        assert_eq!(mix::support::palette_words(palette)[0] as u32 & 15, 6);
     }
 }

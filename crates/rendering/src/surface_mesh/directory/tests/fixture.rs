@@ -67,10 +67,10 @@ fn frames(material: u8, count: usize) -> Vec<GameFrame> {
 /// coordinate-stable accents on page 1. Every other group is absent.
 pub(crate) fn art() -> GameArt {
     let grass = frames(0, usize::from(SHEET[0] * SHEET[1]));
-    let mut terrain: [Vec<GameFrame>; 7] = Default::default();
+    let mut terrain: [Vec<GameFrame>; 11] = Default::default();
     terrain[0] = grass.clone();
     terrain[2] = frames(2, ACCENTS);
-    let mut terrain_topology = [None; 7];
+    let mut terrain_topology = [None; 11];
     terrain_topology[0] = Some(TerrainTopology::PeriodicXMajorReversedY {
         columns: SHEET[0],
         rows: SHEET[1],

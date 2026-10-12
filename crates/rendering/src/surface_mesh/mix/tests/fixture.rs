@@ -1,7 +1,7 @@
 //! Border probes shared by the three renderer pixel tests. Synthetic flat
 //! frames only: any colour between two materials is the blend itself.
 use super::{layer, noise, rank, weights};
-#[path = "../tests/junction.rs"]
+#[path = "../../tests/junction.rs"]
 pub(crate) mod junction;
 use crate::surface_mesh::{
     ProjectedSurfaceTriangle, apply_terrain_textures, landscape, projected_surface_triangles,
@@ -59,7 +59,7 @@ fn frame(group: usize) -> GameFrame {
 }
 
 pub(crate) fn art() -> GameArt {
-    let mut terrain: [Vec<GameFrame>; 7] = Default::default();
+    let mut terrain: [Vec<GameFrame>; 11] = Default::default();
     for group in [0, 1, 2, 3, 5, 6] {
         terrain[group] = vec![frame(group)];
     }
@@ -68,7 +68,7 @@ pub(crate) fn art() -> GameArt {
         standing: Vec::new(),
         grass: terrain[0].clone(),
         terrain,
-        terrain_topology: [None; 7],
+        terrain_topology: [None; 11],
         water_depth: Default::default(),
         resources: Default::default(),
         tree_shadows: Vec::new(),
@@ -136,6 +136,9 @@ pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
 /// The flat colour a scene material shows on its own.
 fn color(material: u8) -> [f32; 4] {
     let group = match material {
+        13 => 1,
+        14 | 15 => 0,
+        16 => 3,
         4 | 7 | 9 => 2,
         8 => 5,
         6 => 0,

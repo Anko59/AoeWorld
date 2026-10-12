@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// The only chunk payload version. Any other leading byte is rejected; cached
 /// payloads from earlier development formats are discarded and regenerated.
-pub const CHUNK_FORMAT_VERSION: u8 = 4;
+pub const CHUNK_FORMAT_VERSION: u8 = 5;
 pub const MAX_DECODED_CHUNK_BYTES: usize = 128 * 1024;
 const HEADER_BYTES: usize = 7;
 /// Physical terrain record before explicit coordinates and appearance.
@@ -234,14 +234,14 @@ fn read_resource_node(bytes: &[u8], cursor: &mut usize) -> Result<ResourceNode, 
 
 fn pack_tile_properties(tile: Tile) -> u32 {
     u32::from(tile.material as u8)
-        | (u32::from(tile.biome as u8) << 4)
-        | (u32::from(tile.vegetation_provenance as u8) << 8)
-        | (u32::from(tile.water as u8) << 11)
-        | (u32::from(tile.elevation_provenance as u8) << 14)
-        | (u32::from(tile.water_provenance as u8) << 17)
-        | (u32::from(tile.passable) << 20)
-        | (u32::from(tile.surface.kind as u8) << 21)
-        | (u32::from(tile.surface.triangulation as u8) << 23)
+        | (u32::from(tile.biome as u8) << 5)
+        | (u32::from(tile.vegetation_provenance as u8) << 9)
+        | (u32::from(tile.water as u8) << 12)
+        | (u32::from(tile.elevation_provenance as u8) << 15)
+        | (u32::from(tile.water_provenance as u8) << 18)
+        | (u32::from(tile.passable) << 21)
+        | (u32::from(tile.surface.kind as u8) << 22)
+        | (u32::from(tile.surface.triangulation as u8) << 24)
 }
 
 fn unpack_tile(
@@ -251,7 +251,7 @@ fn unpack_tile(
     properties: u32,
     observation_properties: u16,
 ) -> Result<Tile, CompactChunkError> {
-    if properties >> 24 != 0 {
+    if properties >> 25 != 0 {
         return Err(CompactChunkError::InvalidEnum);
     }
     let (hydrology_observation, modern_land_cover_class) =
@@ -261,18 +261,18 @@ fn unpack_tile(
         game_height_level,
         surface: TileSurface {
             corner_game_height_levels,
-            kind: surface_kind(((properties >> 21) & 0x3) as u8)?,
-            triangulation: diagonal(((properties >> 23) & 0x1) as u8)?,
+            kind: surface_kind(((properties >> 22) & 0x3) as u8)?,
+            triangulation: diagonal(((properties >> 24) & 0x1) as u8)?,
         },
-        material: ground_material((properties & 0xf) as u8)?,
-        biome: biome(((properties >> 4) & 0xf) as u8)?,
-        vegetation_provenance: provenance(((properties >> 8) & 0x7) as u8)?,
-        water: water_kind(((properties >> 11) & 0x7) as u8)?,
-        elevation_provenance: provenance(((properties >> 14) & 0x7) as u8)?,
-        water_provenance: provenance(((properties >> 17) & 0x7) as u8)?,
+        material: ground_material((properties & 0x1f) as u8)?,
+        biome: biome(((properties >> 5) & 0xf) as u8)?,
+        vegetation_provenance: provenance(((properties >> 9) & 0x7) as u8)?,
+        water: water_kind(((properties >> 12) & 0x7) as u8)?,
+        elevation_provenance: provenance(((properties >> 15) & 0x7) as u8)?,
+        water_provenance: provenance(((properties >> 18) & 0x7) as u8)?,
         hydrology_observation,
         modern_land_cover_class,
-        passable: (properties & (1 << 20)) != 0,
+        passable: (properties & (1 << 21)) != 0,
     })
 }
 

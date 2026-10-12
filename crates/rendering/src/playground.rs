@@ -37,13 +37,15 @@ pub struct GameArt {
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
     /// Local terrain groups in this order: temperate grass, dry grass, dirt,
-    /// sand, legacy rock (unused for natural surfaces), water, and optional
-    /// forest accents. Procedural scene materials reuse dirt/water detail.
+    /// sand, legacy rock (unused for natural surfaces), water, optional forest
+    /// accents, then the optional ground-variety sheets: grass and dirt mix,
+    /// worn grass, lush grass and gravel. Procedural scene materials reuse
+    /// dirt/water detail.
     /// Map binding stays in the client so the renderer remains independent
     /// from geographic map contracts.
-    pub terrain: [Vec<GameFrame>; 7],
+    pub terrain: [Vec<GameFrame>; 11],
     /// Authored sheet topology; never infer a repeating sheet from frame count.
-    pub terrain_topology: [Option<TerrainTopology>; 7],
+    pub terrain_topology: [Option<TerrainTopology>; 11],
     /// Optional water depth sheets beside `terrain[5]`, the light shallow
     /// sheet: medium water, deep water and walkable marsh shallows (fords).
     /// An empty sheet draws the shallow sheet, never a flat tint.

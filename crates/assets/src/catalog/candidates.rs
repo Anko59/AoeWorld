@@ -30,12 +30,8 @@ const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> Candidate
 
 /// Metadata-confirmed contiguous ranges; no topology or gameplay approval yet.
 /// In particular, 100 frames is NOT evidence of a seamless 10×10 sheet.
-pub const UNAPPROVED_SOURCES: [CandidateSource; 16] = [
+pub const UNAPPROVED_SOURCES: [CandidateSource; 12] = [
     graphics(2304, 9, "possible conifer shadows; pairing unverified"),
-    terrain(15001, 100, "grass"),
-    terrain(15009, 100, "grass"),
-    terrain(15006, 100, "grass"),
-    terrain(15017, 100, "beach"),
     terrain(15024, 64, "ice; topology unverified, not implicitly 8×8"),
     graphics(226, 25, "cliff; placeholder frames require review"),
     graphics(227, 25, "cliff; anomalous tall frame requires review"),
@@ -50,40 +46,4 @@ pub const UNAPPROVED_SOURCES: [CandidateSource; 16] = [
 ];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::catalog::{
-        OPTIONAL_RESOURCE_SOURCES, OPTIONAL_TERRAIN_SOURCES, REQUIRED_RENDER_SOURCES,
-    };
-
-    #[test]
-    fn discovery_is_unique_bounded_and_not_a_reviewed_load_list() {
-        let mut ids = std::collections::BTreeSet::new();
-        for candidate in UNAPPROVED_SOURCES {
-            assert!(ids.insert((candidate.archive, candidate.id)));
-            assert!((1..=100).contains(&candidate.observed_frames));
-            assert!(
-                !REQUIRED_RENDER_SOURCES
-                    .iter()
-                    .chain(OPTIONAL_RESOURCE_SOURCES.iter())
-                    .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-                    .any(|source| source.archive == candidate.archive && source.id == candidate.id)
-            );
-        }
-        assert_eq!(UNAPPROVED_SOURCES.len(), 16);
-        assert!(UNAPPROVED_SOURCES.iter().any(|source| source.id == 2304));
-        assert!(
-            !OPTIONAL_RESOURCE_SOURCES
-                .iter()
-                .any(|source| matches!(source.id, 2300 | 2304))
-        );
-        assert_eq!(
-            UNAPPROVED_SOURCES
-                .iter()
-                .find(|source| source.id == 15024)
-                .unwrap()
-                .observed_frames,
-            64
-        );
-    }
-}
+mod tests;

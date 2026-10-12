@@ -5,7 +5,7 @@
 //! mesh LOD. The packer never allocates rows 0–1 of a page (frames start at
 //! texel 2), so those rows of page 0 hold a small RGBA8 table read per fragment
 //! by WGSL, GLSL and the Canvas rasterizer. Entry `i` is texel `(i % 2048,
-//! i / 2048)`; entry 0 stays the white origin. Entries 1..=26 are two header
+//! i / 2048)`; entry 0 stays the white origin. Entries 1..=34 are two header
 //! texels per scene material (first frame entry, frame count; sheet columns,
 //! rows, zero for coordinate-stable accents), followed by two texels per frame
 //! (origin; extent and page). No extra texture, binding or upload exists.
@@ -13,6 +13,7 @@ use super::ProjectedSurfaceTriangle;
 use super::appearance::{frame_index, terrain_group};
 use crate::{AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE, TerrainTopology};
 
+#[path = "directory/tests/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod fixture;
 #[cfg(test)]
@@ -22,7 +23,7 @@ mod tests;
 pub(crate) const TILED: u8 = 6;
 const SIDE: usize = GAME_ATLAS_SIDE as usize;
 const ENTRIES: usize = 2 * SIDE;
-const MATERIALS: usize = 13;
+const MATERIALS: usize = 17;
 const FIRST_FRAME: usize = 1 + 2 * MATERIALS;
 
 /// Writes the directory for `art` into the reserved rows of its atlas. Art
@@ -32,7 +33,7 @@ pub fn write_terrain_directory(art: &crate::GameArt, atlas: &mut [u8]) -> Result
         return Err("Invalid game atlas size".into());
     }
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
-    let mut starts = [0_usize; 11];
+    let mut starts = [0_usize; 15];
     for material in 0..MATERIALS {
         let Some((group, frames, topology)) = terrain_group(art, material as u8) else {
             continue;
