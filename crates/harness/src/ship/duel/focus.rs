@@ -171,7 +171,10 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         ..Default::default()
     };
     if !scope.packages.is_empty() {
-        let log = cache.join("nextest.jsonl");
+        let log = output::run_directory(cache)
+            .map_err(|e| e.to_string())?
+            .join("nextest.jsonl");
+        println!("Retained nextest output: {}", log.display());
         let mut file = output::JsonOutput::create(&log, "nextest").map_err(|e| e.to_string())?;
         let mut command = Command::new("cargo");
         command
@@ -191,8 +194,11 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             return Err(format!("nextest JSON retention unavailable: {error}"));
         }
         // Stream the retained JSON so failures cannot disappear from a bounded output tail.
+        let mut compile_failed = false;
         for line in BufReader::new(fs::File::open(log).map_err(|e| e.to_string())?).lines() {
-            let result = rust_results(&line.map_err(|e| e.to_string())?);
+            let line = line.map_err(|e| e.to_string())?;
+            compile_failed |= package_compile_error(&line, &scope.packages);
+            let result = rust_results(&line);
             report.tests.extend(result.tests);
             report.failed.extend(result.failed);
         }
@@ -200,7 +206,12 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             CaptureExit::Success if !report.tests.is_empty() => (),
             CaptureExit::Success => return Err("focused Rust check ran no tests".into()),
             CaptureExit::Failed(_) if !report.failed.is_empty() => report.passed = false,
-            CaptureExit::Failed(Some(_)) => {
+            CaptureExit::Failed(Some(_))
+                if compile_failed
+                    || runner::tail(&captured)
+                        .lines()
+                        .any(|line| package_compile_error(line, &scope.packages)) =>
+            {
                 report.passed = false;
                 report.build_failed = true;
                 report.failed.push(format!(
@@ -219,12 +230,10 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         }
     }
     if !scope.specs.is_empty() {
-        let local = root.join(".cache/duel");
-        fs::create_dir_all(&local).map_err(|e| e.to_string())?;
-        let report_path = local.join("playwright.json");
-        if report_path.exists() {
-            fs::remove_file(&report_path).map_err(|e| e.to_string())?;
-        }
+        let report_path = output::run_directory(cache)
+            .map_err(|e| e.to_string())?
+            .join("playwright.json");
+        println!("Retained Playwright output: {}", report_path.display());
         browser::dependencies(root, cache)?;
         browser_build(root)?;
         let previous = std::env::current_dir().map_err(|e| e.to_string())?;
@@ -234,9 +243,9 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             .iter()
             .map(|p| spec_filter(p.strip_prefix("browser/").unwrap_or(p)))
             .collect();
-        let checked = crate::e2e::run_focused(&filters).map_err(|e| e.to_string());
+        let checked = crate::e2e::run_focused(&filters, &report_path).map_err(|e| e.to_string());
         std::env::set_current_dir(previous).map_err(|e| e.to_string())?;
-        let browser = browser_results(&local.join("playwright.json"))?;
+        let browser = browser_results(&report_path)?;
         report.passed &= browser.failed.is_empty();
         report.locations.extend(browser.locations);
         report.tests.extend(browser.tests);
@@ -253,6 +262,24 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     report.failed.sort();
     report.failed.dedup();
     Ok(report)
+}
+
+fn package_compile_error(line: &str, packages: &[String]) -> bool {
+    if let Some(message) = line.trim().strip_prefix("error: could not compile `") {
+        return message
+            .split_once('`')
+            .is_some_and(|(package, _)| packages.iter().any(|p| p == package));
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+        return false;
+    };
+    value["reason"] == "compiler-message"
+        && value["message"]["level"] == "error"
+        && value["package_id"].as_str().is_some_and(|id| {
+            let name = id.rsplit('#').next().unwrap_or(id);
+            let name = name.split(['@', ' ']).next().unwrap_or(name);
+            packages.iter().any(|p| p == name)
+        })
 }
 
 pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {

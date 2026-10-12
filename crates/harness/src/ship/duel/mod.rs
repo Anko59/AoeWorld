@@ -118,9 +118,15 @@ fn rounds(
             if red_report.passed { "PASS" } else { "FAIL" },
             runner::names(&red_report)
         ));
-        let authored_red = options.check.is_some()
-            || red_report.build_failed
-            || authored::has_failure(root, &paths, &red_report)?;
+        let authored_red = if options.check.is_some() || red_report.build_failed {
+            true
+        } else {
+            let (authored, notes) = authored::evidence(root, &paths, &red_report)?;
+            for note in notes {
+                summary.push_str(&format!("{note}\n"));
+            }
+            authored
+        };
         if red_report.passed || !authored_red {
             tree::restore(root, &head)?;
             let unrelated = if red_report.passed {

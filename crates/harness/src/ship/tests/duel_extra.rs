@@ -19,7 +19,7 @@ fn unrelated_red_failures_are_refused_without_launching_the_implementer() {
         let (_env, mut options) = setup(&root, "happy");
         options.rounds = 1;
         fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
-        fs::write(root.join("Makefile"), "duel-check:\n\t@echo '{\"passed\":false,\"tests\":[\"aoe-x::other$$existing\"],\"failed\":[\"aoe-x::other$$existing\"],\"untouched\":[]}' > .cache/duel/check.json\n\t@exit 1\n").unwrap();
+        fs::write(root.join("Makefile"), "hooks-check:\n\t@test -x .git/hooks/pre-commit\nduel-check:\n\t@echo '{\"passed\":false,\"tests\":[\"aoe-x::other$$existing\"],\"failed\":[\"aoe-x::other$$existing\"],\"untouched\":[]}' > .cache/duel/check.json\n\t@exit 1\n").unwrap();
         run(&root, &["add", "Makefile"]);
         run(&root, &["commit", "-qm", "unrelated check"]);
         let before = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
@@ -76,7 +76,7 @@ fn red_matches_integration_binaries_and_unit_module_paths_in_changed_files() {
         )
         .unwrap();
         let escaped_failure = failing.replace('$', "$$");
-        fs::write(root.join("Makefile"), format!("duel-check:\n\t@echo '{{\"passed\":false,\"tests\":[\"{escaped_failure}\"],\"failed\":[\"{escaped_failure}\"],\"untouched\":[]}}' > .cache/duel/check.json\n\t@exit 1\n")).unwrap();
+        fs::write(root.join("Makefile"), format!("hooks-check:\n\t@test -x .git/hooks/pre-commit\nduel-check:\n\t@echo '{{\"passed\":false,\"tests\":[\"{escaped_failure}\"],\"failed\":[\"{escaped_failure}\"],\"untouched\":[]}}' > .cache/duel/check.json\n\t@exit 1\n")).unwrap();
         run(&root, &["add", "Makefile", "crates/x/Cargo.toml"]);
         run(&root, &["commit", "-qm", "identified check"]);
         let runtime = root.join(".cache/bin/codex");
@@ -112,7 +112,7 @@ fn test_compile_defect_report_stops_after_one_implementer_and_keeps_tests() {
     let (_env, mut options) = setup(&root, "happy");
     options.rounds = 1;
     fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
-    fs::write(root.join("Makefile"), "duel-check:\n\t@echo '{\"passed\":false,\"build_failed\":true,\"tests\":[],\"failed\":[],\"untouched\":[]}' > .cache/duel/check.json\n\t@echo syntax-error\n\t@exit 1\n").unwrap();
+    fs::write(root.join("Makefile"), "hooks-check:\n\t@test -x .git/hooks/pre-commit\nduel-check:\n\t@echo '{\"passed\":false,\"build_failed\":true,\"tests\":[],\"failed\":[],\"untouched\":[]}' > .cache/duel/check.json\n\t@echo syntax-error\n\t@exit 1\n").unwrap();
     run(&root, &["add", "Makefile"]);
     run(&root, &["commit", "-qm", "build check"]);
     let runtime = root.join(".cache/bin/codex");
@@ -283,6 +283,8 @@ fn pre_existing_green_failures_stop_retries_only_when_untouched_and_reproduced()
         options.rounds = 1;
         let make = format!(
             r#"export HARNESS_DUEL_REVISION
+hooks-check:
+	@test -x .git/hooks/pre-commit
 duel-check:
 	@echo checked >> .cache/checks
 	@mkdir -p .cache/duel
@@ -356,7 +358,7 @@ fn focused_check_executes_selected_packages_reports_names_and_rejects_build_fail
         &cargo,
         r#"#!/bin/sh
 printf '%s\n' "$*" >> .cache/cargo-calls
-if test "$DUEL_STUB" = build; then echo compiler-error >&2; exit 101; fi
+if test "$DUEL_STUB" = build; then printf '%s\n' 'error: could not compile `aoe-x` (lib test): compiler-error' >&2; exit 101; fi
 printf '{"type":"test","event":"%s","name":"aoe-x::lib$task_test"}\n' "$DUEL_STUB"
 if test "$DUEL_STUB" = failed; then exit 100; fi
 "#,
@@ -438,12 +440,18 @@ fn retained_nextest_output_overflow_is_unavailable_and_bounded_on_disk() {
             "{reason}"
         );
         assert!(!report.passed && !report.build_failed);
-        let length = fs::metadata(root.join(".cache/duel/nextest.jsonl"))
+        let logs: Vec<_> = fs::read_dir(root.join(".cache/duel"))
             .unwrap()
-            .len();
-        assert!(length <= 16 * 1024 * 1024, "{length}");
-        if mode == "line" {
-            assert!(length <= 1024 * 1024, "{length}");
+            .map(|entry| entry.unwrap().path().join("nextest.jsonl"))
+            .filter(|path| path.is_file())
+            .collect();
+        assert_eq!(logs.len(), if mode == "line" { 1 } else { 2 });
+        for log in logs {
+            let length = fs::metadata(log).unwrap().len();
+            assert!(length <= 16 * 1024 * 1024, "{length}");
+            if mode == "line" {
+                assert!(length <= 1024 * 1024, "{length}");
+            }
         }
     }
 }

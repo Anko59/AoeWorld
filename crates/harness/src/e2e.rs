@@ -120,17 +120,23 @@ pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    run_specs(&[])
+    run_specs(&[], None)
 }
 
-pub(crate) fn run_focused(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run_focused(
+    specs: &[String],
+    report: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     if specs.is_empty() {
         return Err("no focused browser specs".into());
     }
-    run_specs(specs)
+    run_specs(specs, Some(report))
 }
 
-fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+fn run_specs(
+    specs: &[String],
+    report: Option<&std::path::Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
@@ -235,7 +241,7 @@ fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 // No unbounded Playwright report is written by the browser container.
                 (|| {
                     let mut retained = crate::ship::JsonOutput::create(
-                        &root.join(".cache/duel/playwright.json"),
+                        report.ok_or("focused Playwright report path missing")?,
                         "Playwright",
                     )
                     .map_err(|e| e.to_string())?;

@@ -2,11 +2,20 @@
 use std::{
     fs,
     io::{self, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 const TOTAL: usize = 16 * 1024 * 1024;
 const LINE: usize = 1024 * 1024;
+
+/// Retain each check's logs in a new, randomly named directory, outside Git.
+pub(crate) fn run_directory(cache: &Path) -> io::Result<PathBuf> {
+    fs::create_dir_all(cache)?;
+    Ok(tempfile::Builder::new()
+        .prefix("run-")
+        .tempdir_in(cache)?
+        .keep())
+}
 
 pub(crate) struct JsonOutput {
     file: fs::File,
@@ -17,7 +26,10 @@ pub(crate) struct JsonOutput {
 impl JsonOutput {
     pub(crate) fn create(path: &Path, label: &'static str) -> io::Result<Self> {
         Ok(Self {
-            file: fs::File::create(path)?,
+            file: fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)?,
             label,
             total: 0,
             line: 0,

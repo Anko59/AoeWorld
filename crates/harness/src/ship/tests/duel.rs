@@ -60,7 +60,9 @@ pub(super) fn setup(root: &Path, mode: &str) -> (Env, Options) {
     .unwrap();
     fs::write(
         root.join("Makefile"),
-        r#"duel-check test-unit test-e2e:
+        r#"hooks-check:
+	@test -x .git/hooks/pre-commit
+duel-check test-unit test-e2e:
 	@echo check-tail
 	@echo checked >> .cache/checks
 	@mkdir -p .cache/duel

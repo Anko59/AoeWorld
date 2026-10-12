@@ -28,7 +28,9 @@ fn regions(tokens: TokenStream, cfg: bool, found: &mut Vec<(usize, usize)>) {
         let text = format!("#[{}]", attr.stream());
         let is_cfg =
             matches!(attr.stream().into_iter().next(), Some(TokenTree::Ident(id)) if id == "cfg");
-        if cfg && is_cfg && mentions_test(attr.stream()) {
+        if (cfg && is_cfg && mentions_test(attr.stream()))
+            || (!cfg && super::test_marker(&text.replace(' ', "")))
+        {
             // Parse one item so braces in literals, attributes or generics cannot end it early.
             let mut start = i;
             while start >= 2
@@ -52,18 +54,14 @@ fn regions(tokens: TokenStream, cfg: bool, found: &mut Vec<(usize, usize)>) {
                         .map_or(token.span().end().line, |last| last.span().end().line)
                 });
             found.push((tokens[start].span().start().line, end));
-        } else if !cfg && super::test_marker(&text.replace(' ', "")) {
-            found.push((token.span().start().line, attr.span().end().line));
         }
     }
 }
 
 fn source_regions(text: &str, cfg: bool) -> Vec<(usize, usize)> {
     let mut found = Vec::new();
-    match text.parse::<TokenStream>() {
-        Ok(tokens) => regions(tokens, cfg, &mut found),
-        // An unreadable Rust token stream cannot establish that test code stayed intact.
-        Err(_) => found.push((1, text.lines().count())),
+    if let Ok(tokens) = text.parse::<TokenStream>() {
+        regions(tokens, cfg, &mut found);
     }
     found
 }
@@ -73,7 +71,7 @@ pub(crate) fn test_regions(text: &str) -> Vec<(usize, usize)> {
     source_regions(text, true)
 }
 
-/// One-based inclusive ranges of `#[test]`-style attributes, including qualified paths.
+/// One-based inclusive ranges of whole `#[test]`-style items, including qualified paths.
 pub(crate) fn test_attributes(text: &str) -> Vec<(usize, usize)> {
     source_regions(text, false)
 }

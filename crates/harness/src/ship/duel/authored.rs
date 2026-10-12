@@ -1,12 +1,35 @@
 //! Red requires a failure identified in a file changed by this round's tester.
 use super::focus::CheckReport;
 use crate::ship::git;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
+#[cfg(test)]
 pub(super) fn has_failure(
     root: &Path,
     paths: &[String],
     report: &CheckReport,
+) -> git::Result<bool> {
+    evidence(root, paths, report).map(|(authored, _)| authored)
+}
+
+pub(super) fn evidence(
+    root: &Path,
+    paths: &[String],
+    report: &CheckReport,
+) -> git::Result<(bool, Vec<String>)> {
+    let mut notes = Vec::new();
+    let authored = has_failure_with_notes(root, paths, report, &mut notes)?;
+    Ok((authored, notes))
+}
+
+fn has_failure_with_notes(
+    root: &Path,
+    paths: &[String],
+    report: &CheckReport,
+    notes: &mut Vec<String>,
 ) -> git::Result<bool> {
     for name in &report.failed {
         if report
@@ -73,12 +96,29 @@ pub(super) fn has_failure(
                     .to_string_lossy()
                     .into_owned();
                 if let Some(test) = relative.strip_prefix("tests/") {
+                    let target_path = integration_target(&directory, &value, target);
+                    if let Some(defining) = target_path
+                        .as_ref()
+                        .and_then(|path| defining_file(path, function.trim()))
+                    {
+                        if defining
+                            .strip_prefix(root)
+                            .ok()
+                            .is_some_and(|p| paths.iter().any(|changed| Path::new(changed) == p))
+                        {
+                            return Ok(true);
+                        }
+                        break;
+                    }
                     let binary = test
                         .split('/')
                         .next()
                         .unwrap_or(test)
                         .trim_end_matches(".rs");
                     if target == binary {
+                        notes.push(format!(
+                            "Source unresolved for {name}; falling back to integration target match: {path}"
+                        ));
                         return Ok(true);
                     }
                 } else if let Some(module) = relative.strip_prefix("src/") {
@@ -115,6 +155,83 @@ pub(super) fn has_failure(
         }
     }
     Ok(false)
+}
+
+fn integration_target(directory: &Path, manifest: &toml::Value, target: &str) -> Option<PathBuf> {
+    if let Some(path) = manifest
+        .get("test")
+        .and_then(|v| v.as_array())
+        .and_then(|tests| {
+            tests
+                .iter()
+                .find(|t| t.get("name").and_then(|v| v.as_str()) == Some(target))
+                .and_then(|t| t.get("path").and_then(|v| v.as_str()))
+        })
+    {
+        return Some(directory.join(path));
+    }
+    [
+        directory.join(format!("tests/{target}.rs")),
+        directory.join(format!("tests/{target}/main.rs")),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+}
+
+/// Follow declared inline/external modules; unresolved macro-generated tests use the target fallback.
+fn defining_file(path: &Path, function: &str) -> Option<PathBuf> {
+    let parsed = syn::parse_file(&fs::read_to_string(path).ok()?).ok()?;
+    let modules: Vec<_> = function.split("::").collect();
+    resolve_items(path, path.parent()?, &parsed.items, &modules)
+}
+
+fn resolve_items(
+    path: &Path,
+    directory: &Path,
+    items: &[syn::Item],
+    names: &[&str],
+) -> Option<PathBuf> {
+    let (name, rest) = names.split_first()?;
+    for item in items {
+        match item {
+            syn::Item::Fn(f) if rest.is_empty() && f.sig.ident == *name => {
+                return Some(path.to_owned());
+            }
+            syn::Item::Mod(m) if !rest.is_empty() && m.ident == *name => {
+                let child_directory = directory.join(name);
+                if let Some((_, children)) = &m.content {
+                    return resolve_items(path, &child_directory, children, rest);
+                }
+                let explicit = m.attrs.iter().find_map(|a| {
+                    if a.path().is_ident("path")
+                        && let syn::Meta::NameValue(v) = &a.meta
+                        && let syn::Expr::Lit(lit) = &v.value
+                        && let syn::Lit::Str(value) = &lit.lit
+                    {
+                        return Some(directory.join(value.value()));
+                    }
+                    None
+                });
+                let child = explicit.or_else(|| {
+                    [
+                        directory.join(format!("{name}.rs")),
+                        child_directory.join("mod.rs"),
+                    ]
+                    .into_iter()
+                    .find(|p| p.is_file())
+                })?;
+                let parsed = syn::parse_file(&fs::read_to_string(&child).ok()?).ok()?;
+                let directory = if child.file_name()? == "mod.rs" {
+                    child.parent()?.to_owned()
+                } else {
+                    child.with_extension("")
+                };
+                return resolve_items(&child, &directory, &parsed.items, rest);
+            }
+            _ => (),
+        }
+    }
+    None
 }
 
 fn function_count(directory: &Path, name: &str) -> git::Result<usize> {

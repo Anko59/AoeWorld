@@ -171,11 +171,16 @@ with `Harness-Phase: tests`. The implementer receives the task, tester report
 and failing output tail, writes production only, and gets three attempts to
 turn the check green. The driver commits that implementation with
 `Harness-Phase: implementation`. Commits use the configured Git identity and
-name the runtime/model in a `Co-Authored-By` trailer. Each duel commit runs the
+name the runtime/model in a `Co-Authored-By` trailer. Before staging a commit,
+the driver runs `make hooks-check`; failure stops with `run make hooks-install`.
+Each duel commit runs the
 Git pre-commit hook (`make pre-commit`); preflight and the wider shipping gates
 run in `make ship`, while both role prompts require only the focused check.
 
-A failed build is red because a test may name production APIs not written yet.
+A package compile error reported by Cargo is red because a test may name
+production APIs not written yet. A missing nextest command, invalid arguments,
+or another failure without compile errors or failing-test events makes the
+check unavailable and refuses the step without committing.
 If tests cannot compile for a reason other than missing production code (such
 as a syntax error in a test), the implementer stops and reports
 `DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with
@@ -188,7 +193,9 @@ tests is treated like passing tests, and the summary names those failures.
 Round one's empty or passing tests fail. Role violations restore to the last
 driver commit and name offending paths. Implementers may change production lines
 in a file containing inline tests, but cannot change any line in an item under
-a `cfg` mentioning `test`, or add/remove a `#[test]`-style attribute. Testers
+a `cfg` mentioning `test`, or any part of a `#[test]`-style function, including
+its attributes and body. Malformed product token streams skip inline validation;
+the focused compiler check reports the failure and the implementer can retry. Testers
 still edit test files only. Exhausted green attempts keep the tests
 commit and working changes for the main session to finish. A launch timeout is
 a failure, never red evidence.
@@ -202,6 +209,9 @@ stop before the implementer launches and require `DUEL_CHECK` (for example
 `make fuzz-smoke`). Red means a selected package fails to build or at least
 one failing test belongs to a tester-changed file, matched by nextest binary id
 or module path, or browser test location; green means every selected check passes.
+Integration failures follow the target's declared module path to the defining
+file, which must have changed that round. Unresolved sources fall back to a
+changed integration target; the summary records that fallback.
 `DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
 For an explicit override, a normal nonzero exit is red and exit zero is green;
 named failures are reported when available but are not required, including
@@ -209,7 +219,10 @@ for fuzz runtime crashes. The main session chooses this check and its scope.
 Both role prompts name the exact check and forbid preflight or whole-suite runs;
 the driver and `make ship` own wider gates. Browser dependencies are prepared on
 the first browser check and reused for subsequent checks and baseline exports
-during that duel. Retained nextest and Playwright JSON are limited to 16 MiB
+during that duel. Each check retains nextest and Playwright JSON in a fresh
+random directory under `.cache/duel/run-*`, with exclusive file creation that
+refuses existing files and symlinks. The check prints the retained paths.
+Retained nextest and Playwright JSON are limited to 16 MiB
 total and 1 MiB per line; exceeding either makes the check unavailable.
 Each agent and check gets `DUEL_BUDGET_MINUTES` (default 60); the process group
 is killed on expiry.

@@ -162,6 +162,12 @@ fn validate_inline(root: &Path, head: &str, paths: &[String]) -> git::Result<()>
                 &indexed,
             ),
         ] {
+            // Malformed product tokens belong to the focused compiler check and retry.
+            if before.parse::<proc_macro2::TokenStream>().is_err()
+                || after.parse::<proc_macro2::TokenStream>().is_err()
+            {
+                continue;
+            }
             let patch = git::git(root, &args)?;
             let changes = inline::all_changes(&patch);
             let changes = if let Some((_, changes)) = changes.first() {
@@ -205,6 +211,20 @@ pub(crate) fn commit(
     let paths = changed(root)?;
     if paths.is_empty() {
         return Err(format!("{phase}: no change to commit"));
+    }
+    let hooks = crate::process::capture_in(
+        root,
+        "make",
+        &["hooks-check"],
+        &[],
+        std::time::Duration::from_secs(60),
+        &crate::process::Cancellation::default(),
+    );
+    if !matches!(hooks.exit, crate::process::CaptureExit::Success) {
+        return Err(format!(
+            "hooks-check failed; run make hooks-install\n{}",
+            super::runner::tail(&hooks)
+        ));
     }
     let mut args = vec!["add", "--all", "--"];
     args.extend(paths.iter().map(String::as_str));
