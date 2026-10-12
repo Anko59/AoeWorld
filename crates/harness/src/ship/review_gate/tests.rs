@@ -274,7 +274,6 @@ fn failed_closing(root: &Path, tier: Tier) -> Report {
     let mut report = unstored(root, tier, 6);
     report.closing = true;
     report.findings = finding(crate::review::protocol::Severity::Major);
-    report.store(root).unwrap();
     report
 }
 
@@ -299,21 +298,24 @@ fn finding(severity: crate::review::protocol::Severity) -> Vec<crate::review::pr
     }]
 }
 
-/// Three failed full reviews whose blocking findings do not grow.
-fn three_failed(root: &Path) {
-    for attempt in 1..=3 {
-        commit(root, &format!("try {attempt}"));
-        let _ = ship_with(root, &reviewed(), &|root, tier, _, _, plan| {
-            assert_eq!(*plan, Plan::Full);
-            Ok(graded(root, tier, 5))
-        });
-    }
+/// The branch's one full review failed without a severe finding.
+fn failed_full(root: &Path) {
+    let error = ship_with(root, &reviewed(), &|root, tier, _, _, plan| {
+        assert_eq!(*plan, Plan::Full);
+        Ok(graded(root, tier, 5))
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("the next review is a closing review"),
+        "{error}"
+    );
 }
 
 #[test]
 fn the_review_budget_always_ends_without_a_person() {
     let (_temp, root) = fixture("true");
-    three_failed(&root);
+    failed_full(&root);
     let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("fix first"))
         .unwrap_err()
         .to_string();
@@ -321,11 +323,27 @@ fn the_review_budget_always_ends_without_a_person() {
         error.contains("already failed a review; fix and commit"),
         "{error}"
     );
-    for (closing, expected) in [(1, "closing review of your fixes"), (2, "Split the change")] {
+    for (closing, expected) in [
+        (1, "closing review of your fixes"),
+        (2, "closing review of your fixes"),
+        (3, "Split the change"),
+    ] {
         commit(&root, &format!("fixes {closing}"));
         let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
-            assert!(matches!(plan, Plan::Closing { .. }), "{plan:?}");
-            Ok(failed_closing(root, tier))
+            let Plan::Closing { since, prior } = plan else {
+                panic!("all reviews after the full review are closing: {plan:?}");
+            };
+            assert_eq!(since, &git::git(root, &["rev-parse", "HEAD^"]).unwrap());
+            assert_eq!(prior.len(), usize::from(closing > 1));
+            let mut report = failed_closing(root, tier);
+            // Each fix settles the carried blocker; only the new issue fails.
+            report.findings.extend(prior.iter().cloned().map(|mut f| {
+                f.status = crate::review::protocol::Status::Refuted;
+                f
+            }));
+            report.findings[0].reported.claim = format!("new issue {closing}");
+            report.store(root).unwrap();
+            Ok(report)
         })
         .unwrap_err()
         .to_string();
@@ -376,15 +394,16 @@ fn incomplete_reviews_do_not_spend_the_budget() {
 #[test]
 fn a_diverging_branch_is_told_to_split() {
     let (_temp, root) = fixture("true");
-    for _ in 0..3 {
-        commit(&root, "try");
-        let _ = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
-            let mut report = unstored(root, tier, 4);
-            report.findings = finding(crate::review::protocol::Severity::Critical);
-            report.store(root).unwrap();
-            Ok(report)
-        });
-    }
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
+        assert_eq!(*plan, Plan::Full);
+        let mut report = unstored(root, tier, 4);
+        report.findings = finding(crate::review::protocol::Severity::Critical);
+        report.store(root).unwrap();
+        Ok(report)
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("Split the change"), "{error}");
     commit(&root, "more");
     let error = ship_with(&root, &reviewed(), &|_, _, _, _, _| panic!("no review"))
         .unwrap_err()

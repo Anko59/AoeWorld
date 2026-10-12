@@ -1,19 +1,21 @@
 //! When reviews do not converge (docs/review.md). Agents work without a
 //! person, so the policy always ends on its own, and only ever in a reviewed
-//! merge or a split: up to three full reviews; then, if the findings are
-//! converging, up to two closing reviews that re-verify every open blocking
-//! finding and audit only the latest fixes; a branch that still does not pass,
-//! or whose findings do not converge, is split into smaller pull requests.
-//! Never another full review hoping for a better grade.
+//! merge or a split: one full review; then up to three closing reviews that
+//! re-verify every open blocking finding and audit only the latest fixes; a
+//! branch that still does not pass, or whose full review found a critical
+//! finding or major test weakening, is split into smaller pull requests.
+//! Never another full review hoping for a better grade: each one reads the
+//! whole diff blind, so a second mostly finds different edge cases rather
+//! than checking the fixes.
 use super::{
     Report,
     protocol::{Finding, Status, cap},
 };
 
 /// Full reviews a branch may fail before the closing reviews.
-pub(crate) const BUDGET: usize = 3;
-/// Closing reviews a converging branch may fail before it is split.
-pub(crate) const CLOSING_BUDGET: usize = 2;
+pub(crate) const BUDGET: usize = 1;
+/// Closing reviews a branch may fail before it is split.
+pub(crate) const CLOSING_BUDGET: usize = 3;
 /// Incomplete reviews (some session never answered) in a row before
 /// `make ship` stops and asks to retry later.
 pub(crate) const UNANSWERED: usize = 3;
@@ -109,17 +111,11 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
     if full.len() < BUDGET {
         return Next::Review(Plan::Full);
     }
-    let (previous, last) = (full[full.len() - 2], full[full.len() - 1]);
-    if severe(last) || blocking(last).len() > blocking(previous).len() {
+    let last = full[full.len() - 1];
+    if severe(last) {
         return Next::Split(format!(
-            "blocking findings went from {} to {}{} over the last two full reviews",
-            blocking(previous).len(),
-            blocking(last).len(),
-            if severe(last) {
-                ", including a critical one or a major test weakening"
-            } else {
-                ""
-            }
+            "the full review of {} confirmed a critical finding or a major test weakening",
+            short(&last.head)
         ));
     }
     if let Some(bad) = closing.iter().find(|r| severe(r) || still_open(r) > 0) {
@@ -128,7 +124,7 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
             short(&bad.head),
             still_open(bad),
             if severe(bad) {
-                " or found a critical one"
+                " or found a critical finding or a major test weakening"
             } else {
                 ""
             }

@@ -292,7 +292,7 @@ impl Report {
         }
         if self.closing {
             out.push_str(&format!(
-                "Closing review after three failed reviews: it {} on \"no blocking finding left\"; the grade is reported, not gated (docs/review.md).\n\n",
+                "Closing review after one full review: it {} on \"no blocking finding left\"; the grade is reported, not gated (docs/review.md).\n\n",
                 if self.passes() { "passed" } else { "failed" }
             ));
         }
