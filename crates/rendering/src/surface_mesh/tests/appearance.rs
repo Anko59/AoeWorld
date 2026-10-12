@@ -171,10 +171,10 @@ fn procedural_ramp_kernel_preserves_alpha_and_rounds_luminance_once() {
 }
 
 #[wasm_bindgen_test]
-fn natural_cliffs_use_procedural_rock_at_fine_and_coarse_lod() {
+fn cliff_tops_keep_surrounding_grass_while_vertical_skirts_are_rock_at_every_lod() {
     let mut terrain = map(128);
     for sample in &mut terrain {
-        sample.material = 0; // Semantic recipe remains grass; exposed faces are rock.
+        sample.material = 0; // The marker blocks movement; its top is still grass.
         sample.surface.kind = SceneTerrainSurface::CLIFF;
         sample.surface.corner_game_height_levels = [if sample.position[0].floor() as i32 % 2 == 0 {
             4
@@ -200,8 +200,11 @@ fn natural_cliffs_use_procedural_rock_at_fine_and_coarse_lod() {
         apply_terrain_textures(&mut triangles, &art);
         apply_terrain_textures(&mut triangles, &art);
         for (old, new) in before.iter().zip(&triangles) {
-            assert_eq!(new.material, 4);
-            assert_eq!(new.tint, if new.skirt { 7 } else { 12 });
+            assert_eq!(new.material, if new.skirt { 4 } else { 0 });
+            assert_eq!(new.tint, if new.skirt { 7 } else { 0 });
+            if !new.skirt {
+                assert_eq!(new.texture_uv, Some(frame.atlas));
+            }
             assert!(!new.pickable);
             assert_eq!(
                 new.points.map(|point| point.world),

@@ -288,3 +288,50 @@ fn sequential_plane_passes_match_single_pass_precedence_for_every_alpha_case() {
     }
     assert_eq!(pixels[origin + 32..origin + 36], [77; 4]);
 }
+
+#[wasm_bindgen_test]
+fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
+    let mut manifest = fixture();
+    let frame = &mut manifest.frames[0];
+    frame.source = "graphics.drs:[32, 112, 108, 115]:226".to_owned();
+    frame.width = 1;
+    frame.height = 1;
+    frame.x = 0;
+    frame.y = 0;
+    let place = plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
+    let mut source = vec![0; GAME_ATLAS_PAGE_BYTES];
+    let mut pixels = vec![0; GAME_ATLAS_BYTES];
+    let to = usize::from(place.page) * GAME_ATLAS_PAGE_BYTES
+        + (usize::from(place.y) * GAME_ATLAS_SIDE as usize + usize::from(place.x)) * 4;
+    for texel in [[190, 115, 35, 255], [45, 30, 12, 128], [0, 0, 0, 0]] {
+        source[..4].copy_from_slice(&texel);
+        copy_plane(
+            &manifest.frames[0],
+            place,
+            Plane::Color,
+            &source,
+            &mut pixels,
+        )
+        .unwrap();
+        let actual = &pixels[to..to + 4];
+        assert_eq!(actual[3], texel[3]);
+        assert!(
+            i16::from(actual[0]) - i16::from(actual[2]) <= 32,
+            "stone, not orange: {actual:?}"
+        );
+        if texel[3] != 0 {
+            assert!(actual[0] >= actual[1] && actual[1] >= actual[2]);
+        }
+    }
+    manifest.frames[0].source = "graphics.drs:[32, 112, 108, 115]:1034".to_owned();
+    source[..4].copy_from_slice(&[190, 115, 35, 255]);
+    copy_plane(
+        &manifest.frames[0],
+        place,
+        Plane::Color,
+        &source,
+        &mut pixels,
+    )
+    .unwrap();
+    assert_eq!(&pixels[to..to + 4], &[190, 115, 35, 255]);
+}
