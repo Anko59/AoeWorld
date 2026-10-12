@@ -141,16 +141,16 @@ fn work_launch_has_hooks_writes_model_effort_and_no_smoke_limit() {
         .is_ok()
     );
     assert_eq!(
-        runner::default_check(&["x.spec.ts".into()]),
-        "make test-e2e"
+        runner::default_check("abc"),
+        "make duel-check HARNESS_DUEL_BASE=abc"
     );
     assert_eq!(
-        runner::default_check(&["tests/data".into()]),
-        "make test-unit"
+        runner::default_check("def"),
+        "make duel-check HARNESS_DUEL_BASE=def"
     );
     assert_eq!(
-        runner::default_check(&["tests/a.rs".into(), "x.spec.ts".into()]),
-        "make test-unit"
+        runner::default_check("mixed"),
+        "make duel-check HARNESS_DUEL_BASE=mixed"
     );
 }
 

@@ -49,6 +49,20 @@ pub(crate) fn changed(root: &Path) -> git::Result<Vec<String>> {
     Ok(all.into_iter().collect())
 }
 
+pub(crate) fn since(root: &Path, base: &str) -> git::Result<Vec<String>> {
+    let mut all: BTreeSet<_> = paths(
+        root,
+        &["diff", base, "--no-renames", "--name-only", "-z", "--"],
+    )?
+    .into_iter()
+    .collect();
+    all.extend(paths(
+        root,
+        &["ls-files", "--others", "--exclude-standard", "-z"],
+    )?);
+    Ok(all.into_iter().collect())
+}
+
 pub(crate) fn validate(
     root: &Path,
     tester: bool,
@@ -98,7 +112,7 @@ pub(crate) fn restore(root: &Path, head: &str) -> git::Result<()> {
 
 pub(crate) fn commit(
     root: &Path,
-    title: &str,
+    task: &str,
     phase: &str,
     runtime: &str,
     model: Option<&str>,
@@ -110,10 +124,28 @@ pub(crate) fn commit(
     let mut args = vec!["add", "--all", "--"];
     args.extend(paths.iter().map(String::as_str));
     git::git(root, &args)?;
-    let message = format!(
-        "{title}\n\nHarness-Phase: {phase}\nCo-Authored-By: {runtime} ({}) <noreply@openai.com>",
-        model.unwrap_or("configured default")
-    );
-    git::git(root, &["commit", "-m", &message])?;
+    let message = message(task, phase, runtime, model);
+    git::git(root, &["commit", "--cleanup=verbatim", "-m", &message])?;
     git::git(root, &["rev-parse", "HEAD"])
+}
+
+pub(crate) fn message(task: &str, phase: &str, runtime: &str, model: Option<&str>) -> String {
+    let title = task.lines().next().unwrap_or("Task").trim();
+    let title = if phase == "tests" {
+        format!("Tests: {title}")
+    } else {
+        title.to_owned()
+    };
+    let subject = if title.chars().count() <= 72 {
+        title
+    } else {
+        let prefix: String = title.chars().take(71).collect();
+        let end = prefix.rfind(char::is_whitespace).unwrap_or(0);
+        let prefix = prefix[..end].trim_end();
+        format!("{prefix}{}…", if prefix == "Tests:" { " " } else { "" })
+    };
+    format!(
+        "{subject}\n\n{task}\n\nHarness-Phase: {phase}\nCo-Authored-By: {runtime} ({}) <noreply@openai.com>",
+        model.unwrap_or("configured default")
+    )
 }

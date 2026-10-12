@@ -36,6 +36,10 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub(crate) enum Commands {
     /// Run tester red then implementer green and commit each step (DUEL_*).
     Duel,
+    /// Run only tester-changed Cargo packages and browser spec files in Docker.
+    DuelCheck,
+    /// Finish the focused check, running only selected browser specs when present.
+    DuelBrowserCheck,
     /// Run the preflight gates at HEAD, record evidence, push and open or update the PR.
     Ship(Options),
     /// Print the evidence recorded for HEAD, if any.
@@ -116,6 +120,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
         Commands::Duel => duel::execute(&root).map_err(Into::into),
+        Commands::DuelCheck => duel::stages::native(&root).map_err(Into::into),
+        Commands::DuelBrowserCheck => duel::stages::browser(&root).map_err(Into::into),
         Commands::Ship(mut options) => {
             // `make ship` passes these through the environment, never through shell text.
             let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());

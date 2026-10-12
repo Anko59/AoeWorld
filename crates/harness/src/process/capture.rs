@@ -94,7 +94,12 @@ impl<R: Read + std::os::fd::AsFd> Pipe<R> {
         })
     }
 
+    #[cfg(test)]
     fn poll(&mut self) -> io::Result<()> {
+        self.poll_retaining(None)
+    }
+
+    fn poll_retaining(&mut self, mut retained: Option<&mut fs::File>) -> io::Result<()> {
         if self.eof {
             return Ok(());
         }
@@ -106,7 +111,12 @@ impl<R: Read + std::os::fd::AsFd> Pipe<R> {
                     self.eof = true;
                     break;
                 }
-                Ok(amount) => self.log.push(&buffer[..amount]),
+                Ok(amount) => {
+                    if let Some(file) = retained.as_mut() {
+                        file.write_all(&buffer[..amount])?;
+                    }
+                    self.log.push(&buffer[..amount]);
+                }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => return Err(error),
@@ -120,9 +130,29 @@ impl<R: Read + std::os::fd::AsFd> Pipe<R> {
 mod tests;
 
 pub(crate) fn capture_command(
+    command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+) -> Captured {
+    capture_with_stdout(command, deadline, cancellation, None)
+}
+
+/// Retain complete stdout in a caller-owned local file, alongside the bounded tails.
+/// Local file writes are synchronous; this is not a hostile filesystem boundary.
+pub(crate) fn capture_command_retaining_stdout(
+    command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+    stdout: &mut fs::File,
+) -> Captured {
+    capture_with_stdout(command, deadline, cancellation, Some(stdout))
+}
+
+fn capture_with_stdout(
     mut command: Command,
     deadline: Duration,
     cancellation: &Cancellation,
+    mut retained: Option<&mut fs::File>,
 ) -> Captured {
     let started = Instant::now();
     let empty = |exit| Captured {
@@ -196,7 +226,10 @@ pub(crate) fn capture_command(
                     Err(error) => CaptureExit::Monitor(error),
                 };
             }
-            if let Err(error) = stdout.poll().and_then(|()| stderr.poll()) {
+            if let Err(error) = stdout
+                .poll_retaining(retained.as_deref_mut())
+                .and_then(|()| stderr.poll_retaining(None))
+            {
                 let _ = child.terminate();
                 break CaptureExit::Monitor(error);
             }
@@ -230,7 +263,10 @@ pub(crate) fn capture_command(
         // Never join a blocking reader: bounded nonblocking drain then close FDs.
         let drain_started = Instant::now();
         while !(stdout.eof && stderr.eof) && drain_started.elapsed() < Duration::from_millis(200) {
-            if let Err(error) = stdout.poll().and_then(|()| stderr.poll()) {
+            if let Err(error) = stdout
+                .poll_retaining(retained.as_deref_mut())
+                .and_then(|()| stderr.poll_retaining(None))
+            {
                 exit = CaptureExit::Monitor(error);
                 break;
             }

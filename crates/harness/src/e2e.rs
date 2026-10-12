@@ -120,6 +120,17 @@ pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    run_specs(&[])
+}
+
+pub(crate) fn run_focused(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if specs.is_empty() {
+        return Err("no focused browser specs".into());
+    }
+    run_specs(specs)
+}
+
+fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
@@ -168,7 +179,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let home = format!("HOME={}/.cache/browser-home", root.display());
     let url = format!("AOE_BASE_URL=http://{address}");
     let workdir = root.join("browser");
-    let args = vec![
+    let mut args = vec![
         "run".to_owned(),
         "--rm".to_owned(),
         "--init".to_owned(),
@@ -197,9 +208,27 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "run".to_owned(),
         "test:e2e".to_owned(),
     ];
+    if !specs.is_empty() {
+        let insertion = args
+            .iter()
+            .position(|a| a == "-v")
+            .ok_or("browser mount missing")?;
+        args.splice(
+            insertion..insertion,
+            [
+                "-e".to_owned(),
+                format!(
+                    "PLAYWRIGHT_JSON_OUTPUT_FILE={}/.cache/duel/playwright.json",
+                    root.display()
+                ),
+            ],
+        );
+        args.extend(["--".to_owned(), "--reporter=json".to_owned()]);
+        args.extend(specs.iter().cloned());
+    }
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let cancellation = process::Cancellation::default();
-    thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
+    let browser_result = thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
@@ -223,8 +252,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-    })?;
+    });
+    // Always stop the server; focused failure reports remain available to the driver.
     server.shutdown()?;
+    browser_result?;
+    if !specs.is_empty() {
+        return Ok(());
+    }
     let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if !revision.status.success() {
         return Err("cannot identify E2E source revision".into());

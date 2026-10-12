@@ -1,6 +1,13 @@
 //! Main-session driver: a tester's red tests, then an implementer's green code.
+mod baseline;
 mod config;
+pub(crate) mod focus;
+#[cfg(test)]
+#[path = "tests/focus.rs"]
+mod focus_tests;
 mod runner;
+mod specs;
+pub(crate) mod stages;
 #[cfg(test)]
 mod tests;
 mod tree;
@@ -9,7 +16,7 @@ use crate::{process::CaptureExit, ship::git};
 pub(crate) use config::{Options, read_task};
 use std::{fs, path::Path};
 
-const CONTRACT: &str = "Read AGENTS.md, docs/agent-engineering.md and the scoped AGENTS.md. Use Dockerized Make targets only. Never touch protected classes, weaken existing tests, commit, push, change branches or run make duel. The duel driver commits each step. End with a short report of paths, commands and results.";
+const CONTRACT: &str = "Read AGENTS.md, docs/agent-engineering.md and the scoped AGENTS.md. Use Dockerized Make targets only. Never touch protected classes, weaken existing tests, commit, push, change branches or run make duel. The duel driver commits each step. Run only the focused check named below. Do not run make preflight or the whole suite: the driver and make ship own the wider gates. End with a short report of paths, commands and results.";
 
 pub(crate) fn execute(root: &Path) -> git::Result<()> {
     if !crate::agents::main_session() {
@@ -32,6 +39,7 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
         options.runtime.label(),
         options.model.as_deref().unwrap_or("configured default")
     );
+    summary.push_str(&format!("\nTask:\n{task}\n"));
     let result = rounds(&root, task, options, &subject.branch, &mut summary);
     match &result {
         Ok(()) => summary.push_str("\nResult: PASS. Main session: read the diff, film the change with make showcase, then make ship.\n"),
@@ -39,10 +47,10 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     }
     let path = root
         .join(".cache/duel")
-        .join(format!("{}.md", subject.branch));
+        .join(format!("{}.md", subject.branch.replace(['/', '\\'], "_")));
     fs::create_dir_all(path.parent().ok_or("summary has no parent")?).map_err(|e| e.to_string())?;
     fs::write(&path, &summary).map_err(|e| e.to_string())?;
-    println!("{summary}");
+    println!("{summary}\nSummary: {}", path.display());
     result.map(|()| summary)
 }
 
@@ -53,13 +61,15 @@ fn rounds(
     branch: &str,
     summary: &mut String,
 ) -> git::Result<()> {
-    let title = task.lines().next().ok_or("empty task")?.trim();
+    let pre_duel = git::git(root, &["rev-parse", "HEAD"])?;
     for round in 1..=options.rounds {
         summary.push_str(&format!("\n## Round {round}\n"));
         let head = git::git(root, &["rev-parse", "HEAD"])?;
+        let default_command = runner::default_check(&head);
+        let command = options.check.as_deref().unwrap_or(&default_command);
         let history = runner::bounded(summary);
         let prompt = format!(
-            "Task:\n{task}\n\n{} Write the smallest failing tests, test files only, no production code.\n{CONTRACT}\nHistory:\n{history}",
+            "Task:\n{task}\n\n{} Write the smallest failing tests, test files only, no production code.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the tests.\nHistory:\n{history}",
             if round == 1 {
                 "Tester:"
             } else {
@@ -80,13 +90,9 @@ fn rounds(
             summary.push_str("Attack wrote no new test; duel complete.\n");
             return Ok(());
         }
-        let command = options
-            .check
-            .as_deref()
-            .unwrap_or(runner::default_check(&paths));
-        let red = runner::check(root, options, command);
+        let red = runner::check(root, options, command, options.check.is_none());
         tree::validate(root, true, &head, branch)?;
-        let (passed, tail) = match red {
+        let (red_report, tail) = match red {
             Ok(result) => result,
             Err(error) => {
                 tree::restore(root, &head)?;
@@ -94,10 +100,11 @@ fn rounds(
             }
         };
         summary.push_str(&format!(
-            "Check: `{command}`; red: {}\n\n{tail}\n",
-            if passed { "PASS" } else { "FAIL" }
+            "Check: `{command}`; red: {}; tests: {}\n\n{tail}\n",
+            if red_report.passed { "PASS" } else { "FAIL" },
+            runner::names(&red_report)
         ));
-        if passed {
+        if red_report.passed {
             tree::restore(root, &head)?;
             if round == 1 {
                 return Err("tests already pass at red (restored)".into());
@@ -107,7 +114,7 @@ fn rounds(
         }
         let tests = tree::commit(
             root,
-            &format!("Tests: {title}"),
+            task,
             "tests",
             options.runtime.label(),
             options.model.as_deref(),
@@ -117,7 +124,7 @@ fn rounds(
         let mut green = false;
         for attempt in 1..=3 {
             let prompt = format!(
-                "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}.\n{CONTRACT}\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
+                "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the implementation.\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
             );
             let (exit, report) = runner::agent(root, options, "implementer", &prompt)?;
             summary.push_str(&format!(
@@ -129,16 +136,46 @@ fn rounds(
                     "implementer did not finish: {exit:?}; tests commit stays, working tree kept"
                 ));
             }
-            let checked = runner::check(root, options, command);
+            let checked = runner::check(root, options, command, options.check.is_none());
             tree::validate(root, false, &tests, branch)?;
-            let (passed, tail) = checked?;
+            let (mut checked, tail) = checked?;
+            if options.check.is_some() && checked.untouched.is_empty() && !checked.failed.is_empty()
+            {
+                checked.untouched = baseline::override_untouched(root, &head, &checked.failed)?;
+            }
             summary.push_str(&format!(
-                "green: {} (attempt {attempt})\n{tail}\n",
-                if passed { "PASS" } else { "FAIL" }
+                "green: {} (attempt {attempt}); tests: {}\n{tail}\n",
+                if checked.passed { "PASS" } else { "FAIL" },
+                runner::names(&checked)
             ));
-            if passed {
+            if checked.passed {
                 green = true;
                 break;
+            }
+            if !checked.build_failed
+                && checked.unavailable.is_none()
+                && !checked.failed.is_empty()
+                && checked.failed.iter().all(|n| checked.untouched.contains(n))
+            {
+                let baseline_command = format!("{command} HARNESS_DUEL_REVISION={pre_duel}");
+                let (baseline, baseline_tail) = if options.check.is_none() {
+                    runner::check(root, options, &baseline_command, true)?
+                } else {
+                    let temporary = baseline::export(root, &pre_duel)?;
+                    runner::check(temporary.path(), options, command, false)?
+                };
+                summary.push_str(&format!(
+                    "Pre-duel comparison: {}\n{baseline_tail}\n",
+                    runner::names(&baseline)
+                ));
+                if focus::pre_existing(&checked, &baseline) {
+                    summary.push_str(&format!(
+                        "pre-existing failure: {}\n",
+                        checked.failed.join(", ")
+                    ));
+                    green = true;
+                    break;
+                }
             }
             failing = tail;
         }
@@ -147,7 +184,7 @@ fn rounds(
         }
         let implementation = tree::commit(
             root,
-            title,
+            task,
             "implementation",
             options.runtime.label(),
             options.model.as_deref(),

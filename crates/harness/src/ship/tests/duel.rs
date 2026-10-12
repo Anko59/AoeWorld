@@ -49,9 +49,16 @@ pub(super) fn setup(root: &Path, mode: &str) -> (Env, Options) {
     fs::write(root.join("crates/x/src/lib.rs"), "old\n").unwrap();
     fs::write(
         root.join("Makefile"),
-        "test-unit test-e2e:\n\t@echo check-tail\n\t@echo checked >> .cache/checks\n\t@grep -q green crates/x/src/lib.rs\n\t@if test \"$$DUEL_STUB\" = attack && grep -q attack crates/x/src/tests.rs 2>/dev/null; then grep -q healed crates/x/src/lib.rs; fi\n",
-    )
-    .unwrap();
+        r#"duel-check test-unit test-e2e:
+	@echo check-tail
+	@echo checked >> .cache/checks
+	@mkdir -p .cache/duel
+	@echo '{"passed":false,"tests":["task_test"],"failed":["task_test"],"untouched":[]}' > .cache/duel/check.json
+	@grep -q green crates/x/src/lib.rs
+	@if test "$$DUEL_STUB" = attack && grep -q attack crates/x/src/tests.rs 2>/dev/null; then grep -q healed crates/x/src/lib.rs; fi
+	@echo '{"passed":true,"tests":["task_test"],"failed":[],"untouched":[]}' > .cache/duel/check.json
+"#,
+    ).unwrap();
     run(root, &["add", "-A"]);
     run(root, &["commit", "-qm", "fixture"]);
     // The driver uses the repository identity, without author overrides.
@@ -162,6 +169,7 @@ fn happy_path_commits_tests_before_product_and_stops_on_empty_attack() {
             "tester\nimplementer\ntester\n"
         );
         assert!(summary.contains("red: FAIL") && summary.contains("green: PASS"));
+        assert!(summary.contains("tests: task_test"));
         assert!(summary.contains("tester report") && summary.contains("implementer report"));
         assert!(summary.contains("make ship"));
         assert_eq!(

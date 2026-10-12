@@ -155,7 +155,8 @@ make duel DUEL_TASK=.cache/task.md DUEL_RUNTIME=codex
 ```
 
 The task is a regular UTF-8 file at most 64 KiB; its first line titles the
-commits. Keep it outside tracked changes (for example under `.cache/`).
+commits (at most 72 characters, shortened at a word boundary with “…”). The full
+task stays in both commit bodies. Keep it outside tracked changes (for example under `.cache/`).
 `DUEL_RUNTIME` supports `claude`, `codex` and `pi`; dsh is not supported yet.
 When present, `CLAUDECODE`, `CODEX_THREAD_ID`/`CODEX_CI` or `PI_CODING_AGENT`
 identify the calling runtime; absent or ambiguous markers require an explicit choice. `DUEL_MODEL`
@@ -178,24 +179,33 @@ fail. Role violations restore to the last driver commit and name offending
 paths. Exhausted green attempts keep the tests commit and working changes for
 the main session to finish. A launch timeout is a failure, never red evidence.
 
-Rust tests choose `make test-unit`; browser specs choose `make test-e2e`.
-`DUEL_CHECK='make <focused target>'` overrides that choice; it is a trusted
-main-session command. Mixed Rust/browser changes default to unit tests, so
-select a command covering both when needed. Each agent and check gets
+The default command is `make duel-check HARNESS_DUEL_BASE=<round-start commit>`.
+It runs through Docker and selects only Cargo packages owning tester-changed
+files (`cargo nextest run -p <package>`) and exact changed browser spec files.
+Mixed changes run both. Red means a selected package fails to build or at least
+one selected test fails; green means every selected check passes.
+`DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
+Both role prompts name the exact check and forbid preflight or whole-suite runs;
+the driver and `make ship` own wider gates. Each agent and check gets
 `DUEL_BUDGET_MINUTES` (default 60); the process group is killed on expiry.
 
-The summary lists rounds, commits, check results, output tails and the agents'
-last reports, on stdout and in `.cache/duel/<branch>.md`. The main session then
+A green failure is compared with the original pre-duel revision when all failed
+tests are demonstrably untouched. If those same tests fail there, the driver
+records `pre-existing failure: <names>` and commits without relaunching the
+implementer. Unknown/build failures or changed tests cannot receive this exemption.
+The focused check still reports FAIL; the summary records the exception.
+
+The summary includes the full task, runtime/model, each round's red/green results
+with test names, commits, output tails and each agent's last report. It appears
+on stdout and in `.cache/duel/<branch>.md`, replacing branch slashes with `_`;
+the driver prints that path last, including on failure. The main session then
 reads the diff, films the change with `make showcase` and runs `make ship`.
 `duel` and all `DUEL_*` variables are main-session only. Protected harness work
 follows the same tests-first order in the main session because these roles
 cannot edit the harness itself. This is local workflow evidence, not a sealed
 CI proof that a particular assertion failed for the task's intended reason.
-
-`make duel-coverage` runs all harness tests in the pinned coverage image and
-writes native coverage to `reports/coverage/duel.lcov`. Its runtime launches are
-stubs; use a real task separately to verify a live runtime. The full
-`make coverage` gate and its workspace floors are unchanged.
+Coverage is measured by `make coverage`; runtime launches in harness tests are
+stubs, so use a real task separately to verify a live runtime.
 
 ## Test-first
 
