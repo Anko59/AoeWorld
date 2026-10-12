@@ -61,7 +61,7 @@ pub fn hyde_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
     parse_hyde_sources(&payload)
 }
 
-fn parse_hyde_sources(payload: &str) -> Result<Vec<KnownSource>, SourceCatalogError> {
+pub(crate) fn parse_hyde_sources(payload: &str) -> Result<Vec<KnownSource>, SourceCatalogError> {
     let dataset = serde_json::from_str::<DataverseDataset>(payload)
         .map_err(|error| SourceCatalogError::Metadata(error.to_string()))?;
     [HYDE_BASELINE, HYDE_SUPPLEMENTARY, HYDE_README]
@@ -192,7 +192,9 @@ pub fn potential_biome_sources() -> Result<Vec<KnownSource>, SourceCatalogError>
     parse_potential_biome_sources(&payload)
 }
 
-fn parse_potential_biome_sources(payload: &str) -> Result<Vec<KnownSource>, SourceCatalogError> {
+pub(crate) fn parse_potential_biome_sources(
+    payload: &str,
+) -> Result<Vec<KnownSource>, SourceCatalogError> {
     let record = serde_json::from_str::<ZenodoRecord>(payload)
         .map_err(|error| SourceCatalogError::Metadata(error.to_string()))?;
     [BIOME_RASTER, BIOME_CLASSES]

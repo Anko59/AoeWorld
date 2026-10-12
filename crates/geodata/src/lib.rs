@@ -78,6 +78,8 @@ pub use source_catalog::{
     natural_earth_10m_land, potential_biome_sources, worldcover_sources_for_bounds,
     worldcover_tile_ids,
 };
+#[cfg(test)]
+pub(crate) use source_catalog::{parse_hyde_sources, parse_potential_biome_sources};
 /// Catalog identifiers required by the first source-backed overview recipe.
 /// They let offline verification report exactly which verified cache objects
 /// are absent without querying a provider.
@@ -91,14 +93,27 @@ pub const REQUIRED_OVERVIEW_SOURCE_IDS: &[&str] = &[
     "hyde-3.2.1:readme_release_HYDE3.2.1.txt",
 ];
 
+/// Assembles the overview source list from already-parsed provider catalogs:
+/// the two pinned overview sources, then the Zenodo biome record and the HYDE
+/// listing in documentation order.
+pub(crate) fn overview_sources_from_parsed_catalogs(
+    biome_sources: Vec<KnownSource>,
+    hyde_catalog: Vec<KnownSource>,
+) -> Vec<KnownSource> {
+    let mut sources = vec![etopo_2022_60s_surface(), natural_earth_10m_land()];
+    sources.extend(biome_sources);
+    sources.extend(hyde_catalog);
+    sources
+}
+
 /// Resolves the allowlisted sources needed by the overview recipe. Calling
 /// this may contact the metadata endpoints for the mutable provider catalogs;
 /// callers that need an offline check should use `REQUIRED_OVERVIEW_SOURCE_IDS`.
 pub fn overview_sources() -> Result<Vec<KnownSource>, GeodataError> {
-    let mut sources = vec![etopo_2022_60s_surface(), natural_earth_10m_land()];
-    sources.extend(potential_biome_sources()?);
-    sources.extend(hyde_sources()?);
-    Ok(sources)
+    Ok(overview_sources_from_parsed_catalogs(
+        potential_biome_sources()?,
+        hyde_sources()?,
+    ))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
