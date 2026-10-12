@@ -34,8 +34,8 @@ fn registry_evidence_change_invalidates_same_revision_selection() {
     let mut changed = original.clone();
     changed.gates[0].evidence.push_str(" reviewed change");
     let paths = paths(&["docs/testing.md"]);
-    let old = selection(&original, "a".repeat(40), None, paths.clone()).unwrap();
-    let new = selection(&changed, "a".repeat(40), None, paths).unwrap();
+    let old = selection(&original, "a".repeat(40), None, paths.clone(), false).unwrap();
+    let new = selection(&changed, "a".repeat(40), None, paths, false).unwrap();
     assert_eq!(old.gates, new.gates);
     assert_ne!(old.registry_hash, new.registry_hash);
     let mut results = BTreeMap::from([("select".to_owned(), "success")]);
