@@ -197,12 +197,6 @@ bootstrap: orchestrator-tools browser-deps
 doctor:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- doctor
 
-hooks-install:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
-
-hooks-check:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
-
 include make/agents.mk make/ship.mk make/qualification.mk
 
 structure-check:

@@ -27,3 +27,9 @@ test-placement-coverage: coverage-tools
 
 test-placement:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-placement
+
+hooks-install:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
+
+hooks-check:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
