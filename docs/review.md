@@ -24,10 +24,10 @@ Harness and pi.
 
 | Tier | Reviewers (personas) | Rounds | Models |
 |---|---|---|---|
-| low | 1 (quick: correctness + test integrity) | 1 | average (Sonnet 5.5 medium, GPT‑6 Luna xhigh, GLM 5.3 Flash high) |
+| low | 1 (quick: correctness + test integrity) | 1 | average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
 | medium | 3 (correctness, spec, test integrity) | ≤ 3 until convergence | average |
 | high | 5 (adds hostile input, performance) | ≤ 3 | average, reasoning one step higher |
-| xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
+| xhigh | 3 | ≤ 3 | strong (Opus 5.5 medium, GPT‑6.1 Sol high, GLM 5.3 medium) |
 | max | 5 | ≤ 5 | strong |
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,

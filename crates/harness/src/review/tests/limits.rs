@@ -198,10 +198,10 @@ fn each_runtime_launches_its_reviewer_read_only_with_the_tier_model() {
         "{claude}"
     );
     assert!(claude.ends_with("PROMPT"));
-    let codex = args(Runtime::Codex, &model("gpt-6-luna", "xhigh")).join(" ");
+    let codex = args(Runtime::Codex, &model("gpt-6.1-sol", "medium")).join(" ");
     assert!(codex.contains("-s read-only"), "{codex}");
     assert!(
-        codex.contains("-m gpt-6-luna -c model_reasoning_effort=\"xhigh\""),
+        codex.contains("-m gpt-6.1-sol -c model_reasoning_effort=\"medium\""),
         "{codex}"
     );
     let pi = args(Runtime::Pi, &model("litellm/glm-5.3", "high")).join(" ");
