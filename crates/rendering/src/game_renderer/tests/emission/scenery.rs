@@ -76,12 +76,14 @@ fn cliffs_keep_a_whole_native_face_at_every_zoom_and_share_object_clearance() {
 }
 
 #[wasm_bindgen_test]
-fn cliff_orientation_selects_reviewed_faces_and_mirrors_the_whole_image() {
+fn cliff_orientation_selects_native_faces_with_their_authored_lighting() {
     let art = art();
     for (facing, slots) in [
-        (0, &[4, 5, 15, 17, 19][..]),
-        (1, &[1, 2, 16][..]),
-        (2, &[3, 18, 24][..]),
+        (0, &[3, 15, 17, 19, 24][..]),
+        (1, &[1, 2, 18][..]),
+        (2, &[1, 2, 18][..]),
+        (6, &[4, 5, 16][..]),
+        (7, &[4, 5, 16][..]),
     ] {
         for (variant, slot) in slots.iter().enumerate() {
             let mut resource = piece(facing);
@@ -93,10 +95,9 @@ fn cliff_orientation_selects_reviewed_faces_and_mirrors_the_whole_image() {
         }
     }
     let draw = |facing| world_sprite_frames(&art, &[], &[piece(facing)], &[], camera(), 0);
-    let west = draw(1)[0].0;
-    let east = draw(7)[0].0;
-    assert_eq!(east.uv[0], west.uv[0] + west.uv[2]);
-    assert_eq!(east.uv[2], -west.uv[2]);
+    for facing in [0, 1, 2, 6, 7] {
+        assert!(draw(facing)[0].0.uv[2] > 0.0, "keep authored sun direction");
+    }
     for away in 3..=5 {
         assert!(draw(away).is_empty());
     }
