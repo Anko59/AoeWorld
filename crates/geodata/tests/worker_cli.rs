@@ -52,6 +52,7 @@ fn run(root: &Path, args: &[&str], environment: &[(&str, &str)], input: &[u8]) -
         "AOE_MAP_PACKAGE",
         "AOE_MAP_SAMPLES",
         "AOE_MAP_DEM_RESOLUTION",
+        "AOE_MAP_HYDROLOGY_MODE",
         "AOE_GEODATA_CACHE",
     ] {
         command.env_remove(key);
@@ -159,6 +160,29 @@ fn cli_rejects_invalid_requests_and_detail_options_before_network_access() {
     failure(
         run(&fixture.0, &["map-estimate"], &common, b""),
         "byte input limit",
+    );
+    assert!(!fixture.0.join("cache").exists());
+}
+
+#[test]
+fn missing_output_is_rejected_before_projecting_an_uncovered_river_request() {
+    let fixture = Fixture::new();
+    let request = fixture.request();
+    let mut value: Value = serde_json::from_slice(&fs::read(&request).unwrap()).unwrap();
+    value["center_latitude_e7"] = json!(-178_000_000);
+    value["center_longitude_e7"] = json!(1_798_000_000);
+    fs::write(&request, serde_json::to_vec(&value).unwrap()).unwrap();
+    failure(
+        run(
+            &fixture.0,
+            &["map-generate"],
+            &[
+                ("AOE_MAP_REQUEST", request.to_str().unwrap()),
+                ("AOE_MAP_HYDROLOGY_MODE", "vectors"),
+            ],
+            b"",
+        ),
+        "AOE_MAP_PACKAGE",
     );
     assert!(!fixture.0.join("cache").exists());
 }

@@ -232,6 +232,13 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
                     provenance: vec![crate::WaterModelProvenance::EvidenceOnly as u8; 256],
                 }),
                 kind,
+                river_segments: vec![crate::RiverSegment {
+                    start: [175 * 256, 0],
+                    end: [175 * 256, SIDE * 256],
+                    width_units: 6 * 256,
+                    station_start: 0,
+                    station_end: i64::from(SIDE * 256),
+                }],
             };
             let cover = crate::ModernLandCoverPage {
                 level: 0,
