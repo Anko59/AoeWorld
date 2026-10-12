@@ -31,9 +31,18 @@ fn crossing_with_relief(coast: bool, steep: bool) -> MapChunkGenerator {
 }
 
 fn crossing_with_geometry(coast: bool, steep: bool, segments: Vec<[i64; 7]>) -> MapChunkGenerator {
+    let height = |_: i32, y: i32| y * 600_000;
+    crossing_with_height(coast, if steep { Some(&height) } else { None }, segments)
+}
+
+fn crossing_with_height(
+    coast: bool,
+    height: Option<&dyn Fn(i32, i32) -> i32>,
+    segments: Vec<[i64; 7]>,
+) -> MapChunkGenerator {
     let (mut environment, mut pages) =
         environment(33, 8, &|_, y| (if coast && y >= 28 { 100 } else { 0 }, 0));
-    if steep {
+    if let Some(height) = height {
         environment.samples_per_axis = 33;
         environment.elevation = super::shoreline::pyramid(33);
         let page = EnvironmentPage::Elevation(crate::ElevationPage {
@@ -43,7 +52,7 @@ fn crossing_with_geometry(coast: bool, steep: bool, segments: Vec<[i64; 7]>) -> 
             width: 33,
             height: 33,
             geographic_height_centimeters: (0..33)
-                .flat_map(|y| std::iter::repeat_n(y * 600_000, 33))
+                .flat_map(|y| (0..33).map(move |x| height(x, y)))
                 .collect(),
         });
         pages.0.insert(page.key(), Arc::new(page));
@@ -327,3 +336,6 @@ fn ground_variety_preserves_textured_dirt_river_banks() {
         "ground variety still appears away from banks"
     );
 }
+
+#[path = "rivers/cliffs.rs"]
+mod cliffs;
