@@ -50,10 +50,10 @@ fn webgl_four_material_junction_has_matching_pixels_on_every_shared_edge() {
 }
 
 #[wasm_bindgen_test]
-fn webgl_native_snow_and_ice_keep_their_sheet_colours_at_soft_borders() {
+fn webgl_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
     use crate::surface_mesh::mix::fixture as mix;
     let (canvas, mut renderer) = target(&mix::snow_atlas());
-    for case in [2, 3] {
+    for case in [2, 3, 7, 8] {
         let mut packets = mix::snow_scene(case)
             .iter()
             .map(instance)

@@ -69,10 +69,10 @@ async fn webgpu_four_material_junction_has_matching_pixels_on_every_shared_edge(
 }
 
 #[wasm_bindgen_test]
-async fn webgpu_native_snow_and_ice_keep_their_sheet_colours_at_soft_borders() {
+async fn webgpu_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
     use crate::surface_mesh::mix::fixture as mix;
     let mut renderer = surface_renderer_with_atlas(&mix::snow_atlas()).await;
-    for case in [2, 3] {
+    for case in [2, 3, 7, 8] {
         let faces = mix::snow_scene(case);
         renderer
             .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])

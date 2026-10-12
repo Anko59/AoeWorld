@@ -220,3 +220,58 @@ fn alpine_country_has_forest_then_rock_then_snow_and_no_tree_in_the_snow() {
     assert!(snow > 1_000 && rock > 1_000 && trees > 1_000);
     assert!(lowest_snow > 2_350 && highest_tree < 2_300);
 }
+
+#[test]
+fn forage_bushes_follow_the_composed_ground_and_never_stand_on_rock_or_snow() {
+    let (mut bushes, mut covered, mut ores) = (0, 0, 0);
+    for height in [0, 2400, 3300] {
+        let generator = level(height, 13, 46);
+        for y in 18..22 {
+            for x in 6..10 {
+                let chunk = generator
+                    .landscape_chunk_with_cancel(x, y, &|| false)
+                    .expect("chunk");
+                covered += chunk
+                    .tiles
+                    .iter()
+                    .filter(|tile| {
+                        matches!(
+                            tile.terrain.material,
+                            GroundMaterial::Rock | GroundMaterial::Snow
+                        )
+                    })
+                    .count();
+                for resource in &chunk.resources {
+                    let ground = chunk
+                        .tiles
+                        .iter()
+                        .find(|tile| tile.tile == resource.node.tile)
+                        .expect("resource terrain")
+                        .terrain
+                        .material;
+                    if resource.node.object == ObjectKind::ForageBush {
+                        assert!(
+                            !matches!(
+                                ground,
+                                GroundMaterial::Rock | GroundMaterial::Snow | GroundMaterial::Ice
+                            ),
+                            "bush on {ground:?} at {:?}",
+                            resource.node.tile
+                        );
+                        bushes += 1;
+                    } else if matches!(
+                        resource.node.object,
+                        ObjectKind::GoldDeposit | ObjectKind::StoneDeposit
+                    ) {
+                        ores += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(covered > 10_000, "substantial exposed mountain ground");
+    assert!(
+        bushes > 0 && ores > 0,
+        "vegetated forage and mineral deposits remain"
+    );
+}
