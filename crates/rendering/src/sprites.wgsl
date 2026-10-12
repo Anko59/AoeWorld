@@ -233,7 +233,7 @@ fn ground(rgb: vec3<f32>, kind: u32) -> vec3<f32> {
     var amount = 0.55;
     switch kind {
         case 5u, 7u, 12u: {}
-        case 6u: { base = vec3<f32>(0.78, 0.79, 0.78); amount = 0.12; }
+        case 6u: { base = vec3<f32>(0.82, 0.835, 0.85); amount = 0.14; }
         case 8u: { base = vec3<f32>(0.42, 0.57, 0.65); amount = 0.20; }
         case 9u: { base = vec3<f32>(0.10, 0.08, 0.05); amount = 0.35; }
         case 10u: { base = vec3<f32>(0.22, 0.36, 0.33); amount = 0.25; }
@@ -243,9 +243,9 @@ fn ground(rgb: vec3<f32>, kind: u32) -> vec3<f32> {
 }
 
 // #if mixing
-fn mixed(texel: vec4<f32>, material: u32, appearance: u32) -> vec4<f32> {
+fn mixed(texel: vec4<f32>, material: u32, appearance: u32, tint: u32) -> vec4<f32> {
     let scene = material & 15u;
-    if (appearance & 2147483648u) != 0u && (scene == 7u || scene == 8u) {
+    if (appearance & 2147483648u) != 0u && scene == 8u {
         return texel;
     }
     var kind = 0u;
@@ -256,7 +256,11 @@ fn mixed(texel: vec4<f32>, material: u32, appearance: u32) -> vec4<f32> {
         case 9u: { kind = 9u; }
         default: {}
     }
-    return vec4<f32>(ground(texel.rgb, kind), texel.a);
+    var color = vec4<f32>(ground(texel.rgb, kind), texel.a);
+    if scene == 7u && tint == 1u {
+        color = vec4<f32>(color.rgb * (0.98 / 0.92), color.a);
+    }
+    return color;
 }
 
 fn lattice(p: vec2<i32>) -> f32 {
@@ -431,7 +435,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             sample = textureSampleLevel(sprite_atlas, sprite_sampler, layer.uv, i32(layer.page), 0.0);
         }
         // #if mixing
-        if mixing { sample = mixed(sample, material, in.pages.w); }
+        if mixing { sample = mixed(sample, material, in.pages.w, in.tint_kind); }
         // #endif
         if single { texel = sample; } else { texel += sample * weight; }
     }
@@ -452,7 +456,7 @@ fn shaded(texel: vec4<f32>, color: vec4<f32>, tint: u32, appearance: u32) -> vec
         var shade = 1.0;
         if kind == 7u { shade = 0.72; }
         if kind == 12u { shade = 0.78; }
-        shade *= select(1.0, 0.92, ramp);
+        shade *= select(1.0, select(0.92, 0.98, kind == 6u), ramp);
         return vec4<f32>(ground(texel.rgb, kind) * shade, texel.a);
     }
     if (appearance & 1u) != 0u && tint <= 3u {

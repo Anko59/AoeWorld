@@ -109,18 +109,18 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
             triangle.texture_materials = None;
             triangle.texture_blend = None;
         }
-        triangle.appearance &= !super::landscape::NATIVE_SNOW;
+        triangle.appearance &= !super::landscape::NATIVE_ICE;
         if mix::texture(triangle, art) {
             if !art.terrain[11].is_empty() {
-                triangle.appearance |= super::landscape::NATIVE_SNOW;
+                triangle.appearance |= super::landscape::NATIVE_ICE;
             }
             continue;
         }
-        // Rock, mud and sheetless snow use procedural detail, never paving.
-        // Snow and ice use the reviewed sheet when present. Mixed faces above
-        // preserve each layer's own art and procedural fallback.
+        // Snow always uses its white, faint-relief kernel, even over the ice
+        // sheet. Only actual ice preserves that sheet's blue authored colours.
+        // Mixed faces apply the same transform per layer before soft blending.
         let procedural = |material: u8| {
-            matches!(material, 4 | 9) || (matches!(material, 7 | 8) && art.terrain[11].is_empty())
+            matches!(material, 4 | 7 | 9) || (material == 8 && art.terrain[11].is_empty())
         };
         if procedural(triangle.material) {
             triangle.texture_materials = None;
@@ -129,7 +129,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
                 7 => 6,
                 8 => 8,
                 9 => 9,
-                _ if triangle.skirt || matches!(triangle.tint, 7 | 23) => 11,
+                _ if triangle.skirt || matches!(triangle.tint, 7 | 23) => 7,
                 _ if matches!(triangle.tint, 2 | 12) => 12,
                 _ => 5,
             };
@@ -213,7 +213,7 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
     let detail = (f32::from(texel[0]) + f32::from(texel[1]) + f32::from(texel[2])) / 3.0;
     let (base, amount, shade) = match tint {
         5 => ([0.18; 3], 0.55, 1.0),
-        6 => ([0.78, 0.79, 0.78], 0.12, 1.0),
+        6 => ([0.82, 0.835, 0.85], 0.14, 1.0),
         7 => ([0.18; 3], 0.55, 0.72),
         8 => ([0.42, 0.57, 0.65], 0.20, 1.0),
         9 => ([0.10, 0.08, 0.05], 0.35, 1.0),
@@ -222,7 +222,12 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
         _ => return texel,
     };
     // Combine face lighting before the sole byte rounding, not after tinting.
-    let shade = shade * if ramp { 0.92 } else { 1.0 };
+    let shade = shade
+        * if ramp {
+            if tint == 6 { 0.98 } else { 0.92 }
+        } else {
+            1.0
+        };
     [
         ((base[0] * 255.0 + detail * amount) * shade).round() as u8,
         ((base[1] * 255.0 + detail * amount) * shade).round() as u8,

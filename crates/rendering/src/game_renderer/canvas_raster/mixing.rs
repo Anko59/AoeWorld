@@ -48,6 +48,7 @@ pub(super) fn sample(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             materials[index],
             triangle.appearance,
+            triangle.tint,
         );
     }
     crate::surface_mesh::landscape::blend(samples, weights, triangle.tint, triangle.appearance)

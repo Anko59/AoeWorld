@@ -25,7 +25,7 @@ const COLORS: [[u8; 4]; 8] = [
 /// Columns of scene material, west to east: the last one continues eastwards.
 /// Case 5 is a forest (material 6, full floor) against sand; case 6 has three
 /// materials meeting within one tile column.
-const STRIPS: [&[u8]; 7] = [
+const STRIPS: [&[u8]; 9] = [
     &[0, 3],
     &[2, 4],
     &[7, 1],
@@ -33,6 +33,8 @@ const STRIPS: [&[u8]; 7] = [
     &[9, 3],
     &[6, 3],
     &[2, 3, 0],
+    &[4, 7],
+    &[7, 8],
 ];
 pub(crate) const CASES: usize = STRIPS.len();
 pub(crate) const PROBES: [[u32; 2]; 10] = [
@@ -84,7 +86,7 @@ pub(crate) fn atlas() -> Vec<u8> {
 
 fn snow_art() -> GameArt {
     let mut art = art();
-    art.terrain[7] = vec![frame(7)];
+    art.terrain[11] = vec![frame(7)];
     art
 }
 
@@ -177,7 +179,10 @@ pub(crate) fn expected(case: usize, probe: usize) -> [u8; 4] {
 
 fn expected_for(case: usize, probe: usize, native_snow: bool) -> [u8; 4] {
     let color = |material| {
-        if native_snow && matches!(material, 7 | 8) {
+        if native_snow && material == 7 {
+            // Independent white/cool snow oracle over the synthetic ice colour.
+            [226.13333, 229.95833, 233.78333, 255.0]
+        } else if native_snow && material == 8 {
             COLORS[7].map(f32::from)
         } else {
             color(material)
@@ -272,7 +277,7 @@ pub(crate) fn assert_soft(case: usize, pixel: &dyn Fn(u32, u32) -> [u8; 4]) {
     }
 }
 
-/// Native blue snow/ice must survive each mixed edge, without procedural tint.
+/// Ice stays blue; snow becomes white, including snow-rock and snow-ice edges.
 pub(crate) fn assert_snow_probe(case: usize, probe: usize, actual: [u8; 4]) {
     let expected = expected_for(case, probe, true);
     for channel in 0..4 {

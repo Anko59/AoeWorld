@@ -295,13 +295,21 @@ pub(crate) fn weights(shares: [f32; 3], middle: bool, noise: f32) -> [f32; 3] {
     }
 }
 
-/// Preserve authored snow/ice texels at mixed borders and junctions.
-pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32) -> [f32; 4] {
-    if appearance & super::landscape::NATIVE_SNOW != 0 && matches!(material, 7 | 8) {
+/// Preserve authored ice; snow uses its white kernel at borders and junctions.
+pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32, tint: u8) -> [f32; 4] {
+    let mut sample = if appearance & super::landscape::NATIVE_ICE != 0 && material == 8 {
         texel.map(f32::from)
     } else {
         layer(texel, material)
+    };
+    // Snow is diffuse: compensate its layer before the shared ramp shade,
+    // keeping rock/grass lighting and matching the pure snow tint's 0.98.
+    if material == 7 && tint == 1 {
+        for channel in &mut sample[..3] {
+            *channel *= 0.98 / 0.92;
+        }
     }
+    sample
 }
 
 /// One layer's colour before blending: procedural rock, snow, ice and mud are
@@ -310,7 +318,7 @@ pub(crate) fn layer(texel: [u8; 4], material: u8) -> [f32; 4] {
     let texel = texel.map(f32::from);
     let (base, amount) = match material {
         4 => ([0.18; 3], 0.55),
-        7 => ([0.78, 0.79, 0.78], 0.12),
+        7 => ([0.82, 0.835, 0.85], 0.14),
         8 => ([0.42, 0.57, 0.65], 0.20),
         9 => ([0.10, 0.08, 0.05], 0.35),
         _ => return texel,

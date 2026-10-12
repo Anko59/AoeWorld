@@ -39,6 +39,7 @@ pub(super) fn sample(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             material,
             triangle.appearance,
+            triangle.tint,
         );
         for channel in 0..4 {
             color[channel] += texel[channel] * weight;

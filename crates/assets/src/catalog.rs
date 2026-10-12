@@ -292,7 +292,7 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 9] = [
         archive: "terrain.drs",
         id: 15024,
         frames: 64,
-        interpretation: "8x8 periodic snow and ice field in x-major, reversed-y order",
+        interpretation: "8x8 periodic ice detail in x-major, reversed-y order",
         terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
             columns: 8,
             rows: 8,

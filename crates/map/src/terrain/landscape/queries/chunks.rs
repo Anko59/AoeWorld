@@ -173,7 +173,11 @@ impl MapChunkGenerator {
         // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
         let node = if !reserved.route && !reserved.start && !open {
-            memo.resource(position, base)?
+            // Resource candidates use the source/base biome. Forage also
+            // needs the final ground after snow-line and shore composition.
+            memo.resource(position, base)?.filter(|node| {
+                node.object != ObjectKind::ForageBush || soft_ground(terrain.material)
+            })
         } else {
             None
         };

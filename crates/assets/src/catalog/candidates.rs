@@ -10,15 +10,6 @@ pub struct CandidateSource {
     pub proposed_use: &'static str,
 }
 
-const fn terrain(id: u32, frames: u32, proposed_use: &'static str) -> CandidateSource {
-    CandidateSource {
-        archive: "terrain.drs",
-        id,
-        observed_frames: frames,
-        proposed_use,
-    }
-}
-
 const fn graphics(id: u32, frames: u32, proposed_use: &'static str) -> CandidateSource {
     CandidateSource {
         archive: "graphics.drs",

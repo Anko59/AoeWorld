@@ -77,7 +77,7 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
     let mut art = test_art(frame);
     art.terrain[4][0].atlas.uv[0] = 0.9; // Deliberately distinct paving sentinel.
     // The ice sheet becomes white snow; frozen water keeps its authored colour.
-    art.terrain[7][0].atlas.uv[0] = 0.7;
+    art.terrain[11][0].atlas.uv[0] = 0.7;
     for material in [7, 8] {
         let sample = SceneTerrain {
             appearance: None,
@@ -92,12 +92,12 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
         apply_terrain_textures(&mut triangles, &art);
         for (old, new) in before.iter().zip(&triangles) {
             assert_eq!(new.tint, if material == 7 { 6 } else { old.tint });
-            assert_eq!(new.texture_uv, Some(art.terrain[7][0].atlas));
+            assert_eq!(new.texture_uv, Some(art.terrain[11][0].atlas));
             assert!(new.texture_blend.is_none());
         }
     }
     // Without the sheet they keep the procedural tints.
-    art.terrain[7].clear();
+    art.terrain[11].clear();
     for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9)] {
         for ramp in [false, true] {
             let tint = base_tint + if ramp { 16 } else { 0 };
