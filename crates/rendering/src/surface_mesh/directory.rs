@@ -163,11 +163,6 @@ impl Sheet {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn frame(atlas: &[u8], material: u8, tile: [i32; 2]) -> Option<AtlasAddress> {
-    sheet(atlas, material).map(|sheet| sheet.frame(atlas, tile))
-}
-
 /// Corner positions in tile units from the face's texture origin tile.
 pub(crate) fn locals(triangle: &ProjectedSurfaceTriangle) -> [[f64; 2]; 3] {
     triangle.points.map(|point| {

@@ -102,7 +102,7 @@ fn far_zoom_directory_resolves_every_water_class_to_the_same_sheet_as_near_zoom(
     let written = directory::write_terrain_directory(&art, &mut atlas);
     assert_eq!(written, Ok(()));
     for material in [SHALLOW, MEDIUM, DEEP, FORD] {
-        let tiled = directory::frame(&atlas, material, [7, -3]);
+        let tiled = directory::fixture::frame(&atlas, material, [7, -3]);
         let near = terrain_texture_frame(&art, material, [7, -3]).map(|frame| frame.atlas);
         assert!(
             tiled.is_some() && tiled == near,
