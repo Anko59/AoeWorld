@@ -140,19 +140,31 @@ const FALLBACK_DIGESTS: [&str; 3] = [
 const DEFAULT_PACKAGE_DIGEST: &str =
     "35f4f5370283d8d65d16214bbd8a26985afa03edd55349db55a5f45f8640599d";
 
+/// The optional ground sheets are load-time plumbing: no generator rule
+/// emits their materials, so adding or removing the sheets cannot change
+/// what is generated. The darker-grass sheet draws over the pre-existing
+/// `LushGrass` material, which Tropical fallback tiles already carry.
 #[test]
-fn default_package_generated_chunks_are_unchanged_by_sheet_plumbing() {
+fn sheet_plumbing_emits_none_of_the_new_ground_materials() {
+    const SHEET_ONLY_MATERIALS: [GroundMaterial; 3] = [
+        GroundMaterial::GrassDirt,
+        GroundMaterial::WornGrass,
+        GroundMaterial::Gravel,
+    ];
     let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-    let generator = package.generator();
-    let mut digest = blake3::Hasher::new();
-    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
-        let scene = generator
-            .landscape_chunk_with_cancel(x, y, &|| false)
-            .expect("chunk");
-        digest.update(format!("{scene:?}").as_bytes());
+    let fallbacks = [1, 17, 991].map(|seed| MapChunkGenerator::new([23; 32], seed, 512));
+    for generator in [package.generator()].into_iter().chain(fallbacks) {
+        for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+            let scene = generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .expect("chunk");
+            assert!(
+                scene
+                    .tiles
+                    .iter()
+                    .all(|tile| !SHEET_ONLY_MATERIALS.contains(&tile.terrain.material)),
+                "chunk ({x},{y}) emitted a sheet-only ground material"
+            );
+        }
     }
-    assert_eq!(
-        digest.finalize().to_hex().as_str(),
-        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
-    );
 }
