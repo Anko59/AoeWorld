@@ -176,6 +176,8 @@ fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         nix::unistd::Gid::current()
     );
     let mount = format!("{}:{}", root.display(), root.display());
+    let modules = root.join("browser/node_modules").canonicalize()?;
+    let dependencies = format!("{}:{}:ro", modules.display(), modules.display());
     let home = format!("HOME={}/.cache/browser-home", root.display());
     let url = format!("AOE_BASE_URL=http://{address}");
     let workdir = root.join("browser");
@@ -199,6 +201,8 @@ fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         format!("AOE_E2E_LANDSCAPE_HASH={}", fixture.hash),
         "-v".to_owned(),
         mount,
+        "-v".to_owned(),
+        dependencies,
         "-w".to_owned(),
         workdir.display().to_string(),
         "aoeworld/browser-tools:1.63.0".to_owned(),
@@ -209,20 +213,11 @@ fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "test:e2e".to_owned(),
     ];
     if !specs.is_empty() {
-        let insertion = args
+        let npm = args
             .iter()
-            .position(|a| a == "-v")
-            .ok_or("browser mount missing")?;
-        args.splice(
-            insertion..insertion,
-            [
-                "-e".to_owned(),
-                format!(
-                    "PLAYWRIGHT_JSON_OUTPUT_FILE={}/.cache/duel/playwright.json",
-                    root.display()
-                ),
-            ],
-        );
+            .position(|arg| arg == "npm")
+            .ok_or("npm command missing")?;
+        args.insert(npm + 1, "--silent".to_owned());
         args.extend(["--".to_owned(), "--reporter=json".to_owned()]);
         args.extend(specs.iter().cloned());
     }
@@ -232,8 +227,32 @@ fn run_specs(specs: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let result =
-                process::run_cancellable("docker", &refs, run_deadline, &worker_cancellation);
+            let result = if specs.is_empty() {
+                process::run_cancellable("docker", &refs, run_deadline, &worker_cancellation)
+                    .map_err(|e| e.to_string())
+            } else {
+                // Stream reporter stdout into the same bounded retention used for nextest.
+                // No unbounded Playwright report is written by the browser container.
+                (|| {
+                    let mut retained = crate::ship::JsonOutput::create(
+                        &root.join(".cache/duel/playwright.json"),
+                        "Playwright",
+                    )
+                    .map_err(|e| e.to_string())?;
+                    let mut command = Command::new("docker");
+                    command.args(&refs);
+                    let captured = process::capture_command_retaining_stdout(
+                        command,
+                        run_deadline,
+                        &worker_cancellation,
+                        &mut retained,
+                    );
+                    match captured.exit {
+                        process::CaptureExit::Success => Ok(()),
+                        other => Err(format!("focused Playwright check unavailable: {other:?}")),
+                    }
+                })()
+            };
             let _ = sender.send(result);
         });
         loop {

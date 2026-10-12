@@ -215,34 +215,3 @@ fn without_tests(source: &str, items: &[syn::Item]) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
-
-pub(crate) fn override_untouched(
-    root: &Path,
-    base: &str,
-    failures: &[String],
-) -> git::Result<Vec<String>> {
-    let mut paths = Vec::new();
-    if root.join("crates").is_dir() {
-        for entry in fs::read_dir(root.join("crates")).map_err(|e| e.to_string())? {
-            let path = entry.map_err(|e| e.to_string())?.path().join("Cargo.toml");
-            if path.is_file() {
-                paths.push(
-                    path.strip_prefix(root)
-                        .map_err(|e| e.to_string())?
-                        .to_string_lossy()
-                        .into_owned(),
-                );
-            }
-        }
-    }
-    if paths.is_empty() {
-        return Ok(Vec::new());
-    }
-    let scope = Scope {
-        packages: Vec::new(),
-        specs: Vec::new(),
-        paths: Vec::new(),
-        manifests: paths,
-    };
-    untouched(root, base, &scope, failures)
-}

@@ -69,3 +69,108 @@ fn later_unrelated_red_is_dropped_and_its_failure_is_named() {
     );
     assert!(git::subject(&root).is_ok());
 }
+
+#[test]
+fn explicit_fuzz_check_uses_exit_code_without_test_names_or_duel_report() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for green in [true, false] {
+        let (_temp, root) = fixture("true");
+        let (_env, mut options) = setup(&root, "happy");
+        options.rounds = 1;
+        options.check = Some("make fuzz-smoke".into());
+        fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
+        fs::create_dir_all(root.join("fuzz/fuzz_targets")).unwrap();
+        fs::write(root.join("fuzz/fuzz_targets/a.rs"), "original property\n").unwrap();
+        fs::write(root.join("Makefile"), format!("fuzz-smoke:\n\t@mkdir -p reports/fuzz\n\t@echo '{{\"result\":\"FAIL\"}}' > reports/fuzz/smoke.json\n\t@echo fuzz-runtime-crash\n\t@{}\n", if green { "grep -q green crates/x/src/lib.rs" } else { "exit 1" })).unwrap();
+        fs::write(root.join(".gitignore"), ".cache/\nreports/\n").unwrap();
+        run(
+            &root,
+            &["add", "Makefile", ".gitignore", "fuzz/fuzz_targets/a.rs"],
+        );
+        run(&root, &["commit", "-qm", "runtime fuzz fixture"]);
+        let runtime = root.join(".cache/bin/codex");
+        let script = fs::read_to_string(&runtime).unwrap().replace(
+            "printf '#[test]\\nfn task_test() {}\\n' > crates/x/src/tests.rs",
+            "echo added-property >> fuzz/fuzz_targets/a.rs",
+        );
+        fs::write(runtime, script).unwrap();
+        let result = duel(&root, "Task", &options);
+        let calls = fs::read_to_string(root.join(".cache/calls")).unwrap();
+        assert_eq!(
+            calls.matches("implementer").count(),
+            if green { 1 } else { 3 }
+        );
+        assert!(
+            fs::read_to_string(root.join("fuzz/fuzz_targets/a.rs"))
+                .unwrap()
+                .contains("added-property")
+        );
+        if green {
+            let summary = result.unwrap();
+            assert!(summary.contains("red: FAIL") && summary.contains("green: PASS"));
+            assert!(git::subject(&root).is_ok());
+        } else {
+            assert!(result.unwrap_err().contains("3 attempts"));
+            assert!(
+                git::git(&root, &["log", "-1", "--format=%B"])
+                    .unwrap()
+                    .contains("Harness-Phase: tests")
+            );
+        }
+    }
+}
+
+#[test]
+fn browser_checks_reuse_dependencies_but_rebuild_product_each_time() {
+    use super::super::duel::Env;
+    use crate::ship::duel::{focus, stages};
+    use std::os::unix::fs::PermissionsExt;
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_temp, root) = fixture("true");
+    let (_env, _) = setup(&root, "happy");
+    fs::create_dir_all(root.join("browser")).unwrap();
+    for program in ["cargo", "wasm-bindgen", "make"] {
+        let path = root.join(".cache/bin").join(program);
+        fs::write(&path, "#!/bin/sh\necho \"$(basename \"$0\") $*\" >> .cache/browser-build-calls\nmkdir -p browser/node_modules\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let _target = Env::set(&[(
+        "CARGO_TARGET_DIR",
+        root.join("target").display().to_string(),
+    )]);
+    let scope = focus::Scope {
+        specs: vec!["browser/tests/foo.spec.ts".into()],
+        packages: vec![],
+        manifests: vec![],
+        paths: vec![],
+    };
+    fs::write(
+        root.join(".cache/duel/scope.json"),
+        serde_json::to_vec(&scope).unwrap(),
+    )
+    .unwrap();
+    let _base = Env::set(&[(
+        "HARNESS_DUEL_BASE",
+        git::git(&root, &["rev-parse", "HEAD"]).unwrap(),
+    )]);
+    // No server binary: both attempts stop after prerequisites, without launching Docker.
+    for _ in 0..2 {
+        fs::write(
+            root.join(".cache/duel/check.json"),
+            serde_json::to_vec(&focus::CheckReport {
+                passed: true,
+                ..Default::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(stages::browser(&root).is_err());
+    }
+    let calls = fs::read_to_string(root.join(".cache/browser-build-calls")).unwrap();
+    assert_eq!(calls.matches("make browser-deps").count(), 1, "{calls}");
+    assert_eq!(calls.matches("cargo build --locked --release").count(), 2);
+}

@@ -123,7 +123,7 @@ pub(crate) fn check(
     let stored = fs::read(&report_path)
         .ok()
         .and_then(|v| serde_json::from_slice::<CheckReport>(&v).ok());
-    let report = if let Some(mut report) = stored {
+    let mut report = if let Some(mut report) = stored {
         report.passed &= passed;
         report
     } else if focused {
@@ -136,6 +136,11 @@ pub(crate) fn check(
         );
         override_report(&output, passed)
     };
+    if !focused {
+        // Explicit main-session checks decide red/green solely by normal exit status.
+        report.passed = passed;
+        report.unavailable = None;
+    }
     if let Some(reason) = &report.unavailable {
         return Err(format!("check could not complete: {reason}\n{tail}"));
     }

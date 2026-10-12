@@ -1,5 +1,5 @@
 //! Dockerized checks of tester-selected packages/specs, with named local results.
-use super::{runner, tree};
+use super::{browser, output, runner, tree};
 use crate::{
     process::{Cancellation, CaptureExit, capture_command, capture_command_retaining_stdout},
     ship::git,
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::Path,
     process::Command,
     time::Duration,
@@ -172,11 +172,7 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     };
     if !scope.packages.is_empty() {
         let log = cache.join("nextest.jsonl");
-        let mut file = NextestOutput {
-            file: fs::File::create(&log).map_err(|e| e.to_string())?,
-            total: 0,
-            line: 0,
-        };
+        let mut file = output::JsonOutput::create(&log, "nextest").map_err(|e| e.to_string())?;
         let mut command = Command::new("cargo");
         command
             .args(scope.cargo_args())
@@ -229,6 +225,7 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         if report_path.exists() {
             fs::remove_file(&report_path).map_err(|e| e.to_string())?;
         }
+        browser::dependencies(root, cache)?;
         browser_build(root)?;
         let previous = std::env::current_dir().map_err(|e| e.to_string())?;
         std::env::set_current_dir(root).map_err(|e| e.to_string())?;
@@ -258,42 +255,9 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     Ok(report)
 }
 
-struct NextestOutput {
-    file: fs::File,
-    total: usize,
-    line: usize,
-}
-impl Write for NextestOutput {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if self.total + bytes.len() > 16 * 1024 * 1024 {
-            return Err(io::Error::other(
-                "nextest JSON total limit exceeded (16 MiB)",
-            ));
-        }
-        let mut line = self.line;
-        for &byte in bytes {
-            if byte == b'\n' {
-                line = 0;
-            } else {
-                line += 1;
-            }
-            if line > 1024 * 1024 {
-                return Err(io::Error::other("nextest JSON line limit exceeded (1 MiB)"));
-            }
-        }
-        self.file.write_all(bytes)?;
-        self.total += bytes.len();
-        self.line = line;
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        self.file.flush()
-    }
-}
 pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
     let value: serde_json::Value =
-        serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        serde_json::from_slice(&output::read(path, "Playwright")?).map_err(|e| e.to_string())?;
     fn walk(v: &serde_json::Value, parents: &str, report: &mut CheckReport) {
         if let Some(specs) = v["specs"].as_array() {
             for spec in specs {
@@ -309,7 +273,11 @@ pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
                         report.locations.insert(
                             name.clone(),
                             (
-                                format!("browser/tests/{file}"),
+                                if file.starts_with("tests/") {
+                                    format!("browser/{file}")
+                                } else {
+                                    format!("browser/tests/{file}")
+                                },
                                 spec["line"].as_u64().unwrap_or(0) as usize,
                             ),
                         );
@@ -371,7 +339,6 @@ fn browser_build(root: &Path) -> git::Result<()> {
                 "target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm",
             ],
         ),
-        ("make", vec!["browser-deps"]),
     ] {
         let mut command = Command::new(program);
         command

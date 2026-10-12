@@ -14,13 +14,10 @@ fn unrelated_red_failures_are_refused_without_launching_the_implementer() {
     let _lock = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for overridden in [false, true] {
+    {
         let (_temp, root) = fixture("true");
         let (_env, mut options) = setup(&root, "happy");
         options.rounds = 1;
-        if overridden {
-            options.check = Some("make duel-check".into());
-        }
         fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
         fs::write(root.join("Makefile"), "duel-check:\n\t@echo '{\"passed\":false,\"tests\":[\"aoe-x::other$$existing\"],\"failed\":[\"aoe-x::other$$existing\"],\"untouched\":[]}' > .cache/duel/check.json\n\t@exit 1\n").unwrap();
         run(&root, &["add", "Makefile"]);

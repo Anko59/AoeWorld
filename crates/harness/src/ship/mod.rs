@@ -6,6 +6,7 @@
 //! The agent policy denies `git push` and `gh pr create` to every role.
 mod describe;
 mod duel;
+pub(crate) use duel::output::JsonOutput;
 pub(crate) mod evidence;
 pub(crate) mod git;
 mod github;

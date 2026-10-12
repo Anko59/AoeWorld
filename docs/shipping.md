@@ -183,10 +183,13 @@ that message immediately, keeping the tests commit and working changes.
 
 `DUEL_ROUNDS` defaults to 2 and accepts 1–4 total rounds. Later tester runs
 attack the implementation; no new test or a passing attack ends successfully
-and passing attack edits are discarded. A check with only unrelated failing
+and passing attack edits are discarded. A default check with only unrelated failing
 tests is treated like passing tests, and the summary names those failures.
 Round one's empty or passing tests fail. Role violations restore to the last
-driver commit and name offending paths. Exhausted green attempts keep the tests
+driver commit and name offending paths. Implementers may change production lines
+in a file containing inline tests, but cannot change any line in an item under
+a `cfg` mentioning `test`, or add/remove a `#[test]`-style attribute. Testers
+still edit test files only. Exhausted green attempts keep the tests
 commit and working changes for the main session to finish. A launch timeout is
 a failure, never red evidence.
 
@@ -200,14 +203,19 @@ stop before the implementer launches and require `DUEL_CHECK` (for example
 one failing test belongs to a tester-changed file, matched by nextest binary id
 or module path, or browser test location; green means every selected check passes.
 `DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
+For an explicit override, a normal nonzero exit is red and exit zero is green;
+named failures are reported when available but are not required, including
+for fuzz runtime crashes. The main session chooses this check and its scope.
 Both role prompts name the exact check and forbid preflight or whole-suite runs;
-the driver and `make ship` own wider gates. Retained nextest JSON is limited to
-16 MiB total and 1 MiB per line; exceeding either makes the check unavailable.
+the driver and `make ship` own wider gates. Browser dependencies are prepared on
+the first browser check and reused for subsequent checks and baseline exports
+during that duel. Retained nextest and Playwright JSON are limited to 16 MiB
+total and 1 MiB per line; exceeding either makes the check unavailable.
 Each agent and check gets `DUEL_BUDGET_MINUTES` (default 60); the process group
 is killed on expiry.
 
-A green failure is compared with the original pre-duel revision when all failed
-tests are demonstrably untouched. If those same tests fail there, the driver
+A default focused green failure is compared with the original pre-duel revision
+when all failed tests are demonstrably untouched. If those same tests fail there, the driver
 records `pre-existing failure: <names>` and commits without relaunching the
 implementer. Unknown/build failures or changed tests cannot receive this exemption.
 The focused check still reports FAIL; the summary records the exception.
@@ -238,7 +246,7 @@ description's "For AI" part and into the facts every reviewer reads:
 - each commit classified as tests-only, product, mixed or other, where product
   code is any non-test file under `crates/` except `crates/harness/`; changed
   lines that all lie inside `#[cfg(test)]` items of a product file count as
-  test changes (brace counting, not parsing), and such files are listed, since
+  test changes (Rust token and item spans), and such files are listed, since
   the rule is tests in test files; a merge is listed as `merge (<kind>)` from
   its diff against its first parent;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,

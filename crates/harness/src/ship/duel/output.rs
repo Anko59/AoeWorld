@@ -1,0 +1,75 @@
+//! Bounded JSON retention shared by nextest and focused Playwright checks.
+use std::{
+    fs,
+    io::{self, Read, Write},
+    path::Path,
+};
+
+const TOTAL: usize = 16 * 1024 * 1024;
+const LINE: usize = 1024 * 1024;
+
+pub(crate) struct JsonOutput {
+    file: fs::File,
+    label: &'static str,
+    total: usize,
+    line: usize,
+}
+impl JsonOutput {
+    pub(crate) fn create(path: &Path, label: &'static str) -> io::Result<Self> {
+        Ok(Self {
+            file: fs::File::create(path)?,
+            label,
+            total: 0,
+            line: 0,
+        })
+    }
+}
+impl Write for JsonOutput {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.total + bytes.len() > TOTAL {
+            return Err(io::Error::other(format!(
+                "{} JSON total limit exceeded (16 MiB)",
+                self.label
+            )));
+        }
+        let mut line = self.line;
+        for &byte in bytes {
+            if byte == b'\n' {
+                line = 0;
+            } else {
+                line += 1;
+            }
+            if line > LINE {
+                return Err(io::Error::other(format!(
+                    "{} JSON line limit exceeded (1 MiB)",
+                    self.label
+                )));
+            }
+        }
+        self.file.write_all(bytes)?;
+        self.total += bytes.len();
+        self.line = line;
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
+
+pub(super) fn read(path: &Path, label: &str) -> Result<Vec<u8>, String> {
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > TOTAL as u64 {
+        return Err(format!("{label} JSON total limit exceeded (16 MiB)"));
+    }
+    let mut bytes = Vec::new();
+    file.take(TOTAL as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() > TOTAL {
+        return Err(format!("{label} JSON total limit exceeded (16 MiB)"));
+    }
+    if bytes.split(|b| *b == b'\n').any(|line| line.len() > LINE) {
+        return Err(format!("{label} JSON line limit exceeded (1 MiB)"));
+    }
+    Ok(bytes)
+}

@@ -1,6 +1,7 @@
 //! Main-session driver: a tester's red tests, then an implementer's green code.
 mod authored;
 mod baseline;
+mod browser;
 mod config;
 #[cfg(test)]
 #[path = "tests/fixes.rs"]
@@ -9,6 +10,7 @@ pub(crate) mod focus;
 #[cfg(test)]
 #[path = "tests/focus.rs"]
 mod focus_tests;
+pub(crate) mod output;
 mod runner;
 mod scope;
 mod specs;
@@ -37,6 +39,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
 pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     let subject = git::subject(&root)?;
+    browser::reset(&root)?;
     let mut summary = format!(
         "# Duel: {}\n\nBranch: {}\nRuntime: {} / {}\n",
         task.lines().next().unwrap_or("Task"),
@@ -115,8 +118,9 @@ fn rounds(
             if red_report.passed { "PASS" } else { "FAIL" },
             runner::names(&red_report)
         ));
-        let authored_red =
-            red_report.build_failed || authored::has_failure(root, &paths, &red_report)?;
+        let authored_red = options.check.is_some()
+            || red_report.build_failed
+            || authored::has_failure(root, &paths, &red_report)?;
         if red_report.passed || !authored_red {
             tree::restore(root, &head)?;
             let unrelated = if red_report.passed {
@@ -170,14 +174,7 @@ fn rounds(
             }
             let checked = runner::check(root, options, command, options.check.is_none());
             tree::validate(root, false, &tests, branch)?;
-            let (mut checked, tail) = checked?;
-            if options.check.is_some()
-                && !checked.build_failed
-                && checked.untouched.is_empty()
-                && !checked.failed.is_empty()
-            {
-                checked.untouched = baseline::override_untouched(root, &head, &checked.failed)?;
-            }
+            let (checked, tail) = checked?;
             summary.push_str(&format!(
                 "green: {} (attempt {attempt}); tests: {}\n{tail}\n",
                 if checked.passed { "PASS" } else { "FAIL" },
@@ -187,18 +184,15 @@ fn rounds(
                 green = true;
                 break;
             }
-            if !checked.build_failed
+            if options.check.is_none()
+                && !checked.build_failed
                 && checked.unavailable.is_none()
                 && !checked.failed.is_empty()
                 && checked.failed.iter().all(|n| checked.untouched.contains(n))
             {
                 let baseline_command = format!("{command} HARNESS_DUEL_REVISION={pre_duel}");
-                let (baseline, baseline_tail) = if options.check.is_none() {
-                    runner::check(root, options, &baseline_command, true)?
-                } else {
-                    let temporary = baseline::export(root, &pre_duel)?;
-                    runner::check(temporary.path(), options, command, false)?
-                };
+                let (baseline, baseline_tail) =
+                    runner::check(root, options, &baseline_command, true)?;
                 summary.push_str(&format!(
                     "Pre-duel comparison: {}\n{baseline_tail}\n",
                     runner::names(&baseline)
