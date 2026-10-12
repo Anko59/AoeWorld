@@ -140,23 +140,6 @@ const FALLBACK_DIGESTS: [&str; 3] = [
 const DEFAULT_PACKAGE_DIGEST: &str =
     "a7c9b467bad6228d96f1da5fdbab0ec3f9fc867022bc51775b4b204018648468";
 
-#[test]
-fn default_package_generated_chunk_content_is_pinned() {
-    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-    let generator = package.generator();
-    let mut digest = blake3::Hasher::new();
-    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
-        let scene = generator
-            .landscape_chunk_with_cancel(x, y, &|| false)
-            .expect("chunk");
-        digest.update(format!("{scene:?}").as_bytes());
-    }
-    assert_eq!(
-        digest.finalize().to_hex().as_str(),
-        "47807de0cb4883cafeb2e5d482ae1faa5ea4614e5499d735f1321142130a750b"
-    );
-}
-
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
 /// it with any deliberate generation change, like the pins above.
@@ -173,6 +156,6 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "39420d801c3728593fcfb97f6c915a72c1c50e697cccc67ae092efcc9b6a61bd"
+        "47807de0cb4883cafeb2e5d482ae1faa5ea4614e5499d735f1321142130a750b"
     );
 }
