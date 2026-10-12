@@ -15,9 +15,8 @@ pub use topology::TerrainFrameTopology;
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
 pub const MAX_REVIEWED_FRAMES: u32 = 1_467;
 
-/// Paving 15018 is not natural rock. No imported rock sheet is approved.
-pub const NATURAL_ROCK_FALLBACK: &str =
-    "procedural neutral natural-rock ground; never substitute paved terrain 15018";
+/// Paving 15018 is not natural rock. Neutral rock uses gravel or dirt detail.
+pub const NATURAL_ROCK_FALLBACK: &str = "procedural neutral rock over gravel 15017 or dirt detail; never substitute paved terrain 15018";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AssetRole {

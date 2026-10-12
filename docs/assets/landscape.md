@@ -95,10 +95,10 @@ selection: none stands on rock, snow or ice. Mineral deposits are retained.
 Paved terrain 15018 is deliberately removed from the reviewed natural-rock
 role, following the user's identified semantic mismatch. Its local metadata
 still contains 100 contiguous 97×49 frames, hotspot (0,0); that does not make it
-natural rock. No substitute rock sheet is approved. The catalog explicitly
-requires procedural neutral natural-rock ground, never another unrelated sheet.
-Renderer integration and appearance are owned separately; this stage does not
-claim a new paving pixel review or a verified running-game fallback.
+natural rock. Bare rock and scree use the reviewed pebbly gravel sheet 15017
+(group ten), with a neutral grey procedural tint that retains pebble contrast.
+A pack without gravel falls back to dirt detail. The scene material stays rock,
+so grass and snow blend over it through the shared ground mixer on all backends.
 
 ## Explicit topology contract
 

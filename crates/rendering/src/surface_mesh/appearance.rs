@@ -242,7 +242,7 @@ pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
-    // Snow and ice use terrain group 11; rock uses dirt detail, never paving.
+    // Snow and ice use terrain group 11; natural rock uses gravel, else dirt.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
     // deep and ford shallows use their optional sheet (groups 13-15), else
@@ -260,6 +260,7 @@ pub(crate) fn terrain_group(
     }
     let material = usize::from(match material {
         7 | 8 if !art.terrain[11].is_empty() => 11,
+        4 if !art.terrain[10].is_empty() => 10,
         4 | 7 | 9 => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
