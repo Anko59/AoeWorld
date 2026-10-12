@@ -1,6 +1,7 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 pub(crate) mod contracts;
 mod paths;
+pub(crate) mod placement;
 pub(crate) mod policy;
 pub(crate) mod registry;
 pub(crate) mod review;

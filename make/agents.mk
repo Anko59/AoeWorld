@@ -16,3 +16,20 @@ agent-smoke:
 	@test -n '$(RUNTIME)' || { echo 'usage: make agent-smoke RUNTIME=claude|codex|dsh|pi' >&2; exit 2; }
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' agent-smoke --runtime '$(RUNTIME)'
+
+# Focused native coverage; counters and compiler outputs stay in target/.
+.PHONY: test-placement-coverage
+test-placement-coverage: coverage-tools
+	@mkdir -p reports/placement
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked -p aoe-harness --no-report -E 'test(gates::placement::tests::)'
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov run --locked -p aoe-harness --no-report -- test-placement
+	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/placement/coverage.lcov
+
+test-placement:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-placement
+
+hooks-install:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
+
+hooks-check:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check

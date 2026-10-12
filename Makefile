@@ -21,8 +21,9 @@ GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT
 HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),-v $(HARNESS_CARGO_CACHE):$(ROOT)/.cache/cargo) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),-v $(HARNESS_TARGET_CACHE):$(ROOT)/target)
+TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
 ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT) $(CACHE_MOUNTS)
-DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+DOCKER_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS $(TMP_MOUNT) -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
@@ -82,7 +83,7 @@ HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
 HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
 override SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
 help:
 	@echo 'AoeWorld'
@@ -90,6 +91,7 @@ help:
 	@echo '  make doctor          Check toolchain availability'
 	@echo '  make fmt-check       Check Rust formatting without changing files'
 	@echo '  make fmt             Format Rust files'
+	@echo '  make test-placement  Reject additions to inline Rust tests'
 	@echo '  make structure-check Check tracked file and directory limits'
 	@echo '  make architecture-check Check crate boundaries and source rules'
 	@echo '  make docs-check      Check gate table and local documentation links'
@@ -194,12 +196,6 @@ bootstrap: orchestrator-tools browser-deps
 
 doctor:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- doctor
-
-hooks-install:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
-
-hooks-check:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
 
 include make/agents.mk make/ship.mk make/qualification.mk
 
