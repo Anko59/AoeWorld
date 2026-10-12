@@ -211,8 +211,9 @@ unrelated biomes inside real forest.
 
 ### Shorelines and shore band
 
-Water is never read as raw source cells. Prepared categorical coverage (128
-samples in overview packages), modeled vector hydrology and the seeded
+Lakes and seas are never read as raw source cells. Rivers use
+[persisted source lines and playable fords](../rivers.md). Prepared categorical coverage (128
+samples in overview packages), modeled lake/ocean hydrology and the seeded
 no-source lake and river blocks all pass through one deterministic shaping
 step (`crates/map/src/terrain/shoreline.rs`). A tile reads the grid at a
 mildly warped position, blends the wet/dry state of its four surrounding
@@ -232,7 +233,7 @@ These are modelling choices, not observed geography:
 | Warp | One bilinear octave per axis on a 16-tile lattice, at most 2.5 tiles and 0.65 cells; it gives few-tile cells (30 km maps) a visible bend |
 | Shoreline reach | At most `0.42 * cell + 2.5` tiles from the half-wet contour of the source cells: under one cell from five-tile cells up |
 | Diagonal cell pairs | Joined by a ridge so rasterised channels are not cut at corners |
-| Beach and bank | Passable land within one to three tiles of water (always one, usually two, three where the band widens): sand beside lake, ocean or shallow water, mud beside rivers; rock, snow and ice shores keep their material |
+| Beach and bank | Passable land has sand within one to three tiles of lake, ocean or shallow water (always one, usually two, three where the band widens); river banks use textured dirt in a noisy one-to-two-tile band; rock, snow and ice shores keep their material |
 | Shallow rim | Lake or ocean water within one or two tiles of land takes the `Shore` material while keeping its water kind |
 | Medium water | Lake or ocean water whose nearest land is beyond the rim and within five, six or seven tiles (varying along the shore) keeps the `Water` material |
 | Deep water | Lake or ocean water with no land within that medium reach takes the `DeepWater` material |
@@ -240,7 +241,7 @@ These are modelling choices, not observed geography:
 
 The warped segments joining four-adjacent wet cell centres lie in the
 protected core, wide enough that the nearest tile row is always water, so
-source lakes and rivers stay connected; detached ponds or islets may appear
+source lake cells stay connected; detached ponds or islets may appear
 only inside the shoreline reach. Modeled water
 keeps its surface level, kind and provenance from the wet cell that owns the
 tile; a water corner rounded off the model falls back to categorical coverage.
@@ -250,10 +251,10 @@ start search and navigation. The shore band is composition: the beach and
 bank clear canopy, forest floor, trees and decorations like any other
 reservation and change only material. Water depth, including the shallow rim,
 changes only material: kind, provenance, heights and passability are preserved.
-The land band is walkable; water, including `Shore` water, is not. The renderer
-draws `Shore`, `Water` and `DeepWater` with their own water sheets
-(see [landscape art](../../assets/landscape.md)). `Ford` has renderer wiring,
-but no terrain generator emits it yet; ford generation is separate river work.
+The land band and generated river fords are walkable; ordinary water,
+including `Shore` water, is not. The renderer draws `Shore`, `Water`,
+`DeepWater` and `Ford` with their own water sheets
+(see [landscape art](../../assets/landscape.md)).
 
 ### Tree visual families
 

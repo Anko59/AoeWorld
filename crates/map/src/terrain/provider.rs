@@ -9,6 +9,7 @@ use aoe_core::TileCoord;
 
 mod helpers;
 mod history;
+pub(super) mod rivers;
 pub(super) mod water;
 mod water_model;
 
@@ -79,11 +80,21 @@ pub(super) fn sample_base_tile_with_cliff(
     if water == WaterKind::None && source_corners.is_some() && cliff(tile)?.is_some() {
         surface_kind.kind = surface::SurfaceKind::Cliff;
     }
-    let material = match water {
-        WaterKind::None => material_for(biome.0, geographic_height_centimeters),
-        WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
-        WaterKind::Shallow => GroundMaterial::Shore,
+    let ford = sample.ford && surface_kind.walkable();
+    let material = if ford {
+        GroundMaterial::Ford
+    } else {
+        match water {
+            WaterKind::None => material_for(biome.0, geographic_height_centimeters),
+            WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
+            WaterKind::Shallow => GroundMaterial::Shore,
+        }
     };
+    generator
+        .river_queries
+        .lock()
+        .map_err(|_| EnvironmentPageError::Unavailable)?
+        .insert_water(tile, water);
     Ok(Tile {
         geographic_height_centimeters,
         game_height_level,
@@ -96,7 +107,7 @@ pub(super) fn sample_base_tile_with_cliff(
         water_provenance,
         hydrology_observation,
         modern_land_cover_class,
-        passable: water == WaterKind::None
+        passable: (water == WaterKind::None || ford)
             && material != GroundMaterial::Ice
             && surface_kind.walkable(),
     })

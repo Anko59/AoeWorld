@@ -20,14 +20,21 @@ pub(super) fn load_page(
         return Err(EnvironmentPageError::Corrupt);
     }
     if let EnvironmentPage::HydrologyEvidence(hydrology) = page.as_ref() {
-        let index = generator
-            .provider_environment
-            .as_ref()
-            .and_then(|environment| environment.hydrology_evidence.as_ref())
-            .ok_or(EnvironmentPageError::Corrupt)?;
-        index
-            .validate_page(hydrology, generator.width_tiles as u64)
-            .map_err(|_| EnvironmentPageError::Corrupt)?;
+        let mut cache = generator
+            .river_queries
+            .lock()
+            .map_err(|_| EnvironmentPageError::Unavailable)?;
+        if !cache.validated(key, &page) {
+            let index = generator
+                .provider_environment
+                .as_ref()
+                .and_then(|environment| environment.hydrology_evidence.as_ref())
+                .ok_or(EnvironmentPageError::Corrupt)?;
+            index
+                .validate_page(hydrology, generator.width_tiles as u64)
+                .map_err(|_| EnvironmentPageError::Corrupt)?;
+            cache.remember_validated(key, &page);
+        }
     }
     Ok(page)
 }

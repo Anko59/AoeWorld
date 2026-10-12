@@ -399,7 +399,9 @@ fn page_dimensions(page: &EnvironmentPage) -> (u8, u8) {
 }
 
 fn touch(order: &mut VecDeque<EnvironmentPageKey>, key: EnvironmentPageKey) {
-    if let Some(index) = order.iter().position(|candidate| *candidate == key) {
+    // Terrain repeatedly reads the newest few pages. Search from that end
+    // without changing the unique-key LRU order or its residency bound.
+    if let Some(index) = order.iter().rposition(|candidate| *candidate == key) {
         order.remove(index);
     }
     order.push_back(key);

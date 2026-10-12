@@ -47,7 +47,20 @@ impl MapChunkGenerator {
             return Ok(None);
         }
         if self.provider.is_some() {
-            provider::water::water_kind(self, tile, cancelled).map(Some)
+            if let Some(kind) = self
+                .river_queries
+                .lock()
+                .map_err(|_| EnvironmentPageError::Unavailable)?
+                .water(tile)
+            {
+                return Ok(Some(kind));
+            }
+            let kind = provider::water::water_kind(self, tile, cancelled)?;
+            self.river_queries
+                .lock()
+                .map_err(|_| EnvironmentPageError::Unavailable)?
+                .insert_water(tile, kind);
+            Ok(Some(kind))
         } else {
             Ok(Some(self.dense_water(tile).0))
         }

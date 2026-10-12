@@ -164,7 +164,21 @@ pub(crate) fn minimap_raster(
                 .landscape_point_with_cancel(TileCoord::new(tile_x, tile_y), cancelled)
                 .map_err(MinimapError::Page)?
                 .ok_or(MinimapError::OutsideMap)?;
-            classes.push(classify(&point));
+            let mut class = classify(&point);
+            if !matches!(
+                class,
+                MinimapClass::Ocean | MinimapClass::Lake | MinimapClass::River
+            ) && generator
+                .river_within_with_cancel(
+                    TileCoord::new(tile_x, tile_y),
+                    (tiles_per_side.div_ceil(u64::from(samples)) * 181).div_ceil(256) as i32,
+                    cancelled,
+                )
+                .map_err(MinimapError::Page)?
+            {
+                class = MinimapClass::River;
+            }
+            classes.push(class);
             heights.push(point.tile.terrain.geographic_height_centimeters);
         }
     }

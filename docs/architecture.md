@@ -41,7 +41,9 @@ views remain bounded rather than allocating in proportion to map area.
 The minimap and whole-map overview draw one strategic raster per package from
 `GET /maps/{hash}/minimap`. The server samples the composed landscape query
 that also produces chunks, at one sample per tile up to 512 per axis, so the
-raster cannot disagree with the world. The body is `AWMM`, a little-endian
+raster follows the world. Persisted river lines are additionally tested against
+each pixel footprint so narrow rivers stay visible at strategic scale; physical
+channels retain their tile-scale widths. The body is `AWMM`, a little-endian
 axis, two zero bytes and one byte per sample: terrain class (grass, dry grass,
 forest, soil, sand, rock, snow, ice, shore, river, lake, ocean) in the low
 nibble and north-west relief shade in the high nibble, at most 262,152 bytes.

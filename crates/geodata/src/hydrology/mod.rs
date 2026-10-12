@@ -163,13 +163,14 @@ impl PreparedHydrology {
         let provenance = modeled.map(|(_, provenance)| provenance);
         Ok(match kind {
             HydrologyKind::Ocean => Some((100, 0)),
-            HydrologyKind::Lake | HydrologyKind::River => Some((0, 100)),
+            HydrologyKind::Lake => Some((0, 100)),
             HydrologyKind::Land
                 if provenance == Some(WaterModelProvenance::GeographicCorrection) =>
             {
                 Some((0, 0))
             }
-            HydrologyKind::Land
+            HydrologyKind::River
+            | HydrologyKind::Land
             | HydrologyKind::Shallow
             | HydrologyKind::Reservoir
             | HydrologyKind::UnknownWater

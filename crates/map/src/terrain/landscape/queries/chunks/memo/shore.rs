@@ -1,6 +1,6 @@
 //! Shore band and water depth from shaped physical water. Modelling choices,
 //! not geography: land within one to three tiles of open water is beach
-//! (sand) or river bank (mud); lake or ocean water within one or two tiles of
+//! (sand) or river bank (textured dirt); lake or ocean water within one or two tiles of
 //! land is a shallow rim, medium water reaches five to seven tiles from land
 //! and everything beyond is deep. All widths vary smoothly along the shore so
 //! no band is a constant-width outline. Rivers keep their kind to the bank:
@@ -14,7 +14,7 @@ pub(in super::super) enum Shore {
     None,
     /// Walkable sand beside lake, ocean or shallow water.
     Beach,
-    /// Walkable mud beside river water.
+    /// Walkable textured ground beside river water.
     Bank,
     /// Lake or ocean water near land.
     Shallow,
@@ -118,6 +118,9 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         let Some(base) = self.base(position)? else {
             return Ok(Shore::None);
         };
+        if base.material == crate::GroundMaterial::Ford {
+            return Ok(Shore::None);
+        }
         let neighbor =
             |dx: i32, dy: i32| match (position.x.checked_add(dx), position.y.checked_add(dy)) {
                 (Some(x), Some(y)) => self.water(TileCoord::new(x, y)),
@@ -139,13 +142,15 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     return Ok(Shore::None);
                 }
                 let reach = width(6, -350, 350);
+                let bank = width(23, 0, i64::MAX);
                 for (dx, dy, distance) in BAND {
                     if distance > reach {
                         break;
                     }
                     match neighbor(dx, dy)? {
                         None | Some(WaterKind::None) => {}
-                        Some(WaterKind::River) => return Ok(Shore::Bank),
+                        Some(WaterKind::River) if distance <= bank => return Ok(Shore::Bank),
+                        Some(WaterKind::River) => {}
                         Some(_) => return Ok(Shore::Beach),
                     }
                 }

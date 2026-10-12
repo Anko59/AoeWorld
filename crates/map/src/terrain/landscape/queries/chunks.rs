@@ -144,7 +144,7 @@ impl MapChunkGenerator {
             memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
             shore if base.passable && soft_ground(terrain.material) => {
                 terrain.material = if shore == memo::Shore::Bank {
-                    GroundMaterial::Mud
+                    GroundMaterial::Dirt
                 } else {
                     GroundMaterial::Sand
                 };
@@ -222,6 +222,7 @@ impl MapChunkGenerator {
         }
         if resource.is_none()
             && base.passable
+            && base.water == crate::WaterKind::None
             && !matches!(
                 sample.historical_land_use,
                 LandUse::Crop | LandUse::Grazing | LandUse::Nonland
