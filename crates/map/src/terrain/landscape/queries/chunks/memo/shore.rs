@@ -32,7 +32,7 @@ const BAND_LIMIT: i32 = 50;
 const BAND: [(i32, i32, i32); 160] = band();
 /// Squared reach of a narrow, ordinary and wide band: one tile, two tiles or
 /// a knight's step, three tiles or a (3, 1) step.
-const REACH: [i32; 3] = [2, 5, 10];
+const REACH: [i32; 3] = [2, shoreline::RIVER_BANK_MAX_DISTANCE_SQUARED, 10];
 /// Squared reach of medium water: five, six or seven tiles from land.
 const MEDIUM: [i32; 3] = [25, 36, BAND_LIMIT];
 const WIDTH_LATTICE_TILES: i64 = 9;

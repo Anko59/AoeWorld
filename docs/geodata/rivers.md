@@ -110,3 +110,8 @@ unchanged.
 Exact river composition stops promoting river evidence cells to categorical
 lake coverage. Regenerate packages at this terrain stage so lake coverage
 continues to identify lakes while source lines provide the river footprint.
+
+Cliff cells reserve the widest river-bank halo as well as physical water. The
+shared dense/provider check runs before terrain promotion and cliff decoration;
+river and ford tiles and their textured dirt banks stay free of cliff cells.
+Ground variety still skips bank tiles and continues on unreserved dry ground.

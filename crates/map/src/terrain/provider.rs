@@ -133,7 +133,7 @@ fn cliff_from_corners(
     let piece = super::relief::cliff_at(generator, tile, compression, &|x, y| {
         sample_bilinear_elevation(generator, x, y, samples, AxisPosition::Corner, cancelled)
     })?;
-    if piece.is_some() && !generator.cliff_cell_is_dry(tile, cancelled)? {
+    if piece.is_some() && !generator.cliff_cell_is_available(tile, cancelled)? {
         return Ok(None);
     }
     Ok(piece)

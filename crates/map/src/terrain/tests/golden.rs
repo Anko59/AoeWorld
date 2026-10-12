@@ -139,7 +139,7 @@ const FALLBACK_DIGESTS: [&str; 3] = [
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "dc33f5b62f387127c1cd223c087314baf33b02e6c0a482234d6f7eea5a0e6cc0";
+    "b9d34c9737e6c76eac169b8e9d5ab228f78d5a20c28b3cc1494253a843803dbf";
 
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
@@ -157,7 +157,7 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "64516dc8e1ee59516bd8fe18d7f06531d72381ab43551810a1cd4f95137d6802"
+        "42465681c9997c20aa4f697d7900d85a388b8f2be9fe2f73c8b5ea967afecf0f"
     );
 }
 
