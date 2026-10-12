@@ -33,9 +33,24 @@ pub(super) enum Outcome {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Action {
-    Open { title: String, body: String },
-    Comment { number: u64, body: String },
-    Close { number: u64, comment: String },
+    Open {
+        title: String,
+        body: String,
+    },
+    Comment {
+        number: u64,
+        body: String,
+    },
+    Close {
+        number: u64,
+        comment: String,
+    },
+    /// Replace the body of the open issue `number`, re-marked for `title`.
+    Update {
+        number: u64,
+        title: String,
+        body: String,
+    },
 }
 
 pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
@@ -53,22 +68,7 @@ pub(super) fn triage(root: &Path, raw: &str, run_id: Option<&str>) -> Result<()>
     let run = run_link(&target.repo, run_id);
     let mut problems = Vec::new();
     for action in plan(&results, &target.issues, &run) {
-        let done = match &action {
-            Action::Open { title, body } => {
-                target.create(root, title, &[NIGHTLY_LABEL.to_owned()], body)
-            }
-            Action::Comment { number, body } => target.gh(
-                root,
-                &["issue", "comment", &number.to_string(), "--body", body],
-                None,
-            ),
-            Action::Close { number, comment } => target.gh(
-                root,
-                &["issue", "close", &number.to_string(), "--comment", comment],
-                None,
-            ),
-        };
-        match done {
+        match apply(&target, root, &action) {
             Ok(_) => println!("nightly-triage: {action:?}"),
             Err(error) => problems.push(format!("{action:?}: {error}")),
         }
@@ -77,6 +77,37 @@ pub(super) fn triage(root: &Path, raw: &str, run_id: Option<&str>) -> Result<()>
         return Ok(());
     }
     Err(format!("nightly-triage: {}", problems.join("; ")).into())
+}
+
+/// Carry out one planned action on origin's repository.
+pub(super) fn apply(target: &Target, root: &Path, action: &Action) -> Result<String> {
+    match action {
+        Action::Open { title, body } => {
+            target.create(root, title, &[NIGHTLY_LABEL.to_owned()], body)
+        }
+        Action::Comment { number, body } => target.gh(
+            root,
+            &["issue", "comment", &number.to_string(), "--body", body],
+            None,
+        ),
+        Action::Close { number, comment } => target.gh(
+            root,
+            &["issue", "close", &number.to_string(), "--comment", comment],
+            None,
+        ),
+        Action::Update {
+            number,
+            title,
+            body,
+        } => {
+            let marked = super::marked_body(body, title)?;
+            target.gh(
+                root,
+                &["issue", "edit", &number.to_string(), "--body-file", "-"],
+                Some(marked.as_bytes()),
+            )
+        }
+    }
 }
 
 /// The `needs` context: at most 64 KiB, 64 jobs with GitHub job ids, each
@@ -120,15 +151,19 @@ pub(super) fn title(job: &str) -> String {
 /// Only an issue this command opened: the bot's, labelled, titled for `job`
 /// and with the last fingerprint marker matching that title.
 pub(super) fn owned(issue: &Issue, job: &str) -> bool {
-    let title = title(job);
+    owned_titled(issue, &title(job))
+}
+
+/// The same rules for any bot-opened nightly issue with exactly `title`.
+pub(super) fn owned_titled(issue: &Issue, title: &str) -> bool {
     issue.author == BOT
         && issue.title == title
         && issue.has_label(NIGHTLY_LABEL)
-        && issue.fingerprint_marker.as_deref() == Some(fingerprint(&title).as_str())
+        && issue.fingerprint_marker.as_deref() == Some(fingerprint(title).as_str())
 }
 
 /// The run on origin's repository (`host/owner/name`), never GITHUB_REPOSITORY.
-fn run_link(repo: &str, run_id: Option<&str>) -> String {
+pub(super) fn run_link(repo: &str, run_id: Option<&str>) -> String {
     match run_id.filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())) {
         Some(id) => format!("https://{repo}/actions/runs/{id}"),
         None => "a run without a GITHUB_RUN_ID".into(),

@@ -64,3 +64,22 @@ fn duel_and_its_variables_belong_only_to_main() {
     );
     allowed(&fixture, Role::Main, "DUEL_RUNTIME=codex make duel");
 }
+
+#[test]
+fn every_role_reads_metrics_but_only_the_main_session_files_regressions() {
+    let fixture = Fixture::new();
+    for role in [
+        Role::Main,
+        Role::Tester,
+        Role::Implementer,
+        Role::Reviewer,
+        Role::Other,
+    ] {
+        allowed(&fixture, role, "make metrics");
+    }
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer] {
+        allowed(&fixture, role, "make metrics METRICS_REV=HEAD~1");
+        denied(&fixture, role, "make metric-regressions");
+    }
+    allowed(&fixture, Role::Main, "make metric-regressions");
+}

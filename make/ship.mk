@@ -10,9 +10,9 @@
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS METRICS_REV
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: duel duel-check ship ship-status review review-floor review-calibrate review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
+.PHONY: duel duel-check ship ship-status review review-floor review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -59,6 +59,14 @@ next:
 # `needs` context JSON, reaches the harness through the environment only.
 nightly-triage:
 	@.agents/hooks/harness.sh exec nightly-triage
+
+# The nightly workflow's metric comparison (docs/issues.md): one bot-owned issue.
+metric-regressions:
+	@.agents/hooks/harness.sh exec metric-regressions
+
+# The metrics snapshot of HEAD, or of METRICS_REV (docs/shipping.md); read-only.
+metrics:
+	@.agents/hooks/harness.sh exec metrics
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:

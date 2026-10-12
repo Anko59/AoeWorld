@@ -57,6 +57,10 @@ pub(crate) enum Commands {
     ShowcaseCheck,
     /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
     NightlyTriage,
+    /// Open, update or close the nightly issue for metric regressions.
+    MetricRegressions,
+    /// Write and print the metrics snapshot of HEAD or METRICS_REV.
+    Metrics,
     /// Pre-push: succeed only if `make ship` evidence covers the pushed HEAD.
     PrepushEvidence,
 }
@@ -167,6 +171,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::Issue => issues::issue(&root),
         Commands::Next => issues::next(&root),
         Commands::NightlyTriage => issues::triage::execute(&root),
+        Commands::MetricRegressions => issues::regressions::execute(&root),
+        Commands::Metrics => Ok(metrics::snapshot::command(&root)?),
     }
 }
 

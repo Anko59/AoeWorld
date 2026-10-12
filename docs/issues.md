@@ -84,3 +84,27 @@ subagent, and the harness refuses any other `AOE_AGENT_ROLE`. Run locally, it
 acts as the person's account: the issues it opens are not the bot's, so CI
 never comments on or closes them. Use it locally only to rehearse, and close
 what it opened.
+
+## Nightly metric regressions
+
+The same `triage` job runs `make metric-regressions`
+(`crates/harness/src/ship/issues/regressions.rs`) after the failure triage
+(`if: always()`, a full-history checkout). It compares the static metrics
+([shipping](shipping.md#metrics)) of dev's HEAD with dev as of
+`window_hours` earlier (`git rev-list -1 --before`) and keeps ONE issue,
+`Nightly: metric regressions`, using the thresholds in
+`gates/metric-regressions.json`:
+
+- the test count (all layers) fell by more than `max_test_drop`;
+- `unsafe` lines rose by more than `max_unsafe_increase`;
+- TODO/FIXME lines rose by more than `max_todo_increase`;
+- third-party dependencies rose by more than `max_dependency_increase`;
+- more than `max_files_over_limit` human-authored files exceed 500 lines
+  (this one needs no earlier commit).
+
+While any regression stands the issue is opened or its body is replaced with
+the current list and the run link; when none remains it is closed. It follows
+the ownership rules above: only the issue authored by `github-actions[bot]`,
+labelled `nightly-failure`, titled exactly so and carrying the title's
+fingerprint marker is edited or closed. The command belongs to CI and the main
+session, like `make nightly-triage`.

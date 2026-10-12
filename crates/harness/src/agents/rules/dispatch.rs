@@ -27,6 +27,7 @@ const PERSON_TARGETS: &[&str] = &[
     "review-calibrate",
     // It opens, comments on and closes nightly issues: CI and the main session.
     "nightly-triage",
+    "metric-regressions",
 ];
 pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
     let spec = Spec {
@@ -112,7 +113,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
             }
             Some((name, _)) if agent && !agent_make_variable(name) => {
                 return Err(format!(
-                    "agents set only `AOE_*`, `HARNESS_*`, `REVIEW_*` and `SHIP_*` Make variables, not `{name}`"
+                    "agents set only `AOE_*`, `HARNESS_*`, `METRICS_*`, `REVIEW_*` and `SHIP_*` Make variables, not `{name}`"
                 ));
             }
             // Make expands `$(...)` in a command-line value, including `$(shell ...)`.
@@ -168,7 +169,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
 }
 
 fn agent_make_variable(name: &str) -> bool {
-    ["AOE_", "HARNESS_", "REVIEW_", "SHIP_"]
+    ["AOE_", "HARNESS_", "METRICS_", "REVIEW_", "SHIP_"]
         .iter()
         .any(|prefix| name.starts_with(prefix))
 }
@@ -195,6 +196,7 @@ fn reviewer_target(target: &str) -> bool {
                 | "geodata-test"
                 | "status"
                 | "logs"
+                | "metrics"
         )
 }
 
