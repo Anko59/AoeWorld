@@ -220,6 +220,7 @@ fn detailed_pyramid_streams_native_pages_and_retains_overview_layers() {
     let stage = Stage::new(&root).expect("staging");
     let overview = overview_fixture();
     let hydrology_pages = vec![HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,

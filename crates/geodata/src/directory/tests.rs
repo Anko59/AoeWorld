@@ -274,6 +274,7 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
     let root = test_directory();
     let base = prepared_map();
     let hydrology = vec![HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,
@@ -327,6 +328,90 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
         modern_land_cover_pages: land_cover,
         ..base
     };
+    let mut missing_model = map.clone();
+    let request = missing_model.package.request;
+    missing_model
+        .package
+        .environment
+        .hydrology_evidence
+        .as_mut()
+        .unwrap()
+        .water_model = Some(aoe_map::HydrologyWaterModelIndex {
+        model_version: aoe_map::HYDROLOGY_WATER_MODEL_VERSION,
+        samples_per_axis: 2,
+        target_year_ce: 600,
+        correction_document: aoe_map::WaterCorrectionDocument::empty(request, 2).unwrap(),
+    });
+    let environment = missing_model.package.environment.clone();
+    missing_model.package = MapPackage::with_prepared_environment(
+        map.package.generator_version,
+        request,
+        map.package.source_locks.clone(),
+        map.package.projection.clone(),
+        map.package.provenance.clone(),
+        environment,
+    )
+    .unwrap();
+    assert!(missing_model.validate().is_err());
+    fs::create_dir_all(&root).unwrap();
+    write_directory_contents(&missing_model, &root).unwrap();
+    let hash = missing_model.package.content_hash_hex();
+    fs::write(
+        root.join(format!("{hash}.json")),
+        serde_json::to_vec(&missing_model.package).unwrap(),
+    )
+    .unwrap();
+    let error = GeneratedMap::verify_directory(&root, &hash).expect_err("missing model");
+    assert!(
+        error
+            .to_string()
+            .contains("hydrology page water-model presence does not match its index"),
+        "{error}"
+    );
+    fs::remove_dir_all(&root).unwrap();
+
+    let mut unbounded = map.clone();
+    unbounded.hydrology_evidence_pages[0].river_segments = vec![
+        aoe_map::RiverSegment {
+            start: [0, 0],
+            end: [67_108_864, 67_108_864],
+            width_units: 768,
+            station_start: 0,
+            station_end: 1000,
+        };
+        1024
+    ];
+    let mut environment = unbounded.package.environment.clone();
+    environment
+        .hydrology_evidence
+        .as_mut()
+        .expect("index")
+        .hydrology_page_root = ordered_hydrology_page_root(&unbounded.hydrology_evidence_pages)
+        .expect("structurally valid root");
+    unbounded.package = MapPackage::with_prepared_environment(
+        map.package.generator_version,
+        map.package.request,
+        map.package.source_locks.clone(),
+        map.package.projection.clone(),
+        map.package.provenance.clone(),
+        environment,
+    )
+    .expect("manifest");
+    assert!(
+        unbounded.validate().is_err(),
+        "full-map segments outside the page must fail"
+    );
+    fs::create_dir_all(&root).expect("root");
+    write_directory_contents(&unbounded, &root).expect("malicious pages");
+    let unbounded_hash = unbounded.package.content_hash_hex();
+    fs::write(
+        root.join(format!("{unbounded_hash}.json")),
+        serde_json::to_vec(&unbounded.package).expect("manifest"),
+    )
+    .expect("manifest file");
+    assert!(GeneratedMap::verify_directory(&root, &unbounded_hash).is_err());
+    fs::remove_dir_all(&root).expect("remove malicious package");
+
     let package_before_validation = map.package.clone();
     map.validate().expect("typed generated map validates");
     assert_eq!(map.package, package_before_validation);

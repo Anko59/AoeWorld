@@ -22,6 +22,7 @@ fn detailed_water_surface_uses_acquired_dem_elevation() {
     )
     .unwrap();
     let hydrology_pages = vec![HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,

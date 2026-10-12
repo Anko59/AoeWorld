@@ -10,6 +10,7 @@ fn pages_for_axis(axis: u16) -> Vec<HydrologyEvidencePage> {
             let height = (axis - y * side).min(side) as u8;
             let len = usize::from(width) * usize::from(height);
             HydrologyEvidencePage {
+                river_segments: Vec::new(),
                 level: 0,
                 x,
                 y,
@@ -258,4 +259,57 @@ fn water_model_index_roundtrips_with_stable_hash_and_other_versions_fail() {
         unsupported.model_version = model_version;
         assert_eq!(unsupported.validate(), Err(EnvironmentError::InvalidIndex));
     }
+}
+
+#[test]
+fn river_geometry_is_bounded_required_and_content_rooted() {
+    let mut page = pages_for_axis(2).remove(0);
+    let dry = page.content_hash().expect("dry hash");
+    page.river_segments.push(RiverSegment {
+        start: [128, 0],
+        end: [128, 25600],
+        width_units: 768,
+        station_start: 0,
+        station_end: 25600,
+    });
+    assert_ne!(page.content_hash().expect("river hash"), dry);
+    let river = page.content_hash().expect("river hash");
+    page.river_segments[0].width_units = 1024;
+    assert_ne!(page.content_hash().expect("wider hash"), river);
+    page.river_segments[0].width_units = 0;
+    assert!(page.validate().is_err());
+    page.river_segments[0].width_units = 1024;
+    page.river_segments[0].end = page.river_segments[0].start;
+    assert!(page.validate().is_err());
+    let mut value = serde_json::to_value(pages_for_axis(2).remove(0)).expect("page");
+    value
+        .as_object_mut()
+        .expect("object")
+        .remove("river_segments");
+    assert!(
+        serde_json::from_value::<HydrologyEvidencePage>(value).is_err(),
+        "regenerate packages"
+    );
+}
+
+#[test]
+fn corridor_sampling_bounds_extreme_expansion_and_point_values() {
+    let segment = RiverSegment {
+        start: [0, 0],
+        end: [25600, 0],
+        width_units: 768,
+        station_start: -(1 << 48),
+        station_end: 1 << 48,
+    };
+    segment.validate().expect("valid extreme stations");
+    assert!(segment.sample([0, 0], i64::MAX).is_some());
+    assert_eq!(segment.sample([0, 0], i64::MIN), segment.sample([0, 0], 0));
+    for point in [
+        [i64::MIN, i64::MIN],
+        [i64::MAX, i64::MAX],
+        [i64::MIN, i64::MAX],
+    ] {
+        assert_eq!(segment.sample(point, i64::MAX), None);
+    }
+    assert!(segment.sample([67_108_864, 67_108_864], i64::MAX).is_some());
 }

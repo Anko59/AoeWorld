@@ -21,6 +21,7 @@ fn prepared(kinds: Vec<u8>) -> PreparedHydrology {
         })
         .collect::<Vec<_>>();
     let hydrology_pages = vec![HydrologyPage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,
@@ -78,7 +79,9 @@ fn modern_water_is_consumable_without_rewriting_historical_land_use() {
         Some((0, 100))
     );
     assert_eq!(
-        modern.modern_water_override_at(4, 0, 2).expect("water"),
+        modern
+            .modern_water_override_at(4, 0, 2)
+            .expect("coarse river coverage before terrain composition"),
         Some((0, 100))
     );
     assert_eq!(
@@ -171,7 +174,11 @@ fn modeled_water_correction_overrides_the_shared_coverage_without_promoting_rese
         ordered_hydrology_page_root(&prepared.hydrology_pages).expect("modeled root");
     prepared
         .evidence_index
-        .validate_pages(&prepared.hydrology_pages, &prepared.modern_land_cover_pages)
+        .validate_pages(
+            &prepared.hydrology_pages,
+            &prepared.modern_land_cover_pages,
+            MapRequest::default().estimate().unwrap().tiles_per_side,
+        )
         .expect("verified modeled evidence");
 
     assert_eq!(
@@ -187,7 +194,9 @@ fn modeled_water_correction_overrides_the_shared_coverage_without_promoting_rese
         None
     );
     assert_eq!(
-        prepared.modern_water_override_at(2, 0, 1).expect("river"),
+        prepared
+            .modern_water_override_at(2, 0, 1)
+            .expect("coarse river coverage before terrain composition"),
         Some((0, 100))
     );
 }
@@ -204,6 +213,7 @@ fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
             let len = usize::from(width) * usize::from(height);
             let last_page = x == 1 && y == 1;
             hydrology_pages.push(HydrologyPage {
+                river_segments: Vec::new(),
                 level: 0,
                 x,
                 y,
@@ -249,7 +259,11 @@ fn evidence_page_lookup_reaches_the_last_row_major_page_directly() {
         water_model: None,
     };
     evidence_index
-        .validate_pages(&hydrology_pages, &cover_pages)
+        .validate_pages(
+            &hydrology_pages,
+            &cover_pages,
+            MapRequest::default().estimate().unwrap().tiles_per_side,
+        )
         .expect("complete typed pages");
     let prepared = PreparedHydrology {
         samples_per_axis: axis,
@@ -282,18 +296,6 @@ fn invalid_extent_and_resolution_fail_before_source_or_cache_work() {
 }
 
 #[test]
-fn river_evidence_is_limited_to_the_documented_western_europe_window() {
-    let paris = request_bounds(MapRequest::default()).expect("Paris bounds");
-    assert!(supports_hydrorivers(paris));
-    let outside = MapRequest {
-        center_longitude_e7: -750_000_000,
-        ..MapRequest::default()
-    };
-    let outside = request_bounds(outside).expect("outside bounds");
-    assert!(!supports_hydrorivers(outside));
-}
-
-#[test]
 fn hydrology_plan_rejects_invalid_requests_before_creating_a_cache() {
     let root =
         std::env::temp_dir().join(format!("aoe-hydrology-plan-invalid-{}", std::process::id()));
@@ -303,7 +305,7 @@ fn hydrology_plan_rejects_invalid_requests_before_creating_a_cache() {
         ..MapRequest::default()
     };
     assert!(matches!(
-        preflight_hydrology(&root, invalid),
+        preflight_hydrology(&root, invalid, 2),
         Err(GeodataError::Preparation("invalid map request"))
     ));
     assert!(!root.exists());
@@ -317,7 +319,6 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
         sources: Vec::new(),
-        rivers_available: false,
     };
     assert!(matches!(
         prepare_hydrology_with_plan(
@@ -327,7 +328,6 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
             HydrologySourcePlan {
                 worldcover: Vec::new(),
                 sources: Vec::new(),
-                rivers_available: false,
             },
             &[],
         ),
@@ -346,7 +346,6 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
             HydrologySourcePlan {
                 worldcover: Vec::new(),
                 sources: Vec::new(),
-                rivers_available: false,
             },
             &[],
         ),

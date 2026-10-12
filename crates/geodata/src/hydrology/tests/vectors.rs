@@ -1,43 +1,32 @@
 use super::*;
 
 #[test]
-fn france_footprint_uses_projected_cells_without_degree_bounds_inflation() {
-    let request = MapRequest {
-        requested_side_meters: 1_200_000,
-        ..MapRequest::default()
-    };
+fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
     let cancelled = AtomicBool::new(false);
-    for axis in [2, 15, 16, 65] {
-        assert!(validate_vector_footprint(request, axis, &cancelled).is_ok());
-    }
-    assert!(!supports_hydrorivers(
-        request_bounds(request).expect("degree bounds")
-    ));
     for request in [
         MapRequest {
-            center_latitude_e7: 360_000_000,
-            ..request
+            requested_side_meters: 1_200_000,
+            ..MapRequest::default()
         },
         MapRequest {
-            center_latitude_e7: 600_000_000,
-            ..request
-        },
-        MapRequest {
-            center_longitude_e7: -120_000_000,
-            ..request
-        },
-        MapRequest {
-            center_longitude_e7: 250_000_000,
-            ..request
+            center_latitude_e7: 615_000_000,
+            center_longitude_e7: 255_000_000,
+            ..MapRequest::default()
         },
     ] {
-        assert!(matches!(
-            validate_vector_footprint(request, 16, &cancelled),
-            Err(GeodataError::Preparation(
-                "vector hydrology footprint is outside the western Europe pilot"
-            ))
-        ));
+        assert!(validate_vector_footprint(request, 16, &cancelled).is_ok());
     }
+    assert!(
+        validate_vector_footprint(
+            MapRequest {
+                center_longitude_e7: -750_000_000,
+                ..MapRequest::default()
+            },
+            16,
+            &cancelled,
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -147,4 +136,190 @@ fn vector_api_cancel_and_invalid_axis_fail_before_context_cache_or_network() {
         .is_err()
     );
     assert!(!root.exists());
+}
+
+#[test]
+fn uncovered_vectors_fail_preflight_without_acquiring_inputs() {
+    let request = MapRequest {
+        center_latitude_e7: 0,
+        center_longitude_e7: 0,
+        requested_side_meters: 30_000,
+        ..MapRequest::default()
+    };
+    let cancelled = AtomicBool::new(false);
+    let corrections = WaterCorrectionDocument::empty(request, 2).expect("corrections");
+    let error = PreparedHydrology::validate_vectors_request(request, 2, &corrections, &cancelled)
+        .expect_err("uncovered preflight");
+    assert!(
+        error
+            .to_string()
+            .contains("outside the pinned river dataset extent")
+    );
+}
+
+#[test]
+fn uncovered_vector_preparation_does_not_create_a_cache() {
+    let root = std::env::temp_dir().join(format!("aoe-uncovered-vectors-{}", std::process::id()));
+    assert!(!root.exists());
+    // A sentinel denies cache creation and network access even before the fix.
+    std::fs::write(&root, b"untouched").unwrap();
+    let request = MapRequest {
+        center_latitude_e7: 0,
+        center_longitude_e7: 0,
+        requested_side_meters: 30_000,
+        ..MapRequest::default()
+    };
+    let elevation = [aoe_map::ElevationPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        geographic_height_centimeters: vec![0; 4],
+    }];
+    let water = (0..2)
+        .flat_map(|y| {
+            (0..2).map(move |x| aoe_map::WaterPage {
+                level: 0,
+                x,
+                y,
+                width: 64,
+                height: 64,
+                ocean_coverage_percent: vec![0; 4096],
+                inland_coverage_percent: vec![0; 4096],
+            })
+        })
+        .collect::<Vec<_>>();
+    let error = PreparedHydrology::prepare_vectors(
+        root.clone(),
+        request,
+        2,
+        &elevation,
+        &water,
+        WaterCorrectionDocument::empty(request, 2).expect("corrections"),
+        &AtomicBool::new(false),
+    )
+    .expect_err("uncovered preparation");
+    assert_eq!(std::fs::read(&root).unwrap(), b"untouched");
+    std::fs::remove_file(&root).unwrap();
+    assert!(
+        error
+            .to_string()
+            .contains("outside the pinned river dataset extent")
+    );
+}
+
+#[test]
+fn every_hydrology_preparation_path_rejects_uncovered_before_cache_or_inputs() {
+    let request = MapRequest {
+        center_latitude_e7: 0,
+        center_longitude_e7: 0,
+        requested_side_meters: 30_000,
+        ..MapRequest::default()
+    };
+    let cancelled = AtomicBool::new(false);
+    let corrections = WaterCorrectionDocument::empty(request, 2).unwrap();
+    // A file where a cache directory would be makes any cache/input access
+    // fail distinctly, without allowing acquisition even on unfixed code.
+    let mut failures = Vec::new();
+    for route in [
+        "vector",
+        "vector-method",
+        "full",
+        "detailed",
+        "detailed-corrections",
+        "overview-worker",
+        "detailed-worker",
+    ] {
+        let root =
+            std::env::temp_dir().join(format!("aoe-uncovered-{route}-{}", std::process::id()));
+        let output = root.with_extension("output");
+        assert!(!root.exists() && !output.exists());
+        std::fs::write(&root, b"untouched").unwrap();
+        let result = match route {
+            "vector" => prepare_hydrology_vectors(
+                root.clone(),
+                request,
+                2,
+                &[],
+                &[],
+                corrections.clone(),
+                &cancelled,
+            )
+            .map(|_| ()),
+            "vector-method" => PreparedHydrology::prepare_vectors(
+                root.clone(),
+                request,
+                2,
+                &[],
+                &[],
+                corrections.clone(),
+                &cancelled,
+            )
+            .map(|_| ()),
+            "full" => crate::prepare_hydrology(root.clone(), request, 2).map(|_| ()),
+            "detailed" => crate::prepare_detailed_directory(
+                root.clone(),
+                output.clone(),
+                request,
+                2,
+                crate::DemResolution::Glo90,
+            )
+            .map(|_| ()),
+            "detailed-corrections" => crate::prepare_detailed_directory_with_water_corrections(
+                root.clone(),
+                output.clone(),
+                request,
+                2,
+                crate::DemResolution::Glo90,
+                Some(corrections.clone()),
+            )
+            .map(|_| ()),
+            "overview-worker" => crate::execute_with_cancellation(
+                crate::WorkerRequest::PrepareOverviewDirectory {
+                    cache_root: root.clone(),
+                    output_directory: output.clone(),
+                    request,
+                    samples_per_axis: aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS,
+                    field_axes: aoe_map::OverviewFieldAxes::LANDSCAPE,
+                    hydrology_mode: aoe_map::OverviewHydrologyMode::Vectors,
+                    water_corrections: None,
+                    historical_corrections: None,
+                    vegetation_corrections: None,
+                },
+                &cancelled,
+            )
+            .map(|_| ()),
+            "detailed-worker" => crate::execute_with_cancellation(
+                crate::WorkerRequest::PrepareDetailedDirectory {
+                    cache_root: root.clone(),
+                    output_directory: output.clone(),
+                    request,
+                    samples_per_axis: 2,
+                    resolution: crate::DemResolution::Glo90,
+                    staging_root: None,
+                    historical_corrections: None,
+                    water_corrections: None,
+                    vegetation_corrections: None,
+                },
+                &cancelled,
+            )
+            .map(|_| ()),
+            _ => unreachable!(),
+        };
+        let error = result.expect_err(route);
+        assert_eq!(std::fs::read(&root).unwrap(), b"untouched", "{route}");
+        assert!(!output.exists(), "{route}: no publication");
+        std::fs::remove_file(root).unwrap();
+        if !error
+            .to_string()
+            .contains("outside the pinned river dataset extent")
+        {
+            failures.push(format!("{route}: {error}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "coverage preflight failures: {failures:#?}"
+    );
 }

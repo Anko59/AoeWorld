@@ -73,6 +73,7 @@ fn modeled_source_package() -> (
         provenance: vec![WaterModelProvenance::ModelledLakeSurface as u8; 4],
     };
     let hydrology = HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,
@@ -199,6 +200,7 @@ fn height_bounds_fail_closed_for_missing_or_mistyped_source_pages() {
             y: 0,
         },
         Arc::new(EnvironmentPage::HydrologyEvidence(HydrologyEvidencePage {
+            river_segments: Vec::new(),
             level: 0,
             x: 0,
             y: 0,

@@ -400,7 +400,11 @@ fn vector_only_pages_never_open_worldcover_and_keep_unobserved_cells() {
         water_model: Some(model_index),
     };
     evidence_index
-        .validate_pages(&water, &modern)
+        .validate_pages(
+            &water,
+            &modern,
+            request().estimate().unwrap().tiles_per_side,
+        )
         .expect("nodata evidence pages");
     assert!(matches!(
         sampler.pages_cancelled(&std::sync::atomic::AtomicBool::new(true)),
@@ -455,3 +459,29 @@ fn sampler_constructor_rejects_missing_tiles_and_wrong_ocean_shape_before_io() {
         ))
     ));
 }
+
+#[test]
+fn coarse_offcentre_rivers_rasterize_as_continuous_lines() {
+    let directory = TestDirectory::new();
+    let mut sampler = sampler(&directory, 4326);
+    sampler.axis = 17;
+    sampler.ocean = vec![0; 17 * 17];
+    sampler.river_cells = vec![None; 17 * 17];
+    sampler.tiles.clear();
+    sampler.lakes = vector_dataset(
+        &directory.path("dry.gpkg"),
+        "lakes",
+        OGRwkbGeometryType::wkbPolygon,
+    );
+    let (pages, _) = sampler.pages().expect("off-centre line on dry ground");
+    let page = &pages[0];
+    for x in 4..13 {
+        assert!(
+            (6..10).any(|y| page.kind[y * 17 + x] == HydrologyKind::River as u8),
+            "off-centre river missing at column {x}"
+        );
+    }
+}
+
+#[path = "sampler/channel_rules.rs"]
+mod channel_rules;
