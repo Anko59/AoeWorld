@@ -263,3 +263,16 @@ fn ci_selection_execution_coverage_is_the_union_of_selected_jobs() {
         );
     }
 }
+
+#[test]
+fn pull_requests_skip_coverage_and_pushes_keep_it() {
+    let code = vec!["crates/map/src/terrain.rs".to_owned()];
+    let pull_request = selection("a".repeat(40), Some("b".repeat(40)), code.clone());
+    assert_eq!(pull_request.jobs.get("native-coverage"), Some(&false));
+    for job in ["static", "browser", "target-performance"] {
+        assert_eq!(pull_request.jobs.get(job), Some(&true), "{job}");
+    }
+    let push = selection("a".repeat(40), None, code);
+    assert_eq!(push.jobs.get("native-coverage"), Some(&true));
+    assert_eq!(push.jobs.get("browser"), Some(&true));
+}
