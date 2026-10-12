@@ -36,3 +36,63 @@ fn lake_dominated_world_starts_on_the_largest_land_region() {
         Ok(result)
     );
 }
+
+#[test]
+fn fully_surveyed_large_ineligible_island_does_not_hide_a_mainland_start() {
+    let terrain = Terrain::Map {
+        generator: flat_temperate_generator_with_water(0),
+        overlay: ResourceOverlay::default(),
+    };
+    let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
+    let mut cache = island_and_mainland_cache(&terrain, config);
+    let (regions, complete) = regions::candidates(&mut cache, 64).unwrap();
+    assert!(!complete);
+    let result = certify_regions(&mut cache, regions, complete).unwrap();
+    assert!(matches!(result, StartSearchResult::Found(tile) if tile.x >= 320));
+    assert!(cache.exit_visits <= START_EXIT_VISITS);
+    assert!(cache.exit_chunks.len() <= START_SEARCH_CHUNKS);
+}
+
+#[test]
+fn an_uncertifiable_candidate_region_cannot_starve_the_next_region() {
+    let terrain = Terrain::Map {
+        generator: flat_temperate_generator_with_water(0),
+        overlay: ResourceOverlay::default(),
+    };
+    let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
+    let mut cache = island_and_mainland_cache(&terrain, config);
+    // Isolate budget fairness from pruning: even a retained bad candidate
+    // cannot consume the share reserved for a later viable component.
+    let result = certify_regions(
+        &mut cache,
+        vec![
+            vec![TileCoord::new(255, 255)],
+            vec![TileCoord::new(350, 190)],
+        ],
+        false,
+    )
+    .unwrap();
+    assert_eq!(result, StartSearchResult::Found(TileCoord::new(350, 190)));
+    assert!(cache.exit_visits <= START_EXIT_VISITS);
+    assert!(cache.exit_chunks.len() <= START_SEARCH_CHUNKS);
+}
+
+fn island_and_mainland_cache(terrain: &Terrain, config: WorldConfig) -> StartPassabilityCache<'_> {
+    let mut cache = StartPassabilityCache::new(terrain, config, &|| false);
+    // Exact composed passability isolates the survey and certificate from
+    // shoreline interpolation. The terrain still supplies real flat edges.
+    for y in 0..16 {
+        for x in 0..16 {
+            let mask = (0..1024)
+                .map(|i| {
+                    let px = x * 32 + i % 32;
+                    let py = y * 32 + i / 32;
+                    ((223..=287).contains(&px) && (223..=287).contains(&py))
+                        || ((320..=449).contains(&px) && (160..=223).contains(&py))
+                })
+                .collect();
+            cache.entries.insert((x, y), mask);
+        }
+    }
+    cache
+}

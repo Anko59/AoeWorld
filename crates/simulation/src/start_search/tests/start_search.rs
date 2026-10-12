@@ -54,6 +54,19 @@ fn cancellation_and_budget_are_not_proof_of_absence() {
 }
 
 #[test]
+fn uniform_failed_certificate_reports_cancellation() {
+    let terrain = Terrain::uniform(1);
+    let config = WorldConfig::new(16, 16, Seed(1)).unwrap();
+    let calls = std::cell::Cell::new(0);
+    let result = terrain.search_start_checked(config, 64, || {
+        let call = calls.get();
+        calls.set(call + 1);
+        call > 0
+    });
+    assert_eq!(result, Ok(StartSearchResult::Cancelled));
+}
+
+#[test]
 fn centered_candidate_keys_round_trip_across_odd_and_even_boundaries() {
     for width_tiles in [1_i32, 2, 3, 4, 31, 32, 33, 64, 512] {
         let config = WorldConfig::new(width_tiles, width_tiles, Seed(1)).expect("config");
