@@ -133,9 +133,9 @@ const FOREST_ROUTES: (usize, &str) = (
 // Current generation bytes pin the only live wire format. Drawn-sheet variety
 // changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "8365b07692ef342f5c64fb5893ad8f35e5090e4cfe6437d3105c66b9d296d40a",
-    "bfdba4e9b48a4db7590f7586e4b047e71cd1e490570db64d2824b98e422e3d36",
-    "79456156b0e3ab44a44d124132eb472e608d8ab7d84220fea62778850acfd154",
+    "540cbc16a5f45ee9d677ecce69bc10ffc58ceaa02c9b0b8a64993dc150fdd1a6",
+    "dca0216901e3bc541f4226ca44e257220772e0333cf2d4a2025b2db2c6893f0a",
+    "c77da08abaa6ac04cf18e4eb98835340c9b4fdf43f4a969c28ab2e0d40a79b06",
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =

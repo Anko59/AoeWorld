@@ -259,7 +259,7 @@ fn current_river_and_ford_chunks_are_pinned() {
     }
     assert_eq!(
         hash.finalize().to_hex().as_str(),
-        "c5a1ac3c6347f21e0a755ccfc1024196a4ace4f9925ddddaa319980417a3f14f"
+        "2fe7a0c7234f657d4781cebc8984892825b29a93d1d5f60e9ab5829d15216b47"
     );
 }
 

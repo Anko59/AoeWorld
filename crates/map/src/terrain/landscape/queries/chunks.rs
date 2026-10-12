@@ -152,8 +152,8 @@ impl MapChunkGenerator {
             _ => {}
         }
         if base.passable && matches!(shore, memo::Shore::None) && cover.is_none() {
-            // Climatic snow/rock is authoritative. Uncovered ground retains
-            // drawn variety; nothing physical is decided from this sheet.
+            // Keep climatic cover and textured banks intact. Drawn variety
+            // belongs to uncovered, unbanded land and changes no physics.
             terrain.material = variety::vary(
                 variety::seed(self.geography_key, self.procedural_seed),
                 position,
