@@ -60,6 +60,49 @@ Existing outputs must be regular files. The directory is created when needed.
   steps took. At most 64 steps. Start the app first (`make dev`).
   `"build": "before"` films the app as it was before the change instead
   (below); `"after"`, or no `build`, is the pull request's app.
+- **timing:** the same command before and after as two bars racing
+  (`label`, `command` ≤ 200 characters, `before_ms`, `after_ms` of 1 to
+  3 600 000, optional `unit` `ms` or `s` and up to 4 `extra` figures
+  `{"label", "before", "after"}` of ≤ 40 characters), ending on the ratio
+  ("2.4× faster"). Drawn, not run; for performance PRs.
+- **api:** a request and its response before and after, as two panes with the
+  changed lines highlighted: `caption`, `method`, `path` (starting with `/`),
+  optional `request` body, and `before` / `after` as `{"status", "body"}`
+  (≤ 22 lines of ≤ 80 characters, ≤ 2000 characters). For backend and
+  protocol PRs.
+- **agent-session:** a transcript typed out, tool calls and hook denials
+  styled apart: `tag`, `caption` and 1 to 40 `steps` of
+  `{"role": "user"|"agent"|"tool"|"hook", "text", "verdict"?: "allowed"|"denied"}`
+  (text ≤ 600 characters, ≤ 6000 in all; only tool and hook steps carry a
+  verdict). `make showcase-session SESSION=<jsonl>` prints these steps from a
+  `claude -p --output-format stream-json` or `codex exec --json` log
+  (read-only, bounded, secret-looking strings redacted); paste the output
+  into `steps`.
+- **side by side:** a terminal scene takes `"compare": {"before": [lines],
+  "after": [lines]}` (1 to 30 lines of ≤ 100 characters each) instead of
+  `lines` and shows two panes, before left and after right, playing at once.
+
+```json
+{"kind": "terminal", "tag": "gate", "caption": "Push to dev", "compare": {
+  "before": [{"style": "cmd", "text": "git push origin dev"}, {"style": "bad", "text": "  pushed unchecked"}],
+  "after": [{"style": "cmd", "text": "git push origin dev"}, {"style": "good", "text": "  ✗ refused: use make ship"}]}},
+{"kind": "timing", "label": "Chunk meshing", "command": "make perf-smoke", "before_ms": 2400, "after_ms": 1000,
+ "extra": [{"label": "Peak memory", "before": "310 MB", "after": "180 MB"}]},
+{"kind": "api", "caption": "Spawn answers 201", "method": "POST", "path": "/api/units",
+ "request": "{\"kind\": \"villager\"}",
+ "before": {"status": 200, "body": "{\"id\": 7}"},
+ "after": {"status": 201, "body": "{\"id\": 7,\n \"owner\": 1}"}},
+{"kind": "agent-session", "tag": "hooks", "caption": "A denied push", "steps": [
+  {"role": "user", "text": "Push this to dev"},
+  {"role": "tool", "text": "git push origin dev", "verdict": "denied"},
+  {"role": "hook", "text": "Denied: use make ship", "verdict": "denied"}]}
+```
+
+Limit: side-by-side composition is for rendered scenes only. Two browser scenes
+of a `before`/`after` pair stay consecutive, not composed into one frame: each
+build is reached through its own bridged origin and the recorder drives a
+single page, and a second live browser context would share one video and the
+origin filter per scene (above), so it is not done.
 
 Set `"renderer": "webgpu"` at the top of the storyboard to film browser
 scenes in Chromium with the same software WebGPU flags as the `webgpu`

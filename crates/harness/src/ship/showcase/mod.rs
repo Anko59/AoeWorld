@@ -10,6 +10,9 @@ mod browser;
 mod check;
 mod media;
 mod origins;
+mod output;
+mod scenes;
+pub(crate) mod session;
 mod timing;
 mod workdir;
 
@@ -31,23 +34,15 @@ pub(crate) use media::{
 pub(crate) use origins::Build;
 #[cfg(test)]
 pub(crate) use origins::Origins;
+use output::open_directory;
+pub(crate) use output::{ShowcaseOutput, resolve_out, showcase_tmp};
+pub(crate) use scenes::{Compare, Figure, Reply, SessionStep, Unit};
+#[cfg(test)]
+pub(crate) use scenes::{Role, Verdict};
 use serde::{Deserialize, Serialize};
-use std::{
-    os::unix::ffi::OsStrExt,
-    path::{Component, Path, PathBuf},
-};
 pub(crate) use timing::{Segment, Timings, check_duration, durations, measured_duration, track};
 #[cfg(test)]
-pub(crate) use workdir::create_work_dir;
-
-/// The validated output parent held open for the complete showcase run.
-/// Publication uses only this directory descriptor, so replacing a path
-/// component after validation cannot redirect the final write.
-pub(crate) struct ShowcaseOutput {
-    pub(crate) directory: std::fs::File,
-    pub(crate) name: std::ffi::CString,
-    pub(crate) path: std::path::PathBuf,
-}
+pub(crate) use workdir::{create_work_dir, write_recorder};
 
 pub(crate) const TTS_MODEL: &str = "google/gemini-3.8-flash-lite-tts";
 /// OpenRouter's limit on one speech request.
@@ -119,7 +114,45 @@ pub(crate) enum Scene {
         #[serde(default)]
         tone: Tone,
         caption: String,
+        #[serde(default)]
         lines: Vec<Line>,
+        /// Two panes, before left and after right, instead of `lines`.
+        #[serde(default)]
+        compare: Option<Compare>,
+        #[serde(default)]
+        narration: Option<String>,
+    },
+    /// The same command before and after, as two bars racing.
+    Timing {
+        label: String,
+        command: String,
+        before_ms: u64,
+        after_ms: u64,
+        #[serde(default)]
+        unit: Unit,
+        #[serde(default)]
+        extra: Vec<Figure>,
+        #[serde(default)]
+        narration: Option<String>,
+    },
+    /// A request and its response before and after, changed lines marked.
+    Api {
+        caption: String,
+        method: String,
+        path: String,
+        #[serde(default)]
+        request: Option<String>,
+        before: Reply,
+        after: Reply,
+        #[serde(default)]
+        narration: Option<String>,
+    },
+    /// A replayed headless agent session (`make showcase-session`).
+    #[serde(rename = "agent-session")]
+    AgentSession {
+        tag: String,
+        caption: String,
+        steps: Vec<SessionStep>,
         #[serde(default)]
         narration: Option<String>,
     },
@@ -172,6 +205,9 @@ impl Scene {
         match self {
             Self::Card { narration, .. }
             | Self::Terminal { narration, .. }
+            | Self::Timing { narration, .. }
+            | Self::Api { narration, .. }
+            | Self::AgentSession { narration, .. }
             | Self::Browser { narration, .. } => {
                 narration.as_deref().filter(|n| !n.trim().is_empty())
             }
@@ -183,23 +219,66 @@ impl Scene {
     pub(crate) fn natural_ms(&self) -> u64 {
         match self {
             Self::Card { lines, .. } => 3500 + 400 * lines.len() as u64,
-            Self::Terminal { lines, .. } => {
-                let shown: u64 = lines
-                    .iter()
-                    .map(|line| match line.style {
-                        Style::Cmd => 22 * line.text.chars().count() as u64 + 500,
-                        _ if line.text.is_empty() => 200,
-                        _ => 650,
-                    })
-                    .sum();
-                shown + 3000
-            }
+            Self::Terminal { lines, compare, .. } => match compare {
+                Some(compare) => scenes::compare_ms(compare),
+                None => scenes::lines_ms(lines) + scenes::HOLD_MS,
+            },
+            Self::Timing { extra, .. } => scenes::timing_ms(extra.len()),
+            Self::Api {
+                method,
+                path,
+                before,
+                after,
+                ..
+            } => scenes::api_ms(method, path, before, after),
+            Self::AgentSession { steps, .. } => scenes::session_ms(steps),
             // The steps run once, then the hold: navigation is not planned
             // (it is measured) and each step is counted exactly once.
             Self::Browser { seconds, steps, .. } => steps
                 .iter()
                 .map(Step::planned_ms)
                 .fold(u64::from(*seconds) * 1000, u64::saturating_add),
+        }
+    }
+}
+
+impl Scene {
+    /// The kind's own limits; the narration limit is checked by the board.
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Card { .. } => Ok(()),
+            Self::Terminal { lines, compare, .. } => {
+                scenes::validate_terminal(lines, compare.as_ref())
+            }
+            Self::Timing {
+                label,
+                command,
+                before_ms,
+                after_ms,
+                extra,
+                ..
+            } => scenes::validate_timing(label, command, *before_ms, *after_ms, extra),
+            Self::Api {
+                caption,
+                method,
+                path,
+                request,
+                before,
+                after,
+                ..
+            } => scenes::validate_api(caption, method, path, request.as_deref(), before, after),
+            Self::AgentSession {
+                tag,
+                caption,
+                steps,
+                ..
+            } => scenes::validate_session(tag, caption, steps),
+            Self::Browser {
+                path,
+                seconds,
+                steps,
+                ..
+            } => browser::validate_scene(path, *seconds, steps),
         }
     }
 }
@@ -223,218 +302,10 @@ impl Storyboard {
                     "storyboard: scene {number}'s narration is over {TTS_MAX_CHARS} characters"
                 ));
             }
-            if let Scene::Browser {
-                path,
-                seconds,
-                steps,
-                ..
-            } = scene
-            {
-                browser::validate_scene(path, *seconds, steps)
-                    .map_err(|error| format!("storyboard: scene {number} {error}"))?;
-            }
+            scene
+                .validate()
+                .map_err(|error| format!("storyboard: scene {number} {error}"))?;
         }
         Ok(board)
-    }
-}
-
-/// Resolve the requested video path beneath `.cache/showcase`, refusing
-/// symlinks in every component and multiply-linked existing files.
-pub(crate) fn resolve_out(root: &Path, requested: &str) -> Result<ShowcaseOutput, String> {
-    let requested_path = Path::new(requested);
-    if !requested_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.ends_with(".webm"))
-    {
-        return Err("SHOWCASE_OUT must end in `.webm`".into());
-    }
-    if !super::github::attachable_video(requested_path) {
-        return Err("SHOWCASE_OUT filename must use only letters, digits, `.`, `_` or `-`".into());
-    }
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("cannot resolve repository root: {error}"))?;
-    let root_fd =
-        open_directory(&root).map_err(|error| format!("cannot open repository root: {error}"))?;
-    let cache_fd = open_or_create_child(&root_fd, ".cache")
-        .map_err(|error| format!("cannot open .cache: {error}"))?;
-    let base_fd = open_or_create_child(&cache_fd, "showcase")
-        .map_err(|error| format!("cannot open .cache/showcase: {error}"))?;
-    let base = root.join(".cache/showcase");
-    let requested = Path::new(requested);
-    if requested
-        .components()
-        .any(|part| part == Component::ParentDir)
-    {
-        return Err("SHOWCASE_OUT must not contain `..`".into());
-    }
-    let relative = if requested.is_absolute() {
-        requested
-            .strip_prefix(&base)
-            .map_err(|_| "SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`")?
-            .to_path_buf()
-    } else {
-        let parts: Vec<_> = requested.components().collect();
-        if parts.starts_with(&[
-            Component::Normal(std::ffi::OsStr::new(".cache")),
-            Component::Normal(std::ffi::OsStr::new("showcase")),
-        ]) {
-            requested
-                .strip_prefix(Path::new(".cache/showcase"))
-                .map_err(|_| "SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`")?
-                .to_path_buf()
-        } else {
-            return Err("SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`".into());
-        }
-    };
-    if relative.as_os_str().is_empty() {
-        return Err("SHOWCASE_OUT must name a file inside `<repo>/.cache/showcase/`".into());
-    }
-    let mut parent_path = base.clone();
-    let mut parent_fd = base_fd;
-    let mut file = None;
-    let parts: Vec<_> = relative.components().collect();
-    for (index, part) in parts.iter().enumerate() {
-        match part {
-            Component::Normal(name) if index + 1 == parts.len() => file = Some(name),
-            Component::Normal(name) => {
-                let component = name.to_str().ok_or("SHOWCASE_OUT path must be UTF-8")?;
-                parent_fd = open_or_create_child(&parent_fd, component)
-                    .map_err(|error| format!("cannot open output directory: {error}"))?;
-                parent_path.push(name);
-            }
-            Component::CurDir => {}
-            _ => return Err("SHOWCASE_OUT must resolve inside `<repo>/.cache/showcase/`".into()),
-        }
-    }
-    let file = file.ok_or("SHOWCASE_OUT must name a file inside `<repo>/.cache/showcase/`")?;
-    let name = std::ffi::CString::new(file.as_bytes())
-        .map_err(|_| "SHOWCASE_OUT filename contains a NUL byte")?;
-    match nix::sys::stat::fstatat(
-        &parent_fd,
-        name.as_c_str(),
-        nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW,
-    ) {
-        Ok(metadata)
-            if metadata.st_mode & nix::libc::S_IFMT != nix::libc::S_IFREG
-                || metadata.st_nlink > 1 =>
-        {
-            return Err(
-                "SHOWCASE_OUT must be a single-link regular file, not a symlink or directory"
-                    .into(),
-            );
-        }
-        Ok(_) => {}
-        Err(nix::errno::Errno::ENOENT) => {}
-        Err(error) => return Err(format!("cannot inspect SHOWCASE_OUT: {error}")),
-    }
-    Ok(ShowcaseOutput {
-        directory: parent_fd,
-        name,
-        path: parent_path.join(file),
-    })
-}
-
-/// Create and open the private temporary parent used by showcase runs.
-pub(crate) fn showcase_tmp(root: &Path) -> Result<PathBuf, String> {
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("cannot resolve repository root: {error}"))?;
-    let root_fd =
-        open_directory(&root).map_err(|error| format!("cannot open repository root: {error}"))?;
-    let cache_fd = open_or_create_child(&root_fd, ".cache")
-        .map_err(|error| format!("cannot open .cache: {error}"))?;
-    let tmp_fd = open_or_create_private_child(&cache_fd, "tmp")
-        .map_err(|error| format!("cannot open .cache/tmp: {error}"))?;
-    nix::sys::stat::fchmod(&tmp_fd, nix::sys::stat::Mode::S_IRWXU)
-        .map_err(|error| format!("cannot secure .cache/tmp: {error}"))?;
-    let stat = nix::sys::stat::fstat(&tmp_fd)
-        .map_err(|error| format!("cannot inspect .cache/tmp: {error}"))?;
-    if stat.st_uid != nix::unistd::getuid().as_raw() {
-        return Err(".cache/tmp must be owned by the current user".into());
-    }
-    Ok(root.join(".cache/tmp"))
-}
-
-fn open_directory(path: &Path) -> nix::Result<std::fs::File> {
-    let fd = nix::fcntl::open(
-        path,
-        nix::fcntl::OFlag::O_RDONLY
-            | nix::fcntl::OFlag::O_DIRECTORY
-            | nix::fcntl::OFlag::O_NOFOLLOW
-            | nix::fcntl::OFlag::O_CLOEXEC,
-        nix::sys::stat::Mode::empty(),
-    )?;
-    Ok(std::fs::File::from(fd))
-}
-
-fn open_or_create_child(parent: &std::fs::File, name: &str) -> nix::Result<std::fs::File> {
-    let name = std::ffi::CString::new(name).expect("validated component has no NUL");
-    match nix::fcntl::openat(
-        parent,
-        name.as_c_str(),
-        nix::fcntl::OFlag::O_RDONLY
-            | nix::fcntl::OFlag::O_DIRECTORY
-            | nix::fcntl::OFlag::O_NOFOLLOW
-            | nix::fcntl::OFlag::O_CLOEXEC,
-        nix::sys::stat::Mode::empty(),
-    ) {
-        Ok(fd) => Ok(std::fs::File::from(fd)),
-        Err(nix::errno::Errno::ENOENT) => {
-            match nix::sys::stat::mkdirat(
-                parent,
-                name.as_c_str(),
-                nix::sys::stat::Mode::S_IRWXU
-                    | nix::sys::stat::Mode::S_IRGRP
-                    | nix::sys::stat::Mode::S_IXGRP
-                    | nix::sys::stat::Mode::S_IROTH
-                    | nix::sys::stat::Mode::S_IXOTH,
-            ) {
-                Ok(()) | Err(nix::errno::Errno::EEXIST) => {}
-                Err(error) => return Err(error),
-            }
-            let fd = nix::fcntl::openat(
-                parent,
-                name.as_c_str(),
-                nix::fcntl::OFlag::O_RDONLY
-                    | nix::fcntl::OFlag::O_DIRECTORY
-                    | nix::fcntl::OFlag::O_NOFOLLOW
-                    | nix::fcntl::OFlag::O_CLOEXEC,
-                nix::sys::stat::Mode::empty(),
-            )?;
-            Ok(std::fs::File::from(fd))
-        }
-        Err(error) => Err(error),
-    }
-}
-
-fn open_or_create_private_child(parent: &std::fs::File, name: &str) -> nix::Result<std::fs::File> {
-    let name = std::ffi::CString::new(name).expect("validated component has no NUL");
-    let flags = nix::fcntl::OFlag::O_RDONLY
-        | nix::fcntl::OFlag::O_DIRECTORY
-        | nix::fcntl::OFlag::O_NOFOLLOW
-        | nix::fcntl::OFlag::O_CLOEXEC;
-    match nix::fcntl::openat(
-        parent,
-        name.as_c_str(),
-        flags,
-        nix::sys::stat::Mode::empty(),
-    ) {
-        Ok(fd) => Ok(std::fs::File::from(fd)),
-        Err(nix::errno::Errno::ENOENT) => {
-            match nix::sys::stat::mkdirat(parent, name.as_c_str(), nix::sys::stat::Mode::S_IRWXU) {
-                Ok(()) | Err(nix::errno::Errno::EEXIST) => {}
-                Err(error) => return Err(error),
-            }
-            let fd = nix::fcntl::openat(
-                parent,
-                name.as_c_str(),
-                flags,
-                nix::sys::stat::Mode::empty(),
-            )?;
-            Ok(std::fs::File::from(fd))
-        }
-        Err(error) => Err(error),
     }
 }

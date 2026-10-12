@@ -60,6 +60,8 @@ pub(crate) enum Commands {
     Showcase,
     /// Validate a showcase storyboard without starting Docker or speech requests.
     ShowcaseCheck,
+    /// Print the `agent-session` steps of a headless agent log (SESSION=<jsonl>).
+    ShowcaseSession,
     /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
     NightlyTriage,
     /// Open, update or close the nightly issue for metric regressions.
@@ -167,6 +169,13 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         }
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
+        Commands::ShowcaseSession => {
+            let log = std::env::var("SESSION")
+                .ok()
+                .filter(|value| !value.is_empty())
+                .ok_or("SESSION is unset: run `make showcase-session SESSION=<jsonl>`")?;
+            showcase::session::run(Path::new(&log))
+        }
         Commands::PrepushEvidence => prepush::check(&root),
         Commands::ShipStatus => {
             let head = git::git(&root, &["rev-parse", "HEAD"])?;

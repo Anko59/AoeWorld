@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Write,
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
 };
@@ -23,4 +24,17 @@ pub(crate) fn create_work_dir(
     let directory = super::open_directory(work.path())?;
     nix::sys::stat::fchmod(&directory, nix::sys::stat::Mode::S_IRWXU)?;
     Ok(work)
+}
+
+/// The recorder and the module it imports, run by node in the work directory.
+const RECORDER: [(&str, &str); 2] = [
+    ("record.mjs", include_str!("record.mjs")),
+    ("scenes.mjs", include_str!("scenes.mjs")),
+];
+
+pub(crate) fn write_recorder(work: &Path) -> std::io::Result<()> {
+    for (name, text) in RECORDER {
+        create_new(&work.join(name))?.write_all(text.as_bytes())?;
+    }
+    Ok(())
 }

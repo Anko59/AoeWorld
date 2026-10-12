@@ -7,7 +7,7 @@
 // 127.0.0.1 is a local server piping every connection to that origin's socket,
 // which the harness forwards to that app alone (bridge.rs), so WebRTC, DNS and
 // other addresses reach nothing.
-// Cards and terminals hold the screen for their planned duration, counted from
+// Cards, terminals and the other rendered scenes (scenes.mjs) hold the screen for their planned duration, counted from
 // after the page is drawn; a browser scene holds for its `seconds` after its
 // last step, however long the steps took. Writes silent.webm and timings.json: the blank lead-in and each
 // scene's actual on-screen length, page loading included, in milliseconds,
@@ -15,6 +15,7 @@
 import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
+import { SCENE_STYLE, agentSession, api, compare, timing } from "./scenes.mjs";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
 const origins = plan.origins;
@@ -32,7 +33,7 @@ html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-f
 .before { background:#3d1418; color:var(--red); } .after { background:#12301b; color:var(--green); } .neutral { background:#1f2a3a; color:var(--blue); }
 .caption { font-family:"DejaVu Sans",sans-serif; font-size:26px; margin:0 0 14px; }
 .term { flex:1; background:var(--panel); border-radius:12px; padding:22px 26px; font-size:19px; line-height:1.55; white-space:pre-wrap; overflow:hidden; border:1px solid #30363d; }
-.cmd { color:var(--blue); } .dim { color:var(--dim); } .bad { color:var(--red); } .good { color:var(--green); }`;
+.cmd { color:var(--blue); } .dim { color:var(--dim); } .bad { color:var(--red); } .good { color:var(--green); }${SCENE_STYLE}`;
 
 const TAGS = { before: "BEFORE", after: "AFTER", neutral: "" };
 
@@ -46,6 +47,7 @@ async function card(page, scene) {
 }
 
 async function terminal(page, scene) {
+  if (scene.compare) return compare(page, scene, { stage, escape });
   const tone = scene.tone ?? "neutral";
   const tag = `${TAGS[tone] ? `${TAGS[tone]} · ` : ""}${escape(scene.tag)}`;
   await page.setContent(stage(`<div class="stage"><div><span class="tag ${tone}">${tag}</span></div><div class="caption">${escape(scene.caption)}</div><div class="term" id="t"></div></div>`));
@@ -196,6 +198,9 @@ for (const scene of plan.scenes) {
   const begin = Date.now();
   if (scene.kind === "card") await card(page, scene);
   else if (scene.kind === "terminal") await terminal(page, scene);
+  else if (scene.kind === "timing") await timing(page, scene, { stage, escape });
+  else if (scene.kind === "api") await api(page, scene, { stage, escape });
+  else if (scene.kind === "agent-session") await agentSession(page, scene, { stage, escape });
   else await steps(page, scene);
   const left = scene.duration_ms - (Date.now() - begin);
   // A browser scene's `seconds` start after its last step, never eaten by a

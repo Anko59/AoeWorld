@@ -5,7 +5,7 @@ use super::super::describe::Level;
 use super::bridge::Bridge;
 use super::browser::{Plan, plan};
 use super::origins::Origins;
-use super::workdir::create_new;
+use super::workdir::{create_new, write_recorder};
 use super::{
     Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
     durations, measured_duration, resolve_out, track,
@@ -21,7 +21,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// Fixed OpenRouter speech endpoint.
 const TTS_URL: &str = "https://openrouter.ai/api/v1/audio/speech";
-const RECORDER: &str = include_str!("record.mjs");
 pub(crate) const DEFAULT_OUT: &str = ".cache/showcase/showcase.webm";
 const STORYBOARD_LIMIT: u64 = 256 * 1024;
 #[cfg(test)]
@@ -211,7 +210,7 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         .into());
     }
     create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
-    create_new(&work.join("record.mjs"))?.write_all(RECORDER.as_bytes())?;
+    write_recorder(work)?;
     let mut bridges = Vec::with_capacity(plan.origins.len());
     for bridged in &plan.origins {
         let (host, port) = bridged.origin.address()?;
