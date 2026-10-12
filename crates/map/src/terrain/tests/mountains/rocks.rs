@@ -20,6 +20,8 @@ struct Tally {
     scree: (usize, usize),
     snow: (usize, usize),
     meadow: (usize, usize),
+    below: (usize, usize),
+    above: (usize, usize),
 }
 
 #[test]
@@ -38,6 +40,7 @@ fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
             if stone {
                 // A rock is dressing on open ground: nothing else stands there.
                 assert!(tile.terrain.passable && !is_cliff(tile.terrain));
+                assert_eq!(tile.terrain.water, crate::WaterKind::None);
                 assert!(!scene.resources.iter().any(|r| r.node.tile == at));
                 assert_eq!(tile.appearance.canopy_strength, 0);
             }
@@ -51,6 +54,23 @@ fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
             let beside = around.into_iter().any(|(dx, dy)| {
                 is_cliff(generator.sample_base_tile(TileCoord::new(at.x + dx, at.y + dy)))
             });
+            if beside {
+                let higher_cliff = reach.iter().any(|dx| {
+                    reach.iter().any(|dy| {
+                        let near = generator.sample_base_tile(TileCoord::new(at.x + dx, at.y + dy));
+                        is_cliff(near)
+                            && near.geographic_height_centimeters
+                                > tile.terrain.geographic_height_centimeters
+                    })
+                });
+                let slope = if higher_cliff {
+                    &mut tally.below
+                } else {
+                    &mut tally.above
+                };
+                slope.0 += usize::from(stone);
+                slope.1 += 1;
+            }
             let height = tile.terrain.geographic_height_centimeters / 100;
             let slot = if beside {
                 &mut tally.scree
@@ -93,6 +113,13 @@ fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
         "scree is denser"
     );
     assert!(share(tally.scree) <= 250);
+    assert!(tally.below.1 > 500 && tally.above.1 > 500);
+    assert!(
+        share(tally.below) >= share(tally.above) * 2,
+        "downhill scree: {:?} vs {:?}",
+        tally.below,
+        tally.above
+    );
     assert!(share(tally.snow) < share(tally.rock));
     assert_eq!(tally.meadow.0, 0, "no rocks in a lowland meadow");
     // Clustered, not evenly sprinkled: many 16-tile blocks of rock ground are
@@ -135,4 +162,51 @@ fn dry_grassland_has_a_few_rock_clusters_and_rocks_are_coordinate_stable() {
             .expect("in bounds");
         assert!(point.decoration.is_some_and(|d| d.family as u8 == 2));
     }
+}
+
+#[test]
+fn loose_rocks_stay_off_a_high_cold_lake_and_its_shore() {
+    let mut generator = relief(1, 13, |_, _| 2_400).with_latitude(459_000_000, 60_000);
+    generator.water = Some(Arc::new(PreparedWater::new(
+        2,
+        [(
+            (0, 0),
+            WaterPage {
+                level: 0,
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2,
+                ocean_coverage_percent: vec![0; 4],
+                inland_coverage_percent: vec![100, 0, 100, 0],
+            },
+        )]
+        .into(),
+    )));
+    let scenes = chunks(&generator, 8..16);
+    let mut wet = 0;
+    let mut stones = 0;
+    for scene in &scenes {
+        for tile in &scene.tiles {
+            wet += usize::from(tile.terrain.water != crate::WaterKind::None);
+        }
+        for rock in scene.decorations.iter().filter(|d| d.family as u8 == 2) {
+            stones += 1;
+            let tile = scene
+                .tiles
+                .iter()
+                .find(|tile| tile.tile == rock.tile)
+                .expect("tile");
+            assert_eq!(tile.terrain.water, crate::WaterKind::None);
+            let point = generator
+                .landscape_point_with_cancel(rock.tile, &|| false)
+                .expect("point")
+                .expect("in bounds");
+            assert!(point.decoration.is_some_and(|d| d.family as u8 == 2));
+        }
+    }
+    assert!(
+        wet > 1_000 && stones > 10,
+        "{wet} wet tiles, {stones} stones"
+    );
 }

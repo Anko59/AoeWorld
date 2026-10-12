@@ -110,7 +110,7 @@ fn cliff_orientation_selects_native_faces_with_their_authored_lighting() {
 }
 
 #[wasm_bindgen_test]
-fn loose_rocks_are_small_shadowed_sprites_in_several_sizes() {
+fn loose_rocks_keep_native_frames_and_favor_large_piles_at_both_zooms() {
     let mut art = art();
     let rock = |variant| SceneResource {
         id: 3,
@@ -121,28 +121,64 @@ fn loose_rocks_are_small_shadowed_sprites_in_several_sizes() {
         elevation_meters: 0.0,
     };
     assert!(scene_resource_frame(&art, rock(0)).is_none());
-    art.scenery.rocks = (0..7)
-        .map(|slot| GameFrame {
-            atlas: crate::AtlasAddress {
-                page: 2,
-                uv: [0.5 + slot as f32 * 0.01, 0.25, 0.03, 0.02],
-            },
-            size: [80.0, 40.0],
-            anchor: [40.0, 30.0],
-        })
-        .collect();
-    let mut widths = Vec::new();
-    for variant in [0_u8, 8, 16, 24, 5] {
-        let sprites = world_sprite_frames(&art, &[], &[rock(variant)], &[], camera(), 0);
-        // A soft shadow and the body, like other objects without paired shadows.
-        assert_eq!(sprites.len(), 2);
-        let (body, frame, _, _) = sprites[1];
-        assert_eq!(body.color, [1.0; 4]);
-        assert!(frame.size[0] < 80.0 && frame.size[0] > 30.0);
-        assert!((frame.anchor[1] / frame.size[1] - 0.75).abs() < 1e-4);
-        widths.push(frame.size[0] as u32);
+    art.scenery.rocks = [
+        [58.0, 37.0],
+        [75.0, 36.0],
+        [67.0, 33.0],
+        [75.0, 44.0],
+        [56.0, 34.0],
+        [85.0, 46.0],
+        [78.0, 42.0],
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(slot, size)| GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 2,
+            uv: [0.5 + slot as f32 * 0.01, 0.25, 0.03, 0.02],
+        },
+        size,
+        anchor: [size[0] * 0.5, size[1] * 0.75],
+    })
+    .collect();
+    let mut large = 0;
+    let mut seen = [false; 7];
+    for variant in 0..=255 {
+        let selected = scene_resource_frame(&art, rock(variant)).unwrap();
+        let slot = art
+            .scenery
+            .rocks
+            .iter()
+            .position(|frame| frame.atlas == selected.atlas)
+            .expect("unaltered native art");
+        assert_eq!(selected.size, art.scenery.rocks[slot].size);
+        assert_eq!(selected.anchor, art.scenery.rocks[slot].anchor);
+        seen[slot] = true;
+        large += usize::from(matches!(slot, 3 | 5 | 6));
+        for zoom in [1.0, 0.64] {
+            let mut camera = camera();
+            camera.zoom = zoom;
+            let sprites = world_sprite_frames(&art, &[], &[rock(variant)], &[], camera, 0);
+            assert_eq!(sprites.len(), 2, "shadow and body");
+            let (body, frame, depth, _) = sprites[1];
+            let scale = 128.0 / 96.0 * zoom as f32;
+            assert!((frame.size[0] - selected.size[0] * scale).abs() < 1e-3);
+            assert!((frame.anchor[1] - selected.anchor[1] * scale).abs() < 1e-3);
+            assert_eq!(body.uv, selected.atlas.uv);
+            assert_eq!(body.color, [1.0; 4]);
+            assert_eq!(
+                depth - crate::surface_mesh::surface_depth([10.5, 10.5, 0.0]),
+                1.5
+            );
+            let bounds = resource_sprite_bounds(rock(variant), selected, camera).unwrap();
+            assert!((bounds[2] - bounds[0] - f64::from(frame.size[0])).abs() < 1e-3);
+        }
     }
-    widths.sort_unstable();
-    widths.dedup();
-    assert_eq!(widths.len(), 4);
+    assert!(seen.into_iter().all(|present| present));
+    assert!(
+        large >= 192,
+        "at least three quarters are large piles: {large}"
+    );
+    art.scenery.rocks.truncate(6);
+    assert!(scene_resource_frame(&art, rock(0)).is_none());
 }
