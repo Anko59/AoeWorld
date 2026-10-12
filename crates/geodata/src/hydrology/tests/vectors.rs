@@ -3,10 +3,29 @@ use super::*;
 #[test]
 fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
     let cancelled = AtomicBool::new(false);
+    // Retain every request and valid axis in the former pilot-window test.
+    // The expanded pinned extent deliberately covers its former rejections.
+    let france = MapRequest {
+        requested_side_meters: 1_200_000,
+        ..MapRequest::default()
+    };
     for request in [
+        france,
         MapRequest {
-            requested_side_meters: 1_200_000,
-            ..MapRequest::default()
+            center_latitude_e7: 360_000_000,
+            ..france
+        },
+        MapRequest {
+            center_latitude_e7: 600_000_000,
+            ..france
+        },
+        MapRequest {
+            center_longitude_e7: -120_000_000,
+            ..france
+        },
+        MapRequest {
+            center_longitude_e7: 250_000_000,
+            ..france
         },
         MapRequest {
             center_latitude_e7: 615_000_000,
@@ -14,7 +33,12 @@ fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
             ..MapRequest::default()
         },
     ] {
-        assert!(validate_vector_footprint(request, 16, &cancelled).is_ok());
+        for axis in [2, 15, 16, 65] {
+            assert!(
+                validate_vector_footprint(request, axis, &cancelled).is_ok(),
+                "{request:?}, axis {axis}"
+            );
+        }
     }
     assert!(
         validate_vector_footprint(
@@ -322,4 +346,35 @@ fn every_hydrology_preparation_path_rejects_uncovered_before_cache_or_inputs() {
         failures.is_empty(),
         "coverage preflight failures: {failures:#?}"
     );
+}
+
+#[test]
+fn validated_footprint_is_reused_and_cannot_be_rebound_to_another_grid() {
+    let request = MapRequest::default();
+    let footprint = project_river_footprint(request, 2, &AtomicBool::new(false)).unwrap();
+    assert!(footprint.covered());
+    assert!(footprint.check_binding(request, 2).is_ok());
+    for (request, axis) in [(request, 15), (MapRequest { seed: 2, ..request }, 2)] {
+        assert!(footprint.check_binding(request, axis).is_err());
+    }
+    let root = std::env::temp_dir().join(format!("aoe-plan-grid-{}", std::process::id()));
+    std::fs::write(&root, b"untouched").unwrap();
+    let plan = HydrologySourcePlan {
+        worldcover: Vec::new(),
+        sources: Vec::new(),
+        footprint,
+    };
+    let result = prepare_with_plan(
+        root.clone(),
+        request,
+        15,
+        plan,
+        &[],
+        HydrologySelection::WorldCover,
+    );
+    assert!(
+        matches!(result,Err(GeodataError::Preparation(message)) if message.contains("preflight grid"))
+    );
+    assert_eq!(std::fs::read(&root).unwrap(), b"untouched");
+    std::fs::remove_file(root).unwrap();
 }

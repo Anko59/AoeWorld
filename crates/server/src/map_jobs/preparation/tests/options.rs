@@ -16,7 +16,7 @@ fn requests_without_a_mode_are_automatic_and_unknown_modes_fail() {
         PreparationPlan::resolve(automatic, true)
             .expect("plan")
             .mode,
-        PreparationMode::Detailed
+        PreparationMode::Overview
     );
     value["preparation"] = serde_json::json!("invented");
     assert!(serde_json::from_value::<CreationRequest>(value).is_err());
@@ -25,6 +25,8 @@ fn requests_without_a_mode_are_automatic_and_unknown_modes_fail() {
 #[test]
 fn regional_grid_bounds_use_effective_square_and_normalized_longitude() {
     let mut input = input();
+    input.preparation = PreparationPreference::Detailed;
+    input.hydrology_mode = HydrologyMode::Vectors;
     input.request.requested_side_meters = 120_000;
     assert_eq!(
         PreparationPlan::resolve(input, true)
@@ -50,6 +52,8 @@ fn regional_grid_bounds_use_effective_square_and_normalized_longitude() {
     input.request.compression = aoe_map::Ratio::new(10_000, 1).expect("ratio");
     assert!(PreparationPlan::resolve(input, true).is_err());
     input = super::tests::input();
+    input.preparation = PreparationPreference::Detailed;
+    input.hydrology_mode = HydrologyMode::Vectors;
     input.request.requested_side_meters = 30_001;
     assert_eq!(
         PreparationPlan::resolve(input, true)
@@ -60,8 +64,14 @@ fn regional_grid_bounds_use_effective_square_and_normalized_longitude() {
 }
 
 #[test]
-fn automatic_regional_detail_and_explicit_overview_are_distinct() {
+fn automatic_overview_and_explicit_regional_detail_are_distinct() {
     let mut input = input();
+    assert_eq!(
+        PreparationPlan::resolve(input, true).unwrap().mode,
+        PreparationMode::Overview
+    );
+    input.preparation = PreparationPreference::Detailed;
+    input.hydrology_mode = HydrologyMode::Vectors;
     let plan = PreparationPlan::resolve(input, true).expect("regional");
     assert_eq!(plan.mode, PreparationMode::Detailed);
     assert_eq!(plan.samples_per_axis, 1024);
@@ -108,6 +118,14 @@ fn overview_always_uses_the_independent_landscape_axes() {
             .is_none()
     );
     input.request.requested_side_meters = 30_000;
+    assert!(
+        PreparationPlan::resolve(input, true)
+            .unwrap()
+            .field_axes
+            .is_some()
+    );
+    input.preparation = PreparationPreference::Detailed;
+    input.hydrology_mode = HydrologyMode::Vectors;
     assert!(
         PreparationPlan::resolve(input, true)
             .expect("detailed")

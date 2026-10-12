@@ -292,3 +292,24 @@ fn unsupported_schemas_and_vector_access_without_typed_pages_are_rejected() {
         );
     }
 }
+
+#[test]
+fn outside_coverage_note_is_explicit_bound_to_identity_and_required_in_the_current_format() {
+    let original = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
+    let marked = original
+        .clone()
+        .with_preparation_note(crate::PreparationNote::OutsideRiverCoverage)
+        .unwrap();
+    assert_ne!(original.content_hash, marked.content_hash);
+    assert_eq!(
+        original.generator().chunk(0, 0),
+        marked.generator().chunk(0, 0)
+    );
+    marked.validate().unwrap();
+    let mut forged = original.clone();
+    forged.preparation_notes = marked.preparation_notes.clone();
+    assert!(forged.validate().is_err());
+    let mut value = serde_json::to_value(marked).unwrap();
+    value.as_object_mut().unwrap().remove("preparation_notes");
+    assert!(serde_json::from_value::<MapPackage>(value).is_err());
+}

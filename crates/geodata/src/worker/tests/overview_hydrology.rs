@@ -49,3 +49,54 @@ fn named_lock_counts_match_the_documented_source_lists() {
         VECTOR_HYDROLOGY_SOURCE_LOCKS
     );
 }
+
+#[test]
+fn automatic_preflight_covers_rivers_or_explicitly_marks_the_global_overview() {
+    for (request, covered) in [
+        (MapRequest::default(), true),
+        (
+            MapRequest {
+                center_latitude_e7: -178_000_000,
+                center_longitude_e7: 1_798_000_000,
+                ..MapRequest::default()
+            },
+            false,
+        ),
+        (
+            MapRequest {
+                center_latitude_e7: 480_000_000,
+                center_longitude_e7: -1_000_000_000,
+                ..MapRequest::default()
+            },
+            false,
+        ),
+    ] {
+        let plan = preflight(
+            OverviewHydrologyMode::Automatic,
+            request,
+            1024,
+            OverviewFieldAxes::LANDSCAPE,
+            None,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(plan.has_vectors(), covered);
+        if !covered {
+            let package = plan
+                .mark_package(MapPackage::new(1, request, Vec::new()).unwrap())
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(&package).unwrap()["preparation_notes"],
+                serde_json::json!(["outside_river_coverage"])
+            );
+            assert!(package.environment.hydrology_evidence.is_none());
+            package.validate().unwrap();
+            let bytes = serde_json::to_vec(&package).unwrap();
+            let decoded: MapPackage = serde_json::from_slice(&bytes).unwrap();
+            decoded.validate().unwrap();
+            assert!(
+                matches!(preflight(OverviewHydrologyMode::Vectors,request,1024,OverviewFieldAxes::LANDSCAPE,None,&AtomicBool::new(false)),Err(GeodataError::Preparation(message)) if message.contains("outside the pinned river dataset extent"))
+            );
+        }
+    }
+}

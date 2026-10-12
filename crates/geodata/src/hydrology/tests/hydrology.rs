@@ -319,6 +319,8 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
         sources: Vec::new(),
+        footprint: project_river_footprint(MapRequest::default(), 2, &AtomicBool::new(false))
+            .unwrap(),
     };
     assert!(matches!(
         prepare_hydrology_with_plan(
@@ -328,6 +330,12 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
             HydrologySourcePlan {
                 worldcover: Vec::new(),
                 sources: Vec::new(),
+                footprint: project_river_footprint(
+                    MapRequest::default(),
+                    2,
+                    &AtomicBool::new(false)
+                )
+                .unwrap(),
             },
             &[],
         ),
@@ -346,6 +354,12 @@ fn prepared_hydrology_fails_closed_for_bad_axis_or_missing_vector_sources() {
             HydrologySourcePlan {
                 worldcover: Vec::new(),
                 sources: Vec::new(),
+                footprint: project_river_footprint(
+                    MapRequest::default(),
+                    2,
+                    &AtomicBool::new(false)
+                )
+                .unwrap(),
             },
             &[],
         ),

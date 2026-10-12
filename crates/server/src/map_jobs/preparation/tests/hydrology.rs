@@ -17,7 +17,7 @@ fn creator_requests_hydrology_by_default_for_overview_and_finland() {
         let input: CreationRequest = serde_json::from_value(value).unwrap();
         let plan = PreparationPlan::resolve(input, true).unwrap();
         assert_eq!(plan.mode, PreparationMode::Overview);
-        assert_eq!(plan.hydrology_mode, HydrologyMode::Vectors);
+        assert_eq!(plan.hydrology_mode, HydrologyMode::Automatic);
         assert_eq!(plan.samples_per_axis, 1024);
         assert_eq!(plan.field_axes.unwrap().water, 128);
     }
@@ -74,4 +74,47 @@ async fn durable_submission_key_cannot_switch_hydrology_mode() {
         restored.jobs[&id].job.preparation.hydrology_mode,
         HydrologyMode::Vectors
     );
+}
+
+#[tokio::test]
+async fn automatic_creator_accepts_covered_and_uncovered_requests_and_publishes_the_note() {
+    for (latitude, longitude, outside) in [
+        (480_000_000, 20_000_000, false),
+        (-178_000_000, 1_798_000_000, true),
+    ] {
+        let request = MapRequest {
+            center_latitude_e7: latitude,
+            center_longitude_e7: longitude,
+            ..MapRequest::default()
+        };
+        let input: CreationRequest =
+            serde_json::from_value(serde_json::to_value(request).unwrap()).unwrap();
+        let plan = PreparationPlan::resolve(input, true).unwrap();
+        assert_eq!(plan.mode, PreparationMode::Overview);
+        assert_eq!(plan.hydrology_mode, HydrologyMode::Automatic);
+        let (state, _, _) = crate::map_jobs::tests::state_with_job();
+        let (job, _) = state
+            .map_jobs
+            .lock()
+            .await
+            .enqueue(request, request.estimate().unwrap(), plan)
+            .unwrap();
+        let package = aoe_map::MapPackage::new(1, request, Vec::new()).unwrap();
+        let package = if outside {
+            package
+                .with_preparation_note(aoe_map::PreparationNote::OutsideRiverCoverage)
+                .unwrap()
+        } else {
+            package
+        };
+        let hash = package.content_hash_hex();
+        crate::map_jobs::finish(&state, job.id, Ok(package)).await;
+        let completed = crate::map_jobs::status(&state, job.id).await.unwrap();
+        assert_eq!(completed.preparation_notes.len(), usize::from(outside));
+        assert_eq!(completed.content_hash.as_deref(), Some(hash.as_str()));
+        assert_eq!(
+            state.map_packages.read().await[&hash].preparation_notes,
+            completed.preparation_notes
+        );
+    }
 }
