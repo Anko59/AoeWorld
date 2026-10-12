@@ -190,7 +190,8 @@ fn cliff_tops_keep_surrounding_grass_while_vertical_skirts_are_rock_at_every_lod
         size: [97.0, 49.0],
         anchor: [48.0, 24.0],
     };
-    let art = test_art(frame);
+    let mut art = test_art(frame);
+    art.scenery.cliff_faces = vec![frame; 25];
     for zoom in [1.0, 0.125] {
         let mut triangles =
             projected_surface_triangles(&terrain, camera([64.0, 64.0], zoom, [1280.0, 720.0]));
