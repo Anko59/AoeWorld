@@ -34,6 +34,12 @@ fn has_failure_with_notes(
     notes: &mut Vec<String>,
 ) -> git::Result<bool> {
     for name in &report.failed {
+        // A failure the check marked untouched (a test the tester did not
+        // change, even inside a file the tester edited) is pre-existing: it
+        // is never this round's red evidence.
+        if report.untouched.contains(name) {
+            continue;
+        }
         if report
             .locations
             .get(name)

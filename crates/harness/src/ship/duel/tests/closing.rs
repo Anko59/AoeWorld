@@ -208,3 +208,26 @@ fn prune_keeps_only_the_newest_run_directories() {
     output::prune(cache, 0).unwrap();
     assert!(!cache.join("run-new").exists());
 }
+
+#[test]
+fn a_pre_existing_failure_in_a_changed_file_is_not_red_evidence() {
+    // The tester appended a passing test to a file that already held a
+    // failing one: the only failure is untouched, so nothing the tester
+    // wrote failed.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "crates/x/Cargo.toml", "[package]\nname='aoe-x'\n");
+    write(
+        root,
+        "crates/x/tests/net.rs",
+        "#[test]\nfn fetches() {}\n#[test]\nfn new_case() {}\n",
+    );
+    let paths = ["crates/x/tests/net.rs".to_owned()];
+    let mut report = failed("aoe-x::net$fetches");
+    assert!(authored::has_failure(root, &paths, &report).unwrap());
+    report.untouched = vec!["aoe-x::net$fetches".into()];
+    assert!(!authored::has_failure(root, &paths, &report).unwrap());
+    // A failure the tester did write still counts beside it.
+    report.failed.push("aoe-x::net$new_case".into());
+    assert!(authored::has_failure(root, &paths, &report).unwrap());
+}
