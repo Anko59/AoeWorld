@@ -172,8 +172,9 @@ fn procedural_ramp_kernel_preserves_alpha_and_rounds_luminance_once() {
                 assert_eq!(plateau[3], alpha);
                 assert_eq!(ramp[3], alpha);
                 for channel in 0..3 {
-                    let expected = ((base[channel] * 255.0 + detail * amount) * (face_shade * 0.92))
-                        .round() as u8;
+                    let expected = ((base[channel] * 255.0 + detail * amount)
+                        * (face_shade * if tint == 6 { 0.98 } else { 0.92 }))
+                    .round() as u8;
                     assert_eq!(ramp[channel], expected);
                     assert!(ramp[channel] < plateau[channel]);
                 }
@@ -470,8 +471,8 @@ fn native_ice_detail_becomes_white_snow_with_faint_cool_relief_and_unchanged_alp
         [160, 220, 255, 128],
         [235, 245, 255, 255],
     ] {
-        let snow = mix::art_layer(source, 7, landscape::NATIVE_ICE);
-        let ice = mix::art_layer(source, 8, landscape::NATIVE_ICE);
+        let snow = mix::art_layer(source, 7, landscape::NATIVE_ICE, 0);
+        let ice = mix::art_layer(source, 8, landscape::NATIVE_ICE, 0);
         assert_eq!(ice, source.map(f32::from));
         assert_eq!(snow[3], f32::from(source[3]));
         assert!(snow[0] >= 225.0 && snow[2] <= 255.0, "white snow: {snow:?}");

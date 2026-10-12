@@ -389,3 +389,34 @@ fn variety_junction_retains_all_scene_materials_above_water_codes() {
         assert_eq!(mix::support::palette_words(palette)[0] as u32 & 15, 6);
     }
 }
+
+#[wasm_bindgen_test]
+fn snow_ramps_have_diffuse_shading_and_match_their_mixed_border() {
+    for source in [
+        [75, 120, 170, 255],
+        [160, 220, 255, 128],
+        [235, 245, 255, 255],
+    ] {
+        let flat = procedural_tint(source, 6);
+        let ramp = procedural_tint(source, 22);
+        for channel in 0..3 {
+            assert!(
+                (3..=5).contains(&flat[channel].abs_diff(ramp[channel])),
+                "soft snow slope: {flat:?} {ramp:?}"
+            );
+        }
+        let layer = mix::art_layer(source, 7, landscape::NATIVE_ICE, 1);
+        let border = landscape::blend([layer; 3], [1.0, 0.0, 0.0], 1, 1 | 5 << 1);
+        for channel in 0..4 {
+            assert!(
+                border[channel].abs_diff(ramp[channel]) <= 1,
+                "pure/mixed snow seam: {border:?} {ramp:?}"
+            );
+        }
+        assert_eq!(ramp[3], source[3]);
+        assert_eq!(
+            mix::art_layer(source, 8, landscape::NATIVE_ICE, 1),
+            source.map(f32::from)
+        );
+    }
+}
