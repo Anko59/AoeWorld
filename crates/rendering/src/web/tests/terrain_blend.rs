@@ -349,9 +349,8 @@ pub(super) async fn read_pixels_with_clear<const N: usize>(
             }),
             ..Default::default()
         });
-        pass.set_pipeline(&renderer.pipeline);
-        renderer.instances.set_on(&mut pass);
-        pass.draw(0..6, 0..count);
+        // Read the same ordered program runs that production submits.
+        renderer.draw_on(&mut pass, count);
     }
     for (index, point) in points.iter().enumerate() {
         encoder.copy_texture_to_buffer(

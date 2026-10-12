@@ -5,6 +5,8 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 #[path = "web/tests/atlas_pages.rs"]
 mod atlas_pages;
+#[path = "web/tests/draw_ranges.rs"]
+mod draw_range_tests;
 #[path = "web/tests/grid.rs"]
 mod grid;
 #[path = "web/tests/shader_cost.rs"]
