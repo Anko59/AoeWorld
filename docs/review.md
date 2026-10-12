@@ -199,22 +199,26 @@ that no review passed.
 
 Each full review reads the whole diff blind, so every fix adds new surface to
 find fault with, and grades vary by several points between identical runs.
-Rerunning until a grade crosses 8 would measure luck, not quality. So a branch
-has a budget, and `make ship` decides from the stored reports
+Repeated full reviews found different edge cases instead of checking the fixes,
+costing one to two hours per round; one repeatedly rejected change then passed
+its first closing review. Rerunning until a grade crosses 8 would
+measure luck, not quality. So a branch has one full blind review, then a bounded
+budget for checking fixes. `make ship` decides from the stored reports
 (`crates/harness/src/review/closing.rs`):
 
-1. **Up to three full reviews.** After each, fix and commit every confirmed
-   finding. Every review is stored (none replaces another) and a commit that
-   failed a review is never reviewed again; only new commits are. An
+1. **One full blind review.** If it passes, the change can ship. If it fails,
+   fix and commit every confirmed finding. Every review is stored (none
+   replaces another) and a commit that failed a review is never reviewed
+   again; only new commits are. An
    **incomplete** review (a session never answered) checked nothing: it does
    not count and the same commit may be reviewed again. Three incomplete
    reviews within an hour mean the reviewers are unavailable: `make ship`
    refuses for the rest of that hour, then reviews again.
-2. **Not converging: split.** If the last full review confirmed a finding
-   that caps at 4 (critical, or a major test weakening), or more blocking
-   findings (those capping below 8) than the full review before it, the change
-   is too big to fix by iteration.
-3. **Converging: up to two closing reviews.** Each runs on the **strong**
+2. **Severe full review: split at once.** A full review with a finding that
+   caps at 4 (critical, or a major test weakening: the harness's `severe`
+   predicate) ends the branch's budget immediately. Otherwise every later
+   review is a closing review; there is no second full blind review.
+3. **Up to three closing reviews.** Each runs on the **strong**
    models with at least two reviewers (a one-persona tier borrows the medium
    tier's) and skips the blind round. Every reviewer votes on each blocking
    finding not yet shown fixed (`upheld` = still there, `refuted` = fixed,
@@ -224,8 +228,12 @@ has a budget, and `make ship` decides from the stored reports
    finding is left undecided (disputed)** and every session answered; its grade
    is reported, not gated. A carried finding confirmed only as minor (`partial`
    votes count one severity lower) no longer blocks, as in a full review. A
-   carried finding still blocking or undecided, or a critical one, means split.
-4. **Budget spent: split.** If both closing reviews failed, split.
+   carried finding still blocking or undecided, or a severe finding in the
+   closing review, means split at once. If only new non-severe blocking
+   findings in the fixes remain, fix and commit them for another closing
+   review within the budget.
+4. **Budget spent: split.** If the third closing review fails, split. A passing
+   full or closing review settles the earlier history, as before.
 
 To **split**: break the change into smaller pull requests on new branches
 (each with its own budget, smaller diffs review better), close the original,
@@ -238,10 +246,10 @@ Why this policy, and not the alternatives:
 
 | Option | Verdict |
 |---|---|
-| Merge after the third review anyway | No: the last review's blocking findings would ship unfixed. |
+| Merge when the budget is spent anyway | No: the last review's blocking findings would ship unfixed. |
 | Full reviews until a grade ≥ 8 | No: grades are noisy and each fix adds new surface, so it rewards luck and never has to end. |
 | Lower effort until convergence | No: a weaker review converges by seeing less. |
-| A higher tier, full scope | Costly, and it repeats the blind round over code already reviewed three times. |
+| A higher tier, full scope | Costly, and it repeats the blind round over code already reviewed once. |
 | A final fix merged on tests alone | No: it is unreviewed code, and every bound on it (size, tests, files) proved gameable in review. |
 | **Strong models on the fixes plus the open findings** | Yes: bounded cost, the strongest check where the risk is (the fixes), and a criterion that does not depend on grade noise. |
 | **Split what still does not pass** | Yes: smaller diffs review better, and the pieces start fresh. |

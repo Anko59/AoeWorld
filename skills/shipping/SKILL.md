@@ -13,13 +13,17 @@ step; read its summary and diff, then film the change before shipping.
    with `SHIP_BASE=<its branch>` (no auto-merge yet); after that parent merges,
    rebase onto `origin/dev` and ship again with `SHIP_BASE=dev`
    ([stacked pull requests](../../docs/shipping.md#stacked-pull-requests)).
-3. Review below 8/10: fix and commit every confirmed finding (never weaken a
+3. Full review below 8/10: fix and commit every confirmed finding (never weaken a
    test or gate), file out-of-scope ones as issues, ship again.
-4. After three failed full reviews `make ship` decides, never a person: it
-   runs up to two **closing reviews** of your fixes (commit them first). If the
-   findings are not converging, or the closing reviews do not pass, it tells
-   you to **split** the change into smaller pull requests: do it, close the
-   original, file leftovers as issues. Never rerun reviews to fish for a
+4. A branch gets one full blind review. If it fails without a critical finding
+   or major test weakening, `make ship` runs up to three **closing reviews** of
+   the fixes since the last reviewed commit and every carried blocking finding
+   (commit the fixes first); new findings must be in that fix diff. Closing
+   reviews pass when no blocking finding or undecided carried finding remains
+   and every session answered, regardless of grade. A severe full review, a
+   closing review with severe findings or unresolved carried blockers, or three
+   failed closing reviews means **split** the change into smaller pull requests:
+   do it, close the original, file leftovers as issues. Never rerun reviews to fish for a
    grade, lower the tier, or edit reviewer prompts or `gates/review.json` in
    the same branch.
 5. Report the pull request URL, the grade and what is left in issues.

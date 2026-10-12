@@ -40,9 +40,12 @@ agent policy refuses `$` in agent-set Make values.
    another. The agent policy refuses every write into the Git common directory.
 6. **Reviews** the commit with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
-   family). Below 8/10, or incomplete, nothing is pushed: fix and ship again.
-   A branch has a review budget (three full reviews, then up to two closing
-   reviews of the fixes); when it is spent `make ship` says to split the change
+   family). A full review below 8/10, an incomplete review, or a closing review
+   with a blocking finding or an undecided carried finding pushes nothing.
+   A branch gets one full blind review; a non-severe failure leads to up to
+   three closing reviews of the fixes and carried findings. Severe findings
+   or unresolved carried blockers end the budget early; when it is spent
+   `make ship` says to split the change
    ([review](review.md#when-reviews-do-not-converge)). A stored passing review
    may also be reused after a clean rebase when Git's raw
    `diff --raw --no-abbrev -z --no-renames <merge-base>..<commit>` output is
