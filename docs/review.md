@@ -12,7 +12,7 @@ make review REVIEW_TIER=medium REVIEW_RUNTIME=claude REVIEW_TASK=<description fi
 anything is pushed.
 
 `make review-floor` prints the lowest tier the change allows. The agent picks the
-tier (never below the floor) and says why in the description. A review passes at
+tier (never below the floor) and says why in the description. A full review passes at
 8/10 or more.
 
 ## Tiers
@@ -102,7 +102,7 @@ and effort (`crates/harness/src/review/`).
    one severity lower, so a single dissenting reviewer cannot erase a critical
    one.
 
-The review **passes** when every session answered and the capped grade is at
+A full review **passes** when every session answered and the capped grade is at
 least `merge_grade` (8). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
@@ -133,41 +133,46 @@ a case set this small shows large differences only.
 
 ## What happens next
 
-- **Pass:** `make ship` pushes, appends the review to the pull request, posts
-  the commit status `harness/review` = success and arms GitHub auto-merge. A
-  passing review is reused by a later `make ship` of the same commit. After a
-  clean rebase, it may also be reused when Git's raw
-  `diff --raw --no-abbrev -z --no-renames <merge-base>..<commit>` output is
-  byte-identical for both commits. This means the same paths go from identical
-  old blobs and modes to identical new blobs and modes; the report stores a
-  SHA-256 fingerprint for information, while reuse recomputes both sides from
-  Git. Any complete report for the target commit at the required tier or higher
-  blocks reuse, whether it passed or failed. By design only a review recorded
-  for the same branch name is a source, even when another branch holds a
-  byte-identical change: another branch's review never answers this branch's
-  findings. The source must also have been given the same description (the
-  SHA-256 of the `SHIP_BODY` text is stored), and it must hold under the
-  reviewer policy that `origin/dev` holds today: before loading its model, a
-  review pins one policy commit (the judge's own, `AOE_JUDGE_REV` from
-  `.agents/hooks/harness.sh`, else `origin/dev` once), reads config, registry,
-  model and prompts from it and stores its fingerprint. Reuse pins the same
-  way and takes the floor, eligible tiers and merge grade from that commit;
-  the reuse report records the change's real floor. Reuse writes a new harness report
-  for the rebased commit that points to the original full
-  or closing review, and the status and PR description identify the reuse. A
-  reuse report is never itself a source for another reuse. Failing reviews and
-  reviews below the required tier are not reused. A review is for one base
-  branch: a stacked review (`SHIP_BASE`, [shipping](shipping.md#stacked-pull-requests))
-  never answers for the same commit shipped against dev. Across bases, the
-  same rule applies: after the parent merged and the branch was rebased onto
-  dev, the review recorded against the parent is reused when the raw diff from
-  its merge base with the recorded parent commit equals the raw diff from the
-  new commit's merge base with `origin/dev`. This is a local review
-  equivalence check: a patch can behave differently on a new base, so CI
-  re-runs every gate on the new commit. Branch
-  protection on `dev` requires both `required` (CI) and `harness/review`, so
-  nothing merges without a passing review (Dependabot PRs need a review path:
-  #161).
+- **Pass:** `make ship` publishes once the parent is ready: it pushes, appends
+  the review to the pull request and posts `harness/review` = success. Auto-merge
+  is armed only into `dev`, whose protection requires both `required` (CI)
+  and `harness/review`. A local stacked parent needs no pull request for
+  review: `make ship SHIP_BASE=<parent> SHIP_BODY=<description file>` runs the
+  gates and review against its local tip, records that parent commit, and
+  stops before publishing with `reviewed ahead: <grade>; push when the parent
+  <branch> has its pull request`. `make review SHIP_BASE=<parent>` also runs the
+  gates before reviewing or loading a stored approval; it never publishes.
+  Once the parent has an open harness pull request, ship against its fetched
+  origin tip. After it merges, rebase onto `origin/dev` and ship with
+  `SHIP_BASE=dev` ([shipping](shipping.md#stacked-pull-requests)).
+- **Approval follows the patch.** A stored passing review can answer for the
+  same commit or a rebased commit on the same branch, even after parent edits
+  or a change of base. The harness recomputes the branch's own diff from its
+  merge base with the **recorded base commit**, and compares it with the diff
+  against the selected base now. Per file, identity retains the byte-exact
+  path, old/new modes, ordered removed and added line bytes, and final-newline
+  markers. Context, line offsets and hunk grouping are ignored, so unrelated
+  edits to a shared file do not discard approval. Binary changes and gitlinks
+  require identical old/new object IDs. Unlike `git patch-id --stable`, this
+  keeps literal whitespace changes distinct. Conflict resolution that changes the patch
+  requires another review. The stored SHA-256 fingerprint is informational;
+  equality is checked from Git, never trusted from the report.
+  Only the same branch name and task qualify (the effective `SHIP_BODY` or
+  `REVIEW_TASK` text is fingerprinted), at the required tier or higher.
+  Another branch's identical patch never answers this branch's findings.
+  A complete report for the target head against the current base blocks
+  copying another review over it, including a failing verdict.
+  A review pins one policy commit (the judge's `AOE_JUDGE_REV`, else
+  `origin/dev`) before reading config, registry, models and prompts. Reuse
+  requires that pinned commit to be current `origin/dev` and the source's
+  policy fingerprint to match. Floor, eligible tiers and merge grade come
+  from that commit. Reuse writes a report for the current head and base,
+  pointing to the original passing full or closing review; a reuse report
+  never becomes a source. The status and PR description say
+  `review of <sha> reused (same patch)`.
+  Gates **always run before reuse** on the current tree, and CI runs them
+  again. The same patch can behave differently after a parent deletes code it
+  relies on; patch identity does not establish semantic equivalence.
 - **Fail:** nothing is pushed. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.

@@ -1,5 +1,6 @@
 //! The few Git facts `ship` needs, each from one plain `git` call.
 use std::{path::Path, process::Command};
+mod patch;
 
 pub(crate) type Result<T> = std::result::Result<T, String>;
 
@@ -118,14 +119,17 @@ pub(crate) fn subject(root: &Path) -> Result<Subject> {
     })
 }
 
-/// `refs/remotes/origin/<base>` after a fetch, never a local name that could
-/// shadow it, and the merge base with HEAD.
+/// The selected full ref (origin or an explicit local parent), or the pinned
+/// commit, and its merge base with HEAD. Policy always fetches origin/dev.
 pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, String)> {
     if fetch {
         // Review policy always comes from origin/dev, so a stacked base
         // fetches dev too.
         let mut args = vec!["fetch", "--quiet", "origin", "dev"];
-        if base != "dev" {
+        if base != "dev"
+            && !crate::review::base::is_local(base)
+            && !crate::review::base::is_pinned(base)
+        {
             args.push(base);
         }
         git(root, &args)?;
@@ -137,16 +141,21 @@ pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, Stri
             "--verify",
             "--quiet",
             "--end-of-options",
-            &format!("refs/remotes/origin/{base}^{{commit}}"),
+            &format!("{}^{{commit}}", crate::review::base::reference(base)),
         ],
     )
-    .map_err(|_| format!("origin/{base} is missing; fetch it"))?;
+    .map_err(|_| format!("{} is missing", crate::review::base::reference(base)))?;
     let merge_base = git(root, &["merge-base", &remote, "HEAD"])?;
+    if crate::review::base::is_local(base) && merge_base != remote {
+        return Err(format!(
+            "rebase the child onto local parent `{base}` before reviewing it"
+        ));
+    }
     Ok((remote, merge_base))
 }
 
-/// SHA-256 of Git's raw file identity diff for a commit relative to the
-/// current remote base. Both fingerprints are recomputed from Git, never
+/// SHA-256 of the exact changed hunk bytes, paths, modes and binary identities
+/// relative to the selected base. Both identities are recomputed from Git, never
 /// trusted from report data.
 pub(crate) fn change_fingerprint(
     root: &Path,
@@ -162,14 +171,13 @@ pub(crate) fn change_fingerprint(
     Ok((merge_base, fingerprint))
 }
 
-/// Git's exact raw identity diff, kept as bytes so reuse can compare it
-/// directly. Paths may contain arbitrary bytes and must never be decoded.
+/// Canonical patch identity: context and offsets are ignored, changed bytes
+/// are exact. Paths may contain arbitrary bytes and must never be decoded.
 pub(crate) fn change_identity(root: &Path, base: &str, commit: &str) -> Result<(String, Vec<u8>)> {
-    change_identity_from(root, &format!("refs/remotes/origin/{base}"), commit)
+    change_identity_from(root, &crate::review::base::reference(base), commit)
 }
 
-/// `change_identity` from any base revision, e.g. the parent commit a stacked
-/// review recorded; the merge base is recomputed from Git.
+/// Patch identity against a recorded base commit; Git recomputes its merge base.
 pub(crate) fn change_identity_from(
     root: &Path,
     base: &str,
@@ -196,26 +204,8 @@ pub(crate) fn change_identity_from(
         ],
     )?;
     let merge_base = git(root, &["merge-base", &base, &commit])?;
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args([
-            "diff",
-            "--raw",
-            "--no-abbrev",
-            "-z",
-            "--no-renames",
-            &format!("{merge_base}..{commit}"),
-        ])
-        .output()
-        .map_err(|e| format!("git diff: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "git diff --raw --no-abbrev -z --no-renames: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    Ok((merge_base, output.stdout))
+    let identity = patch::identity(root, &merge_base, &commit)?;
+    Ok((merge_base, identity))
 }
 
 /// The files that differ between `merge_base` and HEAD, unquoted (`-z`), so

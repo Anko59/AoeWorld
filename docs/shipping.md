@@ -22,13 +22,16 @@ agent policy refuses `$` in agent-set Make values.
 
 0. **Checks first** that `gh` is 2.100 or newer (PR video uploads) and, when
    the branch has no open pull request, that a title and a description file
-   were given. Nothing runs or is pushed otherwise.
+   were given. Review-ahead needs `SHIP_BODY` for the task, but no title yet.
+   Nothing runs or is pushed if these checks fail.
 1. **Refuses** a tree with uncommitted or untracked changes ("evidence is for a
    commit"), the protected branches `dev`, `main` and `release/*`, and a
    detached HEAD.
-2. **Selects** suites from the change against `refs/remotes/origin/<base>`
-   (`dev`, or `SHIP_BASE`; see [stacked pull requests](#stacked-pull-requests))
-   after a fetch, never a local branch or tag that could shadow it.
+2. **Selects** suites from the change against the fetched
+   `refs/remotes/origin/<base>` (`dev`, or a published `SHIP_BASE`). For an
+   unpublished stacked parent it explicitly selects `refs/heads/<parent>`.
+   The chosen commit is pinned for gates and review; tags cannot shadow it
+   (see [stacked pull requests](#stacked-pull-requests)).
 3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
@@ -47,23 +50,23 @@ agent policy refuses `$` in agent-set Make values.
    or unresolved carried blockers end the budget early; when it is spent
    `make ship` says to split the change
    ([review](review.md#when-reviews-do-not-converge)). A stored passing review
-   may also be reused after a clean rebase when Git's raw
-   `diff --raw --no-abbrev -z --no-renames <merge-base>..<commit>` output is
-   byte-identical for both commits: the same paths go from identical old blobs
-   and modes to identical new blobs and modes. This is called the same change
-   (identical file blobs); the report stores a SHA-256 fingerprint for
-   information, while the harness recomputes both sides from Git. The old
-   review must meet the required tier, belong to the same branch (by design,
-   never another branch's identical change) and have been given the same
-   `SHIP_BODY` text, and any complete report already stored
-   for the new commit at that tier or higher blocks reuse, whether it passed or
-   failed. The harness stores a new report for the new commit that points to
-   the original full or closing review; reuse reports are not reused again. CI
-   re-runs every gate on the new commit.
+   may also be reused after a rebase when the branch's own patch matches,
+   even after edits to its parent. The harness compares byte-exact paths,
+   modes and changed text lines, ignoring context, offsets and hunk grouping;
+   binary changes and gitlinks require both original object IDs. It preserves
+   whitespace and final newlines ([review](review.md#what-happens-next)). The source diff uses
+   its recorded base commit; the target uses the selected base now. The old
+   review must meet the required tier, belong to the same branch and task,
+   and match current `origin/dev` review policy. A complete report for the
+   current head against this base blocks copying another review over it.
+   A new report points to the original passing full or closing review;
+   reuse reports never become sources. Gates run before loading any approval
+   on every ship, and CI runs them again. Status and description say
+   `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Only then**, pushes exactly that commit to `origin` as the branch
-   (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
+7. **Only then**, if the parent is ready, pushes exactly that commit to
+   `origin` as the branch (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make pre-push`: it skips the preflight when
    `make ship`'s passing preflight evidence covers the clean HEAD being pushed
    (`AOE_SHIP_EVIDENCE`, checked in Rust), and runs `make preflight` otherwise. The push sets SSH keepalives (unless
@@ -87,28 +90,41 @@ A change that depends on an unmerged pull request does not wait for it:
 make ship SHIP_BASE=<parent branch> SHIP_TITLE=… SHIP_BODY=…
 ```
 
-The base must be `dev` or a branch with an open pull request on origin that
-`make ship` opened (found by head branch). Another protected branch, the
-branch itself, an unknown branch and a parent whose pull request is closed or
-merged are refused; for the last, rebase onto `origin/dev` instead. Suites, the
-review diff, test-first and metrics use the merge base with the fetched
-`refs/remotes/origin/<parent>`, so the parent's change is not reviewed again;
-evidence and review reports record the base branch and commit. The pull
-request is opened with `--base <parent>` and its description says it is
-stacked on #<parent>. CI runs on pull requests into any branch, so both are
-tested at once. The `harness/review` status is posted, but auto-merge is not
-armed: GitHub would merge the child into the parent branch.
+The base may be `dev`, an open harness pull request's branch on origin, or a
+local parent branch whose pull request does not exist yet. Another protected
+branch, the child itself and an unknown branch are refused. A closed or merged
+parent pull request requires a rebase onto `origin/dev` instead; a foreign or
+manually opened parent pull request is refused as before.
 
-After the parent squash-merges, rebase the branch onto `origin/dev` (`git
-rebase --onto origin/dev <old parent tip>`), commit nothing else, and run
-`make ship SHIP_BASE=dev`. When the change is identical (the same raw diff,
-[review](review.md#what-happens-next)), the stacked review is reused; the pull
-request is retargeted to `dev` (`gh pr edit --base dev`, unless GitHub already
-did when the parent branch was deleted), force-pushed with
-lease (decided locally: the pushed branch is not an ancestor of HEAD and its
-last review was against another base), and auto-merge is armed. Any other
-change gets a fresh review. Moving an open pull request from `dev` onto a
-parent disables the auto-merge an earlier ship armed.
+**Review ahead:** when the parent has no pull request, the local parent tip
+must be an ancestor of the child. The harness fetches `origin/dev` for review
+policy, pins the local parent commit, runs the gates on the child's current
+tree and reviews only `parent..child`. Evidence and the stored report record
+the parent branch and commit. It stops with
+`reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
+no push, child pull request, status or auto-merge is published. `SHIP_BODY`
+is still the review task; a PR title can wait. `make review SHIP_BASE=<parent>
+REVIEW_TASK=<same description file>` uses the local parent too, runs the gates
+before reviewing or loading an approval, stores the report and never publishes.
+
+Once the parent has its open harness pull request, run `make ship` with the
+same base and description. Suites, review, test-first and metrics use the
+merge base with the fetched `refs/remotes/origin/<parent>`. Gates run again;
+a stored approval is reused if the child's own patch and the other guards
+still match, even if the parent was edited and the child rebased. The child
+PR opens with `--base <parent>` and says it is stacked on #<parent>. CI runs
+on pull requests into any branch, so both are tested at once.
+`harness/review` is posted, but auto-merge waits for a restack onto `dev`.
+
+After the parent squash-merges, rebase onto `origin/dev` (`git rebase --onto
+origin/dev <old parent tip>`) and run `make ship SHIP_BASE=dev`. A matching
+own patch reuses the stacked review
+([review](review.md#what-happens-next)). The pull request is retargeted to
+`dev` (unless GitHub already did), force-pushed with lease when the pushed
+branch is no longer an ancestor of HEAD and its last review was against
+another base, and auto-merge is armed. A changed own patch needs another
+review under the branch's remaining budget. Moving an open pull request from
+`dev` onto a parent disables previously armed auto-merge.
 
 ## The pull request description
 

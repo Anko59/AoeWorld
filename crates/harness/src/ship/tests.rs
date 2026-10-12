@@ -285,6 +285,7 @@ mod describe;
 mod duel;
 mod duel_extra;
 mod metrics;
+mod patch;
 mod showcase;
 mod showcase_bridge;
 mod showcase_browser;

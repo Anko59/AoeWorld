@@ -13,7 +13,7 @@ mod github;
 mod issues;
 mod metrics;
 pub(crate) mod prepush;
-mod review_gate;
+pub(crate) mod review_gate;
 mod review_pr;
 pub(crate) mod run;
 mod showcase;
@@ -72,13 +72,16 @@ pub(crate) struct Options {
     /// Push with `--force-with-lease`, after a rebase.
     #[arg(long)]
     pub(crate) force: bool,
-    /// `dev`, or the branch of an open harness pull request to stack on
+    /// `dev`, or a parent branch (local before its PR exists) to stack on
     /// (SHIP_BASE only; not settable from the command line).
     #[arg(skip = String::from("dev"))]
     pub(crate) base: String,
     /// The open pull request of a stacked `base`, found before the gates run.
     #[arg(skip)]
     pub(crate) parent: Option<stack::Parent>,
+    /// Parent has no PR yet: store the review, without pushing or opening one.
+    #[arg(skip)]
+    pub(crate) review_ahead: bool,
     /// Tests only: leave the pull request alone.
     #[arg(skip)]
     pub(crate) no_pr: bool,
@@ -107,6 +110,7 @@ impl Default for Options {
             force: false,
             base: "dev".into(),
             parent: None,
+            review_ahead: false,
             no_pr: false,
             no_fetch: false,
             tier: None,
@@ -235,7 +239,7 @@ pub(crate) fn ship_with(
     let branch = git::branch(root)?;
     stack::refuse_base(&options.base, &branch)?;
     // Suites, the review diff, test-first and metrics all measure the change
-    // against origin/<base>.
+    // against the selected base (origin, or an explicitly local parent).
     let _base = crate::review::base::scope(&options.base);
     let preflight = if !options.no_pr {
         github::preflight_pull_request(root, options)?
@@ -253,7 +257,19 @@ pub(crate) fn ship_with(
         );
     let options = &Options {
         parent: preflight.parent,
+        review_ahead: preflight.review_ahead || options.review_ahead,
         force: options.force || retarget,
+        ..options.clone()
+    };
+    let _selected = if options.review_ahead {
+        crate::review::base::scope_local(&options.base)
+    } else {
+        crate::review::base::scope(&options.base)
+    };
+    let (base, _) = git::base(root, &options.base, !options.no_fetch)?;
+    let _anchor = crate::review::base::scope_at(&options.base, &base);
+    let options = &Options {
+        no_fetch: true,
         ..options.clone()
     };
     let evidence = judge(root, options)?;
@@ -285,6 +301,13 @@ pub(crate) fn ship_with(
     } else {
         Some(review_gate::require(root, &evidence, options, reviewer)?)
     };
+    if options.review_ahead {
+        let report = review
+            .as_ref()
+            .ok_or("review ahead requires a passing review")?;
+        eprintln!("ship: {}", stack::ahead_message(&options.base, report));
+        return Ok(evidence);
+    }
     push(root, &evidence, options.force)?;
     if !options.no_pr {
         let mut options = options.clone();

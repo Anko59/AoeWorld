@@ -49,6 +49,21 @@ pub(crate) fn require(
     options: &Options,
     reviewer: &Reviewer<'_>,
 ) -> Result<Report> {
+    let task = match &options.body_file {
+        Some(path) => fs::read_to_string(path)?,
+        None => String::new(),
+    };
+    require_task(root, evidence, options, &task, reviewer)
+}
+
+/// Same review step with already-frozen task text (the review-only entry).
+pub(crate) fn require_task(
+    root: &Path,
+    evidence: &Evidence,
+    options: &Options,
+    task: &str,
+    reviewer: &Reviewer<'_>,
+) -> Result<Report> {
     let tier = tier(root, options)?;
     let eligible: Vec<&str> = TIERS
         .iter()
@@ -56,11 +71,7 @@ pub(crate) fn require(
         .map(|t| t.name())
         .collect();
     // The description is part of what was reviewed: reuse needs the same.
-    let task = match &options.body_file {
-        Some(path) => fs::read_to_string(path)?,
-        None => String::new(),
-    };
-    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible, &task)? {
+    if let Some(report) = Report::load_passing(root, &evidence.head, &eligible, task)? {
         eprintln!(
             "ship: reusing the passing {} review of this commit",
             report.tier
@@ -72,10 +83,10 @@ pub(crate) fn require(
     // must not be replaced by a review of another commit's change.
     if !has_complete
         && let Some(report) =
-            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible, &task)?
+            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible, task)?
     {
         eprintln!(
-            "ship: review of {} reused (same change, identical file blobs)",
+            "ship: review of {} reused (same patch)",
             short(report.reused_from.as_deref().unwrap_or_default())
         );
         return Ok(report);
@@ -98,7 +109,7 @@ pub(crate) fn require(
         },
         crate::review::config::runtime_key(options.runtime)
     );
-    let report = reviewer(root, tier, options.runtime, &task, &plan)?;
+    let report = reviewer(root, tier, options.runtime, task, &plan)?;
     eprintln!("{}", report.markdown());
     // A review takes minutes: only a review of the very commit the gates
     // passed, still checked out, unlocks the push.
@@ -111,6 +122,11 @@ pub(crate) fn require(
             short(&now)
         )
         .into());
+    }
+    if report.base != evidence.base || report.base_branch != evidence.base_branch {
+        return Err(
+            "ship: the review answered for another base than the gates; nothing was pushed".into(),
+        );
     }
     if report.passes() {
         return Ok(report);
@@ -190,10 +206,7 @@ pub(crate) fn publish_calls_onto(
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
     }
     let description = if let Some(source) = &report.reused_from {
-        format!(
-            "review of {} reused (same change, identical file blobs)",
-            short(source)
-        )
+        format!("review of {} reused (same patch)", short(source))
     } else {
         format!(
             "{}grade {}/10 · {} tier · {} rounds",

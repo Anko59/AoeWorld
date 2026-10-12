@@ -46,6 +46,8 @@ pub(super) struct Preflight {
     pub(super) body: Option<String>,
     /// The open pull request a stacked base belongs to.
     pub(super) parent: Option<super::stack::Parent>,
+    /// No parent PR yet: gate/review locally and stop before publication.
+    pub(super) review_ahead: bool,
     /// The base the branch's open pull request targets now, if any.
     pub(super) current_base: Option<String>,
 }
@@ -81,11 +83,18 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
     let parent = if options.base == crate::review::base::DEV {
         None
     } else {
-        Some(super::stack::parent(root, &repository, &options.base)?)
+        super::stack::parent(root, &repository, &options.base)?
+    };
+    let review_ahead = options.base != crate::review::base::DEV && parent.is_none();
+    let _local = if review_ahead {
+        super::stack::local_commit(root, &options.base)?;
+        Some(crate::review::base::scope_local(&options.base))
+    } else {
+        None
     };
     let existing = open_pull_request(root, &repository, &branch)?;
     let open = existing.is_some();
-    if !open && (options.title.is_none() || options.body_file.is_none()) {
+    if !open && !review_ahead && (options.title.is_none() || options.body_file.is_none()) {
         return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
     }
     let template_text = if let Some(body) = &options.body_file {
@@ -106,6 +115,7 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
     Ok(Preflight {
         body: template_text,
         parent,
+        review_ahead,
         current_base: existing.map(|pr| pr.base),
     })
 }

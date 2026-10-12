@@ -7,6 +7,8 @@ use super::super::{
     tests::{fixture, offline, run},
 };
 
+mod ahead;
+mod patch_reuse;
 mod reuse;
 mod reuse_policy;
 mod stacked;
@@ -22,12 +24,13 @@ fn graded(root: &Path, tier: Tier, grade: u8) -> Report {
 
 /// A review of HEAD with this grade, not stored yet.
 fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
+    let (base, merge_base) = git::base(root, &crate::review::base::current(), false).unwrap();
     Report {
         version: 1,
         head: git::git(root, &["rev-parse", "HEAD"]).unwrap(),
         branch: "feature".into(),
-        base: String::new(),
-        merge_base: String::new(),
+        base,
+        merge_base,
         tier: tier.name().into(),
         floor: "low".into(),
         runtime: "claude".into(),
@@ -54,7 +57,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         task_fingerprint: Report::effective_task(root, "HEAD", "")
             .ok()
             .map(|task| Report::task_fingerprint(&task)),
-        base_branch: "dev".into(),
+        base_branch: crate::review::base::current(),
     }
 }
 
@@ -230,11 +233,11 @@ fn the_review_is_rendered_into_a_private_description() {
         "{text}"
     );
     assert!(
-        text.contains("Review of `aaaaaaaaaaaa` reused (same change, identical file blobs)"),
+        text.contains("Review of `aaaaaaaaaaaa` reused (same patch)"),
         "{text}"
     );
     assert!(
-        text.contains("# 🤖 For AI") && text.contains("same change, identical file blobs"),
+        text.contains("# 🤖 For AI") && text.contains("same patch"),
         "{text}"
     );
     assert!(text.contains("## Adversarial review"), "{text}");

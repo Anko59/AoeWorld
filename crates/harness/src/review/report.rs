@@ -36,10 +36,9 @@ pub(crate) struct Report {
     /// left", and its grade is reported, not gated.
     #[serde(default)]
     pub(crate) closing: bool,
-    /// SHA-256 of the raw Git file identity diff relative to origin/<base>.
+    /// SHA-256 of the canonical own patch relative to the recorded base.
     /// Reuse always recomputes this value from Git; it is informational only.
     #[serde(default)]
-    #[serde(alias = "patch_id")]
     pub(crate) change_fingerprint: Option<String>,
     /// SHA-256 of the trusted reviewer policy used for this review.
     #[serde(default)]
@@ -85,7 +84,7 @@ impl Report {
         if !task.trim().is_empty() {
             return Ok(task.to_owned());
         }
-        let base = format!("refs/remotes/origin/{}", super::base::current());
+        let base = super::base::reference(&super::base::current());
         let merge_base = git::git(root, &["merge-base", &base, head])?;
         git::git(
             root,
@@ -197,6 +196,13 @@ impl Report {
         task: &str,
     ) -> Result<Option<Self>, String> {
         let wanted = Self::task_fingerprint(&Self::effective_task(root, head, task)?);
+        let branch = git::branch(root)?;
+        let judge = std::env::var(super::trusted::JUDGE_REV).ok();
+        let (_pin, policy) = super::trusted::pin(root, judge.as_deref())?;
+        if policy != git::git(root, &["rev-parse", "refs/remotes/origin/dev"])? {
+            return Ok(None);
+        }
+        let wanted_patch = git::change_identity(root, &super::base::current(), head)?.1;
         let Ok(entries) = fs::read_dir(directory(root)?) else {
             return Ok(None);
         };
@@ -212,10 +218,17 @@ impl Report {
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .find(|r| {
                 r.head == head
+                    && r.branch == branch
                     && r.against_current_base()
                     && tiers.contains(&r.tier.as_str())
                     && r.task_fingerprint.as_deref() == Some(wanted.as_str())
                     && r.passes()
+                    && Self::policy_fingerprint_at(root, &policy, &r.tier)
+                        .ok()
+                        .is_some_and(|fp| r.policy_fingerprint.as_deref() == Some(fp.as_str()))
+                    && git::change_identity_from(root, &r.base, &r.head)
+                        .ok()
+                        .is_some_and(|(_, patch)| patch == wanted_patch)
             }))
     }
 
@@ -286,7 +299,7 @@ impl Report {
         );
         if let Some(source) = &self.reused_from {
             out.push_str(&format!(
-                "Review of `{}` reused (same change, identical file blobs); CI re-runs every gate on this commit.\n\n",
+                "Review of `{}` reused (same patch); CI re-runs every gate on this commit.\n\n",
                 &source[..12.min(source.len())]
             ));
         }

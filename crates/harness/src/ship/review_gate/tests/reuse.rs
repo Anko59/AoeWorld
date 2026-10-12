@@ -147,11 +147,7 @@ fn reuses_a_passing_review_after_rebase_onto_a_moved_base() {
     assert_eq!(stored.reused_from.as_deref(), Some(reviewed.head.as_str()));
     let calls = review_gate::publish_calls("o/r", "u", &stored).unwrap();
     assert!(calls[0].join(" ").contains("description=review of "));
-    assert!(
-        calls[0]
-            .join(" ")
-            .contains("same change, identical file blobs")
-    );
+    assert!(calls[0].join(" ").contains("same patch"));
 
     let evidence = judge(&root, &crate::ship::tests::offline()).unwrap();
     let options = crate::ship::Options {
@@ -170,7 +166,7 @@ fn reuses_a_passing_review_after_rebase_onto_a_moved_base() {
     let status = review_gate::publish_calls("o/r", "u", &written).unwrap()[0].join(" ");
     assert!(
         status.contains(&format!(
-            "description=review of {} reused (same change, identical file blobs)",
+            "description=review of {} reused (same patch)",
             &reviewed.head[..12]
         )),
         "{status}"
@@ -238,31 +234,24 @@ fn source_must_have_passed_its_stored_merge_grade() {
 }
 
 #[test]
-fn raw_identity_keeps_arbitrary_path_bytes_without_text_decoding() {
+fn patch_identity_keeps_arbitrary_path_bytes_without_text_decoding() {
     let (_temp, root) = fixture("true");
     let name = std::ffi::OsString::from_vec(b"raw-\x80-name".to_vec());
     std::fs::write(root.join(name), b"bytes\x80\n").unwrap();
     run(&root, &["add", "--all"]);
     run(&root, &["commit", "-q", "-m", "non-utf8 path"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let (merge_base, raw) = git::change_identity(&root, "dev", &head).unwrap();
-    let expected = std::process::Command::new("git")
-        .arg("-C")
-        .arg(&root)
-        .args([
-            "diff",
-            "--raw",
-            "--no-abbrev",
-            "-z",
-            "--no-renames",
-            &format!("{merge_base}..{head}"),
-        ])
-        .output()
-        .unwrap();
-    assert!(expected.status.success());
-    assert_eq!(
-        raw, expected.stdout,
-        "the comparison input must stay raw bytes"
+    let (_, identity) = git::change_identity(&root, "dev", &head).unwrap();
+    let original = root.join(std::ffi::OsString::from_vec(b"raw-\x80-name".to_vec()));
+    let renamed = root.join(std::ffi::OsString::from_vec(b"raw-\x81-name".to_vec()));
+    std::fs::rename(original, renamed).unwrap();
+    run(&root, &["add", "--all"]);
+    run(&root, &["commit", "-q", "--amend", "--no-edit"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    assert_ne!(
+        identity,
+        git::change_identity(&root, "dev", &head).unwrap().1,
+        "different raw path bytes must never collide"
     );
 }
 
@@ -300,7 +289,7 @@ fn invalid_utf8_byte_difference_refuses_reuse() {
 }
 
 #[test]
-fn a_rebase_that_changes_the_same_file_refuses_reuse() {
+fn unchanged_hunks_reuse_after_the_base_changes_the_same_file() {
     let (_temp, root) = fixture("true");
     run(&root, &["checkout", "-q", "dev"]);
     std::fs::write(
@@ -338,7 +327,7 @@ fn a_rebase_that_changes_the_same_file_refuses_reuse() {
     assert!(
         Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
-            .is_none()
+            .is_some()
     );
 }
 

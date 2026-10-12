@@ -1,7 +1,7 @@
 //! Stacked pull requests (`make ship SHIP_BASE=<branch>`): a branch that
 //! depends on an unmerged one is gated, reviewed and opened against it, so
-//! both are reviewed and tested at once. The base must be `dev` or a branch
-//! whose open pull request `make ship` opened; auto-merge waits until the
+//! both are reviewed and tested at once. A local parent without a PR permits
+//! review ahead, with publication deferred. Auto-merge waits until the
 //! parent merged and the branch was restacked onto dev.
 use super::{Result, git, github::gh};
 use crate::review::base::DEV;
@@ -49,7 +49,7 @@ pub(crate) fn refuse_base(base: &str, branch: &str) -> std::result::Result<(), S
     }
     if git::protected(base) {
         return Err(format!(
-            "SHIP_BASE={base}: a pull request goes into `dev` or stacks on an open harness pull request, never into `{base}`"
+            "SHIP_BASE={base}: use `dev` or an unprotected parent branch, never `{base}`"
         ));
     }
     if base == branch {
@@ -66,7 +66,10 @@ fn opened_by_the_harness(body: &str) -> bool {
 }
 
 /// The open harness pull request whose head is `base`, or why there is none.
-pub(crate) fn parent_from(base: &str, prs: &[HeadPr]) -> std::result::Result<Parent, String> {
+pub(crate) fn parent_from(
+    base: &str,
+    prs: &[HeadPr],
+) -> std::result::Result<Option<Parent>, String> {
     let ours: Vec<&HeadPr> = prs.iter().filter(|pr| !pr.cross_repository).collect();
     if let Some(open) = ours.iter().find(|pr| pr.state == "OPEN") {
         if !opened_by_the_harness(&open.body) {
@@ -75,11 +78,11 @@ pub(crate) fn parent_from(base: &str, prs: &[HeadPr]) -> std::result::Result<Par
                 open.number
             ));
         }
-        return Ok(Parent {
+        return Ok(Some(Parent {
             number: open.number,
             branch: base.to_owned(),
             url: open.url.clone(),
-        });
+        }));
     }
     let restack = "rebase onto origin/dev instead (`git rebase --onto origin/dev <old parent tip>`) and ship with SHIP_BASE=dev SHIP_FORCE=1";
     if let Some(merged) = ours.iter().find(|pr| pr.state == "MERGED") {
@@ -94,13 +97,16 @@ pub(crate) fn parent_from(base: &str, prs: &[HeadPr]) -> std::result::Result<Par
             closed.number
         ));
     }
-    Err(format!(
-        "SHIP_BASE={base}: origin has no pull request from `{base}`; stack only on a branch shipped with `make ship`"
-    ))
+    if !prs.is_empty() && ours.is_empty() {
+        return Err(format!(
+            "SHIP_BASE={base}: a foreign pull request cannot be a parent"
+        ));
+    }
+    Ok(None)
 }
 
 /// Look the parent up on origin's repository by head branch.
-pub(crate) fn parent(root: &Path, repository: &str, base: &str) -> Result<Parent> {
+pub(crate) fn parent(root: &Path, repository: &str, base: &str) -> Result<Option<Parent>> {
     let listed = gh(
         root,
         &[
@@ -118,6 +124,30 @@ pub(crate) fn parent(root: &Path, repository: &str, base: &str) -> Result<Parent
     )?;
     let prs: Vec<HeadPr> = serde_json::from_str(&listed)?;
     Ok(parent_from(base, &prs)?)
+}
+
+/// A missing parent PR is allowed only when its local branch exists.
+pub(crate) fn local_commit(root: &Path, base: &str) -> Result<String> {
+    git::git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            &format!("refs/heads/{base}^{{commit}}"),
+        ],
+    )
+    .map_err(|_| {
+        format!("SHIP_BASE={base}: no open parent pull request or local parent branch").into()
+    })
+}
+
+pub(crate) fn ahead_message(base: &str, report: &crate::review::Report) -> String {
+    format!(
+        "reviewed ahead: {}/10; push when the parent {base} has its pull request",
+        report.grade
+    )
 }
 
 /// The base to move an open pull request to, when it targets another one
@@ -163,7 +193,7 @@ pub(crate) fn note(parent: &Parent) -> String {
 pub(crate) fn next_steps(parent: Option<&Parent>, url: &str) -> String {
     match parent {
         Some(parent) => format!(
-            "ship: {url} is stacked on #{n} and reviewed against `{b}`; CI runs on it now, and auto-merge is not armed. After #{n} merges: `git fetch origin && git rebase --onto origin/dev <old {b} tip>`, commit nothing else, then `make ship SHIP_BASE=dev`: the identical change reuses this review, the pull request is retargeted to dev, force-pushed with lease and auto-merge is armed.",
+            "ship: {url} is stacked on #{n} and reviewed against `{b}`; CI runs on it now, and auto-merge is not armed. After #{n} merges: `git fetch origin && git rebase --onto origin/dev <old {b} tip>`, commit nothing else, then `make ship SHIP_BASE=dev`: the same own patch reuses this review, the pull request is retargeted to dev, force-pushed with lease and auto-merge is armed.",
             n = parent.number,
             b = parent.branch
         ),
