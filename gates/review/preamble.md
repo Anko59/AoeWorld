@@ -28,6 +28,20 @@ for ever more mechanism against a determined attacker: no local check can win
 that, review and CI are the backstop, and every addition is more code to get
 wrong.
 
+Before v1.0 the game has no players and no outside data: map packages, asset
+catalogs, chunks and job results are produced locally by this repository's own
+code. For product code (not the harness guards above), robustness against input
+that the project's own writer cannot produce (a malformed or hostile package,
+an out-of-range value no generator emits, an arithmetic overflow only reachable
+with absurd sizes) is at most `minor`, and belongs in the follow-up issue, not
+in the way of the merge. It is `major` or `critical` only when a normal path
+reaches it: a package the current writer does produce, a request the map
+creator can send, an order a player can give. Likewise a missing second
+enforcement point for an invariant that one reachable path already enforces is
+`minor`. What blocks a product change is wrong behaviour in play or in the
+creator, a regression, an unmet stated requirement, or a broken or weakened
+test.
+
 Project rule (AGENTS.md): no backward compatibility before v1.0. A change
 that adds a legacy or "prior" version, an opt-in profile kept beside the old
 path, a version-gated branch, or a fixture that keeps a superseded version's
