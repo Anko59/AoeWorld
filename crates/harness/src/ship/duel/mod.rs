@@ -10,6 +10,7 @@ pub(crate) mod focus;
 #[cfg(test)]
 #[path = "tests/focus.rs"]
 mod focus_tests;
+mod green;
 pub(crate) mod output;
 mod runner;
 mod scope;
@@ -180,7 +181,19 @@ fn rounds(
             }
             let checked = runner::check(root, options, command, options.check.is_none());
             tree::validate(root, false, &tests, branch)?;
-            let (checked, tail) = checked?;
+            let (mut checked, mut tail) = checked?;
+            let tests_ran = if options.check.is_none() {
+                match green::validate(root, &paths, &red_report, &checked) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        checked.passed = false;
+                        tail.push_str(&format!("\n{error}"));
+                        false
+                    }
+                }
+            } else {
+                true // Explicit DUEL_CHECK uses exit status only.
+            };
             summary.push_str(&format!(
                 "green: {} (attempt {attempt}); tests: {}\n{tail}\n",
                 if checked.passed { "PASS" } else { "FAIL" },
@@ -191,6 +204,7 @@ fn rounds(
                 break;
             }
             if options.check.is_none()
+                && tests_ran
                 && !checked.build_failed
                 && checked.unavailable.is_none()
                 && !checked.failed.is_empty()
@@ -215,7 +229,9 @@ fn rounds(
             failing = tail;
         }
         if !green {
-            return Err("green still fails after 3 attempts; tests commit stays and working tree is left as it is".into());
+            return Err(format!(
+                "green still fails after 3 attempts; tests commit stays and working tree is left as it is\n{failing}"
+            ));
         }
         let implementation = tree::commit(
             root,

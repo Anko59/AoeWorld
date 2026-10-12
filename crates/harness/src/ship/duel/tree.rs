@@ -1,7 +1,7 @@
 //! Check staged, unstaged and untracked paths, including both sides of renames.
 use crate::{
     agents::{is_test_path, protected_path},
-    ship::{git, test_first::inline},
+    ship::{duel::authored, git, test_first::inline},
 };
 use std::{collections::BTreeSet, path::Path, process::Command};
 
@@ -101,6 +101,10 @@ pub(crate) fn validate(
             bad.join(", ")
         ));
     }
+    if tester && let Err(error) = validate_test_names(root, head, &paths) {
+        restore(root, head)?;
+        return Err(format!("tester removed test functions (restored): {error}"));
+    }
     if !tester && let Err(error) = validate_inline(root, head, &paths) {
         restore(root, head)?;
         return Err(format!(
@@ -121,6 +125,35 @@ fn source(root: &Path, object: &str) -> git::Result<String> {
         String::from_utf8(output.stdout).map_err(|e| e.to_string())
     } else {
         Ok(String::new()) // New or deleted paths have no blob on this side.
+    }
+}
+
+fn validate_test_names(root: &Path, head: &str, paths: &[String]) -> git::Result<()> {
+    let mut removed = BTreeSet::new();
+    for path in paths.iter().filter(|p| p.ends_with(".rs")) {
+        let before = authored::functions(&source(root, &format!("{head}:{path}"))?)?;
+        if before.is_empty() {
+            continue;
+        }
+        let working = if root.join(path).exists() {
+            std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string())?
+        } else {
+            String::new()
+        };
+        for after in [working, source(root, &format!(":{path}"))?] {
+            let names = authored::functions(&after)?;
+            removed.extend(
+                before
+                    .iter()
+                    .filter(|n| !names.contains(n))
+                    .map(|n| format!("{path}::{n}")),
+            );
+        }
+    }
+    if removed.is_empty() {
+        Ok(())
+    } else {
+        Err(removed.into_iter().collect::<Vec<_>>().join(", "))
     }
 }
 
@@ -249,8 +282,13 @@ pub(crate) fn message(task: &str, phase: &str, runtime: &str, model: Option<&str
         let prefix = prefix[..end].trim_end();
         format!("{prefix}{}…", if prefix == "Tests:" { " " } else { "" })
     };
+    let address = match runtime {
+        "Claude Code" | "claude" => "noreply@anthropic.com",
+        "Codex" | "codex" => "noreply@openai.com",
+        _ => "noreply@example.com",
+    };
     format!(
-        "{subject}\n\n{task}\n\nHarness-Phase: {phase}\nCo-Authored-By: {runtime} ({}) <noreply@openai.com>",
+        "{subject}\n\n{task}\n\nHarness-Phase: {phase}\nCo-Authored-By: {runtime} ({}) <{address}>",
         model.unwrap_or("configured default")
     )
 }

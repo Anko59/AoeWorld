@@ -263,6 +263,13 @@ fn function_count(directory: &Path, name: &str) -> git::Result<usize> {
     Ok(count)
 }
 
+pub(super) fn functions(source: &str) -> git::Result<Vec<String>> {
+    let parsed = syn::parse_file(source).map_err(|e| e.to_string())?;
+    let mut functions = Vec::new();
+    test_functions(&parsed.items, "", &mut functions);
+    Ok(functions)
+}
+
 fn test_functions(items: &[syn::Item], prefix: &str, functions: &mut Vec<String>) {
     for item in items {
         match item {

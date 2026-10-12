@@ -185,7 +185,11 @@ fn explicit_fuzz_check_uses_exit_code_without_test_names_or_duel_report() {
         options.check = Some("make fuzz-smoke".into());
         fs::write(root.join(".cache/checks"), "fixture\n").unwrap();
         fs::create_dir_all(root.join("fuzz/fuzz_targets")).unwrap();
-        fs::write(root.join("fuzz/fuzz_targets/a.rs"), "original property\n").unwrap();
+        fs::write(
+            root.join("fuzz/fuzz_targets/a.rs"),
+            "// original property\n",
+        )
+        .unwrap();
         fs::write(root.join("Makefile"), format!("hooks-check:\n\t@test -x .git/hooks/pre-commit\nfuzz-smoke:\n\t@mkdir -p reports/fuzz\n\t@echo '{{\"result\":\"FAIL\"}}' > reports/fuzz/smoke.json\n\t@echo fuzz-runtime-crash\n\t@{}\n", if green { "grep -q green crates/x/src/lib.rs" } else { "exit 1" })).unwrap();
         fs::write(root.join(".gitignore"), ".cache/\nreports/\n").unwrap();
         run(
@@ -196,7 +200,7 @@ fn explicit_fuzz_check_uses_exit_code_without_test_names_or_duel_report() {
         let runtime = root.join(".cache/bin/codex");
         let script = fs::read_to_string(&runtime).unwrap().replace(
             "printf '#[test]\\nfn task_test() {}\\n' > crates/x/src/tests.rs",
-            "echo added-property >> fuzz/fuzz_targets/a.rs",
+            "echo '// added-property' >> fuzz/fuzz_targets/a.rs",
         );
         fs::write(runtime, script).unwrap();
         let result = duel(&root, "Task", &options);

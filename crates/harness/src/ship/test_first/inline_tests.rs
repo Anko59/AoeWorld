@@ -9,6 +9,43 @@ const PRODUCT: &str = "pub fn f() {}\n";
 const MODULE: &str = "pub fn f() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn a() {\n        super::f();\n    }\n}\n";
 const TWO: &str = "pub fn f() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn a() {\n        super::f();\n    }\n\n    #[test]\n    fn b() {}\n}\n";
 
+#[test]
+fn cfg_test_only_under_not_is_product_code() {
+    for predicate in [
+        "not(test)",
+        "all(unix, not(test))",
+        "any(not(test), windows)",
+        "not(all(test, unix))",
+        "not(not(test))",
+    ] {
+        let before = format!("#[cfg({predicate})]\nfn production() {{ let value = 1; }}\n");
+        let after = before.replace("value = 1", "value = 2");
+        assert!(inline::test_regions(&before).is_empty(), "{predicate}");
+        assert_eq!(
+            inline::split(
+                &inline::Changes {
+                    old: vec![2],
+                    new: vec![2]
+                },
+                &before,
+                &after
+            ),
+            (0, 2)
+        );
+        let (temp, base) = repo();
+        commit(temp.path(), &[(LIB, &before)], "production cfg");
+        commit(temp.path(), &[(LIB, &after)], "production edit");
+        assert_eq!(
+            kinds(&report(temp.path(), &base, "HEAD").unwrap()),
+            [Kind::Product, Kind::Product]
+        );
+    }
+    assert_eq!(
+        inline::test_regions("#[cfg(any(not(unix), test))]\nfn positive() {}\n"),
+        [(1, 2)]
+    );
+}
+
 fn kinds(report: &super::Report) -> Vec<Kind> {
     report.commits.iter().map(|(_, kind)| *kind).collect()
 }

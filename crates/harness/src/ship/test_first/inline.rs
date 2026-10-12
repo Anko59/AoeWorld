@@ -3,11 +3,18 @@ use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::{parse::Parser, spanned::Spanned};
 
 fn mentions_test(tokens: TokenStream) -> bool {
-    tokens.into_iter().any(|token| match token {
-        TokenTree::Ident(ident) => ident == "test",
-        TokenTree::Group(group) => mentions_test(group.stream()),
-        _ => false,
-    })
+    fn positive(meta: syn::Meta) -> bool {
+        match meta {
+            syn::Meta::Path(path) => path.is_ident("test"),
+            syn::Meta::List(list) if !list.path.is_ident("not") => {
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated
+                    .parse2(list.tokens)
+                    .is_ok_and(|items| items.into_iter().any(positive))
+            }
+            _ => false,
+        }
+    }
+    syn::parse2(tokens).is_ok_and(positive)
 }
 
 fn regions(tokens: TokenStream, cfg: bool, found: &mut Vec<(usize, usize)>) {
@@ -66,7 +73,7 @@ fn source_regions(text: &str, cfg: bool) -> Vec<(usize, usize)> {
     found
 }
 
-/// One-based inclusive line ranges of items under a `cfg` mentioning `test`.
+/// One-based inclusive ranges under a `cfg` mentioning `test` outside `not(...)`.
 pub(crate) fn test_regions(text: &str) -> Vec<(usize, usize)> {
     source_regions(text, true)
 }

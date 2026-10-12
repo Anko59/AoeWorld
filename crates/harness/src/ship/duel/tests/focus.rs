@@ -2,6 +2,117 @@ use super::{focus, tree};
 use std::fs;
 
 #[test]
+fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("crates/x/tests")).unwrap();
+    fs::write(
+        root.join("crates/x/Cargo.toml"),
+        "[package]\nname='aoe-x'\n",
+    )
+    .unwrap();
+    let paths = vec!["crates/x/tests/check.rs".into()];
+    fs::write(
+        root.join(&paths[0]),
+        "#[test]\nfn first() {}\nmod nested { #[test] fn second() {} }\n",
+    )
+    .unwrap();
+    let red = focus::CheckReport {
+        failed: vec![
+            "aoe-x::check$first".into(),
+            "aoe-x::check$nested::second".into(),
+        ],
+        ..Default::default()
+    };
+    let mut green = focus::rust_results(
+        "{\"type\":\"test\",\"event\":\"ok\",\"name\":\"aoe-x::check$first\"}\n{\"type\":\"test\",\"event\":\"ignored\",\"name\":\"aoe-x::check$nested::second\"}\n",
+    );
+    green.passed = true;
+    let error = super::green::validate(root, &paths, &red, &green).unwrap_err();
+    assert_eq!(
+        error,
+        "the tester's tests did not run: aoe-x::check$nested::second"
+    );
+    let build_red = focus::CheckReport {
+        build_failed: true,
+        ..Default::default()
+    };
+    assert!(
+        super::green::validate(root, &paths, &build_red, &green)
+            .unwrap_err()
+            .contains("check.rs::nested::second")
+    );
+    green.tests.push("aoe-y::check$nested::second".into());
+    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    green
+        .tests
+        .push("aoe-x::check$other::nested::second".into());
+    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    green.tests.push("aoe-x::check$nested::second".into());
+    green.failed.push("aoe-x::check$nested::second".into());
+    assert!(super::green::validate(root, &paths, &red, &green).is_err());
+    assert!(super::green::validate(root, &paths, &build_red, &green).is_err());
+    green.failed.clear();
+    assert!(super::green::validate(root, &paths, &red, &green).is_ok());
+    assert!(super::green::validate(root, &paths, &build_red, &green).is_ok());
+    fs::write(
+        root.join(&paths[0]),
+        "#[test] fn first() {}\nmod nested { #[test] fn first() {} }\n",
+    )
+    .unwrap();
+    let alias = focus::CheckReport {
+        tests: vec!["aoe-x::check$nested::first".into()],
+        ..Default::default()
+    };
+    assert!(
+        super::green::validate(root, &paths, &build_red, &alias)
+            .unwrap_err()
+            .contains("check.rs::first")
+    );
+    fs::write(root.join(&paths[0]), "fn helper() {}\n").unwrap();
+    assert!(
+        super::green::validate(root, &paths, &build_red, &green)
+            .unwrap_err()
+            .contains(&paths[0])
+    );
+    fs::create_dir_all(root.join("browser/tests")).unwrap();
+    fs::write(
+        root.join("browser/tests/play.spec.ts"),
+        "test('works', () => {});\n",
+    )
+    .unwrap();
+    let browser_paths = vec!["browser/tests/play.spec.ts".into()];
+    let output = root.join("playwright.json");
+    for (status, expected) in [("skipped", false), ("expected", true)] {
+        fs::write(&output, format!(r#"{{"errors":[],"suites":[{{"specs":[{{"file":"play.spec.ts","line":1,"title":"works","tests":[{{"projectName":"canvas","status":"{status}"}}]}}]}}]}}"#)).unwrap();
+        let browser = focus::browser_results(&output).unwrap();
+        assert_eq!(
+            super::green::validate(root, &browser_paths, &build_red, &browser).is_ok(),
+            expected
+        );
+        let browser_red = focus::CheckReport {
+            failed: vec!["play.spec.ts::works [canvas]".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            super::green::validate(root, &browser_paths, &browser_red, &browser).is_ok(),
+            expected
+        );
+    }
+    fs::write(
+        root.join(&browser_paths[0]),
+        "test('works', () => {}); test('missing', () => {});\n",
+    )
+    .unwrap();
+    let browser = focus::browser_results(&output).unwrap();
+    assert!(
+        super::green::validate(root, &browser_paths, &build_red, &browser)
+            .unwrap_err()
+            .contains("missing")
+    );
+}
+
+#[test]
 fn fixture_scopes_run_browser_specs_and_separate_fuzz_scopes_need_an_override() {
     let temp = tempfile::tempdir().unwrap();
     fs::create_dir_all(temp.path().join("browser/tests/nested")).unwrap();

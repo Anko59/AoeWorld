@@ -291,7 +291,7 @@ duel-check:
 	@if test -n "$$HARNESS_DUEL_REVISION"; then \
 	  echo '{{"passed":false,"tests":["existing"],"failed":["{}"],"untouched":[]}}' > .cache/duel/check.json; \
 	elif grep -q green crates/x/src/lib.rs; then \
-	  echo '{{"passed":false,"tests":["existing"],"failed":["existing"],"untouched":[{}]}}' > .cache/duel/check.json; \
+	  echo '{{"passed":false,"tests":["existing","task_test"],"failed":["existing"],"untouched":[{}]}}' > .cache/duel/check.json; \
 	else \
 	  echo '{{"passed":false,"tests":["task_test"],"failed":["task_test"],"untouched":[]}}' > .cache/duel/check.json; \
 	fi

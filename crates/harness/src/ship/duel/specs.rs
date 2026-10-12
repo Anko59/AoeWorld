@@ -177,6 +177,24 @@ fn calls(source: &str) -> Option<Vec<(String, Range<usize>)>> {
     }
     Some(result)
 }
+
+pub(super) fn definitions(source: &str) -> Option<Vec<(String, usize)>> {
+    Some(
+        calls(source)?
+            .into_iter()
+            .map(|(title, range)| {
+                (
+                    title,
+                    source[..range.start]
+                        .bytes()
+                        .filter(|b| *b == b'\n')
+                        .count()
+                        + 1,
+                )
+            })
+            .collect(),
+    )
+}
 fn rest<'a>(source: &'a str, calls: &[(String, Range<usize>)]) -> Option<Vec<&'a str>> {
     Some(
         tokens(source)?

@@ -164,14 +164,16 @@ and `DUEL_EFFORT` select a model and reasoning effort; absent values use the
 runtime's configured defaults. pi accepts `provider/model`.
 
 The driver launches a tester with the project hooks and `AOE_AGENT_ROLE=tester`,
-checks every changed path is a test outside protected classes, and runs the
+checks every changed path is a test outside protected classes and refuses
+deleted or renamed existing Rust test functions (body edits remain reviewable), then runs the
 check red. Only a failed build or a failing test belonging to a test file the
 tester added or changed that round leads to a `Tests: <task first line>` commit,
 with `Harness-Phase: tests`. The implementer receives the task, tester report
 and failing output tail, writes production only, and gets three attempts to
 turn the check green. The driver commits that implementation with
 `Harness-Phase: implementation`. Commits use the configured Git identity and
-name the runtime/model in a `Co-Authored-By` trailer. Before staging a commit,
+name the runtime/model in a `Co-Authored-By` trailer, with `noreply@anthropic.com`
+for Claude, `noreply@openai.com` for Codex and neutral `noreply@example.com` for pi. Before staging a commit,
 the driver runs `make hooks-check`; failure stops with `run make hooks-install`.
 Each duel commit runs the
 Git pre-commit hook (`make pre-commit`); preflight and the wider shipping gates
@@ -193,7 +195,7 @@ tests is treated like passing tests, and the summary names those failures.
 Round one's empty or passing tests fail. Role violations restore to the last
 driver commit and name offending paths. Implementers may change production lines
 in a file containing inline tests, but cannot change any line in an item under
-a `cfg` mentioning `test`, or any part of a `#[test]`-style function, including
+a `cfg` mentioning `test` outside `not(...)`, or any part of a `#[test]`-style function, including
 its attributes and body. Malformed product token streams skip inline validation;
 the focused compiler check reports the failure and the implementer can retry. Testers
 still edit test files only. Exhausted green attempts keep the tests
@@ -208,13 +210,18 @@ run both. Fuzz targets in their separate workspace and other unsupported paths
 stop before the implementer launches and require `DUEL_CHECK` (for example
 `make fuzz-smoke`). Red means a selected package fails to build or at least
 one failing test belongs to a tester-changed file, matched by nextest binary id
-or module path, or browser test location; green means every selected check passes.
+or module path, or browser test location; green means every selected check passes
+and every name that failed at red is reported as passed. After a red build
+failure, every test defined in the test files the tester changed that round must
+run and pass (at least one). Missing or skipped tests refuse green with
+`the tester's tests did not run: <names/files>`; this also blocks the pre-existing
+failure exemption below.
 Integration failures follow the target's declared module path to the defining
 file, which must have changed that round. Unresolved sources fall back to a
 changed integration target; the summary records that fallback.
 `DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
 For an explicit override, a normal nonzero exit is red and exit zero is green;
-named failures are reported when available but are not required, including
+the red-test execution requirement does not apply. Named failures are reported when available but are not required, including
 for fuzz runtime crashes. The main session chooses this check and its scope.
 Both role prompts name the exact check and forbid preflight or whole-suite runs;
 the driver and `make ship` own wider gates. Browser dependencies are prepared on

@@ -296,7 +296,9 @@ pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
                             "{file}::{parents}{title} [{}]",
                             test["projectName"].as_str().unwrap_or("unknown")
                         );
-                        report.tests.push(name.clone());
+                        if test["status"] != "skipped" {
+                            report.tests.push(name.clone());
+                        }
                         report.locations.insert(
                             name.clone(),
                             (
@@ -329,7 +331,7 @@ pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
     }
     let mut report = CheckReport::default();
     walk(&value, "", &mut report);
-    if value["errors"].as_array().is_some_and(|a| !a.is_empty()) || report.tests.is_empty() {
+    if value["errors"].as_array().is_some_and(|a| !a.is_empty()) || report.locations.is_empty() {
         return Err("Playwright errors or no focused tests".into());
     }
     Ok(report)

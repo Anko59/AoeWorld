@@ -2,6 +2,73 @@ use super::{authored, focus, runner};
 use std::fs;
 
 #[test]
+fn coauthor_addresses_match_the_step_runtime() {
+    for (runtime, address) in [
+        ("claude", "noreply@anthropic.com"),
+        ("codex", "noreply@openai.com"),
+        ("pi", "noreply@example.com"),
+        (
+            crate::agents::Runtime::Claude.label(),
+            "noreply@anthropic.com",
+        ),
+        (crate::agents::Runtime::Codex.label(), "noreply@openai.com"),
+    ] {
+        for phase in ["tests", "implementation"] {
+            let message = super::tree::message("Task", phase, runtime, Some("model"));
+            assert!(
+                message.ends_with(&format!("Co-Authored-By: {runtime} (model) <{address}>")),
+                "{message}"
+            );
+        }
+    }
+}
+
+#[test]
+fn tester_cannot_remove_or_rename_existing_test_functions() {
+    use crate::ship::{
+        git,
+        tests::{fixture, run},
+    };
+    let original = "#[test]\nfn existing() { assert_eq!(1, 1); }\n";
+    for staged in [false, true] {
+        for replacement in ["", "#[test]\nfn renamed() { assert_eq!(1, 1); }\n"] {
+            let (_temp, root) = fixture("true");
+            let path = "crates/x/tests/check.rs";
+            fs::create_dir_all(root.join("crates/x/tests")).unwrap();
+            fs::write(root.join(path), original).unwrap();
+            run(&root, &["add", path]);
+            run(&root, &["commit", "-qm", "existing test"]);
+            let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+            // Strengthening a body and adding a test remain allowed.
+            fs::write(
+                root.join(path),
+                format!("{original}#[test]\nfn added() {{ assert!(false); }}\n")
+                    .replace("assert_eq!(1, 1);", "assert_eq!(1, 1); assert!(true);"),
+            )
+            .unwrap();
+            assert!(super::tree::validate(&root, true, &head, "feature").is_ok());
+            fs::write(
+                root.join(path),
+                format!("{replacement}#[test]\nfn added() {{ assert!(false); }}\n"),
+            )
+            .unwrap();
+            if staged {
+                run(&root, &["add", path]);
+                fs::write(root.join(path), original).unwrap();
+            }
+            let error = super::tree::validate(&root, true, &head, "feature").unwrap_err();
+            assert!(
+                error.contains("tester removed test functions")
+                    && error.contains("check.rs::existing"),
+                "{error}"
+            );
+            assert_eq!(fs::read_to_string(root.join(path)).unwrap(), original);
+            assert!(git::subject(&root).is_ok());
+        }
+    }
+}
+
+#[test]
 fn integration_failure_requires_its_defining_module_file_to_change() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
