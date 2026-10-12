@@ -196,7 +196,7 @@ impl MapChunkGenerator {
         };
         let mut decoration = None;
         if base.surface.kind == SurfaceKind::Cliff
-            && let Some(piece) = self.cliff_piece_with_cancel(position, cancelled)?
+            && let Some(piece) = memo.cliff(position)?
             && piece.anchor
         {
             decoration = Some(LandscapeDecoration {

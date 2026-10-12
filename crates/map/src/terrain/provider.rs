@@ -22,6 +22,18 @@ pub(super) fn sample_base_tile(
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Tile, EnvironmentPageError> {
+    sample_base_tile_with_cliff(generator, tile, cancelled, &|position| {
+        cliff_from_corners(generator, position, cancelled)
+    })
+}
+
+/// Batch callers share the whole-cell decision without changing tile sampling.
+pub(super) fn sample_base_tile_with_cliff(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+    cliff: &dyn Fn(TileCoord) -> Result<Option<super::relief::CliffPiece>, EnvironmentPageError>,
+) -> Result<Tile, EnvironmentPageError> {
     let environment = generator
         .provider_environment
         .as_ref()
@@ -64,10 +76,7 @@ pub(super) fn sample_base_tile(
     );
     let (hydrology_observation, modern_land_cover_class) =
         (sample.observation, sample.modern_land_cover_class);
-    if water == WaterKind::None
-        && source_corners.is_some()
-        && cliff_from_corners(generator, tile, cancelled)?.is_some()
-    {
+    if water == WaterKind::None && source_corners.is_some() && cliff(tile)?.is_some() {
         surface_kind.kind = surface::SurfaceKind::Cliff;
     }
     let material = match water {
