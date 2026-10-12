@@ -293,6 +293,8 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
 fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
     for key in [81, 82, 83] {
         let tiles = composed(&modeled_river(key));
+        let (dry_environment, dry_pages) = environment(33, 8, &|_, _| (0, 0));
+        let dry_tiles = composed(&bind(key, dry_environment, dry_pages));
         // One connected river passes every modeled cell.
         let component = super::shoreline::main_water(&tiles);
         for (sx, sy) in [(16, 0), (16, 10), (16, 20), (20, 20), (24, 20)] {
@@ -310,8 +312,17 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
             for x in 0..WIDTH {
                 let tile = at(&tiles, x, y).expect("tile").terrain;
                 if tile.water == WaterKind::None {
-                    let near = in_band(&tiles, x, y, GroundMaterial::Dirt);
-                    banks += i32::from(near);
+                    let distance = nearest_water(&tiles, x, y, 3).map_or(i32::MAX, |(d, _)| d);
+                    if distance > WIDE {
+                        // Natural dirt from variety is valid away from water;
+                        // adding the river must leave that ground unchanged.
+                        assert_eq!(
+                            tile.material,
+                            at(&dry_tiles, x, y).unwrap().terrain.material
+                        );
+                    } else {
+                        banks += i32::from(in_band(&tiles, x, y, GroundMaterial::Dirt));
+                    }
                 } else {
                     // Rivers keep their kind to the bank: no shallow rim.
                     assert_eq!(tile.water, WaterKind::River, "river kind at {x},{y}");
@@ -342,7 +353,9 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
         assert!(
             tiles
                 .iter()
-                .filter(|p| p.terrain.material == GroundMaterial::Dirt)
+                .filter(|p| p.terrain.material == GroundMaterial::Dirt
+                    && at(&dry_tiles, p.tile.x, p.tile.y).unwrap().terrain.material
+                        != GroundMaterial::Dirt)
                 .all(|p| nearest_water(&tiles, p.tile.x, p.tile.y, 3).is_some_and(|(d, _)| d <= 5))
         );
         assert!(
@@ -353,7 +366,7 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
 }
 
 #[test]
-fn seeded_fallback_rivers_have_textured_banks_only_beside_river_water() {
+fn seeded_fallback_river_banks_coexist_with_ground_variety() {
     let generator = MapChunkGenerator::new([23; 32], 1, 512);
     let mut tiles = std::collections::BTreeMap::new();
     for cy in 0..16 {
@@ -365,12 +378,11 @@ fn seeded_fallback_rivers_have_textured_banks_only_beside_river_water() {
             }
         }
     }
-    let mut mud = 0;
+    let (mut banks, mut natural_dirt) = (0, 0);
     for (&(x, y), tile) in &tiles {
         if tile.material != GroundMaterial::Dirt {
             continue;
         }
-        mud += 1;
         assert!(tile.passable && tile.water == WaterKind::None);
         let river_near = (-3..=3).any(|dy: i32| {
             (-3..=3).any(|dx: i32| {
@@ -380,7 +392,16 @@ fn seeded_fallback_rivers_have_textured_banks_only_beside_river_water() {
                         .is_some_and(|near| near.water == WaterKind::River)
             })
         });
-        assert!(river_near, "mud without a river at {x},{y}");
+        if river_near {
+            banks += 1;
+        } else {
+            natural_dirt += 1;
+            // Variety changes only the drawn sheet, never physical terrain.
+            let base = generator.sample_base_tile(TileCoord::new(x, y));
+            let mut physical = *tile;
+            physical.material = base.material;
+            assert_eq!(physical, base, "variety changed physical land at {x},{y}");
+        }
     }
-    assert!(mud > 0);
+    assert!(banks > 0 && natural_dirt > 0);
 }
