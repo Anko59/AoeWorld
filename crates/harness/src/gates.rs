@@ -176,9 +176,18 @@ fn selection(
     revision: String,
     base: Option<String>,
     paths: Vec<String>,
+    pull_request: bool,
 ) -> Result<Selection, Box<dyn Error>> {
     let suites = classify(registry, &paths).suites;
-    let plan = registry.plan(Cadence::Ci, &suites)?;
+    // A pull request runs the `pr` cadence even when its base cannot be
+    // resolved; a push to dev or main runs `ci`, which adds the slow gates
+    // that need not block a merge.
+    let cadence = if pull_request {
+        Cadence::Pr
+    } else {
+        Cadence::Ci
+    };
+    let plan = registry.plan(cadence, &suites)?;
     // Dependency closure can include gates outside CI cadence. A manifest must
     // never promise work that none of its selected jobs actually executes.
     let executed: BTreeSet<_> = registry
@@ -228,7 +237,7 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
         },
         None => (None, Vec::new()),
     };
-    let mut manifest = selection(&registry, revision, base, paths)?;
+    let mut manifest = selection(&registry, revision, base, paths, requested_base.is_some())?;
     manifest.requested_base = requested_base;
     Ok(manifest)
 }

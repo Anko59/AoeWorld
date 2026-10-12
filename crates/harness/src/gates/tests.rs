@@ -7,7 +7,8 @@ fn classify(paths: &[String]) -> Impact {
     super::classify(&registry(), paths)
 }
 fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
-    super::selection(&registry(), revision, base, paths).expect("selection")
+    let pull_request = base.is_some();
+    super::selection(&registry(), revision, base, paths, pull_request).expect("selection")
 }
 
 #[test]
@@ -169,7 +170,12 @@ fn unavailable_ci_base_selects_all_and_retains_requested_identity() {
         let manifest = current_selection(Some(reference)).expect("conservative selection");
         assert_eq!(manifest.base, None);
         assert_eq!(manifest.requested_base.as_deref(), Some(reference));
-        assert!(manifest.jobs.values().all(|selected| *selected));
+        // Every pull-request job: a request with a base is a pull request even
+        // when the base cannot be resolved, so only coverage (push and nightly)
+        // stays out.
+        for (job, selected) in &manifest.jobs {
+            assert_eq!(*selected, job != "native-coverage", "{job}");
+        }
         assert!(manifest.gates.contains(&"fuzz-smoke".to_owned()));
     }
 }
@@ -193,7 +199,7 @@ fn selected_job_members(registry: &Registry, selection: &Selection) -> BTreeSet<
 fn ci_selection_rejects_unexecuted_nightly_and_weekly_dependencies() {
     let original = registry();
     let docs = vec!["docs/testing.md".to_owned()];
-    let control = super::selection(&original, "a".repeat(40), None, docs.clone())
+    let control = super::selection(&original, "a".repeat(40), None, docs.clone(), false)
         .expect("normal docs selection");
     assert!(control.jobs["static"]);
     assert!(!control.jobs["target-performance"]);
@@ -212,7 +218,7 @@ fn ci_selection_rejects_unexecuted_nightly_and_weekly_dependencies() {
             .plan(Cadence::Ci, &suites)
             .expect("valid dependency graph");
         assert!(plan.gates.contains(&dependency.to_owned()));
-        let error = super::selection(&changed, "a".repeat(40), None, docs.clone())
+        let error = super::selection(&changed, "a".repeat(40), None, docs.clone(), false)
             .expect_err("unexecuted prerequisite must not be promised")
             .to_string();
         assert!(error.contains("without selected executing jobs"), "{error}");
@@ -230,7 +236,7 @@ fn ci_selection_execution_coverage_is_the_union_of_selected_jobs() {
         .expect("docs gate")
         .requires = vec!["perf-instructions".into(), "browser-check".into()];
     let docs = vec!["docs/testing.md".to_owned()];
-    let selected = super::selection(&changed, "a".repeat(40), None, docs.clone())
+    let selected = super::selection(&changed, "a".repeat(40), None, docs.clone(), false)
         .expect("covered prerequisites select their executing jobs");
     for job in ["static", "browser", "target-performance"] {
         assert!(selected.jobs[job], "{job}");
@@ -254,12 +260,36 @@ fn ci_selection_execution_coverage_is_the_union_of_selected_jobs() {
         Some("AGENTS.md"),
     ] {
         let paths = path.into_iter().map(str::to_owned).collect();
-        let selected = super::selection(&changed, "a".repeat(40), None, paths)
+        let selected = super::selection(&changed, "a".repeat(40), None, paths, false)
             .expect("all selected gates have executing coverage");
         let executed = selected_job_members(&changed, &selected);
         assert!(
             selected.gates.iter().all(|gate| executed.contains(gate)),
             "{path:?}"
         );
+    }
+}
+
+#[test]
+fn pull_requests_skip_coverage_and_pushes_keep_it() {
+    let code = vec!["crates/map/src/terrain.rs".to_owned()];
+    let pull_request = selection("a".repeat(40), Some("b".repeat(40)), code.clone());
+    assert_eq!(pull_request.jobs.get("native-coverage"), Some(&false));
+    for job in ["static", "browser", "target-performance"] {
+        assert_eq!(pull_request.jobs.get(job), Some(&true), "{job}");
+    }
+    let push = selection("a".repeat(40), None, code);
+    assert_eq!(push.jobs.get("native-coverage"), Some(&true));
+    assert_eq!(push.jobs.get("browser"), Some(&true));
+}
+
+#[test]
+fn a_pull_request_whose_base_cannot_be_resolved_still_skips_coverage() {
+    // No resolved base and no paths: everything else is selected, as on a push.
+    let unresolved =
+        super::selection(&registry(), "a".repeat(40), None, Vec::new(), true).expect("selection");
+    assert_eq!(unresolved.jobs.get("native-coverage"), Some(&false));
+    for job in ["static", "browser", "target-performance", "fuzz-smoke"] {
+        assert_eq!(unresolved.jobs.get(job), Some(&true), "{job}");
     }
 }
