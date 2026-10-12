@@ -83,6 +83,14 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
         serde_json::from_str(include_str!("../../../../gates/review.json")).unwrap();
     review["floors"] = serde_json::json!({"static": "low", "everything": "high"});
     fs::write(root.join("gates/review.json"), review.to_string()).unwrap();
+    // The real limits, with floor rules over this fixture's two suites.
+    let mut levels: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../gates/levels.json")).unwrap();
+    levels["floor"] = serde_json::json!([
+        {"level": "medium", "min_changed_lines": 61, "reason": "size"},
+        {"level": "high", "suites": ["everything"], "min_changed_lines": 5, "reason": "gates"}
+    ]);
+    fs::write(root.join("gates/levels.json"), levels.to_string()).unwrap();
     // The registry runs `make <gate>`; the recipe is the fixture's behaviour.
     fs::write(root.join("Makefile"), format!("fmt-check:\n\t@{gate}\n")).unwrap();
     fs::write(root.join("README.md"), "x\n").unwrap();
@@ -203,7 +211,8 @@ fn the_low_tier_size_check_fetches_the_current_origin_dev() {
         .unwrap()
         .to_owned();
     assert_ne!(stale, current);
-    super::github::changed_lines(&root, "dev").unwrap();
+    let levels = super::levels::Levels::load(&root).unwrap();
+    super::levels::Change::collect(&root, &levels, "dev", true).unwrap();
     assert_eq!(
         git::git(&root, &["rev-parse", "refs/remotes/origin/dev"]).unwrap(),
         current

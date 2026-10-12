@@ -140,12 +140,48 @@ the PR") and renders two parts:
 - **🤖 For AI:** the agent's notes, the [test-first report](#test-first), gate
   evidence and the full adversarial review.
 
-| Level | For | Video (`SHIP_VIDEO`) | Voice |
-|---|---|---|---|
-| low | the smallest PRs (≤ 60 changed lines) | none | none |
-| medium | most PRs | ≤ 1 min | none |
-| high | important PRs | ≤ 2 min | required |
-| max | the most critical PRs | ≤ 5 min | required |
+| Level | For | Video (`SHIP_VIDEO`) | Voice | Target share |
+|---|---|---|---|---|
+| low | the smallest PRs (≤ 60 changed lines) | none | none | 20 % |
+| medium | most PRs | ≤ 1 min | none | 30 % |
+| high | important PRs | ≤ 2 min | required | 40 % |
+| max | the most critical PRs | ≤ 5 min | required | 10 % |
+
+`gates/levels.json` holds these limits (video length, voice-over, the `Why` and
+`What` line limits, the name of the metrics row set), the target shares and the
+floor rules. Like `gates/review.json` it is read from origin/dev, so a branch
+cannot loosen its own limits (the working tree only while dev lacks the file).
+
+### The floor
+
+The agent picks the level, but never below the floor `make ship` computes from
+the change: `make level-floor` prints it (every role; read-only) and the rule
+that demands it. A rule names a level, a minimum of changed lines (added plus
+removed against the merge base; a binary file counts as 61) and optionally the
+registry suites or path prefixes the change must touch; the floor is the
+highest level of any matching rule. Today:
+
+- more than 60 changed lines: at least `medium`;
+- any product suite selected (native, gameplay, browser, assets, performance,
+  map, release, everything): at least `medium`, so only docs, configuration
+  and tiny changes may be `low`;
+- 200 or more changed lines touching the harness, gates or instructions
+  (`everything`), the map or geodata crates (`map`) or `crates/protocol/`: at
+  least `high`.
+
+Shipping below the floor is refused before any gate runs, with the reason and
+the level to use. The chosen level, the floor, its reason and the metrics row
+set of the level (chosen by `ship/metrics.rs`) are recorded in the ship
+evidence (`level`) and shown in the "For AI" part, which also carries the
+`<!-- level: … -->` marker.
+
+### Tracking
+
+`make level-stats` (main session; read-only, uses `gh`) reads the marker of
+the last 50 pull requests merged into `dev` (`stats_window`) and prints their
+distribution against the target; pull requests without a marker are counted
+apart. `make ship` adds one line with the same distribution to the "For AI"
+part; a `gh` failure there only says the line is unavailable.
 
 The agent picks the level. Not being a frontend change is never a reason for no
 video: film a terminal or agent session, a before/after timing or an API diff.

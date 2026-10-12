@@ -1,7 +1,10 @@
 //! `make ship`'s GitHub side: `gh` checks, the pull request (found by head
 //! branch, on origin's repository), the description, and the
 //! showcase video probe.
-use super::{Evidence, Options, Result, describe, git};
+use super::{
+    Evidence, Options, Result, describe, git,
+    levels::{Change, Levels},
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -50,6 +53,8 @@ pub(super) struct Preflight {
     pub(super) review_ahead: bool,
     /// The base the branch's open pull request targets now, if any.
     pub(super) current_base: Option<String>,
+    /// The chosen level, its floor and why.
+    pub(super) level: Option<super::levels::Decision>,
 }
 
 /// Before any gate runs: a usable `gh`, a valid base, and a title and
@@ -97,22 +102,25 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
     if !open && !review_ahead && (options.title.is_none() || options.body_file.is_none()) {
         return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
     }
-    let template_text = if let Some(body) = &options.body_file {
+    let (template_text, level) = if let Some(body) = &options.body_file {
         if !body.is_file() {
             return Err(format!("SHIP_BODY {} is not a file", body.display()).into());
         }
         let text = fs::read_to_string(body)?;
-        let template = describe::Template::parse(&text)?;
+        let levels = Levels::load(root)?;
+        let template = describe::Template::parse(&text, &levels)?;
         let probe = match &options.video {
             Some(video) => Some(probe_video(root, video)?),
             None => None,
         };
-        template.check(changed_lines(root, &options.base)?, probe)?;
-        Some(text)
+        let change = Change::collect(root, &levels, &options.base, true)?;
+        let decision = template.check(&levels, &change, probe)?;
+        (Some(text), Some(decision))
     } else {
-        None
+        (None, None)
     };
     Ok(Preflight {
+        level,
         body: template_text,
         parent,
         review_ahead,
@@ -299,25 +307,6 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Lines added plus removed against the merge base with origin/<base>; a
-/// binary file (`-` in numstat) counts as larger than any `low` PR.
-pub(super) fn changed_lines(root: &Path, base: &str) -> Result<u64> {
-    let (_, merge_base) = git::base(root, base, true)?;
-    let numstat = git::git(root, &["diff", "--numstat", &merge_base, "HEAD"])?;
-    Ok(numstat
-        .lines()
-        .map(|l| {
-            l.split('\t')
-                .take(2)
-                .map(|n| {
-                    n.parse::<u64>()
-                        .unwrap_or(super::describe::LOW_MAX_CHANGED_LINES + 1)
-                })
-                .sum::<u64>()
-        })
-        .sum())
-}
-
 /// Duration and sound of a video, read by ffmpeg in the pinned browser image.
 fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
     if !attachable_video(video) {
@@ -351,20 +340,27 @@ pub(super) fn description(
     report: &crate::review::Report,
     body: &str,
 ) -> Result<PathBuf> {
-    let template = describe::Template::parse(body)?;
+    let levels = Levels::load(root)?;
+    let template = describe::Template::parse(body, &levels)?;
     let video = options
         .video
         .as_ref()
         .and_then(|v| v.file_name())
         .map(|n| n.to_string_lossy().into_owned());
+    let metrics = super::metrics::table(root, &evidence.base_branch, template.level)?;
+    let test_first = super::test_first::summary(root, &evidence.merge_base, &evidence.head);
+    let distribution = super::levels::stats::summary_line(root, &levels);
     let text = describe::render(
         &template,
         video.as_deref(),
         report,
         evidence,
-        &describe::footer(options.runtime),
-        &super::metrics::table(root, &evidence.base_branch, template.level)?,
-        &super::test_first::summary(root, &evidence.merge_base, &evidence.head),
+        &describe::Extras {
+            footer: &describe::footer(options.runtime),
+            metrics: &metrics,
+            test_first: &test_first,
+            distribution: &distribution,
+        },
     );
     let text = match &options.parent {
         Some(parent) => format!("{}\n{text}", super::stack::note(parent)),

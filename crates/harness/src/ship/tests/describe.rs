@@ -1,10 +1,21 @@
-use super::super::describe::{Level, Template, parse_probe};
+use super::super::{
+    describe::{Level, Template, parse_probe},
+    levels::{Change, Levels},
+};
+
+fn cfg() -> Levels {
+    Levels::parse(include_str!("../../../../../gates/levels.json")).unwrap()
+}
+
+fn parse(text: &str) -> Result<Template, String> {
+    Template::parse(text, &cfg())
+}
 
 const GOOD: &str = "<!-- level: medium -->\n## Why\n> \"I don't review code\" — the user\nAgents publish unchecked code today.\n## What\nmake ship gates every publish.\n## For AI\nDesign notes.\n";
 
 #[test]
 fn a_well_formed_description_parses() {
-    let template = Template::parse(GOOD).unwrap();
+    let template = parse(GOOD).unwrap();
     assert_eq!(template.level, Level::Medium);
     assert!(template.why.starts_with("> "));
     assert_eq!(template.what, "make ship gates every publish.");
@@ -13,7 +24,7 @@ fn a_well_formed_description_parses() {
 
 #[test]
 fn descriptions_accept_crlf_and_only_supported_grounding() {
-    assert!(Template::parse(&GOOD.replace('\n', "\r\n")).is_ok());
+    assert!(parse(&GOOD.replace('\n', "\r\n")).is_ok());
     for grounding in [
         "> request quote",
         "See [the report](docs/report.md)",
@@ -24,33 +35,26 @@ fn descriptions_accept_crlf_and_only_supported_grounding() {
         "Latency measured at 42 ms",
     ] {
         let body = GOOD.replace("> \"I don't review code\" — the user", grounding);
-        assert!(Template::parse(&body).is_ok(), "{grounding}");
+        assert!(parse(&body).is_ok(), "{grounding}");
     }
     for prose in ["This fixes an http parsing bug.", "Our http cache is slow."] {
         let body = GOOD.replace("> \"I don't review code\" — the user", prose);
-        assert!(
-            Template::parse(&body)
-                .unwrap_err()
-                .contains("grounding element")
-        );
+        assert!(parse(&body).unwrap_err().contains("grounding element"));
     }
 }
 
 #[test]
 fn the_human_section_limits_are_enforced() {
     let no_level = GOOD.replace("<!-- level: medium -->\n", "");
-    assert!(Template::parse(&no_level).unwrap_err().contains("level"));
+    assert!(parse(&no_level).unwrap_err().contains("level"));
     let no_element = GOOD.replace("> \"I don't review code\" — the user\n", "");
     assert!(
-        Template::parse(&no_element)
+        parse(&no_element)
             .unwrap_err()
             .contains("grounding element")
     );
     let issue = GOOD.replace("> \"I don't review code\" — the user", "Fixes #116");
-    assert!(
-        Template::parse(&issue).is_ok(),
-        "an issue number grounds the why"
-    );
+    assert!(parse(&issue).is_ok(), "an issue number grounds the why");
     for incomplete in [
         "See [reference](",
         "See [reference]()",
@@ -58,9 +62,7 @@ fn the_human_section_limits_are_enforced() {
     ] {
         let body = GOOD.replace("> \"I don't review code\" — the user", incomplete);
         assert!(
-            Template::parse(&body)
-                .unwrap_err()
-                .contains("grounding element"),
+            parse(&body).unwrap_err().contains("grounding element"),
             "incomplete Markdown link accepted: {incomplete}"
         );
     }
@@ -68,52 +70,63 @@ fn the_human_section_limits_are_enforced() {
         "Agents publish unchecked code today.",
         "> second quote\nAgents publish unchecked code today.",
     );
-    assert!(
-        Template::parse(&two_grounding_lines)
-            .unwrap_err()
-            .contains("split")
-    );
+    assert!(parse(&two_grounding_lines).unwrap_err().contains("split"));
     let valid_why = GOOD.replace("Agents publish unchecked code today.", "One.\nTwo.");
-    assert!(Template::parse(&valid_why).is_ok());
+    assert!(parse(&valid_why).is_ok());
     let long_why = GOOD.replace(
         "Agents publish unchecked code today.\n",
         "One.\nTwo.\nThree.\n",
     );
-    assert!(Template::parse(&long_why).unwrap_err().contains("split"));
+    assert!(parse(&long_why).unwrap_err().contains("split"));
     let long_what = GOOD.replace("make ship gates every publish.\n", "One.\nTwo.\nThree.\n");
-    assert!(Template::parse(&long_what).unwrap_err().contains("split"));
+    assert!(parse(&long_what).unwrap_err().contains("split"));
 }
 
 #[test]
 fn levels_fit_the_change_and_the_video() {
-    let medium = Template::parse(GOOD).unwrap();
-    assert!(medium.check(500, Some((48, false))).is_ok());
+    let medium = parse(GOOD).unwrap();
     assert!(
         medium
-            .check(500, None)
+            .check(&cfg(), &Change::lines(500), Some((48, false)))
+            .is_ok()
+    );
+    assert!(
+        medium
+            .check(&cfg(), &Change::lines(500), None)
             .unwrap_err()
             .contains("needs a showcase video")
     );
     assert!(
         medium
-            .check(500, Some((61, false)))
+            .check(&cfg(), &Change::lines(500), Some((61, false)))
             .unwrap_err()
             .contains("allows 60s")
     );
-    let high = Template::parse(&GOOD.replace("medium", "high")).unwrap();
+    let high = parse(&GOOD.replace("medium", "high")).unwrap();
     assert!(
-        high.check(500, Some((100, false)))
+        high.check(&cfg(), &Change::lines(500), Some((100, false)))
             .unwrap_err()
             .contains("voice-over")
     );
-    assert!(high.check(500, Some((100, true))).is_ok());
-    let low = Template::parse(&GOOD.replace("medium", "low")).unwrap();
-    assert!(low.check(20, None).is_ok(), "a tiny PR may skip the video");
+    assert!(
+        high.check(&cfg(), &Change::lines(500), Some((100, true)))
+            .is_ok()
+    );
+    let low = parse(&GOOD.replace("medium", "low")).unwrap();
+    assert!(
+        low.check(&cfg(), &Change::lines(20), None).is_ok(),
+        "a tiny PR may skip the video"
+    );
     assert_eq!(
-        low.check(20, Some((1, false))).unwrap_err(),
+        low.check(&cfg(), &Change::lines(20), Some((1, false)))
+            .unwrap_err(),
         "low PRs have no video; use medium or higher"
     );
-    assert!(low.check(300, None).unwrap_err().contains("smallest PRs"));
+    assert!(
+        low.check(&cfg(), &Change::lines(300), None)
+            .unwrap_err()
+            .contains("smallest PRs")
+    );
 }
 
 #[test]
@@ -189,13 +202,13 @@ fn ship_video_extensions_match_github_attachment_formats() {
 fn an_empty_what_or_an_empty_quote_is_refused() {
     let empty_what = GOOD.replace("make ship gates every publish.\n", "");
     assert!(
-        Template::parse(&empty_what)
+        parse(&empty_what)
             .unwrap_err()
             .contains("`## What` is empty")
     );
     let empty_quote = GOOD.replace("> \"I don't review code\" — the user", ">");
     assert!(
-        Template::parse(&empty_quote)
+        parse(&empty_quote)
             .unwrap_err()
             .contains("grounding element")
     );

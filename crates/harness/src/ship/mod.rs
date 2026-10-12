@@ -11,6 +11,7 @@ pub(crate) mod evidence;
 pub(crate) mod git;
 mod github;
 mod issues;
+mod levels;
 mod metrics;
 pub(crate) mod prepush;
 pub(crate) mod review_gate;
@@ -51,6 +52,10 @@ pub(crate) enum Commands {
     Issue,
     /// Print the highest-priority unblocked open issue.
     Next,
+    /// Print the lowest pull request level the change allows, and why.
+    LevelFloor,
+    /// Print the levels of the last merged pull requests against the target.
+    LevelStats,
     /// Record the showcase video of SHOWCASE_STORYBOARD (docs/showcase.md).
     Showcase,
     /// Validate a showcase storyboard without starting Docker or speech requests.
@@ -101,6 +106,9 @@ pub(crate) struct Options {
     /// Tests only: skip the adversarial review.
     #[arg(skip)]
     pub(crate) no_review: bool,
+    /// The level, its floor and the reason, recorded in the evidence.
+    #[arg(skip)]
+    pub(crate) level: Option<Box<levels::Decision>>,
     /// Showcase video for the "What" section (SHIP_VIDEO).
     #[arg(long)]
     pub(crate) video: Option<PathBuf>,
@@ -120,6 +128,7 @@ impl Default for Options {
             tier: None,
             runtime: crate::agents::Runtime::Claude,
             no_review: false,
+            level: None,
             video: None,
         }
     }
@@ -170,6 +179,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),
         Commands::Next => issues::next(&root),
+        Commands::LevelFloor => levels::print_floor(&root),
+        Commands::LevelStats => levels::print_stats(&root),
         Commands::NightlyTriage => issues::triage::execute(&root),
         Commands::MetricRegressions => issues::regressions::execute(&root),
         Commands::Metrics => Ok(metrics::snapshot::command(&root)?),
@@ -219,6 +230,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
         merge_base,
         changed,
         gates: results,
+        level: options.level.as_deref().cloned(),
         started,
         finished: now(),
     };
@@ -264,6 +276,7 @@ pub(crate) fn ship_with(
     let options = &Options {
         parent: preflight.parent,
         review_ahead: preflight.review_ahead || options.review_ahead,
+        level: preflight.level.map(Box::new),
         force: options.force || retarget,
         ..options.clone()
     };

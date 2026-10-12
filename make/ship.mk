@@ -12,7 +12,7 @@ override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS METRICS_REV
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: duel duel-check ship ship-status review review-floor review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check
+.PHONY: duel duel-check ship ship-status review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -82,3 +82,11 @@ showcase: showcase-check
 
 showcase-check:
 	@.agents/hooks/harness.sh exec showcase-check
+
+# The lowest PR level the change allows (gates/levels.json), and the levels of
+# the last merged PRs against the target distribution (uses gh, read-only).
+level-floor:
+	@.agents/hooks/harness.sh exec level-floor
+
+level-stats:
+	@.agents/hooks/harness.sh exec level-stats

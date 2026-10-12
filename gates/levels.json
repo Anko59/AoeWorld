@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "stats_window": 50,
+  "binary_file_lines": 61,
+  "levels": {
+    "low": {
+      "video_max_seconds": null,
+      "narration_required": false,
+      "why_max_lines": 3,
+      "what_max_lines": 2,
+      "metrics": "summary",
+      "target_percent": 20
+    },
+    "medium": {
+      "video_max_seconds": 60,
+      "narration_required": false,
+      "why_max_lines": 3,
+      "what_max_lines": 2,
+      "metrics": "standard",
+      "target_percent": 30
+    },
+    "high": {
+      "video_max_seconds": 120,
+      "narration_required": true,
+      "why_max_lines": 3,
+      "what_max_lines": 2,
+      "metrics": "full",
+      "target_percent": 40
+    },
+    "max": {
+      "video_max_seconds": 300,
+      "narration_required": true,
+      "why_max_lines": 3,
+      "what_max_lines": 2,
+      "metrics": "full",
+      "target_percent": 10
+    }
+  },
+  "floor": [
+    {
+      "level": "medium",
+      "min_changed_lines": 61,
+      "reason": "more than 60 changed lines: low is for the smallest PRs only"
+    },
+    {
+      "level": "medium",
+      "suites": ["native", "gameplay", "browser", "assets", "performance", "map", "release", "everything"],
+      "reason": "product code that changes behaviour needs at least medium"
+    },
+    {
+      "level": "high",
+      "suites": ["everything", "map"],
+      "path_prefixes": ["crates/protocol/"],
+      "min_changed_lines": 200,
+      "reason": "harness, gates, protocol or map/geodata changes of 200 or more lines need at least high"
+    }
+  ]
+}

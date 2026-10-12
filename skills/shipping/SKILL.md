@@ -6,8 +6,9 @@ Product work starts with `make duel DUEL_TASK=<file> DUEL_RUNTIME=<runtime>`
 (or the same tests-first order). The driver commits each red-test and green-code
 step; read its summary and diff, then film the change before shipping.
 
-1. Commit on a feature branch; run `make review-floor` and pick the tier (never
-   below it; higher for risky changes). Write the description file.
+1. Commit on a feature branch; run `make review-floor` and `make level-floor`
+   and pick the tier and the description level (never below them; higher for
+   risky changes). Write the description file.
 2. `make ship SHIP_TITLE=… SHIP_BODY=<file> SHIP_TIER=<tier> SHIP_RUNTIME=<your runtime>`.
    A change can be reviewed ahead of a local parent with `SHIP_BASE=<its branch>`;
    gates and review run, but publication waits for the parent's harness pull
