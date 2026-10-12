@@ -1,4 +1,4 @@
-//! Scenery sprites: cliff pieces drawn as ground-lying, depth-sorted bands.
+//! Cliffs keep their upright source image, native size and object clearance.
 use super::super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -29,14 +29,13 @@ fn art() -> GameArt {
     }
 }
 
-fn band(facing: u8, band: u8, lift: u8) -> SceneResource {
-    let offset = SceneResource::cliff_band_offset(band);
+fn piece(facing: u8) -> SceneResource {
     SceneResource {
         id: 9,
-        position: [10.5 + offset, 10.5 + offset],
+        position: [10.5; 2],
         kind: SceneResource::CLIFF,
         visual_variant: 0,
-        visual_family: SceneResource::cliff_family(facing, band, lift),
+        visual_family: facing,
         elevation_meters: 0.0,
     }
 }
@@ -51,74 +50,57 @@ fn camera() -> SceneCamera {
 }
 
 #[wasm_bindgen_test]
-fn a_cliff_piece_is_eight_shadowless_bands_that_cover_its_footprint_once() {
+fn cliffs_keep_a_whole_native_face_at_every_zoom_and_share_object_clearance() {
     let art = art();
-    let resources = (0..SceneResource::CLIFF_BANDS)
-        .map(|index| band(0, index, 0))
-        .collect::<Vec<_>>();
-    let sprites = world_sprite_frames(&art, &[], &resources, &[], camera(), 0);
-    // One body per band and no shadow sprite.
-    assert_eq!(sprites.len(), usize::from(SceneResource::CLIFF_BANDS));
-    let scale = (aoe_core::ISO_TILE_WIDTH / 97.0) as f32;
-    let (mut top, mut bottom, mut previous_depth) = (f32::MAX, f32::MIN, f64::MIN);
-    let mut previous_bottom = None;
-    for (sprite, frame, depth, id) in &sprites {
-        assert_eq!(*id, 9);
-        assert!(sprite.color == [1.0; 4] && sprite.pages[0] == 2);
+    for zoom in [1.0, 0.64] {
+        let mut camera = camera();
+        camera.zoom = zoom;
+        let resource = piece(0);
+        let selected = scene_resource_frame(&art, resource).unwrap();
+        assert_eq!(selected.size, [291.0, 147.0]);
+        assert_eq!(selected.anchor, [145.0, 73.0]);
+        let drawn = world_sprite_frames(&art, &[], &[resource], &[], camera, 0);
+        assert_eq!(drawn.len(), 1, "one whole face, no shadow or strips");
+        let (sprite, frame, depth, id) = drawn[0];
+        let scale = 128.0 / 96.0 * zoom as f32;
         assert!((frame.size[0] - 291.0 * scale).abs() < 1e-3);
-        let center_y = (1.0 - sprite.position[1]) * 384.0;
-        let (first, last) = (
-            center_y - frame.size[1] / 2.0,
-            center_y + frame.size[1] / 2.0,
-        );
-        // Bands run back to front, each reaching under the one behind it.
-        if let Some(previous) = previous_bottom {
-            assert!(first < previous && last > previous);
-        }
-        assert!(*depth > previous_depth);
-        (previous_bottom, previous_depth) = (Some(last), *depth);
-        (top, bottom) = (top.min(first), bottom.max(last));
-        // The piece is centred on its anchor tile horizontally.
-        assert!(((sprite.position[0] + 1.0) * 512.0 - 512.0 - 0.5 * scale).abs() < 1.0);
+        assert!((frame.size[1] - 147.0 * scale).abs() < 1e-3);
+        assert_eq!(sprite.uv, selected.atlas.uv);
+        assert_eq!(id, 9);
+        let ground = crate::surface_mesh::surface_depth([10.5, 10.5, 0.0]);
+        assert_eq!(depth - ground, 1.5, "shared object clearance");
+        let bounds = resource_sprite_bounds(resource, selected, camera).unwrap();
+        assert!((bounds[2] - bounds[0] - f64::from(frame.size[0])).abs() < 1e-3);
+        assert!((bounds[3] - bounds[1] - f64::from(frame.size[1])).abs() < 1e-3);
     }
-    // Together the bands show the whole 147-row face, enlarged to the ground.
-    assert!((bottom - top - 147.0 * scale).abs() < 1.5, "{top} {bottom}");
-    assert!((384.0 - top - 73.0 * scale).abs() < 1.5);
-    let rows = sprites
-        .iter()
-        .map(|(sprite, _, _, _)| sprite.uv[3])
-        .sum::<f32>();
-    assert!(
-        rows >= 0.0625 && rows < 0.0625 * 1.25,
-        "overlap only: {rows}"
-    );
 }
 
 #[wasm_bindgen_test]
-fn cliff_bands_mirror_lift_and_vanish_without_art_or_away_from_the_camera() {
+fn cliff_orientation_selects_reviewed_faces_and_mirrors_the_whole_image() {
     let art = art();
-    let frame = |facing, lift| {
-        world_sprite_frames(&art, &[], &[band(facing, 4, lift)], &[], camera(), 0)
-            .into_iter()
-            .next()
-    };
-    let (southwest, _, depth, _) = frame(1, 0).expect("southwest face");
-    let (southeast, _, lifted, _) = frame(7, 2).expect("southeast face");
-    assert!(southwest.uv[2] > 0.0 && southeast.uv[2] < 0.0);
-    assert_eq!(southeast.uv[0], southwest.uv[0] + southwest.uv[2]);
-    assert!((lifted - depth - 2.0 * SceneResource::CLIFF_DEPTH_LIFT).abs() < 1e-9);
-    // The band only just covers the ground it lies on.
-    let ground = crate::surface_mesh::surface_depth([
-        band(1, 4, 0).position[0],
-        band(1, 4, 0).position[1],
-        0.0,
-    ]);
-    assert!((depth - ground - SceneResource::CLIFF_DEPTH_BIAS).abs() < 1e-9);
-    for away in 3..=5 {
-        assert!(frame(away, 0).is_none());
+    for (facing, slots) in [
+        (0, &[4, 5, 15, 17, 19][..]),
+        (1, &[1, 2, 16][..]),
+        (2, &[3, 18, 24][..]),
+    ] {
+        for (variant, slot) in slots.iter().enumerate() {
+            let mut resource = piece(facing);
+            resource.visual_variant = variant as u8;
+            assert_eq!(
+                scene_resource_frame(&art, resource).unwrap().atlas,
+                art.scenery.cliff_faces[*slot].atlas
+            );
+        }
     }
-    let mut partial = self::art();
+    let draw = |facing| world_sprite_frames(&art, &[], &[piece(facing)], &[], camera(), 0);
+    let west = draw(1)[0].0;
+    let east = draw(7)[0].0;
+    assert_eq!(east.uv[0], west.uv[0] + west.uv[2]);
+    assert_eq!(east.uv[2], -west.uv[2]);
+    for away in 3..=5 {
+        assert!(draw(away).is_empty());
+    }
+    let mut partial = art;
     partial.scenery.cliff_faces.truncate(11);
-    assert!(scene_resource_frame(&partial, band(0, 4, 0)).is_none());
-    assert!(scene_resource_frame(&art, band(0, 4, 0)).is_some());
+    assert!(scene_resource_frame(&partial, piece(0)).is_none());
 }
