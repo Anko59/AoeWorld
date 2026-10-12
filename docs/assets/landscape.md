@@ -1,6 +1,6 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v9 keeps approved art separate from discovery. Required sources remain
+Catalog v10 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
 prefixes, three water depth sheets and four ground-variety sheets and ice 15024 bring the ceiling
 to 1,474 frames (1,274 terrain/200 objects including cliff faces).
@@ -81,9 +81,9 @@ rock-tinted ground.
 
 `Stone` decorations draw graphics 1034: seven plain grey rock piles (56–85 ×
 33–46), the stone-deposit shapes without ore glints. The decoration variant
-picks the pile and one of four sizes (45–90%), with the soft shadow of other
-objects without paired shadow art. Emission and culling keep that chosen size
-without the ordinary resource object's additional native-tile enlargement.
+selects the larger frames for three quarters of piles, retaining all seven
+shapes and their native hotspots. Emission and culling use the shared object
+scale of 128/96, with the soft shadow of objects without paired shadow art.
 Crags 233/234, the rock slab 235 and the
 boulders painted into the cliff faces are not used as separate objects.
 

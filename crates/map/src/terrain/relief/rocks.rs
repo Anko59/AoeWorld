@@ -7,8 +7,8 @@ use crate::{Biome, GroundMaterial, MapChunkGenerator};
 use aoe_core::TileCoord;
 
 /// Highest chance of a rock on one tile, in thousandths (dense scree).
-pub(crate) const MAX_ROCK_PER_THOUSAND: u64 = 280;
-/// Offsets that count as "beside a cliff": the scree apron below and around.
+pub(crate) const MAX_ROCK_PER_THOUSAND: u64 = 560;
+/// Offsets that count as "beside a cliff": the scree apron below the rock wall.
 pub(crate) const SCREE_REACH: [(i32, i32); 8] = [
     (2, 0),
     (-2, 0),
@@ -30,7 +30,7 @@ impl MapChunkGenerator {
         beside_cliff: bool,
     ) -> u64 {
         let base = if beside_cliff {
-            140
+            280
         } else {
             match (material, biome) {
                 (GroundMaterial::Rock, _) => 45,

@@ -13,11 +13,12 @@ pub(super) fn frame(art: &GameArt, resource: SceneResource) -> Option<(GameFrame
 
 fn rock(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     let rocks = &art.scenery.rocks;
-    let mut frame = *rocks.get(usize::from(resource.visual_variant) % rocks.len().max(1))?;
-    let scale = 0.45 + f32::from((resource.visual_variant >> 3) & 3) * 0.15;
-    frame.size = frame.size.map(|value| value * scale);
-    frame.anchor = frame.anchor.map(|value| value * scale);
-    Some(frame)
+    if rocks.len() != 7 {
+        return None;
+    }
+    // Three quarters are the broad, tall piles; keep every native shape.
+    const PILES: [usize; 16] = [5, 3, 6, 5, 1, 5, 6, 3, 2, 5, 6, 3, 4, 5, 6, 0];
+    Some(rocks[PILES[usize::from(resource.visual_variant) % PILES.len()]])
 }
 
 /// Reviewed faces falling toward the camera. The upper-right ridge faces

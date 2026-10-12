@@ -239,7 +239,8 @@ impl MapChunkGenerator {
             ) ^ self.procedural_seed.rotate_left(29);
             // Loose rocks: bare rock, scree beside cliffs, a few elsewhere.
             let rock_roll = (roll >> 24) % 1000;
-            if rock_roll < crate::terrain::relief::MAX_ROCK_PER_THOUSAND
+            if base.water == crate::WaterKind::None
+                && rock_roll < crate::terrain::relief::MAX_ROCK_PER_THOUSAND
                 && sample.density.canopy_per_thousand == 0
             {
                 let mut beside_cliff = false;
@@ -248,10 +249,11 @@ impl MapChunkGenerator {
                         position.x.saturating_add(dx),
                         position.y.saturating_add(dy),
                     );
-                    if memo
-                        .base(near)?
-                        .is_some_and(|tile| tile.surface.kind == SurfaceKind::Cliff)
-                    {
+                    if memo.base(near)?.is_some_and(|tile| {
+                        tile.surface.kind == SurfaceKind::Cliff
+                            && tile.geographic_height_centimeters
+                                > base.geographic_height_centimeters
+                    }) {
                         beside_cliff = true;
                         break;
                     }

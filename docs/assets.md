@@ -37,7 +37,7 @@ periodic sheets add medium water 15016, deep water 15015 and marsh shallows
 15014. The latter is renderer wiring for `Ford` only: no terrain generator
 emits it yet, and ford generation belongs to separate river work. Generated
 shallow water remains impassable. A pack without an optional sheet draws the
-shallow sheet in its place. Catalog v9 retains the removal of paved 15018
+shallow sheet in its place. Catalog v10 retains the removal of paved 15018
 from the natural rock role: natural rock requires procedural neutral ground,
 not paving. The renderer owns that fallback's appearance. Frame count alone
 is never topology. The map client selects those groups from
