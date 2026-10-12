@@ -1,0 +1,65 @@
+{
+ "id": "clean-rust-rename",
+ "area": "clean",
+ "task": "Rename `calc` to `total_price` everywhere; no behaviour change.",
+ "base": {
+  "Cargo.toml": [
+   "[package]",
+   "name = \"seed\"",
+   "version = \"0.1.0\"",
+   "edition = \"2021\""
+  ],
+  "src/lib.rs": [
+   "pub fn calc(unit_cents: u64, quantity: u64) -> u64 {",
+   "    unit_cents * quantity",
+   "}",
+   "",
+   "pub fn invoice_total(lines: &[(u64, u64)]) -> u64 {",
+   "    lines.iter().map(|&(price, qty)| calc(price, qty)).sum()",
+   "}",
+   "",
+   "#[cfg(test)]",
+   "mod tests {",
+   "    use super::*;",
+   "",
+   "    #[test]",
+   "    fn totals_add_up() {",
+   "        assert_eq!(calc(250, 3), 750);",
+   "        assert_eq!(invoice_total(&[(250, 3), (100, 2)]), 950);",
+   "    }",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/lib.rs b/src/lib.rs",
+  "--- a/src/lib.rs",
+  "+++ b/src/lib.rs",
+  "@@ -1,9 +1,12 @@",
+  "-pub fn calc(unit_cents: u64, quantity: u64) -> u64 {",
+  "+pub fn total_price(unit_cents: u64, quantity: u64) -> u64 {",
+  "     unit_cents * quantity",
+  " }",
+  " ",
+  " pub fn invoice_total(lines: &[(u64, u64)]) -> u64 {",
+  "-    lines.iter().map(|&(price, qty)| calc(price, qty)).sum()",
+  "+    lines",
+  "+        .iter()",
+  "+        .map(|&(price, qty)| total_price(price, qty))",
+  "+        .sum()",
+  " }",
+  " ",
+  " #[cfg(test)]",
+  "@@ -12,7 +15,7 @@",
+  " ",
+  "     #[test]",
+  "     fn totals_add_up() {",
+  "-        assert_eq!(calc(250, 3), 750);",
+  "+        assert_eq!(total_price(250, 3), 750);",
+  "         assert_eq!(invoice_total(&[(250, 3), (100, 2)]), 950);",
+  "     }",
+  " }"
+ ],
+ "expect": {
+  "clean": true
+ }
+}

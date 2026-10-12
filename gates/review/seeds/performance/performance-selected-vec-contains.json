@@ -1,0 +1,65 @@
+{
+ "id": "performance-selected-vec-contains",
+ "area": "performance",
+ "task": "Add `visible_selected(visible, selected)` returning the visible unit ids that are selected; called every frame with up to 20,000 of each.",
+ "base": {
+  "Cargo.toml": [
+   "[package]",
+   "name = \"seed\"",
+   "version = \"0.1.0\"",
+   "edition = \"2021\""
+  ],
+  "src/lib.rs": [
+   "pub fn first_visible(visible: &[u32]) -> Option<u32> {",
+   "    visible.first().copied()",
+   "}",
+   "",
+   "#[cfg(test)]",
+   "mod tests {",
+   "    use super::*;",
+   "",
+   "    #[test]",
+   "    fn first() {",
+   "        assert_eq!(first_visible(&[4, 5]), Some(4));",
+   "    }",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/lib.rs b/src/lib.rs",
+  "--- a/src/lib.rs",
+  "+++ b/src/lib.rs",
+  "@@ -1,5 +1,14 @@",
+  " pub fn first_visible(visible: &[u32]) -> Option<u32> {",
+  "     visible.first().copied()",
+  "+}",
+  "+",
+  "+/// The visible ids that are also selected, in visible order.",
+  "+pub fn visible_selected(visible: &[u32], selected: &[u32]) -> Vec<u32> {",
+  "+    visible",
+  "+        .iter()",
+  "+        .copied()",
+  "+        .filter(|id| selected.iter().any(|s| s == id))",
+  "+        .collect()",
+  " }",
+  " ",
+  " #[cfg(test)]",
+  "@@ -10,4 +19,9 @@",
+  "     fn first() {",
+  "         assert_eq!(first_visible(&[4, 5]), Some(4));",
+  "     }",
+  "+",
+  "+    #[test]",
+  "+    fn intersects() {",
+  "+        assert_eq!(visible_selected(&[1, 2, 3, 4], &[4, 2, 9]), vec![2, 4]);",
+  "+    }",
+  " }"
+ ],
+ "expect": {
+  "defect": {
+   "area": "performance",
+   "file": "src/lib.rs",
+   "what": "scanning `selected` for every visible id is O(n*m): 20,000 x 20,000 per frame; a set lookup is linear"
+  }
+ }
+}

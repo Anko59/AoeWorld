@@ -3,7 +3,9 @@
 //! findings until no status changes or the tier's round cap; a grader writes a
 //! grade /10 and two lines, which confirmed findings cap. The report is stored
 //! next to the ship evidence, keyed by commit, where agents cannot write.
+mod arbiter;
 pub(crate) mod base;
+mod calibrate;
 pub(crate) mod closing;
 pub(crate) mod config;
 mod entry;
@@ -53,6 +55,10 @@ pub(crate) enum Commands {
     },
     /// Print the lowest review tier the change allows.
     ReviewFloor,
+    /// Run the review on the calibration seed set and write the recall and
+    /// false-positive tables (`make review-calibrate`: CALIBRATE_TIER,
+    /// CALIBRATE_RUNTIME, CALIBRATE_CASES). A tool, not a gate.
+    ReviewCalibrate,
 }
 
 pub(crate) fn execute(command: Commands) -> Result<()> {
@@ -109,6 +115,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 .into())
             }
         }
+        Commands::ReviewCalibrate => Ok(calibrate::from_env(&root)?),
         Commands::ReviewFloor => {
             println!("{}", floor(&root)?.name());
             Ok(())
@@ -370,6 +377,10 @@ fn review_with_branch(
         if protocol::converged(&before, &findings) || settled {
             break;
         }
+    }
+    // A closing review's votes mean "still there?", not "real?": no arbiter.
+    if tier >= Tier::High && !closing {
+        arbiter::rule(root, &subject, &mut findings, rounds + 1, ask)?;
     }
     let grade_prompt = prompt::grading(root, &subject, &findings)?;
     let grade = ask_checked(ask, vec![grade_prompt], readable_grade)

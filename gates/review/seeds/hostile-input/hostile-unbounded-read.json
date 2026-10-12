@@ -1,0 +1,71 @@
+{
+ "id": "hostile-unbounded-read",
+ "area": "hostile-input",
+ "task": "Add `read_body(stream)` returning the whole request body that a client sends over the connection.",
+ "base": {
+  "Cargo.toml": [
+   "[package]",
+   "name = \"seed\"",
+   "version = \"0.1.0\"",
+   "edition = \"2021\""
+  ],
+  "src/lib.rs": [
+   "use std::io::Read;",
+   "",
+   "pub fn read_line(stream: &mut impl Read) -> std::io::Result<String> {",
+   "    let mut line = Vec::new();",
+   "    let mut byte = [0u8; 1];",
+   "    while line.len() < 8192 && stream.read(&mut byte)? == 1 && byte[0] != b'\\n' {",
+   "        line.push(byte[0]);",
+   "    }",
+   "    Ok(String::from_utf8_lossy(&line).into_owned())",
+   "}",
+   "",
+   "#[cfg(test)]",
+   "mod tests {",
+   "    use super::*;",
+   "",
+   "    #[test]",
+   "    fn reads_one_line() {",
+   "        assert_eq!(read_line(&mut \"abc\\ndef\".as_bytes()).unwrap(), \"abc\");",
+   "    }",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/lib.rs b/src/lib.rs",
+  "--- a/src/lib.rs",
+  "+++ b/src/lib.rs",
+  "@@ -9,6 +9,13 @@",
+  "     Ok(String::from_utf8_lossy(&line).into_owned())",
+  " }",
+  " ",
+  "+/// The whole body a client sent.",
+  "+pub fn read_body(stream: &mut impl Read) -> std::io::Result<Vec<u8>> {",
+  "+    let mut body = Vec::new();",
+  "+    stream.read_to_end(&mut body)?;",
+  "+    Ok(body)",
+  "+}",
+  "+",
+  " #[cfg(test)]",
+  " mod tests {",
+  "     use super::*;",
+  "@@ -17,4 +24,9 @@",
+  "     fn reads_one_line() {",
+  "         assert_eq!(read_line(&mut \"abc\\ndef\".as_bytes()).unwrap(), \"abc\");",
+  "     }",
+  "+",
+  "+    #[test]",
+  "+    fn reads_a_body() {",
+  "+        assert_eq!(read_body(&mut \"hello\".as_bytes()).unwrap(), b\"hello\");",
+  "+    }",
+  " }"
+ ],
+ "expect": {
+  "defect": {
+   "area": "hostile-input",
+   "file": "src/lib.rs",
+   "what": "`read_to_end` on a client connection has no size limit: a client can stream until memory runs out"
+  }
+ }
+}

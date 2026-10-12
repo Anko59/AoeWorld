@@ -10,9 +10,9 @@
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: duel duel-check ship ship-status review review-floor review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
+.PHONY: duel duel-check ship ship-status review review-floor review-calibrate review-pr issue next nightly-triage video-probe ship-tools showcase showcase-check
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -35,6 +35,12 @@ review:
 
 review-floor:
 	@.agents/hooks/harness.sh exec review-floor
+
+# Run the review on the calibration seeds (docs/review.md): CALIBRATE_TIER
+# (default low), CALIBRATE_RUNTIME and CALIBRATE_CASES (a sample size) reach it
+# through the environment. A tool for tuning the reviewers, not a gate.
+review-calibrate:
+	@.agents/hooks/harness.sh exec review-calibrate
 
 # Review a same-repository PR the harness did not open. REVIEW_PR is passed
 # through the environment and never interpolated into shell text.

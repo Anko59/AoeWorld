@@ -158,11 +158,20 @@ fn collect_strings(value: &serde_json::Value, out: &mut Vec<String>) {
     }
 }
 
+/// The `reviewer` of the cast the arbiter's ruling is recorded as: it settles
+/// a disputed finding after the votes, and is never one of them.
+pub(crate) const ARBITER: usize = usize::MAX - 1;
+
+/// The arbiter's ruling on the finding, if it gave one.
+pub(crate) fn ruling(finding: &Finding) -> Option<&Cast> {
+    finding.votes.iter().find(|c| c.reviewer == ARBITER)
+}
+
 /// Each other reviewer's latest vote on the finding.
 fn latest(finding: &Finding) -> Vec<&Cast> {
     let mut latest: Vec<&Cast> = Vec::new();
     for cast in &finding.votes {
-        if cast.reviewer == finding.reporter {
+        if cast.reviewer == finding.reporter || cast.reviewer == ARBITER {
             continue;
         }
         match latest.iter_mut().find(|c| c.reviewer == cast.reviewer) {
@@ -200,6 +209,10 @@ pub(crate) fn status(finding: &Finding, reviewers: usize) -> Status {
 /// `partial` means "real, but a different severity or scope": a finding that
 /// full `upheld` votes alone do not confirm counts one severity lower.
 fn downgraded(finding: &Finding) -> bool {
+    // The arbiter upheld it after reading the code: no split vote lowers it.
+    if ruling(finding).is_some_and(|c| c.vote == Vote::Upheld) {
+        return false;
+    }
     let votes = latest(finding);
     !votes.is_empty() && count(&votes, Vote::Upheld) <= count(&votes, Vote::Refuted)
 }

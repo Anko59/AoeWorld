@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|review|review-floor|review-pr|issue|next|showcase|showcase-check|nightly-triage
+#   harness.sh exec duel|ship|ship-status|review|review-floor|review-calibrate|review-pr|issue|next|showcase|showcase-check|nightly-triage
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -18,12 +18,13 @@ case ${1:-} in
       duel) probe=crates/harness/src/ship/duel/mod.rs ;;
       ship|ship-status) probe=crates/harness/src/ship/mod.rs ;;
       review|review-floor) probe=crates/harness/src/review/mod.rs ;;
+      review-calibrate) probe=crates/harness/src/review/calibrate/mod.rs ;;
       review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
       issue|next) probe=crates/harness/src/ship/issues.rs ;;
       showcase) probe=crates/harness/src/ship/showcase/mod.rs ;;
       showcase-check) probe=crates/harness/src/ship/showcase/check.rs ;;
       nightly-triage) probe=crates/harness/src/ship/issues/triage.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, review, review-floor, review-pr, issue, next, showcase, showcase-check or nightly-triage only" >&2; exit 2 ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, review, review-floor, review-calibrate, review-pr, issue, next, showcase, showcase-check or nightly-triage only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

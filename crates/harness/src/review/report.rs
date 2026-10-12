@@ -1,7 +1,7 @@
 //! The review report: stored as JSON next to the ship evidence
 //! (`<git common dir>/aoe-ship/reviews/<sha>-<tier>.json`, where agents cannot
 //! write) and rendered as Markdown for the pull request.
-use super::protocol::{Finding, Status, blocking};
+use super::protocol::{ARBITER, Finding, Status, blocking, ruling};
 use crate::ship::git;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
@@ -327,8 +327,15 @@ impl Report {
                     r.claim,
                     r.trigger,
                     r.expected_vs_actual,
-                    f.votes.iter().map(|v| format!("{:?}", v.vote)).collect::<Vec<_>>().join(", ")
+                    f.votes.iter().filter(|v| v.reviewer != ARBITER).map(|v| format!("{:?}", v.vote)).collect::<Vec<_>>().join(", ")
                 ));
+                if let Some(ruling) = ruling(f) {
+                    out.push_str(&format!(
+                        "  - arbiter: {:?} — {}\n",
+                        ruling.vote,
+                        ruling.evidence.trim()
+                    ));
+                }
             }
             out.push_str("\n</details>\n\n");
         }

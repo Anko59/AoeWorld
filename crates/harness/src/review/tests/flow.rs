@@ -26,6 +26,7 @@ pub(super) fn fixture(changed: &str) -> tempfile::TempDir {
         "gates/review.json",
         "gates/review/preamble.md",
         "gates/review/grader.md",
+        "gates/review/arbiter.md",
         "gates/review/personas/quick.md",
         "gates/review/personas/correctness.md",
         "gates/review/personas/spec.md",
@@ -160,7 +161,7 @@ fn a_clean_low_tier_review_passes_and_garbage_makes_it_incomplete() {
     )
     .unwrap();
     assert!(report.passes(), "{}", report.markdown());
-    assert_eq!(report.model, "gpt-6-luna");
+    assert_eq!(report.model, "gpt-6.1-sol");
     assert_eq!(*clean.sessions.lock().unwrap(), 2);
     let garbage = Script {
         first: |_| "not json".into(),
