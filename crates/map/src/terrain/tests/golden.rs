@@ -169,10 +169,9 @@ fn sheet_plumbing_emits_none_of_the_new_ground_materials() {
     }
 }
 
-/// The same guard on scene content rather than transport bytes: the wire
-/// format changes in this revision, the generated scenes must not. Like the
-/// pins above it is the current-generation digest, regenerated on any
-/// deliberate generation change, not a compatibility fixture.
+/// Regression pin of the current generation on scene content rather than
+/// transport bytes, so a wire-format change alone cannot move it. Regenerate
+/// it with any deliberate generation change, like the pins above.
 #[test]
 fn default_package_generated_scene_content_is_pinned() {
     let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
