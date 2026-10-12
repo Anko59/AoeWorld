@@ -1,6 +1,7 @@
 //! `make review-calibrate`: run the normal review on every seed case (or a
 //! sample) and measure what it finds. A tool for tuning prompts, personas and
 //! models, never a gate; the real review is not changed by it.
+mod hooks;
 mod repo;
 mod seeds;
 mod summary;

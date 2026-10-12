@@ -60,4 +60,6 @@ if [ "$event" = exec ]; then
   esac
   cd "$root" && exec "$binary" "$2"
 fi
-AOE_AGENT_HOOK_ROOT=$root AOE_AGENT_HOOK_JUDGE=$judge exec "$binary" agent-hook --runtime "$runtime" "$event"
+# A caller that judges another checkout (review-calibrate case repositories)
+# names it in AOE_AGENT_HOOK_ROOT; the judge binary still comes from this one.
+AOE_AGENT_HOOK_ROOT=${AOE_AGENT_HOOK_ROOT:-$root} AOE_AGENT_HOOK_JUDGE=$judge exec "$binary" agent-hook --runtime "$runtime" "$event"

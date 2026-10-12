@@ -295,3 +295,47 @@ fn a_broken_seed_is_refused() {
     assert!(seeds::load(temp.path()).is_err());
     assert!(seeds::load(&temp.path().join("missing")).is_err());
 }
+
+#[test]
+fn a_case_repository_carries_every_runtimes_role_hooks_to_the_source_judge() {
+    let case = shipped().remove(0);
+    let dir = repo::materialise(&repo_root(), &case).unwrap();
+    for relative in super::hooks::CONFIG {
+        assert!(dir.path().join(relative).is_file(), "{relative} missing");
+    }
+    for relative in [
+        ".claude/settings.json",
+        ".codex/hooks.json",
+        ".dsh/hooks.json",
+    ] {
+        let text = fs::read_to_string(dir.path().join(relative)).unwrap();
+        assert!(text.contains(".agents/hooks/harness.sh"), "{relative}");
+    }
+    // Codex's inline hooks are read from the case repository, so it can start.
+    assert!(crate::agents::launch::codex_hooks(dir.path()).is_ok());
+    // The launcher judges the case repository with the source checkout's launcher.
+    let source = tempfile::tempdir().unwrap();
+    for relative in super::hooks::CONFIG {
+        let to = source.path().join(relative);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        fs::copy(repo_root().join(relative), to).unwrap();
+    }
+    let fake = source.path().join(super::hooks::LAUNCHER);
+    fs::create_dir_all(fake.parent().unwrap()).unwrap();
+    fs::write(&fake, "#!/bin/sh\necho \"$AOE_AGENT_HOOK_ROOT $*\"\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let target = tempfile::tempdir().unwrap();
+    super::hooks::install(source.path(), target.path()).unwrap();
+    let out = std::process::Command::new(target.path().join(super::hooks::LAUNCHER))
+        .args(["claude", "pre-tool-use"])
+        .output()
+        .unwrap();
+    let judged = target.path().canonicalize().unwrap();
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap().trim(),
+        format!("{} claude pre-tool-use", judged.display())
+    );
+    // A source without the configuration cannot enforce the role: refused.
+    let bare = tempfile::tempdir().unwrap();
+    assert!(super::hooks::install(bare.path(), target.path()).is_err());
+}

@@ -61,7 +61,7 @@ fn flatten(registry: &str) -> Result<String, String> {
     serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
 }
 
-fn write(root: &Path, relative: &str, text: &str) -> Result<(), String> {
+pub(super) fn write(root: &Path, relative: &str, text: &str) -> Result<(), String> {
     let path = root.join(relative);
     fs::create_dir_all(path.parent().unwrap_or(root)).map_err(|e| e.to_string())?;
     fs::write(&path, text).map_err(|e| format!("{relative}: {e}"))
@@ -92,6 +92,7 @@ pub(super) fn materialise(source: &Path, case: &Case) -> Result<TempDir, String>
         write(root, &relative, &text)?;
     }
     write(root, ENGINE_STUB, "calibration stub\n")?;
+    super::hooks::install(source, root)?;
     for (path, text) in case.files() {
         write(root, path, &text)?;
     }
