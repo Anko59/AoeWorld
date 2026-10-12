@@ -92,7 +92,10 @@ reverts #208 and #221: both existed only to fit a 5% gate that had 37 B left,
 one by moving WebGPU out of Rust. It was re-taken on 2026-10-11 at 236275 B,
 measured on `dev` ba5417c: the growth is merged product code (world-anchored
 terrain texels and their frame directory, #268), and the allowance left could
-not hold the next reviewed features. A baseline moves only in its own reviewed
+not hold the next reviewed features. It was re-taken again on 2026-10-12 at
+248103 B, measured on `dev` 58dc3ec: ground blending with separate shader
+programs (#289, #294), water drawn by depth (#284) and four more ground sheets
+(#291) used the whole allowance, leaving `dev` itself at the cap. A baseline moves only in its own reviewed
 change, with the reason recorded here. These measured deterministic comparisons pass
 locally. Encoded network bytes and tick durations are informational because
 they vary with scheduling. The dedicated hardware environment and
