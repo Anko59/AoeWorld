@@ -6,7 +6,7 @@ use super::*;
 pub(super) fn candidates(
     cache: &mut StartPassabilityCache<'_>,
     max_chunks: usize,
-) -> Result<(Vec<TileCoord>, bool), EnvironmentPageError> {
+) -> Result<(Vec<Vec<TileCoord>>, bool), EnvironmentPageError> {
     let config = cache.config;
     let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
     let center_chunk = TileCoord::new(center.x / CHUNK_TILES, center.y / CHUNK_TILES);
@@ -76,15 +76,47 @@ pub(super) fn candidates(
                 }
             }
         }
-        // A fully surveyed component smaller than the required area or exit
-        // diameter cannot certify a start anywhere. Do not spend the shared
-        // exit budget repeatedly on the same island.
+        // A complete component proves both its area and the maximum possible
+        // Chebyshev exit distance of each clear centre. Include the clearing
+        // itself, rather than treating its bounding-box span as a certificate.
         let distance = START_EXIT_DISTANCE
             .min(((config.width_tiles.max(config.height_tiles) - 1) / 2).max(1) as u32);
-        if !boundary
-            && (region.len() < START_REACHABLE_TILES
-                || (high.x.abs_diff(low.x) < distance && high.y.abs_diff(low.y) < distance))
-        {
+        if !boundary {
+            if region.len() < START_REACHABLE_TILES {
+                continue;
+            }
+            let members = region.iter().copied().collect::<BTreeSet<_>>();
+            region.retain(|tile| {
+                let possible_distance = tile
+                    .x
+                    .abs_diff(low.x)
+                    .max(tile.x.abs_diff(high.x))
+                    .max(tile.y.abs_diff(low.y))
+                    .max(tile.y.abs_diff(high.y));
+                possible_distance >= distance
+                    && (-START_CLEAR_RADIUS..=START_CLEAR_RADIUS).all(|dy| {
+                        (-START_CLEAR_RADIUS..=START_CLEAR_RADIUS)
+                            .all(|dx| members.contains(&TileCoord::new(tile.x + dx, tile.y + dy)))
+                    })
+            });
+            if region.is_empty() {
+                continue;
+            }
+        }
+        // Reserve certificate shares only for regions containing an actual
+        // clearing. Tiny surveyed boundary fragments must not dilute the
+        // budget of viable regions merely because their extent is unknown.
+        let mut clearings = Vec::new();
+        for tile in region {
+            if (cache.cancelled)() {
+                return Ok((Vec::new(), false));
+            }
+            if clear_starting_area(cache, tile)? {
+                clearings.push(tile);
+            }
+        }
+        let mut region = clearings;
+        if region.is_empty() {
             continue;
         }
         region.sort_unstable_by_key(|tile| start_key(*tile, config));
@@ -100,17 +132,19 @@ pub(super) fn candidates(
     // region; the latter remain a fallback for narrow source-backed clearings.
     let mut result = Vec::new();
     for region in regions {
-        result.extend(
+        let mut candidates = Vec::new();
+        candidates.extend(
             region
                 .iter()
                 .copied()
                 .filter(|tile| tile == &center || (tile.x % 8 == 4 && tile.y % 8 == 4)),
         );
-        result.extend(
+        candidates.extend(
             region
                 .into_iter()
                 .filter(|tile| *tile != center && !(tile.x % 8 == 4 && tile.y % 8 == 4)),
         );
+        result.push(candidates);
     }
     Ok((result, complete))
 }

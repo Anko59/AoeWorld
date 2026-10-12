@@ -59,31 +59,17 @@ impl Terrain {
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
         // Uniform ground has one region and needs no survey.
         if matches!(self, Terrain::Uniform(_)) {
-            return Ok(if valid_start(&mut cache, center)? {
+            let valid = valid_start(&mut cache, center)?;
+            return Ok(if cancelled() {
+                StartSearchResult::Cancelled
+            } else if valid {
                 StartSearchResult::Found(center)
             } else {
                 StartSearchResult::Unavailable
             });
         }
         let (candidates, complete) = regions::candidates(&mut cache, max_chunks)?;
-        for candidate in candidates {
-            if cancelled() {
-                return Ok(StartSearchResult::Cancelled);
-            }
-            if valid_start(&mut cache, candidate)? {
-                return Ok(StartSearchResult::Found(candidate));
-            }
-            if cache.exit_budget_exhausted {
-                return Ok(StartSearchResult::LimitReached);
-            }
-        }
-        Ok(if cancelled() {
-            StartSearchResult::Cancelled
-        } else if complete {
-            StartSearchResult::Unavailable
-        } else {
-            StartSearchResult::LimitReached
-        })
+        certify_regions(&mut cache, candidates, complete)
     }
 }
 
@@ -94,6 +80,8 @@ struct StartPassabilityCache<'a> {
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
     exit_visits: usize,
+    exit_visit_limit: usize,
+    exit_chunk_limit: usize,
     exit_chunks: BTreeSet<(i32, i32)>,
     exit_budget_exhausted: bool,
     cancelled: &'a dyn Fn() -> bool,
@@ -108,6 +96,8 @@ impl<'a> StartPassabilityCache<'a> {
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
             exit_visits: 0,
+            exit_visit_limit: START_EXIT_VISITS,
+            exit_chunk_limit: START_SEARCH_CHUNKS,
             exit_chunks: BTreeSet::new(),
             exit_budget_exhausted: false,
             cancelled,
@@ -168,7 +158,7 @@ impl<'a> StartPassabilityCache<'a> {
     /// Work and chunk bounds apply across ALL candidates in this search.
     fn reaches_exit(&mut self, origin: TileCoord) -> Result<bool, EnvironmentPageError> {
         use std::collections::BinaryHeap;
-        if self.exit_visits == START_EXIT_VISITS {
+        if self.exit_visits >= self.exit_visit_limit {
             self.exit_budget_exhausted = true;
             return Ok(false);
         }
@@ -198,7 +188,7 @@ impl<'a> StartPassabilityCache<'a> {
                     next.y.div_euclid(CHUNK_TILES),
                 );
                 if !self.exit_chunks.contains(&chunk)
-                    && self.exit_chunks.len() == START_SEARCH_CHUNKS
+                    && self.exit_chunks.len() >= self.exit_chunk_limit
                 {
                     self.exit_budget_exhausted = true;
                     return Ok(false);
@@ -211,7 +201,7 @@ impl<'a> StartPassabilityCache<'a> {
                     .terrain
                     .crossable_with_cancel(tile, next, self.config, self.cancelled)?
                 {
-                    if self.exit_visits == START_EXIT_VISITS {
+                    if self.exit_visits >= self.exit_visit_limit {
                         self.exit_budget_exhausted = true;
                         return Ok(false);
                     }
@@ -265,6 +255,48 @@ impl<'a> StartPassabilityCache<'a> {
             .copied()
             .unwrap_or(false))
     }
+}
+
+/// Reserve an equal bounded share of remaining work for each remaining region.
+/// Unused work carries forward; a failed region cannot consume later shares.
+fn certify_regions(
+    cache: &mut StartPassabilityCache<'_>,
+    regions: Vec<Vec<TileCoord>>,
+    complete: bool,
+) -> Result<StartSearchResult, EnvironmentPageError> {
+    let count = regions.len();
+    let mut limited = false;
+    for (index, candidates) in regions.into_iter().enumerate() {
+        let remaining = count - index;
+        cache.exit_visit_limit =
+            cache.exit_visits + (START_EXIT_VISITS - cache.exit_visits) / remaining;
+        cache.exit_chunk_limit =
+            cache.exit_chunks.len() + (START_SEARCH_CHUNKS - cache.exit_chunks.len()) / remaining;
+        cache.exit_budget_exhausted = false;
+        for candidate in candidates {
+            if (cache.cancelled)() {
+                return Ok(StartSearchResult::Cancelled);
+            }
+            let valid = valid_start(cache, candidate)?;
+            if (cache.cancelled)() {
+                return Ok(StartSearchResult::Cancelled);
+            }
+            if valid {
+                return Ok(StartSearchResult::Found(candidate));
+            }
+            if cache.exit_budget_exhausted {
+                limited = true;
+                break;
+            }
+        }
+    }
+    Ok(if (cache.cancelled)() {
+        StartSearchResult::Cancelled
+    } else if complete && !limited {
+        StartSearchResult::Unavailable
+    } else {
+        StartSearchResult::LimitReached
+    })
 }
 
 fn valid_start(
