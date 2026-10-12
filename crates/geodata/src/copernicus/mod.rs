@@ -76,7 +76,6 @@ pub(crate) fn prepare_with_staging_and_corrections(
         water: water_corrections,
         vegetation: vegetation_corrections,
     } = corrections;
-    let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     if !(2..=MAX_DETAILED_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "detailed preparation supports 2 through 4096 samples per axis",
@@ -106,7 +105,9 @@ pub(crate) fn prepare_with_staging_and_corrections(
         .map_err(|_| GeodataError::Preparation("invalid map request estimate"))?;
     let bounds = geographic_bounds(request, estimate.effective_side_meters)?;
     validate_tile_budget(bounds)?;
-    let hydrology_plan = crate::hydrology::preflight_hydrology(&cache_root, request)?;
+    let hydrology_plan =
+        crate::hydrology::preflight_hydrology(&cache_root, request, hydrology_axis)?;
+    let _lease = staging_root.as_deref().map(Stage::lease).transpose()?;
     let overview = crate::prepare_overview_with_all_corrections(
         cache_root.clone(),
         request,

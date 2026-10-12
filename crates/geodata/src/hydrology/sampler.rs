@@ -9,10 +9,11 @@ use aoe_map::{HydrologyEvidenceMethod, HydrologyKind};
 use gdal::{
     Dataset,
     spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
-    vector::Geometry,
 };
 use std::{collections::BTreeMap, path::Path};
 
+#[path = "sampler/channels.rs"]
+mod channels;
 #[path = "sampler/lakes.rs"]
 mod lakes;
 #[path = "sampler/topology.rs"]
@@ -183,7 +184,32 @@ impl Sampler {
         transform
             .transform_coords(&mut longitude, &mut latitude, &mut [])
             .map_err(|_| GeodataError::Coordinate)?;
-        let page_bounds = page_bounds(&longitude, &latitude)?;
+        // Query the full projected page and channel halo, not just the
+        // sample-centre box: a parallel river can lie between the last
+        // centre and the page edge.
+        let halo = side
+            / self
+                .request
+                .estimate()
+                .map_err(|_| GeodataError::Projection)?
+                .tiles_per_side as f64
+            * 6.0;
+        let west = east[0] - spacing / 2.0 - halo;
+        let top = north[0] + spacing / 2.0 + halo;
+        let right = east[usize::from(width) - 1] + spacing / 2.0 + halo;
+        let bottom = north[east.len() - 1] - spacing / 2.0 - halo;
+        let mut query_x = Vec::new();
+        let mut query_y = Vec::new();
+        for y in [bottom, (bottom + top) / 2.0, top] {
+            for x in [west, (west + right) / 2.0, right] {
+                query_x.push(x);
+                query_y.push(y);
+            }
+        }
+        transform
+            .transform_coords(&mut query_x, &mut query_y, &mut [])
+            .map_err(|_| GeodataError::Coordinate)?;
+        let page_bounds = page_bounds(&query_x, &query_y)?;
         let lake_features = vector_features(&mut self.lakes, page_bounds, &definition, false)?;
         let river_features = if let Some(rivers) = &mut self.rivers {
             vector_features(rivers, page_bounds, &definition, true)?
@@ -219,26 +245,21 @@ impl Sampler {
                 + index % usize::from(width);
             let ocean = self.ocean[global_index] >= 50;
             let lake = lake_kinds[index];
-            let river = if lake.is_none() && !river_features.is_empty() {
-                let point = Geometry::from_wkt(&format!("POINT ({local_east} {local_north})"))
-                    .map_err(|_| GeodataError::Preparation("could not construct sample point"))?;
-                let river = river_features
-                    .iter()
-                    .any(|feature| feature.geometry.contains(&point));
-                if river
-                    && let Some((feature, station)) =
-                        nearest_river_reach(&river_features, &point, local_east, local_north)
-                    && let Some(reach) = feature.river_reach.as_ref()
-                {
-                    let offset = meters_to_centimeters(station).ok_or(
-                        GeodataError::Preparation("HydroRIVERS line distance is invalid"),
-                    )?;
-                    self.river_cells[global_index] = Some(RiverCellProjection {
-                        reach_id: reach.id,
-                        distance_from_start_centimeters: offset,
-                    });
-                }
-                river
+            let river = if let Some((feature, station)) =
+                nearest_river_reach(&river_features, local_east, local_north, spacing)
+            {
+                let reach = feature
+                    .river_reach
+                    .as_ref()
+                    .ok_or(GeodataError::Preparation("selected river has no reach"))?;
+                let offset = meters_to_centimeters(station).ok_or(GeodataError::Preparation(
+                    "HydroRIVERS line distance is invalid",
+                ))?;
+                self.river_cells[global_index] = Some(RiverCellProjection {
+                    reach_id: reach.id,
+                    distance_from_start_centimeters: offset,
+                });
+                true
             } else {
                 false
             };
@@ -248,6 +269,21 @@ impl Sampler {
         }
         Ok((
             HydrologyPage {
+                river_segments: channels::segments(
+                    &river_features,
+                    side,
+                    self.request
+                        .estimate()
+                        .map_err(|_| GeodataError::Preparation("invalid river scale"))?
+                        .tiles_per_side,
+                    [
+                        east[0] - spacing / 2.0,
+                        *north.last().ok_or(GeodataError::Projection)? - spacing / 2.0,
+                        *east.last().ok_or(GeodataError::Projection)? + spacing / 2.0,
+                        north[0] + spacing / 2.0,
+                    ],
+                    spacing,
+                )?,
                 level: 0,
                 x: x / PAGE,
                 y: y / PAGE,
@@ -305,58 +341,8 @@ fn classify_evidence(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn evidence_precedence_keeps_modern_water_observations_typed() {
-        assert_eq!(
-            classify_evidence(true, Some(HydrologyKind::Lake), true, 40),
-            (HydrologyKind::Ocean, HydrologyEvidenceMethod::OverviewOcean)
-        );
-        assert_eq!(
-            classify_evidence(false, Some(HydrologyKind::RegulatedLake), true, 80),
-            (
-                HydrologyKind::RegulatedLake,
-                HydrologyEvidenceMethod::HydroLakesExtent
-            )
-        );
-        assert_eq!(
-            classify_evidence(false, None, true, 40),
-            (
-                HydrologyKind::River,
-                HydrologyEvidenceMethod::HydroRiversBufferedCorridor
-            )
-        );
-        for class in [WORLD_COVER_WETLAND, 95] {
-            assert_eq!(
-                classify_evidence(false, None, false, class),
-                (
-                    HydrologyKind::Shallow,
-                    HydrologyEvidenceMethod::WorldCoverClass
-                )
-            );
-        }
-        assert_eq!(
-            classify_evidence(false, None, false, WORLD_COVER_PERMANENT_WATER),
-            (
-                HydrologyKind::UnknownWater,
-                HydrologyEvidenceMethod::WorldCoverClass
-            )
-        );
-        assert_eq!(
-            classify_evidence(false, None, false, WORLD_COVER_NODATA),
-            (HydrologyKind::NoEvidence, HydrologyEvidenceMethod::None)
-        );
-        assert_eq!(
-            classify_evidence(false, None, false, 40),
-            (
-                HydrologyKind::Land,
-                HydrologyEvidenceMethod::WorldCoverClass
-            )
-        );
-    }
-}
+#[path = "tests/evidence_precedence.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "tests/sampler.rs"]

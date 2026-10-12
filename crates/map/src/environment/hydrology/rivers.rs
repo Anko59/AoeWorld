@@ -1,0 +1,172 @@
+//! Source centreline geometry at map scale. Integer coordinates and stations
+//! use 1/256 tile units; widths and crossings are explicit gameplay modelling.
+use crate::EnvironmentError;
+use serde::{Deserialize, Serialize};
+
+pub const FORD_SPACING_UNITS: i64 = 40 * 256;
+pub const FORD_HALF_LENGTH_UNITS: i64 = 5 * 256 / 2;
+pub const MAX_RIVER_SEGMENTS_PER_PAGE: usize = 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "[i64; 7]", into = "[i64; 7]")]
+pub struct RiverSegment {
+    pub start: [i32; 2],
+    pub end: [i32; 2],
+    pub width_units: u16,
+    pub station_start: i64,
+    pub station_end: i64,
+}
+
+impl From<RiverSegment> for [i64; 7] {
+    fn from(s: RiverSegment) -> Self {
+        [
+            i64::from(s.start[0]),
+            i64::from(s.start[1]),
+            i64::from(s.end[0]),
+            i64::from(s.end[1]),
+            i64::from(s.width_units),
+            s.station_start,
+            s.station_end,
+        ]
+    }
+}
+
+impl TryFrom<[i64; 7]> for RiverSegment {
+    type Error = EnvironmentError;
+    fn try_from(v: [i64; 7]) -> Result<Self, Self::Error> {
+        let coordinate = |n| i32::try_from(n).map_err(|_| EnvironmentError::InvalidPage);
+        let segment = Self {
+            start: [coordinate(v[0])?, coordinate(v[1])?],
+            end: [coordinate(v[2])?, coordinate(v[3])?],
+            width_units: u16::try_from(v[4]).map_err(|_| EnvironmentError::InvalidPage)?,
+            station_start: v[5],
+            station_end: v[6],
+        };
+        segment.validate()?;
+        Ok(segment)
+    }
+}
+
+impl RiverSegment {
+    pub fn validate(&self) -> Result<(), EnvironmentError> {
+        if self.start == self.end
+            || !(3 * 256..=10 * 256).contains(&self.width_units)
+            || self
+                .start
+                .iter()
+                .chain(&self.end)
+                .any(|v| v.unsigned_abs() > 68_000_000)
+            || self.station_start.unsigned_abs() > (1 << 48)
+            || self.station_end.unsigned_abs() > (1 << 48)
+        {
+            return Err(EnvironmentError::InvalidPage);
+        }
+        Ok(())
+    }
+
+    /// Distance and ford eligibility of a point within the expanded corridor.
+    /// Expanded queries are for conservative shore/minimap discovery only.
+    /// Negative expansion is zero; expansion is capped at twice the maximum
+    /// map side in units, enough to cover any supported map's diagonal.
+    pub fn sample(&self, point: [i64; 2], extra_units: i64) -> Option<(i128, bool)> {
+        let max_expansion = (crate::request::MAX_TILES_PER_SIDE * 2 * 256) as i64;
+        let radius_units =
+            (i64::from(self.width_units) / 2).saturating_add(extra_units.clamp(0, max_expansion));
+        for (axis, value) in point.iter().enumerate() {
+            if *value < i64::from(self.start[axis].min(self.end[axis])) - radius_units
+                || *value > i64::from(self.start[axis].max(self.end[axis])) + radius_units
+            {
+                return None;
+            }
+        }
+        let dx = i128::from(self.end[0]) - i128::from(self.start[0]);
+        let dy = i128::from(self.end[1]) - i128::from(self.start[1]);
+        let px = i128::from(point[0]) - i128::from(self.start[0]);
+        let py = i128::from(point[1]) - i128::from(self.start[1]);
+        let length = dx * dx + dy * dy;
+        if length == 0 {
+            return None;
+        }
+        let fraction = (px * dx + py * dy).clamp(0, length);
+        let ax = px - dx * fraction / length;
+        let ay = py - dy * fraction / length;
+        let distance = ax * ax + ay * ay;
+        let radius = i128::from(radius_units);
+        if distance > radius * radius {
+            return None;
+        }
+        let station = i128::from(self.station_start)
+            + (i128::from(self.station_end) - i128::from(self.station_start)) * fraction / length;
+        let phase = (station as i64).rem_euclid(FORD_SPACING_UNITS);
+        let ford = phase.min(FORD_SPACING_UNITS - phase) <= FORD_HALF_LENGTH_UNITS;
+        Some((distance, ford))
+    }
+}
+
+impl super::HydrologyEvidencePage {
+    /// Package-context validation bounds index work to this page and a five-tile halo.
+    pub fn validate_river_bounds(&self, samples: u16, tiles: u64) -> Result<(), EnvironmentError> {
+        self.validate()?;
+        if !(2..=super::MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS).contains(&samples)
+            || tiles == 0
+            || tiles > crate::request::MAX_TILES_PER_SIDE
+        {
+            return Err(EnvironmentError::InvalidPage);
+        }
+        let units = i128::from(tiles) * 256;
+        let axis = i128::from(samples);
+        for (dimension, (page, size)) in [(self.x, self.width), (self.y, self.height)]
+            .into_iter()
+            .enumerate()
+        {
+            let start = i128::from(page) * i128::from(super::ENVIRONMENT_PAGE_SAMPLES);
+            let end = start + i128::from(size);
+            if end > axis {
+                return Err(EnvironmentError::InvalidPage);
+            }
+            // Compare rational bounds without rounding the fractional page edges.
+            let low = start * units - 5 * 256 * axis;
+            let high = end * units + 5 * 256 * axis;
+            for (segment, geometry) in self.river_segments.iter().enumerate() {
+                for (endpoint, point) in [geometry.start, geometry.end].into_iter().enumerate() {
+                    let coordinate = i128::from(point[dimension]) * axis;
+                    // Persisted coordinates round to the nearest integer unit.
+                    if coordinate * 2 < low * 2 - axis || coordinate * 2 > high * 2 + axis {
+                        return Err(EnvironmentError::RiverOutsidePage {
+                            segment,
+                            endpoint,
+                            axis: dimension,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl super::HydrologyEvidenceIndex {
+    /// Shared acceptance check for a page in a frozen package. Structural
+    /// roots alone cannot bind geometry or optional models to their index.
+    pub fn validate_page(
+        &self,
+        page: &super::HydrologyEvidencePage,
+        tiles: u64,
+    ) -> Result<(), EnvironmentError> {
+        self.validate()?;
+        page.validate_river_bounds(self.samples_per_axis, tiles)?;
+        let side = u16::from(super::ENVIRONMENT_PAGE_SAMPLES);
+        let shape = |coordinate: u16| {
+            self.samples_per_axis
+                .checked_sub(coordinate.checked_mul(side)?)
+                .map(|remaining| remaining.min(side) as u8)
+        };
+        if shape(page.x) != Some(page.width) || shape(page.y) != Some(page.height) {
+            return Err(EnvironmentError::InvalidPage);
+        }
+        if page.water_model.is_some() != self.water_model.is_some() {
+            return Err(EnvironmentError::WaterModelPresence);
+        }
+        Ok(())
+    }
+}

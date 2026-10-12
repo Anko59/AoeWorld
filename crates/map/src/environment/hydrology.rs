@@ -14,6 +14,8 @@ pub use model::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+mod rivers;
+pub use rivers::{MAX_RIVER_SEGMENTS_PER_PAGE, RiverSegment};
 
 pub const MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS: u16 = 1_024;
 pub const WORLD_COVER_OBSERVATION_YEAR: u16 = 2_021;
@@ -169,10 +171,12 @@ impl HydrologyEvidenceIndex {
         }
     }
 
+    /// Validates every page against package dimensions before checking roots.
     pub fn validate_pages(
         &self,
         hydrology: &[HydrologyEvidencePage],
         land_cover: &[ModernLandCoverPage],
+        tiles: u64,
     ) -> Result<(), EnvironmentError> {
         self.validate()?;
         if let Some(model) = &self.water_model {
@@ -186,7 +190,7 @@ impl HydrologyEvidenceIndex {
         validate_page_set(
             self.samples_per_axis,
             hydrology,
-            HydrologyEvidencePage::validate,
+            |page| self.validate_page(page, tiles),
             |page| (page.x, page.y, page.width, page.height),
         )?;
         validate_page_set(
@@ -197,13 +201,6 @@ impl HydrologyEvidenceIndex {
         )?;
         if ordered_hydrology_page_root(hydrology)? != self.hydrology_page_root
             || ordered_modern_land_cover_page_root(land_cover)? != self.modern_land_cover_page_root
-        {
-            return Err(EnvironmentError::InvalidPyramid);
-        }
-        let expects_model = self.water_model.is_some();
-        if hydrology
-            .iter()
-            .any(|page| page.water_model.is_some() != expects_model)
         {
             return Err(EnvironmentError::InvalidPyramid);
         }
@@ -242,6 +239,7 @@ fn validate_page_set<T>(
 /// River corridors are buffered evidence; modeled levels and any supported
 /// downstream direction live in the separate water-model page.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HydrologyEvidencePage {
     pub level: u8,
     pub x: u16,
@@ -250,6 +248,7 @@ pub struct HydrologyEvidencePage {
     pub height: u8,
     pub kind: Vec<u8>,
     pub method: Vec<u8>,
+    pub river_segments: Vec<RiverSegment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub water_model: Option<HydrologyWaterModelPage>,
 }
@@ -264,8 +263,12 @@ impl HydrologyEvidencePage {
             || self.height > ENVIRONMENT_PAGE_SAMPLES
             || self.kind.len() != count
             || self.method.len() != count
+            || self.river_segments.len() > MAX_RIVER_SEGMENTS_PER_PAGE
         {
             return Err(EnvironmentError::InvalidPage);
+        }
+        for segment in &self.river_segments {
+            segment.validate()?;
         }
         for (&kind, &method) in self.kind.iter().zip(&self.method) {
             HydrologyObservation {
@@ -320,6 +323,16 @@ impl HydrologyEvidencePage {
         hash.update(&[self.width, self.height]);
         hash.update(&self.kind);
         hash.update(&self.method);
+        hash.update(b"river-lines\0");
+        hash.update(&(self.river_segments.len() as u32).to_le_bytes());
+        for segment in &self.river_segments {
+            for coordinate in segment.start.into_iter().chain(segment.end) {
+                hash.update(&coordinate.to_le_bytes());
+            }
+            hash.update(&segment.width_units.to_le_bytes());
+            hash.update(&segment.station_start.to_le_bytes());
+            hash.update(&segment.station_end.to_le_bytes());
+        }
         if let Some(model) = &self.water_model {
             hash.update(b"modeled-water-v1\0");
             for index in 0..model.kind.len() {

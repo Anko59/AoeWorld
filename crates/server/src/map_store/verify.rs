@@ -40,12 +40,14 @@ pub(super) fn environment(directory: &Path, package: &MapPackage) -> Result<(), 
             PageLayer::HydrologyEvidence,
             index.samples_per_axis,
             index.hydrology_page_root,
+            |page| index.validate_page(page, package.estimate.tiles_per_side),
         )?;
         evidence::<ModernLandCoverPage>(
             &root,
             PageLayer::ModernLandCover,
             index.samples_per_axis,
             index.modern_land_cover_page_root,
+            ModernLandCoverPage::validate,
         )?;
     }
     Ok(())
@@ -56,6 +58,7 @@ fn evidence<T: StoredPage>(
     layer: PageLayer,
     axis: u16,
     expected_root: [u8; 32],
+    validate: impl Fn(&T) -> Result<(), EnvironmentError>,
 ) -> Result<(), MapStoreError> {
     let directory = root.join(layer.directory_name());
     require_directory(&directory)?;
@@ -72,6 +75,7 @@ fn evidence<T: StoredPage>(
             if page.coordinates() != (0, x as u16, y as u16, width, height) {
                 return Err(invalid(&path, "typed page coordinate or shape is invalid"));
             }
+            validate(&page).map_err(|error| invalid(&path, error))?;
             digest
                 .push(page.content_hash().map_err(|error| invalid(&path, error))?)
                 .map_err(|error| invalid(&path, error))?;

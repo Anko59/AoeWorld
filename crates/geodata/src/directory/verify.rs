@@ -55,21 +55,26 @@ pub(super) fn verify_manifest(
             .map(|field| field.levels.as_slice()),
     )?;
     if let Some(index) = &package.environment.hydrology_evidence {
+        let tiles = package
+            .request
+            .estimate()
+            .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
+            .tiles_per_side;
         count += verify_evidence_layer(
             directory,
             package_hash,
             DirectoryLayer::HydrologyEvidence,
-            index.samples_per_axis,
+            index,
             PageLayer::HydrologyEvidence,
-            index.hydrology_page_root,
+            tiles,
         )?;
         count += verify_evidence_layer(
             directory,
             package_hash,
             DirectoryLayer::ModernLandCover,
-            index.samples_per_axis,
+            index,
             PageLayer::ModernLandCover,
-            index.modern_land_cover_page_root,
+            tiles,
         )?;
     }
     count += verify_layer(
@@ -102,10 +107,15 @@ fn verify_evidence_layer(
     directory: &Path,
     package_hash: &str,
     layer: DirectoryLayer,
-    axis: u16,
+    index: &aoe_map::HydrologyEvidenceIndex,
     page_layer: PageLayer,
-    expected_root: [u8; 32],
+    tiles: u64,
 ) -> Result<usize, GeodataError> {
+    let axis = index.samples_per_axis;
+    let expected_root = match page_layer {
+        PageLayer::HydrologyEvidence => index.hydrology_page_root,
+        _ => index.modern_land_cover_page_root,
+    };
     let side = usize::from(ENVIRONMENT_PAGE_SAMPLES);
     let count = usize::from(axis).div_ceil(side);
     let mut root = PageRootBuilder::new(page_layer, count.saturating_mul(count))?;
@@ -120,6 +130,9 @@ fn verify_evidence_layer(
             let height = (usize::from(axis) - y * side).min(side) as u8;
             if page.dimensions() != (width, height) {
                 return Err(invalid("typed page dimensions do not match its grid"));
+            }
+            if let PageValue::HydrologyEvidence(hydrology) = &page {
+                index.validate_page(hydrology, tiles)?;
             }
             root.push(page.content_hash()?)?;
         }

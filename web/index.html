@@ -297,7 +297,8 @@
         year_ce: 600,
         seed: Math.round(number('map-seed')),
         reconstruction_profile: 'circa600_v1',
-        preparation: document.getElementById('map-preparation').value
+        preparation: document.getElementById('map-preparation').value,
+        hydrology_mode: 'vectors'
       };
     };
     region.addEventListener('change', selectRegion);

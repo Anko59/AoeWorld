@@ -89,6 +89,7 @@ pub(super) fn prepare(root: &Path) -> Result<SeedInventory> {
         &serde_json::to_vec(&package.request)?,
     )?);
     let hydrology = HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,

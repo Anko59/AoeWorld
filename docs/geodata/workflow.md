@@ -83,8 +83,8 @@ The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
 locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
-Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
-Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
+Copernicus elevation and samples modern WorldCover, HydroLAKES, and the pinned
+Europe/Middle East HydroRIVERS dataset while retaining the overview's coarse
 vegetation and historical inputs. Packages persist typed hydrology and modern
 land-cover evidence in bounded, independently verified pages. Terrain consumes
 those observations through the package provider; the optional water coverage
@@ -110,8 +110,18 @@ package format or generation changes, regenerate packages from the cached
 source inputs; old packages are not read. The default server package directory
 is `local-assets/map-packages`.
 
+Hydrology evidence pages require `river_segments`, including an empty array
+where there are no rivers. Each record contains seven integers: start x/y,
+end x/y, width, start station and end station, in 1/256 tile units. Geometry
+participates in the page content hash and must fit its page plus the maximum
+five-tile river half-width margin. The required geometry field changes the single current hydrology page format.
+There is no independently versioned hydrology evidence page format and no
+compatibility reader; schema and recipe remain the single current values above.
+Regenerate affected local packages from verified source caches.
+
 Generation composes one landscape for source-backed and fallback maps alike;
-see [the landscape reference](landscape/implementation.md).
+see [the landscape reference](landscape/implementation.md) and
+[river geometry and crossings](rivers.md).
 
 The local asset mapping is equally deliberate: the client maps semantic terrain
 to six imported AoE II terrain groups (temperate grass, dry grass, dirt, sand,

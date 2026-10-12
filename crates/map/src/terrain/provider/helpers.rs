@@ -19,6 +19,16 @@ pub(super) fn load_page(
     if page.key() != key {
         return Err(EnvironmentPageError::Corrupt);
     }
+    if let EnvironmentPage::HydrologyEvidence(hydrology) = page.as_ref() {
+        let index = generator
+            .provider_environment
+            .as_ref()
+            .and_then(|environment| environment.hydrology_evidence.as_ref())
+            .ok_or(EnvironmentPageError::Corrupt)?;
+        index
+            .validate_page(hydrology, generator.width_tiles as u64)
+            .map_err(|_| EnvironmentPageError::Corrupt)?;
+    }
     Ok(page)
 }
 
