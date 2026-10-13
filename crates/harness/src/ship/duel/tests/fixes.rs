@@ -406,7 +406,11 @@ fn a_missing_playwright_report_reports_the_focused_runs_own_error() {
     let read = focus::browser_results(&path).unwrap_err();
     assert!(read.contains("No such file"), "{read}");
     let failed = focus::missing_report(&path, Err("test server exited early: 1".into()), read);
-    assert_eq!(failed, "test server exited early: 1");
+    assert!(
+        failed.starts_with("test server exited early: 1\n"),
+        "{failed}"
+    );
+    assert!(failed.contains("No such file"), "{failed}");
     let read = focus::browser_results(&path).unwrap_err();
     let silent = focus::missing_report(&path, Ok(()), read);
     assert_eq!(
@@ -416,11 +420,25 @@ fn a_missing_playwright_report_reports_the_focused_runs_own_error() {
 }
 
 #[test]
-fn a_report_that_exists_keeps_its_own_parse_error() {
+fn an_empty_or_cut_report_still_reports_the_failed_runs_own_error() {
+    // The report file is created before Playwright starts, so a run that dies
+    // later leaves it empty or cut short: the run's error must still lead.
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("playwright.json");
+    for partial in ["", r#"{"errors":[],"sui"#] {
+        fs::write(&path, partial).unwrap();
+        let read = focus::browser_results(&path).unwrap_err();
+        let failed = focus::missing_report(&path, Err("exit 1: port in use".into()), read.clone());
+        assert!(failed.starts_with("exit 1: port in use\n"), "{failed}");
+        assert!(failed.contains(&read), "{failed}");
+    }
+}
+
+#[test]
+fn a_successful_run_keeps_the_reports_own_parse_error() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("playwright.json");
     fs::write(&path, r#"{"errors":[],"suites":[]}"#).unwrap();
     let read = focus::browser_results(&path).unwrap_err();
-    let kept = focus::missing_report(&path, Err("exit 1".into()), read.clone());
-    assert_eq!(kept, read);
+    assert_eq!(focus::missing_report(&path, Ok(()), read.clone()), read);
 }

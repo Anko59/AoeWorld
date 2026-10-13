@@ -122,7 +122,7 @@ fn collect(
 ) -> git::Result<()> {
     for entry in fs::read_dir(directory).map_err(|e| {
         format!(
-            "{} (a manifest the saved scope names): {e}",
+            "{} (a source directory of a package in the saved scope): {e}",
             directory.display()
         )
     })? {

@@ -281,14 +281,13 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     Ok(report)
 }
 
-/// Why there is no readable report: a run that failed before Playwright wrote one says why
-/// itself; a bare "No such file" from reading the report would hide that.
+/// Why there is no readable report. A run that failed says why itself, whether
+/// the report is missing, empty or cut short (the file is created before
+/// Playwright starts); the read error alone would hide that.
 pub(super) fn missing_report(path: &Path, checked: git::Result<()>, read: String) -> String {
-    if path.is_file() {
-        return read;
-    }
     match checked {
-        Err(error) => error,
+        Err(error) => format!("{error}\n(Playwright report {}: {read})", path.display()),
+        Ok(()) if path.is_file() => read,
         Ok(()) => format!("Playwright wrote no report at {}", path.display()),
     }
 }
@@ -427,7 +426,7 @@ pub(super) fn classify_specs(root: &Path, base: &str, report: &mut CheckReport) 
             continue;
         }
         let current = fs::read_to_string(root.join(path)).map_err(|e| {
-            format!("{path} is changed since HARNESS_DUEL_BASE {base} but cannot be read: {e}")
+            format!("{path} (the file of a failing test, compared with HARNESS_DUEL_BASE {base}) cannot be read: {e}")
         })?;
         if let Ok(old) = git::git(root, &["show", &format!("{base}:{path}")])
             && super::specs::unchanged(&current, &old, *line)
