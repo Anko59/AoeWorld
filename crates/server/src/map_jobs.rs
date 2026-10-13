@@ -334,6 +334,11 @@ fn launch(state: AppState, id: u64) {
                 map_store::verify_stored(directory, &package).map_err(|error| error.to_string())?
             } else {
                 let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
+                    .and_then(|package| {
+                        package.with_preparation_note(
+                            aoe_map::PreparationNote::GeographicWorkerUnavailable,
+                        )
+                    })
                     .map_err(|error| error.to_string())?;
                 map_store::persist(directory.as_deref(), &package)
                     .map_err(|error| error.to_string())?;

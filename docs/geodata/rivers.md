@@ -9,6 +9,11 @@ the creator displays the note. With rivers explicitly requires coverage and
 rejects an uncovered footprint. Without rivers explicitly requests an overview.
 Detailed regional elevation is an explicit choice and includes hydrology.
 
+Without a geographic worker, only Automatic terrain preparation without an
+explicit With rivers requirement permits procedural fallback. Its package and
+job record `geographic_worker_unavailable`. Explicit source preparation and
+With rivers requests reject the missing worker instead of changing their mode.
+
 Coverage uses the exact geographic extent recorded from the SHA-pinned river
 archive's shapefile header, inset by 0.01 degrees of query padding. The same
 projected-footprint check runs before cache or input access on every hydrology
@@ -40,7 +45,8 @@ presentation are separate changes. This stage adds no river terrain or rendering
 behavior.
 
 Explicit hydrology outside coverage fails with `vector hydrology footprint is
-outside the pinned river dataset extent`. Automatic falls back only for this
+outside the pinned river dataset extent`. With a configured worker, Automatic
+falls back only for this
 preflight coverage outcome, never for acquisition or sampling failures. Source
 errors fail the job. The single current package format requires the
 `preparation_notes` array, even when empty; its note affects content identity

@@ -80,6 +80,7 @@ pub struct SourceLock {
 #[serde(rename_all = "snake_case")]
 pub enum PreparationNote {
     OutsideRiverCoverage,
+    GeographicWorkerUnavailable,
 }
 
 impl PreparationNote {
@@ -87,6 +88,9 @@ impl PreparationNote {
         match self {
             Self::OutsideRiverCoverage => {
                 "This area is outside river coverage; the map uses overview water without rivers."
+            }
+            Self::GeographicWorkerUnavailable => {
+                "No geographic worker configured; terrain is procedural fallback without source river data."
             }
         }
     }
@@ -247,12 +251,15 @@ impl MapPackage {
         })
     }
 
-    /// Bind an explicit coverage outcome to content identity, without changing
+    /// Bind an explicit preparation outcome to content identity, without changing
     /// the geography key or the generated terrain of the same overview inputs.
     pub fn with_preparation_note(mut self, note: PreparationNote) -> Result<Self, MapPackageError> {
         self.validate()?;
         if !self.preparation_notes.is_empty()
             || self.environment.hydrology_evidence.is_some()
+            || (note == PreparationNote::GeographicWorkerUnavailable
+                && (!self.source_locks.is_empty()
+                    || self.environment != PreparedEnvironment::default()))
             || self.source_locks.iter().any(|lock| {
                 ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"]
                     .contains(&lock.id.as_str())
@@ -262,7 +269,11 @@ impl MapPackage {
         }
         let mut hash = blake3::Hasher::new();
         hash.update(&self.content_hash);
-        hash.update(b"aoe-map-preparation-note\0outside_river_coverage");
+        hash.update(b"aoe-map-preparation-note\0");
+        hash.update(match note {
+            PreparationNote::OutsideRiverCoverage => b"outside_river_coverage",
+            PreparationNote::GeographicWorkerUnavailable => b"geographic_worker_unavailable",
+        });
         self.content_hash = *hash.finalize().as_bytes();
         self.preparation_notes.push(note);
         Ok(self)

@@ -68,6 +68,9 @@ impl PreparationPlan {
             .map_err(|error| error.to_string())?;
         let estimate = request.estimate().map_err(|error| error.to_string())?;
         if !worker_available {
+            if input.hydrology_mode == HydrologyMode::Vectors {
+                return Err("With rivers requires a configured geographic worker; procedural fallback cannot supply source river data.".to_owned());
+            }
             return match input.preparation {
                 PreparationPreference::Automatic => Ok(Self::fallback()),
                 _ => Err("Source preparation requires a configured geographic worker.".to_owned()),
