@@ -78,49 +78,60 @@ impl PreparedScene {
         }
     }
 
-    /// Query the actual displayed top surface, including its current LOD.
+    /// Query the ground contact surface, including its current LOD. Cosmetic
+    /// cliff rims never change eligible ground's source contact coordinates.
     /// Spatial buckets avoid scanning the full mesh for every tree or unit.
     pub(crate) fn height(&self, world: [f64; 2]) -> Option<f64> {
         let key = [
             bucket(world[0], self.bucket_width),
             bucket(world[1], self.bucket_width),
         ];
-        self.buckets
-            .get(self.bucket_keys.get(key)?)?
-            .iter()
-            .find_map(|&index| {
-                let points = &self.triangles[index].points;
-                let [a, b, c] = [points[0].world, points[1].world, points[2].world];
-                let denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-                if denominator.abs() < f64::EPSILON {
-                    return None;
-                }
-                let first = ((b[1] - c[1]) * (world[0] - c[0]) + (c[0] - b[0]) * (world[1] - c[1]))
-                    / denominator;
-                let second = ((c[1] - a[1]) * (world[0] - c[0])
-                    + (a[0] - c[0]) * (world[1] - c[1]))
-                    / denominator;
-                let third = 1.0 - first - second;
-                (first >= -1e-7 && second >= -1e-7 && third >= -1e-7)
-                    .then_some(first * a[2] + second * b[2] + third * c[2])
-            })
+        let indices = self.buckets.get(self.bucket_keys.get(key)?)?;
+        if let Some(height) = indices.iter().find_map(|&index| {
+            triangle_height(self.triangles[index].source_ground_points()?, world)
+        }) {
+            return Some(height);
+        }
+        indices.iter().find_map(|&index| {
+            triangle_height(self.triangles[index].points.map(|p| p.world), world)
+        })
     }
+}
+
+fn triangle_height(points: [[f64; 3]; 3], world: [f64; 2]) -> Option<f64> {
+    let [a, b, c] = points;
+    let denominator = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+    if denominator.abs() < f64::EPSILON {
+        return None;
+    }
+    let first =
+        ((b[1] - c[1]) * (world[0] - c[0]) + (c[0] - b[0]) * (world[1] - c[1])) / denominator;
+    let second =
+        ((c[1] - a[1]) * (world[0] - c[0]) + (a[0] - c[0]) * (world[1] - c[1])) / denominator;
+    let third = 1.0 - first - second;
+    (first >= -1e-7 && second >= -1e-7 && third >= -1e-7)
+        .then_some(first * a[2] + second * b[2] + third * c[2])
 }
 
 fn bucket(value: f64, width: f64) -> i32 {
     (value / width).floor() as i32
 }
 fn bounds(triangle: &ProjectedSurfaceTriangle) -> ([f64; 2], [f64; 2]) {
-    triangle.points.iter().fold(
-        ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]),
-        |(mut min, mut max), p| {
-            for axis in 0..2 {
-                min[axis] = min[axis].min(p.world[axis]);
-                max[axis] = max[axis].max(p.world[axis]);
-            }
-            (min, max)
-        },
-    )
+    triangle
+        .points
+        .iter()
+        .map(|p| p.world)
+        .chain(triangle.source_ground_points().into_iter().flatten())
+        .fold(
+            ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]),
+            |(mut min, mut max), p| {
+                for axis in 0..2 {
+                    min[axis] = min[axis].min(p[axis]);
+                    max[axis] = max[axis].max(p[axis]);
+                }
+                (min, max)
+            },
+        )
 }
 
 #[cfg(test)]

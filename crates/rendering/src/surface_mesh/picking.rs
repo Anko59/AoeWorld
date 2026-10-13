@@ -52,21 +52,9 @@ fn source_point(
     weights: [f64; 3],
     presented: [f64; 2],
 ) -> [f64; 2] {
-    if face.order & SCULPTED_ORDER == 0 {
+    let Some(source) = face.source_ground_points() else {
         return presented;
-    }
-    let corners = |mode| match mode {
-        0 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-        1 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-        2 => [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
-        _ => [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
     };
-    let at = face.texture_tile.map(f64::from);
-    let world = |mode, step: f64| corners(mode).map(|p| [at[0] + p[0] * step, at[1] + p[1] * step]);
-    let source = world(
-        face.order & 3,
-        f64::from(1_u32 << ((face.order & 127) >> 2)),
-    );
 
     [0, 1].map(|axis| {
         let value = source
@@ -81,4 +69,30 @@ fn source_point(
             .fold(f64::NEG_INFINITY, f64::max);
         value.clamp(lo + 0.000001, hi - 0.000001)
     })
+}
+
+impl ProjectedSurfaceTriangle {
+    /// Eligible ground before cosmetic cliff rim movement. Contacts stay on
+    /// these source coordinates; depth and rendering use the displayed points.
+    pub fn source_ground_points(&self) -> Option<[[f64; 3]; 3]> {
+        if self.skirt || !self.pickable || self.order & SCULPTED_ORDER == 0 {
+            return None;
+        }
+        let corners = |mode| match mode {
+            0 => [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
+            1 => [[0.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            2 => [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+            _ => [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        };
+        let at = self.texture_tile.map(f64::from);
+        let world =
+            |mode, step: f64| corners(mode).map(|p| [at[0] + p[0] * step, at[1] + p[1] * step]);
+        let source = world(
+            self.order & 3,
+            f64::from(1_u32 << ((self.order & 127) >> 2)),
+        );
+        Some(std::array::from_fn(|i| {
+            [source[i][0], source[i][1], self.points[i].world[2]]
+        }))
+    }
 }

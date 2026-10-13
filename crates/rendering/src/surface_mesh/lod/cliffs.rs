@@ -154,5 +154,7 @@ fn rim(vertex: [i32; 2], cells: &[Option<CellSample>], grid: CellGrid) -> Option
             };
         }
     }
-    Some(jitter)
+    // A cosmetic corner must stay outside the central walkable interior of
+    // every incident source tile, including a three-ledge concave corner.
+    Some(jitter.map(|offset| offset.clamp(-0.24, 0.24)))
 }
