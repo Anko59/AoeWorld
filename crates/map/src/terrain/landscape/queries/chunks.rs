@@ -142,12 +142,9 @@ impl MapChunkGenerator {
             memo::Shore::None => {}
             memo::Shore::Shallow | memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
             memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
-            shore if base.passable && soft_ground(terrain.material) => {
-                terrain.material = if shore == memo::Shore::Bank {
-                    GroundMaterial::Dirt
-                } else {
-                    GroundMaterial::Sand
-                };
+            memo::Shore::Bank if base.passable => terrain.material = GroundMaterial::Dirt,
+            memo::Shore::Beach if base.passable && soft_ground(terrain.material) => {
+                terrain.material = GroundMaterial::Sand;
             }
             _ => {}
         }

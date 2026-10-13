@@ -91,6 +91,8 @@ This proves that fixture's connectivity, not unrestricted real-terrain routes.
 Rivers grade from `Shore` at their edges to `Water` midstream, never deep.
 Ford material and passability remain explicit. Land banks use textured dirt
 in a noisy one-to-two-tile band, consumed by the existing shared ground mixer.
+Passable river banks keep Dirt above the snow line; bank composition takes
+precedence over snow cover as well as ground variety.
 Rounded mesh bank corners and shallow ford artwork belong to the later renderer
 change and are absent from this terrain stage.
 The minimap
