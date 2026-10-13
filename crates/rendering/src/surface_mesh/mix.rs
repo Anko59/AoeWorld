@@ -17,6 +17,7 @@ pub(crate) mod support;
 pub(crate) mod fixture;
 
 const MISSING: u8 = u8::MAX;
+const DEEP: u8 = 5;
 /// Threshold gain and noise reach. `REACH <= GAIN - 1` keeps a share of zero
 /// at zero and a share of one at one whatever the noise says.
 const GAIN: f32 = 4.0;
@@ -65,11 +66,15 @@ impl ProjectedSurfaceTriangle {
 }
 
 /// The displayed sheet and its forest-floor strength. Shallow water overlays
-/// ground; deeper water and metadata-free samples keep their own paths.
+/// ground; loaded deeper water completes the shore halo but keeps its own faces.
 fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
     let appearance = sample.appearance?;
     if sample.surface.water != 0 || appearance::water_material(sample.material) {
-        return matches!(sample.material, 10 | 12).then_some((sample.material, 0));
+        return match sample.material {
+            10 | 12 => Some((sample.material, 0)),
+            5 | 11 => Some((DEEP, 0)),
+            _ => None,
+        };
     }
     let material = match sample.material {
         0 | 6 => u8::from(matches!(appearance.palette, 3 | 4)),
@@ -130,7 +135,7 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         }
     }
     for triangle in triangles.iter_mut().filter(|triangle| eligible(triangle)) {
-        let cells = triangle
+        let mut cells = triangle
             .points
             .map(|point| support[keys.get(vertex(point)).expect("displayed mix vertex")]);
         // Both triangles span the same axis-aligned patch bounds. Inspect all
@@ -141,11 +146,19 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 [bounds[0].min(point[axis]), bounds[1].max(point[axis])]
             })
         });
-        let quad = [[0, 0], [1, 0], [1, 1], [0, 1]].map(|corner| {
+        let mut quad = [[0, 0], [1, 0], [1, 1], [0, 1]].map(|corner| {
             support[keys
                 .get([bounds[0][corner[0]], bounds[1][corner[1]]])
                 .expect("displayed quad corner")]
         });
+        // Loaded depth completes a shallow band's halo without starting a
+        // new blend at a direct land/deep-water boundary.
+        let shallow = quad.iter().flatten().any(|cell| matches!(cell.0, 10 | 12));
+        for cell in quad.iter_mut().flatten().chain(cells.iter_mut().flatten()) {
+            if cell.0 == DEEP {
+                cell.0 = if shallow { 10 } else { MISSING };
+            }
+        }
         let seen = || {
             quad.iter()
                 .flatten()
@@ -300,6 +313,16 @@ fn edge(share: f32, noise: f32) -> f32 {
         return 1.0;
     }
     ((share - 0.5) * GAIN + 0.5 + (noise - 0.5) * REACH).clamp(0.0, 1.0)
+}
+
+/// Water coverage is linear on both ordinary shores and ground junctions.
+/// The remaining ground shares retain their noisy borders under that coverage.
+pub(crate) fn threshold(share: f32, water: f32, noise: f32) -> f32 {
+    if share <= water {
+        return edge(share, 0.5);
+    }
+    let cover = edge(water, 0.5);
+    cover + (1.0 - cover) * edge((share - water) / (1.0 - water), noise)
 }
 
 /// Pure shares and a complete forest bed are independent of the noise lattice.

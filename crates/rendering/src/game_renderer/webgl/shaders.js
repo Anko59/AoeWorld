@@ -230,6 +230,11 @@ float edge(float share, float noise) {
     if (share >= 1.0) return 1.0;
     return clamp((share - .5) * 4.0 + .5 + (noise - .5) * 2.6, 0.0, 1.0);
 }
+float shoreEdge(float share, float water, float noise) {
+    if (share <= water) return edge(share, .5);
+    float cover = edge(water, .5);
+    return cover + (1.0 - cover) * edge((share - water) / (1.0 - water), noise);
+}
 float junctionShare(uint word, uint material) {
     uint present = 0u, matching = 0u;
     for (uint slot = 0u; slot < 4u; slot++) {
@@ -238,6 +243,9 @@ float junctionShare(uint word, uint material) {
         matching += cell == material ? 1u : 0u;
     }
     return float((matching * 255u + present / 2u) / max(present, 1u)) / 255.0;
+}
+float junctionWater(uint word) {
+    return junctionShare(word, 10u) + junctionShare(word, 12u);
 }
 vec4 shaded(vec4 texel, vec4 color, uint tint, uint appearance) {
     if (texel.a <= 0.0) discard;
@@ -306,9 +314,11 @@ void main() {
              (vSolid >= 16u && middle > 0.0 && middle < 1.0))) {
             noise = .6 * value(tile, inside, 1) + .4 * value(tile, inside, 4);
         }
-        float over = edge(vWeights.x, noise);
+        uint top = (vPages.z >> 16u) & 255u, midMaterial = (vPages.z >> 8u) & 255u;
+        float water = top == 10u || top == 12u ? vWeights.x + (midMaterial == 10u || midMaterial == 12u ? vWeights.y : 0.0) : 0.0;
+        float over = shoreEdge(vWeights.x, water, noise);
         weights = vec3((1.0 - vWeights.z) * (1.0 - over), vWeights.z, (1.0 - vWeights.z) * over);
-        if (vSolid >= 16u) { float mid = edge(middle, noise); weights = vec3(1.0 - mid, mid - over, over); }
+        if (vSolid >= 16u) { float mid = shoreEdge(middle, water, noise); weights = vec3(1.0 - mid, mid - over, over); }
     }
     uint groundCount = 0u;
     if (junction) {
@@ -317,6 +327,7 @@ void main() {
         noise = .6 * value(tile, inside, 1) + .4 * value(tile, inside, 4);
     }
     vec3 bary = vec3(vWeights.xy, 1.0 - vWeights.x - vWeights.y);
+    float water = junction ? dot(vec3(junctionWater(uint(vRect3.x)), junctionWater(uint(vRect3.y)), junctionWater(uint(vRect3.z))), bary) : 0.0;
     float cumulative = 0.0, previous = 0.0;
     vec4 texel = vec4(0);
     // One filtered sampling site, with the same varying bound as WGSL.
@@ -334,7 +345,7 @@ void main() {
                 if (material == 15u) continue;
                 vec3 shares = vec3(junctionShare(uint(vRect3.x), material), junctionShare(uint(vRect3.y), material), junctionShare(uint(vRect3.z), material));
                 cumulative += dot(shares, bary);
-                float threshold = edge(cumulative, noise);
+                float threshold = shoreEdge(cumulative, water, noise);
                 weight = (threshold - previous) * (1.0 - vWeights.z);
                 previous = threshold;
                 if (weight <= 0.0) continue;

@@ -100,12 +100,15 @@ pub(crate) fn weights(
     noise: f32,
 ) -> [f32; 15] {
     let mut result = [0.0; 15];
+    let water = (0..3)
+        .map(|i| (share(packed[i], 10) + share(packed[i], 12)) * barycentric[i] as f32)
+        .sum::<f32>();
     let (mut cumulative, mut previous) = (0.0, 0.0);
     for material in palette.into_iter().rev().filter(|m| *m != EMPTY) {
         cumulative += (0..3)
             .map(|i| share(packed[i], material) * barycentric[i] as f32)
             .sum::<f32>();
-        let threshold = edge(cumulative, noise);
+        let threshold = threshold(cumulative, water, noise);
         result[usize::from(material)] = threshold - previous;
         previous = threshold;
     }
