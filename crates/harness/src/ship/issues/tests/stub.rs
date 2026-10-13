@@ -14,7 +14,12 @@ for arg in "$@"; do
 done
 case "$1" in
   api) printf '%s' "$GH_LIST_JSON" ;;
-  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'; fi ;;
+  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'
+    else
+      # Like the real gh, read a body piped on stdin (`--body-file -`) to its
+      # end: exiting first closes the pipe under the writer (EPIPE).
+      case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
+    fi ;;
 esac
 "#;
 
