@@ -37,6 +37,8 @@ pub(crate) mod scene;
 pub(super) use resources::scene_resources;
 #[path = "playground_map/decorations.rs"]
 mod decorations;
+#[path = "playground_map/feedback.rs"]
+pub(crate) mod feedback;
 
 pub(super) fn install_fixture_chunk(client: &mut Client, chunk: &CachedChunk) {
     client.terrain_scene.borrow_mut().take();
@@ -105,7 +107,10 @@ pub(super) fn inspection_label(client: &Client) -> String {
         tile.material,
         tile.water,
         tile.elevation_provenance,
-        if tile.passable { "passable" } else { "blocked" },
+        feedback::movement_label(
+            tile.passable,
+            feedback::blocker_at(client, aoe_core::TileCoord::new(x, y))
+        ),
     )
 }
 
@@ -115,6 +120,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let Some(content_hash) = client.map_content_hash else {
             return;
         };
+        feedback::retain_visible_failures(&mut client);
         if !heights::ensure_bounds(shared.clone(), &mut client, content_hash) {
             return;
         }
@@ -139,6 +145,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
             }
             match result {
                 Ok(chunk) => {
+                    client.terrain_bounds.failures.chunks.remove(&(x, y));
                     include_chunk_height_bounds(&mut client, &chunk);
                     client.terrain_chunks.insert((x, y), chunk);
                     client.terrain_scene.borrow_mut().take();
@@ -146,7 +153,10 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                     evict_distant_chunks(&mut client);
                 }
                 Err(error) => {
-                    client.status = format!("map chunk request failed: {error:?}");
+                    web_sys::console::error_1(&JsValue::from_str(&format!(
+                        "map chunk request failed: {error:?}"
+                    )));
+                    client.terrain_bounds.failures.chunks.insert((x, y));
                     heights::defer_failed_chunks(&mut client);
                 }
             }

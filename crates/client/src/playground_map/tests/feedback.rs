@@ -116,3 +116,39 @@ fn terrain_warning_waits_for_each_affected_chunk_and_bounds() {
     failures.bounds = false;
     assert_eq!(failures.message(), None);
 }
+
+#[wasm_bindgen_test]
+fn acknowledgements_use_their_own_target_context_and_keep_a_bounded_history() {
+    use CommandResult::RejectedInvalidDestination;
+    let mut orders = OrderFeedback::default();
+    orders.record(1, Some(ObjectKind::Tree));
+    orders.record(2, None);
+    assert_eq!(
+        orders.acknowledge(2, RejectedInvalidDestination),
+        order_message(RejectedInvalidDestination, None)
+    );
+    assert_eq!(
+        orders.acknowledge(1, RejectedInvalidDestination),
+        "Cannot move there: a tree is in the way."
+    );
+    assert_eq!(
+        orders.acknowledge(1, RejectedInvalidDestination),
+        order_message(RejectedInvalidDestination, None)
+    );
+    for sequence in 3..=3 + aoe_protocol::MAX_ACK_HISTORY as u64 {
+        orders.record(sequence, Some(ObjectKind::Tree));
+    }
+    assert_eq!(
+        orders.acknowledge(3, RejectedInvalidDestination),
+        order_message(RejectedInvalidDestination, None)
+    );
+    assert_eq!(
+        orders.acknowledge(4, RejectedInvalidDestination),
+        "Cannot move there: a tree is in the way."
+    );
+    orders.clear();
+    assert_eq!(
+        orders.acknowledge(5, RejectedInvalidDestination),
+        order_message(RejectedInvalidDestination, None)
+    );
+}
