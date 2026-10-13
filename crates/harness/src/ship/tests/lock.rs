@@ -170,6 +170,9 @@ fn two_worktrees_of_one_repository_contend_on_one_lock() {
         // The default wait is two hours; contend through the same path without it.
         take(&second, "feature", Duration::ZERO).expect_err("the main checkout holds it");
     }
+    let queued = lock::queue(&second).unwrap();
+    assert_eq!(queued.len(), 1, "the queue is shared too");
+    assert_eq!(queued[0].command, "make ship");
     let held = lock::status(&second)
         .unwrap()
         .expect("visible from the worktree");
@@ -222,4 +225,168 @@ fn only_ship_and_duel_ask_for_the_lock() {
         ["mod.rs", "mod.rs"],
         "ship/mod.rs and duel/mod.rs only"
     );
+}
+
+fn tickets(path: &Path) -> Vec<String> {
+    let dir = PathBuf::from(format!("{}.queue", path.display()));
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Queue `branch` behind the current holder; returns once its first waiting line is out.
+fn enqueue(
+    path: &Path,
+    branch: &'static str,
+    order: &std::sync::Arc<std::sync::Mutex<Vec<&'static str>>>,
+) -> thread::JoinHandle<()> {
+    let (path, order) = (path.to_owned(), order.clone());
+    let (said, lines) = mpsc::channel();
+    let waiter = thread::spawn(move || {
+        let _held = lock::acquire_at(
+            &path,
+            &holder(branch),
+            Duration::from_secs(60),
+            POLL,
+            NEVER,
+            &mut |line| {
+                let _ = said.send(line.to_owned());
+            },
+        )
+        .expect("served in the end");
+        order.lock().unwrap().push(branch);
+        thread::sleep(Duration::from_millis(30));
+    });
+    let line = lines.recv_timeout(Duration::from_secs(10)).expect("queued");
+    assert!(line.starts_with("ship: waiting for first"), "{line}");
+    waiter
+}
+
+#[test]
+fn waiters_are_served_in_arrival_order() {
+    let (_temp, path) = lock_file();
+    let first = take(&path, "first", Duration::ZERO).expect("free lock");
+    let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let waiters = [
+        enqueue(&path, "second", &order),
+        enqueue(&path, "third", &order),
+        enqueue(&path, "fourth", &order),
+    ];
+    thread::sleep(Duration::from_millis(200));
+    drop(first);
+    for waiter in waiters {
+        waiter.join().unwrap();
+    }
+    assert_eq!(*order.lock().unwrap(), ["second", "third", "fourth"]);
+    assert!(tickets(&path).is_empty(), "{:?}", tickets(&path));
+}
+
+#[test]
+fn progress_lines_give_the_position_in_the_queue() {
+    let (_temp, path) = lock_file();
+    let first = take(&path, "first", Duration::ZERO).expect("free lock");
+    let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let ahead = enqueue(&path, "second", &order);
+    let mut lines = Vec::new();
+    let error = lock::acquire_at(
+        &path,
+        &holder("third"),
+        Duration::from_millis(200),
+        POLL,
+        NEVER,
+        &mut |line| lines.push(line.to_owned()),
+    )
+    .expect_err("two ahead")
+    .to_string();
+    assert!(
+        lines.contains(&"ship: position 3 in the queue".to_owned()),
+        "{lines:?}"
+    );
+    assert!(error.contains("position 3 in the queue"), "{error}");
+    drop(first);
+    ahead.join().unwrap();
+    assert!(tickets(&path).is_empty(), "a failed wait leaves no ticket");
+}
+
+/// Re-run this test binary as a child that queues behind the holder and sleeps.
+#[test]
+fn lock_waiter_child() {
+    let Ok(path) = std::env::var("AOE_TEST_LOCK_WAITER") else {
+        return;
+    };
+    let _ = lock::acquire_at(
+        Path::new(&path),
+        &holder("child"),
+        NEVER,
+        POLL,
+        NEVER,
+        &mut |line| {
+            println!("{line}");
+        },
+    );
+}
+
+#[test]
+fn a_killed_waiters_ticket_does_not_block_the_others() {
+    let (_temp, path) = lock_file();
+    let first = take(&path, "first", Duration::ZERO).expect("free lock");
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "ship::tests::lock::lock_waiter_child",
+            "--nocapture",
+        ])
+        .env("AOE_TEST_LOCK_WAITER", &path)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("child");
+    let mut out = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    while !line.starts_with("ship: position") {
+        line.clear();
+        assert!(out.read_line(&mut line).unwrap() > 0, "child never queued");
+    }
+    let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let behind = enqueue(&path, "third", &order);
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert_eq!(
+        tickets(&path).len(),
+        3,
+        "the dead waiter's ticket stays on disk"
+    );
+    drop(first);
+    behind.join().unwrap();
+    assert_eq!(*order.lock().unwrap(), ["third"]);
+    assert!(tickets(&path).is_empty(), "{:?}", tickets(&path));
+}
+
+#[test]
+fn a_zero_wait_with_a_queue_ahead_names_the_running_ship_and_leaves_nothing() {
+    let (_temp, path) = lock_file();
+    let first = take(&path, "first", Duration::ZERO).expect("free lock");
+    let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let ahead = enqueue(&path, "second", &order);
+    let error = take(&path, "third", Duration::ZERO)
+        .expect_err("a queue ahead")
+        .to_string();
+    assert!(error.contains("first in /work/first"), "{error}");
+    assert!(error.contains("SHIP_LOCK_WAIT_MINUTES"), "{error}");
+    let waiting = lock::queue(&path).unwrap();
+    assert_eq!(
+        waiting
+            .iter()
+            .map(|h| h.branch.as_str())
+            .collect::<Vec<_>>(),
+        ["first", "second"],
+        "the queue lists those ahead in order"
+    );
+    drop(first);
+    ahead.join().unwrap();
+    assert!(tickets(&path).is_empty());
 }

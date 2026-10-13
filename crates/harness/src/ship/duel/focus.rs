@@ -97,8 +97,14 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     let cache = root.join(".cache/duel");
     fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
     let mut scope: Scope = if revision.is_some() {
-        serde_json::from_slice(&fs::read(cache.join("scope.json")).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?
+        let saved = cache.join("scope.json");
+        let bytes = fs::read(&saved).map_err(|e| {
+            format!(
+                "HARNESS_DUEL_REVISION needs the scope a default run saved, but {} is unreadable: {e}",
+                saved.display()
+            )
+        })?;
+        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", saved.display()))?
     } else {
         let paths = tree::since(&root, &base)?
             .into_iter()
@@ -246,7 +252,10 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             .collect();
         let checked = crate::e2e::run_focused(&filters, &report_path).map_err(|e| e.to_string());
         std::env::set_current_dir(previous).map_err(|e| e.to_string())?;
-        let browser = browser_results(&report_path)?;
+        let browser = match browser_results(&report_path) {
+            Ok(browser) => browser,
+            Err(read) => return Err(missing_report(&report_path, checked, read)),
+        };
         report.passed &= browser.failed.is_empty();
         report.locations.extend(browser.locations);
         report.tests.extend(browser.tests);
@@ -270,6 +279,18 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
     report.failed.sort();
     report.failed.dedup();
     Ok(report)
+}
+
+/// Why there is no readable report: a run that failed before Playwright wrote one says why
+/// itself; a bare "No such file" from reading the report would hide that.
+pub(super) fn missing_report(path: &Path, checked: git::Result<()>, read: String) -> String {
+    if path.is_file() {
+        return read;
+    }
+    match checked {
+        Err(error) => error,
+        Ok(()) => format!("Playwright wrote no report at {}", path.display()),
+    }
 }
 
 fn package_compile_error(line: &str, packages: &[String]) -> bool {
@@ -405,7 +426,9 @@ pub(super) fn classify_specs(root: &Path, base: &str, report: &mut CheckReport) 
         if !report.failed.contains(name) {
             continue;
         }
-        let current = fs::read_to_string(root.join(path)).map_err(|e| e.to_string())?;
+        let current = fs::read_to_string(root.join(path)).map_err(|e| {
+            format!("{path} is changed since HARNESS_DUEL_BASE {base} but cannot be read: {e}")
+        })?;
         if let Ok(old) = git::git(root, &["show", &format!("{base}:{path}")])
             && super::specs::unchanged(&current, &old, *line)
         {

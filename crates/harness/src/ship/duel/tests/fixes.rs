@@ -398,3 +398,29 @@ fn retained_playwright_output_rejects_growth_before_writing_excess_bytes() {
     );
     assert_eq!(fs::metadata(&path).unwrap().len(), 16 * 1024 * 1024);
 }
+
+#[test]
+fn a_missing_playwright_report_reports_the_focused_runs_own_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("run-x/playwright.json");
+    let read = focus::browser_results(&path).unwrap_err();
+    assert!(read.contains("No such file"), "{read}");
+    let failed = focus::missing_report(&path, Err("test server exited early: 1".into()), read);
+    assert_eq!(failed, "test server exited early: 1");
+    let read = focus::browser_results(&path).unwrap_err();
+    let silent = focus::missing_report(&path, Ok(()), read);
+    assert_eq!(
+        silent,
+        format!("Playwright wrote no report at {}", path.display())
+    );
+}
+
+#[test]
+fn a_report_that_exists_keeps_its_own_parse_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("playwright.json");
+    fs::write(&path, r#"{"errors":[],"suites":[]}"#).unwrap();
+    let read = focus::browser_results(&path).unwrap_err();
+    let kept = focus::missing_report(&path, Err("exit 1".into()), read.clone());
+    assert_eq!(kept, read);
+}
