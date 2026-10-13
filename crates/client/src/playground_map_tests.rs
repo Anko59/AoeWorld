@@ -477,3 +477,6 @@ fn height_probe_eviction_keeps_new_low_coordinates_and_bounds_duplicate_metadata
     heights::remember_probe(&mut probes, &mut order, (0, 0), (0, 0), 0);
     assert!(probes.is_empty() && order.is_empty());
 }
+
+#[path = "playground_map/tests/feedback.rs"]
+mod feedback;
