@@ -52,6 +52,12 @@ if [ ! -x "$binary" ] || [ "$event" = build ]; then
     case $event in pre-tool-use) exit 2 ;; *) exit 1 ;; esac
   fi
 fi
+# Old judges are pruned best effort (keeps this one and the newest other); the
+# hot tool-call events skip it.
+case $event in
+  pre-tool-use|post-tool-use) ;;
+  *) "$binary" agent-prune --home "$common/aoe-agent-hook" --keep "$key" </dev/null >/dev/null 2>&1 || : ;;
+esac
 [ "$event" = build ] && exit 0
 if [ "$event" = exec ]; then
   echo "harness: judge $judge" >&2

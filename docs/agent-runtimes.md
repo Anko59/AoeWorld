@@ -86,6 +86,11 @@ runtime adapter yet, the judge is built from the checkout and labelled a
 **non-authoritative bootstrap** at session start. The registry and limits are
 always read from the checkout.
 
+Each session start, stop, build and `exec` also asks the selected judge to
+prune the rest (`aoe-harness agent-prune`): it keeps that judge, the newest other
+one and anything younger than ten minutes, and ignores failures. `target/` and
+`source/` (the shared build cache) are left alone.
+
 The first build takes a few minutes. If it fails (Docker down), PreToolUse fails
 closed: every shell and edit call is refused until a person runs
 `.agents/hooks/harness.sh build` in a terminal. Other events only report.

@@ -18,6 +18,7 @@ mod context;
 mod edit;
 pub(crate) mod launch;
 mod paths;
+mod prune;
 mod role;
 mod rules;
 mod runtime;
@@ -112,6 +113,15 @@ pub(crate) enum Commands {
         #[arg(value_enum)]
         event: Event,
     },
+    /// Remove old judge builds from the judge directory, keeping `--keep` and
+    /// the newest other (best effort; `harness.sh` calls this).
+    #[command(name = "agent-prune")]
+    Prune {
+        #[arg(long)]
+        home: PathBuf,
+        #[arg(long)]
+        keep: String,
+    },
     /// Run a runtime's CLI headless and check its tool calls reach the judge.
     AgentSmoke {
         #[arg(long, value_enum)]
@@ -122,6 +132,10 @@ pub(crate) enum Commands {
 pub(crate) fn execute(command: Commands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         Commands::AgentHook { runtime, event } => run(runtime, event),
+        Commands::Prune { home, keep } => {
+            prune::prune(&home, &keep, std::time::SystemTime::now());
+            Ok(())
+        }
         Commands::AgentSmoke { runtime } => smoke::check(runtime, Path::new(".")),
     }
 }
