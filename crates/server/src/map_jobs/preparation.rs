@@ -72,7 +72,12 @@ impl PreparationPlan {
                 return Err("With rivers requires a configured geographic worker; procedural fallback cannot supply source river data.".to_owned());
             }
             return match input.preparation {
-                PreparationPreference::Automatic => Ok(Self::fallback()),
+                // The plan keeps the requested rivers choice so a retry or a
+                // recovered job repeats it once a worker is configured.
+                PreparationPreference::Automatic => Ok(Self {
+                    hydrology_mode: input.hydrology_mode,
+                    ..Self::fallback()
+                }),
                 _ => Err("Source preparation requires a configured geographic worker.".to_owned()),
             };
         }
