@@ -13,7 +13,7 @@ override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS METRICS_REV
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: duel duel-check ship ship-status review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check
+.PHONY: duel duel-check ship ship-status review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check showcase-session
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -91,3 +91,8 @@ level-floor:
 
 level-stats:
 	@.agents/hooks/harness.sh exec level-stats
+
+# Convert a headless agent log (SESSION=<jsonl>, claude stream-json or codex
+# exec --json) into the steps of an agent-session scene; read-only.
+showcase-session:
+	@.agents/hooks/harness.sh exec showcase-session

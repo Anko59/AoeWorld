@@ -302,6 +302,7 @@ mod showcase_browser;
 mod showcase_builds;
 mod showcase_findings;
 mod showcase_pipeline;
+mod showcase_scenes;
 mod showcase_security;
 pub(super) mod stack;
 
