@@ -398,3 +398,47 @@ fn retained_playwright_output_rejects_growth_before_writing_excess_bytes() {
     );
     assert_eq!(fs::metadata(&path).unwrap().len(), 16 * 1024 * 1024);
 }
+
+#[test]
+fn a_missing_playwright_report_reports_the_focused_runs_own_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("run-x/playwright.json");
+    let read = focus::browser_results(&path).unwrap_err();
+    assert!(read.contains("No such file"), "{read}");
+    let failed = focus::missing_report(&path, Err("test server exited early: 1".into()), read);
+    assert!(
+        failed.starts_with("test server exited early: 1\n"),
+        "{failed}"
+    );
+    assert!(failed.contains("No such file"), "{failed}");
+    let read = focus::browser_results(&path).unwrap_err();
+    let silent = focus::missing_report(&path, Ok(()), read);
+    assert_eq!(
+        silent,
+        format!("Playwright wrote no report at {}", path.display())
+    );
+}
+
+#[test]
+fn an_empty_or_cut_report_still_reports_the_failed_runs_own_error() {
+    // The report file is created before Playwright starts, so a run that dies
+    // later leaves it empty or cut short: the run's error must still lead.
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("playwright.json");
+    for partial in ["", r#"{"errors":[],"sui"#] {
+        fs::write(&path, partial).unwrap();
+        let read = focus::browser_results(&path).unwrap_err();
+        let failed = focus::missing_report(&path, Err("exit 1: port in use".into()), read.clone());
+        assert!(failed.starts_with("exit 1: port in use\n"), "{failed}");
+        assert!(failed.contains(&read), "{failed}");
+    }
+}
+
+#[test]
+fn a_successful_run_keeps_the_reports_own_parse_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("playwright.json");
+    fs::write(&path, r#"{"errors":[],"suites":[]}"#).unwrap();
+    let read = focus::browser_results(&path).unwrap_err();
+    assert_eq!(focus::missing_report(&path, Ok(()), read.clone()), read);
+}

@@ -120,7 +120,12 @@ fn collect(
     base: &str,
     functions: &mut Vec<(String, bool)>,
 ) -> git::Result<()> {
-    for entry in fs::read_dir(directory).map_err(|e| e.to_string())? {
+    for entry in fs::read_dir(directory).map_err(|e| {
+        format!(
+            "{} (a source directory of a package in the saved scope): {e}",
+            directory.display()
+        )
+    })? {
         let path = entry.map_err(|e| e.to_string())?.path();
         if path.is_symlink() {
             continue;
@@ -137,7 +142,8 @@ fn collect(
                 .strip_prefix(root)
                 .map_err(|e| e.to_string())?
                 .to_string_lossy();
-            let current = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let current =
+                fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let old = git::git(root, &["show", &format!("{base}:{relative}")]).ok();
             let Ok(parsed) = syn::parse_file(&current) else {
                 continue;

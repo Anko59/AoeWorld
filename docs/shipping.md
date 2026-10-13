@@ -93,10 +93,18 @@ worktree and checkout of the repository; a dead or killed holder frees it, so
 it is never stale. The file also names the holder (worktree, branch, command,
 start time), for messages only.
 
-A second run prints `ship: waiting for <branch> in <worktree> (started <time>)`,
-then a line every 5 minutes, and gives up with an error after
+Waiters are served in arrival order. Each creates a ticket in
+`aoe-ship/ship.lock.queue/` (named by arrival time, pid and a counter) and keeps
+an OS lock on it while it waits and while it runs; it may take the main lock only
+when no older ticket is still locked. A ticket whose lock can be taken belongs to
+a dead process: the next waiter removes it and moves on. Tickets are removed on
+release and on drop, so none are left after a normal exit.
+
+A second run prints `ship: waiting for <branch> in <worktree> (started <time>)`
+and `ship: position N in the queue`, then a line every 5 minutes (and whenever
+its position changes), and gives up with an error after
 `SHIP_LOCK_WAIT_MINUTES` (default 120; `0` fails immediately). `make ship-status`
-shows the holder without waiting. Read-only commands (`review-floor`,
+shows the holder and the queue in order without waiting. Read-only commands (`review-floor`,
 `showcase-check`, `ship-status`…) never take the lock. Never wait for another
 ship by scanning processes: a `pgrep -f` loop matches its own command line and
 waits on itself forever; queue on the lock instead.

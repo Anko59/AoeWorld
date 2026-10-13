@@ -182,7 +182,10 @@ fn run_specs(
         nix::unistd::Gid::current()
     );
     let mount = format!("{}:{}", root.display(), root.display());
-    let modules = root.join("browser/node_modules").canonicalize()?;
+    let modules = root
+        .join("browser/node_modules")
+        .canonicalize()
+        .map_err(|e| format!("{}/browser/node_modules: {e}", root.display()))?;
     let dependencies = format!("{}:{}:ro", modules.display(), modules.display());
     let home = format!("HOME={}/.cache/browser-home", root.display());
     let url = format!("AOE_BASE_URL=http://{address}");
@@ -255,7 +258,10 @@ fn run_specs(
                     );
                     match captured.exit {
                         process::CaptureExit::Success => Ok(()),
-                        other => Err(format!("focused Playwright check unavailable: {other:?}")),
+                        other => Err(format!(
+                            "focused Playwright check unavailable: {other:?}\n{}",
+                            stderr_tail(&captured.stderr)
+                        )),
                     }
                 })()
             };
@@ -347,6 +353,12 @@ fn renderer_evidence(
         evidence.push(value);
     }
     Ok(serde_json::Value::Array(evidence))
+}
+
+fn stderr_tail(stderr: &[u8]) -> String {
+    let text = String::from_utf8_lossy(stderr);
+    let lines: Vec<_> = text.lines().rev().take(40).collect();
+    lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
 fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {

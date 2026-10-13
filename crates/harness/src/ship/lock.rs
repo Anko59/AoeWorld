@@ -3,6 +3,13 @@
 //! which every worktree and checkout of the repository shares. The kernel drops it
 //! when the holder exits however it exits, so a dead holder never leaves a stale
 //! lock. The holder written into the file is for messages only.
+//!
+//! Waiters are served in arrival order. Each one creates a ticket in `ship.lock.queue/`
+//! named by its arrival time in nanoseconds, its pid and a per-process counter (names sort
+//! in arrival order), and holds an exclusive `flock` on that ticket while it waits and
+//! while it runs. It may take the main lock only when no older ticket is still locked; an
+//! older ticket whose `flock` can be taken belongs to a dead process and is removed.
+//! Tickets are removed on release and on drop.
 use super::{Result, git};
 use nix::fcntl::{Flock, FlockArg};
 use serde::{Deserialize, Serialize};
@@ -10,6 +17,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -37,10 +45,101 @@ impl Holder {
     }
 }
 
-/// Held until dropped; the lock is released with the file.
+/// Held until dropped; the lock is released with the file, and the ticket is removed.
 #[derive(Debug)]
 pub(crate) struct ShipLock {
     _flock: Flock<File>,
+    _ticket: Ticket,
+}
+
+/// A place in the queue: the file exists, and is locked by us, until this is dropped.
+#[derive(Debug)]
+struct Ticket {
+    dir: PathBuf,
+    name: String,
+    _flock: Flock<File>,
+}
+
+static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+impl Ticket {
+    /// Lock a hidden staging file, then rename it into the queue, so that no waiter can see
+    /// a ticket before it is locked and mistake it for a dead process's.
+    fn enter(lock_path: &Path, holder: &Holder) -> Result<Self> {
+        let dir = queue_dir(lock_path);
+        fs::create_dir_all(&dir)?;
+        let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        let staging = dir.join(format!(".enter-{pid}-{sequence}"));
+        let file = OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&staging)?;
+        let mut flock = Flock::lock(file, FlockArg::LockExclusiveNonblock)
+            .map_err(|(_, errno)| format!("ship queue {}: {errno}", staging.display()))?;
+        write_holder(&mut flock, holder)?;
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let name = format!("{nanos:020}-{pid:010}-{sequence:06}");
+        fs::rename(&staging, dir.join(&name))?;
+        Ok(Self {
+            dir,
+            name,
+            _flock: flock,
+        })
+    }
+
+    /// The holders of the tickets older than ours that are still alive, oldest first.
+    /// Tickets left by dead processes are removed on the way.
+    fn ahead(&self) -> Result<Vec<Option<Holder>>> {
+        let mut alive = Vec::new();
+        for name in ticket_names(&self.dir)? {
+            if name >= self.name {
+                break;
+            }
+            let path = self.dir.join(&name);
+            let Ok(file) = File::open(&path) else {
+                continue;
+            };
+            match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+                Ok(_dead) => {
+                    let _ = fs::remove_file(&path);
+                }
+                Err((_, nix::errno::Errno::EWOULDBLOCK)) => alive.push(read_holder(&path)),
+                Err((_, errno)) => {
+                    return Err(format!("ship queue {}: {errno}", path.display()).into());
+                }
+            }
+        }
+        Ok(alive)
+    }
+}
+
+impl Drop for Ticket {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(self.dir.join(&self.name));
+    }
+}
+
+fn queue_dir(lock_path: &Path) -> PathBuf {
+    let mut name = lock_path.as_os_str().to_owned();
+    name.push(".queue");
+    PathBuf::from(name)
+}
+
+/// Ticket file names in arrival order (staging files are not tickets yet).
+fn ticket_names(dir: &Path) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if !name.starts_with('.') {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
 }
 
 pub(crate) fn path(root: &Path) -> Result<PathBuf> {
@@ -92,36 +191,58 @@ pub(crate) fn acquire_at(
     say: &mut dyn FnMut(&str),
 ) -> Result<ShipLock> {
     let started = Instant::now();
+    let ticket = Ticket::enter(path, holder)?;
     let mut announced = false;
+    let mut last_position = 0;
     let mut last_report = started;
     loop {
-        let file = open(path)?;
-        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
-            Ok(mut flock) => {
-                write_holder(&mut flock, holder)?;
-                if announced {
-                    say("ship: the lock is free; starting");
+        let ahead = ticket.ahead()?;
+        if ahead.is_empty() {
+            let file = open(path)?;
+            match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+                Ok(mut flock) => {
+                    write_holder(&mut flock, holder)?;
+                    if announced {
+                        say("ship: the lock is free; starting");
+                    }
+                    return Ok(ShipLock {
+                        _flock: flock,
+                        _ticket: ticket,
+                    });
                 }
-                return Ok(ShipLock { _flock: flock });
+                Err((_, nix::errno::Errno::EWOULDBLOCK)) => {}
+                Err((_, errno)) => {
+                    return Err(format!("ship lock {}: {errno}", path.display()).into());
+                }
             }
-            Err((_, nix::errno::Errno::EWOULDBLOCK)) => {}
-            Err((_, errno)) => return Err(format!("ship lock {}: {errno}", path.display()).into()),
         }
-        let current = read_holder(path).map_or("another ship".into(), |h| h.describe());
+        let position = ahead.len() + 1;
+        let current = ahead
+            .into_iter()
+            .next()
+            .flatten()
+            .or_else(|| read_holder(path))
+            .map_or("another ship".into(), |h| h.describe());
         if started.elapsed() >= wait {
             return Err(format!(
-                "ship: waiting for {current}, but SHIP_LOCK_WAIT_MINUTES ({}) ran out; \
-                 run `make ship-status`, then try again when it finishes",
+                "ship: waiting for {current} (position {position} in the queue), but \
+                 SHIP_LOCK_WAIT_MINUTES ({}) ran out; run `make ship-status`, then try again \
+                 when it finishes",
                 wait.as_secs() / 60
             )
             .into());
         }
         if !announced {
             say(&format!("ship: waiting for {current}"));
+            say(&format!("ship: position {position} in the queue"));
             announced = true;
+            last_position = position;
+        } else if position != last_position {
+            say(&format!("ship: position {position} in the queue"));
+            last_position = position;
         } else if last_report.elapsed() >= report_every {
             say(&format!(
-                "ship: still waiting for {current} ({} min so far)",
+                "ship: still waiting for {current} ({} min so far, position {position} in the queue)",
                 started.elapsed().as_secs() / 60
             ));
             last_report = Instant::now();
@@ -147,8 +268,45 @@ pub(crate) fn status(path: &Path) -> Result<Option<Holder>> {
     }
 }
 
+/// Everyone queued now, oldest first; the first is normally the running ship.
+/// Tickets of dead processes are skipped (waiters remove them). Never waits.
+pub(crate) fn queue(path: &Path) -> Result<Vec<Holder>> {
+    let dir = queue_dir(path);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut alive = Vec::new();
+    for name in ticket_names(&dir)? {
+        let ticket = dir.join(&name);
+        let Ok(file) = File::open(&ticket) else {
+            continue;
+        };
+        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+            Ok(_dead) => {}
+            Err((_, nix::errno::Errno::EWOULDBLOCK)) => {
+                alive.push(read_holder(&ticket).unwrap_or_else(|| Holder {
+                    worktree: "unknown".into(),
+                    branch: "unknown".into(),
+                    command: "unknown".into(),
+                    started: 0,
+                }))
+            }
+            Err((_, errno)) => {
+                return Err(format!("ship queue {}: {errno}", ticket.display()).into());
+            }
+        }
+    }
+    Ok(alive)
+}
+
 pub(crate) fn print_status(root: &Path) -> Result<()> {
-    match status(&path(root)?)? {
+    let lock_path = path(root)?;
+    let held = status(&lock_path)?;
+    let mut waiting = queue(&lock_path)?;
+    if held.is_some() && !waiting.is_empty() {
+        waiting.remove(0);
+    }
+    match held {
         Some(holder) => println!(
             "ship lock: held by `{}` on {} (started {})",
             holder.command,
@@ -156,6 +314,18 @@ pub(crate) fn print_status(root: &Path) -> Result<()> {
             utc(holder.started)
         ),
         None => println!("ship lock: free"),
+    }
+    if !waiting.is_empty() {
+        println!("ship queue (first come, first served):");
+    }
+    for (index, holder) in waiting.iter().enumerate() {
+        println!(
+            "  {}. `{}` on {} (queued {})",
+            index + 1,
+            holder.command,
+            holder.describe_place(),
+            utc(holder.started)
+        );
     }
     Ok(())
 }
