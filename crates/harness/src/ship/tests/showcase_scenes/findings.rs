@@ -1,4 +1,4 @@
-use super::super::showcase::{Storyboard, resolve_out};
+use super::super::super::showcase::{Storyboard, resolve_out};
 
 #[test]
 fn showcase_output_name_matches_the_shipping_attachment_validator() {
@@ -10,7 +10,7 @@ fn showcase_output_name_matches_the_shipping_attachment_validator() {
             .contains("filename")
     );
     let output = resolve_out(root.path(), ".cache/showcase/my-take_2.webm").unwrap();
-    assert!(super::super::github::attachable_video(&output.path));
+    assert!(super::super::super::github::attachable_video(&output.path));
 }
 
 #[test]
@@ -19,12 +19,12 @@ fn showcase_check_refuses_newlines_in_concat_manifest_paths() {
         let parent = tempfile::tempdir().unwrap();
         let root = parent.path().join(format!("checkout{separator}review"));
         std::fs::create_dir(&root).unwrap();
-        let error = super::super::showcase::validate_manifest_root(&root).unwrap_err();
+        let error = super::super::super::showcase::validate_manifest_root(&root).unwrap_err();
         assert!(error.contains("manifest paths"), "{error}");
     }
 
     let root = tempfile::tempdir().unwrap();
-    assert!(super::super::showcase::validate_manifest_root(root.path()).is_ok());
+    assert!(super::super::super::showcase::validate_manifest_root(root.path()).is_ok());
     assert!(
         check_voice(
             "high",
@@ -35,9 +35,9 @@ fn showcase_check_refuses_newlines_in_concat_manifest_paths() {
 }
 
 fn check_voice(level: &str, json: &str) -> Result<(), String> {
-    let level = super::super::describe::Level::parse(level).unwrap();
+    let level = super::super::super::describe::Level::parse(level).unwrap();
     let board = Storyboard::parse(json)?;
-    super::super::showcase::check_voice_requirement(level, &board)
+    super::super::super::showcase::check_voice_requirement(level, &board)
 }
 
 #[test]

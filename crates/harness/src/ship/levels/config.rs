@@ -3,10 +3,42 @@
 //! read from origin/dev (`review::trusted`), so a branch cannot loosen its own
 //! limits.
 use super::{super::describe::Level, Change, Floor};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 
 const LEVELS: [Level; 4] = [Level::Low, Level::Medium, Level::High, Level::Max];
+
+/// The metrics row set of a level: each set shows the rows up to its tier
+/// (`ship/metrics/table.rs` tags every row with the lowest tier showing it).
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RowSet {
+    Summary,
+    Standard,
+    Extended,
+    Full,
+}
+
+impl RowSet {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Summary => "summary",
+            Self::Standard => "standard",
+            Self::Extended => "extended",
+            Self::Full => "full",
+        }
+    }
+
+    /// The highest row tier the set shows.
+    pub(crate) fn tier(self) -> Level {
+        match self {
+            Self::Summary => Level::Low,
+            Self::Standard => Level::Medium,
+            Self::Extended => Level::High,
+            Self::Full => Level::Max,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,8 +49,8 @@ pub(crate) struct Spec {
     /// Non-empty lines of `## Why`, its one grounding element included.
     pub(crate) why_max_lines: usize,
     pub(crate) what_max_lines: usize,
-    /// Name of the metrics row set; `metrics.rs` decides what it shows.
-    pub(crate) metrics: String,
+    /// The metrics rows the pull request description shows.
+    pub(crate) metrics: RowSet,
     /// Share of merged pull requests this level aims for.
     pub(crate) target_percent: u32,
 }
@@ -35,6 +67,10 @@ pub(crate) struct Rule {
     pub(crate) path_prefixes: Vec<String>,
     #[serde(default)]
     pub(crate) min_changed_lines: u64,
+    /// Only files that can change behaviour count towards `suites`: test files
+    /// and the `inert` paths do not.
+    #[serde(default)]
+    pub(crate) behaviour: bool,
     pub(crate) reason: String,
 }
 
@@ -46,6 +82,10 @@ pub(crate) struct Levels {
     pub(crate) stats_window: usize,
     /// Lines a binary file counts as in the changed-line total.
     pub(crate) binary_file_lines: u64,
+    /// Documentation and configuration paths: a path that starts with a
+    /// prefix or ends with a suffix changes no product behaviour by itself.
+    pub(crate) inert_prefixes: Vec<String>,
+    pub(crate) inert_suffixes: Vec<String>,
     pub(crate) levels: BTreeMap<Level, Spec>,
     pub(crate) floor: Vec<Rule>,
 }
@@ -93,9 +133,6 @@ impl Levels {
                     level.name()
                 ));
             }
-            if spec.metrics.trim().is_empty() {
-                problems.push(format!("level {} needs a metrics row set", level.name()));
-            }
         }
         if total != 100 {
             problems.push(format!("target_percent must add up to 100, not {total}"));
@@ -128,6 +165,17 @@ impl Levels {
         Ok(())
     }
 
+    /// Whether a file is documentation or configuration (see `inert_prefixes`).
+    pub(crate) fn is_inert(&self, path: &str) -> bool {
+        self.inert_prefixes
+            .iter()
+            .any(|p| path.starts_with(p.as_str()))
+            || self
+                .inert_suffixes
+                .iter()
+                .any(|s| path.ends_with(s.as_str()))
+    }
+
     pub(crate) fn spec(&self, level: Level) -> &Spec {
         &self.levels[&level]
     }
@@ -148,7 +196,12 @@ impl Levels {
         };
         for rule in &self.floor {
             let scoped = !rule.suites.is_empty() || !rule.path_prefixes.is_empty();
-            let touches = rule.suites.iter().any(|s| change.suites.contains(s))
+            let suites = if rule.behaviour {
+                &change.behaviour_suites
+            } else {
+                &change.suites
+            };
+            let touches = rule.suites.iter().any(|s| suites.contains(s))
                 || rule
                     .path_prefixes
                     .iter()

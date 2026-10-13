@@ -8,8 +8,9 @@ pub(crate) mod stats;
 mod tests;
 
 use super::{describe::Level, git};
+use crate::agents::is_test_path;
 use crate::gates::registry::Registry;
-pub(crate) use config::Levels;
+pub(crate) use config::{Levels, RowSet};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::Path};
 
@@ -21,6 +22,9 @@ pub(crate) struct Change {
     pub(crate) lines: u64,
     pub(crate) files: Vec<String>,
     pub(crate) suites: BTreeSet<String>,
+    /// The suites selected by the files that can change behaviour: not test
+    /// files and not documentation or configuration (`Levels::is_inert`).
+    pub(crate) behaviour_suites: BTreeSet<String>,
 }
 
 impl Change {
@@ -29,6 +33,32 @@ impl Change {
         Self {
             lines,
             ..Self::default()
+        }
+    }
+
+    /// The change of `files` (`lines` added plus removed) classified by `registry`.
+    pub(crate) fn from_files(
+        levels: &Levels,
+        registry: &Registry,
+        lines: u64,
+        files: Vec<String>,
+    ) -> Self {
+        let active: Vec<String> = files
+            .iter()
+            .filter(|f| !is_test_path(f) && !levels.is_inert(f))
+            .cloned()
+            .collect();
+        let suites = registry.classify(&files).suites;
+        let behaviour_suites = if active.is_empty() {
+            BTreeSet::new()
+        } else {
+            registry.classify(&active).suites
+        };
+        Self {
+            lines,
+            files,
+            suites,
+            behaviour_suites,
         }
     }
 
@@ -42,25 +72,22 @@ impl Change {
         let registry =
             Registry::parse(crate::review::trusted(root, "gates/registry.json")?.as_bytes())?;
         levels.check_suites(registry.suites.iter().map(|s| s.id.as_str()))?;
-        let suites = registry.classify(&files).suites;
-        Ok(Self {
-            lines: numstat_lines(&numstat, levels.binary_file_lines),
-            files,
-            suites,
-        })
+        let lines = numstat_lines(&numstat, levels.binary_file_lines);
+        Ok(Self::from_files(levels, &registry, lines, files))
     }
 }
 
 /// Lines added plus removed; a binary file (`-` in numstat) counts as
-/// `binary` lines per side.
+/// `binary` lines in all.
 fn numstat_lines(numstat: &str, binary: u64) -> u64 {
     numstat
         .lines()
         .map(|l| {
-            l.split('\t')
-                .take(2)
-                .map(|n| n.parse::<u64>().unwrap_or(binary))
-                .sum::<u64>()
+            let mut columns = l.split('\t').take(2).map(|n| n.parse::<u64>());
+            match (columns.next(), columns.next()) {
+                (Some(Ok(added)), Some(Ok(removed))) => added + removed,
+                _ => binary,
+            }
         })
         .sum()
 }
@@ -80,8 +107,8 @@ pub(crate) struct Decision {
     pub(crate) chosen: Level,
     pub(crate) floor: Level,
     pub(crate) reason: String,
-    /// The metrics row set of the chosen level (selected by `ship/metrics.rs`).
-    pub(crate) metrics: String,
+    /// The metrics row set of the chosen level (`ship/metrics/table.rs`).
+    pub(crate) metrics: RowSet,
 }
 
 /// The floor of HEAD against the current base, from the fetched origin ref.

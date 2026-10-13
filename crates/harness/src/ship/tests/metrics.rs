@@ -1,5 +1,5 @@
 use super::{
-    super::describe::Level,
+    super::levels::RowSet,
     super::metrics::{self, class, comment_lines, scan_rust},
     fixture, run,
 };
@@ -96,7 +96,7 @@ fn metrics_are_revision_bound_and_the_table_uses_merge_base() {
     assert_eq!(head.lines.get("production"), Some(&7));
     assert_eq!(head.lines.get("tests"), Some(&4));
 
-    let table = metrics::table(&root, "dev", Level::Low).unwrap();
+    let table = metrics::table(&root, "dev", RowSet::Summary).unwrap();
     assert!(
         table.contains("| Lines changed: production | | +— / −— | |"),
         "{table}"
@@ -160,7 +160,7 @@ fn integration_test_paths_are_only_crate_top_level_tests_and_missing_values_are_
     let head = metrics::repository(&root, "HEAD").unwrap();
     assert_eq!(head.tests.get("unit"), Some(&1));
     assert_eq!(head.tests.get("integration"), Some(&1));
-    let table = metrics::table(&root, "dev", Level::Low).unwrap();
+    let table = metrics::table(&root, "dev", RowSet::Summary).unwrap();
     assert!(
         table.contains("| Lines changed: config | | +— / −— | |"),
         "{table}"
@@ -376,11 +376,11 @@ fn the_table_grows_with_the_level_and_hides_absent_measured_rows() {
         "revision": sha, "dirty": false,
         "workloads": [{"scenario": "smoke", "total_entities": 5, "encoded_bytes": 6, "tick_duration_ns": [9]}]
     }).to_string());
-    let at = |level| metrics::table(&root, "dev", level).unwrap();
-    let low = at(Level::Low);
-    let medium = at(Level::Medium);
-    let high = at(Level::High);
-    let max = at(Level::Max);
+    let at = |rows| metrics::table(&root, "dev", rows).unwrap();
+    let low = at(RowSet::Summary);
+    let medium = at(RowSet::Standard);
+    let high = at(RowSet::Extended);
+    let max = at(RowSet::Full);
     assert!(
         low.contains("| Largest human-authored file (lines, limit 500) |"),
         "{low}"

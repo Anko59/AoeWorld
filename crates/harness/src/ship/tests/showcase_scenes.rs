@@ -1,5 +1,6 @@
 //! The timing, api and agent-session scenes, the side-by-side terminal and
 //! the session converter (docs/showcase.md).
+mod findings;
 mod session_text;
 use super::super::showcase::{
     Origins, Scene, Storyboard, durations, plan, session, session::convert, session::redact,

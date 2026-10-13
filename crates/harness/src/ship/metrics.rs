@@ -64,10 +64,10 @@ fn numstat(root: &Path, merge_base: &str) -> Result<BTreeMap<String, LineCounts>
 pub(super) fn table(
     root: &Path,
     base: &str,
-    level: super::describe::Level,
+    rows: super::levels::RowSet,
 ) -> Result<String, String> {
     let (_, merge_base) = git::base(root, base, true)?;
     let before = snapshot::compute(root, &merge_base)?;
     let after = snapshot::compute(root, "HEAD")?;
-    table::render(&before, &after, &numstat(root, &merge_base)?, level)
+    table::render(&before, &after, &numstat(root, &merge_base)?, rows)
 }

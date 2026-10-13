@@ -83,3 +83,21 @@ fn every_role_reads_metrics_but_only_the_main_session_files_regressions() {
     }
     allowed(&fixture, Role::Main, "make metric-regressions");
 }
+
+#[test]
+fn level_floor_is_read_only_for_every_role_and_level_stats_is_main_only() {
+    let fixture = Fixture::new();
+    for role in [
+        Role::Main,
+        Role::Tester,
+        Role::Implementer,
+        Role::Reviewer,
+        Role::Other,
+    ] {
+        allowed(&fixture, role, "make level-floor");
+    }
+    allowed(&fixture, Role::Main, "make level-stats");
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer, Role::Other] {
+        denied(&fixture, role, "make level-stats");
+    }
+}
