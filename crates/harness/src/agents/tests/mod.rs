@@ -1,6 +1,7 @@
 mod bash;
 mod dispatch;
 mod hooks;
+mod prune;
 mod runtimes;
 mod shell_state;
 mod stop;
