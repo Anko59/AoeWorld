@@ -201,3 +201,70 @@ measured duration exceeds 5 minutes is rejected. The final WebM is written to
 a temporary file beside the destination and atomically renamed into place.
 Existing multiply linked output files are refused. `make ship`
 then checks the level's limit and the sound track.
+
+## Compare
+
+`make compare` answers "what did this change do to the real map?" without a
+second server, a controller lease or a hunt for cameras: it screenshots the
+same bookmarked camera on the build before the change and on the working
+tree, and counts the pixels that differ. It is a viewer, not a gate: it exits 0
+whatever the differences, and fails only when a view could not be captured.
+
+```sh
+make compare COMPARE_VIEWS=finland-start,france-alps-cliffs      # → .cache/compare/<branch>/
+make compare COMPARE_BEFORE=http://127.0.0.1:8086/ COMPARE_AFTER=build
+```
+
+Each side that is `build` (the default) gets its own server on a free port,
+started and stopped by the run, with one browser session that is the gameplay
+controller of that server alone; so nothing waits for a lease and no other
+agent's server is touched. `before` is `git archive` of the merge base with
+`origin/dev` (`COMPARE_BASE=<rev>` picks another commit) built in the tool
+image under `.cache/compare/` (cached per commit, cold build several minutes);
+`after` is the working tree, uncommitted edits included, built into `target/`.
+A URL instead of `build` uses an app that is already running (plain `http`
+on loopback with a port): the run then takes *that* server's controller lease.
+
+`qa/bookmarks.json` holds the views:
+
+```json
+{"maps": {"finland": {"center_latitude_e7": 615000000, "center_longitude_e7": 255000000, "requested_side_meters": 30000}},
+ "bookmarks": [{"name": "finland-start", "map": "finland", "x": 252, "y": 252, "zoom": 1,
+                "renderer": "webgpu", "note": "Start area", "verified": true}]}
+```
+
+`maps` names a map by its request, which survives a format change that changes
+the package's content hash; each side resolves the name to the stored package
+with that request in its package directory (`local-assets/map-packages`, or
+`COMPARE_BEFORE_PACKAGES` / `COMPARE_AFTER_PACKAGES`, so a map-crate change
+can compare two package formats). `x`, `y` are tiles, `zoom` is the client's
+0.25 to 3, `renderer` is `webgpu` (default) or `webgl2`. A bookmark with
+`"verified": false` is skipped unless `COMPARE_VIEWS` names it. At most 40
+views per run, 200 per file.
+
+For each view the run opens the package once per session, zooms with the wheel,
+places the camera with minimap clicks aimed again from the camera read back
+(`aoeNavigation.frame`), and waits until the `terrain cache: … chunks` count,
+the camera and the map requests in flight stay unchanged for five polls
+(`COMPARE_VIEW_TIMEOUT_SECONDS`, default 90, bounds it; `COMPARE_BUDGET_MINUTES`,
+default 40, bounds the run). The viewport is 1280×720 at device scale 1. If the
+two sides end on different cameras the view is "camera mismatch", not a pixel
+difference. The count covers the scene (the canvas) only, with every HUD
+rectangle that overlaps it masked; pixels that differ under a mask are in
+`report.json` (`masked_changed_pixels`, `only_masked_differ`), never in the count.
+
+`COMPARE_OUT` (default `.cache/compare/<branch>/`, always below `.cache/`) gets,
+per view, `<name>.before.png`, `<name>.after.png`, `<name>.diff.png` (changed
+pixels red, differences under the HUD blue), `<name>.montage.png` (before |
+after | diff at 1:1) and, for all views, `montage.png` (one row per view, shrunk
+by a whole factor only if it would pass 16 384 px) and `report.json` with the
+cameras read back, chunks, settle time and counts. Files are owned by you.
+Only the main session and role-less agents run it.
+
+Limits: a spectator cannot open a map and the camera has no URL or setter, so
+the harness drives documented input events; a minimap click is only as precise as
+the aiming loop (the read-back camera is in the report). Follow-ups: a camera URL
+fragment and a "chunks loaded" attribute in the client would replace the two
+small objects (`camera`, `settle`) in `capture.mjs`; a storyboard
+`"bookmark": "<name>"` field on browser scenes would film the same cameras.
+

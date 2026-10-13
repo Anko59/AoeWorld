@@ -9,7 +9,7 @@ const MARKER: &str = "invalid stored map package ";
 const NAMED_FILES: usize = 3;
 
 /// Keeps `error` unchanged unless its text names an invalid stored package.
-pub(super) fn annotate(
+pub(crate) fn annotate(
     error: Box<dyn std::error::Error>,
     directory: &Path,
 ) -> Box<dyn std::error::Error> {

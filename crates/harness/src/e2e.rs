@@ -4,7 +4,7 @@ mod country;
 mod landscape;
 mod matrix;
 mod source;
-mod stale;
+pub(crate) mod stale;
 mod visual;
 use std::{
     io::{Read, Write},

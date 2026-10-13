@@ -155,6 +155,14 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
                     .into(),
             );
         }
+        // It starts servers and browsers for minutes: the main session and
+        // role-less agents only, not the roles that write tests, code or reviews.
+        if target == "compare" && context.role.duty_bound() {
+            return Err(format!(
+                "the {} does not run `make compare`; report back and the main session runs it",
+                context.role.name()
+            ));
+        }
         if target == "ship" && context.role.duty_bound() {
             return Err(format!(
                 "the {} does not ship; report back and the main session runs `make ship`",
@@ -171,9 +179,11 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
 }
 
 fn agent_make_variable(name: &str) -> bool {
-    ["AOE_", "HARNESS_", "METRICS_", "REVIEW_", "SHIP_"]
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
+    [
+        "AOE_", "COMPARE_", "HARNESS_", "METRICS_", "REVIEW_", "SHIP_",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
 }
 
 fn reviewer_target(target: &str) -> bool {

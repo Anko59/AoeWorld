@@ -31,3 +31,4 @@ syn = { version = "2.0", features = ["full", "visit"] }
 toml = "1.1"
 
 tempfile = "3.27"
+png = "0.17"

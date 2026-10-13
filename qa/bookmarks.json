@@ -1,0 +1,164 @@
+{
+ "maps": {
+  "france": {
+   "center_latitude_e7": 462000000,
+   "center_longitude_e7": 22000000,
+   "requested_side_meters": 1200000
+  },
+  "finland": {
+   "center_latitude_e7": 615000000,
+   "center_longitude_e7": 255000000,
+   "requested_side_meters": 30000
+  }
+ },
+ "bookmarks": [
+  {
+   "name": "finland-start",
+   "map": "finland",
+   "x": 252,
+   "y": 252,
+   "zoom": 1,
+   "note": "Start area of the Finland map (map session QA, 2026-10-13)."
+  },
+  {
+   "name": "finland-conifer-forest",
+   "map": "finland",
+   "x": 100,
+   "y": 100,
+   "zoom": 1,
+   "note": "Conifer forest; QA row also at WebGL2."
+  },
+  {
+   "name": "finland-conifer-forest-webgl2",
+   "map": "finland",
+   "x": 100,
+   "y": 100,
+   "zoom": 1,
+   "renderer": "webgl2",
+   "note": "The same forest through the WebGL2 renderer."
+  },
+  {
+   "name": "finland-lakeshore",
+   "map": "finland",
+   "x": 253,
+   "y": 310,
+   "zoom": 1,
+   "note": "Lake shore."
+  },
+  {
+   "name": "finland-lake-south-end",
+   "map": "finland",
+   "x": 230,
+   "y": 405,
+   "zoom": 1,
+   "note": "South end of the lake.",
+   "verified": false
+  },
+  {
+   "name": "france-paris-basin",
+   "map": "france",
+   "x": 10186,
+   "y": 5076,
+   "zoom": 1,
+   "note": "Paris basin."
+  },
+  {
+   "name": "france-brittany-shore",
+   "map": "france",
+   "x": 1660,
+   "y": 5449,
+   "zoom": 1,
+   "note": "Brittany coast; shoreline rendering."
+  },
+  {
+   "name": "france-brittany-close-shore",
+   "map": "france",
+   "x": 1660,
+   "y": 5471,
+   "zoom": 1,
+   "note": "The close bank of the same coast.",
+   "verified": false
+  },
+  {
+   "name": "france-mediterranean-shore",
+   "map": "france",
+   "x": 14316,
+   "y": 15215,
+   "zoom": 1,
+   "note": "Mediterranean coast.",
+   "verified": false
+  },
+  {
+   "name": "france-landes",
+   "map": "france",
+   "x": 6071,
+   "y": 13912,
+   "zoom": 1,
+   "note": "Landes.",
+   "verified": false
+  },
+  {
+   "name": "france-dry-southwest",
+   "map": "france",
+   "x": 6113,
+   "y": 13926,
+   "zoom": 1,
+   "note": "Dry southwest ground mix.",
+   "verified": false
+  },
+  {
+   "name": "france-eastern-forest",
+   "map": "france",
+   "x": 16056,
+   "y": 6197,
+   "zoom": 1,
+   "note": "Eastern forest, trails and glades.",
+   "verified": false
+  },
+  {
+   "name": "france-alps-cliffs",
+   "map": "france",
+   "x": 17109,
+   "y": 9921,
+   "zoom": 1,
+   "note": "Alps cliffs and snowy slope."
+  },
+  {
+   "name": "france-alps-cliffs-webgl2",
+   "map": "france",
+   "x": 17109,
+   "y": 9921,
+   "zoom": 1,
+   "renderer": "webgl2",
+   "note": "Alps cliffs through the WebGL2 renderer.",
+   "verified": false
+  },
+  {
+   "name": "france-alps-snowline",
+   "map": "france",
+   "x": 16914,
+   "y": 9921,
+   "zoom": 0.698,
+   "note": "Alps rock band and snow line.",
+   "verified": false
+  },
+  {
+   "name": "france-pyrenees-high",
+   "map": "france",
+   "x": 6777,
+   "y": 16309,
+   "zoom": 1,
+   "note": "Pyrenees high rock band.",
+   "verified": false
+  },
+  {
+   "name": "france-lake-geneva",
+   "map": "france",
+   "x": 15527,
+   "y": 9473,
+   "zoom": 1,
+   "note": "Lake Geneva shore region.",
+   "verified": false
+  }
+ ]
+}
