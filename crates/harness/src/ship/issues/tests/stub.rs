@@ -10,7 +10,11 @@ const GH: &str = r#"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
 for arg in "$@"; do
-  if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then echo "stub failure" >&2; exit 1; fi
+  if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then
+    # A failing gh has still read its piped body: drain it before exiting.
+    case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
+    echo "stub failure" >&2; exit 1
+  fi
 done
 case "$1" in
   api) printf '%s' "$GH_LIST_JSON" ;;
