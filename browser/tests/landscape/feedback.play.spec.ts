@@ -418,3 +418,61 @@ test("elevated failed terrain stays warned until it loads at a stationary camera
     release();
   }
 });
+
+test("new terrain failure replaces an old rejection and recovery stays connected", async ({
+  page,
+}) => {
+  const world = await feedbackWorld(page);
+  const { canvas, center, target } = await loadedWorld(page);
+  await canvas.click({ position: center });
+  await canvas.click({ position: target, button: "right" });
+  await expect(page.locator("#connection")).toHaveText(
+    "Cannot move there: a tree is in the way.",
+  );
+  let failedUrl = "";
+  let retries = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/maps/${hash}/chunks/*/*`, async (route) => {
+    const url = route.request().url();
+    const [x = 0, y = 0] = url.split("/").slice(-2).map(Number);
+    if (x >= 350) {
+      if (!failedUrl) {
+        failedUrl = url;
+        await route.abort("failed");
+        return;
+      }
+      if (url === failedUrl) retries++;
+      await held;
+    }
+    await route.fulfill({ json: chunkWithTree(x, y) });
+  });
+  try {
+    await page.getByRole("button", { name: "Show whole map" }).click();
+    const box = await page.locator("#minimap-map").boundingBox();
+    if (!box) throw new Error("Missing minimap");
+    const side = Math.min(box.width, box.height);
+    await page.mouse.click(
+      box.x + (box.width - side) / 2 + side * 0.75,
+      box.y + (box.height - side) / 2 + side * 0.25,
+    );
+    await page.getByRole("button", { name: "Close map overview" }).click();
+    await expect(page.locator("#connection")).toHaveText(
+      "Some terrain could not be loaded; retrying.",
+    );
+    await expect.poll(() => retries, { timeout: 15000 }).toBe(1);
+    // The affected chunk is still pending; no newer order or socket reconnect
+    // may be needed to replace the rejection or clear the recovered warning.
+    await expect(page.locator("#connection")).toHaveText(
+      "Some terrain could not be loaded; retrying.",
+    );
+    expect(world.orders).toHaveLength(1);
+    release();
+    await expect(page.locator("#connection")).toHaveText("connected");
+    expect(world.orders).toHaveLength(1);
+  } finally {
+    release();
+  }
+});
