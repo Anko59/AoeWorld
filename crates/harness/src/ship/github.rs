@@ -1,10 +1,7 @@
 //! `make ship`'s GitHub side: `gh` checks, the pull request (found by head
 //! branch, on origin's repository), the description, and the
 //! showcase video probe.
-use super::{
-    Evidence, Options, Result, describe, git,
-    levels::{Change, Levels},
-};
+use super::{Evidence, Options, Result, describe, git, levels::Levels};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -83,62 +80,111 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
             .into());
         }
     }
-    let branch = git::branch(root)?;
-    let repository = git::origin_repository(root)?;
-    let parent = if options.base == crate::review::base::DEV {
-        None
-    } else {
-        super::stack::parent(root, &repository, &options.base)?
-    };
-    let review_ahead = options.base != crate::review::base::DEV && parent.is_none();
-    let _local = if review_ahead {
-        super::stack::local_commit(root, &options.base)?;
-        Some(crate::review::base::scope_local(&options.base))
-    } else {
-        None
-    };
-    let existing = open_pull_request(root, &repository, &branch)?;
-    let open = existing.is_some();
-    if !open && !review_ahead && (options.title.is_none() || options.body_file.is_none()) {
+    let situation = situation(root, &options.base)?;
+    let Situation {
+        parent,
+        review_ahead,
+        existing,
+        ..
+    } = &situation;
+    if situation.title_required() && (options.title.is_none() || options.body_file.is_none()) {
         return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
     }
     let (template_text, level) = if let Some(body) = &options.body_file {
-        if !body.is_file() {
-            return Err(format!("SHIP_BODY {} is not a file", body.display()).into());
-        }
-        let text = fs::read_to_string(body)?;
-        let levels = Levels::load(root)?;
-        let template = describe::Template::parse(&text, &levels)?;
-        let probe = match &options.video {
-            Some(video) => Some(probe_video(root, video)?),
-            None => None,
+        let request = super::check::Request {
+            body,
+            title: options.title.as_deref(),
+            title_required: situation.title_required(),
+            video: options.video.as_deref(),
+            base: &options.base,
+            fetch: true,
         };
-        let change = Change::collect(root, &levels, &options.base, true)?;
-        let decision = template.check(&levels, &change, probe)?;
-        (Some(text), Some(decision))
+        let checked = super::check::run(root, &request)?;
+        (Some(checked.text), Some(checked.decision))
     } else {
         (None, None)
     };
     Ok(Preflight {
         level,
         body: template_text,
+        parent: parent.clone(),
+        review_ahead: *review_ahead,
+        current_base: existing.as_ref().map(|pr| pr.base.clone()),
+    })
+}
+
+/// How the branch stands towards GitHub, decided once for the description
+/// check and the preflight: the parent pull request of a stacked base, whether
+/// the ship only reviews ahead, and the branch's own open pull request. While
+/// it lives, a local unpublished parent is the selected base.
+pub(super) struct Situation {
+    pub(super) parent: Option<super::stack::Parent>,
+    pub(super) review_ahead: bool,
+    pub(super) existing: Option<OpenPr>,
+    _scope: Option<crate::review::base::Scope>,
+}
+
+impl Situation {
+    /// A new pull request needs a title; an open one keeps its own and a
+    /// review ahead publishes nothing.
+    pub(super) fn title_required(&self) -> bool {
+        self.existing.is_none() && !self.review_ahead
+    }
+}
+
+/// [`situation_with`] asking `gh` about the checked-out branch.
+pub(super) fn situation(root: &Path, base: &str) -> Result<Situation> {
+    let branch = git::branch(root)?;
+    let repository = git::origin_repository(root)?;
+    situation_with(
+        root,
+        base,
+        || super::stack::parent(root, &repository, base),
+        || open_pull_request(root, &repository, &branch),
+    )
+}
+
+pub(super) fn situation_with(
+    root: &Path,
+    base: &str,
+    parent: impl FnOnce() -> Result<Option<super::stack::Parent>>,
+    open: impl FnOnce() -> Result<Option<OpenPr>>,
+) -> Result<Situation> {
+    let parent = if base == crate::review::base::DEV {
+        None
+    } else {
+        parent()?
+    };
+    let review_ahead = base != crate::review::base::DEV && parent.is_none();
+    let scope = if review_ahead {
+        super::stack::local_commit(root, base)?;
+        Some(crate::review::base::scope_local(base))
+    } else {
+        None
+    };
+    Ok(Situation {
         parent,
         review_ahead,
-        current_base: existing.map(|pr| pr.base),
+        existing: open()?,
+        _scope: scope,
     })
 }
 
 /// A branch's open pull request: its URL and the branch it targets.
 #[derive(serde::Deserialize)]
-struct OpenPr {
+pub(super) struct OpenPr {
     url: String,
     #[serde(rename = "baseRefName")]
-    base: String,
+    pub(super) base: String,
 }
 
 /// The open pull request whose head is `branch` (never a PR number that
 /// happens to equal a numeric branch name).
-fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<OpenPr>> {
+pub(super) fn open_pull_request(
+    root: &Path,
+    repository: &str,
+    branch: &str,
+) -> Result<Option<OpenPr>> {
     let found = gh(
         root,
         &[
@@ -308,7 +354,7 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
 }
 
 /// Duration and sound of a video, read by ffmpeg in the pinned browser image.
-fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
+pub(super) fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
     if !attachable_video(video) {
         return Err(format!(
             "SHIP_VIDEO {} must be a .mp4, .mov or .webm file named with letters, digits, `.`, `_` or `-` only",

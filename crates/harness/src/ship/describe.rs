@@ -17,7 +17,7 @@
 //! ```
 use super::{
     evidence::Evidence,
-    levels::{Change, Decision, Levels},
+    levels::{Change, Floor, Levels},
     run::GateVerdict,
 };
 use crate::review::Report;
@@ -126,100 +126,154 @@ fn is_element(line: &str) -> bool {
         || sampled_metric
 }
 
+/// What reading a description found: every problem, not only the first.
+pub(crate) struct Inspected {
+    pub(crate) level: Option<Level>,
+    pub(crate) problems: Vec<String>,
+    pub(crate) template: Option<Template>,
+}
+
 impl Template {
+    /// The first problem of the text, or the template.
     pub(crate) fn parse(text: &str, levels: &Levels) -> Result<Self, String> {
-        let level = text
-            .lines()
-            .find_map(|l| {
-                l.trim()
-                    .strip_prefix("<!-- level:")?
-                    .strip_suffix("-->")
-                    .and_then(Level::parse)
-            })
-            .ok_or("the description needs a first line `<!-- level: low|medium|high|max -->`")?;
-        let why = section(text, "Why").ok_or("the description needs a `## Why` section")?;
-        let what = section(text, "What").ok_or("the description needs a `## What` section")?;
-        let for_ai = section(text, "For AI").unwrap_or_default();
-        if what.trim().is_empty() {
-            return Err("`## What` is empty: say in one or two lines what was implemented".into());
+        let found = Self::inspect(text, levels);
+        match (found.problems.into_iter().next(), found.template) {
+            (Some(problem), _) => Err(problem),
+            (None, Some(template)) => Ok(template),
+            (None, None) => Err("the description could not be read".into()),
         }
-        let spec = levels.spec(level);
-        let grounding_lines = why.lines().filter(|line| is_element(line)).count();
-        if grounding_lines == 0 {
-            return Err("`## Why` needs one grounding element: a > quote from a human, an issue/reference link or HTTPS URL, a screenshot or a sampled metric".into());
-        }
-        if grounding_lines > 1
-            || why.lines().filter(|line| !line.trim().is_empty()).count() > spec.why_max_lines
-        {
-            return Err(format!(
-                "`## Why` has more than {} lines of text; if it needs more, the PR is doing too much: split it",
-                spec.why_max_lines - 1
-            ));
-        }
-        if what.lines().filter(|l| !l.trim().is_empty()).count() > spec.what_max_lines {
-            return Err(format!(
-                "`## What` has more than {} lines; if it needs more, split the PR",
-                spec.what_max_lines
-            ));
-        }
-        Ok(Self {
-            level,
-            why,
-            what,
-            for_ai,
-        })
     }
 
-    /// The level must fit the change (it may not be below the floor) and the
-    /// video; anything else is a reason to split. Returns what to record.
+    /// Every problem of the text; the template only when there is none.
+    pub(crate) fn inspect(text: &str, levels: &Levels) -> Inspected {
+        let mut problems = Vec::new();
+        let level = text.lines().find_map(|l| {
+            l.trim()
+                .strip_prefix("<!-- level:")?
+                .strip_suffix("-->")
+                .and_then(Level::parse)
+        });
+        if level.is_none() {
+            problems.push(
+                "the description needs a first line `<!-- level: low|medium|high|max -->`"
+                    .to_owned(),
+            );
+        }
+        let why = section(text, "Why");
+        let what = section(text, "What");
+        if why.is_none() {
+            problems.push("the description needs a `## Why` section".to_owned());
+        }
+        if what.is_none() {
+            problems.push("the description needs a `## What` section".to_owned());
+        }
+        // Without a level the lowest one's limits stand in for the chosen one.
+        let spec = levels.spec(level.unwrap_or(Level::Low));
+        let lines = |text: &str| text.lines().filter(|l| !l.trim().is_empty()).count();
+        if let Some(what) = &what {
+            if what.trim().is_empty() {
+                problems.push(
+                    "`## What` is empty: say in one or two lines what was implemented".into(),
+                );
+            } else if lines(what) > spec.what_max_lines {
+                problems.push(format!(
+                    "`## What` has more than {} lines; if it needs more, split the PR",
+                    spec.what_max_lines
+                ));
+            }
+        }
+        if let Some(why) = &why {
+            let grounding_lines = why.lines().filter(|line| is_element(line)).count();
+            if grounding_lines == 0 {
+                problems.push("`## Why` needs one grounding element: a > quote from a human, an issue/reference link or HTTPS URL, a screenshot or a sampled metric".to_owned());
+            }
+            if grounding_lines > 1 || lines(why) > spec.why_max_lines {
+                problems.push(format!(
+                    "`## Why` has more than {} lines of text; if it needs more, the PR is doing too much: split it",
+                    spec.why_max_lines - 1
+                ));
+            }
+        }
+        let template = match (level, why, what) {
+            (Some(level), Some(why), Some(what)) if problems.is_empty() => Some(Self {
+                level,
+                why,
+                what,
+                for_ai: section(text, "For AI").unwrap_or_default(),
+            }),
+            _ => None,
+        };
+        Inspected {
+            level,
+            problems,
+            template,
+        }
+    }
+
+    /// The first way the level fails the change and the video, or what to
+    /// record; `ship::check` reports all of them.
+    #[cfg(test)]
     pub(crate) fn check(
         &self,
         levels: &Levels,
         change: &Change,
         video: Option<(u32, bool)>,
-    ) -> Result<Decision, String> {
-        let floor = levels.floor(change);
-        let name = self.level.name();
-        if self.level < floor.level {
-            return Err(format!(
-                "`{name}` is below the floor `{}` for this change ({} changed lines): {}; use {} or higher",
-                floor.level.name(),
-                change.lines,
-                floor.reason,
-                floor.level.name()
-            ));
+    ) -> Result<super::levels::Decision, String> {
+        let (problems, floor) = level_problems(self.level, levels, change, video.map(Some));
+        if let Some(problem) = problems.into_iter().next() {
+            return Err(problem);
         }
-        let spec = levels.spec(self.level);
-        match (spec.video_max_seconds, video) {
-            (None, Some(_)) => {
-                return Err(format!(
-                    "{name} PRs have no video; use {} or higher",
-                    levels.lowest_with_video().name()
-                ));
-            }
-            (None, None) => {}
-            (Some(_), None) => {
-                return Err(format!(
-                    "a {name} PR needs a showcase video (SHIP_VIDEO); show it working, before/after"
-                ));
-            }
-            (Some(limit), Some((seconds, _))) if seconds > limit => {
-                return Err(format!(
-                    "the video is {seconds}s; a {name} PR allows {limit}s: tighten it or split the PR"
-                ));
-            }
-            (Some(_), Some((_, false))) if spec.narration_required => {
-                return Err(format!("a {name} PR video needs a voice-over"));
-            }
-            _ => {}
-        }
-        Ok(Decision {
+        Ok(super::levels::Decision {
             chosen: self.level,
             floor: floor.level,
             reason: floor.reason,
-            metrics: spec.metrics,
+            metrics: levels.spec(self.level).metrics,
         })
     }
+}
+
+/// Every way `level` fails the change and the video (`Some(None)`: a video
+/// that could not be read, already reported), and the floor.
+pub(crate) fn level_problems(
+    level: Level,
+    levels: &Levels,
+    change: &Change,
+    video: Option<Option<(u32, bool)>>,
+) -> (Vec<String>, Floor) {
+    let floor = levels.floor(change);
+    let name = level.name();
+    let mut problems = Vec::new();
+    if level < floor.level {
+        problems.push(format!(
+            "`{name}` is below the floor `{}` for this change ({} changed lines): {}; use {} or higher",
+            floor.level.name(),
+            change.lines,
+            floor.reason,
+            floor.level.name()
+        ));
+    }
+    let spec = levels.spec(level);
+    match (spec.video_max_seconds, video) {
+        (None, Some(_)) => problems.push(format!(
+            "{name} PRs have no video; use {} or higher",
+            levels.lowest_with_video().name()
+        )),
+        (Some(_), None) => problems.push(format!(
+            "a {name} PR needs a showcase video (SHIP_VIDEO); show it working, before/after"
+        )),
+        (Some(limit), Some(Some((seconds, voiced)))) => {
+            if seconds > limit {
+                problems.push(format!(
+                    "the video is {seconds}s; a {name} PR allows {limit}s: tighten it or split the PR"
+                ));
+            }
+            if !voiced && spec.narration_required {
+                problems.push(format!("a {name} PR video needs a voice-over"));
+            }
+        }
+        _ => {}
+    }
+    (problems, floor)
 }
 
 /// The probe of a video: duration in seconds and whether it has an audio stream,

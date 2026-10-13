@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|review|review-floor|level-floor|level-stats|review-calibrate|review-pr|issue|next|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|metrics
+#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-calibrate|review-pr|issue|next|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|metrics
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -16,7 +16,7 @@ case ${1:-} in
     # Each command runs dev's judge once dev has it, the bootstrap until then.
     case ${2:-} in
       duel) probe=crates/harness/src/ship/duel/mod.rs ;;
-      ship|ship-status|level-floor|level-stats) probe=crates/harness/src/ship/mod.rs ;;
+      ship|ship-status|describe-check|level-floor|level-stats) probe=crates/harness/src/ship/mod.rs ;;
       review|review-floor) probe=crates/harness/src/review/mod.rs ;;
       review-calibrate) probe=crates/harness/src/review/calibrate/mod.rs ;;
       review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
@@ -27,7 +27,7 @@ case ${1:-} in
       nightly-triage) probe=crates/harness/src/ship/issues/triage.rs ;;
       metric-regressions) probe=crates/harness/src/ship/issues/regressions.rs ;;
       metrics) probe=crates/harness/src/ship/metrics/snapshot.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, review, review-floor, level-floor, level-stats, review-calibrate, review-pr, issue, next, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions or metrics only" >&2; exit 2 ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-calibrate, review-pr, issue, next, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions or metrics only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

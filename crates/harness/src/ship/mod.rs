@@ -4,6 +4,7 @@
 //! evidence for that commit (whatever the verdict) where agents cannot write;
 //! and, only on PASS, pushes the branch and creates or updates its pull request.
 //! The agent policy denies `git push` and `gh pr create` to every role.
+mod check;
 mod describe;
 mod duel;
 pub(crate) use duel::output::JsonOutput;
@@ -53,6 +54,8 @@ pub(crate) enum Commands {
     Issue,
     /// Print the highest-priority unblocked open issue.
     Next,
+    /// Check a pull request description (SHIP_BODY, SHIP_TITLE, SHIP_VIDEO) without shipping.
+    DescribeCheck,
     /// Print the lowest pull request level the change allows, and why.
     LevelFloor,
     /// Print the levels of the last merged pull requests against the target.
@@ -166,8 +169,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 options.runtime = clap::ValueEnum::from_str(&runtime, true)
                     .map_err(|_| format!("SHIP_RUNTIME={runtime}: use claude, codex, dsh or pi"))?;
             }
-            let _lock = lock::acquire(&root, "make ship")?;
-            ship(&root, &options).map(|_| ())
+            check::publish(&root, &options)
         }
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
@@ -190,6 +192,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),
         Commands::Next => issues::next(&root),
+        Commands::DescribeCheck => check::command(&root),
         Commands::LevelFloor => levels::print_floor(&root),
         Commands::LevelStats => levels::print_stats(&root),
         Commands::NightlyTriage => issues::triage::execute(&root),
