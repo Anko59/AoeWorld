@@ -22,6 +22,10 @@ pub(crate) mod stages;
 #[cfg(test)]
 mod tests;
 mod tree;
+mod wasm;
+#[cfg(test)]
+#[path = "tests/wasm.rs"]
+mod wasm_tests;
 
 use crate::{process::CaptureExit, ship::git};
 pub(crate) use config::{Options, read_task};
@@ -43,7 +47,14 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
 
 pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let subject = git::subject(&root)?;
+    // Test-file changes left by a duel whose check was unavailable are the tester's
+    // work: continue from them. Any other change still refuses the start.
+    let resume = tree::only_test_changes(&root)?;
+    let subject = if resume {
+        git::subject_with_changes(&root)?
+    } else {
+        git::subject(&root)?
+    };
     browser::reset(&root)?;
     let cache = root.join(".cache/duel");
     clean(output::prune(&cache, 0));
@@ -55,7 +66,7 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
         options.model.as_deref().unwrap_or("configured default")
     );
     summary.push_str(&format!("\nTask:\n{task}\n"));
-    let result = rounds(&root, task, options, &subject.branch, &mut summary);
+    let result = rounds(&root, task, options, &subject.branch, resume, &mut summary);
     // Keep only the last run's logs for the summary, and drop the comparison build.
     clean(output::prune(&cache, 1));
     clean(
@@ -91,6 +102,7 @@ fn rounds(
     task: &str,
     options: &Options,
     branch: &str,
+    resume: bool,
     summary: &mut String,
 ) -> git::Result<()> {
     let pre_duel = git::git(root, &["rev-parse", "HEAD"])?;
@@ -108,7 +120,15 @@ fn rounds(
                 "Attack the completed change with new failing tests."
             }
         );
-        let (exit, tester) = runner::agent(root, options, "tester", &prompt)?;
+        let (exit, tester) = if resume && round == 1 {
+            (
+                CaptureExit::Success,
+                "Resumed from the tester's uncommitted test changes; the tester was skipped."
+                    .to_owned(),
+            )
+        } else {
+            runner::agent(root, options, "tester", &prompt)?
+        };
         summary.push_str(&format!("\nTester last report:\n{tester}\n"));
         let paths = tree::validate(root, true, &head, branch)?;
         if !matches!(exit, CaptureExit::Success) {
@@ -133,8 +153,10 @@ fn rounds(
         let (red_report, tail) = match red {
             Ok(result) => result,
             Err(error) => {
-                tree::restore(root, &head)?;
-                return Err(error);
+                // The check could not run, which says nothing about the tests: keep them.
+                return Err(format!(
+                    "{error}\nthe tester's test changes are kept, uncommitted, in the working tree; fix the check and rerun `make duel` to continue from them, or choose the check with DUEL_CHECK='<command>' (currently `{command}`)"
+                ));
             }
         };
         summary.push_str(&format!(

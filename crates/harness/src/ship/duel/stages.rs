@@ -32,7 +32,7 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
     let mut scope: Scope =
         serde_json::from_slice(&fs::read(cache.join("scope.json")).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-    if !scope.specs.is_empty() {
+    if !scope.specs.is_empty() || !scope.wasm.is_empty() {
         scope.packages.clear();
         let revision = std::env::var("HARNESS_DUEL_REVISION")
             .ok()
@@ -58,6 +58,17 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
             let base =
                 std::env::var("HARNESS_DUEL_BASE").map_err(|_| "HARNESS_DUEL_BASE is required")?;
             focus::classify_specs(&root, &base, &mut browser)?;
+            if !browser.build_failed {
+                let wasm: Vec<_> = browser
+                    .failed
+                    .iter()
+                    .filter(|n| !browser.locations.contains_key(*n))
+                    .cloned()
+                    .collect();
+                browser
+                    .untouched
+                    .extend(baseline::untouched(&root, &base, &scope, &wasm)?);
+            }
         }
         report.passed &= browser.passed;
         report.build_failed |= browser.build_failed;
@@ -66,6 +77,7 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
         report.failed.extend(browser.failed);
         report.untouched.extend(browser.untouched);
         report.locations.extend(browser.locations);
+        report.exit_only.extend(browser.exit_only);
     }
     focus::save(&cache, &report)?;
     if let Some(reason) = report.unavailable {

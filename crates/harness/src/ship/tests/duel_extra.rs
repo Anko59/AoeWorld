@@ -8,6 +8,8 @@ use std::{fs, time::Duration};
 
 #[path = "duel/fixes.rs"]
 mod fixes;
+#[path = "duel/keep.rs"]
+mod keep;
 
 #[test]
 fn unrelated_red_failures_are_refused_without_launching_the_implementer() {
@@ -184,7 +186,10 @@ fn failed_implementer_keeps_tests_and_work_and_incomplete_check_cannot_be_red() 
         let error = duel(&root, "Task", &options).unwrap_err();
         if mode == "happy" {
             assert!(error.contains("check could not complete"));
-            assert!(git::subject(&root).is_ok());
+            // An incomplete check says nothing about the tests: they stay, uncommitted.
+            assert!(error.contains("kept, uncommitted"), "{error}");
+            assert!(root.join("crates/x/src/tests.rs").is_file());
+            assert!(git::subject(&root).is_err());
         } else {
             assert!(error.contains("implementer did not finish"));
             assert!(

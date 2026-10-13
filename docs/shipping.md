@@ -314,7 +314,14 @@ The default command is `make duel-check HARNESS_DUEL_BASE=<round-start commit>`.
 It runs through Docker and selects only Cargo packages owning tester-changed
 files (`cargo nextest run -p <package>`) and exact changed browser spec files.
 Browser fixtures under `browser/tests/` select all browser specs. Mixed changes
-run both. Fuzz targets in their separate workspace and other unsupported paths
+run both. A changed file of a package that `make test-wasm` runs (the suites in
+`wasm_test::SUITES`, today `aoe-client` and `aoe-rendering`) selects that package's
+wasm-bindgen suite in the Docker browser stage instead of native nextest, which finds
+no tests there: a file with `wasm_bindgen_test`s (or no tests, a helper) runs wasm, one
+with `#[test]`s runs nextest, one with both runs both. The wasm results are named
+`<package>$<module path>::<test>` and follow the same red/green/authorship rules, and a
+wasm build failure is a build-failed red. If the runner prints no test lines, that
+package is judged by exit status only and the summary says so. Fuzz targets in their separate workspace and other unsupported paths
 stop before the implementer launches and require `DUEL_CHECK` (for example
 `make fuzz-smoke`). Red means a selected package fails to build or at least
 one failing test belongs to a tester-changed file, matched by nextest binary id
@@ -327,6 +334,11 @@ failure exemption below.
 Integration failures follow the target's declared module path to the defining
 file, which must have changed that round. Unresolved sources fall back to a
 changed integration target; the summary records that fallback.
+When the check cannot run (a missing tool, a timeout, a runner that never started) the
+tester's test files are kept, uncommitted, in the working tree, and the duel ends
+saying so and how to rerun with `DUEL_CHECK=`. A rerun on a tree whose only changes are
+test files continues from them: round 1 skips the tester and goes straight to the red
+check. Any change outside test files still refuses the start.
 `DUEL_CHECK='make <focused target>'` overrides this trusted main-session command.
 For an explicit override, a normal nonzero exit is red and exit zero is green;
 the red-test execution requirement does not apply. Named failures are reported when available but are not required, including

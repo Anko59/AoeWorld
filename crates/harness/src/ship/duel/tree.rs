@@ -53,6 +53,16 @@ pub(crate) fn changed(root: &Path) -> git::Result<Vec<String>> {
     Ok(all.into_iter().collect())
 }
 
+/// True when the tree has changes and every one is a test file: a tester's work to resume from.
+pub(crate) fn only_test_changes(root: &Path) -> git::Result<bool> {
+    let paths = changed(root)?;
+    Ok(!paths.is_empty()
+        && paths.iter().all(|p| {
+            let lower = p.to_ascii_lowercase();
+            is_test_path(&lower) && protected_path(&lower).is_none()
+        }))
+}
+
 pub(crate) fn since(root: &Path, base: &str) -> git::Result<Vec<String>> {
     let mut all: BTreeSet<_> = paths(
         root,
