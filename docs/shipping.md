@@ -82,6 +82,23 @@ agent policy refuses `$` in agent-set Make values.
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
 
+## One ship at a time
+
+Sessions share one machine, so `make ship` and `make duel` take a machine-wide
+lock before any heavy work and release it when they exit, by whatever route.
+It is an OS file lock on `<git common dir>/aoe-ship/ship.lock`, shared by every
+worktree and checkout of the repository; a dead or killed holder frees it, so
+it is never stale. The file also names the holder (worktree, branch, command,
+start time), for messages only.
+
+A second run prints `ship: waiting for <branch> in <worktree> (started <time>)`,
+then a line every 5 minutes, and gives up with an error after
+`SHIP_LOCK_WAIT_MINUTES` (default 120; `0` fails immediately). `make ship-status`
+shows the holder without waiting. Read-only commands (`review-floor`,
+`showcase-check`, `ship-status`…) never take the lock. Never wait for another
+ship by scanning processes: a `pgrep -f` loop matches its own command line and
+waits on itself forever; queue on the lock instead.
+
 ## Stacked pull requests
 
 A change that depends on an unmerged pull request does not wait for it:

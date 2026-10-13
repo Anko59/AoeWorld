@@ -37,6 +37,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     let options = Options::from_env(get)?;
     let task = get("DUEL_TASK").ok_or("DUEL_TASK is required: name the task file")?;
     let task = read_task(&root.join(task))?;
+    let _lock = super::lock::acquire(root, "make duel").map_err(|e| e.to_string())?;
     run(root, &task, &options).map(|_| ())
 }
 

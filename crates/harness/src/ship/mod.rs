@@ -12,6 +12,7 @@ pub(crate) mod git;
 mod github;
 mod issues;
 mod levels;
+pub(crate) mod lock;
 mod metrics;
 pub(crate) mod prepush;
 pub(crate) mod review_gate;
@@ -163,6 +164,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 options.runtime = clap::ValueEnum::from_str(&runtime, true)
                     .map_err(|_| format!("SHIP_RUNTIME={runtime}: use claude, codex, dsh or pi"))?;
             }
+            let _lock = lock::acquire(&root, "make ship")?;
             ship(&root, &options).map(|_| ())
         }
         Commands::Showcase => showcase::make(&root).map(|_| ()),
@@ -174,7 +176,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 Some(evidence) => println!("{}", serde_json::to_string_pretty(&evidence)?),
                 None => println!("no evidence for {head}; run `make ship`"),
             }
-            Ok(())
+            lock::print_status(&root)
         }
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),

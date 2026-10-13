@@ -293,6 +293,7 @@ fn the_branch_and_repository_come_from_full_refs_and_origin() {
 mod describe;
 mod duel;
 mod duel_extra;
+mod lock;
 mod metrics;
 mod patch;
 mod showcase;
