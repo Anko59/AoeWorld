@@ -5,6 +5,24 @@ use aoe_protocol::{CommandResult, ResourceAmount, ResourceState};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn unresolved_terrain_failures_drop_oldest_at_sixty_four_and_remove_on_recovery() {
+    let mut failures = TerrainFailures::default();
+    for x in 0..64 {
+        failures.chunks.insert((x, 0));
+    }
+    failures.chunks.insert((0, 0)); // Retrying the oldest does not renew its age.
+    failures.chunks.insert((64, 0));
+    assert_eq!(failures.chunks.len(), 64);
+    assert!(!failures.chunks.contains(&(0, 0)));
+    assert!(failures.chunks.contains(&(64, 0)));
+    assert!(failures.chunks.remove(&(64, 0)));
+    assert!(!failures.chunks.remove(&(64, 0)));
+    failures.chunks.insert((65, 0));
+    assert_eq!(failures.chunks.len(), 64);
+    assert!(failures.chunks.contains(&(1, 0)));
+}
+
+#[wasm_bindgen_test]
 fn movement_labels_name_resources_and_leave_base_terrain_intact() {
     assert_eq!(
         movement_label(true, Some(ObjectKind::Tree)),
