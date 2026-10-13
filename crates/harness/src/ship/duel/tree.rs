@@ -7,6 +7,8 @@ use crate::{
         test_first::inline,
     },
 };
+pub(crate) mod kept;
+
 use std::{collections::BTreeSet, path::Path, process::Command};
 
 fn paths(root: &Path, args: &[&str]) -> git::Result<Vec<String>> {
@@ -53,16 +55,6 @@ pub(crate) fn changed(root: &Path) -> git::Result<Vec<String>> {
     Ok(all.into_iter().collect())
 }
 
-/// True when the tree has changes and every one is a test file: a tester's work to resume from.
-pub(crate) fn only_test_changes(root: &Path) -> git::Result<bool> {
-    let paths = changed(root)?;
-    Ok(!paths.is_empty()
-        && paths.iter().all(|p| {
-            let lower = p.to_ascii_lowercase();
-            is_test_path(&lower) && protected_path(&lower).is_none()
-        }))
-}
-
 pub(crate) fn since(root: &Path, base: &str) -> git::Result<Vec<String>> {
     let mut all: BTreeSet<_> = paths(
         root,
@@ -83,14 +75,33 @@ pub(crate) fn validate(
     head: &str,
     branch: &str,
 ) -> git::Result<Vec<String>> {
+    validate_keeping(root, tester, head, branch, false)
+}
+
+/// `validate`; with `keep` a violation is reported but the tree is left as it is, because
+/// the work is not this driver's agent's (a resumed round) and is never discarded.
+pub(crate) fn validate_keeping(
+    root: &Path,
+    tester: bool,
+    head: &str,
+    branch: &str,
+    keep: bool,
+) -> git::Result<Vec<String>> {
+    let discard = |root: &Path, head: &str| -> git::Result<&'static str> {
+        if keep {
+            Ok("kept")
+        } else {
+            restore(root, head).map(|()| "restored")
+        }
+    };
     if git::git(root, &["rev-parse", "HEAD"])? != head || git::branch(root)? != branch {
         return Err("agent moved HEAD or the branch; stop and inspect Git state".into());
     }
     let paths = match changed(root) {
         Ok(paths) => paths,
         Err(error) => {
-            restore(root, head)?;
-            return Err(format!("{error} (restored)"));
+            let outcome = discard(root, head)?;
+            return Err(format!("{error} ({outcome})"));
         }
     };
     let bad: Vec<_> = paths
@@ -108,21 +119,23 @@ pub(crate) fn validate(
         .cloned()
         .collect();
     if !bad.is_empty() {
-        restore(root, head)?;
+        let outcome = discard(root, head)?;
         return Err(format!(
-            "{} changed forbidden paths (restored): {}",
+            "{} changed forbidden paths ({outcome}): {}",
             if tester { "tester" } else { "implementer" },
             bad.join(", ")
         ));
     }
     if tester && let Err(error) = validate_test_names(root, head, &paths) {
-        restore(root, head)?;
-        return Err(format!("tester removed test functions (restored): {error}"));
+        let outcome = discard(root, head)?;
+        return Err(format!(
+            "tester removed test functions ({outcome}): {error}"
+        ));
     }
     if !tester && let Err(error) = validate_inline(root, head, &paths) {
-        restore(root, head)?;
+        let outcome = discard(root, head)?;
         return Err(format!(
-            "implementer changed inline test code (restored): {error}"
+            "implementer changed inline test code ({outcome}): {error}"
         ));
     }
     Ok(paths)

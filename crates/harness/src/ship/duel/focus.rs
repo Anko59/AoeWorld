@@ -24,10 +24,6 @@ pub(crate) struct CheckReport {
     pub(crate) tests: Vec<String>,
     pub(crate) failed: Vec<String>,
     pub(crate) untouched: Vec<String>,
-    /// Wasm suites whose tests the runner did not name: their entry in `tests`/`failed`
-    /// is only an exit status.
-    #[serde(default)]
-    pub(crate) exit_only: Vec<String>,
     #[serde(default)]
     pub(crate) locations: BTreeMap<String, (String, usize)>,
 }
@@ -268,7 +264,6 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         report.build_failed |= wasm.build_failed;
         report.tests.extend(wasm.tests);
         report.failed.extend(wasm.failed);
-        report.exit_only.extend(wasm.exit_only);
     }
     report.tests.sort();
     report.tests.dedup();

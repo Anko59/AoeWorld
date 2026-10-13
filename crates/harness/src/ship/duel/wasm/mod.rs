@@ -21,7 +21,8 @@ pub(super) fn check(root: &Path, wasm: &[String], cache: &Path) -> git::Result<C
     results(&runs)
 }
 
-/// Fold suite runs into one report. A run that ended without a verdict is unavailable.
+/// Fold suite runs into one report. A run that ended without a verdict, or failed without
+/// a named test or a compile error, is unavailable: never red evidence.
 pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
@@ -44,7 +45,6 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
         } else {
             format!("{}::{}", run.package, run.binary)
         };
-        let mut named = 0;
         for line in run.output.lines() {
             let Some(rest) = line.trim().strip_prefix("test ") else {
                 continue;
@@ -70,19 +70,12 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
                 }
                 _ => continue,
             }
-            named += 1;
         }
         let failed_named = report
             .failed
             .iter()
             .any(|n| n.starts_with(&format!("{binary}$")));
         if passed && !failed_named {
-            if named == 0 {
-                // The runner printed no test lines: exit status is the only evidence.
-                let name = exit_only_name(run.package);
-                report.tests.push(name.clone());
-                report.exit_only.push(name);
-            }
             continue;
         }
         report.passed = false;
@@ -111,16 +104,16 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
                 tail(&run.output)
             ));
         } else {
-            let name = exit_only_name(run.package);
-            report.failed.push(name.clone());
-            report.exit_only.push(name);
+            // Neither a named failure nor a compile error: this says nothing about the tests.
+            return Err(format!(
+                "wasm check unavailable: {} exited {:?} without a named failing test or a compile error; rerun, or choose the check with DUEL_CHECK\n{}",
+                run.package,
+                run.exit,
+                tail(&run.output)
+            ));
         }
     }
     Ok(report)
-}
-
-pub(super) fn exit_only_name(package: &str) -> String {
-    format!("{package}::wasm-suite")
 }
 
 fn tail(output: &str) -> String {

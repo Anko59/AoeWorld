@@ -108,7 +108,7 @@ fn wasm_results_name_passed_and_failed_tests_like_nextest() {
         output,
     )])
     .unwrap();
-    assert!(!report.passed && !report.build_failed && report.exit_only.is_empty());
+    assert!(!report.passed && !report.build_failed);
     assert_eq!(
         report.failed,
         ["aoe-rendering$surface_mesh::tests::shore::b"]
@@ -164,26 +164,30 @@ fn wasm_build_failure_is_build_failed_and_a_missing_tool_is_unavailable() {
 }
 
 #[test]
-fn unnamed_wasm_results_fall_back_to_exit_status_and_say_so() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path();
-    let paths = rendering(root, WASM_TEST);
-    let red = wasm::results(&[run(
-        "aoe-rendering",
-        "lib",
-        CaptureExit::Failed(Some(1)),
+fn an_unnamed_wasm_failure_is_unavailable_never_red() {
+    // Replaces the removed exit-status fallback (`<pkg>::wasm-suite` as a pseudo-test).
+    let crashed = |output: &str| {
+        wasm::results(&[run(
+            "aoe-rendering",
+            "lib",
+            CaptureExit::Failed(Some(1)),
+            output,
+        )])
+    };
+    for output in [
         "boom\n",
-    )])
-    .unwrap();
-    assert!(!red.passed && red.exit_only == red.failed);
-    let (authored, notes) = authored::evidence(root, &paths, &red).unwrap();
-    assert!(
-        authored && notes[0].contains("judged by exit status"),
-        "{notes:?}"
-    );
+        "test a ... ok\n",
+        "error: the lock file needs updating\n",
+    ] {
+        let error = crashed(output).unwrap_err();
+        assert!(
+            error.contains("wasm check unavailable") && error.contains("DUEL_CHECK"),
+            "{error}"
+        );
+    }
+    // A passing run with no test lines is a pass with nothing named, not a pseudo-test.
     let pass = wasm::results(&[run("aoe-rendering", "lib", CaptureExit::Success, "ok\n")]).unwrap();
-    assert!(pass.passed);
-    green::validate(root, &paths, None, &red, &pass).unwrap();
+    assert!(pass.passed && pass.tests.is_empty() && pass.failed.is_empty());
 }
 
 #[test]
@@ -204,7 +208,6 @@ fn a_failing_wasm_test_in_a_changed_file_is_red_evidence_and_green_requires_it_t
         red.failed,
         ["aoe-rendering$surface_mesh::tests::shore::shore_is_wet"]
     );
-    assert!(red.exit_only.is_empty());
     assert!(authored::evidence(root, &paths, &red).unwrap().0);
     let pass = wasm::results(&[run(
         "aoe-rendering",

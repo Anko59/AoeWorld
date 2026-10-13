@@ -290,7 +290,14 @@ run in `make ship`, while both role prompts require only the focused check.
 A package compile error reported by Cargo is red because a test may name
 production APIs not written yet. A missing nextest command, invalid arguments,
 or another failure without compile errors or failing-test events makes the
-check unavailable and refuses the step without committing.
+check unavailable and refuses the step without committing. The tester's test files
+are then kept uncommitted and the driver records them (branch, HEAD and a content hash
+of each path) in `<git common dir>/aoe-ship/duel-kept/<branch>.json`. A rerun resumes
+from them only when the dirty tree matches that record exactly; any other dirty tree is
+refused (`commit first` / `commit or stash`) and left untouched. The record is removed
+when the round commits or the duel ends otherwise. A resumed round never runs
+`git reset --hard` or `git clean` over that work: a passing red check, an unauthored red
+or a role violation stops with the reason and leaves the files in place.
 If tests cannot compile for a reason other than missing production code (such
 as a syntax error in a test), the implementer stops and reports
 `DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with
@@ -320,8 +327,9 @@ wasm-bindgen suite in the Docker browser stage instead of native nextest, which 
 no tests there: a file with `wasm_bindgen_test`s (or no tests, a helper) runs wasm, one
 with `#[test]`s runs nextest, one with both runs both. The wasm results are named
 `<package>$<module path>::<test>` and follow the same red/green/authorship rules, and a
-wasm build failure is a build-failed red. If the runner prints no test lines, that
-package is judged by exit status only and the summary says so. Fuzz targets in their separate workspace and other unsupported paths
+wasm compile failure of the test target is a build-failed red. A wasm run that exits
+non-zero with neither a named failing test nor a compile error (a crash, a timeout, a
+lock-file error) makes the check unavailable, never red; rerun it or use `DUEL_CHECK`. Fuzz targets in their separate workspace and other unsupported paths
 stop before the implementer launches and require `DUEL_CHECK` (for example
 `make fuzz-smoke`). Red means a selected package fails to build or at least
 one failing test belongs to a tester-changed file, matched by nextest binary id

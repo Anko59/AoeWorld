@@ -77,7 +77,6 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
         report.failed.extend(browser.failed);
         report.untouched.extend(browser.untouched);
         report.locations.extend(browser.locations);
-        report.exit_only.extend(browser.exit_only);
     }
     focus::save(&cache, &report)?;
     if let Some(reason) = report.unavailable {

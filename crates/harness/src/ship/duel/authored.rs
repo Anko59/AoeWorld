@@ -40,14 +40,6 @@ fn has_failure_with_notes(
         if report.untouched.contains(name) {
             continue;
         }
-        // A wasm suite whose tests the runner did not name is judged by exit status:
-        // its package owns a test file this round's tester changed.
-        if report.exit_only.contains(name) {
-            notes.push(format!(
-                "wasm results of {name} could not be named; judged by exit status only"
-            ));
-            return Ok(true);
-        }
         if report
             .locations
             .get(name)
