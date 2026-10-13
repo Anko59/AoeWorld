@@ -17,6 +17,48 @@ fn webgl_shallow_water_fades_into_sand_at_two_zooms() {
 }
 
 #[wasm_bindgen_test]
+fn webgl_snow_diamond_edges_have_no_discarded_pinholes() {
+    let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
+    for y in 0_i32..49 {
+        for x in 0_i32..97 {
+            if (x - 48).abs() + 2 * (y - 24).abs() <= 48 {
+                let offset = (y as usize * 2048 + x as usize) * 4;
+                pixels[offset..offset + 4].copy_from_slice(&[210, 220, 230, 255]);
+            }
+        }
+    }
+    let (canvas, mut renderer) = target(&pixels);
+    let mut face = triangle(
+        [[64.0, 12.0], [116.0, 64.0], [64.0, 116.0]],
+        [0.0; 3],
+        [1.0; 3],
+    );
+    face.material = 7;
+    face.tint = 6;
+    face.texture_uv = Some(crate::AtlasAddress {
+        page: 0,
+        uv: [0.0, 0.0, 97.0 / 2048.0, 49.0 / 2048.0],
+    });
+    render(&mut renderer, &mut [instance(&face)]);
+    let mut checked = 0;
+    for y in 13..116 {
+        for x in 64..116 {
+            let p = ScreenPoint {
+                x: f64::from(x) + 0.5,
+                y: f64::from(y) + 0.5,
+            };
+            if crate::surface_mesh::barycentric(face.points, p)
+                .is_some_and(|w| w.iter().all(|v| *v > 0.001))
+            {
+                assert!(pixel(&canvas, x, y)[0] >= 200, "snow hole at {x},{y}");
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 2000);
+}
+
+#[wasm_bindgen_test]
 fn webgl_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
     let (canvas, mut renderer) = target(&fixture::atlas());
     let mut dirt = Vec::new();

@@ -2,6 +2,36 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn diamond_mask_stair_steps_do_not_make_holes_in_continuous_ground_edges() {
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
+    for y in 0_i32..49 {
+        for x in 0_i32..97 {
+            if (x - 48).abs() + 2 * (y - 24).abs() <= 48 {
+                let offset = (y as usize * 2048 + x as usize) * 4;
+                atlas[offset..offset + 4].copy_from_slice(&[210, 220, 230, 255]);
+            }
+        }
+    }
+    let address = crate::AtlasAddress {
+        page: 0,
+        uv: [0.0, 0.0, 97.0 / 2048.0, 49.0 / 2048.0],
+    };
+    for at in [
+        [0.759, 0.259],
+        [0.241, 0.259],
+        [0.759, 0.741],
+        [0.241, 0.741],
+    ] {
+        assert_eq!(sample(&atlas, address, at, None), [210, 220, 230, 255]);
+    }
+    assert_eq!(
+        sample(&atlas, address, [0.0, 0.0], None),
+        [0; 4],
+        "outside the diamond stays transparent"
+    );
+}
+
+#[wasm_bindgen_test]
 fn threshold_nonfinite_and_quadrants_keep_nearest_ieee_fallback() {
     let address = crate::AtlasAddress {
         page: 0,

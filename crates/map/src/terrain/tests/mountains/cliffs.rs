@@ -1,6 +1,47 @@
 use super::*;
 use crate::CompactChunk;
 
+#[test]
+fn straight_contour_cells_share_a_level_ledge_and_keep_their_downhill_direction() {
+    let generator = plane(-432, 0);
+    let mut joined = 0;
+    for y in (601..739).step_by(3) {
+        for x in (97..670).step_by(3) {
+            let anchor = TileCoord::new(x, y);
+            let next = TileCoord::new(x, y + 3);
+            let Some(first) = generator
+                .cliff_piece_with_cancel(anchor, &|| false)
+                .unwrap()
+            else {
+                continue;
+            };
+            let Some(second) = generator.cliff_piece_with_cancel(next, &|| false).unwrap() else {
+                continue;
+            };
+            assert_eq!(first.facing, second.facing, "a straight ridge never flips");
+            let ledge = generator
+                .sample_base_tile(anchor)
+                .surface
+                .corner_game_height_levels;
+            assert_eq!(ledge, [ledge[0]; 4], "rock supports a level ledge");
+            for at in [anchor, next] {
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let tile = generator.sample_base_tile(TileCoord::new(at.x + dx, at.y + dy));
+                        assert_eq!(tile.surface.corner_game_height_levels, ledge);
+                        assert_eq!(tile.game_height_level, ledge[0]);
+                        assert!(!tile.passable);
+                    }
+                }
+            }
+            let below = generator.sample_base_tile(TileCoord::new(x + 2, y));
+            assert!(ledge[0] > below.surface.corner_game_height_levels[0]);
+            joined += 1;
+        }
+    }
+    assert!(joined > 100, "fixture must exercise joined runs: {joined}");
+}
+
 /// Maximal runs of `true` as (start, length).
 fn runs(values: &[bool]) -> Vec<(usize, usize)> {
     let mut result = Vec::new();

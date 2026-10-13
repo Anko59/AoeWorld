@@ -71,7 +71,7 @@ fn frontmost_surface_depth_includes_elevation_and_cliff_faces() {
     let triangles = projected_surface_triangles(&[ground, high], camera);
     let screen = ScreenPoint { x: 128.0, y: 32.0 };
     assert_eq!(surface_depth_at(&triangles, screen), Some(7.0));
-    assert_eq!(pick_surface_point(&triangles, screen), None);
+    assert_eq!(pick_surface_point(&triangles, screen), Some([0.5, 0.5]));
 }
 
 #[wasm_bindgen_test]

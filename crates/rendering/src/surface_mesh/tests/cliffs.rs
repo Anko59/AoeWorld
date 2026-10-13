@@ -1,0 +1,162 @@
+use super::*;
+
+#[wasm_bindgen_test]
+fn coarse_terrain_keeps_the_cliff_wall_instead_of_averaging_its_ledge_away() {
+    let camera = SceneCamera {
+        center: [48.0; 2],
+        zoom: 0.25,
+        viewport: [1440.0, 1000.0],
+        focus_elevation_meters: 2.0,
+    };
+    let terrain = (0..96)
+        .flat_map(|y| {
+            (0..96).map(move |x| {
+                let cliff = (45..48).contains(&x);
+                let height = if x < 48 { 4 } else { 0 };
+                SceneTerrain {
+                    position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                    material: 7,
+                    elevation_meters: f64::from(height),
+                    appearance: None,
+                    surface: SceneTerrainSurface {
+                        corner_game_height_levels: [height; 4],
+                        kind: if cliff {
+                            SceneTerrainSurface::CLIFF
+                        } else {
+                            SceneTerrainSurface::PLATEAU
+                        },
+                        triangulation: 0,
+                        water: 0,
+                    },
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let faces = projected_surface_triangles(&terrain, camera);
+    assert!(faces.len() <= MAX_SURFACE_TRIANGLES);
+    let walls = faces.iter().filter(|face| face.skirt).collect::<Vec<_>>();
+    assert!(walls.len() > 10, "a ridge is visible at minimum zoom");
+    assert!(
+        walls
+            .iter()
+            .flat_map(|face| face.points)
+            .any(|point| point.world[2] == 4.0)
+    );
+}
+
+#[wasm_bindgen_test]
+fn a_foremost_nonpickable_wall_does_not_cancel_the_ground_hit() {
+    let camera = SceneCamera {
+        center: [1.0, 1.0],
+        zoom: 1.0,
+        viewport: [256.0, 128.0],
+        focus_elevation_meters: 0.0,
+    };
+    let ground = SceneTerrain {
+        position: [0.5; 2],
+        material: 7,
+        elevation_meters: 0.0,
+        appearance: None,
+        surface: SceneTerrainSurface::flat(0.0),
+    };
+    let faces = projected_surface_triangles(&[ground], camera);
+    let mut occluder = faces[0];
+    occluder.pickable = false;
+    for point in &mut occluder.points {
+        point.world[2] = 10.0;
+    }
+    let pointer = ScreenPoint { x: 140.0, y: 32.0 };
+    let expected = pick_surface_point(&faces, pointer).unwrap();
+    for skirt in [true, false] {
+        occluder.skirt = skirt;
+        let mut triangles = faces.clone();
+        triangles.push(occluder);
+        assert_eq!(pick_surface_point(&triangles, pointer), Some(expected));
+        triangles.reverse();
+        assert_eq!(pick_surface_point(&triangles, pointer), Some(expected));
+        assert_eq!(pick_surface_point(&[occluder], pointer), None);
+    }
+}
+
+#[wasm_bindgen_test]
+fn joined_cliff_walls_use_straight_native_rock_and_share_the_ledge_vertices() {
+    let camera = SceneCamera {
+        center: [1.0, 1.0],
+        zoom: 1.0,
+        viewport: [512.0; 2],
+        focus_elevation_meters: 2.0,
+    };
+    let mut terrain = Vec::new();
+    for y in 0..2 {
+        for x in 0..2 {
+            let height = if x == 0 { 4 } else { 0 };
+            terrain.push(SceneTerrain {
+                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                elevation_meters: f64::from(height),
+                material: 7,
+                appearance: None,
+                surface: SceneTerrainSurface {
+                    corner_game_height_levels: [height; 4],
+                    kind: if x == 0 {
+                        SceneTerrainSurface::CLIFF
+                    } else {
+                        SceneTerrainSurface::PLATEAU
+                    },
+                    triangulation: 0,
+                    water: 0,
+                },
+            });
+        }
+    }
+    let mut art = test_art(GameFrame {
+        atlas: AtlasAddress {
+            page: 0,
+            uv: [0.0, 0.0, 0.05, 0.025],
+        },
+        size: [97.0, 49.0],
+        anchor: [0.0; 2],
+    });
+    art.scenery.cliff_faces = (0..25)
+        .map(|slot| GameFrame {
+            atlas: AtlasAddress {
+                page: 2,
+                uv: [slot as f32 / 32.0, 0.0, 0.03, 0.07],
+            },
+            size: [294.0, 156.0],
+            anchor: [153.0, 80.0],
+        })
+        .collect();
+    let mut faces = projected_surface_triangles(&terrain, camera);
+    apply_terrain_textures(&mut faces, &art);
+    let walls = faces.iter().filter(|face| face.skirt).collect::<Vec<_>>();
+    assert_eq!(walls.len(), 4);
+    for wall in &walls {
+        let address = wall.texture_uv.unwrap();
+        assert_eq!(address.page, 2, "native rock, never snow or gravel");
+        assert_eq!(wall.tint, 0, "retain the authored face lighting");
+        assert!(!wall.pickable);
+        for point in wall.points.iter().filter(|point| point.world[2] == 4.0) {
+            assert!(
+                faces
+                    .iter()
+                    .filter(|face| !face.skirt)
+                    .flat_map(|face| face.points)
+                    .any(|top| top.world == point.world && top.screen == point.screen)
+            );
+        }
+    }
+    assert!(
+        walls
+            .iter()
+            .filter(|wall| wall.tile[1] == 0)
+            .flat_map(|wall| wall.points)
+            .any(|point| point.world == [1.0, 1.0, 0.0])
+    );
+    assert!(
+        walls
+            .iter()
+            .filter(|wall| wall.tile[1] == 1)
+            .flat_map(|wall| wall.points)
+            .any(|point| point.world == [1.0, 1.0, 4.0])
+    );
+}
