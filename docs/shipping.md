@@ -136,9 +136,7 @@ the PR") and renders two parts:
 
 - **🧑 For humans:** Why, What with the showcase video (`SHIP_VIDEO`, uploaded
   inline with `gh --attach`), and How with the review headline, summary, and a
-  metrics table comparing the merge base with this PR. It reports changed lines
-  by class, unit and integration `#[test]` attributes, production comment
-  density, and production line counts.
+  metrics table comparing the merge base with this PR ([metrics](#metrics)).
 - **🤖 For AI:** the agent's notes, the [test-first report](#test-first), gate
   evidence and the full adversarial review.
 
@@ -155,11 +153,49 @@ Record it with `make showcase` ([showcase videos](showcase.md)). Duration and
 audio-stream presence are checked with ffmpeg from the pinned browser image. High and max levels require an audio stream; reviewers decide
 whether that track contains speech.
 
-Metrics read tracked Rust blobs from the named commit or merge base. Blobs over
-1 MiB and binary blobs are omitted. Comment density uses a small Rust lexical
-scanner that ignores markers inside ordinary and raw strings and handles nested
-block comments; it does not parse macro-generated tokens or languages embedded
-inside strings.
+## Metrics
+
+`make metrics` writes the metrics of one commit (HEAD, or `METRICS_REV=<rev>`)
+to `<git common dir>/aoe-ship/metrics/<sha>.json` and prints it. Every role may
+run it: it only reads. The PR table is built from the snapshots of the merge
+base and of HEAD, as base → PR with a delta and a 🟢/🔴 marker where a metric
+has a good direction. It has one row per metric, and the PR level (the first line of
+`SHIP_BODY`) picks the rows:
+
+| Level | Rows |
+|---|---|
+| low | lines changed by class, `#[test]` attributes (unit, integration), production comment density and lines, largest human-authored file |
+| medium | + generated lines changed, wasm, Playwright and fuzz test counts, Cargo and npm dependencies, `unsafe` lines, TODO/FIXME lines, files within 10% of or over the 500-line limit |
+| high | + total lines and comment density per class, gate time, WASM size (raw, gzip), native server binary |
+| max | + line coverage and the perf smoke figures (p95 tick, entities, encoded bytes) |
+
+**Static** values come from git blobs at that commit and need no build. Lines
+use the classes production, tests, harness, docs, config and generated
+(lockfiles, `docs/gates.md`). Comment density uses the Rust lexer for `.rs` and
+whole `//` or `#` lines for TypeScript, shell, YAML and TOML. Test counts: Rust
+`#[test]` in unit files (`crates/*/src`) and integration files
+(`crates/*/tests`), `#[wasm_bindgen_test]`, Playwright `test(` cases in
+`browser/tests`, and fuzz targets (`fuzz/fuzz_targets/*.rs`). Dependencies are
+the third-party packages (with a `source`) of `Cargo.lock` and `fuzz/Cargo.lock`
+and the packages of `browser/package-lock.json`. `unsafe` counts non-comment
+production lines with the keyword; TODO/FIXME counts production, test and
+config lines. The largest-file and limit rows use the same human-authored
+text files as `make structure-check`. Blobs over 1 MiB (16 MiB for lockfiles)
+and binary blobs are omitted.
+
+**Measured** values are never produced by `make metrics`: it reads reports that
+already exist and shows "—" otherwise. They apply to the checked-out commit
+only and only when the report was written after that commit was made: coverage
+(`reports/coverage/summary.json`), WASM size (`reports/perf/optimized.wasm`,
+`.gz`, else the largest `web/pkg/*.wasm`), the native binary
+(`target/release/aoe-server`), the perf smoke report (`reports/perf/smoke.json`,
+clean and for that commit) and the gate seconds of that commit's ship evidence.
+A later snapshot of the same commit keeps measured values an earlier one had.
+Measured rows with no value on either side are left out of the table.
+
+The comment scanner ignores markers inside ordinary and raw strings and handles
+nested block comments; it does not parse macro-generated tokens or languages
+embedded inside strings.
 
 CI then runs every selected gate again; the `required` check gates the merge,
 and GitHub auto-merge merges an armed pull request when the required checks

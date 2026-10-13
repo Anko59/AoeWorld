@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "window_hours": 24,
+  "max_test_drop": 0,
+  "max_unsafe_increase": 0,
+  "max_todo_increase": 5,
+  "max_dependency_increase": 5,
+  "max_files_over_limit": 0
+}

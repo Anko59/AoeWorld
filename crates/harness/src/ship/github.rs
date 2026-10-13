@@ -363,7 +363,7 @@ pub(super) fn description(
         report,
         evidence,
         &describe::footer(options.runtime),
-        &super::metrics::table(root, &evidence.base_branch)?,
+        &super::metrics::table(root, &evidence.base_branch, template.level)?,
         &super::test_first::summary(root, &evidence.merge_base, &evidence.head),
     );
     let text = match &options.parent {
