@@ -24,6 +24,11 @@ Finland and replaces the former pilot restriction. File coverage does not prove
 uniform completeness of the reach inventory.
 
 Hydrology pages persist projected source line segments in 1/256 tile units.
+The segment tuple is `[start_x, start_y, end_x, end_y, width, station_start,
+station_end, source_delta_x, source_delta_y, source_station_delta]`. Original
+direction and station span are retained before clipping and are required in the
+single current format. Curve trims use the full source length and direction;
+clipping cannot change the bend or its ford phase.
 Lines are simplified by at most a quarter tile and clipped to their page plus
 the maximum five-tile river half-width margin. Package validation rejects
 segments outside that page margin through one contextual page validator used
@@ -31,8 +36,8 @@ by complete server verification, activation, provider decode/reload, generated-m
 self-checks and streamed writer verification. It also checks exact page shape
 and water-model presence against the index. This applies before lake/ocean or
 correction shortcuts can skip physical river work.
-At most 1024 compact seven-integer segments fit a page; existing page byte
-limits also apply. Geometry, width and distance stations participate in the page
+At most 1024 compact ten-integer segments fit a page; existing page byte
+limits also apply. Geometry, width, distance stations and original segment metadata participate in the page
 content root. The required geometry field changes the single current format
 in place: regenerate packages and clear chunk caches; there is no old reader.
 

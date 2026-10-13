@@ -253,6 +253,8 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
             width_units: 3 * 256,
             station_start: 256,
             station_end: 7 * 256,
+            source_delta: [1536, 0],
+            source_station_delta: 1536,
         }],
         level: 0,
         x: 0,

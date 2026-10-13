@@ -332,6 +332,10 @@ impl HydrologyEvidencePage {
             hash.update(&segment.width_units.to_le_bytes());
             hash.update(&segment.station_start.to_le_bytes());
             hash.update(&segment.station_end.to_le_bytes());
+            for delta in segment.source_delta {
+                hash.update(&delta.to_le_bytes());
+            }
+            hash.update(&segment.source_station_delta.to_le_bytes());
         }
         if let Some(model) = &self.water_model {
             hash.update(b"modeled-water-v1\0");

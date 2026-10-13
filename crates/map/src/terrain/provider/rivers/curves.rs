@@ -68,7 +68,12 @@ pub(super) fn shape(segments: &[RiverSegment]) -> Vec<Vec<RiverSegment>> {
                     4,
                 );
             }
-            if middle.start != middle.end {
+            let remaining = [0, 1].map(|i| i64::from(middle.end[i]) - i64::from(middle.start[i]));
+            let forward = remaining[0] * i64::from(s.source_delta[0])
+                + remaining[1] * i64::from(s.source_delta[1]);
+            // A trim may extend beyond a page-clipped stub. Do not reverse
+            // that stub into an extra straight piece beside the source arc.
+            if middle.start != middle.end && forward > 0 {
                 output.push(middle);
             }
             output.extend(tail);
@@ -77,23 +82,21 @@ pub(super) fn shape(segments: &[RiverSegment]) -> Vec<Vec<RiverSegment>> {
         .collect()
 }
 
-/// Cut at most six tiles or a quarter of either segment. The quadratic
+/// Cut at most six tiles or a quarter of the unclipped source segment. The quadratic
 /// remains in their convex hull, at most 3 tiles from the source polyline.
 fn trim(s: RiverSegment, end: bool) -> RiverSegment {
-    let (a, b, station_a, station_b) = if end {
-        (s.end, s.start, s.station_end, s.station_start)
+    let (a, station_a) = if end {
+        (s.end, s.station_end)
     } else {
-        (s.start, s.end, s.station_start, s.station_end)
+        (s.start, s.station_start)
     };
-    let length = (i64::from(b[0]) - i64::from(a[0]))
-        .abs()
-        .max((i64::from(b[1]) - i64::from(a[1])).abs())
-        .max(1);
+    let direction = s.source_delta.map(i64::from);
+    let length = direction[0].abs().max(direction[1].abs()).max(1);
     let cut = (length / 4).min(6 * 256);
+    let sign = if end { -1 } else { 1 };
     RiverSegment {
-        start: [0, 1]
-            .map(|i| (i64::from(a[i]) + (i64::from(b[i]) - i64::from(a[i])) * cut / length) as i32),
-        station_start: station_a + (station_b - station_a) * cut / length,
+        start: [0, 1].map(|i| (i64::from(a[i]) + sign * direction[i] * cut / length) as i32),
+        station_start: station_a + sign * s.source_station_delta * cut / length,
         ..s
     }
 }

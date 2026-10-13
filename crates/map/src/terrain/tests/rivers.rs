@@ -59,6 +59,23 @@ fn crossing_with_height(
     }
     // Geometry is deliberately between evidence cell centres; changing the
     // raster axis must not change its playable width or remove the channel.
+    let segments = segments
+        .into_iter()
+        .map(|s| {
+            [
+                s[0],
+                s[1],
+                s[2],
+                s[3],
+                s[4],
+                s[5],
+                s[6],
+                s[2] - s[0],
+                s[3] - s[1],
+                s[6] - s[5],
+            ]
+        })
+        .collect::<Vec<_>>();
     let mut value = serde_json::json!({
         "level": 0, "x": 0, "y": 0, "width": 33, "height": 33,
         "kind": vec![crate::HydrologyKind::NoEvidence as u8; 1089],
@@ -191,6 +208,8 @@ fn river_width_crosses_evidence_page_edges_without_a_cut_or_query_order_change()
                     width_units: 6 * 256,
                     station_start: i64::from(start_y),
                     station_end: i64::from(end_y),
+                    source_delta: [0, WIDTH * 256],
+                    source_station_delta: i64::from(WIDTH * 256),
                 }]
             } else {
                 vec![]

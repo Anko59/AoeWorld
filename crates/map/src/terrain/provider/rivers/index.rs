@@ -187,3 +187,7 @@ impl Index {
         best
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/rivers/index.rs"]
+mod tests;

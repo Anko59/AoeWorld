@@ -68,10 +68,23 @@ pub(super) fn segments(
                 let start = coordinate(interpolate(a));
                 let end = coordinate(interpolate(b));
                 if start != end {
+                    let source_start = coordinate(pair[0]);
+                    let source_end = coordinate(pair[1]);
+                    let mut source_delta = [0; 2];
+                    for axis in 0..2 {
+                        source_delta[axis] = source_end[axis]
+                            .checked_sub(source_start[axis])
+                            .ok_or(GeodataError::Preparation(
+                                "river source segment exceeds coordinate range",
+                            ))?;
+                    }
                     let segment = RiverSegment {
                         start,
                         end,
                         width_units,
+                        source_delta,
+                        source_station_delta: (station - segment_length * units).round() as i64
+                            - station.round() as i64,
                         station_start: (station - a * segment_length * units).round() as i64,
                         station_end: (station - b * segment_length * units).round() as i64,
                     };

@@ -75,6 +75,8 @@ fn river_mouths_keep_lake_and_sea_priority_with_and_without_water_models() {
                     width_units: 6 * 256,
                     station_start: 0,
                     station_end: 257 * 256,
+                    source_delta: [0, 65792],
+                    source_station_delta: 65792,
                 }],
             };
             let root = crate::ordered_hydrology_page_root(std::slice::from_ref(&page)).unwrap();

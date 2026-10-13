@@ -378,6 +378,8 @@ fn typed_evidence_pages_round_trip_and_stream_verify_on_independent_axis() {
             width_units: 768,
             station_start: 0,
             station_end: 1000,
+            source_delta: [67108864, 67108864],
+            source_station_delta: 1000,
         };
         1024
     ];

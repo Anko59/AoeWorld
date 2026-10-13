@@ -179,6 +179,8 @@ fn subpixel_source_river_remains_continuous_in_the_minimap() {
                 width_units: 3 * 256,
                 station_start: 0,
                 station_end: 2048 * 256,
+                source_delta: [0, 524288],
+                source_station_delta: 524288,
             }],
         }),
         EnvironmentPage::ModernLandCover(ModernLandCoverPage {

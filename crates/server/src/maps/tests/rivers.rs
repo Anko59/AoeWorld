@@ -24,6 +24,8 @@ fn hostile_package(directory: &FsPath, fault: u8) -> MapPackage {
             width_units: 768,
             station_start: 0,
             station_end: 1000,
+            source_delta: [67108864, 67108864],
+            source_station_delta: 1000,
         }),
         1 => hydrology.water_model = None,
         2 => environment.hydrology_evidence.as_mut().unwrap().water_model = None,

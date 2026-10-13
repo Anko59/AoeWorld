@@ -9,13 +9,13 @@ fn page_clipped_bend_matches_the_unwarped_complete_curve() {
         width_units: 3 * 256,
         station_start: 128 * 256,
         station_end: 64 * 256,
-        source_delta: [64 * 256, 0],
-        source_station_delta: -64 * 256,
+        source_delta: [16384, 0],
+        source_station_delta: -16384,
     };
     let outgoing = RiverSegment {
         start: incoming.end,
         end: [512 * 256, 320 * 256],
-        source_delta: [0, 64 * 256],
+        source_delta: [0, 16384],
         station_start: 64 * 256,
         station_end: 0,
         ..incoming
@@ -34,7 +34,11 @@ fn page_clipped_bend_matches_the_unwarped_complete_curve() {
     for y in 252..=260 {
         for x in 508..=516 {
             let point = [x * 256 + 128, y * 256 + 128];
-            assert_eq!(page.physical(point, 0, 0), complete.physical(point, 0, 0), "{point:?}");
+            assert_eq!(
+                page.physical(point, 0, 0),
+                complete.physical(point, 0, 0),
+                "{point:?}"
+            );
         }
     }
 }

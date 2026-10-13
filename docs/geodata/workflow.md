@@ -111,8 +111,10 @@ source inputs; old packages are not read. The default server package directory
 is `local-assets/map-packages`.
 
 Hydrology evidence pages require `river_segments`, including an empty array
-where there are no rivers. Each record contains seven integers: start x/y,
-end x/y, width, start station and end station, in 1/256 tile units. Geometry
+where there are no rivers. Each record contains ten integers: start x/y,
+end x/y, width, start station, end station, original direction x/y and original
+station span, in 1/256 tile units. Original metadata makes runtime corner cuts
+independent of page clipping and participates in the content hash. Geometry
 participates in the page content hash and must fit its page plus the maximum
 five-tile river half-width margin. The required geometry field changes the single current hydrology page format.
 There is no independently versioned hydrology evidence page format and no

@@ -217,6 +217,8 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
             width_units: 8 * 256,
             station_start: a * 256,
             station_end: b * 256,
+            source_delta: [(ex * 256) - (x * 256), (ey * 256) - (y * 256)],
+            source_station_delta: (b * 256) - (a * 256),
         })
         .collect(),
         level: 0,
