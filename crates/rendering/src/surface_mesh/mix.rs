@@ -394,12 +394,26 @@ pub(crate) fn weights(shares: [f32; 3], middle: bool, noise: f32) -> [f32; 3] {
 }
 
 /// Mountain sheets retain their authored colour on borders and junctions.
-pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32, _tint: u8) -> [f32; 4] {
-    if appearance & super::landscape::NATIVE_ICE != 0 && material == 8 {
+pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32, tint: u8) -> [f32; 4] {
+    let mut sample = if appearance & super::landscape::NATIVE_ICE != 0 && material == 8 {
         texel.map(f32::from)
     } else {
         layer(texel, material)
+    };
+    // Mixed faces keep the ordinary shade on grass/dirt. Cancel it only on
+    // mountain layers so their authored relief matches neighbouring pure tops.
+    if matches!(material, 4 | 7) {
+        let shade = match tint {
+            1 => 0.92,
+            2 => 0.78,
+            3 => 0.72,
+            _ => 1.0,
+        };
+        for channel in &mut sample[..3] {
+            *channel /= shade;
+        }
     }
+    sample
 }
 
 /// Ice and mud use bounded detail; native ground sheets retain their colours.

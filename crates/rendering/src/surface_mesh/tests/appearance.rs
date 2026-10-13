@@ -108,7 +108,7 @@ fn native_mountain_and_ice_sheets_preserve_scene_geometry() {
             apply_terrain_textures(&mut triangles, &art);
             for (old, new) in before.iter().zip(&triangles) {
                 assert_eq!(new.material, material);
-                assert_eq!(new.tint, old.tint);
+                assert_eq!(new.tint, if material == 8 { old.tint } else { 0 });
                 assert_eq!(new.texture_uv, Some(atlas));
                 assert!(new.texture_blend.is_none());
                 assert_eq!(new.pickable, old.pickable);

@@ -129,6 +129,17 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
             triangle.texture_materials = None;
             triangle.texture_blend = None;
         }
+        // Native mountain art already carries its relief. A coarse cell's
+        // ramp/cliff marker must not paint a flat polygon over that art.
+        let native_top =
+            !triangle.skirt && (triangle.pickable || art.scenery.cliff_faces.len() == 25);
+        if native_top
+            && matches!(triangle.material, 4 | 7)
+            && triangle.mix == [0; 6]
+            && triangle.appearance & mix::support::FULL == 0
+        {
+            triangle.tint = 0;
+        }
         triangle.appearance &= !super::landscape::NATIVE_ICE;
         if mix::texture(triangle, art) {
             if !art.water_depth[2].0.is_empty() {
@@ -138,7 +149,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         // Rock and snow draw native ground colours on pure and mixed faces.
         // Vertical closures and missing cliff art retain their stone kernel.
-        let cliff = triangle.skirt || !triangle.pickable;
+        let cliff = triangle.skirt || (!triangle.pickable && art.scenery.cliff_faces.len() != 25);
         let procedural = |material: u8| {
             (material == 4 && cliff)
                 || material == 9

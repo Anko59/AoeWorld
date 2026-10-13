@@ -214,6 +214,10 @@ vec4 mixed(vec4 texel, uint material, uint appearance, uint tint) {
         case 9u: kind = 9u; break;
     }
     vec4 color = vec4(ground(texel.rgb, kind), texel.a);
+    if (scene == 4u || scene == 7u) {
+        float shade = tint == 1u ? .92 : tint == 2u ? .78 : tint == 3u ? .72 : 1.0;
+        color.rgb /= shade;
+    }
     return color;
 }
 float lattice(ivec2 p) {

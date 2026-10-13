@@ -259,6 +259,9 @@ fn mixed(texel: vec4<f32>, material: u32, appearance: u32, tint: u32) -> vec4<f3
         default: {}
     }
     var color = vec4<f32>(ground(texel.rgb, kind), texel.a);
+    if scene == 4u || scene == 7u {
+        color = vec4<f32>(color.rgb / terrain_tint(tint), color.a);
+    }
     return color;
 }
 

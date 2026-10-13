@@ -117,7 +117,10 @@ boulders painted into the cliff faces are not used as separate objects.
 ## Snow ground
 
 Snow (scene material 7) draws soft ground 15026 as authored, including mixed
-borders. Frozen water (material 8) draws the separate blue ice 15024 sheet.
+borders. Authored mountain relief supplies the top shading: coarse ramp and
+cliff markers cannot paint grey or dark polygons onto pure rock/snow. Mixed
+layers cancel that face shade for mountains while grass/dirt retain theirs.
+Frozen water (material 8) draws the separate blue ice 15024 sheet.
 The native-ice flag avoids per-pixel directory checks. Snow no longer uses an
 ice-detail or whitening kernel. Climatic snow and bare rock stay authoritative
 over drawn variety, with no forage on either.

@@ -243,3 +243,53 @@ fn native_snow_keeps_soft_ground_art_instead_of_a_white_ice_kernel() {
         "pure snow must use the same native ground colour as mixed snow"
     );
 }
+
+#[wasm_bindgen_test]
+fn native_mountain_tops_keep_authored_colour_on_ramps_and_cliff_cells() {
+    let mut art = art();
+    art.scenery.cliff_faces = vec![art.terrain[4][0]; 25];
+    for material in [4, 7] {
+        for kind in [SceneTerrainSurface::RAMP, SceneTerrainSurface::CLIFF] {
+            let mut sample = ground(0, 0, material);
+            sample.surface.kind = kind;
+            sample.surface.corner_game_height_levels = [0, 1, 1, 0];
+            for zoom in [1.0, 0.25] {
+                let mut faces = projected_surface_triangles(
+                    &[sample],
+                    super::appearance_tests::camera([0.5; 2], zoom, [256.0, 128.0]),
+                );
+                let before = faces.clone();
+                apply_terrain_textures(&mut faces, &art);
+                for (old, face) in before.iter().zip(faces).filter(|(_, face)| !face.skirt) {
+                    assert_eq!(
+                        face.tint, 0,
+                        "native {material} top must not become a grey or shaded polygon"
+                    );
+                    assert_eq!(
+                        face.texture_uv,
+                        Some(terrain_texture_frame(&art, material, [0, 0]).unwrap().atlas)
+                    );
+                    assert_eq!(face.pickable, old.pickable);
+                    assert_eq!(face.points.map(|p| p.world), old.points.map(|p| p.world));
+                }
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn native_mountain_border_layers_match_unshaded_pure_ground_on_every_face() {
+    let word = 1 | 5 << 1;
+    for material in [4, 7] {
+        for source in [[230, 235, 240, 128], [95, 115, 145, 255]] {
+            for tint in 0..=3 {
+                let layer = mix::art_layer(source, material, word, tint);
+                let actual = landscape::blend([layer; 3], [1.0, 0.0, 0.0], tint, word);
+                assert_eq!(
+                    actual, source,
+                    "mountain {material} layer must not expose the face shading at its border"
+                );
+            }
+        }
+    }
+}

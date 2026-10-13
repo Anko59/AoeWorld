@@ -206,6 +206,13 @@ pub(crate) fn assert_shore(pixels: [[u8; 4]; 5]) {
 pub(crate) fn snow_scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     let mut faces = projected_surface_triangles(&terrain(case), camera(case));
     apply_terrain_textures(&mut faces, &snow_art());
+    // Exercise the mixed ramp shader on flat geometry to isolate colour from
+    // projection: authored mountain relief must match the unshaded pure tops.
+    if case == 7 {
+        for face in faces.iter_mut().filter(|face| face.mix != [0; 6]) {
+            face.tint = 1;
+        }
+    }
     faces
 }
 

@@ -396,9 +396,7 @@ fn native_snow_ramps_match_their_mixed_border() {
         let layer = mix::art_layer(source, 7, 1 | 5 << 1, 1);
         let border = landscape::blend([layer; 3], [1.0, 0.0, 0.0], 1, 1 | 5 << 1);
         for channel in 0..3 {
-            assert!(
-                border[channel].abs_diff((f32::from(source[channel]) * 0.92).round() as u8) <= 1
-            );
+            assert!(border[channel].abs_diff(source[channel]) <= 1);
         }
         assert_eq!(border[3], source[3]);
     }
