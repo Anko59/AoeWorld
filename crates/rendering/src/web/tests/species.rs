@@ -49,7 +49,7 @@ async fn webgpu_dressing_anchor_pixels() {
             .collect::<Vec<_>>();
         assert!(!sprites.is_empty());
         renderer.render_world_layers(&[], &sprites, clear).unwrap();
-        for pixel in read_pixels_with_clear(&renderer, 2, [[60, 63]], color).await {
+        for pixel in read_pixels_with_clear(&renderer, 2, [[64, 64]], color).await {
             assert_pixel(pixel, [255, 0, 0, 255]);
         }
     }

@@ -32,13 +32,21 @@ pub struct GameFrame {
     pub anchor: [f32; 2],
 }
 
-/// Optional mountain scenery; an empty group means the pack has no such art.
+/// Optional nonblocking scenery; an empty group means the pack has no such art.
 #[derive(Default)]
 pub struct SceneryArt {
     /// Raw 25-slot cliff-face group; only the reviewed slots are drawn.
     pub cliff_faces: Vec<GameFrame>,
     /// Grey rock piles drawn as loose rocks.
     pub rocks: Vec<GameFrame>,
+    /// Native scrub prefix; only the three low succulent forms are selected.
+    pub shrubs: Vec<GameFrame>,
+    /// Low wildflower patches.
+    pub grass: Vec<GameFrame>,
+    /// Weathered stumps, including signed/outside native hotspots.
+    pub stumps: Vec<GameFrame>,
+    /// Fallen mossy wood.
+    pub logs: Vec<GameFrame>,
 }
 
 pub struct GameArt {

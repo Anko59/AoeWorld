@@ -299,7 +299,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_200_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_218_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -329,6 +329,6 @@ async fn full_catalog_packs_1474_terrain_frames_and_200_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    assert_eq!(count(objects, [120, 120, 120, 255]), 200);
+    assert_eq!(count(objects, [120, 120, 120, 255]), 218);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }

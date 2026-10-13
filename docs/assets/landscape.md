@@ -3,8 +3,8 @@
 Catalog v11 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five base terrain sheets. Optional full conifer 4654 and palm 4653
 prefixes, three water depth sheets, four ground-variety sheets, rock 15033,
-soft snow 15026 and ice 15024 bring the ceiling to 1,674 frames
-(1,474 terrain/200 objects including cliff faces).
+soft snow 15026 and ice 15024 bring the ceiling to 1,692 frames
+(1,474 terrain/218 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -38,7 +38,7 @@ conifer/palm prefixes and the four ground sheets have moved to the reviewed opti
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 1,674 actual extents through the runtime packer; the
+test separately feeds all 1,692 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -157,3 +157,34 @@ paired shadow alignment, sheet seams/order and actual WebGPU/Canvas gameplay.
 Any promotion changes the catalog version and selection/packing budget tests.
 Portable parser/topology fixtures and private pack verification are distinct
 from these outstanding visual qualifications.
+
+## Ground dressing
+
+Catalog v11 adds graphics.drs prefixes 4474 (six), 2561 (seven), 1035 (three)
+and 1252 (two), bringing the selection to 1,492 frames: 1,274 terrain and 218
+objects. The runtime remains three 2048-square pages, 48 MiB and 2,048 frames.
+Original contact sheets and gameplay captures stay in ignored `.cache/showcase/`.
+
+Shrub selects only low succulent scrub 4474 slots 3–5 (14–21 by 14–23 pixels).
+Tall cacti 0–2 and the forage source 2560 are excluded. This narrow trial pack
+has no independently reviewed small leafy bush; succulent scrub in woodland is
+an art limitation. Grass selects all seven yellow wildflower patches 2561
+(56–84 by 31–46). Deadwood selects all three weathered stumps 1035
+(20–29 by 19–20) and both low mossy fallen logs 1252 (91–93 by 35–36).
+Raw signed hotspots survive packing, including stump slot 2 at (-3,13), and
+stump slot 0 at (20,25) below its 29 by 20 image. No source pixels are changed.
+Projectile debris 4585 and tall bare tree 1262 are discovery only.
+
+The variant plus orientation selects a native shape without mirroring its
+sunlight. Whole frames use the existing rock/world-object sprite path and
+128/96 art scale times zoom, shared by WebGPU, WebGL2 and Canvas. Culling and
+depth use the same selected native frame, ground contact and object clearance
+as resources and units. Dressing stays outside resource and passability state.
+
+Client selection retains half of shrub/deadwood records and one quarter of
+flower records by a deterministic world-tile hash. Rock and cliff selection is
+unchanged. Selection never depends on zoom, camera or iterator order. This
+restrains bright accents without altering map generation or viewport budgets.
+Portable tests cover catalog completeness, anchors, native variants, ordering,
+selection independence and anchor pixels on each backend. Those fixtures are
+separate from private-pack packing, gameplay appearance and frame cadence.

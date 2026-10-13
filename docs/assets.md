@@ -37,7 +37,7 @@ periodic sheets add medium water 15016, deep water 15015 and marsh shallows
 15014. Generated river `Ford` crossings draw with the light shallow 15002
 sheet; the marsh sheet stays imported but is not selected for fords. Ordinary
 shallow water remains impassable. A pack without an optional sheet draws the
-shallow sheet in its place. Catalog v11 selects natural rock ground 15033 and soft snow ground 15026,
+shallow sheet in its place. Catalog v12 selects natural rock ground 15033 and soft snow ground 15026,
 with distinct authored sheets and colours. Paved 15018 and gravel 15017 are
 not rock substitutes; cracked ice 15024 is used only for frozen water. Frame count alone
 is never topology. The map client selects those groups from
@@ -49,8 +49,8 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v11 selects at most 1,674 frames:
-1,474 terrain and 200 objects including cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
+The periodic groups retain all 100 frames. Catalog v12 selects at most 1,692 frames:
+1,474 terrain and 218 objects including cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;

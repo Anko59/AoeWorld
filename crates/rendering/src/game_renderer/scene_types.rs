@@ -87,6 +87,12 @@ impl SceneResource {
     pub const CLIFF: u8 = 16;
     /// A loose rock; visual_variant selects its pile and size.
     pub const ROCK: u8 = 17;
+    /// Low scrub dressing; never enters resource/depletion or movement state.
+    pub const SHRUB: u8 = 18;
+    /// Low plant patches standing on the tile's projected ground.
+    pub const GRASS: u8 = 19;
+    /// Weathered stumps and fallen wood, purely visual.
+    pub const DEADWOOD: u8 = 20;
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.

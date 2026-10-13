@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 11;
+pub const VERSION: u8 = 12;
 
 pub mod candidates;
 pub mod packing;
@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_674;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_692;
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -48,6 +48,10 @@ pub enum AssetRole {
     Snow,
     RockPile,
     Ice,
+    Shrub,
+    GrassTuft,
+    DeadwoodStump,
+    DeadwoodLog,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -148,7 +152,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 9] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 13] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -228,6 +232,40 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 9] = [
         id: 1034,
         frames: 7,
         interpretation: "seven plain grey rock piles for visual rocks",
+        terrain_topology: None,
+    },
+    // Full native prefixes retain source slots and signed hotspots. Selection
+    // excludes the three tall cactus forms; only low succulent scrub is dressing.
+    SpriteSource {
+        role: AssetRole::Shrub,
+        archive: "graphics.drs",
+        id: 4474,
+        frames: 6,
+        interpretation: "low succulent scrub frames 3,4,5 only; no tall cacti or forage bushes",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::GrassTuft,
+        archive: "graphics.drs",
+        id: 2561,
+        frames: 7,
+        interpretation: "seven low yellow wildflower patches; nonblocking grass dressing",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::DeadwoodStump,
+        archive: "graphics.drs",
+        id: 1035,
+        frames: 3,
+        interpretation: "three weathered stumps; preserve signed and outside hotspots",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::DeadwoodLog,
+        archive: "graphics.drs",
+        id: 1252,
+        frames: 2,
+        interpretation: "two low mossy fallen logs; nonblocking deadwood dressing",
         terrain_topology: None,
     },
 ];

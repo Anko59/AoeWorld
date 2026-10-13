@@ -32,6 +32,6 @@ fn webgl_dressing_anchor_pixels() {
             .collect::<Vec<_>>();
         assert!(!sprites.is_empty());
         render(&mut renderer, &mut sprites);
-        assert_pixel(&canvas, 60, 63, [255, 0, 0, 255]);
+        assert_pixel(&canvas, 64, 64, [255, 0, 0, 255]);
     }
 }

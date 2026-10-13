@@ -50,22 +50,11 @@ const MAX_CACHED_CHUNK_BYTES: usize = 128 * 1024 * 1024;
 const MAX_PICK_ITERATIONS: usize = 4;
 
 pub(super) fn cache_status(client: &Client) -> String {
-    let mut label = format!(
+    format!(
         "terrain cache: {} / 128 MiB ({} / {MAX_CACHED_CHUNKS} chunks)",
         display_mebibytes(cached_chunk_bytes(client)),
         client.terrain_chunks.len(),
-    );
-    let pending_art = client
-        .terrain_scene
-        .borrow()
-        .as_ref()
-        .map_or(0, |scene| scene.decorations.len());
-    if pending_art > 0 {
-        label.push_str(&format!(
-            " · {pending_art} visible dressing records await reviewed art"
-        ));
-    }
-    label
+    )
 }
 
 pub(super) fn clear_terrain_cache(client: &mut Client) {

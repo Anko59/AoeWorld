@@ -46,29 +46,40 @@ pub(super) fn for_scene(client: &Client, scene: &scene::PreparedScene) -> Vec<Sc
 }
 
 /// Whole scenery sprites standing on their centre tile.
-pub(super) fn scenery<'a>(
-    _client: &'a Client,
-    scene: &'a scene::PreparedScene,
-) -> impl Iterator<Item = SceneResource> + 'a {
+pub(super) fn scenery(scene: &scene::PreparedScene) -> impl Iterator<Item = SceneResource> + '_ {
     scene.decorations.iter().filter_map(|decoration| {
-        let kind = if decoration.family == aoe_map::DecorationFamily::Cliff as u8 {
-            SceneResource::CLIFF
-        } else if decoration.family == aoe_map::DecorationFamily::Stone as u8 {
-            SceneResource::ROCK
-        } else {
-            return None;
+        let kind = match decoration.family {
+            family if family == aoe_map::DecorationFamily::Cliff as u8 => SceneResource::CLIFF,
+            family if family == aoe_map::DecorationFamily::Stone as u8 => SceneResource::ROCK,
+            family if family == aoe_map::DecorationFamily::Shrub as u8 => SceneResource::SHRUB,
+            family if family == aoe_map::DecorationFamily::Grass as u8 => SceneResource::GRASS,
+            family if family == aoe_map::DecorationFamily::Deadwood as u8 => {
+                SceneResource::DEADWOOD
+            }
+            _ => return None,
         };
         let [x, y] = decoration.position.map(|value| value.floor() as u64);
+        // World-tile selection is independent of camera/zoom/traversal, so
+        // accents neither flicker while panning nor consume authority state.
+        let mask = match kind {
+            SceneResource::GRASS => 3,
+            SceneResource::SHRUB | SceneResource::DEADWOOD => 1,
+            _ => 0,
+        };
+        let mut hash = (x as u32).wrapping_mul(374_761_393)
+            ^ (y as u32).wrapping_mul(668_265_263)
+            ^ u32::from(decoration.family).wrapping_mul(2_246_822_519);
+        hash = (hash ^ (hash >> 13)).wrapping_mul(1_274_126_177);
+        hash ^= hash >> 16;
+        if hash & mask != 0 {
+            return None;
+        }
         Some(SceneResource {
             id: (y << 19) | (x << 1) | 1,
             position: decoration.position,
             kind,
             visual_variant: decoration.visual_variant,
-            visual_family: if kind == SceneResource::CLIFF {
-                decoration.orientation
-            } else {
-                0
-            },
+            visual_family: decoration.orientation,
             elevation_meters: decoration.elevation_meters,
         })
     })

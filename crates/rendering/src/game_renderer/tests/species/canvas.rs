@@ -68,6 +68,6 @@ fn canvas_dressing_anchor_pixels() {
             false,
         )
         .unwrap();
-        assert_eq!(pixel(&presentation.color_buffer, 60, 63), [255, 0, 0, 255]);
+        assert_eq!(pixel(&presentation.color_buffer, 64, 64), [255, 0, 0, 255]);
     }
 }
