@@ -24,6 +24,7 @@ async fn setup_scenario(scenario: Scenario) -> (SocketAddr, JoinHandle<()>, Join
             tick_hz: 20,
             asset_pack: None,
             map_package_directory: None,
+            open_map_package: None,
             map_worker: None,
             geodata_cache_directory: ".cache/geodata".into(),
         },
@@ -69,6 +70,7 @@ async fn setup_with_fallback_map() -> (
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: Some(directory.path().to_owned()),
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };
@@ -93,6 +95,7 @@ async fn selected_local_pack_is_served_only_when_configured() {
         tick_hz: 20,
         asset_pack: Some(pack.path().to_owned()),
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };
