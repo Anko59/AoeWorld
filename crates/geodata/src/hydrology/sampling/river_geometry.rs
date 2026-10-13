@@ -6,6 +6,7 @@ pub(in crate::hydrology) struct RiverReachGeometry {
     pub(in crate::hydrology) next_down_id: u32,
     pub(in crate::hydrology) distance_to_sink_centimeters: u32,
     pub(in crate::hydrology) line_points: Vec<(f64, f64)>,
+    pub(in crate::hydrology) discharge: f64,
 }
 
 /// Returns the closest point's distance from and along a projected line string.
@@ -77,6 +78,10 @@ pub(in crate::hydrology) fn river_reach_geometry(
     let id = u32::try_from(integer_field("HYRIV_ID")?).ok()?;
     let next_down_id = u32::try_from(integer_field("NEXT_DOWN")?).ok()?;
     let distance_to_sink_km = real_field("DIST_DN_KM")?;
+    let discharge = real_field("DIS_AV_CMS")?;
+    if !discharge.is_finite() || discharge < 0.0 {
+        return None;
+    }
     if id == 0 || !distance_to_sink_km.is_finite() || distance_to_sink_km < 0.0 {
         return None;
     }
@@ -102,5 +107,6 @@ pub(in crate::hydrology) fn river_reach_geometry(
         next_down_id,
         distance_to_sink_centimeters: distance_to_sink_centimeters.round() as u32,
         line_points,
+        discharge,
     })
 }

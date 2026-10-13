@@ -33,6 +33,7 @@ fn pages_for_axis(axis: u16, kinds: &[HydrologyKind]) -> Vec<HydrologyPage> {
                 }
             }
             HydrologyPage {
+                river_segments: Vec::new(),
                 level: 0,
                 x,
                 y,

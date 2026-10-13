@@ -1,7 +1,6 @@
 use super::super::hydrology_sampling::{RiverReachGeometry, VectorFeature, line_position};
 use super::super::{GeodataError, RiverTopologyCell, RiverTopologyGrid};
 use super::Sampler;
-use gdal::vector::Geometry;
 use std::collections::BTreeMap;
 
 const MAX_REACH_METADATA: usize = 100_000;
@@ -136,23 +135,31 @@ impl Sampler {
     }
 }
 
-pub(super) fn nearest_river_reach<'a>(
-    features: &'a [VectorFeature],
-    point: &Geometry,
+pub(super) fn nearest_river_reach(
+    features: &[VectorFeature],
     x: f64,
     y: f64,
-) -> Option<(&'a VectorFeature, f64)> {
+    spacing: f64,
+) -> Option<(&VectorFeature, f64)> {
     let mut best: Option<(&VectorFeature, f64, f64, u32)> = None;
     for feature in features {
-        if !feature.geometry.contains(point) {
-            continue;
-        }
         let Some(reach) = feature.river_reach.as_ref() else {
             continue;
         };
         let Some((distance, station)) = line_position(&reach.line_points, x, y) else {
             continue;
         };
+        if reach.discharge < super::channels::minimum_discharge(spacing)
+            || !super::channels::corridor_intersects_cell(
+                &reach.line_points,
+                x,
+                y,
+                spacing,
+                (10.0 * reach.discharge.sqrt()).clamp(5.0, 600.0) / 2.0,
+            )
+        {
+            continue;
+        }
         let replace = best.is_none_or(|(_, best_distance, _, best_id)| {
             distance.total_cmp(&best_distance).is_lt()
                 || (distance.total_cmp(&best_distance).is_eq() && reach.id < best_id)
@@ -200,24 +207,5 @@ fn coordinate_to_centimeters(meters: f64) -> Option<i32> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn endpoint_distance_handles_extreme_projected_coordinates_without_overflow() {
-        let reach = RiverReachMetadata {
-            next_down_id: 0,
-            distance_to_sink_centimeters: 0,
-            start_x_centimeters: i32::MAX,
-            start_y_centimeters: i32::MAX,
-            end_x_centimeters: i32::MAX,
-            end_y_centimeters: i32::MIN,
-            length_centimeters: 0,
-        };
-        let delta = i128::from(i32::MAX) - i128::from(i32::MIN);
-        assert_eq!(
-            endpoint_distance_squared(i32::MIN, i32::MIN, &reach),
-            delta * delta
-        );
-    }
-}
+#[path = "../tests/topology.rs"]
+mod tests;

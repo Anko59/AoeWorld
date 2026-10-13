@@ -247,6 +247,13 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
     let (base, elevation, mut water, vegetation, land_use) = prepared();
     water[0].ocean_coverage_percent.fill(0);
     let hydrology = vec![HydrologyEvidencePage {
+        river_segments: vec![aoe_map::RiverSegment {
+            start: [-256, 128],
+            end: [5 * 256, 128],
+            width_units: 3 * 256,
+            station_start: 256,
+            station_end: 7 * 256,
+        }],
         level: 0,
         x: 0,
         y: 0,
@@ -342,6 +349,14 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
         .expect("river query")
         .expect("in bounds");
     assert_eq!(river.water, WaterKind::River);
+    assert_eq!(
+        generator
+            .tile_at(aoe_core::TileCoord::new(10, 0))
+            .unwrap()
+            .water,
+        WaterKind::River,
+        "data stage preserves existing modeled-cell water"
+    );
     assert_eq!(
         river.hydrology_observation.expect("observation").kind,
         HydrologyKind::River

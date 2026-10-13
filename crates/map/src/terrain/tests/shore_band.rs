@@ -204,6 +204,7 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
     let cells = (0..33_u16).flat_map(|sy| (0..33_u16).map(move |sx| (sx, sy)));
     let kind = |wet: bool| if wet { HydrologyKind::River } else { HydrologyKind::Land } as u8;
     let hydrology = HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,
@@ -260,7 +261,16 @@ pub(super) fn modeled_river(key: u8) -> MapChunkGenerator {
         policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
         hydrology_page_root: [3; 32],
         modern_land_cover_page_root: [4; 32],
-        water_model: None,
+        water_model: Some(crate::HydrologyWaterModelIndex {
+            model_version: crate::HYDROLOGY_WATER_MODEL_VERSION,
+            samples_per_axis: 33,
+            target_year_ce: 600,
+            correction_document: crate::WaterCorrectionDocument::empty(
+                crate::MapRequest::default(),
+                33,
+            )
+            .expect("fixture corrections"),
+        }),
     });
     bind(key, environment, Pages(pages.0))
 }

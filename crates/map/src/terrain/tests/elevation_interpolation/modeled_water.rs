@@ -1,7 +1,6 @@
 use super::*;
 
-#[test]
-fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
+fn modeled_lake_generator(corrupt_geometry: bool) -> MapChunkGenerator {
     use crate::{
         HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyWaterModelIndex,
         HydrologyWaterModelPage, HydrologyWaterPolicy, ModernLandCoverPage,
@@ -27,6 +26,17 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
         inland_coverage_percent: vec![0, 0, 100, 100],
     };
     let hydrology = HydrologyEvidencePage {
+        river_segments: if corrupt_geometry {
+            vec![crate::RiverSegment {
+                start: [0, 0],
+                end: [67_108_864, 67_108_864],
+                width_units: 768,
+                station_start: 0,
+                station_end: 1000,
+            }]
+        } else {
+            Vec::new()
+        },
         level: 0,
         x: 0,
         y: 0,
@@ -193,13 +203,18 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
             Arc::new(EnvironmentPage::ModernLandCover(cover)),
         ),
     ]));
-    let generator = MapChunkGenerator::new([8; 32], 3, 128)
+    MapChunkGenerator::new([8; 32], 3, 128)
         .with_page_provider(
             Ratio::new(1, 1).expect("ratio"),
             environment,
             Arc::new(provider),
         )
-        .expect("verified environment provider");
+        .expect("verified environment provider")
+}
+
+#[test]
+fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
+    let generator = modeled_lake_generator(false);
     let expected_land = generator
         .tile_at(TileCoord::new(127, 127))
         .expect("corrected source land");
@@ -253,4 +268,19 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
     assert_eq!(coast.water, WaterKind::Ocean);
     assert_eq!(coast.water_provenance, Provenance::ModelDerived);
     assert_eq!(coast.surface.corner_game_height_levels, [0; 4]);
+}
+
+#[test]
+fn provider_validates_geometry_before_lake_ocean_and_land_correction_shortcuts() {
+    let generator = modeled_lake_generator(true);
+    for tile in [
+        TileCoord::new(0, 0),
+        TileCoord::new(127, 0),
+        TileCoord::new(127, 127),
+    ] {
+        assert_eq!(
+            generator.tile_at_with_cancel(tile, &|| false),
+            Err(EnvironmentPageError::Corrupt)
+        );
+    }
 }

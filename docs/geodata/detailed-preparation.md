@@ -43,17 +43,18 @@ those categories and do not imply finer water evidence.
 
 Detailed water preparation also samples every WorldCover 2021 tile intersecting
 the conservative request bounds, plus global HydroLAKES. The current HydroRIVERS
-input is the Europe release and is sampled only when the full request bounds fit
-inside the documented pilot window of 36–60°N, 12°W–25°E; outside it, river
-evidence is explicitly marked unavailable in source-lock preprocessing metadata.
+input is the Europe/Middle East release. The opened pinned dataset's extent
+sets coverage; every explicit hydrology path rejects an uncovered projected
+footprint before cache or input access. Automatic overview instead records that
+the area is outside river coverage and omits hydrology before acquiring overview
+inputs. Sampling reuses the bound preflight decision and checks the opened extent
+against the pinned metadata.
 These are modern evidence sources; they do not rewrite HYDE's circa-600 land-use
 estimates. Source locks record source metadata and SHA-256 digests.
 HydroSHEDS archives use reviewed pinned hashes. WorldCover's fixed release
 endpoint publishes no digest, so its narrowly allowlisted first HTTPS transfer
 establishes a local SHA-256 pin; that first-use digest is not a provider-published
-checksum. It is checked on every cache reuse. The HydroRIVERS input is the
-Europe/Middle East release and is only evidence within the pilot bounds above;
-outside them, the package does not claim river coverage. Coarse Natural Earth
+checksum. It is checked on every cache reuse. Coarse Natural Earth
 coastline sampling and classified natural lakes/rivers may update the existing
 prepared water layer, including where a narrow mapped river is absent from the
 coarse overview water sample. Modern WorldCover land and missing evidence do
@@ -88,11 +89,10 @@ to the terminal decreases; ambiguous, terminal, missing, or unsupported
 topology keeps flow unknown. The source distance orders the flow graph, not
 channel elevation: river surfaces still start from Copernicus DEM values sampled
 onto the hydrology grid, with upstream cells raised as needed to prevent an uphill step along a
-supported edge. These are modeled surfaces, not measured channel levels. River
-membership is determined by center samples at the declared hydrology-grid
-resolution. A cell classified as river is not a claim that 100% of its sub-grid
-area is water; corridor width is represented at that prepared resolution, with
-no finer bank or water fraction asserted. See the [HydroRIVERS v1 technical
+supported edge. These are modeled surfaces, not measured channel levels. Evidence cells conservatively intersect persisted source lines with
+discharge-based widths; see [rivers](rivers.md). The geometry is available for
+a separate terrain-composition change; this data stage does not emit fords.
+See the [HydroRIVERS v1 technical
 documentation](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf)
 for the source topology fields and distance semantics.
 

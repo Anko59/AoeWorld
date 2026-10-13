@@ -156,7 +156,10 @@ pub use map_result::{
 };
 
 mod worker;
-pub use worker::{execute, execute_with_cancellation};
+pub use worker::{
+    OverviewHydrologyPreflight, execute, execute_overview_with_preflight,
+    execute_with_cancellation, preflight_overview_hydrology,
+};
 
 #[path = "lib/overview.rs"]
 mod overview;

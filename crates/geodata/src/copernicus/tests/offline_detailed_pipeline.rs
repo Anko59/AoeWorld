@@ -219,6 +219,7 @@ fn four_pages<T>(mut build: impl FnMut(u16, u16) -> T) -> Vec<T> {
 
 fn hydrology_fixture() -> crate::PreparedHydrology {
     let evidence = vec![HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,

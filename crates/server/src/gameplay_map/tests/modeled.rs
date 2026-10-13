@@ -35,6 +35,7 @@ impl EnvironmentPageProvider for ModeledProvider {
 fn modeled_water_package_activates_and_cancellation_remains_bounded() {
     let (base, _) = flat_prepared_package();
     let hydrology = HydrologyEvidencePage {
+        river_segments: Vec::new(),
         level: 0,
         x: 0,
         y: 0,

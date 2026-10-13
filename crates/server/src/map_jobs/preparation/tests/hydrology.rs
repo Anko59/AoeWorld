@@ -1,47 +1,26 @@
 use super::*;
 
 #[test]
-fn creator_vectors_are_explicit_and_never_selected_by_region() {
-    let request = MapRequest {
-        requested_side_meters: 1_200_000,
-        ..MapRequest::default()
-    };
-    let mut input: CreationRequest =
-        serde_json::from_value(serde_json::to_value(request).unwrap()).unwrap();
-    let absent = PreparationPlan::resolve(input, true).unwrap();
-    assert_eq!(absent.hydrology_mode, HydrologyMode::None);
-    assert!(
-        serde_json::to_value(absent)
-            .unwrap()
-            .get("hydrology_mode")
-            .is_none()
-    );
-    input.hydrology_mode = HydrologyMode::Vectors;
-    assert!(PreparationPlan::resolve(input, true).is_err()); // requires explicit overview
-    input.preparation = PreparationPreference::Overview;
-    let plan = PreparationPlan::resolve(input, true).unwrap();
-    assert_eq!(plan.mode, PreparationMode::Overview);
-    assert_eq!(plan.samples_per_axis, 1024);
-    assert_eq!(plan.field_axes.unwrap().water, 128);
-    assert_eq!(plan.hydrology_mode, HydrologyMode::Vectors);
-    assert!(plan.explanation.contains("unobserved class-0 nodata"));
-    assert_eq!(
-        serde_json::to_value(plan).unwrap()["hydrology_mode"],
-        "vectors"
-    );
-    assert!(PreparationPlan::resolve(input, false).is_err());
-    input.request.center_latitude_e7 = -330_000_000;
-    assert!(PreparationPlan::resolve(input, true).is_err());
-    input.hydrology_mode = HydrologyMode::None;
-    assert_eq!(
-        PreparationPlan::resolve(input, true)
-            .unwrap()
-            .hydrology_mode,
-        HydrologyMode::None
-    );
-    let mut value = serde_json::to_value(request).unwrap();
-    value["hydrology_mode"] = "invented".into();
-    assert!(serde_json::from_value::<CreationRequest>(value).is_err());
+fn creator_requests_hydrology_by_default_for_overview_and_finland() {
+    for (latitude, longitude, side) in [
+        (480_000_000, 20_000_000, 1_200_000),
+        (615_000_000, 255_000_000, 30_000),
+    ] {
+        let request = MapRequest {
+            center_latitude_e7: latitude,
+            center_longitude_e7: longitude,
+            requested_side_meters: side,
+            ..MapRequest::default()
+        };
+        let mut value = serde_json::to_value(request).unwrap();
+        value["preparation"] = "overview".into();
+        let input: CreationRequest = serde_json::from_value(value).unwrap();
+        let plan = PreparationPlan::resolve(input, true).unwrap();
+        assert_eq!(plan.mode, PreparationMode::Overview);
+        assert_eq!(plan.hydrology_mode, HydrologyMode::Automatic);
+        assert_eq!(plan.samples_per_axis, 1024);
+        assert_eq!(plan.field_axes.unwrap().water, 128);
+    }
 }
 
 #[tokio::test]
@@ -95,4 +74,47 @@ async fn durable_submission_key_cannot_switch_hydrology_mode() {
         restored.jobs[&id].job.preparation.hydrology_mode,
         HydrologyMode::Vectors
     );
+}
+
+#[tokio::test]
+async fn automatic_creator_accepts_covered_and_uncovered_requests_and_publishes_the_note() {
+    for (latitude, longitude, outside) in [
+        (480_000_000, 20_000_000, false),
+        (-178_000_000, 1_798_000_000, true),
+    ] {
+        let request = MapRequest {
+            center_latitude_e7: latitude,
+            center_longitude_e7: longitude,
+            ..MapRequest::default()
+        };
+        let input: CreationRequest =
+            serde_json::from_value(serde_json::to_value(request).unwrap()).unwrap();
+        let plan = PreparationPlan::resolve(input, true).unwrap();
+        assert_eq!(plan.mode, PreparationMode::Overview);
+        assert_eq!(plan.hydrology_mode, HydrologyMode::Automatic);
+        let (state, _, _) = crate::map_jobs::tests::state_with_job();
+        let (job, _) = state
+            .map_jobs
+            .lock()
+            .await
+            .enqueue(request, request.estimate().unwrap(), plan)
+            .unwrap();
+        let package = aoe_map::MapPackage::new(1, request, Vec::new()).unwrap();
+        let package = if outside {
+            package
+                .with_preparation_note(aoe_map::PreparationNote::OutsideRiverCoverage)
+                .unwrap()
+        } else {
+            package
+        };
+        let hash = package.content_hash_hex();
+        crate::map_jobs::finish(&state, job.id, Ok(package)).await;
+        let completed = crate::map_jobs::status(&state, job.id).await.unwrap();
+        assert_eq!(completed.preparation_notes.len(), usize::from(outside));
+        assert_eq!(completed.content_hash.as_deref(), Some(hash.as_str()));
+        assert_eq!(
+            state.map_packages.read().await[&hash].preparation_notes,
+            completed.preparation_notes
+        );
+    }
 }

@@ -83,8 +83,8 @@ The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
 locks and reproducible reductions, but it is an overview-quality stack. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
-Copernicus elevation and samples modern WorldCover, HydroLAKES, and the bounded
-Europe/Middle East HydroRIVERS pilot while retaining the overview's coarse
+Copernicus elevation and samples modern WorldCover, HydroLAKES, and the pinned
+Europe/Middle East HydroRIVERS dataset while retaining the overview's coarse
 vegetation and historical inputs. Packages persist typed hydrology and modern
 land-cover evidence in bounded, independently verified pages. Terrain consumes
 those observations through the package provider; the optional water coverage
@@ -110,8 +110,18 @@ package format or generation changes, regenerate packages from the cached
 source inputs; old packages are not read. The default server package directory
 is `local-assets/map-packages`.
 
+Hydrology evidence pages require `river_segments`, including an empty array
+where there are no rivers. Each record contains seven integers: start x/y,
+end x/y, width, start station and end station, in 1/256 tile units. Geometry
+participates in the page content hash and must fit its page plus the maximum
+five-tile river half-width margin. The required geometry field changes the single current hydrology page format.
+There is no independently versioned hydrology evidence page format and no
+compatibility reader; schema and recipe remain the single current values above.
+Regenerate affected local packages from verified source caches.
+
 Generation composes one landscape for source-backed and fallback maps alike;
-see [the landscape reference](landscape/implementation.md).
+see [the landscape reference](landscape/implementation.md) and
+[river geometry and crossings](rivers.md).
 
 The local asset mapping is equally deliberate: the client maps semantic terrain
 to six imported AoE II terrain groups (temperate grass, dry grass, dirt, sand,
@@ -219,16 +229,20 @@ Directory-sync failure after rename reports uncertain crash durability in the
 server log while retaining the committed state. Partial geographic preparation
 files are not garbage-collected by this journal.
 
-The creator's Automatic detail mode selects regional Copernicus elevation for
-squares up to 120 km with centers within 75 degrees latitude and 170 degrees
-longitude. This conservative window avoids the regional worker's unsupported
-polar and wrapped footprints. The grid is a power of two between 128 and 4096
-samples, targeting 30 m spacing. Larger or edge-of-world selections explicitly
-use the 128-sample overview; a user may also select overview for a small map.
-Detailed mode rejects selections outside that window instead of silently
-downgrading them. Exact projected coverage and source/staging budgets are still
-checked by the worker before preparation. Water, vegetation and historical
-land use retain their current overview resolution, even with detailed elevation.
+The creator defaults to Automatic rivers and a landscape overview: elevation
+and history use 1024 samples; water and potential vegetation use 128. The worker
+checks river coverage before acquisition. Covered footprints add vector hydrology;
+uncovered ones keep the global overview and record `outside_river_coverage` in
+package and job preparation notes, displayed by the creator. Explicit With rivers
+rejects uncovered footprints; Without rivers requests the overview directly.
+
+Detailed regional elevation is an explicit choice and includes rivers. It
+supports squares up to 120 km with centers within 75 degrees latitude and 170
+degrees longitude, using a power-of-two grid of 128–4096 samples for approximately
+30 m spacing. With rivers plus Automatic detail may also select this regional
+path. Detailed requests reject unsupported windows and uncovered river
+footprints. Source errors never turn into a fallback. Water, vegetation and
+historical land use retain their overview resolution with detailed elevation.
 
 Estimates and active jobs expose the selected preparation mode, sample grid,
 spacing, and source limitations. Without a configured worker, Automatic remains

@@ -44,6 +44,7 @@ pub(crate) struct PageResidency {
     entries: BTreeMap<EnvironmentPageKey, PageEntry>,
     cache: Mutex<PageCache>,
     height_bounds: Mutex<Option<(i16, i16)>>,
+    hydrology: Option<(aoe_map::HydrologyEvidenceIndex, u64)>,
     verified_page_loads: AtomicU64,
 }
 
@@ -56,6 +57,14 @@ impl PageResidency {
         if cancelled() {
             return Err(MapStoreError::Cancelled);
         }
+        package
+            .validate()
+            .map_err(|error| invalid(directory, error))?;
+        let hydrology = package
+            .environment
+            .hydrology_evidence
+            .clone()
+            .map(|index| (index, package.estimate.tiles_per_side));
         let mut entries = BTreeMap::new();
         let root = directory.join("pages").join(package.content_hash_hex());
         scan_layer(
@@ -80,20 +89,18 @@ impl PageResidency {
                 cancelled,
             )?;
         }
-        if let Some(index) = &package.environment.hydrology_evidence {
+        if let Some(context) = &hydrology {
             scan_evidence_layer(
                 &root,
                 PageLayer::HydrologyEvidence,
-                index.samples_per_axis,
-                index.hydrology_page_root,
+                context,
                 &mut entries,
                 cancelled,
             )?;
             scan_evidence_layer(
                 &root,
                 PageLayer::ModernLandCover,
-                index.samples_per_axis,
-                index.modern_land_cover_page_root,
+                context,
                 &mut entries,
                 cancelled,
             )?;
@@ -103,6 +110,7 @@ impl PageResidency {
             entries,
             cache: Mutex::new(PageCache::default()),
             height_bounds: Mutex::new(None),
+            hydrology,
             verified_page_loads: AtomicU64::new(0),
         }))
     }
@@ -159,7 +167,8 @@ impl EnvironmentPageProvider for PageResidency {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        let page = decode_page(key, &bytes).map_err(|_| EnvironmentPageError::Corrupt)?;
+        let page = decode_page(key, &bytes, self.hydrology.as_ref())
+            .map_err(|_| EnvironmentPageError::Corrupt)?;
         if page
             .content_hash()
             .map_err(|_| EnvironmentPageError::Corrupt)?
@@ -225,7 +234,8 @@ fn scan_layer(
                 };
                 let path = directory.join(format!("{level}-{x}-{y}.json"));
                 let bytes = read_bounded_file(&path, MAX_PAGE_BYTES, "environment page")?;
-                let page = decode_page(key, &bytes).map_err(|reason| invalid(&path, reason))?;
+                let page =
+                    decode_page(key, &bytes, None).map_err(|reason| invalid(&path, reason))?;
                 let expected_dimensions = (
                     (metadata.samples_per_axis - x * side).min(side) as u8,
                     (metadata.samples_per_axis - y * side).min(side) as u8,
@@ -265,11 +275,17 @@ fn scan_layer(
 fn scan_evidence_layer(
     root: &Path,
     layer: PageLayer,
-    axis: u16,
-    expected_root: [u8; 32],
+    hydrology: &(aoe_map::HydrologyEvidenceIndex, u64),
     entries: &mut BTreeMap<EnvironmentPageKey, PageEntry>,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<(), MapStoreError> {
+    let (index, _) = hydrology;
+    let axis = index.samples_per_axis;
+    let expected_root = if layer == PageLayer::HydrologyEvidence {
+        index.hydrology_page_root
+    } else {
+        index.modern_land_cover_page_root
+    };
     let directory = root.join(layer.directory_name());
     let side = usize::from(ENVIRONMENT_PAGE_SAMPLES);
     let count = usize::from(axis).div_ceil(side);
@@ -291,7 +307,8 @@ fn scan_evidence_layer(
             };
             let path = directory.join(format!("0-{x}-{y}.json"));
             let bytes = read_bounded_file(&path, MAX_PAGE_BYTES, "environment page")?;
-            let page = decode_page(key, &bytes).map_err(|reason| invalid(&path, reason))?;
+            let page = decode_page(key, &bytes, Some(hydrology))
+                .map_err(|reason| invalid(&path, reason))?;
             let width = (usize::from(axis) - x * side).min(side) as u8;
             let height = (usize::from(axis) - y * side).min(side) as u8;
             if page_dimensions(&page) != (width, height) {
@@ -335,7 +352,11 @@ impl PageEntry {
     }
 }
 
-fn decode_page(key: EnvironmentPageKey, bytes: &[u8]) -> Result<EnvironmentPage, &'static str> {
+fn decode_page(
+    key: EnvironmentPageKey,
+    bytes: &[u8],
+    hydrology: Option<&(aoe_map::HydrologyEvidenceIndex, u64)>,
+) -> Result<EnvironmentPage, String> {
     let page = match key.layer {
         PageLayer::Elevation => {
             serde_json::from_slice::<ElevationPage>(bytes).map(EnvironmentPage::Elevation)
@@ -353,9 +374,16 @@ fn decode_page(key: EnvironmentPageKey, bytes: &[u8]) -> Result<EnvironmentPage,
     }
     .map_err(|_| "page JSON is invalid")?;
     if page.key() != key {
-        return Err("page coordinates are invalid");
+        return Err("page coordinates are invalid".to_owned());
     }
-    page.validate().map_err(|_| "page contents are invalid")?;
+    if let EnvironmentPage::HydrologyEvidence(page) = &page {
+        let (index, tiles) = hydrology.ok_or("hydrology page has no package context")?;
+        index
+            .validate_page(page, *tiles)
+            .map_err(|error| error.to_string())?;
+    } else {
+        page.validate().map_err(|error| error.to_string())?;
+    }
     Ok(page)
 }
 
@@ -398,35 +426,5 @@ fn invalid(path: &Path, reason: impl std::fmt::Display) -> MapStoreError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lru_stays_bounded_under_a_large_valid_page_workload() {
-        let mut cache = PageCache::default();
-        // This exercises the cache capacity with valid page coordinates.  The
-        // large, real-coordinate pyramid eviction fixture lives in
-        // `tests::residency`; this unit test only checks the cache itself.
-        for index in 0..16_384_u16 {
-            let x = index % 256;
-            let y = index / 256;
-            let key = EnvironmentPageKey {
-                layer: PageLayer::Elevation,
-                level: 0,
-                x,
-                y,
-            };
-            let page = Arc::new(EnvironmentPage::Elevation(ElevationPage {
-                level: 0,
-                x,
-                y,
-                width: 64,
-                height: 64,
-                geographic_height_centimeters: vec![i32::from(index); 64 * 64],
-            }));
-            cache_insert(&mut cache, key, page).expect("bounded cache insertion");
-        }
-        assert_eq!(cache.pages.len(), MAX_RESIDENT_ENVIRONMENT_PAGES);
-        assert_eq!(cache.order.len(), MAX_RESIDENT_ENVIRONMENT_PAGES);
-    }
-}
+#[path = "tests/cache.rs"]
+mod tests;

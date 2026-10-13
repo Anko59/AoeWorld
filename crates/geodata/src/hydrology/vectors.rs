@@ -1,11 +1,22 @@
 use super::*;
 use gdal::spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef};
 
+// HydroRIVERS_v10_eu.shp header in source SHA-256
+// 500da7d36ceee0aa4c82dd625f5c53d80ba2f7ac14ad022cd3a6601bf55068e5.
+// Metadata is available before acquiring the archive; the opened layer is
+// checked against this same extent before sampling.
+pub(super) const PINNED_RIVER_EXTENT: gdal::vector::Envelope = gdal::vector::Envelope {
+    MinX: -24.472916666666663,
+    MaxX: 69.5166666666652,
+    MinY: 12.602083333333333,
+    MaxY: 81.78958333333222,
+};
+
 pub(super) const MODERN_NOT_REQUESTED: &str =
     "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only";
 
 impl PreparedHydrology {
-    /// Validates the bounded vector pilot and correction binding without acquisition.
+    /// Validates the bounded vector request and correction binding without acquisition.
     pub fn validate_vectors_request(
         request: MapRequest,
         axis: u16,
@@ -75,14 +86,40 @@ pub fn prepare_hydrology_vectors(
     corrections
         .validate_for(request, samples_per_axis)
         .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
+    let footprint = project_river_footprint(request, samples_per_axis, cancelled)?;
+    footprint.check_binding(request, samples_per_axis)?;
+    prepare_vectors_validated(
+        cache_root,
+        footprint,
+        overview_elevation_pages,
+        overview_water_pages,
+        corrections,
+        cancelled,
+    )
+}
+
+pub(crate) fn prepare_vectors_validated(
+    cache_root: PathBuf,
+    footprint: RiverFootprint,
+    overview_elevation_pages: &[aoe_map::ElevationPage],
+    overview_water_pages: &[aoe_map::WaterPage],
+    corrections: WaterCorrectionDocument,
+    cancelled: &AtomicBool,
+) -> Result<PreparedHydrology, GeodataError> {
+    let request = footprint.request;
+    let samples_per_axis = footprint.axis;
+    footprint.check_binding(request, samples_per_axis)?;
+    check_cancelled(cancelled)?;
+    corrections
+        .validate_for(request, samples_per_axis)
+        .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     // Reject malformed supplied context before any cache or provider access.
     let elevation_context = super::overview_elevation_context(overview_elevation_pages)?;
     hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
-    validate_vector_footprint(request, samples_per_axis, cancelled)?;
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
         sources: hydrology_vector_sources(),
-        rivers_available: true,
+        footprint,
     };
     check_cancelled(cancelled)?;
     let mut prepared = prepare_with_plan(
@@ -120,14 +157,48 @@ fn validate_vector_request(request: MapRequest, axis: u16) -> Result<MapRequest,
 
 // Check every cell's vertices, edge midpoints and center, not a degree approximation
 // or only four corners. Row-sized coordinate buffers retain the existing axis cap.
-// The window is the shared river-vector source coverage inset by the geographic
-// vector-query padding; no widening is hidden in that padding. The shared
-// request_bounds helper is unchanged.
-fn validate_vector_footprint(
+// Coverage uses the SHA-pinned shapefile header extent, inset by query padding.
+#[derive(Clone, Debug)]
+pub(crate) struct RiverFootprint {
+    request: MapRequest,
+    axis: u16,
+    covered: bool,
+}
+
+impl RiverFootprint {
+    pub(crate) fn covered(&self) -> bool {
+        self.covered
+    }
+    pub(crate) fn check_binding(&self, request: MapRequest, axis: u16) -> Result<(), GeodataError> {
+        if request.normalized().ok() != Some(self.request) || axis != self.axis {
+            return Err(GeodataError::Preparation(
+                "hydrology preflight grid does not match sampling request",
+            ));
+        }
+        if !self.covered {
+            return Err(GeodataError::Preparation(
+                "vector hydrology footprint is outside the pinned river dataset extent",
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn validate_vector_footprint(
     request: MapRequest,
     axis: u16,
     cancelled: &AtomicBool,
 ) -> Result<(), GeodataError> {
+    project_river_footprint(request, axis, cancelled)?.check_binding(request, axis)
+}
+
+pub(crate) fn project_river_footprint(
+    request: MapRequest,
+    axis: u16,
+    cancelled: &AtomicBool,
+) -> Result<RiverFootprint, GeodataError> {
+    check_cancelled(cancelled)?;
+    let request = validate_vector_request(request, axis)?;
     let side = request
         .estimate()
         .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
@@ -142,8 +213,10 @@ fn validate_vector_footprint(
     let transform =
         CoordTransform::new(&local, &geographic).map_err(|_| GeodataError::Projection)?;
     let spacing = side / f64::from(axis);
-    let window = aoe_map::VECTOR_HYDROLOGY_FOOTPRINT_WINDOW;
-    let (longitudes, latitudes) = (window.longitude_degrees(), window.latitude_degrees());
+    let padding = 0.01;
+    let extent = PINNED_RIVER_EXTENT;
+    let longitudes = extent.MinX + padding..=extent.MaxX - padding;
+    let latitudes = extent.MinY + padding..=extent.MaxY - padding;
     for row in 0..=u32::from(axis) * 2 {
         check_cancelled(cancelled)?;
         let mut longitude = (0..=u32::from(axis) * 2)
@@ -159,12 +232,18 @@ fn validate_vector_footprint(
                 || !longitudes.contains(&lon)
                 || !latitudes.contains(&lat)
         }) {
-            return Err(GeodataError::Preparation(
-                "vector hydrology footprint is outside the western Europe pilot",
-            ));
+            return Ok(RiverFootprint {
+                request,
+                axis,
+                covered: false,
+            });
         }
     }
-    Ok(())
+    Ok(RiverFootprint {
+        request,
+        axis,
+        covered: true,
+    })
 }
 
 #[cfg(test)]

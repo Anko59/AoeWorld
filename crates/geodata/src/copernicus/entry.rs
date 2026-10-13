@@ -53,7 +53,14 @@ pub(super) fn assemble_acquired_package(
         overview_ocean,
     )?;
     apply_detailed_water_model(&mut sampler, &mut hydrology, request, water_corrections)?;
-    super::pyramid::store_hydrology_evidence(&stage, &hydrology)?;
+    super::pyramid::store_hydrology_evidence(
+        &stage,
+        &hydrology,
+        request
+            .estimate()
+            .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
+            .tiles_per_side,
+    )?;
     let fields = super::pyramid::build_pyramids(
         &mut sampler,
         &stage,

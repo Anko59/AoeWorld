@@ -12,6 +12,7 @@ fn typed_evidence_pages_evict_and_reload_with_bounded_residency() {
         for x in 0..page_count {
             let len = usize::from(ENVIRONMENT_PAGE_SAMPLES).pow(2);
             hydrology.push(HydrologyEvidencePage {
+                river_segments: Vec::new(),
                 level: 0,
                 x,
                 y,

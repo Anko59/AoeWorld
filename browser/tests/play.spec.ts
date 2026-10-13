@@ -309,7 +309,11 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
   await expect(page.locator("#map-estimate")).toContainText(
     "requires a configured geographic worker",
   );
+  await expect(page.getByLabel("Rivers")).toBeDisabled();
+  await expect(page.getByLabel("Rivers")).toHaveValue("vectors");
   await page.getByLabel("Terrain detail").selectOption("automatic");
+  await expect(page.getByLabel("Rivers")).toBeEnabled();
+  await expect(page.getByLabel("Rivers")).toHaveValue("automatic");
   await expect(page.getByRole("button", { name: "Generate" })).toBeEnabled();
   await page.getByRole("button", { name: "Generate" }).click();
   await expect(page.locator("#map-estimate")).toContainText(
@@ -411,6 +415,7 @@ test("map creator retries a recovered request with its original detail", async (
       expect(route.request().postDataJSON()).toEqual({
         ...request,
         preparation: "overview",
+        hydrology_mode: "none",
       });
       await route.fulfill({ status: 500, body: "controlled retry response" });
     }

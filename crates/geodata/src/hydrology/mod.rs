@@ -18,7 +18,7 @@ use std::{
 
 #[path = "sampling.rs"]
 mod hydrology_sampling;
-use hydrology_sampling::{Bounds, request_bounds, tile_latitude, tile_longitude};
+use hydrology_sampling::{request_bounds, tile_latitude, tile_longitude};
 #[path = "sampler.rs"]
 mod sampler;
 use sampler::Sampler;
@@ -27,6 +27,7 @@ mod vectors;
 #[path = "model.rs"]
 mod water_model;
 pub use vectors::prepare_hydrology_vectors;
+pub(crate) use vectors::{RiverFootprint, prepare_vectors_validated, project_river_footprint};
 
 #[cfg(test)]
 pub(crate) fn offline_vector_pages(
@@ -44,7 +45,7 @@ pub(crate) fn offline_vector_pages(
 
 /// Overview preparation returns a complete pyramid; the modeled-water DEM
 /// context is only its bounded level-zero source grid, never virtual tiles.
-/// Keep ElevationGrid::new strict for legacy callers supplying a single grid.
+/// Keep ElevationGrid::new strict for callers supplying a single grid.
 pub(crate) fn overview_elevation_context(
     pages: &[aoe_map::ElevationPage],
 ) -> Result<Vec<aoe_map::ElevationPage>, GeodataError> {
@@ -193,7 +194,7 @@ struct OpenTile {
 pub(crate) struct HydrologySourcePlan {
     worldcover: Vec<KnownSource>,
     sources: Vec<KnownSource>,
-    rivers_available: bool,
+    footprint: RiverFootprint,
 }
 
 /// Acquires and samples the bounded modern-water evidence stack. Sources are
@@ -209,7 +210,7 @@ pub fn prepare_hydrology(
             "hydrology preparation supports 2 through 1024 samples per axis",
         ));
     }
-    let plan = preflight_hydrology(&cache_root, request)?;
+    let plan = preflight_hydrology(&cache_root, request, samples_per_axis)?;
     let overview = crate::prepare_overview(cache_root.clone(), request, 128)?;
     let mut prepared = prepare_hydrology_with_plan(
         cache_root,
@@ -241,19 +242,27 @@ pub(crate) fn apply_water_model(
     prepared.evidence_index.water_model = Some(model);
     prepared.evidence_index.hydrology_page_root =
         ordered_hydrology_page_root(&prepared.hydrology_pages)?;
-    prepared
-        .evidence_index
-        .validate_pages(&prepared.hydrology_pages, &prepared.modern_land_cover_pages)?;
+    prepared.evidence_index.validate_pages(
+        &prepared.hydrology_pages,
+        &prepared.modern_land_cover_pages,
+        request
+            .estimate()
+            .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
+            .tiles_per_side,
+    )?;
     Ok(())
 }
 
 pub(crate) fn preflight_hydrology(
     cache_root: &Path,
     request: MapRequest,
+    samples_per_axis: u16,
 ) -> Result<HydrologySourcePlan, GeodataError> {
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let footprint = project_river_footprint(request, samples_per_axis, &AtomicBool::new(false))?;
+    footprint.check_binding(request, samples_per_axis)?;
     let bounds = request_bounds(request)?;
     worldcover_tile_ids(
         bounds.min_latitude,
@@ -275,13 +284,8 @@ pub(crate) fn preflight_hydrology(
         bounds.max_longitude,
         &cache,
     )?;
-    let rivers_available = supports_hydrorivers(bounds);
     let mut sources = worldcover.clone();
-    sources.extend(
-        hydrology_vector_sources()
-            .into_iter()
-            .filter(|source| source.id != "hydrorivers-v1.0-eu-shp" || rivers_available),
-    );
+    sources.extend(hydrology_vector_sources());
     let estimate = cache.estimate_known_acquisition(&sources)?;
     if estimate.download_bytes > crate::MAX_HYDROLOGY_DOWNLOAD_BYTES {
         return Err(GeodataError::Preparation(
@@ -291,17 +295,8 @@ pub(crate) fn preflight_hydrology(
     Ok(HydrologySourcePlan {
         worldcover,
         sources,
-        rivers_available,
+        footprint,
     })
-}
-
-fn supports_hydrorivers(bounds: Bounds) -> bool {
-    let coverage = aoe_map::VECTOR_HYDROLOGY_SOURCE_COVERAGE;
-    let (longitudes, latitudes) = (coverage.longitude_degrees(), coverage.latitude_degrees());
-    bounds.min_latitude >= *latitudes.start()
-        && bounds.max_latitude <= *latitudes.end()
-        && bounds.min_longitude >= *longitudes.start()
-        && bounds.max_longitude <= *longitudes.end()
 }
 
 pub(crate) fn prepare_hydrology_with_plan(
@@ -347,6 +342,7 @@ fn prepare_with_plan(
     let request = request
         .normalized()
         .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    plan.footprint.check_binding(request, samples_per_axis)?;
     let cache = SourceCache::new(
         cache_root,
         crate::DownloadPolicy {
@@ -392,7 +388,25 @@ fn prepare_with_plan(
         .ok_or(GeodataError::Preparation(
             "HydroLAKES cache path is missing",
         ))?;
-    let rivers = paths.get("hydrorivers-v1.0-eu-shp").map(PathBuf::as_path);
+    let river_path = paths
+        .get("hydrorivers-v1.0-eu-shp")
+        .ok_or(GeodataError::Preparation(
+            "HydroRIVERS cache path is missing",
+        ))?;
+    let rivers = Some(river_path.as_path());
+    {
+        use gdal::vector::LayerAccess;
+        let dataset = hydrology_sampling::open_vector_source(river_path, RIVERS_MEMBER)?;
+        let extent = dataset.layer(0)?.get_extent()?;
+        let pinned = vectors::PINNED_RIVER_EXTENT;
+        if [extent.MinX, extent.MaxX, extent.MinY, extent.MaxY]
+            != [pinned.MinX, pinned.MaxX, pinned.MinY, pinned.MaxY]
+        {
+            return Err(GeodataError::Preparation(
+                "opened river dataset extent differs from pinned metadata",
+            ));
+        }
+    }
     let ocean =
         hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
     crate::preparation_progress::stage(crate::preparation_progress::Phase::SamplingWater);
@@ -423,20 +437,23 @@ fn prepare_with_plan(
         modern_land_cover_page_root: ordered_modern_land_cover_page_root(&modern_land_cover_pages)?,
         water_model: None,
     };
-    evidence_index.validate_pages(&hydrology_pages, &modern_land_cover_pages)?;
-    let river_coverage = if plan.rivers_available {
-        "hydrorivers=western-europe-covered"
-    } else {
-        "hydrorivers=unavailable-outside-western-europe"
-    };
+    evidence_index.validate_pages(
+        &hydrology_pages,
+        &modern_land_cover_pages,
+        request
+            .estimate()
+            .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
+            .tiles_per_side,
+    )?;
+    let river_coverage = "hydrorivers=pinned-dataset-extent-covered";
     let preprocessing = if vectors_only {
         format!(
-            "hydrology-gdal-vectors-v1;lake-surface-model-v2;river-topology-profile-v1;{river_coverage};{}",
+            "hydrology-gdal-vectors-v1;river-lines-width-fords;lake-surface-model-v2;river-topology-profile-v1;{river_coverage};{}",
             vectors::MODERN_NOT_REQUESTED,
         )
     } else {
         format!(
-            "hydrology-gdal-page-v3;lake-surface-model-v2;river-topology-profile-v1;{river_coverage}"
+            "hydrology-gdal-page-v3;river-lines-width-fords;lake-surface-model-v2;river-topology-profile-v1;{river_coverage}"
         )
     };
     let source_locks = locks

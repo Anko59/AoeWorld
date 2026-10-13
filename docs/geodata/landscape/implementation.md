@@ -374,16 +374,20 @@ applies only to this field-local preparation; detailed preparation keeps its
 coupled 128-sample overview context and its direct 128 cap. Field-local source
 locks append `;axes=E/V/W/H` to their preprocessing identity.
 
-Vector hydrology is selected explicitly, never by region: the creator's
-`hydrology_mode: vectors` with an explicit overview, or
-`AOE_MAP_HYDROLOGY_MODE=vectors` for the CLI. `PreparedHydrology::prepare_vectors`
-uses the prepared overview context plus pinned HydroLAKES/HydroRIVERS, without
+The creator and CLI default to Automatic overview hydrology. A single projected
+footprint decides coverage before any cache or source acquisition: covered areas
+use pinned HydroLAKES/HydroRIVERS, while uncovered areas use the ordinary overview
+and record `outside_river_coverage` in the package and job result. The creator
+shows that note. Explicit With rivers and detailed preparation reject uncovered
+footprints precisely; Without rivers remains available everywhere. The validated
+footprint is carried into sampling rather than projected again. The opened river
+layer must match the same SHA-pinned extent and query padding.
+`AOE_MAP_HYDROLOGY_MODE=vectors` requests rivers explicitly.
+`PreparedHydrology::prepare_vectors` uses prepared overview context without
 WorldCover catalog or raster work. Typed evidence and modeled water share the
-1024 axis; categorical water stays at 128 and modern land cover is class-0
-nodata, not an observation. The whole projected footprint must lie inside the
-river-vector source coverage window less the query padding; the window, padding,
-axes, mode and lock counts (7 overview, 2 vector) are defined once in
-`aoe_map` environment/preparation and shared by geodata, worker and server.
+1024 axis; categorical water stays at 128 and modern land cover is class-0 nodata,
+not an observation. Axes, mode and lock counts (7 overview, 2 vector) are defined
+in `aoe_map` environment/preparation and used by geodata, worker and server.
 Cancellation is checked before publishing the manifest; orphan immutable pages
 are not a published package.
 

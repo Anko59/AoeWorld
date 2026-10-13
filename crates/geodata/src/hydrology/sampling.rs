@@ -362,11 +362,7 @@ pub(super) fn vector_features(
             })
             .transpose()?
             .unwrap_or(0);
-        let geometry = if rivers {
-            transformed.buffer(river_width(&feature)?, 4)?
-        } else {
-            transformed
-        };
+        let geometry = transformed;
         let retained_bytes = geometry.wkb()?.len();
         let retained_and_line_bytes =
             retained_bytes
@@ -395,16 +391,6 @@ fn local_transform(definition: &str) -> Result<CoordTransform, GeodataError> {
     source.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
     target.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
     CoordTransform::new(&source, &target).map_err(|_| GeodataError::Projection)
-}
-
-fn river_width(feature: &gdal::vector::Feature<'_>) -> Result<f64, GeodataError> {
-    let index = feature.field_index("DIS_AV_CMS")?;
-    let discharge = match feature.field(index)? {
-        Some(FieldValue::RealValue(value)) if value.is_finite() => value,
-        Some(FieldValue::IntegerValue(value)) => f64::from(value),
-        _ => 0.0,
-    };
-    Ok((4.0 + discharge.max(0.0).sqrt() * 3.0).clamp(4.0, 100.0))
 }
 
 fn checked_geometry_bytes(

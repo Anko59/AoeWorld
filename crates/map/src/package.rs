@@ -75,6 +75,27 @@ pub struct SourceLock {
     pub preprocessing_version: String,
 }
 
+/// Explicit preparation outcomes that callers must display with the package.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreparationNote {
+    OutsideRiverCoverage,
+    GeographicWorkerUnavailable,
+}
+
+impl PreparationNote {
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::OutsideRiverCoverage => {
+                "This area is outside river coverage; the map uses overview water without rivers."
+            }
+            Self::GeographicWorkerUnavailable => {
+                "No geographic worker configured; terrain is procedural fallback without source river data."
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct MapPackage {
     pub schema_version: u16,
@@ -89,6 +110,7 @@ pub struct MapPackage {
     pub provenance: EnvironmentalProvenance,
     pub environment: PreparedEnvironment,
     pub content_hash: [u8; 32],
+    pub preparation_notes: Vec<PreparationNote>,
 }
 
 impl MapPackage {
@@ -225,7 +247,36 @@ impl MapPackage {
             provenance,
             environment,
             content_hash,
+            preparation_notes: Vec::new(),
         })
+    }
+
+    /// Bind an explicit preparation outcome to content identity, without changing
+    /// the geography key or the generated terrain of the same overview inputs.
+    pub fn with_preparation_note(mut self, note: PreparationNote) -> Result<Self, MapPackageError> {
+        self.validate()?;
+        if !self.preparation_notes.is_empty()
+            || self.environment.hydrology_evidence.is_some()
+            || (note == PreparationNote::GeographicWorkerUnavailable
+                && (!self.source_locks.is_empty()
+                    || self.environment != PreparedEnvironment::default()))
+            || self.source_locks.iter().any(|lock| {
+                ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"]
+                    .contains(&lock.id.as_str())
+            })
+        {
+            return Err(MapPackageError::NonCanonicalFields);
+        }
+        let mut hash = blake3::Hasher::new();
+        hash.update(&self.content_hash);
+        hash.update(b"aoe-map-preparation-note\0");
+        hash.update(match note {
+            PreparationNote::OutsideRiverCoverage => b"outside_river_coverage",
+            PreparationNote::GeographicWorkerUnavailable => b"geographic_worker_unavailable",
+        });
+        self.content_hash = *hash.finalize().as_bytes();
+        self.preparation_notes.push(note);
+        Ok(self)
     }
 
     pub fn content_hash_hex(&self) -> String {
@@ -253,6 +304,11 @@ impl MapPackage {
             self.provenance.clone(),
             self.environment.clone(),
         )?;
+        let canonical = match self.preparation_notes.as_slice() {
+            [] => canonical,
+            [note] => canonical.with_preparation_note(*note)?,
+            _ => return Err(MapPackageError::NonCanonicalFields),
+        };
         (canonical == *self)
             .then_some(())
             .ok_or(MapPackageError::NonCanonicalFields)

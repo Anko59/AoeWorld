@@ -18,8 +18,9 @@ use overview::coarse_vegetation;
 pub(super) fn store_hydrology_evidence(
     stage: &Stage,
     prepared: &crate::PreparedHydrology,
+    tiles: u64,
 ) -> Result<(), GeodataError> {
-    evidence::store_hydrology_evidence(stage, prepared)
+    evidence::store_hydrology_evidence(stage, prepared, tiles)
 }
 
 pub(super) struct DetailedFields {

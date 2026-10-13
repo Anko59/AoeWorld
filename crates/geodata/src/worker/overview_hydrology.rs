@@ -10,21 +10,114 @@ use std::sync::atomic::AtomicBool;
 /// Vector evidence and modeled water share the landscape overview axis.
 pub(super) const VECTOR_SAMPLES_PER_AXIS: u16 = LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
 
-pub(super) fn preflight(
+/// An immutable preflight decision, bound to its request and preparation grid.
+/// The CLI can carry this into execution instead of projecting a second time.
+#[derive(Clone, Debug)]
+pub struct OverviewHydrologyPreflight {
+    request: MapRequest,
+    mode: OverviewHydrologyMode,
+    axis: u16,
+    axes: OverviewFieldAxes,
+    requested_corrections: Option<WaterCorrectionDocument>,
+    corrections: Option<WaterCorrectionDocument>,
+    footprint: Option<crate::hydrology::RiverFootprint>,
+    outside: bool,
+}
+
+impl OverviewHydrologyPreflight {
+    pub fn has_vectors(&self) -> bool {
+        self.footprint.is_some()
+    }
+    pub(super) fn validate_binding(
+        &self,
+        request: MapRequest,
+        mode: OverviewHydrologyMode,
+        axis: u16,
+        axes: OverviewFieldAxes,
+        corrections: &Option<WaterCorrectionDocument>,
+    ) -> Result<(), GeodataError> {
+        if request.normalized().ok() != Some(self.request)
+            || mode != self.mode
+            || axis != self.axis
+            || axes != self.axes
+            || corrections != &self.requested_corrections
+        {
+            return Err(GeodataError::Preparation(
+                "overview hydrology preflight does not match execution request",
+            ));
+        }
+        Ok(())
+    }
+    pub(super) fn prepare(
+        &self,
+        cache: std::path::PathBuf,
+        elevation: &[aoe_map::ElevationPage],
+        water: &[aoe_map::WaterPage],
+        cancelled: &AtomicBool,
+    ) -> Result<Option<PreparedHydrology>, GeodataError> {
+        self.footprint
+            .clone()
+            .map(|footprint| {
+                crate::hydrology::prepare_vectors_validated(
+                    cache,
+                    footprint,
+                    elevation,
+                    water,
+                    self.corrections.clone().ok_or(GeodataError::Preparation(
+                        "vector preflight has no correction binding",
+                    ))?,
+                    cancelled,
+                )
+            })
+            .transpose()
+    }
+    pub(super) fn mark_package(&self, package: MapPackage) -> Result<MapPackage, GeodataError> {
+        if package.request != self.request
+            || (self.has_vectors() && package.environment.hydrology_evidence.is_none())
+        {
+            return Err(GeodataError::Preparation(
+                "hydrology result does not match preflight",
+            ));
+        }
+        Ok(if self.outside {
+            package.with_preparation_note(aoe_map::PreparationNote::OutsideRiverCoverage)?
+        } else {
+            package
+        })
+    }
+}
+
+pub fn preflight(
     mode: OverviewHydrologyMode,
     request: MapRequest,
     samples_per_axis: u16,
     axes: OverviewFieldAxes,
     corrections: Option<WaterCorrectionDocument>,
     cancelled: &AtomicBool,
-) -> Result<Option<WaterCorrectionDocument>, GeodataError> {
+) -> Result<OverviewHydrologyPreflight, GeodataError> {
+    if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(crate::CacheError::Cancelled.into());
+    }
+    let request = request
+        .normalized()
+        .map_err(|_| GeodataError::Preparation("invalid map request"))?;
+    let mut plan = OverviewHydrologyPreflight {
+        request,
+        mode,
+        axis: samples_per_axis,
+        axes,
+        requested_corrections: corrections.clone(),
+        corrections: None,
+        footprint: None,
+        outside: false,
+    };
     if mode == OverviewHydrologyMode::None {
         if corrections.is_some() {
             return Err(GeodataError::Preparation(
                 "overview water corrections require vectors mode",
             ));
         }
-        return Ok(None);
+        return Ok(plan);
     }
     if axes != OverviewFieldAxes::LANDSCAPE {
         return Err(GeodataError::Preparation(
@@ -36,17 +129,24 @@ pub(super) fn preflight(
             "overview vectors require the landscape overview samples per axis",
         ));
     }
-    let corrections = match corrections {
+    let document = match corrections {
         Some(document) => document,
         None => WaterCorrectionDocument::empty(request, VECTOR_SAMPLES_PER_AXIS)?,
     };
-    PreparedHydrology::validate_vectors_request(
-        request,
-        VECTOR_SAMPLES_PER_AXIS,
-        &corrections,
-        cancelled,
-    )?;
-    Ok(Some(corrections))
+    document.validate_for(request, VECTOR_SAMPLES_PER_AXIS)?;
+    let footprint =
+        crate::hydrology::project_river_footprint(request, VECTOR_SAMPLES_PER_AXIS, cancelled)?;
+    if !footprint.covered()
+        && mode == OverviewHydrologyMode::Automatic
+        && plan.requested_corrections.is_none()
+    {
+        plan.outside = true;
+    } else {
+        footprint.check_binding(request, VECTOR_SAMPLES_PER_AXIS)?;
+        plan.footprint = Some(footprint);
+        plan.corrections = Some(document);
+    }
+    Ok(plan)
 }
 
 impl GeneratedMap {
@@ -90,6 +190,7 @@ impl GeneratedMap {
         hydrology.evidence_index.validate_pages(
             &hydrology.hydrology_pages,
             &hydrology.modern_land_cover_pages,
+            self.package.estimate.tiles_per_side,
         )?;
         let marker =
             hydrology
@@ -133,56 +234,5 @@ impl GeneratedMap {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preflight_rejects_vector_axis_mismatch_before_acquisition() {
-        let request = MapRequest::default();
-        let cancelled = AtomicBool::new(false);
-        let axes = OverviewFieldAxes::LANDSCAPE;
-        let vectors = OverviewHydrologyMode::Vectors;
-        assert!(
-            preflight(
-                vectors,
-                request,
-                VECTOR_SAMPLES_PER_AXIS,
-                axes,
-                None,
-                &cancelled
-            )
-            .is_ok()
-        );
-        assert!(matches!(
-            preflight(vectors, request, 128, axes, None, &cancelled),
-            Err(GeodataError::Preparation(message)) if message.contains("samples per axis")
-        ));
-    }
-
-    #[test]
-    fn named_lock_counts_match_the_documented_source_lists() {
-        let biome_sources = crate::parse_potential_biome_sources(
-            r#"{"files":[
-                {"key":"pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif","size":210668848,"checksum":"md5:e67c4778153fe5dcd9c637f4846e2f03","links":{"self":"https://zenodo.org/file.tif"}},
-                {"key":"pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif.csv","size":2968,"checksum":"md5:874f169f966e039935108bc366773f80","links":{"self":"https://zenodo.org/file.csv"}}
-            ]}"#,
-        )
-        .expect("recorded Zenodo record payload");
-        let hyde_catalog = crate::parse_hyde_sources(
-            r#"{"data":{"latestVersion":{"files":[
-                {"dataFile":{"id":5490328,"filename":"HYDE3_2_1-baseline.zip","filesize":5339653974,"checksum":{"type":"SHA-1","value":"0d0e4ff97deb59664ce6c34dfdeeafa08e487d20"}}},
-                {"dataFile":{"id":5490327,"filename":"HYDE3_2_1-general_supplementary.zip","filesize":23585889,"checksum":{"type":"SHA-1","value":"3cfe98d21e70c9ce478460c7265962f1bb2b6aab"}}},
-                {"dataFile":{"id":5396388,"filename":"readme_release_HYDE3.2.1.txt","filesize":8826,"checksum":{"type":"SHA-1","value":"821309ce6035c68033c6e5b3522982cd515bd111"}}}
-            ]}}}"#,
-        )
-        .expect("recorded HYDE listing payload");
-        assert_eq!(
-            crate::overview_sources_from_parsed_catalogs(biome_sources, hyde_catalog).len(),
-            LANDSCAPE_OVERVIEW_SOURCE_LOCKS
-        );
-        assert_eq!(
-            crate::hydrology_vector_sources().len(),
-            VECTOR_HYDROLOGY_SOURCE_LOCKS
-        );
-    }
-}
+#[path = "tests/overview_hydrology.rs"]
+mod tests;
