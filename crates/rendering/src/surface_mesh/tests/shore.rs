@@ -384,3 +384,71 @@ fn a_dry_triangle_beside_a_shore_corner_keeps_only_its_ground_sheet() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn stepped_shallow_shores_share_their_water_sheet_with_adjoining_depth_faces() {
+    for direction in [-1, 1] {
+        for deeper in [5, 11] {
+            let mut samples = mix::fixture::shore_terrain();
+            for sample in &mut samples {
+                let x = (sample.position[0] - 0.5) as i32;
+                let y = (sample.position[1] - 0.5) as i32;
+                let band = x + direction * y;
+                sample.material = if band < 0 {
+                    3
+                } else if band < 2 {
+                    10
+                } else {
+                    deeper
+                };
+                sample.surface.water = u8::from(band >= 0);
+            }
+            let mut view = mix::fixture::camera(0);
+            view.viewport = [512.0; 2];
+            let mut art = mix::fixture::art();
+            art.water_depth[0].0 = art.terrain[0].clone();
+            art.water_depth[1].0 = art.terrain[1].clone();
+            let mut faces = projected_surface_triangles(&samples, view);
+            apply_terrain_textures(&mut faces, &art);
+            let mut pure_shore_vertices = std::collections::BTreeSet::new();
+            for face in &faces {
+                if (face.appearance >> 1) & 7 == 6 {
+                    for (point, coverage) in face.points.iter().zip(face.floor_strengths.unwrap()) {
+                        if coverage == 255 {
+                            pure_shore_vertices
+                                .insert((point.world[0] as i32, point.world[1] as i32));
+                        }
+                    }
+                }
+            }
+            let mut shared = 0;
+            for face in &faces {
+                if face.skirt
+                    || face.floor_strengths.is_some()
+                    || !matches!(face.material, 5 | 10 | 11)
+                {
+                    continue;
+                }
+                for (corner, point) in face.points.iter().enumerate() {
+                    if pure_shore_vertices.contains(&(point.world[0] as i32, point.world[1] as i32))
+                    {
+                        shared += 1;
+                        assert_eq!(
+                            face.texture_materials.unwrap()[corner],
+                            10,
+                            "shore/depth seam at {:?}, direction {direction}, depth {deeper}",
+                            point.world
+                        );
+                    }
+                }
+            }
+            assert!(shared > 0, "fixture must cover the shore/depth join");
+            assert!(
+                faces.iter().any(|face| !face.skirt
+                    && face.material == deeper
+                    && face.texture_materials == Some([deeper; 3])),
+                "interior depth art stays intact"
+            );
+        }
+    }
+}
