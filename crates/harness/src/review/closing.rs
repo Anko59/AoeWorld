@@ -9,7 +9,7 @@
 //! whole diff blind, so a second mostly finds different edge cases rather
 //! than checking the fixes.
 use super::{
-    Report,
+    Increment, Report,
     protocol::{Finding, Status, cap},
 };
 
@@ -33,6 +33,21 @@ pub(crate) enum Plan {
         since: String,
         prior: Vec<Finding>,
     },
+    /// The first review of the commits added after a passing review: only
+    /// that increment is judged (`increment`).
+    Increment(Increment),
+}
+
+impl Plan {
+    /// Reviews with the closing procedure (strong models, no blind round, a
+    /// verdict on "no blocking finding left"): fixes, and small increments.
+    pub(crate) fn closing_style(&self) -> bool {
+        match self {
+            Self::Full => false,
+            Self::Closing { .. } => true,
+            Self::Increment(increment) => increment.closing,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -107,8 +122,19 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
             short(&failed.head)
         ));
     }
-    let full: Vec<&Report> = failing.iter().copied().filter(|r| !r.closing).collect();
-    let closing: Vec<&Report> = failing.iter().copied().filter(|r| r.closing).collect();
+    // The first review of an increment spends the full review's slot, whatever
+    // its style: it is the branch's one review of code nobody has judged.
+    let closing_review = |r: &Report| r.closing && r.increment.is_none();
+    let full: Vec<&Report> = failing
+        .iter()
+        .copied()
+        .filter(|r| !closing_review(r))
+        .collect();
+    let closing: Vec<&Report> = failing
+        .iter()
+        .copied()
+        .filter(|r| closing_review(r))
+        .collect();
     if full.len() < BUDGET {
         return Next::Review(Plan::Full);
     }

@@ -2,10 +2,7 @@
 use super::{gh, git, review_gate};
 use crate::{
     agents::Runtime,
-    review::{
-        self, Tier,
-        closing::{self, Next},
-    },
+    review::{self, Tier, closing::Next},
 };
 use serde::Deserialize;
 use std::{
@@ -72,10 +69,13 @@ pub(super) fn execute(root: &Path) -> Result<()> {
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
     let history = review::history(&worktree.path, &metadata.head_name)?;
-    let plan = match closing::next(&history, &metadata.head_oid, unix_now()) {
-        Next::Review(plan) => plan,
-        Next::FixFirst(why) | Next::Split(why) | Next::Unavailable(why) => return Err(why.into()),
-    };
+    let plan =
+        match review::increment::next(&worktree.path, &history, &metadata.head_oid, unix_now()) {
+            Next::Review(plan) => plan,
+            Next::FixFirst(why) | Next::Split(why) | Next::Unavailable(why) => {
+                return Err(why.into());
+            }
+        };
     let tier = required_tier(
         review::floor(&worktree.path)?,
         dependency_major_bump(&worktree.path, "origin/dev", &metadata.head_oid)?,

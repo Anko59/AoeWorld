@@ -9,6 +9,7 @@ mod calibrate;
 pub(crate) mod closing;
 pub(crate) mod config;
 mod entry;
+pub(crate) mod increment;
 mod prompt;
 pub(crate) mod protocol;
 mod report;
@@ -26,6 +27,7 @@ pub(crate) use config::Tier;
 #[cfg(test)]
 pub(crate) use entry::review_on_base;
 pub(crate) use entry::{execute, review, review_for_branch};
+pub(crate) use increment::Increment;
 use protocol::{Answer, Cast, Finding, Grade, Status};
 pub(crate) use report::{Report, history};
 pub(crate) use session::Ask;
@@ -65,6 +67,10 @@ pub(crate) enum Commands {
 fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTreeSet<String>)> {
     let (base, merge_base) = git::base(root, &base::current(), false)?;
     let changed = git::changed(root, &merge_base)?;
+    Ok((base, merge_base, suites_of(root, &changed)?))
+}
+
+fn suites_of(root: &Path, changed: &[String]) -> Result<std::collections::BTreeSet<String>> {
     let registry = Registry::parse(trusted(root, "gates/registry.json")?.as_bytes())?;
     // A misspelt floor would silently give the low tier.
     let known: std::collections::BTreeSet<&str> =
@@ -76,8 +82,12 @@ fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTre
     {
         return Err(format!("gates/review.json: floor for unknown suite `{unknown}`").into());
     }
-    let suites = registry.classify(&changed).suites;
-    Ok((base, merge_base, suites))
+    Ok(registry.classify(changed).suites)
+}
+
+/// The lowest tier that the change to `files` alone allows.
+pub(crate) fn floor_of(root: &Path, files: &[String]) -> Result<Tier> {
+    Ok(Config::load(root)?.floor(&suites_of(root, files)?))
 }
 
 pub(crate) fn floor(root: &Path) -> Result<Tier> {
@@ -175,20 +185,39 @@ fn review_with_branch(
         return Err("commit or stash your changes first: reviewers read the working tree, and the review is of HEAD".into());
     }
     let head = git::git(root, &["rev-parse", "HEAD"])?;
+    // The commits after an approved one: only they are judged.
+    let (view, scope_note, facts_from) = match plan {
+        Plan::Increment(increment) => {
+            let (files, diff) = increment::view(root, &merge_base, &increment.scope)?;
+            let from = match &increment.scope {
+                increment::Scope::Since(since) => since.clone(),
+                increment::Scope::Files(_) => merge_base.clone(),
+            };
+            let note = prompt::scope_note(increment, &files, &from);
+            (Some((files, diff)), note, from)
+        }
+        _ => (None, String::new(), merge_base.clone()),
+    };
+    let mut filter =
+        increment::Filter::new(view.as_ref().map(|(_, diff)| increment::Lines::of(diff)));
     let subject = prompt::Subject {
         head: head.clone(),
         merge_base: merge_base.clone(),
         task: Report::effective_task(root, &head, task)?,
-        stat: git::git(root, &["diff", "--stat", &merge_base, "HEAD"])?,
-        // A closing review audits the fixes since the last reviewed commit.
-        diff: match plan {
-            Plan::Full => git::git(root, &["diff", &merge_base, "HEAD"])?,
-            // Only the branch's own files: a rebase must not bring dev's changes in.
-            Plan::Closing { since, .. } => closing_diff(root, &merge_base, since)?,
+        stat: match &view {
+            Some((files, _)) => increment::stat(root, &facts_from, files)?,
+            None => git::git(root, &["diff", "--stat", &merge_base, "HEAD"])?,
         },
-        facts: facts(root, &merge_base)?,
+        // A closing review audits the fixes since the last reviewed commit.
+        diff: match (plan, view) {
+            (Plan::Closing { since, .. }, _) => increment::since_diff(root, &merge_base, since)?,
+            (_, Some((_, diff))) => diff,
+            _ => git::git(root, &["diff", &merge_base, "HEAD"])?,
+        },
+        facts: facts(root, &facts_from)?,
+        scope: scope_note,
     };
-    let closing = matches!(plan, Plan::Closing { .. });
+    let closing = plan.closing_style();
     let tier_config = config.tiers[&tier].clone();
     let model = policy.model.clone();
     let personas = tier_config.personas.clone();
@@ -203,18 +232,25 @@ fn review_with_branch(
         personas
     };
     let reviewers = personas.len();
-    let first = match plan {
-        Plan::Closing { prior, .. } => {
+    let first = if closing {
+        if let Plan::Closing { prior, .. } = plan {
             findings = prior.clone();
-            1
         }
-        Plan::Full => {
-            blind_round(root, &personas, &subject, ask, &mut findings, &mut failures)?;
-            for finding in &mut findings {
-                finding.status = protocol::status(finding, reviewers);
-            }
-            2
+        1
+    } else {
+        blind_round(
+            root,
+            &personas,
+            &subject,
+            ask,
+            &mut findings,
+            &mut failures,
+            &mut filter,
+        )?;
+        for finding in &mut findings {
+            finding.status = protocol::status(finding, reviewers);
         }
+        2
     };
     let mut rounds = 1;
     // A closing review needs a round after the first to examine what it finds.
@@ -298,6 +334,7 @@ fn review_with_branch(
                         .into_iter()
                         .filter(|f| !last && f.severity <= protocol::Severity::Major)
                         .collect();
+                    let serious = filter.admit(serious);
                     add_findings(&mut findings, reviewer, round, serious);
                 }
                 Err(error) => {
@@ -368,6 +405,13 @@ fn review_with_branch(
         // What the reviewers saw: the commit log stands in for an empty task.
         task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
         base_branch: base::current(),
+        increment: match plan {
+            Plan::Increment(increment) => Some(Increment {
+                outside: filter.outside,
+                ..increment.clone()
+            }),
+            _ => None,
+        },
     };
     report.store(root)?;
     Ok(report)
@@ -381,6 +425,7 @@ fn blind_round(
     ask: &dyn Ask,
     findings: &mut Vec<Finding>,
     failures: &mut Vec<String>,
+    filter: &mut increment::Filter,
 ) -> Result<()> {
     let prompts = personas
         .iter()
@@ -393,24 +438,14 @@ fn blind_round(
         match answer
             .and_then(|text| serde_json::from_str::<Answer>(&text).map_err(|e| e.to_string()))
         {
-            Ok(answer) => add_findings(findings, reviewer, 1, answer.findings),
+            Ok(answer) => {
+                let inside = filter.admit(answer.findings);
+                add_findings(findings, reviewer, 1, inside)
+            }
             Err(error) => failures.push(format!("round 1, {}: {error}", personas[reviewer])),
         }
     }
     Ok(())
-}
-
-/// The fixes since `since`, limited to the files the branch touches now or
-/// touched then (a fix may revert a file to dev), taken literally.
-fn closing_diff(root: &Path, merge_base: &str, since: &str) -> Result<String> {
-    let mut files = git::changed(root, merge_base)?;
-    let since_base = git::git(root, &["merge-base", merge_base, since])?;
-    files.extend(git::changed_between(root, &since_base, since)?);
-    files.sort();
-    files.dedup();
-    let mut args = vec!["--literal-pathspecs", "diff", since, "HEAD", "--"];
-    args.extend(files.iter().map(String::as_str));
-    Ok(git::git(root, &args)?)
 }
 
 fn add_findings(

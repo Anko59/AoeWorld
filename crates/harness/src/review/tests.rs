@@ -283,6 +283,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         change_fingerprint: None,
         policy_fingerprint: None,
         reused_from: None,
+        increment: None,
         task_fingerprint: None,
         base_branch: "dev".into(),
     };
@@ -300,8 +301,10 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
     assert!(report.markdown().contains("Incomplete review"));
 }
 
+mod after_approval;
 mod arbiter;
 mod closing;
+mod cumulative;
 mod flow;
 mod limits;
 mod pinned;

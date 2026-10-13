@@ -127,7 +127,7 @@ fn full_id(sha: &str) -> bool {
 
 /// Always use the recorded base, including for dev: a moved base must not
 /// change the source's original patch. Missing objects decline reuse.
-fn source_identity(root: &Path, source: &Report) -> Result<Vec<u8>, String> {
+pub(super) fn source_identity(root: &Path, source: &Report) -> Result<Vec<u8>, String> {
     if !full_id(&source.base) {
         return Err("review records no base commit".into());
     }

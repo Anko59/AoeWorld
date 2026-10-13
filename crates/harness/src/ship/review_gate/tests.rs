@@ -7,6 +7,7 @@ use super::super::{
     tests::{fixture, offline, run},
 };
 
+mod after_approval;
 mod ahead;
 mod patch_reuse;
 mod reuse;
@@ -53,6 +54,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         change_fingerprint: None,
         policy_fingerprint: Report::policy_fingerprint(root, tier.name()).ok(),
         reused_from: None,
+        increment: None,
         // An empty task: the reviewers saw the commit log.
         task_fingerprint: Report::effective_task(root, "HEAD", "")
             .ok()

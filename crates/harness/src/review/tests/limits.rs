@@ -77,6 +77,7 @@ fn prompts_stay_under_the_argument_limit_for_any_diff() {
         stat: "stat".into(),
         diff: "+ changed line é\n".repeat(40_000),
         facts: "facts".into(),
+        scope: String::new(),
     };
     let first = prompt::first_round(&root, "correctness", &subject).unwrap();
     assert!(first.len() <= PROMPT_LIMIT, "{}", first.len());
@@ -136,6 +137,7 @@ fn a_huge_task_or_file_list_is_cut_not_fatal() {
         stat: " assets/a.png | Bin\n".repeat(20_000),
         diff: "+x\n".into(),
         facts: "facts".into(),
+        scope: String::new(),
     };
     let prompt = prompt::first_round(&root, "correctness", &subject).unwrap();
     assert!(prompt.len() <= PROMPT_LIMIT, "{}", prompt.len());

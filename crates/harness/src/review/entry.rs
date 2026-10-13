@@ -1,4 +1,4 @@
-use super::{Commands, closing, floor, history, now};
+use super::{Commands, closing, floor, history, increment, now};
 use super::{Config, Live, Plan, Report, Result, Tier, config::Model, review_with_branch, trusted};
 use crate::{agents::Runtime, ship::git};
 use std::{
@@ -84,7 +84,7 @@ impl Policy {
     ) -> Result<Self> {
         let (pin, commit) = trusted::pin(root, judge)?;
         let config = Config::load(root)?;
-        let model = config.model_for(tier, runtime, matches!(plan, Plan::Closing { .. }));
+        let model = config.model_for(tier, runtime, plan.closing_style());
         Ok(Self {
             _pin: pin,
             commit,
@@ -138,7 +138,12 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
             }
             // `make review` spends the same budget as `make ship`.
             let head = git::git(&root, &["rev-parse", "HEAD"])?;
-            let plan = match closing::next(&history(&root, &git::branch(&root)?)?, &head, now()) {
+            let plan = match increment::next(
+                &root,
+                &history(&root, &git::branch(&root)?)?,
+                &head,
+                now(),
+            ) {
                 closing::Next::Review(plan) => plan,
                 closing::Next::FixFirst(why)
                 | closing::Next::Split(why)
