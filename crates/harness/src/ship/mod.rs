@@ -347,7 +347,7 @@ pub(crate) fn ship_with(
         eprintln!("ship: {}", stack::ahead_message(&options.base, report));
         return Ok(evidence);
     }
-    let rebased = recheck::before_push(root, &evidence, options)?;
+    let rebased = recheck::before_push(root, &evidence, review.as_ref(), options)?;
     let (evidence, review, lease, _recheck_anchor) = match rebased {
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),

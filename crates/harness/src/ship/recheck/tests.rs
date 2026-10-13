@@ -10,6 +10,8 @@ use crate::{
 };
 use std::{fs, path::PathBuf};
 
+mod pinned;
+
 type Temp = tempfile::TempDir;
 
 /// The ship fixture, with the committer identity a rebase needs.
@@ -86,7 +88,11 @@ const ONE_FILE_DIR: &str = "[ $$(ls dir 2>/dev/null | wc -l) -le 1 ]";
 fn an_unmoved_base_is_not_rechecked() {
     let (temp, root) = fixture(LOGGED);
     let before = judge(&root, &offline()).unwrap();
-    assert!(before_push(&root, &before, &offline()).unwrap().is_none());
+    assert!(
+        before_push(&root, &before, None, &offline())
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(runs(&temp), 1, "only the ship's own gate run");
     assert_eq!(head(&root), before.head);
     let shipped = ship(&root, &offline()).unwrap();
@@ -105,7 +111,17 @@ fn a_moved_base_is_rebased_rechecked_pushed_and_recorded() {
         (recheck.rounds, recheck.commits.clone()),
         (1, vec![moved.clone()])
     );
-    assert_eq!(recheck.gates[0].gate, "fmt-check");
+    assert_eq!(
+        shipped.gates[0].gate, "fmt-check",
+        "the static gates ran on the rebased head"
+    );
+    assert_eq!(shipped.cadence, "recheck", "not a copied preflight verdict");
+    assert_eq!(recheck.head, shipped.head);
+    assert_ne!(recheck.from_head, shipped.head);
+    assert_eq!(
+        recheck.preflight[0].gate, "fmt-check",
+        "the pre-rebase preflight is a reference"
+    );
     assert_eq!(
         (shipped.base.as_str(), recheck.base.as_str()),
         (moved.as_str(), moved.as_str())
@@ -118,7 +134,9 @@ fn a_moved_base_is_rebased_rechecked_pushed_and_recorded() {
     assert_eq!(stored.recheck.unwrap().from_head, recheck.from_head);
     let text = section(&shipped);
     assert!(
-        text.contains("Re-check before push") && text.contains("fmt-check"),
+        text.contains("Re-check before push")
+            && text.contains("fmt-check")
+            && text.contains(&format!("Full preflight on `{}`", &recheck.from_head[..12])),
         "{text}"
     );
     assert_eq!(section(&judge(&root, &offline()).unwrap()), "");
@@ -227,11 +245,13 @@ fn a_stacked_ship_rechecks_against_its_parent_not_dev() {
     assert_eq!(before.changed, ["c.txt"]);
     advance(&temp, "dev", "dev-only.txt", "d\n");
     assert!(
-        before_push(&root, &before, &options).unwrap().is_none(),
+        before_push(&root, &before, None, &options)
+            .unwrap()
+            .is_none(),
         "dev is not the base"
     );
     let moved = advance(&temp, "parent", "p2.txt", "p2\n");
-    let rebased = before_push(&root, &before, &options)
+    let rebased = before_push(&root, &before, None, &options)
         .unwrap()
         .expect("parent moved");
     assert_eq!(rebased.evidence.base, moved);
@@ -266,7 +286,7 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
     let tip = remote_tip(&root, "feature");
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
-    let error = before_push(&root, &before, &offline())
+    let error = before_push(&root, &before, None, &offline())
         .err()
         .unwrap()
         .to_string();
@@ -285,7 +305,7 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
         force: true,
         ..offline()
     };
-    let rebased = before_push(&root, &before, &forced).unwrap().unwrap();
+    let rebased = before_push(&root, &before, None, &forced).unwrap().unwrap();
     assert_eq!(rebased.lease, None);
     drop(rebased); // releases the pinned base of this fixture
     // A branch not on the remote needs no force at all.
@@ -293,7 +313,7 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
     assert_eq!(
-        before_push(&root, &before, &offline())
+        before_push(&root, &before, None, &offline())
             .unwrap()
             .unwrap()
             .lease,

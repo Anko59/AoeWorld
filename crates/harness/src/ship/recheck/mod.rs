@@ -9,7 +9,7 @@
 use super::{
     Options,
     evidence::{self, Evidence},
-    git, review_gate,
+    git,
     run::{self, GateResult, GateVerdict},
 };
 use crate::{
@@ -18,6 +18,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+mod carry;
 
 #[cfg(test)]
 mod tests;
@@ -28,18 +30,28 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub(super) const MAX_ROUNDS: u32 = 3;
 
 /// What the re-check did, kept in the evidence and the pull request description.
+/// The evidence's own `gates` are the static gates that ran on the rebased head
+/// (cadence `recheck`); the full preflight is only referenced here, by the
+/// commit and base it passed on. The pre-push hook accepts the rebased head
+/// through this record alone (`prepush.rs`).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Recheck {
+    /// The rebased head the static gates ran on.
+    pub(crate) head: String,
     /// The base commit the branch was rebased onto.
     pub(crate) base: String,
-    /// The commit the ship started from (before the rebase).
+    /// The commit the full preflight passed on (before the rebase) ...
     pub(crate) from_head: String,
+    /// ... and the base it was run against.
+    pub(crate) from_base: String,
+    /// The full preflight gates that passed on `from_head`.
+    pub(crate) preflight: Vec<GateResult>,
+    /// The dev revision the carried review was judged under, if one was.
+    pub(crate) judge: Option<String>,
     pub(crate) rounds: u32,
     /// The commits the base gained meanwhile, oldest first.
     pub(crate) commits: Vec<String>,
-    /// The static gates of the last round, on the rebased result.
-    pub(crate) gates: Vec<GateResult>,
 }
 
 /// The branch after a re-check rebase: evidence and review for the new commit.
@@ -58,16 +70,33 @@ fn short(sha: &str) -> &str {
 }
 
 /// Fetch the base again; `None` when nothing moved. A local parent cannot
-/// move under the ship.
+/// move under the ship. `review` is the review that just passed for
+/// `evidence.head`, carried over a rebase that leaves the patch unchanged.
 pub(super) fn before_push(
     root: &Path,
     evidence: &Evidence,
+    review: Option<&Report>,
     options: &Options,
+) -> Result<Option<Rebased>> {
+    let judge = std::env::var("AOE_JUDGE_REV").ok();
+    before_push_judged(root, evidence, review, options, judge.as_deref())
+}
+
+/// `before_push` for a review judged under dev revision `judge` (the
+/// `AOE_JUDGE_REV` `.agents/hooks/harness.sh` pins; `None` without one).
+pub(super) fn before_push_judged(
+    root: &Path,
+    evidence: &Evidence,
+    review: Option<&Report>,
+    options: &Options,
+    judge: Option<&str>,
 ) -> Result<Option<Rebased>> {
     if base::is_local(&options.base) {
         return Ok(None);
     }
     let from_head = evidence.head.clone();
+    let started = super::now();
+    let judged = carry::judged_under(judge, evidence);
     let mut current = evidence.base.clone();
     let mut merge_base = evidence.merge_base.clone();
     let (mut rounds, mut commits, mut results) = (0, Vec::new(), Vec::new());
@@ -101,6 +130,10 @@ pub(super) fn before_push(
             gained.len(),
             short(&latest)
         );
+        if let Some(report) = review {
+            carry::policy_unchanged(root, report, &judged)?;
+            carry::patch_unchanged(root, evidence, &latest)?;
+        }
         results = static_gates(root)?;
         if let Some(failed) = results.iter().find(|r| r.verdict != GateVerdict::Pass) {
             return Err(failure(options, failed, &gained).into());
@@ -115,31 +148,40 @@ pub(super) fn before_push(
     let subject = git::subject(root)?;
     let lease = lease(root, options, &subject, &from_head)?;
     let anchor = base::scope_at(&options.base, &current);
-    let evidence = Evidence {
-        head: subject.head,
+    let after = Evidence {
+        cadence: "recheck".into(),
+        verdict: evidence::verdict(&results),
+        head: subject.head.clone(),
         tree: subject.tree,
         base: current.clone(),
         changed: git::changed(root, &merge_base)?,
         merge_base,
+        gates: results,
         recheck: Some(Recheck {
+            head: subject.head,
             base: current,
             from_head,
+            from_base: evidence.base.clone(),
+            preflight: evidence.gates.clone(),
+            judge: judge.map(str::to_owned),
             rounds,
             commits,
-            gates: results,
         }),
+        started,
         finished: super::now(),
         ..evidence.clone()
     };
-    let path = evidence::write(root, &evidence)?;
+    let path = evidence::write(root, &after)?;
     eprintln!("ship: evidence {}", path.display());
-    let review = if options.no_review {
-        None
-    } else {
-        Some(carry_review(root, &evidence, options)?)
+    let review = match review {
+        Some(report) if !options.no_review => {
+            let patch = carry::patch_unchanged(root, evidence, &after.base)?;
+            Some(carry::carry(root, report, &after, &patch)?)
+        }
+        _ => None,
     };
     Ok(Some(Rebased {
-        evidence,
+        evidence: after,
         review,
         lease,
         _anchor: anchor,
@@ -189,13 +231,20 @@ fn rebase(
     };
     let files = git::git(root, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
     let aborted = git::git(root, &["rebase", "--abort"]);
+    // A rebase that never started has nothing to abort: the abort fails and
+    // the branch is untouched. Only a rebase still in progress, or a HEAD that
+    // is not the round's, means the abort did not restore the branch.
+    let rebasing = ["rebase-merge", "rebase-apply"].iter().any(|dir| {
+        git::git(root, &["rev-parse", "--git-path", dir]).is_ok_and(|path| root.join(path).exists())
+    });
     let restored = git::git(root, &["rev-parse", "HEAD"]).is_ok_and(|head| head == round_head);
-    if aborted.is_err() || !restored {
+    if rebasing || !restored {
         return Err(format!(
             "ship: {} moved during the ship and the rebase failed ({error}); the abort did not \
-             restore {}: run `git rebase --abort` and check the branch. Nothing was pushed",
+             restore {} ({}): run `git rebase --abort` and check the branch. Nothing was pushed",
             options.base,
-            short(round_head)
+            short(round_head),
+            aborted.err().unwrap_or_else(|| "abort succeeded".into())
         )
         .into());
     }
@@ -203,7 +252,7 @@ fn rebase(
     if files.is_empty() {
         return Err(format!(
             "ship: {base} moved during the ship ({gained} new commit(s)) and the rebase onto it \
-             failed: {error}. The branch is as it was; nothing was pushed"
+             could not run: {error}. The branch is as it was; nothing was pushed"
         )
         .into());
     }
@@ -295,28 +344,20 @@ fn lease(
     .into())
 }
 
-/// The review of the rebased commit comes from the stored one by patch
-/// identity; if the rebase changed the patch it is not run here.
-fn carry_review(root: &Path, evidence: &Evidence, options: &Options) -> Result<Report> {
-    review_gate::require(root, evidence, options, &|_, _, _, _, _| {
-        Err(
-            "the re-check rebase changed your patch, so the passed review cannot be carried \
-             over; ship again to review the changed part"
-                .into(),
-        )
-    })
-}
-
-/// The description's section for the re-check, empty when none ran.
+/// The description's section for the re-check, empty when none ran. The
+/// static gates that ran on the rebased head are the evidence's own table
+/// (above this section); the full preflight is listed under the commit it ran on.
 pub(super) fn section(evidence: &Evidence) -> String {
     let Some(recheck) = &evidence.recheck else {
         return String::new();
     };
     let mut out = format!(
         "\n## Re-check before push\n\n`{}` moved during the ship ({} new commit(s): {}). The \
-         branch was rebased from `{}` onto `{}` ({} round(s)) and the whole-repository static \
-         gates ran on the result; the passed review was carried over by patch identity.\n\n\
-         | Gate | Verdict | Time |\n|---|---|---|\n",
+         branch was rebased from `{}` onto `{}` ({} round(s)). The whole-repository static \
+         gates ran on the rebased head `{}` (the table above); the full preflight below passed \
+         on `{}` against base `{}`, before the rebase, and was not run again. The passed review \
+         was carried over because the own patch and the review policy are unchanged.\n\n\
+         ### Full preflight on `{}` (base `{}`)\n\n| Gate | Verdict | Time |\n|---|---|---|\n",
         evidence.base_branch,
         recheck.commits.len(),
         recheck
@@ -327,9 +368,14 @@ pub(super) fn section(evidence: &Evidence) -> String {
             .join(" "),
         short(&recheck.from_head),
         short(&recheck.base),
-        recheck.rounds
+        recheck.rounds,
+        short(&recheck.head),
+        short(&recheck.from_head),
+        short(&recheck.from_base),
+        short(&recheck.from_head),
+        short(&recheck.from_base),
     );
-    for gate in &recheck.gates {
+    for gate in &recheck.preflight {
         let verdict = match gate.verdict {
             GateVerdict::Pass => "✅ PASS",
             GateVerdict::Fail => "❌ FAIL",
