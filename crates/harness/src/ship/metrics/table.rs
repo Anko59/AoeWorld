@@ -1,7 +1,7 @@
 //! The pull request metrics table: one row per metric, base against PR, with
-//! the rows chosen by the PR level (docs/shipping.md).
+//! the rows chosen by the PR level's row set (docs/shipping.md).
 use super::{LineCounts, snapshot::Snapshot};
-use crate::ship::describe::Level;
+use crate::ship::{describe::Level, levels::RowSet};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -312,10 +312,10 @@ pub(super) fn render(
     before: &Snapshot,
     after: &Snapshot,
     changed: &BTreeMap<String, LineCounts>,
-    level: Level,
+    set: RowSet,
 ) -> Result<String, String> {
     let mut out = String::from("| 📊 Metric | merge base | this PR | |\n|---|---:|---:|---:|\n");
-    let shown = if level >= Level::Medium { 6 } else { 5 };
+    let shown = if set.tier() >= Level::Medium { 6 } else { 5 };
     for category in [
         "production",
         "tests",
@@ -339,7 +339,7 @@ pub(super) fn render(
         ));
     }
     for row in rows(before, after) {
-        if row.level > level || (row.measured && row.before.is_none() && row.after.is_none()) {
+        if row.level > set.tier() || (row.measured && row.before.is_none() && row.after.is_none()) {
             continue;
         }
         out.push_str(&row.text());

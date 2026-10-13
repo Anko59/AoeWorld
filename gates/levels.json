@@ -2,6 +2,8 @@
   "version": 1,
   "stats_window": 50,
   "binary_file_lines": 61,
+  "inert_prefixes": ["docs/", "skills/", "make/", ".github/", "gates/"],
+  "inert_suffixes": ["AGENTS.md", "CLAUDE.md", ".md"],
   "levels": {
     "low": {
       "video_max_seconds": null,
@@ -24,7 +26,7 @@
       "narration_required": true,
       "why_max_lines": 3,
       "what_max_lines": 2,
-      "metrics": "full",
+      "metrics": "extended",
       "target_percent": 40
     },
     "max": {
@@ -45,6 +47,7 @@
     {
       "level": "medium",
       "suites": ["native", "gameplay", "browser", "assets", "performance", "map", "release", "everything"],
+      "behaviour": true,
       "reason": "product code that changes behaviour needs at least medium"
     },
     {

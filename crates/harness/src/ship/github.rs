@@ -347,7 +347,11 @@ pub(super) fn description(
         .as_ref()
         .and_then(|v| v.file_name())
         .map(|n| n.to_string_lossy().into_owned());
-    let metrics = super::metrics::table(root, &evidence.base_branch, template.level)?;
+    let metrics = super::metrics::table(
+        root,
+        &evidence.base_branch,
+        levels.spec(template.level).metrics,
+    )?;
     let test_first = super::test_first::summary(root, &evidence.merge_base, &evidence.head);
     let distribution = super::levels::stats::summary_line(root, &levels);
     let text = describe::render(

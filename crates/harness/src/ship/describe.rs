@@ -217,7 +217,7 @@ impl Template {
             chosen: self.level,
             floor: floor.level,
             reason: floor.reason,
-            metrics: spec.metrics.clone(),
+            metrics: spec.metrics,
         })
     }
 }
@@ -373,7 +373,7 @@ pub(crate) fn level_section(
             " Floor: `{}` ({}). Metrics rows: `{}`.",
             decision.floor.name(),
             decision.reason,
-            decision.metrics
+            decision.metrics.name()
         ));
     }
     out.push_str(&format!("\n\n{distribution}\n\n"));

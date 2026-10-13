@@ -4,9 +4,10 @@ use super::{
         evidence::{Evidence, Verdict},
         tests::{fixture, run},
     },
-    Change, Decision, Levels, current_floor, numstat_lines,
+    Change, Decision, Levels, RowSet, current_floor, numstat_lines,
     stats::{Distribution, marker},
 };
+use crate::gates::registry::Registry;
 use std::{collections::BTreeSet, fs};
 
 fn committed() -> Levels {
@@ -18,6 +19,10 @@ fn change(lines: u64, suites: &[&str], files: &[&str]) -> Change {
         lines,
         files: files.iter().map(|f| (*f).to_owned()).collect(),
         suites: suites
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<BTreeSet<_>>(),
+        behaviour_suites: suites
             .iter()
             .map(|s| (*s).to_owned())
             .collect::<BTreeSet<_>>(),
@@ -69,7 +74,10 @@ fn a_malformed_config_is_refused() {
     );
     assert!(broken(&|v| v["levels"]["low"]["what_max_lines"] = 0.into()).contains("line limits"));
     assert!(broken(&|v| v["levels"]["high"]["video_max_seconds"] = 0.into()).contains("positive"));
-    assert!(broken(&|v| v["levels"]["low"]["metrics"] = " ".into()).contains("metrics"));
+    assert!(
+        broken(&|v| v["levels"]["low"]["metrics"] = "everything".into())
+            .contains("unknown variant `everything`")
+    );
     assert!(broken(&|v| v["floor"][0]["reason"] = "".into()).contains("reason"));
     assert!(
         Levels::parse("not json")
@@ -123,9 +131,59 @@ fn the_floor_follows_size_and_what_the_change_touches() {
     );
 }
 
+fn real(lines: u64, files: &[&str]) -> Change {
+    let registry = Registry::parse(include_bytes!("../../../../../gates/registry.json")).unwrap();
+    let files = files.iter().map(|f| (*f).to_owned()).collect();
+    Change::from_files(&committed(), &registry, lines, files)
+}
+
+#[test]
+fn a_test_only_change_may_be_low_but_a_large_one_still_may_not() {
+    let levels = committed();
+    let floor = |lines, files: &[&str]| levels.floor(&real(lines, files)).level;
+    // The two real cases that `make ship` refused at `low`.
+    let probe = "crates/rendering/src/surface_mesh/tests/junction.rs";
+    let stub = "crates/harness/src/ship/issues/tests/stub.rs";
+    assert_eq!(floor(14, &[probe]), Level::Low);
+    assert_eq!(floor(7, &[stub]), Level::Low);
+    assert_eq!(
+        floor(14, &["crates/rendering/src/surface_mesh/junction.rs"]),
+        Level::Medium
+    );
+    // Product code next to a test still needs medium; size still counts.
+    assert_eq!(floor(14, &[probe, "crates/core/src/a.rs"]), Level::Medium);
+    assert_eq!(floor(61, &[probe]), Level::Medium);
+    assert_eq!(floor(200, &[stub]), Level::High);
+}
+
+#[test]
+fn docs_and_configuration_edits_may_be_low_but_harness_code_may_not() {
+    let levels = committed();
+    let floor = |lines, files: &[&str]| levels.floor(&real(lines, files)).level;
+    for path in [
+        "docs/shipping.md",
+        "AGENTS.md",
+        "crates/harness/AGENTS.md",
+        "CLAUDE.md",
+        "skills/shipping/SKILL.md",
+        "make/ship.mk",
+        ".github/workflows/ci.yml",
+        "gates/levels.json",
+    ] {
+        assert_eq!(floor(10, &[path]), Level::Low, "{path}");
+    }
+    assert_eq!(
+        floor(10, &["crates/harness/src/ship/mod.rs"]),
+        Level::Medium
+    );
+    assert_eq!(floor(10, &[".claude/settings.json"]), Level::Medium);
+    assert_eq!(floor(200, &["gates/levels.json"]), Level::High);
+    assert_eq!(floor(200, &["make/ship.mk"]), Level::High);
+}
+
 #[test]
 fn binary_files_count_as_large_changes() {
-    assert_eq!(numstat_lines("3\t4\ta.rs\n-\t-\tlogo.png\n", 61), 7 + 122);
+    assert_eq!(numstat_lines("3\t4\ta.rs\n-\t-\tlogo.png\n", 61), 7 + 61);
     assert_eq!(numstat_lines("", 61), 0);
 }
 
@@ -146,7 +204,7 @@ fn a_level_below_the_floor_is_refused_with_the_reason_and_the_level_to_use() {
             chosen: Level::Low,
             floor: Level::Low,
             reason: "docs, configuration or a small change".into(),
-            metrics: "summary".into()
+            metrics: RowSet::Summary
         }
     );
     let medium = Template::parse(&text.replace("low", "medium"), &levels).unwrap();
@@ -155,7 +213,7 @@ fn a_level_below_the_floor_is_refused_with_the_reason_and_the_level_to_use() {
         (decision.chosen, decision.floor),
         (Level::Medium, Level::Medium)
     );
-    assert_eq!(decision.metrics, "standard");
+    assert_eq!(decision.metrics, RowSet::Standard);
 }
 
 #[test]
@@ -244,7 +302,7 @@ fn the_level_is_recorded_in_the_evidence_and_shown_for_ai() {
         chosen: Level::High,
         floor: Level::Medium,
         reason: "product code".into(),
-        metrics: "full".into(),
+        metrics: RowSet::Full,
     };
     let text = serde_json::json!({
         "version": 1, "cadence": "preflight", "head": "a", "tree": "b", "branch": "c",
