@@ -1,6 +1,47 @@
 use super::*;
 
 #[wasm_bindgen_test]
+fn continuous_steep_ground_does_not_turn_into_a_checkerboard_of_coarse_walls() {
+    let camera = SceneCamera {
+        center: [48.0; 2],
+        zoom: 0.25,
+        viewport: [1440.0, 1000.0],
+        focus_elevation_meters: 48.0,
+    };
+    let terrain = (0..96)
+        .flat_map(|y| {
+            (0..96).map(move |x| {
+                let heights = [
+                    (x + y) / 2,
+                    (x + y + 1) / 2,
+                    (x + y + 2) / 2,
+                    (x + y + 1) / 2,
+                ]
+                .map(|z| z as i16);
+                SceneTerrain {
+                    position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                    material: 7,
+                    elevation_meters: f64::from(heights[0]),
+                    appearance: None,
+                    surface: SceneTerrainSurface {
+                        corner_game_height_levels: heights,
+                        kind: SceneTerrainSurface::CLIFF,
+                        triangulation: 0,
+                        water: 0,
+                    },
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let faces = projected_surface_triangles(&terrain, camera);
+    assert!(faces.len() <= MAX_SURFACE_TRIANGLES);
+    assert!(
+        faces.iter().all(|face| !face.skirt),
+        "continuous steep source corners have no vertical discontinuity"
+    );
+}
+
+#[wasm_bindgen_test]
 fn coarse_terrain_keeps_the_cliff_wall_instead_of_averaging_its_ledge_away() {
     let camera = SceneCamera {
         center: [48.0; 2],
@@ -21,7 +62,7 @@ fn coarse_terrain_keeps_the_cliff_wall_instead_of_averaging_its_ledge_away() {
                     surface: SceneTerrainSurface {
                         corner_game_height_levels: [height; 4],
                         kind: if cliff {
-                            SceneTerrainSurface::CLIFF
+                            SceneTerrainSurface::CLIFF_LEDGE
                         } else {
                             SceneTerrainSurface::PLATEAU
                         },
@@ -98,7 +139,7 @@ fn joined_cliff_walls_use_straight_native_rock_and_share_the_ledge_vertices() {
                 surface: SceneTerrainSurface {
                     corner_game_height_levels: [height; 4],
                     kind: if x == 0 {
-                        SceneTerrainSurface::CLIFF
+                        SceneTerrainSurface::CLIFF_LEDGE
                     } else {
                         SceneTerrainSurface::PLATEAU
                     },
@@ -133,6 +174,10 @@ fn joined_cliff_walls_use_straight_native_rock_and_share_the_ledge_vertices() {
     for wall in &walls {
         let address = wall.texture_uv.unwrap();
         assert_eq!(address.page, 2, "native rock, never snow or gravel");
+        assert_eq!(
+            address, art.scenery.cliff_faces[4].atlas,
+            "joined east walls keep one orientation"
+        );
         assert_eq!(wall.tint, 0, "retain the authored face lighting");
         assert!(!wall.pickable);
         for point in wall.points.iter().filter(|point| point.world[2] == 4.0) {
@@ -159,4 +204,16 @@ fn joined_cliff_walls_use_straight_native_rock_and_share_the_ledge_vertices() {
             .flat_map(|wall| wall.points)
             .any(|point| point.world == [1.0, 1.0, 4.0])
     );
+    for sample in &mut terrain {
+        sample.position.swap(0, 1);
+    }
+    let mut rotated = projected_surface_triangles(&terrain, camera);
+    apply_terrain_textures(&mut rotated, &art);
+    for wall in rotated.iter().filter(|face| face.skirt) {
+        assert_eq!(
+            wall.texture_uv,
+            Some(art.scenery.cliff_faces[1].atlas),
+            "joined south walls keep the authored orientation"
+        );
+    }
 }

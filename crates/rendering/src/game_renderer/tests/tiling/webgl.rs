@@ -17,6 +17,70 @@ fn webgl_shallow_water_fades_into_sand_at_two_zooms() {
 }
 
 #[wasm_bindgen_test]
+fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
+    let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
+    for y in 0..156 {
+        for x in 0..294 {
+            if x < 185 || y < 100 {
+                let at = crate::GAME_ATLAS_PAGE_BYTES * 2 + ((y + 32) * 2048 + x + 32) * 4;
+                pixels[at..at + 4].copy_from_slice(&[85, 90, 95, 255]);
+            }
+        }
+    }
+    let frame = GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 2,
+            uv: [32.0 / 2048.0, 32.0 / 2048.0, 294.0 / 2048.0, 156.0 / 2048.0],
+        },
+        size: [294.0, 156.0],
+        anchor: [153.0, 80.0],
+    };
+    let art = GameArt {
+        walking: Vec::new(),
+        standing: Vec::new(),
+        grass: Vec::new(),
+        terrain: Default::default(),
+        terrain_topology: [None; 12],
+        water_depth: Default::default(),
+        resources: Default::default(),
+        tree_shadows: Vec::new(),
+        tree_families: Default::default(),
+        scenery: crate::SceneryArt {
+            cliff_faces: vec![frame; 25],
+            rocks: Vec::new(),
+        },
+    };
+    let mut faces = [
+        triangle(
+            [[20.0, 20.0], [108.0, 20.0], [108.0, 108.0]],
+            [0.0; 3],
+            [1.0; 3],
+        ),
+        triangle(
+            [[20.0, 20.0], [108.0, 108.0], [20.0, 108.0]],
+            [0.0; 3],
+            [1.0; 3],
+        ),
+    ];
+    for (index, face) in faces.iter_mut().enumerate() {
+        face.skirt = true;
+        face.pickable = false;
+        face.material = 4;
+        face.tint = 13;
+        face.texture_mode = 4 + index as u8;
+        face.order = 2 + index as u8;
+    }
+    apply_terrain_textures(&mut faces, &art);
+    let (canvas, mut renderer) = target(&pixels);
+    render(&mut renderer, &mut faces.map(|face| instance(&face)));
+    for y in 22..106 {
+        for x in 22..106 {
+            assert_pixel(&canvas, x, y, [85, 90, 95, 255]);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn webgl_snow_diamond_edges_have_no_discarded_pinholes() {
     let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
     for y in 0_i32..49 {

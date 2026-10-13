@@ -10,6 +10,24 @@ use helpers::{bytes, decoration, fixture, malformed, tree};
 const OBSERVATION: usize = HEADER_BYTES + TERRAIN_BYTES - 2;
 
 #[test]
+fn a_raised_cliff_ledge_is_distinct_from_a_continuous_steep_surface_on_the_wire() {
+    let mut chunk = fixture(2);
+    chunk.tiles[0].terrain.surface.kind = crate::SurfaceKind::Cliff;
+    chunk.tiles[1].terrain.surface.kind = crate::SurfaceKind::CliffLedge;
+    for tile in &mut chunk.tiles {
+        tile.terrain.passable = false;
+    }
+    let decoded = CompactChunk::encode(&chunk).unwrap().decode().unwrap();
+    assert_eq!(decoded, chunk);
+    assert!(
+        decoded
+            .tiles
+            .iter()
+            .all(|tile| !tile.terrain.surface.walkable())
+    );
+}
+
+#[test]
 fn generated_chunks_round_trip_with_typed_terrain_evidence() {
     let mut original = MapChunkGenerator::new([7; 32], 11, 64)
         .landscape_chunk_with_cancel(1, 1, &|| false)

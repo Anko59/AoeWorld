@@ -1,4 +1,4 @@
-//! Frozen pre-optimization pixel oracle; test-only.
+//! Scalar current-output pixel oracle; updated when ground coverage changes.
 use super::*;
 
 pub(super) fn raster_surface(
@@ -77,7 +77,26 @@ fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64;
             + 0.5
             + local[axis] * (f64::from(rect[axis + 2]) * side - 1.0).max(0.0)
     });
-    sample_atlas(atlas, address.page, point[0], point[1])
+    let nearest = sample_atlas(atlas, address.page, point[0], point[1]);
+    let edge = (local[0] - 0.5).abs() + (local[1] - 0.5).abs();
+    let extent = f64::from(rect[2].min(rect[3])) * side;
+    let diamond = ((f64::from(rect[2]) - 2.0 * f64::from(rect[3])) * side + 1.0).abs() <= 1.0;
+    if nearest[3] == 0
+        && diamond
+        && rect.iter().all(|v| v.is_finite())
+        && extent > 2.0
+        && (0.47..=0.50001).contains(&edge)
+    {
+        let inset = [0, 1].map(|axis| {
+            let inside = local[axis] + (0.5 - local[axis]) * (2.0 / extent);
+            f64::from(rect[axis]) * side
+                + 0.5
+                + inside * (f64::from(rect[axis + 2]) * side - 1.0).max(0.0)
+        });
+        sample_atlas(atlas, address.page, inset[0], inset[1])
+    } else {
+        nearest
+    }
 }
 
 struct RasterPlane {
