@@ -74,6 +74,16 @@ job; only unselected jobs may be skipped. `make ci-check` validates that
 contract locally when supplied the manifest and job results.
 Do not claim a complete gate until they exist and pass at the exact revision.
 
+## Failure output
+
+When a supervised command fails, times out or is cancelled, the harness keeps
+its full output in `reports/process/<program>-….log` and prints a failure
+excerpt before the `exited with …; log: …` line: failing test lines, `panicked
+at` with its assertion lines, `test result: FAILED`, and compiler `error`
+lines with their location, de-duplicated and capped at about 40 lines and 4 KiB
+(or the last 15 non-empty lines when nothing matches). Read the excerpt before
+the log path: the last line of console output is often not the cause.
+
 ## Rust test placement
 
 Tests live in `tests.rs`, `tests/`, or `*_tests.rs` (the agent role's test-file

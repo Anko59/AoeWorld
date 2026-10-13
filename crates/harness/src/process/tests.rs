@@ -1,5 +1,6 @@
 use super::*;
 mod capture;
+mod excerpt;
 
 #[test]
 fn bounded_log_keeps_tail() {

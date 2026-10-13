@@ -15,6 +15,7 @@ use std::{
 };
 
 mod capture;
+mod excerpt;
 pub(crate) use capture::{
     CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command,
     capture_command_retaining_stdout, capture_in, safe_observation,
@@ -255,6 +256,9 @@ fn supervise(
         .map(|path| path.display().to_string())
         .unwrap_or_else(|error| format!("unavailable ({error})")),
     };
+    if let Some(excerpt) = excerpt::excerpt_for(&captured, &log) {
+        let _ = io::stderr().write_all(excerpt.as_bytes());
+    }
     match captured.exit {
         CaptureExit::Success => Ok(()),
         CaptureExit::Failed(code) => Err(ProcessError::Exit {

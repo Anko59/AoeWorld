@@ -1,0 +1,60 @@
+--- stdout ---
+Set timeout to 300 seconds...
+Running headless tests in Chrome on `http://127.0.0.1:35345/`
+Try find `webdriver.json` for configure browser's capabilities:
+test world_key_index::tests::coordinate_lookup_matches_ordered_reference_and_bounds_capacity ... ok
+test game_renderer::webgl_tests::tiling_pixels::webgl_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod ... ok
+test game_renderer::webgl_tests::tiling_pixels::webgl_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft ... ok
+test game_renderer::webgl_tests::tiling_pixels::webgl_four_material_junction_has_matching_pixels_on_every_shared_edge ... FAIL
+test game_renderer::webgl_tests::tiling_pixels::webgl_blends_every_ground_material_pair_across_a_noisy_border ... ok
+test game_renderer::canvas_depth_tests::tiling_pixels::canvas_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod ... ok
+test game_renderer::canvas_depth_tests::tiling_pixels::canvas_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft ... ok
+test game_renderer::tests::depleted_resource_disappears_from_both_backend_draw_lists ... ok
+test game_renderer::tests::broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees ... ok
+test game_renderer::tests::an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker ... ok
+test game_renderer::direct_emission_tests::alloc_budget::dense_scene_build_heap_traffic_old_vs_direct ... ok
+
+failures:
+
+---- game_renderer::webgl_tests::tiling_pixels::webgl_four_material_junction_has_matching_pixels_on_every_shared_edge output ----
+    error output:
+        panicked at crates/rendering/src/surface_mesh/mix/tests/../../tests/junction.rs:111:5:
+        assertion `left == right` failed: first face covers the edge probe
+          left: 0
+         right: 255
+        
+        Stack:
+        
+
+failures:
+
+    game_renderer::webgl_tests::tiling_pixels::webgl_four_material_junction_has_matching_pixels_on_every_shared_edge
+
+test result: FAILED. 192 passed; 1 failed; 0 ignored; 0 filtered out; finished in 49.03s
+
+    Invoking test: game_renderer::webgl_tests::tiling_pixels::webgl_four_material_junction_has_matching_pixels_on_every_shared_edge
+    panicked at crates/rendering/src/surface_mesh/mix/tests/../../tests/junction.rs:111:5:
+    assertion `left == right` failed: first face covers the edge probe
+      left: 0
+     right: 255
+    
+    Stack:
+    
+
+--- stderr ---
+   Compiling serde_json v1.0.151
+   Compiling wasm-bindgen-futures v0.4.78
+   Compiling web-sys v0.3.105
+   Compiling memchr v2.8.3
+   Compiling wasm-bindgen-test v0.3.78
+   Compiling wgpu-types v30.0.1
+   Compiling wgpu v30.0.1
+   Compiling aoe-rendering v0.1.0 (/home/runner/work/AoeWorld/AoeWorld/crates/rendering)
+    Finished `release` profile [optimized] target(s) in 26.40s
+     Running unittests src/lib.rs (target/wasm32-unknown-unknown/release/deps/aoe_rendering-d92fea3c66e9f08b.wasm)
+Error: some tests failed
+error: test failed, to rerun pass `-p aoe-rendering --lib`
+
+Caused by:
+  process didn't exit successfully: `wasm-bindgen-test-runner /home/runner/work/AoeWorld/AoeWorld/target/wasm32-unknown-unknown/release/deps/aoe_rendering-d92fea3c66e9f08b.wasm` (exit status: 1)
+note: test exited abnormally; to see the full output pass --no-capture to the harness.
