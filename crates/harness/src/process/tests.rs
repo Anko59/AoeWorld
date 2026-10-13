@@ -81,3 +81,60 @@ fn real_cancellation_stops_child_promptly() {
     worker.join().expect("cancellation worker");
     assert!(start.elapsed() < Duration::from_secs(2));
 }
+
+fn fake(one: f64) -> impl Fn() -> Option<load::Load> {
+    move || {
+        Some(load::Load {
+            one,
+            five: 20.0,
+            fifteen: 10.5,
+            cores: 12,
+        })
+    }
+}
+
+fn deadline_message(reader: &load::Reader<'_>) -> String {
+    let mut command = Command::new("sleep");
+    command.arg("2");
+    supervise_reading(
+        "sleep",
+        command,
+        Duration::from_millis(10),
+        &Cancellation::default(),
+        reader,
+    )
+    .expect_err("deadline")
+    .to_string()
+}
+
+#[test]
+fn deadline_error_states_the_load_and_calls_an_overloaded_machine_so() {
+    let busy = deadline_message(&fake(31.4));
+    assert!(busy.contains("machine load was 31.4 / 20.0 / 10.5 (1 / 5 / 15 min) on 12 cores"));
+    assert!(busy.contains("the machine was overloaded; this is probably not your change"));
+    assert!(busy.contains("rerun when it is quieter"));
+    let quiet = deadline_message(&fake(3.0));
+    assert!(
+        quiet.contains("machine load was 3.0 / 20.0 / 10.5"),
+        "{quiet}"
+    );
+    assert!(!quiet.contains("overloaded"), "{quiet}");
+    let unknown = deadline_message(&|| None);
+    assert!(
+        unknown.contains("exceeded its 0s deadline; log:"),
+        "{unknown}"
+    );
+}
+
+#[test]
+fn the_load_is_parsed_from_proc_loadavg_and_exactly_the_core_count_is_not_overload() {
+    let load = load::parse("0.52 1.25 3.00 2/801 12345\n", 4).unwrap();
+    assert_eq!(
+        (load.one, load.five, load.fifteen, load.cores),
+        (0.52, 1.25, 3.0, 4)
+    );
+    assert!(load::parse("garbage", 4).is_none());
+    assert!(load::parse("1.0 2.0", 4).is_none());
+    assert!(!load::parse("4.00 1 1 1/1 1", 4).unwrap().overloaded());
+    assert!(load::parse("4.01 1 1 1/1 1", 4).unwrap().overloaded());
+}

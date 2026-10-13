@@ -145,6 +145,7 @@ fn failed_mapped_command_never_accepts_valid_old_worktree_artifacts() {
         Err(ProcessError::Deadline {
             program: "cargo".into(),
             seconds: 4500,
+            load: String::new(),
             log: "local".into(),
         })
     })

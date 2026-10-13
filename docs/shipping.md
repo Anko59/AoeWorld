@@ -67,7 +67,17 @@ agent policy refuses `$` in agent-set Make values.
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Only then**, if the parent is ready, pushes exactly that commit to
+7. **Re-checks a moved base**, still holding the lock: it fetches the base
+   (`dev`, or the parent of a stacked ship) again. If it moved, the branch's
+   own commits are rebased onto it (a conflict aborts the rebase, leaves the
+   branch as it was and names the files) and every `static` preflight gate runs
+   on the result (`lint` compiles the workspace), up to 3 times if it moves
+   again. A red gate stops with its excerpt and the new commits it combines
+   with, leaving the rebased branch. The review is carried over by patch
+   identity, never run again; the evidence and description record the re-check.
+   A rebased branch already on `origin` is pushed with a lease on the commit
+   the ship started from, else the ship asks for `SHIP_FORCE=1`.
+   **Then**, if the parent is ready, pushes exactly that commit to
    `origin` as the branch (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
    runs `make pre-push`: it skips the preflight when
    `make ship`'s passing preflight evidence covers the clean HEAD being pushed
@@ -478,6 +488,9 @@ Proving in CI that the tests ran red then green remains
 - Gates run in the checkout as written (`make <gate>`), not in an exported
   commit snapshot: ignored files and caches take part, and an edit reverted
   between the before and after checks is not seen.
+- The re-check cannot see `dev` moving while CI runs after the push; only a
+  GitHub merge queue closes that (a repository setting, for the owner). A gate
+  over its deadline reports the machine load, and says so when it exceeds the cores.
 - `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the

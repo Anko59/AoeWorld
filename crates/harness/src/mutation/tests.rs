@@ -363,6 +363,7 @@ fn typed_process_failure_is_separate_from_artifact_failure_and_never_passes_old_
         process::ProcessError::Deadline {
             program: "secret".into(),
             seconds: 4500,
+            load: String::new(),
             log: "secret".into(),
         },
         process::ProcessError::Cancelled {

@@ -41,6 +41,7 @@ fn record(root: &Path, verdict: Verdict, cadence: &str) -> String {
             gates: Vec::new(),
             verdict,
             level: None,
+            recheck: None,
             started: 0,
             finished: 0,
         },

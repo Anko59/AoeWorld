@@ -12,6 +12,8 @@ use std::{fs, path::Path};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(in crate::ship) use tests::graded;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

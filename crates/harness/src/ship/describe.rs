@@ -488,6 +488,7 @@ pub(crate) fn render(
             gate.gate, gate.seconds
         ));
     }
+    out.push_str(&super::recheck::section(evidence));
     out.push_str(&format!(
         "\n## Adversarial review\n\n{}\n\n{}\n",
         report.markdown(),
