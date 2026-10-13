@@ -63,8 +63,8 @@ fn scene_with_bed(forest: bool, variety: bool) -> Vec<ProjectedSurfaceTriangle> 
 /// Every shared edge, including quad diagonals and boundaries between tiles.
 /// Move its midpoint to a pixel centre and just inside each isolated face:
 /// raster top-left ownership and GPU subpixel rounding must not turn either
-/// readback into background. The inset exceeds half a 1/16-pixel raster step
-/// while remaining below 0.1 pixel in this fixture; tolerances stay at two bytes.
+/// readback into background. The inset is a fixed 1/8 pixel, two 1/16-pixel
+/// raster steps, whatever the face size; tolerances stay at two bytes.
 pub(crate) fn edge_pairs() -> Vec<[ProjectedSurfaceTriangle; 2]> {
     [(false, false), (true, false), (false, true)]
         .into_iter()
@@ -95,9 +95,15 @@ fn pairs_with_bed(forest: bool, variety: bool) -> Vec<[ProjectedSurfaceTriangle;
                     face.points.iter().map(|p| p.screen.x).sum::<f64>() / 3.0,
                     face.points.iter().map(|p| p.screen.y).sum::<f64>() / 3.0,
                 ];
+                let edge = [
+                    shared[1].screen.x - shared[0].screen.x,
+                    shared[1].screen.y - shared[0].screen.y,
+                ];
+                let side = edge[0] * (center[1] - middle[1]) - edge[1] * (center[0] - middle[0]);
+                let inset = 0.125_f64.copysign(side) / edge[0].hypot(edge[1]);
                 for point in &mut face.points {
-                    point.screen.x += 64.5 - middle[0] + (middle[0] - center[0]) * 0.005;
-                    point.screen.y += 64.5 - middle[1] + (middle[1] - center[1]) * 0.005;
+                    point.screen.x += 64.5 - middle[0] + edge[1] * inset;
+                    point.screen.y += 64.5 - middle[1] - edge[0] * inset;
                 }
             }
             pairs.push(pair);
