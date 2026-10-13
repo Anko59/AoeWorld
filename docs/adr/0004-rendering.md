@@ -231,9 +231,9 @@ forest bed and returned before the per-vertex material splat; rock, snow, ice
 and mud faces dropped their vertex materials because their procedural look was
 one tint per face. `surface_mesh/mix.rs` replaces both gaps for map scenes.
 
-Each displayed vertex takes the share of every ground sheet among its four
-incident land tiles (water, cliffs and metadata-free samples are not
-observations). A quad whose four corner supports see one sheet keeps its
+Each displayed vertex takes the share of displayed ground and shallow-water
+sheets among its four incident source cells. Metadata-free samples are not
+observations. A quad whose four corner supports see one sheet keeps its
 existing path. A face in a quad that sees several becomes a world-tiled face (mode 6) with
 layers ordered by `mix::rank`, low to high: ice, rock, gravel, mud, sand, dirt, grass and dirt mix, dry
 grass, worn grass, grass, lush grass, snow. The lowest is the base and the highest the overlay, so both
@@ -281,8 +281,9 @@ partial. Pure shares and a complete bed need no lattice evaluation. Junctions de
 three four-nibble observations per layer and resolve each nonzero sheet.
 No Sprite112 field, texture,
 binding or varying is added, and the triangle stays 240 bytes (six spare bytes
-hold the shares). Land against water is unchanged: water sheets and shores
-belong to the water renderer. Borders are still one mesh face wide on coarse
+hold the shares). Shallow water and ford shallows also contribute shore observations;
+loaded medium/deep water completes their halo without blending a direct
+land/deep-water edge. Borders are still one mesh face wide on coarse
 LODs, and long straight biome edges are a map-generation property.
 
 The shared shader compiles into ordinary and ground-mixing programs. SwiftShader
@@ -316,7 +317,8 @@ grass, lush grass, gravel), drawn from optional art groups 7–10; a pack withou
 a sheet draws dry grass, grass, grass or sand. The three grassy ones carry the
 ecological palette like grass; none is procedural. The directory holds seventeen
 material headers. Junction nibbles 5 and 6 encode scene materials 15 and 16;
-water and the forest bed never supply ground observations, and 15 stays empty.
+medium/deep classes are halo markers rather than junction layers, the forest
+bed never supplies an observation, and 15 stays empty.
 
 ## Direct scene emission
 
@@ -331,3 +333,30 @@ source ties, mirrors, boundary cameras, NaN depths) by digest and assert the
 stable depth/type/id order. An absolute allocation budget for a dense
 8,158-sprite scene (no growth reallocations, at most 102 allocations) guards the
 direct path. Performance/size claims require measured unchanged gates.
+
+
+## Soft shallow shorelines
+
+Shallow water and ford coverage overlays the ground shares with a linear,
+half-tile transition. A shore quad needs complete source support; missing cells
+never count as dry land. Medium/deep source cells complete the shallow halo,
+while their own displayed faces keep the depth-sheet path. Vertices touched by
+a blended shore quad pin adjoining native water faces to the same shallow sheet;
+the existing depth interpolation resumes farther into the water. A temporary
+byte per requested vertex records these pins only when shallow water is visible.
+Source water flags,
+passability and picking ownership remain unchanged.
+
+Ordinary two-sheet shores reuse the interpolated floor endpoint word with
+neutral palette six, keeping the ordinary shader and instance run. Ground
+junctions and procedural shores use the existing mixing program. No atlas,
+Sprite112 field or inland geometry is added. A dry triangle whose opposite quad
+corner alone sees an overlay retains only the base sheet: zero coverage must
+never fall back to a three-vertex splat and draw a hard triangular patch.
+
+Shore skirts are omitted for equal heights and a single quantized level;
+real drops keep their side geometry and use the ground bank's material.
+A generic grass placeholder on a bank falls back to neutral rock detail.
+Synthetic mesh/pixel tests cover these contracts across Canvas, WebGL2 and
+WebGPU; prepared-map screenshots and frame samples are separate qualification,
+not dedicated hardware or finished RTS performance evidence.

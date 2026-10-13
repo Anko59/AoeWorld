@@ -103,7 +103,9 @@ fn vertex(point: SurfacePoint) -> [i32; 2] {
 pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[SceneTerrain]) {
     let mut keys = crate::WorldKeyIndex::default();
     let mut support: Vec<[(u8, u16); 4]> = Vec::new();
+    let mut water_visible = false;
     for triangle in triangles.iter().filter(|triangle| eligible(triangle)) {
+        water_visible |= appearance::water_material(triangle.material);
         for point in triangle.points {
             if keys.entry(vertex(point)) == support.len() {
                 support.push([(MISSING, 0); 4]);
@@ -113,6 +115,13 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
     if support.is_empty() {
         return;
     }
+    // One temporary byte per requested vertex, only when shallow water is
+    // displayed. Interior water keeps its native depth interpolation.
+    let mut shore_depths = if water_visible {
+        vec![MISSING; support.len()]
+    } else {
+        Vec::new()
+    };
     for sample in terrain {
         let Some(cell) = ground(sample) else {
             continue;
@@ -179,6 +188,17 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         if matches!(over, 10 | 12) && quad.iter().flatten().any(|cell| cell.0 == MISSING) {
             continue;
         }
+        if !shore_depths.is_empty() && matches!(over, 10 | 12) {
+            // Shore mixing reaches pure shallows at the inner quad edge. Pin
+            // its four shared vertices so the next native depth face starts
+            // with that same sheet, rather than an abrupt darker depth band.
+            for corner in [[0, 0], [1, 0], [1, 1], [0, 1]] {
+                let index = keys
+                    .get([bounds[0][corner[0]], bounds[1][corner[1]]])
+                    .expect("displayed shore depth vertex");
+                shore_depths[index] = shore_depths[index].min(over);
+            }
+        }
         let middle = seen()
             .filter(|material| *material != base && *material != over)
             .max_by_key(|material| rank(*material))
@@ -205,8 +225,32 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         if full {
             support::retain(triangle, cells);
         }
-        triangle.texture_materials = Some([base, middle, over]);
+        // A quad can see an overlay only at the corner opposite this triangle.
+        // Zero shares use the ordinary path, which interprets three different
+        // materials as vertex ownership rather than coverage. Keep it pure.
+        triangle.texture_materials = Some(if !full && triangle.mix == [0; 6] {
+            [base; 3]
+        } else {
+            [base, middle, over]
+        });
         triangle.floor_strengths = Some(floors);
+    }
+    if !shore_depths.is_empty() {
+        for triangle in triangles.iter_mut().filter(|face| {
+            !face.skirt
+                && appearance::water_material(face.material)
+                && face.floor_strengths.is_none()
+        }) {
+            if let Some(materials) = triangle.texture_materials.as_mut() {
+                for (corner, point) in triangle.points.iter().enumerate() {
+                    if let Some(index) = keys.get(vertex(*point)) {
+                        if shore_depths[index] != MISSING {
+                            materials[corner] = shore_depths[index];
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
