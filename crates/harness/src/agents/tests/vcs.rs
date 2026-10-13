@@ -75,6 +75,7 @@ fn the_main_session_and_other_agents_ship_feature_branches() {
         for command in [
             "git add -A && git commit -m 'Add claude hook'",
             "make ship SHIP_TITLE=x SHIP_BODY=/tmp/body.md",
+            "make ship SHIP_LOCK_WAIT_MINUTES=0 SHIP_TITLE=x SHIP_BODY=/tmp/body.md",
             "gh pr view 12 --json state",
             "gh api repos/o/r/pulls/12",
             "gh api graphql -f query='{ viewer { login } }'",
