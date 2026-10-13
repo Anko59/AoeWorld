@@ -252,6 +252,7 @@ fn browser_checks_reuse_dependencies_but_rebuild_product_each_time() {
     let scope = focus::Scope {
         specs: vec!["browser/tests/foo.spec.ts".into()],
         packages: vec![],
+        wasm: vec![],
         manifests: vec![],
         paths: vec![],
     };

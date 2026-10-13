@@ -20,7 +20,13 @@ pub(crate) fn run_directory(cache: &Path) -> io::Result<PathBuf> {
 /// Remove retained `run-*` directories except the `keep` newest.
 pub(crate) fn prune(cache: &Path, keep: usize) -> io::Result<()> {
     let mut runs = Vec::new();
-    for entry in fs::read_dir(cache)? {
+    let entries = match fs::read_dir(cache) {
+        Ok(entries) => entries,
+        // No duel has run in this checkout yet: nothing to prune.
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
         let entry = entry?;
         if entry.file_name().to_string_lossy().starts_with("run-") && entry.file_type()?.is_dir() {
             runs.push((entry.metadata()?.modified()?, entry.path()));

@@ -121,6 +121,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     };
     // The original scope is persisted for the separate browser adapter.
     scope.specs.clear();
+    scope.wasm.clear();
     let result = run_scope(check_root, &scope, &cache);
     let mut report = match result {
         Ok(report) => report,
@@ -256,6 +257,13 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             }
             report.passed = false;
         }
+    }
+    if !scope.wasm.is_empty() {
+        let wasm = super::wasm::check(root, &scope.wasm, cache)?;
+        report.passed &= wasm.passed;
+        report.build_failed |= wasm.build_failed;
+        report.tests.extend(wasm.tests);
+        report.failed.extend(wasm.failed);
     }
     report.tests.sort();
     report.tests.dedup();

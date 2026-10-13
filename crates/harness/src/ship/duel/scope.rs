@@ -5,7 +5,10 @@ use std::{collections::BTreeSet, fs, path::Path};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Scope {
+    /// Packages whose native nextest run the check needs.
     pub(crate) packages: Vec<String>,
+    /// Packages whose wasm-bindgen-test suites (`wasm_test::SUITES`) the check needs.
+    pub(crate) wasm: Vec<String>,
     pub(crate) specs: Vec<String>,
     pub(crate) paths: Vec<String>,
     pub(crate) manifests: Vec<String>,
@@ -13,6 +16,7 @@ pub(crate) struct Scope {
 impl Scope {
     pub(crate) fn from_paths(root: &Path, paths: &[String]) -> git::Result<Self> {
         let mut packages = BTreeSet::new();
+        let mut wasm = BTreeSet::new();
         let mut manifests = BTreeSet::new();
         let mut specs = BTreeSet::new();
         let mut unmapped = None;
@@ -81,7 +85,13 @@ impl Scope {
                         }
                         return Err(unsupported());
                     }
-                    packages.insert(name.to_owned());
+                    let (native, browser) = runners(root, path, name);
+                    if native {
+                        packages.insert(name.to_owned());
+                    }
+                    if browser {
+                        wasm.insert(name.to_owned());
+                    }
                     manifests.insert(
                         manifest
                             .strip_prefix(root)
@@ -101,11 +111,12 @@ impl Scope {
                 return Err(unsupported());
             }
         }
-        if packages.is_empty() && specs.is_empty() {
+        if packages.is_empty() && wasm.is_empty() && specs.is_empty() {
             return Err(unmapped.unwrap_or_else(|| "no focused tests selected".into()));
         }
         Ok(Self {
             packages: packages.into_iter().collect(),
+            wasm: wasm.into_iter().collect(),
             manifests: manifests.into_iter().collect(),
             specs: specs.into_iter().collect(),
             paths: paths.to_vec(),
@@ -130,6 +141,23 @@ impl Scope {
         }
         args
     }
+}
+
+/// Which runners a changed file of `package` needs: (native nextest, wasm suites).
+/// Only packages `test-wasm` runs have the second; there, a file defining native
+/// `#[test]`s needs nextest, one with `wasm_bindgen_test`s (or neither: a helper or
+/// fixture) needs the wasm runner, and one with both needs both.
+fn runners(root: &Path, path: &str, package: &str) -> (bool, bool) {
+    if !crate::wasm_test::packages().contains(&package) {
+        return (true, false);
+    }
+    let source = if path.ends_with(".rs") {
+        fs::read_to_string(root.join(path)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let native = source.contains("#[test]") || source.contains("#[tokio::test");
+    (native, source.contains("wasm_bindgen_test") || !native)
 }
 
 fn browser_specs(root: &Path, directory: &Path, specs: &mut BTreeSet<String>) -> git::Result<()> {

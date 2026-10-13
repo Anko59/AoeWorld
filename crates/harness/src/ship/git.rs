@@ -106,6 +106,11 @@ pub(crate) fn subject(root: &Path) -> Result<Subject> {
                 .into(),
         );
     }
+    subject_with_changes(root)
+}
+
+/// The subject of a branch whose tree may hold changes the caller accounts for.
+pub(crate) fn subject_with_changes(root: &Path) -> Result<Subject> {
     let branch = branch(root)?;
     if protected(&branch) {
         return Err(format!(

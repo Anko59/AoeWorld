@@ -154,6 +154,7 @@ fn no_failures_need_no_baseline_provenance_scan() {
     let temp = tempfile::tempdir().unwrap();
     let scope = focus::Scope {
         packages: vec!["absent".into()],
+        wasm: vec![],
         specs: vec![],
         paths: vec![],
         manifests: vec!["absent/Cargo.toml".into()],

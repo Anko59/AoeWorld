@@ -22,6 +22,10 @@ pub(crate) mod stages;
 #[cfg(test)]
 mod tests;
 mod tree;
+mod wasm;
+#[cfg(test)]
+#[path = "tests/wasm.rs"]
+mod wasm_tests;
 
 use crate::{process::CaptureExit, ship::git};
 pub(crate) use config::{Options, read_task};
@@ -43,7 +47,14 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
 
 pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let subject = git::subject(&root)?;
+    // Only a round this driver kept after an unavailable check, unchanged since, is
+    // resumed. Any other change still refuses the start.
+    let resume = tree::kept::matches(&root, &git::branch(&root)?)?;
+    let subject = if resume {
+        git::subject_with_changes(&root)?
+    } else {
+        git::subject(&root)?
+    };
     browser::reset(&root)?;
     let cache = root.join(".cache/duel");
     clean(output::prune(&cache, 0));
@@ -55,7 +66,23 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
         options.model.as_deref().unwrap_or("configured default")
     );
     summary.push_str(&format!("\nTask:\n{task}\n"));
-    let result = rounds(&root, task, options, &subject.branch, &mut summary);
+    let mut kept = false;
+    let result = rounds(
+        &root,
+        task,
+        options,
+        &subject.branch,
+        (resume, &mut kept),
+        &mut summary,
+    );
+    let record = if kept {
+        tree::kept::write(&root, &subject.branch)
+    } else {
+        tree::kept::remove(&root, &subject.branch)
+    };
+    if let Err(error) = record {
+        eprintln!("duel: cannot update the kept-round record: {error}");
+    }
     // Keep only the last run's logs for the summary, and drop the comparison build.
     clean(output::prune(&cache, 1));
     clean(
@@ -80,6 +107,15 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     result.map(|()| summary)
 }
 
+/// Drop a tester's rejected tests, unless they are a resumed round's: those stay on disk.
+fn discard(root: &Path, head: &str, resumed: bool) -> git::Result<&'static str> {
+    if resumed {
+        return Ok("kept");
+    }
+    tree::restore(root, head)?;
+    Ok("restored")
+}
+
 fn clean(result: std::io::Result<()>) {
     if let Err(error) = result {
         eprintln!("duel: cannot clean .cache/duel: {error}");
@@ -91,6 +127,7 @@ fn rounds(
     task: &str,
     options: &Options,
     branch: &str,
+    (resume, kept): (bool, &mut bool),
     summary: &mut String,
 ) -> git::Result<()> {
     let pre_duel = git::git(root, &["rev-parse", "HEAD"])?;
@@ -108,9 +145,19 @@ fn rounds(
                 "Attack the completed change with new failing tests."
             }
         );
-        let (exit, tester) = runner::agent(root, options, "tester", &prompt)?;
+        // A resumed round's tests were not written by this round's agent: never discard them.
+        let resumed = resume && round == 1;
+        let (exit, tester) = if resumed {
+            (
+                CaptureExit::Success,
+                "Resumed from the tester's uncommitted test changes; the tester was skipped."
+                    .to_owned(),
+            )
+        } else {
+            runner::agent(root, options, "tester", &prompt)?
+        };
         summary.push_str(&format!("\nTester last report:\n{tester}\n"));
-        let paths = tree::validate(root, true, &head, branch)?;
+        let paths = tree::validate_keeping(root, true, &head, branch, resumed)?;
         if !matches!(exit, CaptureExit::Success) {
             tree::restore(root, &head)?;
             return Err(format!("tester did not finish: {exit:?} (restored)"));
@@ -125,16 +172,19 @@ fn rounds(
         if options.check.is_none()
             && let Err(error) = focus::Scope::from_paths(root, &paths)
         {
-            tree::restore(root, &head)?;
-            return Err(error);
+            let outcome = discard(root, &head, resumed)?;
+            return Err(format!("{error} ({outcome})"));
         }
         let red = runner::check(root, options, command, options.check.is_none());
-        tree::validate(root, true, &head, branch)?;
+        tree::validate_keeping(root, true, &head, branch, resumed)?;
         let (red_report, tail) = match red {
             Ok(result) => result,
             Err(error) => {
-                tree::restore(root, &head)?;
-                return Err(error);
+                // The check could not run, which says nothing about the tests: keep them.
+                *kept = true;
+                return Err(format!(
+                    "{error}\nthe tester's test changes are kept, uncommitted, in the working tree; fix the check and rerun `make duel` to continue from them, or choose the check with DUEL_CHECK='<command>' (currently `{command}`)"
+                ));
             }
         };
         summary.push_str(&format!(
@@ -152,7 +202,7 @@ fn rounds(
             authored
         };
         if red_report.passed || !authored_red {
-            tree::restore(root, &head)?;
+            let outcome = discard(root, &head, resumed)?;
             let unrelated = if red_report.passed {
                 String::new()
             } else {
@@ -162,7 +212,7 @@ fn rounds(
                 )
             };
             if round == 1 {
-                return Err(format!("tests already pass at red{unrelated} (restored)"));
+                return Err(format!("tests already pass at red{unrelated} ({outcome})"));
             }
             summary.push_str(&format!(
                 "attack tests already pass{unrelated}; attack dropped.\n"

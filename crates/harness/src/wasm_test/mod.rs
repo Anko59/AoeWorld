@@ -11,6 +11,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod suites;
+pub(crate) use suites::{SUITES, SuiteRun, packages, run_focused};
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 struct Driver {
@@ -122,39 +125,9 @@ pub fn run() -> Result<()> {
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
     let environment = runner_environment(&remote, capabilities);
-    for arguments in [
-        vec![
-            "test",
-            "--locked",
-            "--release",
-            "-p",
-            "aoe-client",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--test",
-            "browser",
-        ],
-        vec![
-            "test",
-            "--locked",
-            "--release",
-            "-p",
-            "aoe-client",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--lib",
-        ],
-        vec![
-            "test",
-            "--locked",
-            "--release",
-            "-p",
-            "aoe-rendering",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--lib",
-        ],
-    ] {
+    for suite in SUITES {
+        let arguments = suite.cargo_arguments();
+        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
         process::run_with_env("cargo", &arguments, &environment, CARGO_DEADLINE)?;
     }
     let report = Report {
