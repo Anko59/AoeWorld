@@ -7,7 +7,7 @@ enum ShoreEdge {
     South,
 }
 
-fn terrain(tile: [i32; 2], water: u8, height: i16) -> SceneTerrain {
+pub(super) fn terrain(tile: [i32; 2], water: u8, height: i16) -> SceneTerrain {
     SceneTerrain {
         appearance: None,
         position: [f64::from(tile[0]) + 0.5, f64::from(tile[1]) + 0.5],
@@ -38,7 +38,7 @@ fn pair(
     ]
 }
 
-fn camera() -> SceneCamera {
+pub(super) fn camera() -> SceneCamera {
     SceneCamera {
         center: [1.0, 1.0],
         zoom: 1.0,

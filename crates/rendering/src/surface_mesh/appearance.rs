@@ -259,12 +259,11 @@ pub(crate) fn terrain_group(
     // Snow and ice use terrain group 11; natural rock uses gravel, else dirt.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
-    // deep and ford shallows use their optional sheet (groups 13-15), else
-    // that same shallow sheet.
+    // deep use their optional sheets; fords always use the light shallow
+    // sheet. The optional marsh sheet's green flecks obscure the crossing.
     let depth = match material {
         5 => Some(0),
         11 => Some(1),
-        12 => Some(2),
         _ => None,
     }
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
