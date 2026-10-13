@@ -47,7 +47,9 @@ pub(super) fn assign_materials(
 }
 
 fn blendable(triangle: &ProjectedSurfaceTriangle, wet: bool) -> bool {
-    triangle.texture_materials.is_some() && water_material(triangle.material) == wet
+    !triangle.skirt
+        && triangle.texture_materials.is_some()
+        && water_material(triangle.material) == wet
 }
 
 /// Scene materials drawn with water art: medium 5, shallow 10, deep 11 and

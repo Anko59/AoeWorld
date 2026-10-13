@@ -91,7 +91,8 @@ fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
 fn eligible(triangle: &ProjectedSurfaceTriangle) -> bool {
     triangle.appearance & 1 != 0
         && (!appearance::water_material(triangle.material) || matches!(triangle.material, 10 | 12))
-        && !triangle.skirt
+        // Neutral bank closures carry the same shared-edge coverage as the tops.
+        && (!triangle.skirt || triangle.tint == 0)
         && triangle.tint <= 3
         && triangle.texture_materials.is_some()
 }

@@ -354,8 +354,11 @@ Sprite112 field or inland geometry is added. A dry triangle whose opposite quad
 corner alone sees an overlay retains only the base sheet: zero coverage must
 never fall back to a three-vertex splat and draw a hard triangular patch.
 
-Shore skirts are omitted for equal heights and a single quantized level;
-real drops keep their side geometry and use the ground bank's material.
+Shore skirts are omitted only when shared-edge heights are equal. Unequal tops
+keep the closing strip and the ground bank's material. One-level beach strips
+use neutral shading and the tops' shared shoreline coverage with complete source
+support, avoiding a dark wall or a background hole without changing source heights.
+Larger drops retain their bank shading.
 A generic grass placeholder on a bank falls back to neutral rock detail.
 Synthetic mesh/pixel tests cover these contracts across Canvas, WebGL2 and
 WebGPU; prepared-map screenshots and frame samples are separate qualification,

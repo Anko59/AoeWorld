@@ -342,13 +342,11 @@ fn append_edge_skirt(
         Edge::South => ([2, 3], [1, 0]),
     };
     let shore = (sample.surface.water != 0) != (neighbor.surface.water != 0);
-    // One quantized shore level is a gentle beach, not a vertical bank.
+    // Different top heights need a closing strip, even at a one-level beach.
     if current_indices
         .iter()
         .zip(neighbor_indices)
-        .all(|(current_index, neighbor_index)| {
-            current[*current_index].abs_diff(adjacent[neighbor_index]) <= u16::from(shore)
-        })
+        .all(|(current_index, neighbor_index)| current[*current_index] == adjacent[neighbor_index])
     {
         return;
     }
@@ -391,7 +389,9 @@ fn append_edge_skirt(
     } else {
         4
     };
-    let color = darken(surface_color(bank), 0.62);
+    let gentle = shore && material != 4 && top.iter().zip(bottom).all(|(a, b)| a - b <= 1.0);
+    let tint = if water_step || gentle { 0 } else { 3 };
+    let color = darken(surface_color(bank), if gentle { 1.0 } else { 0.62 });
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
         floor_strengths: None,
@@ -402,11 +402,11 @@ fn append_edge_skirt(
         skirt: true,
         material,
         texture_mode: 4,
-        tint: if water_step { 0 } else { 3 },
+        tint,
         texture_uv: None,
         texture_blend: None,
         texture_tile: tile,
-        texture_materials: None,
+        texture_materials: gentle.then_some([material; 3]),
         pickable: false,
         order: skirt_order(edge),
     });
@@ -420,11 +420,11 @@ fn append_edge_skirt(
         skirt: true,
         material,
         texture_mode: 5,
-        tint: if water_step { 0 } else { 3 },
+        tint,
         texture_uv: None,
         texture_blend: None,
         texture_tile: tile,
-        texture_materials: None,
+        texture_materials: gentle.then_some([material; 3]),
         pickable: false,
         order: skirt_order(edge) + 1,
     });
