@@ -61,8 +61,7 @@ pub enum GroundMaterial {
     Water,
     /// Open water with no land within the medium reach.
     DeepWater,
-    /// Renderer mapping for walkable river shallows. No terrain generator
-    /// emits this material yet; ford generation belongs to separate river work.
+    /// Walkable river crossings generated where local slopes permit them.
     Ford,
     /// Grass broken by bare soil; drawn variety only, like the two below.
     GrassDirt,
@@ -159,6 +158,7 @@ pub struct MapChunkGenerator {
     provider: Option<Arc<dyn EnvironmentPageProvider>>,
     provider_environment: Option<Arc<PreparedEnvironment>>,
     provider_compression: Option<Ratio>,
+    river_queries: Arc<std::sync::Mutex<provider::rivers::Cache>>,
 }
 
 impl MapChunkGenerator {
@@ -175,12 +175,13 @@ impl MapChunkGenerator {
             provider: None,
             provider_environment: None,
             provider_compression: None,
+            river_queries: Arc::default(),
         }
     }
 
     /// Binds an immutable page provider without retaining a complete page
     /// vector. The provider owns source access and residency; this generator
-    /// retains only package metadata and deterministic terrain inputs.
+    /// retains metadata, deterministic inputs and a bounded derived water cache.
     pub fn with_page_provider(
         mut self,
         compression: Ratio,
@@ -191,6 +192,7 @@ impl MapChunkGenerator {
         if environment.samples_per_axis == 0 {
             return Err(EnvironmentError::InvalidPyramid);
         }
+        self.river_queries = Arc::default();
         self.provider = Some(provider);
         self.provider_environment = Some(Arc::new(environment));
         self.provider_compression = Some(compression);
@@ -224,6 +226,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            river_queries: self.river_queries,
         })
     }
 
@@ -259,6 +262,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            river_queries: self.river_queries,
         })
     }
 
@@ -294,6 +298,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            river_queries: self.river_queries,
         })
     }
 
@@ -328,6 +333,7 @@ impl MapChunkGenerator {
             provider: self.provider,
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
+            river_queries: self.river_queries,
         })
     }
 

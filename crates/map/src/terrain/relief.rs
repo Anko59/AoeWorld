@@ -174,7 +174,7 @@ impl MapChunkGenerator {
                 .corner(x, y, self.width_tiles)
                 .ok_or(EnvironmentPageError::Invalid)
         })?;
-        if piece.is_some() && !self.cliff_cell_is_dry(tile, cancelled)? {
+        if piece.is_some() && !self.cliff_cell_is_available(tile, cancelled)? {
             return Ok(None);
         }
         Ok(piece)
@@ -191,9 +191,10 @@ fn cell_tiles(tile: TileCoord) -> impl Iterator<Item = TileCoord> {
 }
 
 impl MapChunkGenerator {
-    /// No base-terrain recursion: read resolved physical water only. A partial
-    /// edge cell is excluded too, because a sprite needs its whole footprint.
-    pub(super) fn cliff_cell_is_dry(
+    /// Shared dense/provider eligibility: read physical water without recursing
+    /// through base terrain. Exclude partial cells, water and the widest river
+    /// bank halo, so neither promotion nor art can replace a bank.
+    pub(super) fn cliff_cell_is_available(
         &self,
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
@@ -201,6 +202,27 @@ impl MapChunkGenerator {
         for position in cell_tiles(tile) {
             if self.base_water_with_cancel(position, cancelled)? != Some(super::WaterKind::None) {
                 return Ok(false);
+            }
+        }
+        let west = tile.x.div_euclid(CLIFF_CELL_TILES) * CLIFF_CELL_TILES;
+        let north = tile.y.div_euclid(CLIFF_CELL_TILES) * CLIFF_CELL_TILES;
+        let center = TileCoord::new(west + 1, north + 1);
+        if !self.water_possible_near(center, 4, cancelled)? {
+            return Ok(true);
+        }
+        // At most forty halo positions; the core was already checked above.
+        for y in north - 2..=north + 4 {
+            for x in west - 2..=west + 4 {
+                let dx = (west - x).max(0).max(x - west - 2);
+                let dy = (north - y).max(0).max(y - north - 2);
+                let distance = dx * dx + dy * dy;
+                if distance > 0
+                    && distance <= super::shoreline::RIVER_BANK_MAX_DISTANCE_SQUARED
+                    && self.base_water_with_cancel(TileCoord::new(x, y), cancelled)?
+                        == Some(super::WaterKind::River)
+                {
+                    return Ok(false);
+                }
             }
         }
         Ok(true)

@@ -91,4 +91,9 @@ fn written_segments_are_split_at_page_half_width_margin() {
     assert_eq!(lines[0].start[0], lower);
     assert_eq!(lines[0].end[0], upper);
     assert!(lines[0].station_start > lines[0].station_end);
+    let encoded = serde_json::to_value(lines[0]).expect("segment");
+    assert_eq!(
+        encoded[7], 85334,
+        "unclipped source length survives page clipping"
+    );
 }

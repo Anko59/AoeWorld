@@ -8,16 +8,19 @@ pub const FORD_HALF_LENGTH_UNITS: i64 = 5 * 256 / 2;
 pub const MAX_RIVER_SEGMENTS_PER_PAGE: usize = 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "[i64; 7]", into = "[i64; 7]")]
+#[serde(try_from = "[i64; 10]", into = "[i64; 10]")]
 pub struct RiverSegment {
     pub start: [i32; 2],
     pub end: [i32; 2],
     pub width_units: u16,
     pub station_start: i64,
     pub station_end: i64,
+    /// Original, unclipped direction and station span for page-invariant bends.
+    pub source_delta: [i32; 2],
+    pub source_station_delta: i64,
 }
 
-impl From<RiverSegment> for [i64; 7] {
+impl From<RiverSegment> for [i64; 10] {
     fn from(s: RiverSegment) -> Self {
         [
             i64::from(s.start[0]),
@@ -27,13 +30,16 @@ impl From<RiverSegment> for [i64; 7] {
             i64::from(s.width_units),
             s.station_start,
             s.station_end,
+            i64::from(s.source_delta[0]),
+            i64::from(s.source_delta[1]),
+            s.source_station_delta,
         ]
     }
 }
 
-impl TryFrom<[i64; 7]> for RiverSegment {
+impl TryFrom<[i64; 10]> for RiverSegment {
     type Error = EnvironmentError;
-    fn try_from(v: [i64; 7]) -> Result<Self, Self::Error> {
+    fn try_from(v: [i64; 10]) -> Result<Self, Self::Error> {
         let coordinate = |n| i32::try_from(n).map_err(|_| EnvironmentError::InvalidPage);
         let segment = Self {
             start: [coordinate(v[0])?, coordinate(v[1])?],
@@ -41,6 +47,8 @@ impl TryFrom<[i64; 7]> for RiverSegment {
             width_units: u16::try_from(v[4]).map_err(|_| EnvironmentError::InvalidPage)?,
             station_start: v[5],
             station_end: v[6],
+            source_delta: [coordinate(v[7])?, coordinate(v[8])?],
+            source_station_delta: v[9],
         };
         segment.validate()?;
         Ok(segment)
@@ -49,7 +57,20 @@ impl TryFrom<[i64; 7]> for RiverSegment {
 
 impl RiverSegment {
     pub fn validate(&self) -> Result<(), EnvironmentError> {
-        if self.start == self.end
+        let delta = [0, 1].map(|i| i64::from(self.end[i]) - i64::from(self.start[i]));
+        let source = self.source_delta.map(i64::from);
+        let length = source[0].abs().max(source[1].abs());
+        let cross = i128::from(delta[0]) * i128::from(source[1])
+            - i128::from(delta[1]) * i128::from(source[0]);
+        let dot = i128::from(delta[0]) * i128::from(source[0])
+            + i128::from(delta[1]) * i128::from(source[1]);
+        if length == 0
+            || length < delta[0].abs().max(delta[1].abs())
+            || dot <= 0
+            // Both original and clipped endpoints round on each axis.
+            || cross.abs() > i128::from(length) * 4 + 2
+            || self.source_station_delta.unsigned_abs() > (1 << 49)
+            || self.start == self.end
             || !(3 * 256..=10 * 256).contains(&self.width_units)
             || self
                 .start

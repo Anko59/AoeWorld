@@ -271,6 +271,8 @@ fn river_geometry_is_bounded_required_and_content_rooted() {
         width_units: 768,
         station_start: 0,
         station_end: 25600,
+        source_delta: [0, 25600],
+        source_station_delta: 25600,
     });
     assert_ne!(page.content_hash().expect("river hash"), dry);
     let river = page.content_hash().expect("river hash");
@@ -300,6 +302,8 @@ fn corridor_sampling_bounds_extreme_expansion_and_point_values() {
         width_units: 768,
         station_start: -(1 << 48),
         station_end: 1 << 48,
+        source_delta: [25600, 0],
+        source_station_delta: 562949953421312,
     };
     segment.validate().expect("valid extreme stations");
     assert!(segment.sample([0, 0], i64::MAX).is_some());

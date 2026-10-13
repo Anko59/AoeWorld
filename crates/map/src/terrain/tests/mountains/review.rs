@@ -238,6 +238,8 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
                     width_units: 6 * 256,
                     station_start: 0,
                     station_end: i64::from(SIDE * 256),
+                    source_delta: [0, SIDE * 256],
+                    source_station_delta: i64::from(SIDE * 256),
                 }],
             };
             let cover = crate::ModernLandCoverPage {

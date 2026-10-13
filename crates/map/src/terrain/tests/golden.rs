@@ -133,13 +133,13 @@ const FOREST_ROUTES: (usize, &str) = (
 // Current generation bytes pin the only live wire format. Drawn-sheet variety
 // changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "8365b07692ef342f5c64fb5893ad8f35e5090e4cfe6437d3105c66b9d296d40a",
-    "bfdba4e9b48a4db7590f7586e4b047e71cd1e490570db64d2824b98e422e3d36",
-    "79456156b0e3ab44a44d124132eb472e608d8ab7d84220fea62778850acfd154",
+    "f28221a5521b871b2bcff404b903a77a8012c979d036dc8dc0c74a60e2c56867",
+    "b80449b96fed43040add7125c3f78a5d5fd284f9ffe9126da405e1c6f95c786c",
+    "6e79b360277d8e638905f9b0c76956e860988af585ca68c5e72b051000764cb8",
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "dc33f5b62f387127c1cd223c087314baf33b02e6c0a482234d6f7eea5a0e6cc0";
+    "b9d34c9737e6c76eac169b8e9d5ab228f78d5a20c28b3cc1494253a843803dbf";
 
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
@@ -157,6 +157,36 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "64516dc8e1ee59516bd8fe18d7f06531d72381ab43551810a1cd4f95137d6802"
+        "42465681c9997c20aa4f697d7900d85a388b8f2be9fe2f73c8b5ea967afecf0f"
     );
+}
+
+/// Sheet selection and ground variety preserve physical terrain. Retain all
+/// generator/chunk cases from the former plumbing-only assertion.
+#[test]
+fn ground_sheet_plumbing_coexists_with_generated_variety() {
+    const DRAWN_MATERIALS: [GroundMaterial; 3] = [
+        GroundMaterial::GrassDirt,
+        GroundMaterial::WornGrass,
+        GroundMaterial::Gravel,
+    ];
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    let fallbacks = [1, 17, 991].map(|seed| MapChunkGenerator::new([23; 32], seed, 512));
+    let mut observed = std::collections::BTreeSet::new();
+    for generator in [package.generator()].into_iter().chain(fallbacks) {
+        for (x, y) in [(0, 0), (7, 7), (15, 15)] {
+            let scene = generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .expect("chunk");
+            for tile in scene.tiles {
+                if DRAWN_MATERIALS.contains(&tile.terrain.material) {
+                    assert!(tile.terrain.passable);
+                    assert_eq!(tile.terrain.water, WaterKind::None);
+                    observed.insert(tile.terrain.material as u8);
+                }
+            }
+        }
+    }
+    assert!(observed.contains(&(GroundMaterial::GrassDirt as u8)));
+    assert!(observed.contains(&(GroundMaterial::WornGrass as u8)));
 }

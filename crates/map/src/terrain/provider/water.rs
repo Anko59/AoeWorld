@@ -9,8 +9,7 @@ use crate::terrain::shoreline::{self, CellGrid};
 use crate::terrain::{MapChunkGenerator, Provenance, WaterKind, surface};
 use crate::{
     ENVIRONMENT_PAGE_SAMPLES, EnvironmentPage, EnvironmentPageError, EnvironmentPageKey,
-    HydrologyEvidenceMethod, HydrologyKind, HydrologyObservation, PageLayer, PreparedEnvironment,
-    Ratio, TileSurface,
+    HydrologyKind, HydrologyObservation, PageLayer, PreparedEnvironment, Ratio, TileSurface,
 };
 use aoe_core::TileCoord;
 use std::sync::Arc;
@@ -73,12 +72,35 @@ impl<'a> Cells<'a> {
     /// not shaped.
     fn modeled(&mut self, x: i64, y: i64) -> Result<Option<ModeledWater>, EnvironmentPageError> {
         match self.page(x, y)? {
-            (EnvironmentPage::HydrologyEvidence(page), index) => {
-                Ok(water_model::modeled_at(page, index)?.filter(|model| open_water(model.0)))
-            }
+            (EnvironmentPage::HydrologyEvidence(page), index) => Ok(open_evidence_at(page, index)?
+                .filter(|model| open_water(model.0) && model.0 != HydrologyKind::River)),
             _ => Err(EnvironmentPageError::Corrupt),
         }
     }
+}
+
+/// Unmodeled lake/ocean observations remain open-water evidence. Use the
+/// same reader for shaped neighbors and the nearest cell at a river mouth.
+fn open_evidence_at(
+    page: &crate::HydrologyEvidencePage,
+    index: usize,
+) -> Result<Option<ModeledWater>, EnvironmentPageError> {
+    let modeled = water_model::modeled_at(page, index)?;
+    if modeled.is_some() {
+        return Ok(modeled);
+    }
+    let observation = page
+        .observation(index)
+        .map_err(|_| EnvironmentPageError::Corrupt)?;
+    Ok(observed_open_water(observation))
+}
+
+fn observed_open_water(observation: HydrologyObservation) -> Option<ModeledWater> {
+    matches!(observation.kind, HydrologyKind::Lake | HydrologyKind::Ocean).then_some((
+        observation.kind,
+        None,
+        crate::WaterModelProvenance::EvidenceOnly,
+    ))
 }
 
 const fn open_water(kind: HydrologyKind) -> bool {
@@ -94,6 +116,7 @@ pub(in crate::terrain) struct WaterSample {
     pub modeled: Option<ModeledWater>,
     pub observation: Option<HydrologyObservation>,
     pub modern_land_cover_class: Option<u8>,
+    pub ford: bool,
 }
 
 /// Shaped categorical and modeled water at one tile, before the modeled
@@ -125,6 +148,7 @@ pub(in crate::terrain) fn sample(
             modeled: None,
             observation: None,
             modern_land_cover_class: None,
+            ford: false,
         });
     };
     let (observation, modern_land_cover_class, nearest) = water_model::sample_typed_evidence(
@@ -135,7 +159,10 @@ pub(in crate::terrain) fn sample(
         cancelled,
     )?;
     let grid = CellGrid::source(index.samples_per_axis, generator.width_tiles);
-    let modeled = if nearest.is_some() && grid.shaped() {
+    let nearest = nearest
+        .or_else(|| observation.and_then(observed_open_water))
+        .filter(|model| model.0 != HydrologyKind::River);
+    let mut modeled = if nearest.is_some() && grid.shaped() {
         let mut cells = Cells::new(generator, PageLayer::HydrologyEvidence, cancelled);
         // A rounded-off water corner falls back to categorical coverage; a
         // land correction still applies where no shaped water reaches.
@@ -144,12 +171,36 @@ pub(in crate::terrain) fn sample(
     } else {
         nearest
     };
+    // Lake/ocean evidence and categorical coverage also protect mouths when
+    // no water model exists. Explicit land corrections retain their precedence.
+    let protected = matches!(water, WaterKind::Lake | WaterKind::Ocean)
+        || modeled.is_some_and(|m| {
+            matches!(m.0, HydrologyKind::Lake | HydrologyKind::Ocean)
+                || (m.0 == HydrologyKind::Land
+                    && m.2 == crate::WaterModelProvenance::GeographicCorrection)
+        });
+    let channel = if protected {
+        None
+    } else {
+        super::rivers::sample(generator, tile, 0, cancelled)?
+    };
+    let ford = channel == Some(true);
+    if channel.is_some() {
+        // Rivers and fords retain local terrain height. A sampled kilometre-cell
+        // water level would create cliffs at every ford and cell boundary.
+        modeled = Some((
+            HydrologyKind::River,
+            None,
+            crate::WaterModelProvenance::ModelledRiverSurface,
+        ));
+    }
     Ok(WaterSample {
         water,
         provenance,
         modeled,
         observation,
         modern_land_cover_class,
+        ford: ford && modeled.is_some_and(|m| m.0 == HydrologyKind::River),
     })
 }
 
@@ -169,15 +220,6 @@ pub(in crate::terrain) fn resolve(
         surface_kind,
         &mut provenance,
     );
-    if water == WaterKind::Lake
-        && sample.modeled.is_none()
-        && sample.observation.is_some_and(|observation| {
-            observation.kind == HydrologyKind::River
-                && observation.method == HydrologyEvidenceMethod::HydroRiversBufferedCorridor
-        })
-    {
-        water = WaterKind::River;
-    }
     (water, provenance)
 }
 
@@ -206,6 +248,9 @@ pub(in crate::terrain) fn water_near(
     radius: i32,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<bool, EnvironmentPageError> {
+    if super::rivers::sample(generator, tile, radius, cancelled)?.is_some() {
+        return Ok(true);
+    }
     let environment = generator
         .provider_environment
         .as_ref()

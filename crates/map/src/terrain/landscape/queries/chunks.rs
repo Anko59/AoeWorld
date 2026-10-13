@@ -142,18 +142,15 @@ impl MapChunkGenerator {
             memo::Shore::None => {}
             memo::Shore::Shallow | memo::Shore::Margin => terrain.material = GroundMaterial::Shore,
             memo::Shore::Deep => terrain.material = GroundMaterial::DeepWater,
-            shore if base.passable && soft_ground(terrain.material) => {
-                terrain.material = if shore == memo::Shore::Bank {
-                    GroundMaterial::Mud
-                } else {
-                    GroundMaterial::Sand
-                };
+            memo::Shore::Bank if base.passable => terrain.material = GroundMaterial::Dirt,
+            memo::Shore::Beach if base.passable && soft_ground(terrain.material) => {
+                terrain.material = GroundMaterial::Sand;
             }
             _ => {}
         }
         if base.passable && matches!(shore, memo::Shore::None) && cover.is_none() {
-            // Climatic snow/rock is authoritative. Uncovered ground retains
-            // drawn variety; nothing physical is decided from this sheet.
+            // Keep climatic cover and textured banks intact. Drawn variety
+            // belongs to uncovered, unbanded land and changes no physics.
             terrain.material = variety::vary(
                 variety::seed(self.geography_key, self.procedural_seed),
                 position,
@@ -222,6 +219,7 @@ impl MapChunkGenerator {
         }
         if resource.is_none()
             && base.passable
+            && base.water == crate::WaterKind::None
             && !matches!(
                 sample.historical_land_use,
                 LandUse::Crop | LandUse::Grazing | LandUse::Nonland

@@ -304,3 +304,6 @@ pub(super) fn all_wet_near<E>(
 #[cfg(test)]
 #[path = "tests/shoreline_math.rs"]
 mod tests;
+
+/// Widest river-bank band: two tiles or a knight's step.
+pub(super) const RIVER_BANK_MAX_DISTANCE_SQUARED: i32 = 5;

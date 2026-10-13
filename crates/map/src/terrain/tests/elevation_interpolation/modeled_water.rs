@@ -33,6 +33,8 @@ fn modeled_lake_generator(corrupt_geometry: bool) -> MapChunkGenerator {
                 width_units: 768,
                 station_start: 0,
                 station_end: 1000,
+                source_delta: [67108864, 67108864],
+                source_station_delta: 1000,
             }]
         } else {
             Vec::new()
