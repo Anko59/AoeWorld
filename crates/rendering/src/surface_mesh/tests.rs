@@ -13,6 +13,8 @@ mod landscape_tests;
 mod mix_tests;
 #[path = "tests/native_canvas.rs"]
 mod native_canvas_tests;
+#[path = "tests/river_bank.rs"]
+mod river_bank_tests;
 #[path = "tests/shore.rs"]
 mod shore_tests;
 #[path = "tests/terrain_texture.rs"]
