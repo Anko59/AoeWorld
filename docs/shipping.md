@@ -179,6 +179,17 @@ the PR") and renders two parts:
 floor rules. Like `gates/review.json` it is read from origin/dev, so a branch
 cannot loosen its own limits (the working tree only while dev lacks the file).
 
+### Checking the description first
+
+`make describe-check SHIP_BODY=<file> [SHIP_TITLE=…] [SHIP_VIDEO=<file>]` runs
+every description rule at once (every role; read-only, no lock, no fetch): the
+template sections and their line limits, the `Why` grounding element, the level
+marker, the level against the floor (with its reason), the video against the
+level (required or not, length, voice-over, unreadable file) and the title. It
+prints `description: OK (level <level>, floor <floor>)` or a numbered list of
+every problem. `make ship` runs the same check before the lock wait, the gates
+and the review, and stops with the whole list.
+
 ### The floor
 
 The agent picks the level, but never below the floor `make ship` computes from

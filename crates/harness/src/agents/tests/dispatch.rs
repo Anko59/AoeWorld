@@ -101,3 +101,21 @@ fn level_floor_is_read_only_for_every_role_and_level_stats_is_main_only() {
         denied(&fixture, role, "make level-stats");
     }
 }
+
+#[test]
+fn describe_check_is_read_only_for_every_role() {
+    let fixture = Fixture::new();
+    for role in [
+        Role::Main,
+        Role::Tester,
+        Role::Implementer,
+        Role::Reviewer,
+        Role::Other,
+    ] {
+        allowed(
+            &fixture,
+            role,
+            "make describe-check SHIP_BODY=body.md SHIP_TITLE=t SHIP_VIDEO=v.webm",
+        );
+    }
+}

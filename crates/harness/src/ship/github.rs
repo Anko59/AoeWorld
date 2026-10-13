@@ -1,10 +1,7 @@
 //! `make ship`'s GitHub side: `gh` checks, the pull request (found by head
 //! branch, on origin's repository), the description, and the
 //! showcase video probe.
-use super::{
-    Evidence, Options, Result, describe, git,
-    levels::{Change, Levels},
-};
+use super::{Evidence, Options, Result, describe, git, levels::Levels};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -103,19 +100,16 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
         return Err("a new pull request needs SHIP_TITLE and SHIP_BODY (a description file); nothing was run".into());
     }
     let (template_text, level) = if let Some(body) = &options.body_file {
-        if !body.is_file() {
-            return Err(format!("SHIP_BODY {} is not a file", body.display()).into());
-        }
-        let text = fs::read_to_string(body)?;
-        let levels = Levels::load(root)?;
-        let template = describe::Template::parse(&text, &levels)?;
-        let probe = match &options.video {
-            Some(video) => Some(probe_video(root, video)?),
-            None => None,
+        let request = super::check::Request {
+            body,
+            title: options.title.as_deref(),
+            title_required: !open && !review_ahead,
+            video: options.video.as_deref(),
+            base: &options.base,
+            fetch: true,
         };
-        let change = Change::collect(root, &levels, &options.base, true)?;
-        let decision = template.check(&levels, &change, probe)?;
-        (Some(text), Some(decision))
+        let checked = super::check::run(root, &request)?;
+        (Some(checked.text), Some(checked.decision))
     } else {
         (None, None)
     };
@@ -130,7 +124,7 @@ pub(super) fn preflight_pull_request(root: &Path, options: &Options) -> Result<P
 
 /// A branch's open pull request: its URL and the branch it targets.
 #[derive(serde::Deserialize)]
-struct OpenPr {
+pub(super) struct OpenPr {
     url: String,
     #[serde(rename = "baseRefName")]
     base: String,
@@ -138,7 +132,11 @@ struct OpenPr {
 
 /// The open pull request whose head is `branch` (never a PR number that
 /// happens to equal a numeric branch name).
-fn open_pull_request(root: &Path, repository: &str, branch: &str) -> Result<Option<OpenPr>> {
+pub(super) fn open_pull_request(
+    root: &Path,
+    repository: &str,
+    branch: &str,
+) -> Result<Option<OpenPr>> {
     let found = gh(
         root,
         &[
@@ -308,7 +306,7 @@ pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
 }
 
 /// Duration and sound of a video, read by ffmpeg in the pinned browser image.
-fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
+pub(super) fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
     if !attachable_video(video) {
         return Err(format!(
             "SHIP_VIDEO {} must be a .mp4, .mov or .webm file named with letters, digits, `.`, `_` or `-` only",
