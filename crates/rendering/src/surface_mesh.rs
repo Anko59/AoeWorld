@@ -341,6 +341,8 @@ fn append_edge_skirt(
         Edge::East => ([1, 2], [0, 3]),
         Edge::South => ([2, 3], [1, 0]),
     };
+    let shore = (sample.surface.water != 0) != (neighbor.surface.water != 0);
+    // Different top heights need a closing strip, even at a one-level beach.
     if current_indices
         .iter()
         .zip(neighbor_indices)
@@ -372,13 +374,24 @@ fn append_edge_skirt(
         project_world(projection, world_xy[1], bottom[1]),
         project_world(projection, world_xy[0], bottom[0]),
     ];
+    // A shoreline's ground bank owns the side material, including when the
+    // modeled water level sits above the adjacent terrain.
     let bank = if sample.surface.water != 0 && neighbor.surface.water == 0 {
         *neighbor
     } else {
         sample
     };
     let water_step = sample.surface.water != 0 && neighbor.surface.water != 0;
-    let color = darken(surface_color(bank), 0.62);
+    let material = if water_step {
+        5
+    } else if shore && bank.surface.kind != SceneTerrainSurface::CLIFF {
+        bank.material
+    } else {
+        4
+    };
+    let gentle = shore && material != 4 && top.iter().zip(bottom).all(|(a, b)| a - b <= 1.0);
+    let tint = if water_step || gentle { 0 } else { 3 };
+    let color = darken(surface_color(bank), if gentle { 1.0 } else { 0.62 });
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
         floor_strengths: None,
@@ -387,13 +400,13 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
-        material: if water_step { 5 } else { 4 },
+        material,
         texture_mode: 4,
-        tint: if water_step { 0 } else { 3 },
+        tint,
         texture_uv: None,
         texture_blend: None,
         texture_tile: tile,
-        texture_materials: None,
+        texture_materials: gentle.then_some([material; 3]),
         pickable: false,
         order: skirt_order(edge),
     });
@@ -405,13 +418,13 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
-        material: if water_step { 5 } else { 4 },
+        material,
         texture_mode: 5,
-        tint: if water_step { 0 } else { 3 },
+        tint,
         texture_uv: None,
         texture_blend: None,
         texture_tile: tile,
-        texture_materials: None,
+        texture_materials: gentle.then_some([material; 3]),
         pickable: false,
         order: skirt_order(edge) + 1,
     });

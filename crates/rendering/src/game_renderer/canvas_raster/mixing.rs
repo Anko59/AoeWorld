@@ -36,8 +36,24 @@ pub(super) fn sample(
     } else {
         0.5
     };
-    let weights = mix::weights(shares, middle, noise);
     let materials = triangle.texture_materials.unwrap_or([triangle.material; 3]);
+    let weights = if matches!(materials[2], 10 | 12) {
+        let water = shares[0]
+            + if matches!(materials[1], 10 | 12) {
+                shares[1]
+            } else {
+                0.0
+            };
+        let over = mix::threshold(shares[0], water, noise);
+        if middle {
+            let mid = mix::threshold(shares[0] + shares[1], water, noise);
+            [1.0 - mid, mid - over, over]
+        } else {
+            [(1.0 - bed) * (1.0 - over), bed, (1.0 - bed) * over]
+        }
+    } else {
+        mix::weights(shares, middle, noise)
+    };
     let mut samples = [[0.0; 4]; 3];
     for index in 0..3 {
         if weights[index] <= 0.0 {

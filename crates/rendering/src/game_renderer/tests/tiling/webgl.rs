@@ -2,6 +2,21 @@ use super::*;
 use crate::surface_mesh::directory::fixture;
 
 #[wasm_bindgen_test]
+fn webgl_shallow_water_fades_into_sand_at_two_zooms() {
+    use crate::surface_mesh::mix::fixture as shore;
+    let (canvas, mut renderer) = target(&shore::atlas());
+    for zoom in [0.2, 0.4] {
+        let mut packets = shore::shore_scene(zoom)
+            .iter()
+            .map(instance)
+            .collect::<Vec<_>>();
+        render(&mut renderer, &mut packets);
+        shore::assert_shore(shore::SHORE_PROBES.map(|[x, y]| pixel(&canvas, x, y)));
+        shore::assert_soft(0, &|x, y| pixel(&canvas, x, y));
+    }
+}
+
+#[wasm_bindgen_test]
 fn webgl_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
     let (canvas, mut renderer) = target(&fixture::atlas());
     let mut dirt = Vec::new();
@@ -62,5 +77,21 @@ fn webgl_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
         for (probe, [x, y]) in mix::PROBES.into_iter().enumerate() {
             mix::assert_snow_probe(case, probe, pixel(&canvas, x, y));
         }
+    }
+}
+
+#[wasm_bindgen_test]
+fn webgl_one_level_sand_water_bank_covers_the_review_probe() {
+    use crate::surface_mesh::mix::fixture::{self as shore, gap};
+    let (canvas, mut renderer) = target(&shore::atlas());
+    renderer.resize(256, 128).unwrap();
+    for halo in [false, true] {
+        let mut packets = gap::scene(halo)
+            .iter()
+            .map(|face| surface_instance(face, [256.0, 128.0], 0.0))
+            .collect::<Vec<_>>();
+        render(&mut renderer, &mut packets);
+        let [x, y] = gap::PROBE;
+        gap::assert_pixel(pixel(&canvas, x, y), halo);
     }
 }

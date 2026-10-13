@@ -300,13 +300,17 @@ pub(super) async fn read_pixels_with_clear<const N: usize>(
     clear: wgpu::Color,
 ) -> [[u8; 4]; N] {
     assert!((1..=5).contains(&N), "bounded GPU readback probe count");
-    assert!(points.iter().all(|p| p[0] < 128 && p[1] < 128));
+    assert!(
+        points
+            .iter()
+            .all(|p| p[0] < renderer.config.width && p[1] < renderer.config.height)
+    );
     // One shared pass preserves instance/depth ordering for every requested pixel.
     // Disjoint 256-byte-aligned copies use at most 1280 bytes and one mapped buffer.
     // Read actual shader pixels without relying on compositor canvas lifetime.
     let size = wgpu::Extent3d {
-        width: 128,
-        height: 128,
+        width: renderer.config.width,
+        height: renderer.config.height,
         depth_or_array_layers: 1,
     };
     let target = renderer.device.create_texture(&wgpu::TextureDescriptor {

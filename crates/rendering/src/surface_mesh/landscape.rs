@@ -39,9 +39,13 @@ pub(crate) fn interpolated_floor_weights(
     let Some(values) = values else {
         return floor_weights(word);
     };
-    let floor = values[0] * barycentric[0] as f32
+    let mut floor = values[0] * barycentric[0] as f32
         + values[1] * barycentric[1] as f32
         + values[2] * barycentric[2] as f32;
+    // Reserved neutral palette 6 reuses endpoints for shallow shore coverage.
+    if (word >> 1) & 7 == 6 {
+        floor = ((floor - 0.5) * 4.0 + 0.5).clamp(0.0, 1.0);
+    }
     [1.0 - floor, floor, 0.0]
 }
 

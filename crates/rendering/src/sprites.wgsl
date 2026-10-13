@@ -290,6 +290,12 @@ fn edge(share: f32, noise: f32) -> f32 {
     return clamp((share - 0.5) * 4.0 + 0.5 + (noise - 0.5) * 2.6, 0.0, 1.0);
 }
 
+fn shore_edge(share: f32, water: f32, noise: f32) -> f32 {
+    if share <= water { return edge(share, 0.5); }
+    let cover = edge(water, 0.5);
+    return cover + (1.0 - cover) * edge((share - water) / (1.0 - water), noise);
+}
+
 fn junction_share(word: u32, material: u32) -> f32 {
     var present = 0u;
     var matching = 0u;
@@ -299,6 +305,9 @@ fn junction_share(word: u32, material: u32) -> f32 {
         matching += select(0u, 1u, cell == material);
     }
     return f32((matching * 255u + present / 2u) / max(present, 1u)) / 255.0;
+}
+fn junction_water(word: u32) -> f32 {
+    return junction_share(word, 10u) + junction_share(word, 12u);
 }
 // #endif
 
@@ -358,6 +367,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if landscape { count = 2u; }
         // #endif
     }
+    if landscape && blend && ((in.pages.w >> 1u) & 7u) == 6u {
+        let water = clamp((in.weights.y - 0.5) * 4.0 + 0.5, 0.0, 1.0);
+        weights = vec3<f32>(1.0 - water, water, 0.0);
+    }
     // #if mixing
     var noise = 0.5;
     if mixing && !junction {
@@ -367,10 +380,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
              (in.solid >= 16u && middle > 0.0 && middle < 1.0)) {
             noise = 0.6 * value(tile, inside, 1) + 0.4 * value(tile, inside, 4);
         }
-        let over = edge(in.weights.x, noise);
+        let top = (in.pages.z >> 16u) & 255u;
+        let mid_material = (in.pages.z >> 8u) & 255u;
+        let water = select(0.0, in.weights.x + select(0.0, in.weights.y, mid_material == 10u || mid_material == 12u), top == 10u || top == 12u);
+        let over = shore_edge(in.weights.x, water, noise);
         weights = vec3<f32>((1.0 - in.weights.z) * (1.0 - over), in.weights.z, (1.0 - in.weights.z) * over);
         if in.solid >= 16u {
-            let mid = edge(middle, noise);
+            let mid = shore_edge(middle, water, noise);
             weights = vec3<f32>(1.0 - mid, mid - over, over);
         }
     }
@@ -381,6 +397,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         noise = 0.6 * value(tile, inside, 1) + 0.4 * value(tile, inside, 4);
     }
     let bary = vec3<f32>(in.weights.xy, 1.0 - in.weights.x - in.weights.y);
+    var water = 0.0;
+    if junction { water = dot(vec3<f32>(junction_water(u32(in.rect3.x)), junction_water(u32(in.rect3.y)), junction_water(u32(in.rect3.z))), bary); }
     var cumulative = 0.0;
     var previous = 0.0;
     // #endif
@@ -406,7 +424,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 if material == 15u { continue; }
                 let shares = vec3<f32>(junction_share(u32(in.rect3.x), material), junction_share(u32(in.rect3.y), material), junction_share(u32(in.rect3.z), material));
                 cumulative += dot(shares, bary);
-                let threshold = edge(cumulative, noise);
+                let threshold = shore_edge(cumulative, water, noise);
                 weight = (threshold - previous) * (1.0 - in.weights.z);
                 previous = threshold;
                 if weight <= 0.0 { continue; }

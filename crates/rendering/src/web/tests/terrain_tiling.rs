@@ -3,6 +3,46 @@ use super::*;
 use crate::surface_mesh::directory::fixture;
 
 #[wasm_bindgen_test]
+async fn webgpu_shallow_water_fades_into_sand_without_extra_draws_or_programs() {
+    use crate::surface_mesh::mix::fixture as shore;
+    let mut renderer = surface_renderer_with_atlas(&shore::atlas()).await;
+    let terrain = shore::terrain(0)
+        .into_iter()
+        .map(|mut sample| {
+            sample.material = 3;
+            sample
+        })
+        .collect::<Vec<_>>();
+    let mut inland = crate::surface_mesh::projected_surface_triangles(&terrain, shore::camera(0));
+    crate::surface_mesh::apply_terrain_textures(&mut inland, &shore::art());
+    let baseline = renderer
+        .render_world_layers(&inland, &[], [0.0, 0.0, 0.0, 1.0])
+        .unwrap();
+    let baseline_mixed_program = renderer.mixed_pipeline.is_some();
+    let mut results = Vec::new();
+    for zoom in [0.2, 0.4] {
+        let faces = shore::shore_scene(zoom);
+        let counters = renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        assert_eq!(
+            counters.draw_calls, baseline.draw_calls,
+            "shore blending adds no draw calls"
+        );
+        assert_eq!(
+            renderer.mixed_pipeline.is_some(),
+            baseline_mixed_program,
+            "shore blending adds no shader program"
+        );
+        results.push(read_pixels(&renderer, faces.len() as u32, shore::SHORE_PROBES).await);
+    }
+    renderer.device.destroy();
+    for pixels in results {
+        shore::assert_shore(pixels);
+    }
+}
+
+#[wasm_bindgen_test]
 async fn webgpu_terrain_texels_are_world_anchored_across_zoom_and_mesh_lod() {
     let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
     let mut dirt = Vec::new();
@@ -84,4 +124,23 @@ async fn webgpu_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft()
         }
     }
     renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
+async fn webgpu_one_level_sand_water_bank_covers_the_review_probe() {
+    use crate::surface_mesh::mix::fixture::{self as shore, gap};
+    let mut renderer = surface_renderer_with_atlas(&shore::atlas()).await;
+    renderer.resize(256, 128);
+    let mut pixels = Vec::new();
+    for halo in [false, true] {
+        let faces = gap::scene(halo);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        pixels.push(read_pixels(&renderer, faces.len() as u32, [gap::PROBE]).await[0]);
+    }
+    renderer.device.destroy();
+    for (halo, pixel) in [false, true].into_iter().zip(pixels) {
+        gap::assert_pixel(pixel, halo);
+    }
 }
