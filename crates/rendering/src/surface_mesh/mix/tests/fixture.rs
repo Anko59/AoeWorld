@@ -1,6 +1,8 @@
 //! Border probes shared by the three renderer pixel tests. Synthetic flat
 //! frames only: any colour between two materials is the blend itself.
 use super::{layer, noise, rank, weights};
+#[path = "../../tests/shore_gap.rs"]
+pub(crate) mod gap;
 #[path = "../../tests/junction.rs"]
 pub(crate) mod junction;
 use crate::surface_mesh::{

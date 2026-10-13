@@ -125,3 +125,22 @@ async fn webgpu_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft()
     }
     renderer.device.destroy();
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_one_level_sand_water_bank_covers_the_review_probe() {
+    use crate::surface_mesh::mix::fixture::{self as shore, gap};
+    let mut renderer = surface_renderer_with_atlas(&shore::atlas()).await;
+    renderer.resize(256, 128);
+    let mut pixels = Vec::new();
+    for halo in [false, true] {
+        let faces = gap::scene(halo);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        pixels.push(read_pixels(&renderer, faces.len() as u32, [gap::PROBE]).await[0]);
+    }
+    renderer.device.destroy();
+    for (halo, pixel) in [false, true].into_iter().zip(pixels) {
+        gap::assert_pixel(pixel, halo);
+    }
+}

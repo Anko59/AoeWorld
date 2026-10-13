@@ -212,3 +212,35 @@ fn canvas_shore_blend_matches_across_an_edge_beside_a_third_ground_material() {
     });
     shore::junction::assert_edge(&pair, pixels);
 }
+
+#[wasm_bindgen_test]
+fn canvas_one_level_sand_water_bank_covers_the_review_probe() {
+    use crate::surface_mesh::mix::fixture::{self as shore, gap};
+    let (canvas, context) = target_canvas().unwrap();
+    canvas.set_width(256);
+    let mut presentation = CanvasPresentation::new(256, 128);
+    for halo in [false, true] {
+        let layers = gap::scene(halo)
+            .into_iter()
+            .map(WorldLayer::Surface)
+            .collect::<Vec<_>>();
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &shore::atlas(),
+            &mut presentation,
+            &layers,
+            gap::camera(),
+            false,
+        )
+        .unwrap();
+        let [x, y] = gap::PROBE;
+        let offset = ((y * 256 + x) * 4) as usize;
+        gap::assert_pixel(
+            presentation.color_buffer[offset..offset + 4]
+                .try_into()
+                .unwrap(),
+            halo,
+        );
+    }
+}

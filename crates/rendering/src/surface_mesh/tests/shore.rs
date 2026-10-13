@@ -107,15 +107,19 @@ fn coplanar_shore_edges_remain_skirt_free_for_both_directions_and_sides() {
 }
 
 #[wasm_bindgen_test]
-fn one_quantized_height_step_at_a_beach_does_not_create_vertical_walls() {
+fn one_quantized_height_step_at_a_beach_keeps_a_neutral_sand_closure() {
     for edge in [ShoreEdge::East, ShoreEdge::South] {
         for water_on_first in [false, true] {
             for heights in [[2, 3], [3, 2]] {
                 let samples = pair(edge, water_on_first, heights[0], heights[1]);
                 let faces = projected_surface_triangles(&samples, camera());
+                let skirts = faces.iter().filter(|face| face.skirt).collect::<Vec<_>>();
+                assert_eq!(skirts.len(), 2, "unequal tops must stay closed");
                 assert!(
-                    faces.iter().all(|face| !face.skirt),
-                    "a one-level shore mismatch is a gentle beach, heights {heights:?}"
+                    skirts
+                        .iter()
+                        .all(|face| face.material == 3 && face.tint == 0),
+                    "one-level beach strips use neutral sand, heights {heights:?}"
                 );
             }
         }
