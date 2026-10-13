@@ -17,7 +17,7 @@ use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
 /// A stored review of HEAD with this grade, as `review::review` leaves it.
-fn graded(root: &Path, tier: Tier, grade: u8) -> Report {
+pub(in crate::ship) fn graded(root: &Path, tier: Tier, grade: u8) -> Report {
     let report = unstored(root, tier, grade);
     report.store(root).unwrap();
     report

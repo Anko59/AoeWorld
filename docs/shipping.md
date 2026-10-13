@@ -67,13 +67,23 @@ agent policy refuses `$` in agent-set Make values.
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Only then**, if the parent is ready, pushes exactly that commit to
-   `origin` as the branch (`SHIP_FORCE=1` adds `--force-with-lease`, after a rebase). The pre-push hook
-   runs `make pre-push`: it skips the preflight when
-   `make ship`'s passing preflight evidence covers the clean HEAD being pushed
-   (`AOE_SHIP_EVIDENCE`, checked in Rust), and runs `make preflight` otherwise. The push sets SSH keepalives (unless
-   `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the
-   connection for minutes (#209).
+7. **Re-checks a moved base**, still holding the lock: it fetches the base (`dev`, or the parent of a
+   stacked ship) again. If it moved, the branch's own commits are rebased onto it (a conflict aborts the
+   rebase, leaves the branch as it was and names the files) and every `static` preflight gate runs on
+   the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
+   its excerpt and the new commits it combines with, leaving the rebased branch. The review that just
+   passed is carried over, never rerun and not via the reuse check (the pinned judge `AOE_JUDGE_REV`
+   makes that decline once dev moved), when dev's review policy is unchanged (else "the review policy on
+   dev changed in <commits>") and the own patch is identical against each base (else "changed your
+   patch"). The rebased head's evidence (cadence `recheck`) holds its static gates and a separate "full
+   preflight passed on <old head> (base <old base>)". A rebased branch already on `origin` is pushed
+   with a lease on the commit the ship started from, else the ship asks for `SHIP_FORCE=1`. **Then**, if
+   the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
+   `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
+   when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on
+   it; full preflight on the recorded head, identical own patch), covers the clean HEAD
+   (`AOE_SHIP_EVIDENCE`), else runs `make preflight`. The push sets SSH keepalives (unless
+   `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the connection for minutes (#209).
 8. **Creates or updates** the pull request against the base (`dev`) on
    `origin`'s GitHub repository, found by head branch (never by a number),
    with the review appended; posts the `harness/review` status and, into
@@ -478,6 +488,9 @@ Proving in CI that the tests ran red then green remains
 - Gates run in the checkout as written (`make <gate>`), not in an exported
   commit snapshot: ignored files and caches take part, and an edit reverted
   between the before and after checks is not seen.
+- The re-check cannot see `dev` moving while CI runs after the push; requiring
+  branches to be up to date (a setting, for the owner) would. A gate over its
+  deadline reports the machine load, and says so when it exceeds the cores.
 - `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the

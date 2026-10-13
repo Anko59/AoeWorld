@@ -2,7 +2,7 @@
 //! with their budgets. Shared by the agent stop rule and `ship`.
 use crate::{
     gates::registry::{Capability, Gate},
-    process::{Cancellation, CaptureExit, capture_command},
+    process::{Cancellation, CaptureExit, capture_command, load},
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, process::Command, time::Duration};
@@ -84,7 +84,7 @@ fn run_one(root: &Path, gate: &Gate) -> GateResult {
     let passed = matches!(captured.exit, CaptureExit::Success);
     let mut summary: String = last.chars().take(120).collect();
     if matches!(captured.exit, CaptureExit::Deadline) {
-        summary = format!("over its {}s budget; {summary}", gate.budget_s);
+        summary = over_budget(gate.budget_s, &summary, &load::read);
     }
     let tail = if passed {
         String::new()
@@ -103,6 +103,17 @@ fn run_one(root: &Path, gate: &Gate) -> GateResult {
         summary,
         tail,
     }
+}
+
+/// The summary of a gate that hit its budget, with the machine load then.
+pub(super) fn over_budget(budget_s: u32, last: &str, reader: &load::Reader<'_>) -> String {
+    let load = load::note(reader);
+    let load = if load.is_empty() {
+        load
+    } else {
+        format!(" ({load})")
+    };
+    format!("over its {budget_s}s budget{load}; {last}")
 }
 
 fn docker_available() -> bool {

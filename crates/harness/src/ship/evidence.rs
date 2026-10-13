@@ -34,6 +34,8 @@ pub(crate) struct Evidence {
     pub(crate) verdict: Verdict,
     /// The pull request level, its floor and why (None without a description).
     pub(crate) level: Option<super::levels::Decision>,
+    /// The re-check against a moved base just before the push, if one ran.
+    pub(crate) recheck: Option<super::recheck::Recheck>,
     pub(crate) started: u64,
     pub(crate) finished: u64,
 }

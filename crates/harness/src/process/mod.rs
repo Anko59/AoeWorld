@@ -16,6 +16,7 @@ use std::{
 
 mod capture;
 pub(crate) mod excerpt;
+pub(crate) mod load;
 pub(crate) use capture::{
     CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command,
     capture_command_retaining_stdout, capture_in, safe_observation,
@@ -49,10 +50,12 @@ pub enum ProcessError {
         code: Option<i32>,
         log: String,
     },
-    #[error("{program} exceeded its {seconds}s deadline; log: {log}")]
+    #[error("{program} exceeded its {seconds}s deadline{load}; log: {log}")]
     Deadline {
         program: String,
         seconds: u64,
+        /// ` (machine load was …)`, or empty when the load cannot be read.
+        load: String,
         log: String,
     },
     #[error("{program} was cancelled; log: {log}")]
@@ -226,6 +229,16 @@ fn supervise(
     deadline: Duration,
     cancellation: &Cancellation,
 ) -> Result<(), ProcessError> {
+    supervise_reading(program, command, deadline, cancellation, &load::read)
+}
+
+fn supervise_reading(
+    program: &str,
+    command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+    load: &load::Reader<'_>,
+) -> Result<(), ProcessError> {
     let captured = capture::capture_command(command, deadline, cancellation);
     if matches!(captured.exit, CaptureExit::Success) {
         if captured.truncated {
@@ -269,6 +282,10 @@ fn supervise(
         CaptureExit::Deadline => Err(ProcessError::Deadline {
             program: program.into(),
             seconds: deadline.as_secs(),
+            load: match load::note(load) {
+                note if note.is_empty() => note,
+                note => format!(" ({note})"),
+            },
             log,
         }),
         CaptureExit::Cancelled => Err(ProcessError::Cancelled {

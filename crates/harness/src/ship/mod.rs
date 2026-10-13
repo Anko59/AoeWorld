@@ -17,6 +17,7 @@ mod levels;
 pub(crate) mod lock;
 mod metrics;
 pub(crate) mod prepush;
+mod recheck;
 pub(crate) mod review_gate;
 mod review_pr;
 pub(crate) mod run;
@@ -249,6 +250,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
         changed,
         gates: results,
         level: options.level.as_deref().cloned(),
+        recheck: None,
         started,
         finished: now(),
     };
@@ -345,7 +347,12 @@ pub(crate) fn ship_with(
         eprintln!("ship: {}", stack::ahead_message(&options.base, report));
         return Ok(evidence);
     }
-    push(root, &evidence, options.force)?;
+    let rebased = recheck::before_push(root, &evidence, review.as_ref(), options)?;
+    let (evidence, review, lease, _recheck_anchor) = match rebased {
+        Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
+        None => (evidence, review, None, None),
+    };
+    push(root, &evidence, options.force, lease.as_deref())?;
     if !options.no_pr {
         let mut options = options.clone();
         if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
@@ -439,11 +446,17 @@ fn push_command(root: &Path, head: &str) -> Command {
     command
 }
 
-fn push(root: &Path, evidence: &Evidence, force: bool) -> Result<()> {
+fn push(root: &Path, evidence: &Evidence, force: bool, lease: Option<&str>) -> Result<()> {
     // The remote is fixed and the refspec names the evidenced branch only.
     let refspec = format!("{}:refs/heads/{}", evidence.head, evidence.branch);
     let mut command = push_command(root, &evidence.head);
-    if force {
+    if let Some(from) = lease {
+        // A re-check rebase of a branch already pushed: overwrite only `from`.
+        command.arg(format!(
+            "--force-with-lease=refs/heads/{}:{from}",
+            evidence.branch
+        ));
+    } else if force {
         command.arg("--force-with-lease");
     }
     if let Some(ssh) = ssh_keepalive(caller_chose_ssh(root)) {
