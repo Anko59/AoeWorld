@@ -10,11 +10,20 @@ const GH: &str = r#"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
 for arg in "$@"; do
-  if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then echo "stub failure" >&2; exit 1; fi
+  if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then
+    # A failing gh has still read its piped body: drain it before exiting.
+    case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
+    echo "stub failure" >&2; exit 1
+  fi
 done
 case "$1" in
   api) printf '%s' "$GH_LIST_JSON" ;;
-  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'; fi ;;
+  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'
+    else
+      # Like the real gh, read a body piped on stdin (`--body-file -`) to its
+      # end: exiting first closes the pipe under the writer (EPIPE).
+      case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
+    fi ;;
 esac
 "#;
 
