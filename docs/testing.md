@@ -14,7 +14,10 @@ must use `#[wasm_bindgen_test]`; native `#[test]` cases in WASM-only modules do
 not run in this gate. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
 this gate. `make test-e2e` runs both an explicit WebGPU project under Xvfb with Vulkan
-SwiftShader and a game-only project with default browser launch settings.
+SwiftShader and a game-only project with default browser launch settings. It and
+`make duel-check` first validate the stored packages in `local-assets/map-packages`;
+packages from before a format change fail with an "invalid stored map package"
+error, which names the files and says to regenerate them or move the directory aside.
 Game checks cover rendered pixels, movement, resize, and compatibility startup
 after a missing WebGPU API, null WebGPU context, or unavailable adapter. WebGL2
 checks require real shader pixels, depth/material parity, moving units, bound-

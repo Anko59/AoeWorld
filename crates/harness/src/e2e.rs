@@ -4,6 +4,7 @@ mod country;
 mod landscape;
 mod matrix;
 mod source;
+mod stale;
 mod visual;
 use std::{
     io::{Read, Write},
@@ -153,7 +154,8 @@ fn run_specs(
             Some(path) => std::path::PathBuf::from(path).canonicalize()?,
             None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
         };
-    let fixture = landscape::prepare(&root, Some(&existing_maps))?;
+    let fixture = landscape::prepare(&root, Some(&existing_maps))
+        .map_err(|error| stale::annotate(error, &existing_maps))?;
     let server = Command::new(binary)
         .current_dir(&root)
         .env("AOE_BIND", address.to_string())
@@ -286,7 +288,7 @@ fn run_specs(
     });
     // Always stop the server; focused failure reports remain available to the driver.
     server.shutdown()?;
-    browser_result?;
+    browser_result.map_err(|error| stale::annotate(error, &existing_maps))?;
     if !specs.is_empty() {
         return Ok(());
     }
