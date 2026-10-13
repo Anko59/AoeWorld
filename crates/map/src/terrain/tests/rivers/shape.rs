@@ -189,3 +189,36 @@ fn page_clipped_bend_has_the_same_physical_curve_as_the_complete_source() {
         }
     }
 }
+
+#[test]
+fn passable_river_bank_keeps_dirt_above_the_snow_line() {
+    let generator = crossing_with_height(
+        false,
+        Some(&|_, _| 340_000),
+        vec![[130 * 256, -256, 130 * 256, 258 * 256, 6 * 256, 0, 259 * 256]],
+    );
+    let westernmost = (0..WIDTH)
+        .find(|&x| generator.tile_at(TileCoord::new(x, 80)).unwrap().water == WaterKind::River)
+        .expect("river row");
+    let position = TileCoord::new(westernmost - 1, 80);
+    let point = generator
+        .landscape_point_with_cancel(position, &|| false)
+        .unwrap()
+        .unwrap();
+    assert!(point.tile.terrain.passable);
+    assert_eq!(point.tile.terrain.water, WaterKind::None);
+    assert_eq!(point.tile.terrain.geographic_height_centimeters, 340_000);
+    assert_eq!(point.tile.terrain.material, GroundMaterial::Dirt);
+    let away = generator
+        .landscape_point_with_cancel(TileCoord::new(40, 80), &|| false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(away.tile.terrain.material, GroundMaterial::Snow);
+    let chunk = generator
+        .landscape_chunk_with_cancel(position.x / 32, position.y / 32, &|| false)
+        .unwrap();
+    assert_eq!(
+        chunk.tiles.iter().find(|p| p.tile == position).unwrap(),
+        &point.tile
+    );
+}
