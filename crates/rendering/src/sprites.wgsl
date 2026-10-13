@@ -358,6 +358,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if landscape { count = 2u; }
         // #endif
     }
+    if landscape && blend && ((in.pages.w >> 1u) & 7u) == 6u {
+        let water = clamp((in.weights.y - 0.5) * 4.0 + 0.5, 0.0, 1.0);
+        weights = vec3<f32>(1.0 - water, water, 0.0);
+    }
     // #if mixing
     var noise = 0.5;
     if mixing && !junction {

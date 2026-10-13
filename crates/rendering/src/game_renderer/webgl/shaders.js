@@ -294,6 +294,10 @@ void main() {
     vec3 weights = vec3(1,0,0);
     uint count = 1u;
     if (blend && !single) { weights = vWeights; count = landscape && !mixing ? 2u : 3u; }
+    if (landscape && blend && ((vPages.w >> 1u) & 7u) == 6u) {
+        float water = clamp((vWeights.y - .5) * 4.0 + .5, 0.0, 1.0);
+        weights = vec3(1.0 - water, water, 0.0);
+    }
     float noise = .5;
     if (mixing && !junction) {
         float middle = vWeights.x + vWeights.y;

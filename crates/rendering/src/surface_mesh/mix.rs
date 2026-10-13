@@ -1,4 +1,4 @@
-//! Soft borders between every pair of ground materials.
+//! Soft borders between ground materials and shallow shore water.
 //!
 //! Each displayed vertex takes the share of every ground material among its
 //! four incident source tiles. A quad whose corners see more than one
@@ -25,7 +25,7 @@ const REACH: f32 = 2.6;
 /// Overlay order, low to high: a higher material spills over a lower one.
 /// Bare hard ground is lowest, vegetation creeps over it and snow covers all:
 /// ice, rock, gravel, mud, sand, dirt, grass and dirt mix, dry grass, worn
-/// grass, grass, lush grass, snow.
+/// grass, grass, lush grass, snow, shallow water and ford shallows.
 pub(crate) fn rank(material: u8) -> u8 {
     match material {
         8 => 0,
@@ -40,7 +40,9 @@ pub(crate) fn rank(material: u8) -> u8 {
         0 => 9,
         15 => 10,
         7 => 11,
-        _ => 12,
+        10 => 12,
+        12 => 13,
+        _ => 14,
     }
 }
 
@@ -52,16 +54,22 @@ pub(crate) fn vegetative(material: u8) -> bool {
 impl ProjectedSurfaceTriangle {
     /// Faces drawn through the appearance word: palette, bed and filtered sheets.
     pub(crate) fn vegetated(&self) -> bool {
-        vegetative(self.material) || self.mix != [0; 6] || self.appearance & support::FULL != 0
+        vegetative(self.material)
+            || self.mix != [0; 6]
+            || self.appearance & support::FULL != 0
+            || (self.floor_strengths.is_some()
+                && self
+                    .texture_materials
+                    .is_some_and(|m| matches!(m[1], 10 | 12)))
     }
 }
 
-/// The sheet a land tile shows and its forest-floor strength. Water
-/// and metadata-free samples are not observations.
+/// The displayed sheet and its forest-floor strength. Shallow water overlays
+/// ground; deeper water and metadata-free samples keep their own paths.
 fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
     let appearance = sample.appearance?;
     if sample.surface.water != 0 || appearance::water_material(sample.material) {
-        return None;
+        return matches!(sample.material, 10 | 12).then_some((sample.material, 0));
     }
     let material = match sample.material {
         0 | 6 => u8::from(matches!(appearance.palette, 3 | 4)),
@@ -77,7 +85,7 @@ fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
 
 fn eligible(triangle: &ProjectedSurfaceTriangle) -> bool {
     triangle.appearance & 1 != 0
-        && !appearance::water_material(triangle.material)
+        && (!appearance::water_material(triangle.material) || matches!(triangle.material, 10 | 12))
         && !triangle.skirt
         && triangle.tint <= 3
         && triangle.texture_materials.is_some()
@@ -153,6 +161,11 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         if base == over {
             continue;
         }
+        // A shore needs a complete source halo: an unloaded cell must not be
+        // interpreted as dry ground or make a lone water cell spill outwards.
+        if matches!(over, 10 | 12) && quad.iter().flatten().any(|cell| cell.0 == MISSING) {
+            continue;
+        }
         let middle = seen()
             .filter(|material| *material != base && *material != over)
             .max_by_key(|material| rank(*material))
@@ -198,7 +211,14 @@ pub(super) fn texture(triangle: &mut ProjectedSurfaceTriangle, art: &GameArt) ->
     let bed = triangle
         .floor_strengths
         .is_some_and(|floors| floors != [0; 3]);
-    let second = if full || bed || triangle.mix[3..] == [0; 3] {
+    // A bare two-sheet shore uses the ordinary interpolated two-layer path.
+    // Reuse the bed endpoint word for water coverage, avoiding a mixing program
+    // and extra draw runs for the common sand/water border.
+    let shore =
+        !full && !bed && middle == base && matches!(over, 10 | 12) && !matches!(base, 4 | 7..=9);
+    let second = if shore {
+        over
+    } else if full || bed || triangle.mix[3..] == [0; 3] {
         triangle.mix[3..].fill(0);
         if art.terrain[6].is_empty() { 2 } else { 6 }
     } else {
@@ -207,13 +227,14 @@ pub(super) fn texture(triangle: &mut ProjectedSurfaceTriangle, art: &GameArt) ->
     let frame = |material| {
         appearance::terrain_texture_frame(art, material, triangle.texture_tile).map(|f| f.atlas)
     };
-    let (Some(a), Some(b), Some(c)) = (frame(base), frame(second), frame(over)) else {
+    let third = if shore { base } else { over };
+    let (Some(a), Some(b), Some(c)) = (frame(base), frame(second), frame(third)) else {
         triangle.mix = [0; 6];
         triangle.appearance &= !support::FULL;
         triangle.texture_blend = None;
         return false;
     };
-    triangle.texture_materials = Some([base, second, over]);
+    triangle.texture_materials = Some([base, second, third]);
     triangle.texture_mode = directory::TILED;
     triangle.texture_uv = Some(a);
     triangle.texture_blend = Some([
@@ -224,7 +245,12 @@ pub(super) fn texture(triangle: &mut ProjectedSurfaceTriangle, art: &GameArt) ->
             c
         },
     ]);
-    if !vegetative(triangle.material) {
+    if shore {
+        triangle.floor_strengths = Some([triangle.mix[0], triangle.mix[1], triangle.mix[2]]);
+        triangle.mix = [0; 6];
+        // Reserved palette 6 is neutral, with a narrow shore coverage band.
+        triangle.appearance = 1 | 6 << 1;
+    } else if !vegetative(triangle.material) {
         // Bare ground keeps face shading but no ecological palette or canopy.
         triangle.appearance = (triangle.appearance & support::FULL) | 1 | 5 << 1;
     }

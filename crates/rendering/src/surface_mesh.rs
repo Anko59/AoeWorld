@@ -341,10 +341,14 @@ fn append_edge_skirt(
         Edge::East => ([1, 2], [0, 3]),
         Edge::South => ([2, 3], [1, 0]),
     };
+    let shore = (sample.surface.water != 0) != (neighbor.surface.water != 0);
+    // One quantized shore level is a gentle beach, not a vertical bank.
     if current_indices
         .iter()
         .zip(neighbor_indices)
-        .all(|(current_index, neighbor_index)| current[*current_index] == adjacent[neighbor_index])
+        .all(|(current_index, neighbor_index)| {
+            current[*current_index].abs_diff(adjacent[neighbor_index]) <= u16::from(shore)
+        })
     {
         return;
     }
@@ -372,12 +376,21 @@ fn append_edge_skirt(
         project_world(projection, world_xy[1], bottom[1]),
         project_world(projection, world_xy[0], bottom[0]),
     ];
+    // A shoreline's ground bank owns the side material, including when the
+    // modeled water level sits above the adjacent terrain.
     let bank = if sample.surface.water != 0 && neighbor.surface.water == 0 {
         *neighbor
     } else {
         sample
     };
     let water_step = sample.surface.water != 0 && neighbor.surface.water != 0;
+    let material = if water_step {
+        5
+    } else if shore && bank.surface.kind != SceneTerrainSurface::CLIFF {
+        bank.material
+    } else {
+        4
+    };
     let color = darken(surface_color(bank), 0.62);
     result.push(ProjectedSurfaceTriangle {
         appearance: landscape::pack(bank.appearance),
@@ -387,7 +400,7 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
-        material: if water_step { 5 } else { 4 },
+        material,
         texture_mode: 4,
         tint: if water_step { 0 } else { 3 },
         texture_uv: None,
@@ -405,7 +418,7 @@ fn append_edge_skirt(
         color,
         tile,
         skirt: true,
-        material: if water_step { 5 } else { 4 },
+        material,
         texture_mode: 5,
         tint: if water_step { 0 } else { 3 },
         texture_uv: None,
