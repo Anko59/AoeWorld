@@ -146,6 +146,9 @@ echo "$AOE_AGENT_ROLE report"
         rounds: 2,
         check: None,
         budget: Duration::from_secs(5),
+        qualify: None,
+        qualify_budget: Duration::from_secs(5),
+        qualify_attempts: 2,
     };
     (env, options)
 }

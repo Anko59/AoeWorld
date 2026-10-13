@@ -15,6 +15,7 @@ pub(crate) mod focus;
 mod focus_tests;
 mod green;
 pub(crate) mod output;
+mod qualify;
 mod runner;
 mod scope;
 mod specs;
@@ -67,6 +68,7 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
     );
     summary.push_str(&format!("\nTask:\n{task}\n"));
     let mut kept = false;
+    let base = git::git(&root, &["rev-parse", "HEAD"])?;
     let result = rounds(
         &root,
         task,
@@ -74,7 +76,8 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
         &subject.branch,
         (resume, &mut kept),
         &mut summary,
-    );
+    )
+    .and_then(|()| qualify::run(&root, task, options, (&subject.branch, &base), &mut summary));
     let record = if kept {
         tree::kept::write(&root, &subject.branch)
     } else {
@@ -95,6 +98,7 @@ pub(crate) fn run(root: &Path, task: &str, options: &Options) -> git::Result<Str
         }),
     );
     match &result {
+        Ok(()) if options.qualify.is_some() => summary.push_str("\nResult: PASS, qualified. Main session: read the diff (git diff origin/dev...HEAD), film the change with make showcase, then make ship.\n"),
         Ok(()) => summary.push_str("\nResult: PASS. Main session: read the diff, film the change with make showcase, then make ship.\n"),
         Err(error) => summary.push_str(&format!("\nResult: FAIL: {error}\nMain session: inspect git diff and the last commit, finish the failing implementation with the same tests, rerun the check, then commit before filming and make ship.\n")),
     }

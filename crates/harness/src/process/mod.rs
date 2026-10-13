@@ -15,7 +15,7 @@ use std::{
 };
 
 mod capture;
-mod excerpt;
+pub(crate) mod excerpt;
 pub(crate) use capture::{
     CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command,
     capture_command_retaining_stdout, capture_in, safe_observation,

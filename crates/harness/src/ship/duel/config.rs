@@ -10,6 +10,11 @@ pub(crate) struct Options {
     pub(crate) rounds: u32,
     pub(crate) check: Option<String>,
     pub(crate) budget: Duration,
+    /// DUEL_QUALIFY: a command run once after the last green round (for example `make preflight`).
+    pub(crate) qualify: Option<String>,
+    pub(crate) qualify_budget: Duration,
+    /// Implementer fixes DUEL_QUALIFY_ATTEMPTS allows before the duel ends FAIL.
+    pub(crate) qualify_attempts: u32,
 }
 
 impl Options {
@@ -41,6 +46,14 @@ impl Options {
         if minutes == 0 {
             return Err("DUEL_BUDGET_MINUTES must be positive".into());
         }
+        let qualify_minutes = number("DUEL_QUALIFY_MINUTES", 45)?;
+        if qualify_minutes == 0 {
+            return Err("DUEL_QUALIFY_MINUTES must be positive".into());
+        }
+        let qualify_attempts = number("DUEL_QUALIFY_ATTEMPTS", 2)?;
+        if !(1..=5).contains(&qualify_attempts) {
+            return Err("DUEL_QUALIFY_ATTEMPTS must be between 1 and 5".into());
+        }
         Ok(Self {
             runtime,
             model: get("DUEL_MODEL"),
@@ -48,6 +61,9 @@ impl Options {
             rounds,
             check: get("DUEL_CHECK"),
             budget: Duration::from_secs(u64::from(minutes) * 60),
+            qualify: get("DUEL_QUALIFY"),
+            qualify_budget: Duration::from_secs(u64::from(qualify_minutes) * 60),
+            qualify_attempts,
         })
     }
 }

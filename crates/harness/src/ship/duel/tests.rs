@@ -65,6 +65,27 @@ fn bounded_task_and_configuration() {
     assert_eq!(options.rounds, 4);
     assert_eq!(options.budget, Duration::from_secs(120));
     assert_eq!(options.model.as_deref(), Some("p/m"));
+    assert!(options.qualify.is_none());
+    assert_eq!(options.qualify_budget, Duration::from_secs(45 * 60));
+    assert_eq!(options.qualify_attempts, 2);
+    let options = config(&[
+        ("DUEL_RUNTIME", "pi"),
+        ("DUEL_QUALIFY", "make preflight"),
+        ("DUEL_QUALIFY_MINUTES", "3"),
+        ("DUEL_QUALIFY_ATTEMPTS", "4"),
+    ])
+    .unwrap();
+    assert_eq!(options.qualify.as_deref(), Some("make preflight"));
+    assert_eq!(options.qualify_budget, Duration::from_secs(180));
+    assert_eq!(options.qualify_attempts, 4);
+    for (key, value) in [
+        ("DUEL_QUALIFY_MINUTES", "0"),
+        ("DUEL_QUALIFY_ATTEMPTS", "0"),
+        ("DUEL_QUALIFY_ATTEMPTS", "6"),
+        ("DUEL_QUALIFY_ATTEMPTS", "x"),
+    ] {
+        assert!(config(&[("DUEL_RUNTIME", "pi"), (key, value)]).is_err());
+    }
 }
 
 #[test]
@@ -179,4 +200,17 @@ fn prompt_tails_are_bounded_at_utf8_boundaries() {
     assert!(tail.len() <= 8000);
     assert!(output.ends_with(&tail));
     assert_eq!(runner::bounded("small"), "small");
+}
+
+#[test]
+fn an_excerpt_drops_passing_test_lines_and_stays_bounded() {
+    let mut output =
+        String::from("Focused PASS: a::one, a::two\nPASS [ 0.1s] a one\ntest b ... ok\n");
+    for n in 0..50 {
+        output.push_str(&format!("line {n}\n"));
+    }
+    let excerpt = runner::excerpt(&output);
+    assert_eq!(excerpt.lines().count(), 20);
+    assert!(!excerpt.contains("PASS") && !excerpt.contains("... ok"));
+    assert!(excerpt.ends_with("line 49"));
 }
