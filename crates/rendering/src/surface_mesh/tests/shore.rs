@@ -302,3 +302,29 @@ fn alpha_bearing_diamond_fills_shore_skirts_without_transparent_uv_corners() {
         );
     }
 }
+
+#[wasm_bindgen_test]
+fn a_one_tile_shallow_band_still_blends_into_sand_with_deeper_water_behind_it() {
+    for deeper in [5, 11] {
+        let mut samples = mix::fixture::shore_terrain();
+        for sample in &mut samples {
+            if sample.position[0] >= 1.0 {
+                sample.material = deeper;
+            }
+        }
+        let mut faces = projected_surface_triangles(&samples, mix::fixture::camera(0));
+        apply_terrain_textures(&mut faces, &mix::fixture::art());
+        let shallow = faces
+            .iter()
+            .filter(|face| !face.skirt && face.tile == [0, 0])
+            .collect::<Vec<_>>();
+        assert_eq!(shallow.len(), 2);
+        for face in shallow {
+            assert!(
+                face.texture_materials.unwrap().contains(&3),
+                "the loaded deeper-water halo must not remove sand from the shallow shoreline: deeper {deeper}, layers {:?}",
+                face.texture_materials
+            );
+        }
+    }
+}

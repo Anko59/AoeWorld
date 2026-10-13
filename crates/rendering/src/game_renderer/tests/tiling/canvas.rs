@@ -149,3 +149,66 @@ fn canvas_snow_is_white_ice_stays_blue_and_their_ground_borders_are_soft() {
         mix::assert_soft(case, &|x, y| pixel(&presentation.color_buffer, x, y));
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_shore_blend_matches_across_an_edge_beside_a_third_ground_material() {
+    use crate::surface_mesh::{apply_terrain_textures, mix::fixture as shore};
+    let mut terrain = shore::shore_terrain();
+    // Dirt changes the north quad's palette, but supplies no observation on
+    // its shared south edge: that edge is the same sand/water on both sides.
+    terrain
+        .iter_mut()
+        .find(|sample| sample.position == [-1.5, -1.5])
+        .unwrap()
+        .material = 2;
+    let camera = shore::camera(0);
+    let mut faces = crate::surface_mesh::projected_surface_triangles(&terrain, camera);
+    apply_terrain_textures(&mut faces, &shore::art());
+    let mut pair = [[-1, -1], [-1, 0]].map(|tile| {
+        *faces
+            .iter()
+            .find(|face| {
+                face.tile == tile
+                    && [[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+                        .iter()
+                        .all(|world| face.points.iter().any(|point| point.world == *world))
+            })
+            .expect("two faces meeting on the sand/water edge")
+    });
+    let edge = aoe_core::Camera {
+        center: camera.center,
+        zoom: camera.zoom,
+        viewport: camera.viewport,
+        focus_elevation_meters: camera.focus_elevation_meters,
+    }
+    .world_to_screen_at_height([-0.1, 0.0], 0.0);
+    for face in &mut pair {
+        let center = [
+            face.points.iter().map(|point| point.screen.x).sum::<f64>() / 3.0,
+            face.points.iter().map(|point| point.screen.y).sum::<f64>() / 3.0,
+        ];
+        // Isolate each face and sample just inside the shared edge, avoiding
+        // raster ownership ties while keeping the same world-coordinate probe.
+        for point in &mut face.points {
+            point.screen.x += 64.5 - edge.x + (edge.x - center[0]) * 0.005;
+            point.screen.y += 64.5 - edge.y + (edge.y - center[1]) * 0.005;
+        }
+    }
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = shore::atlas();
+    let pixels = pair.map(|face| {
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &[WorldLayer::Surface(face)],
+            camera,
+            false,
+        )
+        .unwrap();
+        pixel(&presentation.color_buffer, 64, 64)
+    });
+    shore::junction::assert_edge(&pair, pixels);
+}
