@@ -5,6 +5,9 @@ Read [shipping](../../docs/shipping.md) and [review](../../docs/review.md).
 Product work starts with `make duel DUEL_TASK=<file> DUEL_RUNTIME=<runtime>`
 (or the same tests-first order). The driver commits each red-test and green-code
 step; read its summary and diff, then film the change before shipping.
+For a rendering or map change, `make compare` (bookmarked cameras, before and
+after, one montage each; [Compare](../../docs/showcase.md#compare)) checks it on
+the real maps first.
 
 1. Commit on a feature branch; run `make review-floor` and `make level-floor`
    and pick the tier and the description level (never below them; higher for

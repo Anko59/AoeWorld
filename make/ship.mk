@@ -12,8 +12,9 @@
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES DUEL_QUALIFY DUEL_QUALIFY_MINUTES DUEL_QUALIFY_ATTEMPTS
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS METRICS_REV
+export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check showcase-session
+.PHONY: duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check showcase-session compare
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -101,3 +102,9 @@ level-stats:
 # exec --json) into the steps of an agent-session scene; read-only.
 showcase-session:
 	@.agents/hooks/harness.sh exec showcase-session
+
+# Before and after screenshots of the bookmarked cameras of qa/bookmarks.json
+# (docs/showcase.md, "Compare"). Builds and serves both sides on free ports,
+# so it needs no running server; read-only towards the repository.
+compare:
+	@.agents/hooks/harness.sh exec compare

@@ -301,3 +301,24 @@ fn sed_programs_are_scanned_for_writes() {
         assert!(sed_program_writes(program), "{program}");
     }
 }
+
+#[test]
+fn compare_is_for_the_main_session_and_role_less_agents() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer] {
+        denied(&fixture, role, "make compare");
+    }
+    for role in [Role::Main, Role::Other] {
+        allowed(&fixture, role, "make compare");
+        allowed(
+            &fixture,
+            role,
+            "make compare COMPARE_VIEWS=alps,paris COMPARE_AFTER=build",
+        );
+    }
+    denied(
+        &fixture,
+        Role::Other,
+        "make compare COMPARE_BOOKMARKS=$(pwd)/x.json",
+    );
+}

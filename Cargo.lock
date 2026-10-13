@@ -162,6 +162,7 @@ dependencies = [
  "ed25519-dalek",
  "futures-util",
  "nix",
+ "png",
  "proc-macro2",
  "serde",
  "serde_json",
