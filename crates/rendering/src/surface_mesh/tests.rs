@@ -3,7 +3,7 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 #[path = "tests/appearance.rs"]
 mod appearance_tests;
-#[path = "tests/cliffs.rs"]
+#[path = "tests/cliffs/mod.rs"]
 mod cliff_tests;
 #[path = "tests/equivalence.rs"]
 mod equivalence_tests;

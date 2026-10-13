@@ -10,7 +10,6 @@ struct Sprite {
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
-
 struct VertexOutput {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
@@ -25,7 +24,6 @@ struct VertexOutput {
     @location(9) @interpolate(flat) rect2: vec4<f32>,
     @location(10) @interpolate(flat) rect3: vec4<f32>,
 };
-
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
     switch mode {
         case 0u: {
@@ -61,12 +59,10 @@ fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
         default: { return vec2<f32>(0.0, 0.0); }
     }
 }
-
 fn terrain_atlas_uv(rect: vec4<f32>, local: vec2<f32>) -> vec2<f32> {
     let pixel = vec2<f32>(1.0) / vec2<f32>(textureDimensions(sprite_atlas));
     return rect.xy + pixel * 0.5 + local * max(rect.zw - pixel, vec2<f32>(0.0));
 }
-
 fn directory(entry: u32) -> vec4<f32> {
     return floor(textureLoad(sprite_atlas, vec2<u32>(entry % 2048u, entry / 2048u), 0u, 0u) * 255.0 + 0.5);
 }

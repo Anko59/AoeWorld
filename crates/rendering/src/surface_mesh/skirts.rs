@@ -84,8 +84,14 @@ pub(super) fn append_edge_skirt(
     // Private pre-texturing marker: native faces replace it with tint zero;
     // missing art follows the existing procedural rock fallback.
     let shore = (sample.surface.water != 0) != (adjacent_sample.surface.water != 0);
-    let material = if water_step { 5 } else if shore && !bank.surface.is_cliff() { bank.material } else { 4 };
-    let gentle = shore && material != 4 && top.iter().zip(bottom).all(|(a,b)| a-b <= 1.0);
+    let material = if water_step {
+        5
+    } else if shore && !bank.surface.is_cliff() {
+        bank.material
+    } else {
+        4
+    };
+    let gentle = shore && material != 4 && top.iter().zip(bottom).all(|(a, b)| a - b <= 1.0);
     let tint = if cliff {
         13
     } else if water_step || gentle {

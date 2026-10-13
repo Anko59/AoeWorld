@@ -247,3 +247,36 @@ fn cliff_cells_below_the_snow_line_take_summer_ground_not_base_snow() {
     }
     assert!(cliffs > 50, "fixture has low cliffs: {cliffs}");
 }
+
+#[test]
+fn a_cliff_cell_has_a_neighbor_on_the_ridge_instead_of_an_isolated_square_mesa() {
+    let generator = alpine(1);
+    let mut checked = 0;
+    for y in (601..745).step_by(3) {
+        for x in (97..745).step_by(3) {
+            let at = TileCoord::new(x, y);
+            if generator
+                .cliff_piece_with_cancel(at, &|| false)
+                .unwrap()
+                .is_none()
+            {
+                continue;
+            }
+            let joined = (-1..=1).any(|dy| {
+                (-1..=1).any(|dx| {
+                    (dx != 0 || dy != 0)
+                        && generator
+                            .cliff_piece_with_cancel(
+                                TileCoord::new(x + dx * 3, y + dy * 3),
+                                &|| false,
+                            )
+                            .unwrap()
+                            .is_some()
+                })
+            });
+            assert!(joined, "isolated cliff cell at {x},{y}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 100, "still retains real ridges: {checked}");
+}
