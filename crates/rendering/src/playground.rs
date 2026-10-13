@@ -44,6 +44,8 @@ pub struct SceneryArt {
     /// Low wildflower patches.
     pub grass: Vec<GameFrame>,
     /// Weathered stumps, including signed/outside native hotspots.
+    pub reeds: Vec<GameFrame>,
+    pub snags: Vec<GameFrame>,
     pub stumps: Vec<GameFrame>,
     /// Fallen mossy wood.
     pub logs: Vec<GameFrame>,

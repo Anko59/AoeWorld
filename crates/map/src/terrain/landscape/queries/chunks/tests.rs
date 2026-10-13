@@ -130,7 +130,7 @@ fn candidate_forest_families_floor_and_source_geometry_survive_the_codec() {
 }
 
 #[test]
-fn shared_resource_approaches_and_routes_clear_blocking_forest() {
+fn shared_resource_approaches_and_routes_clear_floor_canopy_trees_and_dressing() {
     let generator = fixture(128, 8, 100);
     let reserved = |position: TileCoord| Reservations {
         route: position.x.rem_euclid(32) < 4,
@@ -177,9 +177,7 @@ fn shared_resource_approaches_and_routes_clear_blocking_forest() {
                             .any(|node| node.node.tile == tile.tile
                                 && node.node.object == ObjectKind::Tree)
                     );
-                    if !corridor || r.start {
-                        assert!(!scene.decorations.iter().any(|node| node.tile == tile.tile));
-                    }
+                    assert!(!scene.decorations.iter().any(|node| node.tile == tile.tile));
                 }
             }
             for resource in &scene.resources {

@@ -133,13 +133,13 @@ const FOREST_ROUTES: (usize, &str) = (
 // Current generation bytes pin the only live wire format. Drawn-sheet variety
 // changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "f28221a5521b871b2bcff404b903a77a8012c979d036dc8dc0c74a60e2c56867",
-    "b80449b96fed43040add7125c3f78a5d5fd284f9ffe9126da405e1c6f95c786c",
-    "6e79b360277d8e638905f9b0c76956e860988af585ca68c5e72b051000764cb8",
+    "73ba035cc8af889aecd2ab9d6d4fc66e987a7eb42f542c2a7148060c909b7e33",
+    "6c22262e64dbda15255c74954e1ccbb585c5890877d076d63bb09f14f707025b",
+    "06afe8a6c6178c5d234242f31696c32be7f965af4d01ccdebedf5250e58ef3f4",
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "b9d34c9737e6c76eac169b8e9d5ab228f78d5a20c28b3cc1494253a843803dbf";
+    "53da97aff165a1a81a7de5404b28adfecd3b02837ff87f5d3fb784f3edf6cba0";
 
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
@@ -157,7 +157,7 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "42465681c9997c20aa4f697d7900d85a388b8f2be9fe2f73c8b5ea967afecf0f"
+        "16553e67cfab698876c4f24fe886953ea47a04ec1ecd3ffc32482b3e3df49f7d"
     );
 }
 

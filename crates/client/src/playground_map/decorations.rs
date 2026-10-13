@@ -59,21 +59,6 @@ pub(super) fn scenery(scene: &scene::PreparedScene) -> impl Iterator<Item = Scen
             _ => return None,
         };
         let [x, y] = decoration.position.map(|value| value.floor() as u64);
-        // World-tile selection is independent of camera/zoom/traversal, so
-        // accents neither flicker while panning nor consume authority state.
-        let mask = match kind {
-            SceneResource::GRASS => 3,
-            SceneResource::SHRUB | SceneResource::DEADWOOD => 1,
-            _ => 0,
-        };
-        let mut hash = (x as u32).wrapping_mul(374_761_393)
-            ^ (y as u32).wrapping_mul(668_265_263)
-            ^ u32::from(decoration.family).wrapping_mul(2_246_822_519);
-        hash = (hash ^ (hash >> 13)).wrapping_mul(1_274_126_177);
-        hash ^= hash >> 16;
-        if hash & mask != 0 {
-            return None;
-        }
         Some(SceneResource {
             id: (y << 19) | (x << 1) | 1,
             position: decoration.position,

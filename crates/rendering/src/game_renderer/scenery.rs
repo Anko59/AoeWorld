@@ -29,13 +29,24 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     let scenery = &art.scenery;
     match resource.kind {
         SceneResource::SHRUB if scenery.shrubs.len() == 6 => Some(scenery.shrubs[3 + variant % 3]),
-        SceneResource::GRASS if scenery.grass.len() == 7 => Some(scenery.grass[variant % 7]),
-        SceneResource::DEADWOOD if scenery.stumps.len() == 3 && scenery.logs.len() == 2 => {
-            let index = variant % 5;
-            Some(if index < 3 {
-                scenery.stumps[index]
+        SceneResource::GRASS if scenery.grass.len() == 7 && scenery.reeds.len() == 2 => {
+            const PATCHES: [usize; 15] = [7, 8, 0, 7, 1, 8, 2, 7, 3, 8, 4, 7, 5, 8, 6];
+            let index = PATCHES[variant % PATCHES.len()];
+            Some(if index < 7 {
+                scenery.grass[index]
             } else {
-                scenery.logs[index - 3]
+                scenery.reeds[index - 7]
+            })
+        }
+        SceneResource::DEADWOOD
+            if scenery.stumps.len() == 3 && scenery.logs.len() == 2 && scenery.snags.len() == 1 =>
+        {
+            const WOOD: [usize; 12] = [3, 4, 3, 0, 4, 1, 3, 4, 2, 3, 4, 5];
+            let index = WOOD[variant % WOOD.len()];
+            Some(match index {
+                0..=2 => scenery.stumps[index],
+                3..=4 => scenery.logs[index - 3],
+                _ => scenery.snags[0],
             })
         }
         _ => None,

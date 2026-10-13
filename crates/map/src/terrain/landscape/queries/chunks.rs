@@ -1,6 +1,8 @@
 //! Bounded composed scene generation: the only chunk/point composition path.
 use super::*;
 use crate::terrain::{resource_id, resources, unsigned_noise};
+#[path = "chunks/dressing.rs"]
+mod dressing;
 #[path = "chunks/memo.rs"]
 mod memo;
 use crate::{
@@ -267,19 +269,9 @@ impl MapChunkGenerator {
                     });
                 }
             }
-            // Exposed ground carries rocks only, by the rule above.
-            let sheltered = sample.density.canopy_per_thousand > 0;
             if decoration.is_none()
-                && roll % 100 < 3
-                && (sheltered || appearance.exposure != NativeExposure::Exposed)
+                && let Some(family) = dressing::family(self, position, terrain, appearance, roll)
             {
-                let family = if sheltered {
-                    DecorationFamily::Deadwood
-                } else if matches!(base.biome, Biome::Woodland | Biome::Savanna) {
-                    DecorationFamily::Shrub
-                } else {
-                    DecorationFamily::Grass
-                };
                 decoration = Some(LandscapeDecoration {
                     tile: position,
                     family,

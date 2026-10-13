@@ -13,7 +13,7 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_692;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_695;
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -52,6 +52,8 @@ pub enum AssetRole {
     GrassTuft,
     DeadwoodStump,
     DeadwoodLog,
+    GrassReeds,
+    DeadwoodTree,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -152,7 +154,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 13] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 15] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -266,6 +268,22 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 13] = [
         id: 1252,
         frames: 2,
         interpretation: "two low mossy fallen logs; nonblocking deadwood dressing",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::GrassReeds,
+        archive: "graphics.drs",
+        id: 4584,
+        frames: 2,
+        interpretation: "two native tan reed clumps mixed into meadow patches",
+        terrain_topology: None,
+    },
+    SpriteSource {
+        role: AssetRole::DeadwoodTree,
+        archive: "graphics.drs",
+        id: 1262,
+        frames: 1,
+        interpretation: "occasional bare snag; nonblocking deadwood, no wood resource",
         terrain_topology: None,
     },
 ];
