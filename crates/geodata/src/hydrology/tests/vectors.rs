@@ -32,6 +32,12 @@ fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
             center_longitude_e7: 255_000_000,
             ..MapRequest::default()
         },
+        // A former coverage rejection of the worker-option test: the
+        // expanded extent covers the default footprint at latitude 60.
+        MapRequest {
+            center_latitude_e7: 600_000_000,
+            ..MapRequest::default()
+        },
     ] {
         for axis in [2, 15, 16, 65] {
             assert!(
@@ -40,17 +46,23 @@ fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
             );
         }
     }
-    assert!(
-        validate_vector_footprint(
-            MapRequest {
-                center_longitude_e7: -750_000_000,
-                ..MapRequest::default()
-            },
-            16,
-            &cancelled,
-        )
-        .is_err()
-    );
+    // Still rejected: a footprint west of the extent, and the default-centred
+    // 3,000 km square whose corners leave it.
+    for request in [
+        MapRequest {
+            center_longitude_e7: -750_000_000,
+            ..MapRequest::default()
+        },
+        MapRequest {
+            requested_side_meters: 3_000_000,
+            ..MapRequest::default()
+        },
+    ] {
+        assert!(
+            validate_vector_footprint(request, 16, &cancelled).is_err(),
+            "{request:?}"
+        );
+    }
 }
 
 #[test]

@@ -220,7 +220,7 @@ fn vector_worker_options_reject_before_overview_acquisition_or_publication() {
     let valid = serde_json::json!({ "operation": "prepare_overview_directory", "cache_root": cache,
         "output_directory": output, "request": request, "samples_per_axis": 1024,
         "field_axes": OverviewFieldAxes::LANDSCAPE, "hydrology_mode": "vectors" });
-    for change in 0..8 {
+    for change in 0..9 {
         let mut input = valid.clone();
         match change {
             0 => input["field_axes"]["historical"] = 128.into(),
@@ -234,6 +234,9 @@ fn vector_worker_options_reject_before_overview_acquisition_or_publication() {
             }
             5 => input["hydrology_mode"] = "none".into(),
             6 => input["request"]["requested_side_meters"] = 10_000_001.into(),
+            // Valid but outside the pinned river extent: explicit vectors
+            // must still refuse before any acquisition.
+            8 => input["request"]["requested_side_meters"] = 3_000_000.into(),
             _ => {
                 input["water_corrections"] =
                     serde_json::to_value(WaterCorrectionDocument::empty(request, 1024).unwrap())
