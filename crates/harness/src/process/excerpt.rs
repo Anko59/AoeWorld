@@ -25,6 +25,20 @@ pub(super) fn excerpt_for(captured: &Captured, log: &str) -> Option<String> {
 }
 
 fn select(text: &str) -> Vec<String> {
+    let matched = failure_blocks(text);
+    if !matched.is_empty() {
+        return matched;
+    }
+    let tail: Vec<String> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_owned)
+        .collect();
+    tail[tail.len().saturating_sub(FALLBACK_LINES)..].to_vec()
+}
+
+/// The lines of `text` that say why a command failed, or none when nothing is recognisable.
+pub(crate) fn failure_blocks(text: &str) -> Vec<String> {
     let lines: Vec<&str> = text.lines().collect();
     let mut blocks: Vec<Vec<&str>> = Vec::new();
     let mut index = 0;
@@ -60,16 +74,55 @@ fn select(text: &str) -> Vec<String> {
         }
         index += take;
     }
-    let matched: Vec<String> = blocks.into_iter().flatten().map(str::to_owned).collect();
-    if !matched.is_empty() {
-        return matched;
+    blocks.into_iter().flatten().map(str::to_owned).collect()
+}
+
+/// Names of the failing tests a runner printed (nextest `FAIL [..] name`, libtest `test name ... FAILED`).
+pub(crate) fn failed_test_names(text: &str) -> Vec<String> {
+    status_names(text, &["FAIL ", "TIMEOUT "], " ... FAILED")
+}
+
+/// Names of the passing tests a runner printed (nextest `PASS [..] name`, libtest `test name ... ok`).
+pub(crate) fn passed_test_names(text: &str) -> Vec<String> {
+    status_names(text, &["PASS "], " ... ok")
+}
+
+fn status_names(text: &str, statuses: &[&str], libtest_suffix: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in text.lines().map(str::trim) {
+        let name = if let Some(status) = statuses.iter().find_map(|s| line.strip_prefix(s)) {
+            let name = status
+                .split_once(']')
+                .map_or(status, |(_, name)| name)
+                .trim();
+            name.strip_prefix('(')
+                .and_then(|s| s.split_once(')'))
+                .map_or(name, |(_, name)| name)
+                .trim()
+        } else if let Some(test) = line
+            .strip_prefix("test ")
+            .and_then(|s| s.strip_suffix(libtest_suffix))
+        {
+            test.trim()
+        } else {
+            continue;
+        };
+        if !name.is_empty() {
+            names.push(name.to_owned());
+        }
     }
-    let tail: Vec<String> = lines
-        .iter()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| (*line).to_owned())
-        .collect();
-    tail[tail.len().saturating_sub(FALLBACK_LINES)..].to_vec()
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// A line that only reports one passing test; a summary never embeds these.
+pub(crate) fn is_passing_line(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with("PASS [")
+        || line.starts_with("Focused PASS:")
+        || (line.starts_with("test ") && line.ends_with(" ... ok"))
+        || (line.starts_with('{') && line.contains("\"event\":\"ok\""))
 }
 
 /// Blocks repeat with different indentation (runner output vs. its failures summary).

@@ -378,11 +378,32 @@ records `pre-existing failure: <names>` and commits without relaunching the
 implementer. Unknown/build failures or changed tests cannot receive this exemption.
 The focused check still reports FAIL; the summary records the exception.
 
+`DUEL_QUALIFY=<command>` (for example `make preflight` or `make test-e2e`) adds a
+final qualification step once the last round is green: the driver runs the command
+once in the worktree, under the same process runner and budget handling as the
+checks (`DUEL_QUALIFY_MINUTES`, default 45). A pass is recorded as
+`qualify: PASS (<command>, <duration>)` and the result line then says what is left
+(read the diff, film, ship). A failure relaunches the implementer with the failure
+excerpt and the instruction to make the command pass without touching any test; the
+same role rules apply (test files and inline test code must stay byte-identical, the
+focused check must still pass). The fix is committed as its own commit
+(`Harness-Phase: qualification`) and the command is rerun, at most
+`DUEL_QUALIFY_ATTEMPTS` times (default 2); then the duel ends FAIL with
+`qualification failed: <excerpt>` and every earlier commit stays. An implementer
+that reports `DUEL_QUALIFY_BLOCKED: <reason>` (the failure is in a test it may not
+change) stops the duel with that reason. Without `DUEL_QUALIFY` nothing changes.
+
 The summary includes the full task, runtime/model, each round's red/green results
-with test names, commits, output tails and each agent's last report. It appears
+with the failing test names (a green line shows a count such as `266 passed`, never
+a list of passing tests; with a `DUEL_CHECK` override the names come from the
+check's output, and `unidentified` only means nothing was recognisable), commits,
+output tails (the failure lines, at most 20) and each agent's last report. It appears
 on stdout and in `.cache/duel/<branch>.md`, replacing branch slashes with `_`;
 the driver prints that path last, including on failure. The main session then
-reads the diff, films the change with `make showcase` and runs `make ship`.
+reads the diff, films the change with `make showcase` and runs `make ship`. `dev`
+can move during a duel: read the change with the three-dot diff
+`git diff origin/dev...HEAD` (a plain `git diff origin/dev` also shows what landed on
+`dev` meanwhile), or rebase first.
 `duel` and all `DUEL_*` variables are main-session only. Protected harness work
 follows the same tests-first order in the main session because these roles
 cannot edit the harness itself. This is local workflow evidence, not a sealed

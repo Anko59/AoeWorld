@@ -10,6 +10,8 @@ use std::{fs, time::Duration};
 mod fixes;
 #[path = "duel/keep.rs"]
 mod keep;
+#[path = "duel/qualify.rs"]
+mod qualify;
 
 #[test]
 fn unrelated_red_failures_are_refused_without_launching_the_implementer() {

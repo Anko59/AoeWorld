@@ -2,28 +2,43 @@
 use super::{Options, focus::CheckReport};
 use crate::{
     agents::{Runtime, launch},
-    process::{Cancellation, CaptureExit, Captured, capture_command},
+    process::{Cancellation, CaptureExit, Captured, capture_command, excerpt},
     ship::git,
 };
-use std::{fs, path::Path, process::Command};
+use std::{fs, path::Path, process::Command, time::Duration};
 
+/// Longest output tail a summary or prompt embeds.
+const TAIL_LINES: usize = 20;
+/// Most failing test names a status line lists.
+const NAMES: usize = 20;
+
+/// The failure lines of a command's output, else its last lines: never a passing test, at most 20 lines.
 pub(crate) fn tail(c: &Captured) -> String {
     let text = format!(
         "{}\n{}",
         String::from_utf8_lossy(&c.stdout),
         String::from_utf8_lossy(&c.stderr)
     );
-    bounded(
-        &text
+    excerpt(&text)
+}
+
+pub(crate) fn excerpt(text: &str) -> String {
+    let mut lines = excerpt::failure_blocks(text);
+    if lines.is_empty() {
+        lines = text
             .lines()
-            .rev()
-            .take(40)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>()
-            .join("\n"),
-    )
+            .filter(|line| !line.trim().is_empty() && !excerpt::is_passing_line(line))
+            .map(str::to_owned)
+            .collect();
+    }
+    let lines: Vec<String> = lines[lines.len().saturating_sub(TAIL_LINES)..]
+        .iter()
+        .map(|line| match line.char_indices().nth(240) {
+            Some((end, _)) => format!("{}…", &line[..end]),
+            None => line.clone(),
+        })
+        .collect();
+    bounded(&lines.join("\n"))
 }
 
 pub(crate) fn bounded(text: &str) -> String {
@@ -94,18 +109,9 @@ pub(crate) fn agent(
     Ok((captured.exit, report(options.runtime, &output)))
 }
 
-pub(crate) fn check(
-    root: &Path,
-    options: &Options,
-    command: &str,
-    focused: bool,
-) -> git::Result<(CheckReport, String)> {
-    let report_path = root.join(".cache/duel/check.json");
-    if report_path.exists() {
-        fs::remove_file(&report_path).map_err(|e| e.to_string())?;
-    }
+/// Run a trusted main-session command (DUEL_CHECK, DUEL_QUALIFY), never a runtime's shell text.
+pub(crate) fn shell(root: &Path, command: &str, budget: Duration) -> Captured {
     eprintln!("duel: {command}");
-    // DUEL_CHECK is the person's trusted command, never a runtime's shell text.
     let mut c = Command::new("sh");
     c.args(["-c", command]).current_dir(root);
     for key in [
@@ -117,7 +123,20 @@ pub(crate) fn check(
     ] {
         c.env_remove(key);
     }
-    let captured = capture_command(c, options.budget, &Cancellation::default());
+    capture_command(c, budget, &Cancellation::default())
+}
+
+pub(crate) fn check(
+    root: &Path,
+    options: &Options,
+    command: &str,
+    focused: bool,
+) -> git::Result<(CheckReport, String)> {
+    let report_path = root.join(".cache/duel/check.json");
+    if report_path.exists() {
+        fs::remove_file(&report_path).map_err(|e| e.to_string())?;
+    }
+    let captured = shell(root, command, options.budget);
     let tail = tail(&captured);
     let passed = matches!(captured.exit, CaptureExit::Success);
     let stored = fs::read(&report_path)
@@ -154,11 +173,21 @@ pub(crate) fn default_check(base: &str) -> String {
     format!("make duel-check HARNESS_DUEL_BASE={base}")
 }
 
+/// What a status line says about the tests: the failing names, else a count, never a list of passing tests.
 pub(crate) fn names(report: &CheckReport) -> String {
     if !report.failed.is_empty() {
-        report.failed.join(", ")
+        let mut shown = report
+            .failed
+            .iter()
+            .take(NAMES)
+            .cloned()
+            .collect::<Vec<_>>();
+        if report.failed.len() > NAMES {
+            shown.push(format!("(+{} more)", report.failed.len() - NAMES));
+        }
+        shown.join(", ")
     } else if !report.tests.is_empty() {
-        report.tests.join(", ")
+        format!("{} passed", report.tests.len())
     } else {
         "unidentified (see check output)".into()
     }
@@ -173,27 +202,11 @@ pub(super) fn override_report(output: &str, passed: bool) -> CheckReport {
             .lines()
             .any(|line| line.trim_start().starts_with("error: could not compile "));
     if report.failed.is_empty() {
-        for line in output.lines().map(str::trim) {
-            if let Some(status) = line
-                .strip_prefix("FAIL ")
-                .or_else(|| line.strip_prefix("TIMEOUT "))
-            {
-                let name = status
-                    .split_once(']')
-                    .map_or(status, |(_, name)| name)
-                    .trim();
-                let name = name
-                    .strip_prefix('(')
-                    .and_then(|s| s.split_once(')'))
-                    .map_or(name, |(_, name)| name)
-                    .trim();
-                if !name.is_empty() {
-                    report.failed.push(name.to_owned());
-                }
-            }
-        }
-        report.failed.sort();
-        report.failed.dedup();
+        report.failed = excerpt::failed_test_names(output);
+    }
+    if report.tests.is_empty() {
+        report.tests = excerpt::passed_test_names(output);
+        report.tests.extend(report.failed.iter().cloned());
     }
     report
 }

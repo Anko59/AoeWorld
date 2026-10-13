@@ -10,7 +10,7 @@
 # PR= on the command line wins over a REVIEW_PR already in the environment;
 # it reaches the harness through the exported variable, never shell text.
 override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
-export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES
+export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES DUEL_QUALIFY DUEL_QUALIFY_MINUTES DUEL_QUALIFY_ATTEMPTS
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS METRICS_REV
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
 .PHONY: duel duel-check ship ship-status review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions metrics video-probe ship-tools showcase showcase-check showcase-session
