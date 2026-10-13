@@ -361,3 +361,39 @@ fn assert_native_region(address: AtlasAddress, art: &GameArt, frames: &[usize]) 
         "sampled region belongs to reviewed native faces: {address:?}"
     );
 }
+
+#[wasm_bindgen_test]
+fn rocky_presentation_keeps_ground_orders_in_the_passable_source_cell() {
+    let (terrain, camera) = rocky_ridge();
+    let faces = projected_surface_triangles(&terrain, camera);
+    let mut checked = 0;
+    for face in faces.iter().filter(|f| f.pickable && !f.skirt) {
+        for corner in 0..3 {
+            let mut weights = [0.01; 3];
+            weights[corner] = 0.98;
+            let pointer = ScreenPoint {
+                x: face
+                    .points
+                    .iter()
+                    .zip(weights)
+                    .map(|(p, w)| p.screen.x * w)
+                    .sum(),
+                y: face
+                    .points
+                    .iter()
+                    .zip(weights)
+                    .map(|(p, w)| p.screen.y * w)
+                    .sum(),
+            };
+            let picked =
+                pick_surface_point(&[*face], pointer).expect("presented ground is pickable");
+            assert_eq!(
+                picked.map(|p| p.floor() as i32),
+                face.tile,
+                "cosmetic bevel must preserve authoritative source ownership: {picked:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 100);
+}
