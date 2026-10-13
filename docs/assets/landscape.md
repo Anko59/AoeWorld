@@ -67,20 +67,34 @@ the shore band uses reviewed sand 15010. Animation is not implemented.
 ## Cliff pieces
 
 Cliff records mark three-by-three impassable cells along steep contours,
-with the same open passes. All nine tiles share a ledge at the highest source
-corner of the cell. Adjacent cells on a straight ridge agree on that height.
+with the same open passes. All nine tiles share the uppermost crossed contour
+level. Neighboring cells along that contour cannot create internal box steps.
 The current surface tag distinguishes these ledges from continuous steep
 ground, which keeps its shared sloping corners at every mesh LOD.
 The snowy or grassy top meets a closed mesh face at the same world vertices;
 per-vertex depth replaces the constant-depth cliff billboard.
 
-East and south walls sample the opaque interior of reviewed native straight
-faces 4 and 1 respectively; face four avoids its lower silhouette notch.
-The mesh owns their silhouette and junctions;
-random corner frames never interrupt a straight run. Source lighting and the
-runtime atlas palette correction remain intact. Coarse cliff cells retain the
-ledge and closed faces inside the existing triangle bound. Without complete
-face art, walls retain their procedural rock fallback.
+East and south walls sample ten reviewed opaque rock interiors from the original
+cliff source. A world-coordinate hash chooses compatible lighting groups, and
+one formation spans three tiles rather than repeating a stripe on every tile.
+The selected rectangles retain native strata, highlights and dark crevices while
+excluding transparent silhouette holes. Source lighting and the runtime atlas
+palette correction remain intact. Without complete face art, walls retain their
+procedural rock fallback.
+
+Shared presentation vertices bevel outer and inner corners, roughen the rim,
+and carry the same irregular outline to the foot. Both ground sheets and the upright
+faces use the same lateral deformation, after integer material ownership is assigned.
+Height-dependent offsets are avoided so crossed sheets keep their intersections.
+An edge whose height difference changes sign closes with two triangles meeting
+at the true crossing; uphill ground seams keep their ground appearance.
+Coarse art-patch vertices interpolate the coarse edge deformation, keeping the
+wall closed at minimum zoom inside the existing triangle bound. Missing halos
+retain exact planes until the support is loaded. Isolated contour cells are
+omitted at placement; joined pairs and ridge ends remain deterministic.
+Picking uses presented depth but returns the corresponding source ground
+coordinates. Source span and triangulation occupy unused bits of the private
+order byte; ordinary draw order and the triangle/GPU packet sizes stay unchanged.
 
 Native terrain diamonds have staircase alpha masks. At the continuous mesh
 edge only, a transparent nearest texel samples one texel inward toward the

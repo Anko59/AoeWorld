@@ -1,6 +1,7 @@
 use super::*;
 use aoe_core::Camera;
 mod banks;
+mod cliffs;
 mod landscape;
 
 #[cfg(test)]
@@ -203,6 +204,7 @@ pub fn projected_surface_triangles(
     appearance::assign_materials(&mut result, terrain);
     floor::assign(&mut result, terrain);
     mix::assign(&mut result, terrain);
+    cliffs::sculpt(&mut result, &cells, grid, &camera);
     // Material support belongs to the original integer vertices. Bevel their
     // presentation only after the ground and water sheets have been assigned.
     if !bank_cells.is_empty() {
@@ -218,7 +220,7 @@ pub fn projected_surface_triangles(
             .total_cmp(&average_depth(right))
             .then(left.tile.cmp(&right.tile))
             .then(left.skirt.cmp(&right.skirt))
-            .then(left.order.cmp(&right.order))
+            .then(left.draw_order().cmp(&right.draw_order()))
     });
     result
 }

@@ -40,8 +40,8 @@ pub(crate) struct CliffPiece {
     /// east, southeast.
     pub facing: u8,
     pub variant: u8,
-    /// Highest source corner of the whole cell. All nine tiles support this
-    /// ledge, so adjacent pieces on a straight contour share a top edge.
+    /// Uppermost crossed contour. All nine tiles support this ledge, and
+    /// cells along the same contour cannot introduce internal height steps.
     pub top_level: i16,
     /// The centre tile of the cell, which carries the anchor record.
     pub anchor: bool,
@@ -54,6 +54,45 @@ pub(super) fn game_centimeters(height: i32, compression: Ratio) -> i64 {
 /// Whole-cell cliff detection from the bound corner-height field. Water is
 /// checked by both source adapters before promoting terrain or emitting art.
 pub(super) fn cliff_at<E>(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    compression: Ratio,
+    corner_height: &dyn Fn(i32, i32) -> Result<i32, E>,
+) -> Result<Option<CliffPiece>, E> {
+    let Some(piece) = candidate_at(generator, tile, compression, corner_height)? else {
+        return Ok(None);
+    };
+    if cell_tiles(tile).any(|position| {
+        landscape::starting_glade(generator, position)
+            || landscape::starting_connector_contains(generator, position)
+    }) {
+        return Ok(None);
+    }
+    // A contour fragment without another piece is a square mesa, not a ridge.
+    // Inspect the unpruned candidates so joined pairs and ends stay symmetric;
+    // this does not recurse or depend on chunk generation order.
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            if (dx != 0 || dy != 0)
+                && candidate_at(
+                    generator,
+                    TileCoord::new(
+                        tile.x + dx * CLIFF_CELL_TILES,
+                        tile.y + dy * CLIFF_CELL_TILES,
+                    ),
+                    compression,
+                    corner_height,
+                )?
+                .is_some()
+            {
+                return Ok(Some(piece));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn candidate_at<E>(
     generator: &MapChunkGenerator,
     tile: TileCoord,
     compression: Ratio,
@@ -72,6 +111,9 @@ pub(super) fn cliff_at<E>(
     );
     let (west, north) = (cell.0 * CLIFF_CELL_TILES, cell.1 * CLIFF_CELL_TILES);
     let (east, south) = (west + CLIFF_CELL_TILES, north + CLIFF_CELL_TILES);
+    if east > generator.width_tiles || south > generator.width_tiles {
+        return Ok(None);
+    }
     let mut heights = [0_i64; 4];
     for (slot, (x, y)) in [(west, north), (east, north), (east, south), (west, south)]
         .into_iter()
@@ -98,17 +140,12 @@ pub(super) fn cliff_at<E>(
     if smooth(key, i64::from(cell.0), i64::from(cell.1), PASS_PERIOD_CELLS) < PASS_SHARE {
         return Ok(None);
     }
-    if cell_tiles(tile).any(|position| {
-        landscape::starting_glade(generator, position)
-            || landscape::starting_connector_contains(generator, position)
-    }) {
-        return Ok(None);
-    }
     let variant = (landscape::mix64(key ^ pair(i64::from(cell.0), i64::from(cell.1))) >> 24) as u8;
     Ok(Some(CliffPiece {
         facing,
         variant,
-        top_level: (highest / 100).clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
+        top_level: (highest.div_euclid(CONTOUR_GAME_CENTIMETERS) * (CONTOUR_GAME_CENTIMETERS / 100))
+            .clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
         anchor: tile.x.rem_euclid(CLIFF_CELL_TILES) == 1
             && tile.y.rem_euclid(CLIFF_CELL_TILES) == 1,
     }))

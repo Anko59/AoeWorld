@@ -100,23 +100,7 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
-        if triangle.skirt && triangle.tint == 13 && art.scenery.cliff_faces.len() == 25 {
-            // Straight east/south wall textures, never randomized corner stamps.
-            // The opaque interior supplies native rock detail; the mesh owns the
-            // silhouette, anchor and depth, including the shared snowy ledge.
-            let frame = art.scenery.cliff_faces[if triangle.order < 4 { 4 } else { 1 }];
-            let mut address = frame.atlas;
-            if triangle.order < 4 {
-                // Face four has a transparent notch below 64% of its height.
-                // Modes four/five now sample its opaque rows 30–60%.
-                address.uv[1] += address.uv[3] * 0.075;
-                address.uv[3] *= 0.75;
-            }
-            triangle.texture_uv = Some(address);
-            triangle.texture_blend = None;
-            triangle.texture_materials = None;
-            triangle.appearance = 0;
-            triangle.tint = 0;
+        if super::cliff_art::apply(triangle, art) {
             continue;
         }
         // If the bank sheet is only the pack's generic grass placeholder,

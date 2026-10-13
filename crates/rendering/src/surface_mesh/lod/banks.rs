@@ -28,7 +28,7 @@ pub(super) fn round(
         let samples = [a, b, c, d];
         if !samples.iter().any(|s| s.surface.water == 3)
             || samples.iter().enumerate().any(|(i, s)| {
-                s.surface.kind == SceneTerrainSurface::CLIFF
+                s.surface.is_cliff()
                     || f64::from(s.surface.corner_game_height_levels[[2, 3, 0, 1][i]])
                         != point.world[2]
             })

@@ -6,11 +6,15 @@ use aoe_core::{Camera, ScreenPoint};
 use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
+mod cliff_art;
 pub(crate) mod directory;
 pub(crate) mod floor;
 pub(crate) mod landscape;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
+mod picking;
+pub use picking::pick_surface_point;
+const SCULPTED_ORDER: u8 = 128;
 mod skirts;
 use skirts::{Edge, SkirtSurface, append_edge_skirt};
 pub(crate) mod mix;
@@ -55,7 +59,18 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) texture_tile: [i32; 2],
     pub(crate) texture_materials: Option<[u8; 3]>,
     pub(crate) pickable: bool,
+    /// Ordinary draw order, or bit seven plus source span and triangulation.
     pub(crate) order: u8,
+}
+
+impl ProjectedSurfaceTriangle {
+    pub(crate) fn draw_order(&self) -> u8 {
+        if self.order & SCULPTED_ORDER != 0 {
+            self.order & 1
+        } else {
+            self.order
+        }
+    }
 }
 
 pub fn sample_surface_height(
@@ -97,52 +112,6 @@ fn sample_float_surface_height(
             + (local_x + local_y - 1.0) * southeast
             + (1.0 - local_x) * southwest
     }
-}
-
-pub fn pick_surface_point(
-    triangles: &[ProjectedSurfaceTriangle],
-    screen: ScreenPoint,
-) -> Option<[f64; 2]> {
-    let mut best: Option<(f64, [i32; 2], bool, bool, [f64; 2])> = None;
-    for triangle in triangles {
-        // Faces close the rendered relief but are not order targets. Continue
-        // to the nearest eligible ground instead of rejecting the whole ray.
-        if triangle.skirt || !triangle.pickable {
-            continue;
-        }
-        let Some(weights) = barycentric(triangle.points, screen) else {
-            continue;
-        };
-        let world = [
-            triangle.points[0].world[0] * weights[0]
-                + triangle.points[1].world[0] * weights[1]
-                + triangle.points[2].world[0] * weights[2],
-            triangle.points[0].world[1] * weights[0]
-                + triangle.points[1].world[1] * weights[1]
-                + triangle.points[2].world[1] * weights[2],
-        ];
-        let elevation = triangle.points[0].world[2] * weights[0]
-            + triangle.points[1].world[2] * weights[1]
-            + triangle.points[2].world[2] * weights[2];
-        let hit = (
-            surface_render_depth([world[0], world[1], elevation], triangle.skirt),
-            triangle.tile,
-            triangle.skirt,
-            triangle.pickable,
-            world,
-        );
-        if best.as_ref().is_none_or(|current| {
-            hit.0
-                .total_cmp(&current.0)
-                .then((!hit.2).cmp(&(!current.2)))
-                .then(hit.3.cmp(&current.3))
-                .then(hit.1.cmp(&current.1))
-                .is_gt()
-        }) {
-            best = Some(hit);
-        }
-    }
-    best.and_then(|(_, _, skirt, pickable, world)| (!skirt && pickable).then_some(world))
 }
 
 pub fn surface_depth_at(
