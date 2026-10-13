@@ -51,3 +51,18 @@ fn files_differ_by_their_exact_changed_bytes() {
     assert_eq!(differing(&approved, &approved), None);
     assert_eq!(differing(b"not json", &current), None);
 }
+
+#[test]
+fn small_follow_ups_add_up_until_a_full_review() {
+    use Step::{Full, Other, Small};
+    assert_eq!(since_full([Full].into_iter()), 0);
+    assert_eq!(since_full([Full, Small(150), Small(40)].into_iter()), 190);
+    // A failed review or a closing review of fixes neither adds nor resets;
+    // an older full review ends the count.
+    assert_eq!(
+        since_full([Small(500), Full, Small(90), Other, Small(60)].into_iter()),
+        150
+    );
+    // Slices of 150 lines: the second one is over the limit in total.
+    assert!(150 + since_full([Full, Small(150)].into_iter()) > SMALL);
+}

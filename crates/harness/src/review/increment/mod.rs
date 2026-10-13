@@ -100,10 +100,48 @@ fn approved(root: &Path, history: &[Report], head: &str) -> Option<Increment> {
                 tier: report.tier.clone(),
                 scope,
                 lines,
-                closing: lines <= SMALL && floor <= passed,
+                // Small follow-ups add up: closing-style only while everything
+                // added since the last full review stays small in total.
+                closing: lines + since_full(history.iter().map(slice)) <= SMALL && floor <= passed,
                 outside: Vec::new(),
             })
         })
+}
+
+/// How a stored report counts towards `since_full`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Step {
+    /// A passing full review, of the whole diff or of an increment.
+    Full,
+    /// A passing closing-style increment review of this many lines.
+    Small(usize),
+    /// A failed review, or a closing review of fixes: approves no new lines.
+    Other,
+}
+
+fn slice(report: &Report) -> Step {
+    if !(report.complete() && report.passes()) {
+        return Step::Other;
+    }
+    match &report.increment {
+        Some(increment) if increment.closing => Step::Small(increment.lines),
+        _ if report.closing => Step::Other,
+        _ => Step::Full,
+    }
+}
+
+/// Lines approved by closing-style increment reviews since the last passing
+/// full review. Only a full review ends the count.
+pub(crate) fn since_full(history: impl DoubleEndedIterator<Item = Step>) -> usize {
+    let mut total = 0;
+    for step in history.rev() {
+        match step {
+            Step::Other => {}
+            Step::Small(lines) => total += lines,
+            Step::Full => break,
+        }
+    }
+    total
 }
 
 /// Where the approved patch of `report` stands in the branch now.

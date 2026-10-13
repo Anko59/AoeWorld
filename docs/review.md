@@ -283,6 +283,9 @@ the pull request) and can never block, whatever its severity: the code is
 approved. Every line of every new commit is still reviewed; the reviewers
 cannot skip one. The report and the pull request's review line say which ran:
 `closing review of 12 lines since <sha>, approved 9/10`.
+Small follow-ups add up: the 200 lines count everything approved by closing-style
+increment reviews since the last passing full review, so a large change cannot
+be added in small slices without a full review of the slice that crosses the limit.
 
 Budget: the pass closed the earlier budget, so the first review of an increment
 takes the full review's slot, whatever its style, and its failures are
