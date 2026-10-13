@@ -2,6 +2,10 @@
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 
+#[cfg(test)]
+#[path = "scene/tests/review.rs"]
+mod review_tests;
+
 pub(crate) struct PreparedScene {
     camera: Camera,
     pub terrain: Vec<SceneTerrain>,
