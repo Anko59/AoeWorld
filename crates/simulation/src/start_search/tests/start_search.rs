@@ -4,6 +4,8 @@ use super::*;
 mod composed_forest;
 #[path = "exit_certificate.rs"]
 mod exit_certificate;
+#[path = "lake_regions.rs"]
+mod lake_regions;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,
@@ -49,6 +51,19 @@ fn cancellation_and_budget_are_not_proof_of_absence() {
             StartSearchResult::Found(TileCoord::new(31, 31))
         );
     }
+}
+
+#[test]
+fn uniform_failed_certificate_reports_cancellation() {
+    let terrain = Terrain::uniform(1);
+    let config = WorldConfig::new(16, 16, Seed(1)).unwrap();
+    let calls = std::cell::Cell::new(0);
+    let result = terrain.search_start_checked(config, 64, || {
+        let call = calls.get();
+        calls.set(call + 1);
+        call > 0
+    });
+    assert_eq!(result, Ok(StartSearchResult::Cancelled));
 }
 
 #[test]

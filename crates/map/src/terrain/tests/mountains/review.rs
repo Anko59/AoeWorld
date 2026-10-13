@@ -161,6 +161,13 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
             16,
             [((0, 0), wet.clone())].into(),
         )));
+        // A mapped river is a separate physical-water fixture. Its categorical
+        // layer is dry so lake priority is exercised by the Lake case, not
+        // contradicted by the River case.
+        let mut wet = wet;
+        if expected == WaterKind::River {
+            wet.inland_coverage_percent.fill(0);
+        }
         let elevation = dense
             .elevation
             .as_ref()
@@ -193,26 +200,49 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
         .map(|page| (page.key(), Arc::new(page)))
         .collect();
         if expected == WaterKind::River {
+            let kind: Vec<_> = (0..256)
+                .map(|i| {
+                    if i % 16 < 4 {
+                        crate::HydrologyKind::River as u8
+                    } else {
+                        crate::HydrologyKind::NoEvidence as u8
+                    }
+                })
+                .collect();
             let hydrology = crate::HydrologyEvidencePage {
                 level: 0,
                 x: 0,
                 y: 0,
-                width: 1,
-                height: 1,
-                kind: vec![crate::HydrologyKind::River as u8],
-                method: vec![crate::HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8],
-                water_model: None,
+                width: 16,
+                height: 16,
+                method: kind
+                    .iter()
+                    .map(|kind| {
+                        if *kind == crate::HydrologyKind::River as u8 {
+                            crate::HydrologyEvidenceMethod::HydroRiversBufferedCorridor as u8
+                        } else {
+                            crate::HydrologyEvidenceMethod::None as u8
+                        }
+                    })
+                    .collect(),
+                water_model: Some(crate::HydrologyWaterModelPage {
+                    kind: kind.clone(),
+                    surface_level_centimeters: vec![None; 256],
+                    flow_direction: vec![crate::WaterFlowDirection::Unknown as u8; 256],
+                    provenance: vec![crate::WaterModelProvenance::EvidenceOnly as u8; 256],
+                }),
+                kind,
             };
             let cover = crate::ModernLandCoverPage {
                 level: 0,
                 x: 0,
                 y: 0,
-                width: 1,
-                height: 1,
-                worldcover_class: vec![10],
+                width: 16,
+                height: 16,
+                worldcover_class: vec![10; 256],
             };
             environment.hydrology_evidence = Some(crate::HydrologyEvidenceIndex {
-                samples_per_axis: 1,
+                samples_per_axis: 16,
                 page_samples: crate::ENVIRONMENT_PAGE_SAMPLES,
                 world_cover_year: crate::WORLD_COVER_OBSERVATION_YEAR,
                 policy: crate::HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
@@ -224,7 +254,16 @@ fn one_wet_tile_rejects_the_whole_cliff_cell_in_dense_and_provider_queries() {
                     std::slice::from_ref(&cover),
                 )
                 .unwrap(),
-                water_model: None,
+                water_model: Some(crate::HydrologyWaterModelIndex {
+                    model_version: crate::HYDROLOGY_WATER_MODEL_VERSION,
+                    samples_per_axis: 16,
+                    target_year_ce: crate::WATER_CORRECTION_TARGET_YEAR_CE,
+                    correction_document: crate::WaterCorrectionDocument::empty(
+                        crate::MapRequest::default(),
+                        16,
+                    )
+                    .unwrap(),
+                }),
             });
             for page in [
                 EnvironmentPage::HydrologyEvidence(hydrology),

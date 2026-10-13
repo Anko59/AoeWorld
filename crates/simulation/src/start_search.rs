@@ -19,9 +19,9 @@ pub enum StartSearchResult {
 }
 
 impl Terrain {
-    /// Finds the closest playable 5×5 clearing without allocating terrain
-    /// state proportional to the virtual map area. Candidates use squared
-    /// tile-center distance, followed by canonical `(y, x)` ordering.
+    /// Finds a certified 5×5 clearing, preferring the largest surveyed land
+    /// region, then centre distance and canonical `(y, x)` ordering. Survey
+    /// storage is bounded independently of the virtual map area.
     pub fn starting_tile(&self, config: WorldConfig) -> Option<TileCoord> {
         match self.search_start(config, START_SEARCH_CHUNKS, || false) {
             StartSearchResult::Found(tile) => Some(tile),
@@ -57,53 +57,19 @@ impl Terrain {
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
         let mut cache = StartPassabilityCache::new(self, config, &cancelled);
-        if valid_start(&mut cache, center)? {
-            return Ok(StartSearchResult::Found(center));
+        // Uniform ground has one region and needs no survey.
+        if matches!(self, Terrain::Uniform(_)) {
+            let valid = valid_start(&mut cache, center)?;
+            return Ok(if cancelled() {
+                StartSearchResult::Cancelled
+            } else if valid {
+                StartSearchResult::Found(center)
+            } else {
+                StartSearchResult::Unavailable
+            });
         }
-        if cancelled() {
-            return Ok(StartSearchResult::Cancelled);
-        }
-        if cache.exit_budget_exhausted {
-            return Ok(StartSearchResult::LimitReached);
-        }
-        let center_chunk = TileCoord::new(
-            center.x.div_euclid(CHUNK_TILES),
-            center.y.div_euclid(CHUNK_TILES),
-        );
-        let chunks_x = (config.width_tiles + CHUNK_TILES - 1) / CHUNK_TILES;
-        let chunks_y = (config.height_tiles + CHUNK_TILES - 1) / CHUNK_TILES;
-        let max_ring = center_chunk
-            .x
-            .max(chunks_x - 1 - center_chunk.x)
-            .max(center_chunk.y)
-            .max(chunks_y - 1 - center_chunk.y);
-        let mut best = None;
-        let mut scanned = 0;
-        for ring in 0..=max_ring {
-            for (chunk_x, chunk_y) in ring_chunks(center_chunk, ring) {
-                if chunk_x < 0 || chunk_y < 0 || chunk_x >= chunks_x || chunk_y >= chunks_y {
-                    continue;
-                }
-                if cancelled() {
-                    return Ok(StartSearchResult::Cancelled);
-                }
-                if scanned == max_chunks {
-                    return Ok(StartSearchResult::LimitReached);
-                }
-                scanned += 1;
-                scan_start_chunk(&mut cache, chunk_x, chunk_y, &mut best)?;
-                if cancelled() {
-                    return Ok(StartSearchResult::Cancelled);
-                }
-                if cache.exit_budget_exhausted {
-                    return Ok(StartSearchResult::LimitReached);
-                }
-            }
-            if best.is_some_and(|tile| farther_than_best(tile, config, center_chunk, ring)) {
-                return Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found));
-            }
-        }
-        Ok(best.map_or(StartSearchResult::Unavailable, StartSearchResult::Found))
+        let (candidates, complete) = regions::candidates(&mut cache, max_chunks)?;
+        certify_regions(&mut cache, candidates, complete)
     }
 }
 
@@ -114,6 +80,8 @@ struct StartPassabilityCache<'a> {
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
     exit_visits: usize,
+    exit_visit_limit: usize,
+    exit_chunk_limit: usize,
     exit_chunks: BTreeSet<(i32, i32)>,
     exit_budget_exhausted: bool,
     cancelled: &'a dyn Fn() -> bool,
@@ -128,6 +96,8 @@ impl<'a> StartPassabilityCache<'a> {
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
             exit_visits: 0,
+            exit_visit_limit: START_EXIT_VISITS,
+            exit_chunk_limit: START_SEARCH_CHUNKS,
             exit_chunks: BTreeSet::new(),
             exit_budget_exhausted: false,
             cancelled,
@@ -188,7 +158,7 @@ impl<'a> StartPassabilityCache<'a> {
     /// Work and chunk bounds apply across ALL candidates in this search.
     fn reaches_exit(&mut self, origin: TileCoord) -> Result<bool, EnvironmentPageError> {
         use std::collections::BinaryHeap;
-        if self.exit_visits == START_EXIT_VISITS {
+        if self.exit_visits >= self.exit_visit_limit {
             self.exit_budget_exhausted = true;
             return Ok(false);
         }
@@ -218,7 +188,7 @@ impl<'a> StartPassabilityCache<'a> {
                     next.y.div_euclid(CHUNK_TILES),
                 );
                 if !self.exit_chunks.contains(&chunk)
-                    && self.exit_chunks.len() == START_SEARCH_CHUNKS
+                    && self.exit_chunks.len() >= self.exit_chunk_limit
                 {
                     self.exit_budget_exhausted = true;
                     return Ok(false);
@@ -231,7 +201,7 @@ impl<'a> StartPassabilityCache<'a> {
                     .terrain
                     .crossable_with_cancel(tile, next, self.config, self.cancelled)?
                 {
-                    if self.exit_visits == START_EXIT_VISITS {
+                    if self.exit_visits >= self.exit_visit_limit {
                         self.exit_budget_exhausted = true;
                         return Ok(false);
                     }
@@ -287,33 +257,46 @@ impl<'a> StartPassabilityCache<'a> {
     }
 }
 
-fn scan_start_chunk(
+/// Reserve an equal bounded share of remaining work for each remaining region.
+/// Unused work carries forward; a failed region cannot consume later shares.
+fn certify_regions(
     cache: &mut StartPassabilityCache<'_>,
-    chunk_x: i32,
-    chunk_y: i32,
-    best: &mut Option<TileCoord>,
-) -> Result<(), EnvironmentPageError> {
-    let config = cache.config;
-    let origin = TileCoord::new(chunk_x * CHUNK_TILES, chunk_y * CHUNK_TILES);
-    let mut candidates = (origin.y..(origin.y + CHUNK_TILES).min(config.height_tiles))
-        .flat_map(|y| {
-            (origin.x..(origin.x + CHUNK_TILES).min(config.width_tiles))
-                .map(move |x| TileCoord::new(x, y))
-        })
-        .collect::<Vec<_>>();
-    candidates.sort_unstable_by_key(|tile| start_key(*tile, config));
-    for candidate in candidates {
-        if best.is_some_and(|current| start_key(candidate, config) >= start_key(current, config)) {
-            continue;
-        }
-        if valid_start(cache, candidate)? {
-            *best = Some(candidate);
-        }
-        if cache.exit_budget_exhausted || (cache.cancelled)() {
-            break;
+    regions: Vec<Vec<TileCoord>>,
+    complete: bool,
+) -> Result<StartSearchResult, EnvironmentPageError> {
+    let count = regions.len();
+    let mut limited = false;
+    for (index, candidates) in regions.into_iter().enumerate() {
+        let remaining = count - index;
+        cache.exit_visit_limit =
+            cache.exit_visits + (START_EXIT_VISITS - cache.exit_visits) / remaining;
+        cache.exit_chunk_limit =
+            cache.exit_chunks.len() + (START_SEARCH_CHUNKS - cache.exit_chunks.len()) / remaining;
+        cache.exit_budget_exhausted = false;
+        for candidate in candidates {
+            if (cache.cancelled)() {
+                return Ok(StartSearchResult::Cancelled);
+            }
+            let valid = valid_start(cache, candidate)?;
+            if (cache.cancelled)() {
+                return Ok(StartSearchResult::Cancelled);
+            }
+            if valid {
+                return Ok(StartSearchResult::Found(candidate));
+            }
+            if cache.exit_budget_exhausted {
+                limited = true;
+                break;
+            }
         }
     }
-    Ok(())
+    Ok(if (cache.cancelled)() {
+        StartSearchResult::Cancelled
+    } else if complete && !limited {
+        StartSearchResult::Unavailable
+    } else {
+        StartSearchResult::LimitReached
+    })
 }
 
 fn valid_start(
@@ -337,39 +320,6 @@ fn clear_starting_area(
         }
     }
     Ok(true)
-}
-
-fn farther_than_best(
-    best: TileCoord,
-    config: WorldConfig,
-    center_chunk: TileCoord,
-    ring: i32,
-) -> bool {
-    let min_x = (center_chunk.x - ring).max(0) * CHUNK_TILES;
-    let max_x = ((center_chunk.x + ring + 1) * CHUNK_TILES - 1).min(config.width_tiles - 1);
-    let min_y = (center_chunk.y - ring).max(0) * CHUNK_TILES;
-    let max_y = ((center_chunk.y + ring + 1) * CHUNK_TILES - 1).min(config.height_tiles - 1);
-    let edge_distance = [
-        min_x
-            .checked_sub(1)
-            .map(|x| centered_distance_squared(x, config.width_tiles)),
-        max_x
-            .checked_add(1)
-            .filter(|x| *x < config.width_tiles)
-            .map(|x| centered_distance_squared(x, config.width_tiles)),
-        min_y
-            .checked_sub(1)
-            .map(|y| centered_distance_squared(y, config.height_tiles)),
-        max_y
-            .checked_add(1)
-            .filter(|y| *y < config.height_tiles)
-            .map(|y| centered_distance_squared(y, config.height_tiles)),
-    ]
-    .into_iter()
-    .flatten()
-    .min()
-    .unwrap_or(u64::MAX);
-    start_key(best, config).0 < edge_distance
 }
 
 fn start_key(tile: TileCoord, config: WorldConfig) -> (u64, i32, i32) {
@@ -406,6 +356,9 @@ fn ring_chunks(center: TileCoord, ring: i32) -> Vec<(i32, i32)> {
     }
     chunks
 }
+
+#[path = "start_search/regions.rs"]
+mod regions;
 
 #[cfg(test)]
 #[path = "start_search/tests/start_search.rs"]
