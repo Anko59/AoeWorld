@@ -1,5 +1,5 @@
 //! Player-facing descriptions use loaded resources and acknowledged orders only.
-use super::{CHUNK_TILES, Client, terrain_visible_tiles};
+use super::{CHUNK_TILES, Client, heights};
 use crate::resource_state::ResourceStateCache;
 use aoe_core::TileCoord;
 use aoe_map::{ObjectKind, ResourceNode};
@@ -20,12 +20,10 @@ impl TerrainFailures {
 }
 
 pub(in super::super) fn retain_visible_failures(client: &mut Client) {
-    let visible = terrain_visible_tiles(client);
-    client.terrain_bounds.failures.chunks.retain(|&(x, y)| {
-        x >= visible.min.x.div_euclid(CHUNK_TILES)
-            && x <= visible.max.x.saturating_sub(1).div_euclid(CHUNK_TILES)
-            && y >= visible.min.y.div_euclid(CHUNK_TILES)
-            && y <= visible.max.y.saturating_sub(1).div_euclid(CHUNK_TILES)
+    // Unloaded terrain can project into view above the resident height range.
+    let bounds = client.terrain_bounds.levels.unwrap_or((i16::MIN, i16::MAX));
+    client.terrain_bounds.failures.chunks.retain(|&coordinate| {
+        heights::chunk_may_be_visible(client.camera, client.config, coordinate, bounds)
     });
 }
 
