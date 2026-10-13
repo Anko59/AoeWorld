@@ -16,7 +16,8 @@ pub(super) fn validate(
         .filter(|n| !green.failed.contains(n))
         .collect();
     let mut missing = Vec::new();
-    if !red.build_failed {
+    // A red that only panicked names no test: the tester's own tests must be seen running instead.
+    if !red.build_failed && (!red.failed.is_empty() || red.panics.is_empty()) {
         // Only the tester's own failures must turn green: a failure the red
         // check marked untouched (a test the tester did not change) is
         // pre-existing and reported as such, not required here.

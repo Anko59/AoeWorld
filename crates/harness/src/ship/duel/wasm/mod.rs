@@ -1,10 +1,12 @@
 //! Focused check of packages that `test-wasm` runs: their wasm-bindgen-test suites, named like nextest.
+mod panic;
 use super::{focus::CheckReport, output, runner};
 use crate::{
     process::CaptureExit,
     ship::git,
     wasm_test::{self, SuiteRun},
 };
+pub(super) use panic::normalize;
 use std::{fs, path::Path};
 
 pub(super) fn check(root: &Path, wasm: &[String], cache: &Path) -> git::Result<CheckReport> {
@@ -21,8 +23,9 @@ pub(super) fn check(root: &Path, wasm: &[String], cache: &Path) -> git::Result<C
     results(&runs)
 }
 
-/// Fold suite runs into one report. A run that ended without a verdict, or failed without
-/// a named test or a compile error, is unavailable: never red evidence.
+/// Fold suite runs into one report. A run that ended without a verdict, or failed with no
+/// test line, panic or compile error (nothing ran), is unavailable. A run that panicked, or
+/// aborted after printing tests, failed: the panic location stands in for the missing test name.
 pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
@@ -80,6 +83,9 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
         }
         report.passed = false;
         if failed_named {
+            if !passed {
+                report.panics.extend(panic::parse(&run.output));
+            }
             continue;
         }
         if run.output.contains("wasm-bindgen-test-runner")
@@ -93,6 +99,16 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
                 tail(&run.output)
             ));
         }
+        let panics = panic::parse(&run.output);
+        let ran = run.output.lines().any(|l| {
+            l.trim()
+                .strip_prefix("test ")
+                .is_some_and(|r| r.contains(" ... "))
+        });
+        let aborted = ran
+            && ["test exited abnormally", "some tests failed"]
+                .iter()
+                .any(|m| run.output.contains(m));
         if run.output.lines().any(|l| {
             let l = l.trim_start();
             l.starts_with("error: could not compile") || l.starts_with("error[E")
@@ -103,10 +119,12 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
                 run.package,
                 tail(&run.output)
             ));
+        } else if !panics.is_empty() || aborted {
+            report.panics.extend(panics);
         } else {
-            // Neither a named failure nor a compile error: this says nothing about the tests.
+            // No test line, panic or compile error: nothing ran, which says nothing about the tests.
             return Err(format!(
-                "wasm check unavailable: {} exited {:?} without a named failing test or a compile error; rerun, or choose the check with DUEL_CHECK\n{}",
+                "wasm check unavailable: {} exited {:?} without a named failing test, a panic or a compile error; rerun, or choose the check with DUEL_CHECK\n{}",
                 run.package,
                 run.exit,
                 tail(&run.output)

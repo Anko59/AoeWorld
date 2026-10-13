@@ -180,6 +180,19 @@ fn has_failure_with_notes(
             }
         }
     }
+    // A panic raised in a file the tester changed this round (a shared test helper) is red too.
+    for panic in &report.panics {
+        if paths.iter().any(|changed| {
+            let changed = super::wasm::normalize(changed);
+            panic.path == changed || panic.path.ends_with(&format!("/{changed}"))
+        }) {
+            return Ok(true);
+        }
+        notes.push(format!(
+            "no tester-authored failing test: the run panicked at {} which this round did not change",
+            panic.location
+        ));
+    }
     Ok(false)
 }
 

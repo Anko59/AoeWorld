@@ -186,6 +186,18 @@ pub(crate) fn names(report: &CheckReport) -> String {
             shown.push(format!("(+{} more)", report.failed.len() - NAMES));
         }
         shown.join(", ")
+    } else if let Some(panic) = report.panics.first() {
+        let more = report.panics.len() - 1;
+        let more = if more > 0 {
+            format!(" (+{more} more)")
+        } else {
+            String::new()
+        };
+        format!(
+            "panicked at {}: {}{more}",
+            panic.location,
+            panic.message.lines().next().unwrap_or("")
+        )
     } else if !report.tests.is_empty() {
         format!("{} passed", report.tests.len())
     } else {

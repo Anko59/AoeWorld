@@ -251,3 +251,111 @@ fn pruning_a_cache_that_never_existed_is_not_an_error() {
     output::prune(&temp.path().join("c"), 0).unwrap();
     assert!(!temp.path().join("c/run-1").exists());
 }
+
+/// Real output of the third duel (dev faa0fa40): a panic in a shared helper aborts the runner
+/// after the test lines, with no `... FAIL` line.
+const HELPER_PANIC: &str = "running 12 tests\n\ntest surface_mesh::mix::tests::other ... ok\n\npanicked at crates/rendering/src/surface_mesh/mix/tests/fixture.rs:311:5:\nassertion `left != right` failed: case 1: two sheets\n  left: 3\n right: 3\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nnote: test exited abnormally\n";
+const FIXTURE: &str = "crates/rendering/src/surface_mesh/mix/tests/fixture.rs";
+
+fn panicked(output: &str) -> CheckReport {
+    wasm::results(&[run(
+        "aoe-rendering",
+        "lib",
+        CaptureExit::Failed(Some(1)),
+        output,
+    )])
+    .unwrap()
+}
+
+#[test]
+fn a_wasm_panic_is_a_failed_run_naming_the_location_and_assertion() {
+    let report = panicked(HELPER_PANIC);
+    assert!(!report.passed && !report.build_failed && report.failed.is_empty());
+    assert_eq!(report.panics.len(), 1);
+    assert_eq!(report.panics[0].location, format!("{FIXTURE}:311:5"));
+    assert!(report.panics[0].message.contains("case 1: two sheets"));
+    assert!(!report.panics[0].message.contains("RUST_BACKTRACE"));
+    let named = super::runner::names(&report);
+    assert!(
+        named.contains("panicked at") && named.contains("fixture.rs:311:5"),
+        "{named}"
+    );
+    // Aborting after test lines is failed even without a panic line; both texts count.
+    for text in ["test exited abnormally", "some tests failed"] {
+        let aborted = panicked(&format!("test a ... ok\n{text}\n"));
+        assert!(!aborted.passed && aborted.panics.is_empty());
+    }
+    // Nothing ran: no test line, no panic, no compile error is still unavailable.
+    for output in [
+        "test exited abnormally\n",
+        "",
+        "error: the lock file needs updating\n",
+    ] {
+        let error = wasm::results(&[run(
+            "aoe-rendering",
+            "lib",
+            CaptureExit::Failed(Some(1)),
+            output,
+        )])
+        .unwrap_err();
+        assert!(error.contains("wasm check unavailable"), "{error}");
+    }
+    // Panics are recorded once, bounded, and also next to a named failure.
+    let many: String = (0..9)
+        .map(|n| format!("panicked at crates/a/src/x.rs:{n}:1:\nboom\n"))
+        .collect();
+    assert_eq!(panicked(&many).panics.len(), 5);
+    let both = panicked(&format!("test a::b ... FAIL\n{HELPER_PANIC}"));
+    assert_eq!(both.failed.len(), 1);
+    assert_eq!(both.panics.len(), 1);
+}
+
+#[test]
+fn a_panic_is_red_only_in_a_file_the_tester_changed() {
+    let temp = tempfile::tempdir().unwrap();
+    let report = panicked(HELPER_PANIC);
+    let evidence = |changed: &[&str]| {
+        let paths: Vec<String> = changed.iter().map(|p| (*p).to_owned()).collect();
+        authored::evidence(temp.path(), &paths, &report).unwrap()
+    };
+    assert!(evidence(&[FIXTURE]).0);
+    let (authored, notes) = evidence(&["crates/rendering/src/other.rs"]);
+    assert!(!authored);
+    assert!(
+        notes.iter().any(
+            |n| n.contains("no tester-authored failing test") && n.contains("fixture.rs:311:5")
+        ),
+        "{notes:?}"
+    );
+    // Runner-printed paths with `..` components match the changed file's plain path.
+    let odd = panicked("panicked at crates/rendering/tests/../../tests/x.rs:4:9:\nboom\n");
+    assert_eq!(odd.panics[0].path, "crates/tests/x.rs");
+    let paths = vec!["crates/tests/x.rs".to_owned()];
+    assert!(authored::evidence(temp.path(), &paths, &odd).unwrap().0);
+    assert_eq!(wasm::normalize("./a/b/../c/./d.rs"), "a/c/d.rs");
+    assert_eq!(wasm::normalize("../a"), "../a");
+}
+
+#[test]
+fn green_after_a_panic_only_red_still_requires_the_testers_tests_to_run_and_pass() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let paths = rendering(root, WASM_TEST);
+    let red = panicked(HELPER_PANIC);
+    let line = |name: &str| format!("test surface_mesh::tests::shore::{name} ... ok\n");
+    let pass = |name: &str| {
+        wasm::results(&[run(
+            "aoe-rendering",
+            "lib",
+            CaptureExit::Success,
+            &line(name),
+        )])
+        .unwrap()
+    };
+    green::validate(root, &paths, None, &red, &pass("shore_is_wet")).unwrap();
+    assert!(
+        green::validate(root, &paths, None, &red, &pass("other"))
+            .unwrap_err()
+            .contains("did not run")
+    );
+}

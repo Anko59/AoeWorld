@@ -205,6 +205,26 @@ fn rounds(
             }
             authored
         };
+        if !red_report.passed
+            && !authored_red
+            && !red_report.build_failed
+            && red_report.failed.is_empty()
+        {
+            // Only a panic outside this round's files (or an abort): the tests say nothing.
+            *kept = true;
+            let what = red_report.panics.first().map_or_else(
+                || "the run failed without a named test or a panic".to_owned(),
+                |p| {
+                    format!(
+                        "the run panicked at {} which this round did not change",
+                        p.location
+                    )
+                },
+            );
+            return Err(format!(
+                "check could not complete: no tester-authored failing test: {what}\n{tail}\nthe tester's test changes are kept, uncommitted, in the working tree; fix the check and rerun `make duel` to continue from them, or choose the check with DUEL_CHECK='<command>' (currently `{command}`)"
+            ));
+        }
         if red_report.passed || !authored_red {
             let outcome = discard(root, &head, resumed)?;
             let unrelated = if red_report.passed {

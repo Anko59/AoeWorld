@@ -14,6 +14,14 @@ use std::{
     time::Duration,
 };
 
+/// A panic a test run printed: the file it was raised in (normalised), `path:line:col`, and the assertion lines.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Panic {
+    pub(crate) path: String,
+    pub(crate) location: String,
+    pub(crate) message: String,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub(crate) struct CheckReport {
     pub(crate) passed: bool,
@@ -26,6 +34,9 @@ pub(crate) struct CheckReport {
     pub(crate) untouched: Vec<String>,
     #[serde(default)]
     pub(crate) locations: BTreeMap<String, (String, usize)>,
+    /// Panics of a failed run that named no failing test (a panic in a shared helper aborts the runner).
+    #[serde(default)]
+    pub(crate) panics: Vec<Panic>,
 }
 
 pub(crate) use super::scope::Scope;
@@ -149,10 +160,14 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     if report.passed {
         Ok(())
     } else {
-        Err(format!(
-            "focused tests failed: {}",
-            report.failed.join(", ")
-        ))
+        let mut what = report.failed.join(", ");
+        for panic in &report.panics {
+            what.push_str(&format!(
+                "\npanicked at {}\n{}",
+                panic.location, panic.message
+            ));
+        }
+        Err(format!("focused tests failed: {what}"))
     }
 }
 pub(super) fn save(cache: &Path, report: &CheckReport) -> git::Result<()> {
@@ -273,6 +288,7 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         report.build_failed |= wasm.build_failed;
         report.tests.extend(wasm.tests);
         report.failed.extend(wasm.failed);
+        report.panics.extend(wasm.panics);
     }
     report.tests.sort();
     report.tests.dedup();
