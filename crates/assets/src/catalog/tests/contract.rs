@@ -59,7 +59,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 11);
+    assert_eq!(VERSION, 12);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -70,13 +70,13 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[4..8]
             .iter()
-            .map(|source| (source.role, source.id, source.frames))
+            .map(|source| (source.role as usize, source.id, source.frames))
             .collect::<Vec<_>>(),
         vec![
-            (AssetRole::GrassDirt, 15006, 100),
-            (AssetRole::WornGrass, 15009, 100),
-            (AssetRole::LushGrass, 15001, 100),
-            (AssetRole::Gravel, 15017, 100),
+            (AssetRole::GrassDirt as usize, 15006, 100),
+            (AssetRole::WornGrass as usize, 15009, 100),
+            (AssetRole::LushGrass as usize, 15001, 100),
+            (AssetRole::Gravel as usize, 15017, 100),
         ]
     );
     assert!(OPTIONAL_TERRAIN_SOURCES[4..8].iter().all(|source| {
@@ -156,18 +156,22 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
     assert_eq!(
         OPTIONAL_RESOURCE_SOURCES
             .iter()
-            .map(|source| (source.role, source.id, source.frames))
+            .map(|source| (source.role as usize, source.id, source.frames))
             .collect::<Vec<_>>(),
         vec![
-            (AssetRole::WoodTree, 4652, 14),
-            (AssetRole::WoodTreeShadow, 2296, 14),
-            (AssetRole::ForageBush, 2560, 4),
-            (AssetRole::GoldDeposit, 4479, 7),
-            (AssetRole::StoneDeposit, 4482, 7),
-            (AssetRole::TreeConifer, 4654, 9),
-            (AssetRole::TreePalm, 4653, 13),
-            (AssetRole::CliffFace, 226, 25),
-            (AssetRole::RockPile, 1034, 7),
+            (AssetRole::WoodTree as usize, 4652, 14),
+            (AssetRole::WoodTreeShadow as usize, 2296, 14),
+            (AssetRole::ForageBush as usize, 2560, 4),
+            (AssetRole::GoldDeposit as usize, 4479, 7),
+            (AssetRole::StoneDeposit as usize, 4482, 7),
+            (AssetRole::TreeConifer as usize, 4654, 9),
+            (AssetRole::TreePalm as usize, 4653, 13),
+            (AssetRole::CliffFace as usize, 226, 25),
+            (AssetRole::RockPile as usize, 1034, 7),
+            (27, 4474, 6),
+            (28, 2561, 7),
+            (29, 1035, 3),
+            (30, 1252, 2),
         ]
     );
 }

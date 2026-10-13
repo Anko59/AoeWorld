@@ -29,7 +29,7 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert!(ranges[AssetRole::Rock as usize].is_some());
-    assert_eq!(ROLE_SLOTS, 27);
+    assert_eq!(ROLE_SLOTS, 31);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }
@@ -62,7 +62,14 @@ fn source_indices_preserve_frame_order_and_reject_missing_or_duplicate_frames() 
 
 #[wasm_bindgen_test]
 fn optional_tree_families_require_complete_unique_native_prefixes() {
-    for role in [AssetRole::TreeConifer, AssetRole::TreePalm] {
+    for role in [
+        AssetRole::TreeConifer,
+        AssetRole::TreePalm,
+        AssetRole::Shrub,
+        AssetRole::GrassTuft,
+        AssetRole::DeadwoodStump,
+        AssetRole::DeadwoodLog,
+    ] {
         let selection = OPTIONAL_RESOURCE_SOURCES
             .iter()
             .find(|source| source.role == role)

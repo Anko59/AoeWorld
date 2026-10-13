@@ -93,3 +93,20 @@ pub(crate) fn expected(family: u8) -> [[u8; 4]; 4] {
         CLEAR,
     ]
 }
+
+/// Portable dressing fixture: opaque pixels at the ground hotspot.
+pub(crate) fn dressing_art() -> GameArt {
+    let mut art = art();
+    let native = frame(640);
+    art.scenery.shrubs = vec![native; 6];
+    art.scenery.grass = vec![native; 7];
+    art.scenery.stumps = vec![native; 3];
+    art.scenery.logs = vec![native; 2];
+    art
+}
+pub(crate) fn dressing(kind: u8) -> SceneResource {
+    SceneResource {
+        kind,
+        ..resource(0, 0)
+    }
+}

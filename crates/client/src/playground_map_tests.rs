@@ -480,3 +480,5 @@ fn height_probe_eviction_keeps_new_low_coordinates_and_bounds_duplicate_metadata
 
 #[path = "playground_map/tests/feedback.rs"]
 mod feedback;
+#[path = "playground_map/tests/dressing.rs"]
+mod dressing;
