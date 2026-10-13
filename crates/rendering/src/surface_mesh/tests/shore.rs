@@ -107,6 +107,94 @@ fn coplanar_shore_edges_remain_skirt_free_for_both_directions_and_sides() {
 }
 
 #[wasm_bindgen_test]
+fn one_quantized_height_step_at_a_beach_does_not_create_vertical_walls() {
+    for edge in [ShoreEdge::East, ShoreEdge::South] {
+        for water_on_first in [false, true] {
+            for heights in [[2, 3], [3, 2]] {
+                let samples = pair(edge, water_on_first, heights[0], heights[1]);
+                let faces = projected_surface_triangles(&samples, camera());
+                assert!(
+                    faces.iter().all(|face| !face.skirt),
+                    "a one-level shore mismatch is a gentle beach, heights {heights:?}"
+                );
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn a_real_beach_drop_keeps_skirts_textured_with_the_upper_sand_bank() {
+    let art = mix::fixture::art();
+    let sand = terrain_texture_frame(&art, 3, [0, 0]).unwrap().atlas;
+    for edge in [ShoreEdge::East, ShoreEdge::South] {
+        for water_on_first in [false, true] {
+            let heights = if water_on_first { [0, 4] } else { [4, 0] };
+            let samples = pair(edge, water_on_first, heights[0], heights[1]);
+            let mut faces = projected_surface_triangles(&samples, camera());
+            apply_terrain_textures(&mut faces, &art);
+            let skirts = faces.iter().filter(|face| face.skirt).collect::<Vec<_>>();
+            assert_eq!(skirts.len(), 2, "a real height drop must stay closed");
+            for face in skirts {
+                assert!(!face.pickable);
+                assert_eq!(face.material, 3, "upper sand bank owns the side face");
+                assert_eq!(face.texture_uv, Some(sand));
+                assert_eq!(face.tint, 3, "sand bank shading, without a rock kernel");
+                assert!(face.points.iter().any(|point| point.world[2] == 4.0));
+                assert!(face.points.iter().any(|point| point.world[2] == 0.0));
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn shoreline_appearance_keeps_source_water_ownership_picking_and_inland_vertex_count() {
+    let mut samples = mix::fixture::shore_terrain();
+    let source = samples
+        .iter()
+        .map(|sample| sample.surface)
+        .collect::<Vec<_>>();
+    let view = mix::fixture::camera(0);
+    let projection = Camera {
+        center: view.center,
+        zoom: view.zoom,
+        viewport: view.viewport,
+        focus_elevation_meters: view.focus_elevation_meters,
+    };
+    let mut faces = projected_surface_triangles(&samples, view);
+    apply_terrain_textures(&mut faces, &mix::fixture::art());
+    assert_eq!(
+        source,
+        samples
+            .iter()
+            .map(|sample| sample.surface)
+            .collect::<Vec<_>>()
+    );
+    for world in [[-0.25, 0.25], [0.25, 0.25]] {
+        let picked = pick_surface_point(&faces, projection.world_to_screen_at_height(world, 0.0))
+            .expect("shore appearance retains the existing pickable surface");
+        assert!((picked[0] - world[0]).abs() < 1e-7);
+        assert!((picked[1] - world[1]).abs() < 1e-7);
+    }
+    for sample in &mut samples {
+        sample.material = 3;
+        sample.surface.water = 0;
+    }
+    // A flat, fully visible 4x4 inland patch still has two triangles per tile.
+    samples.retain(|sample| {
+        (-2.0..2.0).contains(&sample.position[0]) && (-2.0..2.0).contains(&sample.position[1])
+    });
+    let inland = projected_surface_triangles(
+        &samples,
+        SceneCamera {
+            viewport: [512.0; 2],
+            ..view
+        },
+    );
+    assert_eq!(inland.len() * 3, 16 * 6);
+    assert!(inland.iter().all(|face| !face.skirt));
+}
+
+#[wasm_bindgen_test]
 fn modeled_water_steps_use_the_shared_water_material_and_are_not_pickable() {
     let samples = [terrain([0, 0], 1, 4), terrain([1, 0], 2, 0)];
     let mut triangles = projected_surface_triangles(&samples, camera());

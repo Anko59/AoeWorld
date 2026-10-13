@@ -151,6 +151,54 @@ pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     faces
 }
 
+/// A coplanar sand beach against shallow lake water, with ordinary map metadata.
+pub(crate) fn shore_terrain() -> Vec<SceneTerrain> {
+    let mut samples = terrain(0);
+    for sample in &mut samples {
+        let wet = sample.position[0] >= 0.0;
+        sample.material = if wet { 10 } else { 3 };
+        sample.surface.water = u8::from(wet);
+    }
+    samples
+}
+
+pub(crate) const SHORE_PROBES: [[u32; 2]; 5] = [[8, 64], [44, 64], [64, 64], [84, 64], [116, 64]];
+
+pub(crate) fn shore_scene(zoom: f64) -> Vec<ProjectedSurfaceTriangle> {
+    let mut view = camera(0);
+    view.zoom = zoom;
+    let mut faces = projected_surface_triangles(&shore_terrain(), view);
+    apply_terrain_textures(&mut faces, &art());
+    faces
+}
+
+/// Flat authored colours isolate the shoreline blend from texture detail.
+/// Require pure sand and water away from the border and an opaque mixture
+/// inside the band, without prescribing its exact noisy shape or packet format.
+pub(crate) fn assert_shore(pixels: [[u8; 4]; 5]) {
+    let (sand, water) = (COLORS[3], COLORS[5]);
+    for (actual, expected) in [(pixels[0], sand), (pixels[4], water)] {
+        for c in 0..4 {
+            assert!(
+                actual[c].abs_diff(expected[c]) <= 2,
+                "pure shore sheet: {actual:?}"
+            );
+        }
+    }
+    assert!(pixels.iter().all(|pixel| pixel[3] == 255));
+    assert!(
+        pixels[1..4].iter().any(|pixel| {
+            pixel[0] > water[0] + 5
+                && pixel[0] < sand[0] - 5
+                && pixel[1] > water[1] + 5
+                && pixel[1] < sand[1] - 5
+                && pixel[2] > sand[2] + 5
+                && pixel[2] < water[2] - 5
+        }),
+        "shallow water must fade over sand across the tile border: {pixels:?}"
+    );
+}
+
 pub(crate) fn snow_scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     let mut faces = projected_surface_triangles(&terrain(case), camera(case));
     apply_terrain_textures(&mut faces, &snow_art());

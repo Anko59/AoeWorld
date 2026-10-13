@@ -1,6 +1,36 @@
 use super::*;
 use crate::surface_mesh::directory::fixture;
 
+#[wasm_bindgen_test]
+fn canvas_shallow_water_fades_into_sand_at_two_zooms() {
+    use crate::surface_mesh::mix::fixture as shore;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = shore::atlas();
+    for zoom in [0.2, 0.4] {
+        let layers = shore::shore_scene(zoom)
+            .into_iter()
+            .map(WorldLayer::Surface)
+            .collect::<Vec<_>>();
+        let mut camera = shore::camera(0);
+        camera.zoom = zoom;
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &layers,
+            camera,
+            false,
+        )
+        .unwrap();
+        shore::assert_shore(
+            shore::SHORE_PROBES.map(|[x, y]| pixel(&presentation.color_buffer, x, y)),
+        );
+        shore::assert_soft(0, &|x, y| pixel(&presentation.color_buffer, x, y));
+    }
+}
+
 /// The same world point shows the same native texel at two zooms and at two
 /// mesh LODs; coarse patches tile by world coordinate, not by patch origin.
 #[wasm_bindgen_test]
