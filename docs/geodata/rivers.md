@@ -98,7 +98,10 @@ change and are absent from this terrain stage.
 The minimap
 uses the same persisted lines with pixel-half-diagonal footprint discovery, so a
 sub-pixel river remains connected at strategic scale without widening its
-physical channel. Lake and sea classes take priority at mouths.
+physical channel. Lake and sea classes take priority at mouths. A composed
+SetLand correction also wins at the raster sample; the raw footprint cannot
+restore a river removed by that correction. Ordinary dry sample centres keep
+footprint discovery for subpixel rivers.
 
 Queries retain at most 64 page-local 16×16 segment indexes and 16,384 exact
 physical water kinds. Tile keys are checked on memo hits; collisions miss.
