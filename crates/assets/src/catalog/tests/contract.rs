@@ -1,6 +1,42 @@
 use super::*;
 
 #[test]
+fn mountain_snow_source_is_ground_art_instead_of_cracked_ice() {
+    let source = REQUIRED_RENDER_SOURCES
+        .iter()
+        .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+        .find(|source| source.role == AssetRole::Snow)
+        .expect("native snow ground source");
+    assert_ne!(
+        source.id, 15024,
+        "15024 is cracked ice, not soft snow ground"
+    );
+    assert!(
+        source
+            .terrain_topology
+            .is_some_and(|topology| topology.supports_frames(source.frames))
+    );
+}
+
+#[test]
+fn mountain_rock_has_a_native_ground_source_separate_from_gravel_and_paving() {
+    let source = REQUIRED_RENDER_SOURCES
+        .iter()
+        .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+        .find(|source| source.role == AssetRole::Rock)
+        .expect("native rock ground source");
+    assert!(
+        ![15017, 15018].contains(&source.id),
+        "gravel and paving are not mountain rock ground"
+    );
+    assert!(
+        source
+            .terrain_topology
+            .is_some_and(|topology| topology.supports_frames(source.frames))
+    );
+}
+
+#[test]
 fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
     let mut roles = REQUIRED_RENDER_SOURCES
         .iter()

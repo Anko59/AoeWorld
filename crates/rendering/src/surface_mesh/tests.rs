@@ -13,6 +13,8 @@ mod floor_tests;
 mod landscape_tests;
 #[path = "tests/mix.rs"]
 mod mix_tests;
+#[path = "tests/mountain/tests.rs"]
+mod mountain_tests;
 #[path = "tests/native_canvas.rs"]
 mod native_canvas_tests;
 #[path = "tests/river_bank.rs"]
