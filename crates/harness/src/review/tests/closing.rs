@@ -14,7 +14,7 @@ use std::{fs, process::Command, sync::Mutex};
 /// "Now" in these tests: long after every stored review.
 const NOW: u64 = 1_000_000;
 
-fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report {
+pub(super) fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]) -> Report {
     Report {
         version: 1,
         head: head.into(),

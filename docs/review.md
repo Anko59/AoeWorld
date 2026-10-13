@@ -277,15 +277,23 @@ most 200 changed lines **and** the floor of the files it changes is not above
 the tier of the passed review. Otherwise it gets a **full** review of the
 increment at the tier you chose (never below the floor of the whole change).
 Both judge the increment's diff, and the approved diff is only read-only
-context. **A finding must cite a line inside the increment's hunks**; anything
-else is recorded as a note (`Notes outside the increment`, in the report and
+context. **A finding must cite a line inside the increment's hunks**, or name
+a file the increment changes without a hunk to cite (deleted, renamed, mode
+changed or binary; for a rename, the old path too), where any line or none is
+inside; anything else is recorded as a note (`Notes outside the increment`, in the report and
 the pull request) and can never block, whatever its severity: the code is
 approved. Every line of every new commit is still reviewed; the reviewers
 cannot skip one. The report and the pull request's review line say which ran:
 `closing review of 12 lines since <sha>, approved 9/10`.
 Small follow-ups add up: the 200 lines count everything approved by closing-style
-increment reviews since the last passing full review, so a large change cannot
-be added in small slices without a full review of the slice that crosses the limit.
+increment reviews since the last passing full review, however it came to be
+approved, so a large change cannot be added in small slices without a full
+review of the slice that crosses the limit. Walking the history forward, a
+passing full review resets the total; a passing closing-style increment review
+adds its lines; a failed one is pending (the latest wins) until a passing
+closing review of its fixes adds those lines, and a failed full review of an
+increment, once its fixes pass, resets the total (it had a blind review). A
+reused copy of a report never counts again.
 
 Budget: the pass closed the earlier budget, so the first review of an increment
 takes the full review's slot, whatever its style, and its failures are

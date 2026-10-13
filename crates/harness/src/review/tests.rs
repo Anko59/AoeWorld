@@ -304,6 +304,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
 mod after_approval;
 mod arbiter;
 mod closing;
+mod cumulative;
 mod flow;
 mod limits;
 mod pinned;

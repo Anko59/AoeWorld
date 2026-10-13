@@ -12,8 +12,14 @@ use super::{
     protocol::Reported,
 };
 use crate::ship::git;
+use history::{since_full, slice};
+pub(in crate::review) use lines::Lines;
+use lines::changed_lines;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
+
+pub(super) mod history;
+mod lines;
 
 /// Changed lines up to which an increment gets a closing-style review.
 pub(crate) const SMALL: usize = 200;
@@ -108,42 +114,6 @@ fn approved(root: &Path, history: &[Report], head: &str) -> Option<Increment> {
         })
 }
 
-/// How a stored report counts towards `since_full`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Step {
-    /// A passing full review, of the whole diff or of an increment.
-    Full,
-    /// A passing closing-style increment review of this many lines.
-    Small(usize),
-    /// A failed review, or a closing review of fixes: approves no new lines.
-    Other,
-}
-
-fn slice(report: &Report) -> Step {
-    if !(report.complete() && report.passes()) {
-        return Step::Other;
-    }
-    match &report.increment {
-        Some(increment) if increment.closing => Step::Small(increment.lines),
-        _ if report.closing => Step::Other,
-        _ => Step::Full,
-    }
-}
-
-/// Lines approved by closing-style increment reviews since the last passing
-/// full review. Only a full review ends the count.
-pub(crate) fn since_full(history: impl DoubleEndedIterator<Item = Step>) -> usize {
-    let mut total = 0;
-    for step in history.rev() {
-        match step {
-            Step::Other => {}
-            Step::Small(lines) => total += lines,
-            Step::Full => break,
-        }
-    }
-    total
-}
-
 /// Where the approved patch of `report` stands in the branch now.
 fn place(root: &Path, report: &Report, merge_base: &str, current: &[u8]) -> Option<Scope> {
     if git::git(root, &["merge-base", "--is-ancestor", &report.head, "HEAD"]).is_ok() {
@@ -236,70 +206,6 @@ pub(super) fn since_diff(root: &Path, merge_base: &str, since: &str) -> Result<S
     let mut args = vec!["--literal-pathspecs", "diff", since, "HEAD", "--"];
     args.extend(files.iter().map(String::as_str));
     git::git(root, &args)
-}
-
-/// Lines added plus removed; a binary change is never small.
-fn changed_lines(diff: &str) -> usize {
-    diff.lines()
-        .map(|line| match line {
-            l if l.starts_with("+++") || l.starts_with("---") => 0,
-            l if l.starts_with('+') || l.starts_with('-') => 1,
-            l if l.starts_with("Binary files") || l == "GIT binary patch" => SMALL + 1,
-            _ => 0,
-        })
-        .sum()
-}
-
-/// Where the lines of an increment are: a finding elsewhere is out of scope.
-pub(super) struct Lines {
-    ranges: BTreeMap<String, Vec<(u32, u32)>>,
-    /// A header that could not be read: everything counts as inside.
-    unreadable: bool,
-}
-
-impl Lines {
-    pub(super) fn of(diff: &str) -> Self {
-        let mut ranges: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
-        let (mut file, mut unreadable) = (None::<String>, false);
-        for line in diff.lines() {
-            if let Some(path) = line.strip_prefix("+++ ") {
-                match path.strip_prefix("b/") {
-                    Some(path) if !path.starts_with('"') => file = Some(path.to_owned()),
-                    _ if path == "/dev/null" => file = None,
-                    _ => unreadable = true,
-                }
-            } else if let (Some(path), Some(hunk)) = (&file, line.strip_prefix("@@ ")) {
-                let new = hunk.split(' ').find_map(|part| part.strip_prefix('+'));
-                let mut parts = new.unwrap_or("").split(',');
-                let start: Option<u32> = parts.next().and_then(|n| n.parse().ok());
-                let count: u32 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(1);
-                match start {
-                    Some(start) => ranges
-                        .entry(path.clone())
-                        .or_default()
-                        .push((start, start + count.saturating_sub(1))),
-                    None => unreadable = true,
-                }
-            }
-        }
-        Self { ranges, unreadable }
-    }
-
-    /// Whether a finding at `file:line` is inside the increment's hunks (with
-    /// the context lines the reviewers saw). A deleted file has no lines to
-    /// cite, so a finding on it names no line and counts as inside.
-    pub(super) fn holds(&self, reported: &Reported) -> bool {
-        if self.unreadable {
-            return true;
-        }
-        let file = reported.file.trim_start_matches("./");
-        let Some(hunks) = self.ranges.get(file) else {
-            return false;
-        };
-        reported
-            .line
-            .is_none_or(|n| hunks.iter().any(|&(from, to)| (from..=to).contains(&n)))
-    }
 }
 
 /// Keeps what a review may report: the findings inside the increment, and
