@@ -275,6 +275,41 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
         .collect()
 }
 
+pub(in super::super) fn settle_counts(client: &mut Client) -> super::super::capture::ChunkCounts {
+    use super::super::capture::ChunkCounts;
+    if client.surface_fixture || client.map_content_hash.is_none() {
+        return ChunkCounts::default();
+    }
+    // Waiting for verified height bounds cannot advertise an already settled map.
+    if client.terrain_bounds.levels.is_none() {
+        return ChunkCounts {
+            pending: 1,
+            failed: 0,
+        };
+    }
+    cached_candidates(client);
+    let visible = client
+        .terrain_bounds
+        .candidates
+        .as_ref()
+        .map_or(&[][..], |(_, _, _, keys)| keys.as_slice());
+    // Keep failures bounded to this demand window; cancelled/retired completions
+    // never enter it. Include queued demand even during request backoff.
+    client.capture.failures.retain(|key| visible.contains(key));
+    let focus = (client.focus_map_hash != client.map_content_hash).then_some((
+        (client.camera.center[0].floor() as i32).div_euclid(CHUNK_TILES),
+        (client.camera.center[1].floor() as i32).div_euclid(CHUNK_TILES),
+    ));
+    ChunkCounts::for_visible(
+        visible,
+        |key| {
+            client.terrain_chunks.contains_key(key)
+                || (Some(*key) != focus && !resident_may_be_visible(client, *key))
+        },
+        &client.capture.failures,
+    )
+}
+
 pub(super) fn resident_may_be_visible(client: &Client, coordinate: (i32, i32)) -> bool {
     client
         .terrain_bounds

@@ -149,6 +149,7 @@ export function initNavigation() {
       panel.dataset.worldHeight = String(world[1]);
       panel.dataset.cameraX = String(center[0]);
       panel.dataset.cameraY = String(center[1]);
+      panel.dataset.zoom = String(state[8]);
       marker(camera, center);
       marker(primary, [state[4], state[5]]);
       const points = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {

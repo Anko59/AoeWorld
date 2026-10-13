@@ -11,7 +11,8 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         .get_element_by_id("scene")
         .ok_or("No canvas")?
         .dyn_into()?;
-    let (mut renderer, canvas) = GameRenderer::new(canvas)
+    let backend = super::capture::current(&document).renderer;
+    let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await
         .map_err(|error| JsValue::from_str(&error))?;
     let (art, pixels) = load().await?;
@@ -40,6 +41,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
             focus_elevation_meters: 0.0,
         },
         config,
+        capture: Default::default(),
         primary: None,
         role: None,
         map_content_hash: None,
@@ -71,6 +73,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     resize(&mut shared.borrow_mut());
     super::fixture::set_active(&shared);
     controls::install(shared.clone())?;
+    super::capture::install(shared.clone())?;
     connect(shared.clone())?;
     animate(shared)?;
     Ok(())

@@ -102,11 +102,23 @@ fn context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, Strin
 
 impl GameRenderer {
     pub async fn new(canvas: HtmlCanvasElement) -> Result<(Self, HtmlCanvasElement), String> {
-        if let Ok(renderer) = Renderer::new(canvas.clone()).await {
+        Self::new_with_backend(canvas, None).await
+    }
+
+    pub async fn new_with_backend(
+        canvas: HtmlCanvasElement,
+        backend: Option<&str>,
+    ) -> Result<(Self, HtmlCanvasElement), String> {
+        if backend != Some("canvas")
+            && backend != Some("webgl2")
+            && let Ok(renderer) = Renderer::new(canvas.clone()).await
+        {
             return Ok((Self::WebGpu(Box::new(renderer)), canvas));
         }
         let replacement = replace_canvas(&canvas)?;
-        if let Ok(renderer) = WebGlRenderer::new(&replacement) {
+        if backend != Some("canvas")
+            && let Ok(renderer) = WebGlRenderer::new(&replacement)
+        {
             return Ok((Self::WebGl(renderer), replacement));
         }
         // Either failed GPU tier may have bound the element's context type.

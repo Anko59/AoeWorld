@@ -71,6 +71,7 @@ pub(super) fn cache_status(client: &Client) -> String {
 pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
+    client.capture.failures.clear();
     client.terrain_bounds = Default::default();
     client.terrain_height_bounds = None;
     client.terrain_resident_height_bounds = None;
@@ -141,6 +142,11 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                 // Retired success/error cannot evict a replacement slot, insert
                 // stale geometry or cause the normal five-second failure backoff.
                 return;
+            }
+            if result.is_ok() {
+                client.capture.failures.remove(&(x, y));
+            } else {
+                client.capture.failures.insert((x, y));
             }
             match result {
                 Ok(chunk) => {
