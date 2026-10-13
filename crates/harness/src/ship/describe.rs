@@ -15,10 +15,17 @@
 //! ## For AI
 //! Anything else: design, alternatives, risks, follow-ups.
 //! ```
-use super::{evidence::Evidence, run::GateVerdict};
+use super::{
+    evidence::Evidence,
+    levels::{Change, Decision, Levels},
+    run::GateVerdict,
+};
 use crate::review::Report;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Level {
     Low,
     Medium,
@@ -36,6 +43,14 @@ impl Level {
             _ => None,
         }
     }
+    /// Longest video in seconds; `None`: no video at this level.
+    pub(crate) fn video_limit(self) -> Option<u32> {
+        Levels::embedded()?.spec(self).video_max_seconds
+    }
+    /// Whether the video needs a voice-over.
+    pub(crate) fn voiced(self) -> bool {
+        Levels::embedded().is_some_and(|levels| levels.spec(self).narration_required)
+    }
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Low => "low",
@@ -44,22 +59,7 @@ impl Level {
             Self::Max => "max",
         }
     }
-    /// Longest video, in seconds; `None`: no video at this level.
-    pub(crate) fn video_limit(self) -> Option<u32> {
-        match self {
-            Self::Low => None,
-            Self::Medium => Some(60),
-            Self::High => Some(120),
-            Self::Max => Some(300),
-        }
-    }
-    pub(crate) fn voiced(self) -> bool {
-        self >= Self::High
-    }
 }
-
-/// `low` is for the smallest pull requests only.
-pub(crate) const LOW_MAX_CHANGED_LINES: u64 = 60;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Template {
@@ -127,7 +127,7 @@ fn is_element(line: &str) -> bool {
 }
 
 impl Template {
-    pub(crate) fn parse(text: &str) -> Result<Self, String> {
+    pub(crate) fn parse(text: &str, levels: &Levels) -> Result<Self, String> {
         let level = text
             .lines()
             .find_map(|l| {
@@ -143,15 +143,24 @@ impl Template {
         if what.trim().is_empty() {
             return Err("`## What` is empty: say in one or two lines what was implemented".into());
         }
+        let spec = levels.spec(level);
         let grounding_lines = why.lines().filter(|line| is_element(line)).count();
         if grounding_lines == 0 {
             return Err("`## Why` needs one grounding element: a > quote from a human, an issue/reference link or HTTPS URL, a screenshot or a sampled metric".into());
         }
-        if grounding_lines > 1 || why.lines().filter(|line| !line.trim().is_empty()).count() > 3 {
-            return Err("`## Why` has more than two lines of text; if it needs more, the PR is doing too much: split it".into());
+        if grounding_lines > 1
+            || why.lines().filter(|line| !line.trim().is_empty()).count() > spec.why_max_lines
+        {
+            return Err(format!(
+                "`## Why` has more than {} lines of text; if it needs more, the PR is doing too much: split it",
+                spec.why_max_lines - 1
+            ));
         }
-        if what.lines().filter(|l| !l.trim().is_empty()).count() > 2 {
-            return Err("`## What` has more than two lines; if it needs more, split the PR".into());
+        if what.lines().filter(|l| !l.trim().is_empty()).count() > spec.what_max_lines {
+            return Err(format!(
+                "`## What` has more than {} lines; if it needs more, split the PR",
+                spec.what_max_lines
+            ));
         }
         Ok(Self {
             level,
@@ -161,36 +170,55 @@ impl Template {
         })
     }
 
-    /// The level must fit the change; anything else is a reason to split.
+    /// The level must fit the change (it may not be below the floor) and the
+    /// video; anything else is a reason to split. Returns what to record.
     pub(crate) fn check(
         &self,
-        changed_lines: u64,
+        levels: &Levels,
+        change: &Change,
         video: Option<(u32, bool)>,
-    ) -> Result<(), String> {
-        if self.level == Level::Low && changed_lines > LOW_MAX_CHANGED_LINES {
+    ) -> Result<Decision, String> {
+        let floor = levels.floor(change);
+        let name = self.level.name();
+        if self.level < floor.level {
             return Err(format!(
-                "`low` is for the smallest PRs (≤ {LOW_MAX_CHANGED_LINES} changed lines, this one has {changed_lines}); use medium or higher"
+                "`{name}` is below the floor `{}` for this change ({} changed lines): {}; use {} or higher",
+                floor.level.name(),
+                change.lines,
+                floor.reason,
+                floor.level.name()
             ));
         }
-        if self.level == Level::Low && video.is_some() {
-            return Err("low PRs have no video; use medium or higher".into());
+        let spec = levels.spec(self.level);
+        match (spec.video_max_seconds, video) {
+            (None, Some(_)) => {
+                return Err(format!(
+                    "{name} PRs have no video; use {} or higher",
+                    levels.lowest_with_video().name()
+                ));
+            }
+            (None, None) => {}
+            (Some(_), None) => {
+                return Err(format!(
+                    "a {name} PR needs a showcase video (SHIP_VIDEO); show it working, before/after"
+                ));
+            }
+            (Some(limit), Some((seconds, _))) if seconds > limit => {
+                return Err(format!(
+                    "the video is {seconds}s; a {name} PR allows {limit}s: tighten it or split the PR"
+                ));
+            }
+            (Some(_), Some((_, false))) if spec.narration_required => {
+                return Err(format!("a {name} PR video needs a voice-over"));
+            }
+            _ => {}
         }
-        match (self.level.video_limit(), video) {
-            (None, _) => Ok(()),
-            (Some(_), None) => Err(format!(
-                "a {} PR needs a showcase video (SHIP_VIDEO); show it working, before/after",
-                self.level.name()
-            )),
-            (Some(limit), Some((seconds, _))) if seconds > limit => Err(format!(
-                "the video is {seconds}s; a {} PR allows {limit}s: tighten it or split the PR",
-                self.level.name()
-            )),
-            (Some(_), Some((_, audio))) if self.level.voiced() && !audio => Err(format!(
-                "a {} PR video needs a voice-over",
-                self.level.name()
-            )),
-            _ => Ok(()),
-        }
+        Ok(Decision {
+            chosen: self.level,
+            floor: floor.level,
+            reason: floor.reason,
+            metrics: spec.metrics.clone(),
+        })
     }
 }
 
@@ -324,19 +352,47 @@ pub(crate) fn footer(runtime: crate::agents::Runtime) -> String {
     }
 }
 
+/// The generated parts of the description besides the review.
+pub(crate) struct Extras<'a> {
+    pub(crate) footer: &'a str,
+    pub(crate) metrics: &'a str,
+    pub(crate) test_first: &'a str,
+    /// The level distribution line (`make level-stats`).
+    pub(crate) distribution: &'a str,
+}
+
+/// The "For AI" lines on the chosen level, its floor and the distribution.
+pub(crate) fn level_section(
+    template: &Template,
+    evidence: &Evidence,
+    distribution: &str,
+) -> String {
+    let mut out = format!("## Level\n\nChosen: `{}`.", template.level.name());
+    if let Some(decision) = &evidence.level {
+        out.push_str(&format!(
+            " Floor: `{}` ({}). Metrics rows: `{}`.",
+            decision.floor.name(),
+            decision.reason,
+            decision.metrics
+        ));
+    }
+    out.push_str(&format!("\n\n{distribution}\n\n"));
+    out
+}
+
 pub(crate) fn render(
     template: &Template,
     video: Option<&str>,
     report: &Report,
     evidence: &Evidence,
-    footer: &str,
-    metrics: &str,
-    test_first: &str,
+    extras: &Extras,
 ) -> String {
-    let mut out = format!(
-        "# 🧑 For humans\n\n### 🎯 Why\n\n{}\n\n### 🛠️ What\n\n{}\n",
+    // The marker lets `make level-stats` read the level of merged pull requests.
+    let mut out = format!("<!-- level: {} -->\n# 🧑 For humans", template.level.name());
+    out.push_str(&format!(
+        "\n\n### 🎯 Why\n\n{}\n\n### 🛠️ What\n\n{}\n",
         template.why, template.what
-    );
+    ));
     if let Some(name) = video {
         out.push_str(&format!("\n🎬 ![Showcase](./{name})\n"));
     }
@@ -352,13 +408,15 @@ pub(crate) fn render(
             ))
             .unwrap_or_default(),
         report.summary.trim().replace('\n', "\n> "),
-        metrics,
+        extras.metrics,
     ));
     if !template.for_ai.is_empty() {
         out.push_str(&format!("{}\n\n", template.for_ai));
     }
+    out.push_str(&level_section(template, evidence, extras.distribution));
     out.push_str(&format!(
-        "## Test-first report\n\nReported, never enforced: the test-integrity reviewer judges it.\n\n{test_first}\n"
+        "## Test-first report\n\nReported, never enforced: the test-integrity reviewer judges it.\n\n{}\n",
+        extras.test_first
     ));
     out.push_str(&format!(
         "## Gate evidence (`{}`, level {})\n\n| Gate | Verdict | Time |\n|---|---|---|\n",
@@ -377,8 +435,9 @@ pub(crate) fn render(
         ));
     }
     out.push_str(&format!(
-        "\n## Adversarial review\n\n{}\n\n{footer}\n",
-        report.markdown()
+        "\n## Adversarial review\n\n{}\n\n{}\n",
+        report.markdown(),
+        extras.footer
     ));
     out
 }

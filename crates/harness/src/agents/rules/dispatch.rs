@@ -25,6 +25,8 @@ const PERSON_TARGETS: &[&str] = &[
     "review-pr",
     // It spends model sessions on the seed set: the main session only.
     "review-calibrate",
+    // It lists merged pull requests through gh: the main session only.
+    "level-stats",
     // It opens, comments on and closes nightly issues: CI and the main session.
     "nightly-triage",
     "metric-regressions",
@@ -180,6 +182,7 @@ fn reviewer_target(target: &str) -> bool {
             target,
             "help"
                 | "doctor"
+                | "level-floor"
                 | "lint"
                 | "deny"
                 | "test-unit"
