@@ -23,5 +23,23 @@ pub(crate) fn run_in(root: &Path, environment: &[(&str, &str)]) -> Result<(), Pr
     process::run_in(root, "cargo", ARGS, environment, BUDGET)
 }
 
+pub(crate) fn lint() -> Result<(), ProcessError> {
+    let args = ["clippy", "--workspace", "--all-targets", "--locked"];
+    process::run(
+        "cargo",
+        &[args.as_slice(), &["--", "-D", "warnings"]].concat(),
+        BUDGET,
+    )
+}
+
+pub(crate) fn test_unit() -> Result<(), ProcessError> {
+    run_in(Path::new("."), &[])?;
+    process::run(
+        "cargo",
+        &["test", "--workspace", "--doc", "--locked"],
+        BUDGET,
+    )
+}
+
 #[cfg(test)]
 mod tests;

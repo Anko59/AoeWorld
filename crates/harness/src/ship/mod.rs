@@ -192,7 +192,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 Some(evidence) => println!("{}", serde_json::to_string_pretty(&evidence)?),
                 None => println!("no evidence for {head}; run `make ship`"),
             }
-            lock::print_status(&root)
+            lock::print_status(&root)?;
+            crate::slots::print_status(&root)
         }
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),

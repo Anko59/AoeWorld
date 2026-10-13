@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::{Value, json};
 mod classification;
+mod heavy;
 mod job_mapping;
 mod placement;
 

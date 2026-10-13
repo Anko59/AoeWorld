@@ -28,6 +28,7 @@ mod release_stack;
 mod repo_policy;
 mod review;
 mod ship;
+mod slots;
 mod wasm_test;
 
 use clap::{Parser, Subcommand};
@@ -90,6 +91,7 @@ enum Command {
     FmtCheck,
     Lint,
     TestUnit,
+    LoadStatus,
     TestWasm,
     TestE2e,
     TestCreatorSource,
@@ -198,6 +200,7 @@ enum AssetCommand {
 }
 
 fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
+    let _slot = slots::guard::guard(&command)?;
     match command {
         Command::Assets { command } => match command {
             AssetCommand::Inspect { input } => {
@@ -286,27 +289,9 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::CiCheck => gates::ci_check()?,
         Command::Fmt => format_commands(false)?,
         Command::FmtCheck => format_commands(true)?,
-        Command::Lint => process::run(
-            "cargo",
-            &[
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--locked",
-                "--",
-                "-D",
-                "warnings",
-            ],
-            Duration::from_secs(600),
-        )?,
-        Command::TestUnit => {
-            native::run_in(Path::new("."), &[])?;
-            process::run(
-                "cargo",
-                &["test", "--workspace", "--doc", "--locked"],
-                Duration::from_secs(600),
-            )?;
-        }
+        Command::Lint => native::lint()?,
+        Command::TestUnit => native::test_unit()?,
+        Command::LoadStatus => slots::print_status(Path::new("."))?,
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,
