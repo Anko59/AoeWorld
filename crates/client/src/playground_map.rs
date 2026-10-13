@@ -157,6 +157,10 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                         "map chunk request failed: {error:?}"
                     )));
                     client.terrain_bounds.failures.chunks.insert((x, y));
+                    feedback::retain_visible_failures(&mut client);
+                    if client.terrain_bounds.failures.chunks.contains(&(x, y)) {
+                        feedback::terrain_failed(&mut client);
+                    }
                     heights::defer_failed_chunks(&mut client);
                 }
             }

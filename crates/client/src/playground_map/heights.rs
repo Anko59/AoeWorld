@@ -125,6 +125,7 @@ pub(super) fn ensure_bounds(
                     "map height bounds unavailable: {error:?}"
                 )));
                 client.terrain_bounds.failures.bounds = true;
+                feedback::terrain_failed(&mut client);
                 client.terrain_bounds.retry_after = super::super::now() + 5_000.0;
             }
         }

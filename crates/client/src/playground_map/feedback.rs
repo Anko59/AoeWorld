@@ -39,6 +39,10 @@ pub(in super::super) fn connection_label(client: &Client) -> &str {
     }
 }
 
+pub(in super::super) fn terrain_failed(client: &mut Client) {
+    client.order_feedback.dismiss(&mut client.status);
+}
+
 pub(crate) fn live_blocker(node: &ResourceNode, state: &ResourceStateCache) -> Option<ObjectKind> {
     (node.initial_amount > 0 && state.visible(node.id)).then_some(node.object)
 }
@@ -95,21 +99,37 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
 }
 
 #[derive(Default)]
-pub(crate) struct OrderFeedback(BTreeMap<u64, Option<ObjectKind>>);
+pub(crate) struct OrderFeedback {
+    targets: BTreeMap<u64, Option<ObjectKind>>,
+    message: Option<&'static str>,
+}
 
 impl OrderFeedback {
     pub fn record(&mut self, sequence: u64, blocker: Option<ObjectKind>) {
-        self.0.insert(sequence, blocker);
-        while self.0.len() > MAX_ACK_HISTORY {
-            self.0.pop_first();
+        self.targets.insert(sequence, blocker);
+        while self.targets.len() > MAX_ACK_HISTORY {
+            self.targets.pop_first();
         }
     }
 
     pub fn acknowledge(&mut self, sequence: u64, result: CommandResult) -> &'static str {
-        order_message(result, self.0.remove(&sequence).flatten())
+        let message = order_message(result, self.targets.remove(&sequence).flatten());
+        self.message = (result != CommandResult::Accepted).then_some(message);
+        message
+    }
+
+    fn dismiss(&mut self, status: &mut String) {
+        if self
+            .message
+            .take()
+            .is_some_and(|message| status.as_str() == message)
+        {
+            *status = "connected".to_owned();
+        }
     }
 
     pub fn clear(&mut self) {
-        self.0.clear();
+        self.targets.clear();
+        self.message = None;
     }
 }
