@@ -328,3 +328,59 @@ fn a_one_tile_shallow_band_still_blends_into_sand_with_deeper_water_behind_it() 
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn a_dry_triangle_beside_a_shore_corner_keeps_only_its_ground_sheet() {
+    // A stepped coast like Geneva: the opposite quad corner sees water, but
+    // this triangle's three incident supports are all sand. Its zero shares
+    // must not fall back to a barycentric water layer at one arbitrary vertex.
+    for overlay in [0, 10] {
+        for diagonal in [0, 1] {
+            let mut samples = mix::fixture::shore_terrain();
+            for sample in &mut samples {
+                let wet = if diagonal == 0 {
+                    sample.position[0] - sample.position[1] >= 2.0
+                } else {
+                    sample.position[0] + sample.position[1] >= 2.0
+                };
+                sample.material = if wet { overlay } else { 3 };
+                sample.surface.water = u8::from(wet && overlay == 10);
+                sample.surface.triangulation = diagonal;
+            }
+            let mut view = mix::fixture::camera(0);
+            view.viewport = [512.0; 2];
+            let mut faces = projected_surface_triangles(&samples, view);
+            let dry = faces
+                .iter()
+                .enumerate()
+                .filter(|(_, face)| {
+                    face.material == 3
+                        && face.points.iter().all(|point| {
+                            samples
+                                .iter()
+                                .filter(|sample| {
+                                    (sample.position[0] - point.world[0]).abs() < 1.0
+                                        && (sample.position[1] - point.world[1]).abs() < 1.0
+                                })
+                                .all(|sample| sample.material == 3)
+                        })
+                        && face.tile[0].abs() < 3
+                        && face.tile[1].abs() < 3
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            assert!(
+                !dry.is_empty(),
+                "fixture must include a dry corner triangle"
+            );
+            apply_terrain_textures(&mut faces, &mix::fixture::art());
+            for index in dry {
+                assert!(
+                    faces[index].texture_blend.is_none(),
+                    "zero coverage must stay pure sand beside material {overlay}, diagonal {diagonal}: {:?}",
+                    faces[index].texture_materials
+                );
+            }
+        }
+    }
+}
