@@ -48,14 +48,15 @@ impl Drop for Server {
 struct BrowserContainer(String);
 
 /// Whole-suite bounds for one serial Playwright worker; each test keeps its own
-/// 30 s timeout, so a hang still fails fast. The suite is ~94 tests at ~3 s each:
-/// the release run reached 282 s of a former 300 s bound on dev (2026-10-10) and
-/// any new spec tipped it over. Coverage runs the same suite against an
-/// instrumented debug server.
+/// 30 s timeout, so a hang still fails fast. The suite outgrew two bounds: 282 s
+/// of a former 300 s (2026-10-10), then 102 passing tests took 588 s of 600 s in
+/// CI (2026-10-13) and the run was cut off with no failing test. The gate
+/// registry's own budget for this suite is 2400 s. Coverage runs the same suite
+/// against an instrumented debug server.
 fn browser_run_deadline(coverage: Option<&str>) -> Duration {
     match coverage {
-        Some("1") => Duration::from_secs(1200),
-        _ => Duration::from_secs(600),
+        Some("1") => Duration::from_secs(2400),
+        _ => Duration::from_secs(1200),
     }
 }
 
@@ -372,25 +373,4 @@ fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{browser_run_deadline, server_binary};
-    use std::time::Duration;
-
-    #[test]
-    fn the_instrumented_debug_server_gets_its_own_deadline() {
-        assert_eq!(browser_run_deadline(None), Duration::from_secs(600));
-        assert_eq!(browser_run_deadline(Some("1")), Duration::from_secs(1200));
-    }
-
-    #[test]
-    fn coverage_mode_cannot_silently_select_an_uninstrumented_server() {
-        assert_eq!(server_binary(None), Ok("target/release/aoe-server"));
-        assert_eq!(
-            server_binary(Some("1")),
-            Ok("target/llvm-cov-target/debug/aoe-server")
-        );
-        for invalid in ["", "0", "true", "release"] {
-            assert!(server_binary(Some(invalid)).is_err());
-        }
-    }
-}
+mod tests;
