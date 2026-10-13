@@ -280,3 +280,44 @@ fn a_cliff_cell_has_a_neighbor_on_the_ridge_instead_of_an_isolated_square_mesa()
     }
     assert!(checked > 100, "still retains real ridges: {checked}");
 }
+
+#[test]
+fn ledges_follow_one_contour_height_instead_of_stepping_into_boxes_along_a_ridge() {
+    let generator = plane(-432, 36);
+    let compression = Ratio {
+        numerator: 1,
+        denominator: 1,
+    };
+    let corner = |x: i32, y: i32| Ok::<_, ()>(20_000 - 24 * x + 12 * y);
+    let mut checked = 0;
+    for y in (601..745).step_by(3) {
+        for x in (97..670).step_by(3) {
+            let at = TileCoord::new(x, y);
+            let Some(piece) =
+                crate::terrain::relief::cliff_at(&generator, at, compression, &corner).unwrap()
+            else {
+                continue;
+            };
+            let west = x.div_euclid(3) * 3;
+            let north = y.div_euclid(3) * 3;
+            let lowest = [
+                (west, north),
+                (west + 3, north),
+                (west + 3, north + 3),
+                (west, north + 3),
+            ]
+            .map(|(x, y)| corner(x, y).unwrap())
+            .into_iter()
+            .min()
+            .unwrap();
+            let contour_level = (lowest.div_euclid(800) + 1) * 8;
+            assert_eq!(
+                i32::from(piece.top_level),
+                contour_level,
+                "one contour cannot become an interior box step at {x},{y}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 100, "fixture retains joined contours: {checked}");
+}
