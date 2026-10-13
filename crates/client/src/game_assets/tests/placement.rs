@@ -339,6 +339,8 @@ fn dressing_catalog_prefixes_preserve_native_signed_hotspots_and_object_page() {
         (2561, 7, [23, 15]),
         (1035, 3, [-3, 13]),
         (1252, 2, [63, 18]),
+        (4584, 2, [19, 9]),
+        (1262, 1, [94, 172]),
     ] {
         let source = OPTIONAL_RESOURCE_SOURCES
             .iter()

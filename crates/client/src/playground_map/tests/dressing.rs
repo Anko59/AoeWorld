@@ -59,19 +59,12 @@ fn every_dressing_family_maps_to_scenery_without_mutating_map_authority() {
             .map(|s| s.id)
             .collect::<Vec<_>>();
         reversed.reverse();
-        assert_eq!(expected, reversed, "tile hash is independent of traversal");
-        if family == 1 {
-            assert!((850..1200).contains(&first.len()), "quarter-density grass");
-        }
-        if family == 0 || family == 3 {
-            assert!(
-                (1800..2300).contains(&first.len()),
-                "half-density woody accents"
-            );
-        }
-        if family == 2 || family == 4 {
-            assert_eq!(first.len(), 4096);
-        }
+        assert_eq!(expected, reversed, "selection is independent of traversal");
+        assert_eq!(
+            first.len(),
+            4096,
+            "map density is retained for every family"
+        );
         scene.decorations.clear();
         assert_eq!(decorations::scenery(&scene).count(), 0);
     }

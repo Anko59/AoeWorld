@@ -172,6 +172,8 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (28, 2561, 7),
             (29, 1035, 3),
             (30, 1252, 2),
+            (31, 4584, 2),
+            (32, 1262, 1),
         ]
     );
 }
