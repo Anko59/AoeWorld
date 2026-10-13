@@ -254,16 +254,11 @@ fn mixed(texel: vec4<f32>, material: u32, appearance: u32, tint: u32) -> vec4<f3
     }
     var kind = 0u;
     switch material & 15u {
-        case 4u: { kind = 5u; }
-        case 7u: { kind = 6u; }
         case 8u: { kind = 8u; }
         case 9u: { kind = 9u; }
         default: {}
     }
     var color = vec4<f32>(ground(texel.rgb, kind), texel.a);
-    if scene == 7u && tint == 1u {
-        color = vec4<f32>(color.rgb * (0.98 / 0.92), color.a);
-    }
     return color;
 }
 

@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::RockPile as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::Ice as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -120,12 +120,9 @@ const TERRAIN_ROLES: [AssetRole; 12] = [
     AssetRole::Snow,
 ];
 
-/// Optional depth sheets in renderer order: medium, deep, ford shallows.
-const WATER_DEPTH_ROLES: [AssetRole; 3] = [
-    AssetRole::WaterMedium,
-    AssetRole::WaterDeep,
-    AssetRole::Shallows,
-];
+/// Optional water sheets in renderer order: medium, deep, frozen.
+const WATER_DEPTH_ROLES: [AssetRole; 3] =
+    [AssetRole::WaterMedium, AssetRole::WaterDeep, AssetRole::Ice];
 
 fn renderer_topology(topology: TerrainFrameTopology) -> TerrainTopology {
     match topology {
@@ -160,7 +157,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     let mut terrain_topology = [None; 12];
     let mut depth_topology = [None; 3];
     // Catalog roles are bounded, not a dynamic startup search tree. The browser
-    // oracle covers every selected role and the intentionally absent rock role.
+    // oracle covers every selected role.
     let mut ranges: RoleRanges = std::array::from_fn(|_| None);
     for (sources, required) in [
         (REQUIRED_RENDER_SOURCES.as_slice(), true),

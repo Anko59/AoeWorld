@@ -28,8 +28,8 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
             reference.get(&role)
         );
     }
-    assert_eq!(ranges[AssetRole::Rock as usize], None);
-    assert_eq!(ROLE_SLOTS, 26);
+    assert!(ranges[AssetRole::Rock as usize].is_some());
+    assert_eq!(ROLE_SLOTS, 27);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }

@@ -1,9 +1,10 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v10 keeps approved art separate from discovery. Required sources remain
-cavalry 3008/3004 and five terrain sheets. Optional full conifer 4654 and palm 4653
-prefixes, three water depth sheets and four ground-variety sheets and ice 15024 bring the ceiling
-to 1,474 frames (1,274 terrain/200 objects including cliff faces).
+Catalog v11 keeps approved art separate from discovery. Required sources remain
+cavalry 3008/3004, five base terrain sheets and soft snow 15026. Optional full conifer 4654 and palm 4653
+prefixes, three water depth sheets, four ground-variety sheets, rock 15033
+and ice 15024 bring the ceiling to 1,674 frames
+(1,474 terrain/200 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -25,7 +26,9 @@ No original pixels, generated manifests, or screenshots are public fixtures.
 | Palms 4653 | graphics.drs | 13 | All originals inspected. Wood family 4 uses singles [0,1,2,3,5,6,8,10,11,12], not clumps 4/7/9. Signed/outside hotspots preserved, including frame 0 (20,175) on 88×168. Selected-body alpha silhouette, not 2300 or broadleaf 2296. |
 | Grasses 15001/15009/15006 | terrain.drs | 100 each | Promoted in v7. All 97×49, hotspot (0,0). Montages in x-major, reversed-y order tile without seams: 15001 darker grass, 15009 grass with brown patches, 15006 grass and dirt mix. |
 | Beach 15017 | terrain.drs | 100 | Promoted in v7 as gravel: 97×49, hotspot (0,0), seamless pebbly montage. Shore compatibility remains unreviewed. |
-| Ice detail 15024 | terrain.drs | 64 | 97×49, hotspot (0,0), seamless 8×8 x-major, reversed-y sheet. Blue-white cracked ice; the snow kernel desaturates and lightens it to white with faint cool relief. The pack has no snow sheet or snow-covered trees. |
+| Ice detail 15024 | terrain.drs | 64 | 97×49, hotspot (0,0), seamless 8×8 x-major, reversed-y sheet. Blue-white cracked ice for frozen water only; never snow ground. |
+| Snow 15026 | terrain.drs | 100 | Conquerors trial; 97×49, hotspot (0,0), soft white ground, seamless 10×10 x-major, reversed-y sheet. |
+| Rock 15033 | terrain.drs | 100 | HD native rock, obtained privately as WololoKingdoms `DLC_ROCK.slp`; 97×49, hotspot (0,0), broad warm/cool stone relief, seamless 10×10 x-major, reversed-y sheet. Absent from the trials. |
 | Cliff faces 226 | graphics.drs | 25 | Reviewed over a three-by-three tile grid and promoted: slots 1,2,3,4,5,15,16,17,18,19,24 are rock faces falling toward the camera (270–308 × 136–156, hotspot at the footprint centre); the other fourteen slots are 1×1/2×3 placeholders. |
 | Cliffs 227–234 | graphics.drs | 25 each | 227 (slots 8,22,23) and 228 (10,11,20,21) are thin rims of cliffs seen from behind; 229–232 hold one corner piece each; 233/234 one small crag each. Mostly placeholders; 227 slot 7 is a 329×718 frame. Unpromoted. |
 | Cliff 235 | graphics.drs | 1 | 154×79, hotspot (96,32); metadata only. |
@@ -35,7 +38,7 @@ conifer/palm prefixes and the four ground sheets have moved to the reviewed opti
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 1,474 actual extents through the runtime packer; the
+test separately feeds all 1,674 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -113,28 +116,26 @@ boulders painted into the cliff faces are not used as separate objects.
 
 ## Snow ground
 
-Snow (scene material 7) uses the ice sheet 15024 as relief detail, desaturated
-and lightened by the shared per-layer kernel: a cool white base and fourteen
-percent luminance detail make cracks faint. Snow ramp shading is diffuse at
-two percent, with the same colour on pure faces and mixed borders. Ice (material 8) keeps the sheet's
-blue authored colours. The native-ice flag avoids per-pixel directory checks.
-Both layers blend through the ordinary soft ground mixer with rock and grass;
-packs without the ice sheet retain their procedural detail fallback.
-Climatic snow and bare rock stay authoritative over drawn variety, so the rock
-band keeps grey gravel and no forage; uncovered ground retains dev variety.
+Snow (scene material 7) draws soft ground 15026 as authored, including mixed
+borders. Frozen water (material 8) draws the separate blue ice 15024 sheet.
+The native-ice flag avoids per-pixel directory checks. Snow no longer uses an
+ice-detail or whitening kernel. Climatic snow and bare rock stay authoritative
+over drawn variety, with no forage on either.
 
 Forage bushes are filtered against composed ground after snow-line and shore
 selection: none stands on rock, snow or ice. Mineral deposits are retained.
 
 ## Natural rock correction
 
-Paved terrain 15018 is deliberately removed from the reviewed natural-rock
-role, following the user's identified semantic mismatch. Its local metadata
-still contains 100 contiguous 97×49 frames, hotspot (0,0); that does not make it
-natural rock. Bare rock and scree use the reviewed pebbly gravel sheet 15017
-(group ten), with a neutral grey procedural tint that retains pebble contrast.
-A pack without gravel falls back to dirt detail. The scene material stays rock,
-so grass and snow blend over it through the shared ground mixer on all backends.
+Paved terrain 15018 and pebbly gravel 15017 are not mountain ground. Rock
+(scene material 4) draws native 15033 with its authored stone colours and broad
+structure. A missing optional rock sheet uses dirt detail, without a grey
+kernel. Vertical closures and absent cliff-face art retain their stone tint.
+Rock and snow use the same incident-tile coverage, ordered noisy thresholds
+and world-tile sampling as grass and dirt on all three backends. Coarse patches
+that meet mountain borders subdivide within the fixed triangle budget to keep
+the source-tile blend band; pure patches keep ordinary LOD geometry. Pure and
+mixed patches use the same displayed-vertex material support.
 
 ## Explicit topology contract
 

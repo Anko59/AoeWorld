@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 10;
+pub const VERSION: u8 = 11;
 
 pub mod candidates;
 pub mod packing;
@@ -13,10 +13,11 @@ mod topology;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_474;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_674;
 
-/// Paving 15018 is not natural rock. Neutral rock uses gravel or dirt detail.
-pub const NATURAL_ROCK_FALLBACK: &str = "procedural neutral rock over gravel 15017 or dirt detail; never substitute paved terrain 15018";
+/// Paving and gravel are not mountain ground.
+pub const NATURAL_ROCK_FALLBACK: &str =
+    "native rock ground 15033; never substitute paved terrain 15018";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AssetRole {
@@ -46,6 +47,7 @@ pub enum AssetRole {
     CliffFace,
     Snow,
     RockPile,
+    Ice,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,7 +71,7 @@ impl SpriteSource {
 
 /// Sources required for a local-pack game to start. They are deliberately
 /// ordered by render role, not by incidental archive order.
-pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
+pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
     SpriteSource {
         role: AssetRole::CavalryWalking,
         archive: "graphics.drs",
@@ -141,6 +143,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
             rows: 10,
         }),
     },
+    variety(AssetRole::Snow, 15026, "10x10 periodic soft snow ground"),
 ];
 
 /// Reviewed resource art that a renderer loads when its local pack provides
@@ -243,7 +246,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 9] = [
 /// the same x-major, reversed-y order as the required sheets: grass and dirt
 /// mix 15006, grass with brown patches 15009, darker grass 15001 and pebbly
 /// beach 15017. A pack without one draws its base sheet instead.
-pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 9] = [
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 10] = [
     SpriteSource {
         role: AssetRole::ForestFloor,
         archive: "terrain.drs",
@@ -279,7 +282,7 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 9] = [
         archive: "terrain.drs",
         id: 15014,
         frames: 100,
-        interpretation: "10x10 periodic marsh-shallows atlas in x-major, reversed-y order; renderer mapping only, no generated fords",
+        interpretation: "10x10 periodic marsh-shallows atlas; no generated fords",
         terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
             columns: 10,
             rows: 10,
@@ -297,12 +300,13 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 9] = [
     ),
     variety(AssetRole::LushGrass, 15001, "10x10 periodic darker grass"),
     variety(AssetRole::Gravel, 15017, "10x10 periodic pebbly beach"),
+    variety(AssetRole::Rock, 15033, "10x10 periodic natural rock ground"),
     SpriteSource {
-        role: AssetRole::Snow,
+        role: AssetRole::Ice,
         archive: "terrain.drs",
         id: 15024,
         frames: 64,
-        interpretation: "8x8 periodic ice detail in x-major, reversed-y order",
+        interpretation: "8x8 periodic cracked ice; frozen water only",
         terrain_topology: Some(TerrainFrameTopology::PeriodicXMajorReversedY {
             columns: 8,
             rows: 8,

@@ -59,13 +59,14 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 10);
+    assert_eq!(VERSION, 11);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
     assert_eq!(AssetRole::Gravel as usize, 22);
     assert_eq!(AssetRole::Snow as usize, 24);
-    assert_eq!(OPTIONAL_TERRAIN_SOURCES[8].id, 15024);
+    assert_eq!(OPTIONAL_TERRAIN_SOURCES[8].id, 15033);
+    assert_eq!(OPTIONAL_TERRAIN_SOURCES[9].id, 15024);
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[4..8]
             .iter()
@@ -133,9 +134,9 @@ fn paving_is_not_approved_as_natural_rock() {
             .iter()
             .chain(OPTIONAL_RESOURCE_SOURCES.iter())
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-            .all(|source| source.role != AssetRole::Rock && source.id != 15018)
+            .all(|source| source.id != 15018)
     );
-    assert!(NATURAL_ROCK_FALLBACK.contains("procedural"));
+    assert!(NATURAL_ROCK_FALLBACK.contains("native rock"));
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[0].terrain_topology,
         Some(TerrainFrameTopology::CoordinateStableAccents)

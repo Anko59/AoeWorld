@@ -24,7 +24,10 @@ pub(super) fn assign_materials(
         }
         debug_assert!(materials.len() <= MAX_SURFACE_TRIANGLES * 3);
         for sample in terrain {
-            if water_material(sample.material) == wet && (wet || sample.surface.water == 0) {
+            if water_material(sample.material) == wet
+                && (wet || sample.surface.water == 0)
+                && sample.surface.kind != SceneTerrainSurface::CLIFF
+            {
                 if let Some(index) = keys.get(tile_key(sample.position)) {
                     materials[index].1 = Some(sample.material);
                 }
@@ -128,16 +131,18 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         triangle.appearance &= !super::landscape::NATIVE_ICE;
         if mix::texture(triangle, art) {
-            if !art.terrain[11].is_empty() {
+            if !art.water_depth[2].0.is_empty() {
                 triangle.appearance |= super::landscape::NATIVE_ICE;
             }
             continue;
         }
-        // Snow always uses its white, faint-relief kernel, even over the ice
-        // sheet. Only actual ice preserves that sheet's blue authored colours.
-        // Mixed faces apply the same transform per layer before soft blending.
+        // Rock and snow draw native ground colours on pure and mixed faces.
+        // Vertical closures and missing cliff art retain their stone kernel.
+        let cliff = triangle.skirt || !triangle.pickable;
         let procedural = |material: u8| {
-            matches!(material, 4 | 7 | 9) || (material == 8 && art.terrain[11].is_empty())
+            (material == 4 && cliff)
+                || material == 9
+                || (material == 8 && art.water_depth[2].0.is_empty())
         };
         if procedural(triangle.material) {
             triangle.texture_materials = None;
@@ -259,7 +264,7 @@ pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
-    // Snow and ice use terrain group 11; natural rock uses gravel, else dirt.
+    // Snow and rock own distinct native sheets; ice is an optional water sheet.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
     // deep use their optional sheets; fords always use the light shallow
@@ -267,6 +272,7 @@ pub(crate) fn terrain_group(
     let depth = match material {
         5 => Some(0),
         11 => Some(1),
+        8 => Some(2),
         _ => None,
     }
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
@@ -275,8 +281,8 @@ pub(crate) fn terrain_group(
         return Some((13 + slot, &sheet.0, sheet.1));
     }
     let material = usize::from(match material {
-        7 | 8 if !art.terrain[11].is_empty() => 11,
-        4 if !art.terrain[10].is_empty() => 10,
+        7 if !art.terrain[11].is_empty() => 11,
+        4 if !art.terrain[4].is_empty() => 4,
         4 | 7 | 9 => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,

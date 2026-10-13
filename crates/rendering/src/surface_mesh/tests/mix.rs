@@ -391,38 +391,21 @@ fn variety_junction_retains_all_scene_materials_above_water_codes() {
 }
 
 #[wasm_bindgen_test]
-fn snow_ramps_have_diffuse_shading_and_match_their_mixed_border() {
-    for source in [
-        [75, 120, 170, 255],
-        [160, 220, 255, 128],
-        [235, 245, 255, 255],
-    ] {
-        let flat = procedural_tint(source, 6);
-        let ramp = procedural_tint(source, 22);
+fn native_snow_ramps_match_their_mixed_border() {
+    for source in [[230, 235, 240, 255], [210, 215, 220, 128]] {
+        let layer = mix::art_layer(source, 7, 1 | 5 << 1, 1);
+        let border = landscape::blend([layer; 3], [1.0, 0.0, 0.0], 1, 1 | 5 << 1);
         for channel in 0..3 {
             assert!(
-                (3..=5).contains(&flat[channel].abs_diff(ramp[channel])),
-                "soft snow slope: {flat:?} {ramp:?}"
+                border[channel].abs_diff((f32::from(source[channel]) * 0.92).round() as u8) <= 1
             );
         }
-        let layer = mix::art_layer(source, 7, landscape::NATIVE_ICE, 1);
-        let border = landscape::blend([layer; 3], [1.0, 0.0, 0.0], 1, 1 | 5 << 1);
-        for channel in 0..4 {
-            assert!(
-                border[channel].abs_diff(ramp[channel]) <= 1,
-                "pure/mixed snow seam: {border:?} {ramp:?}"
-            );
-        }
-        assert_eq!(ramp[3], source[3]);
-        assert_eq!(
-            mix::art_layer(source, 8, landscape::NATIVE_ICE, 1),
-            source.map(f32::from)
-        );
+        assert_eq!(border[3], source[3]);
     }
 }
 
 #[wasm_bindgen_test]
-fn natural_rock_uses_gravel_detail_at_both_zooms_with_a_dirt_fallback() {
+fn natural_rock_uses_native_ground_at_both_zooms_with_a_dirt_fallback() {
     let frame = |group: usize| GameFrame {
         atlas: crate::AtlasAddress {
             page: 0,
@@ -433,25 +416,24 @@ fn natural_rock_uses_gravel_detail_at_both_zooms_with_a_dirt_fallback() {
     };
     let mut art = test_art(frame(0));
     art.terrain[2] = vec![frame(2)];
+    art.terrain[4] = vec![frame(4)];
     art.terrain[10] = vec![frame(10)];
-    for zoom in [1.0, 0.64] {
+    for zoom in [1.0, 0.25] {
         let rock = terrain_texture_frame(&art, 4, [-3, 8]).expect("natural rock");
-        assert_eq!(rock.atlas, frame(10).atlas);
+        assert_eq!(rock.atlas, frame(4).atlas);
         for other in [0, 7] {
             let mut faces = mesh(&halves(4, other), zoom);
             apply_terrain_textures(&mut faces, &art);
             assert!(faces.iter().any(|face| face.mix != [0; 6]));
             assert!(faces.iter().any(|face| face.material == 4
                 && face.mix == [0; 6]
-                && face.texture_uv == Some(frame(10).atlas)));
+                && face.texture_uv == Some(frame(4).atlas)));
         }
     }
-    art.terrain[10].clear();
+    art.terrain[4].clear();
     let fallback = terrain_texture_frame(&art, 4, [-3, 8]).expect("dirt fallback");
     assert_eq!(fallback.atlas, frame(2).atlas);
-    let dark = mix::art_layer([40, 80, 110, 255], 4, 0, 0);
-    let light = mix::art_layer([170, 200, 240, 255], 4, 0, 0);
-    assert!(light[0] - dark[0] > 60.0, "pebble contrast must survive");
-    assert_eq!(light[0], light[1]);
-    assert_eq!(light[1], light[2]);
+    for source in [[40, 80, 110, 255], [170, 200, 240, 128]] {
+        assert_eq!(mix::art_layer(source, 4, 0, 0), source.map(f32::from));
+    }
 }

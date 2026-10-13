@@ -4,6 +4,7 @@ mod banks;
 mod budget;
 mod cliffs;
 mod landscape;
+mod mountains;
 
 #[cfg(test)]
 #[path = "lod_tests.rs"]
@@ -93,7 +94,7 @@ pub fn projected_surface_triangles(
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
     let divisions = budget::subdivisions(&cells, grid);
-    let texture_step = size / divisions;
+    let patches = mountains::plan(terrain, grid, divisions, &cells);
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
             continue;
@@ -108,70 +109,60 @@ pub fn projected_surface_triangles(
         } else {
             [[0, 1, 2], [0, 2, 3]]
         };
-        for patch_y in 0..divisions {
-            for patch_x in 0..divisions {
-                let texture_tile = [
-                    tile[0] + patch_x * texture_step,
-                    tile[1] + patch_y * texture_step,
-                ];
-                let local_corners = [
-                    [patch_x, patch_y],
-                    [patch_x + 1, patch_y],
-                    [patch_x + 1, patch_y + 1],
-                    [patch_x, patch_y + 1],
-                ];
-                let mut patch_heights = [0.0; 4];
-                for index in 0..4 {
-                    let [x, y] = local_corners[index];
-                    patch_heights[index] = sample_float_surface_height(
-                        heights,
-                        sample.surface.triangulation,
-                        f64::from(x) / f64::from(divisions),
-                        f64::from(y) / f64::from(divisions),
-                    );
-                }
-                let corners = projected_corners(&camera, texture_tile, texture_step, patch_heights);
-                for (order, indices) in indices.into_iter().enumerate() {
-                    result.push(ProjectedSurfaceTriangle {
-                        points: [
-                            corners[indices[0]],
-                            corners[indices[1]],
-                            corners[indices[2]],
-                        ],
-                        color,
-                        appearance,
-                        floor_strengths: None,
-                        mix: [0; 6],
-                        tile,
-                        skirt: false,
-                        // Physical cliff ledges keep their surrounding ground;
-                        // closed vertical edges supply the native rock face.
-                        material: sample.material,
-                        // Several world tiles under one face: sample per fragment
-                        // by world tile, never one origin frame stretched over all.
-                        texture_mode: if texture_step > 1 {
-                            directory::TILED
-                        } else {
-                            texture_mode(sample.surface.triangulation, order as u8)
-                        },
-                        tint: if sample.surface.water != 0 {
-                            0
-                        } else {
-                            match sample.surface.kind {
-                                SceneTerrainSurface::RAMP => 1,
-                                _ => 0,
-                            }
-                        },
-                        texture_uv: None,
-                        texture_blend: None,
-                        texture_tile,
-                        texture_materials: (sample.surface.water == 0
-                            || appearance::water_material(sample.material))
-                        .then_some([sample.material; 3]),
-                        pickable: !sample.surface.is_cliff(),
-                        order: order as u8,
-                    });
-                }
+        for (texture_tile, step) in patches.tiles(tile, divisions) {
+            let x = texture_tile[0] - tile[0];
+            let y = texture_tile[1] - tile[1];
+            let local_corners = [[x, y], [x + step, y], [x + step, y + step], [x, y + step]];
+            let mut patch_heights = [0.0; 4];
+            for index in 0..4 {
+                let [x, y] = local_corners[index];
+                patch_heights[index] = sample_float_surface_height(
+                    heights,
+                    sample.surface.triangulation,
+                    f64::from(x) / f64::from(size),
+                    f64::from(y) / f64::from(size),
+                );
+            }
+            let corners = projected_corners(&camera, texture_tile, step, patch_heights);
+            for (order, indices) in indices.into_iter().enumerate() {
+                result.push(ProjectedSurfaceTriangle {
+                    points: [
+                        corners[indices[0]],
+                        corners[indices[1]],
+                        corners[indices[2]],
+                    ],
+                    color,
+                    appearance,
+                    floor_strengths: None,
+                    mix: [0; 6],
+                    tile,
+                    skirt: false,
+                    // Physical cliff ledges keep their surrounding ground;
+                    // closed vertical edges supply the native rock face.
+                    material: sample.material,
+                    // Coarse patches sample each world tile's native frame.
+                    texture_mode: if step > 1 {
+                        directory::TILED
+                    } else {
+                        texture_mode(sample.surface.triangulation, order as u8)
+                    },
+                    tint: if sample.surface.water != 0 {
+                        0
+                    } else {
+                        match sample.surface.kind {
+                            SceneTerrainSurface::RAMP => 1,
+                            _ => 0,
+                        }
+                    },
+                    texture_uv: None,
+                    texture_blend: None,
+                    texture_tile,
+                    texture_materials: (sample.surface.water == 0
+                        || appearance::water_material(sample.material))
+                    .then_some([sample.material; 3]),
+                    pickable: !sample.surface.is_cliff(),
+                    order: order as u8,
+                });
             }
         }
         for (edge, offset) in [(Edge::East, [size, 0]), (Edge::South, [0, size])] {
