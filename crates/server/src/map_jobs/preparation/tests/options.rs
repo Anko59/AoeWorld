@@ -308,3 +308,28 @@ async fn explicit_source_choices_never_become_procedural_fallback() {
         }
     }
 }
+
+#[test]
+fn fallback_plan_records_the_requested_rivers_choice_for_a_later_retry() {
+    for (hydrology_mode, recorded) in [
+        (HydrologyMode::Automatic, Some("automatic")),
+        (HydrologyMode::None, None),
+    ] {
+        let plan = PreparationPlan::resolve(
+            CreationRequest {
+                request: MapRequest::default(),
+                preparation: PreparationPreference::Automatic,
+                hydrology_mode,
+            },
+            false,
+        )
+        .unwrap();
+        assert_eq!(plan.mode, PreparationMode::ProceduralFallback);
+        assert_eq!(plan.hydrology_mode, hydrology_mode);
+        let json = serde_json::to_value(plan).unwrap();
+        assert_eq!(
+            json.get("hydrology_mode").and_then(|v| v.as_str()),
+            recorded
+        );
+    }
+}
