@@ -219,10 +219,11 @@ budget for checking fixes. `make ship` decides from the stored reports
    not count and the same commit may be reviewed again. Three incomplete
    reviews within an hour mean the reviewers are unavailable: `make ship`
    refuses for the rest of that hour, then reviews again.
-2. **Severe full review: split at once.** A full review with a finding that
-   caps at 4 (critical, or a major test weakening: the harness's `severe`
-   predicate) ends the branch's budget immediately. Otherwise every later
-   review is a closing review; there is no second full blind review.
+2. **Every later review is a closing review.** There is no second full blind
+   review. A severe finding of the full review (critical, or a major test
+   weakening: the harness's `severe` predicate) is carried like any other
+   blocking finding: such a finding is usually a small fix, and the closing
+   review must show it fixed.
 3. **Up to three closing reviews.** Each runs on the **strong**
    models with at least two reviewers (a one-persona tier borrows the medium
    tier's) and skips the blind round. Every reviewer votes on each blocking

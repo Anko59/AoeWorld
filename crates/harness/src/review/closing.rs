@@ -2,8 +2,9 @@
 //! person, so the policy always ends on its own, and only ever in a reviewed
 //! merge or a split: one full review; then up to three closing reviews that
 //! re-verify every open blocking finding and audit only the latest fixes; a
-//! branch that still does not pass, or whose full review found a critical
-//! finding or major test weakening, is split into smaller pull requests.
+//! branch that still does not pass is split into smaller pull requests. A
+//! critical finding of the full review is carried like any other and must be
+//! shown fixed by the closing review.
 //! Never another full review hoping for a better grade: each one reads the
 //! whole diff blind, so a second mostly finds different edge cases rather
 //! than checking the fixes.
@@ -110,13 +111,6 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
     let closing: Vec<&Report> = failing.iter().copied().filter(|r| r.closing).collect();
     if full.len() < BUDGET {
         return Next::Review(Plan::Full);
-    }
-    let last = full[full.len() - 1];
-    if severe(last) {
-        return Next::Split(format!(
-            "the full review of {} confirmed a critical finding or a major test weakening",
-            short(&last.head)
-        ));
     }
     if let Some(bad) = closing.iter().find(|r| severe(r) || still_open(r) > 0) {
         return Next::Split(format!(

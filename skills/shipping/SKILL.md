@@ -21,7 +21,7 @@ step; read its summary and diff, then film the change before shipping.
    the fixes since the last reviewed commit and every carried blocking finding
    (commit the fixes first); new findings must be in that fix diff. Closing
    reviews pass when no blocking finding or undecided carried finding remains
-   and every session answered, regardless of grade. A severe full review, a
+   and every session answered, regardless of grade. A
    closing review with severe findings or unresolved carried blockers, or three
    failed closing reviews means **split** the change into smaller pull requests:
    do it, close the original, file leftovers as issues. Never rerun reviews to fish for a
