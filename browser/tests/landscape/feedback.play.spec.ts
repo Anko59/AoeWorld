@@ -50,13 +50,18 @@ function chunkWithTree(x: number, y: number) {
   };
 }
 
-async function feedbackWorld(page: Page) {
+async function feedbackWorld(
+  page: Page,
+  size = 16384,
+  start = 8192.5,
+  maximumHeight = 2,
+) {
   await gameAssets(page);
   let active: WebSocketRoute | undefined;
   let revision = 0;
   let result = 6; // RejectedInvalidDestination, the server's resource-blocked result.
   const orders: number[] = [];
-  const position = unsigned((8192 * 1024 + 512) * 2);
+  const position = unsigned(start * 1024 * 2);
   await page.routeWebSocket("**/game/ws", (socket) => {
     active = socket;
     socket.onMessage((message) => {
@@ -71,8 +76,8 @@ async function feedbackWorld(page: Page) {
             1,
             ...Array<number>(32).fill(2),
             0,
-            ...unsigned(32768),
-            ...unsigned(32768),
+            ...unsigned(size * 2),
+            ...unsigned(size * 2),
             ...unsigned(1024),
             20,
             0,
@@ -112,7 +117,7 @@ async function feedbackWorld(page: Page) {
       json: {
         content_hash: hash,
         minimum_height_level: 0,
-        maximum_height_level: 2,
+        maximum_height_level: maximumHeight,
       },
     }),
   );
@@ -201,7 +206,6 @@ async function transientFailure(page: Page) {
   });
   return { release, retries: () => retries };
 }
-
 test("failed terrain shows a short single-line sentence and logs details", async ({
   page,
 }) => {
@@ -316,5 +320,101 @@ test("other order rejections use a plain sentence without a tree explanation", a
     await expect(page.locator("#connection")).not.toContainText(
       /tree|Rejected[A-Z]|CommandResult|JsValue/,
     );
+  }
+});
+
+function flatChunk(x: number, y: number, height = 0) {
+  const chunk = syntheticChunk(x, y, () => false);
+  const bytes = Buffer.from(chunk.payload_hex, "hex");
+  for (let tile = 0; tile < 1024; tile++) {
+    const offset = 7 + tile * 35;
+    bytes.writeInt32LE(height * 100, offset);
+    for (let field = 4; field < 14; field += 2)
+      bytes.writeInt16LE(height, offset + field);
+  }
+  return { ...chunk, payload_hex: bytes.toString("hex") };
+}
+
+test("elevated failed terrain stays warned until it loads at a stationary camera", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const world = await feedbackWorld(page, 16384, 8192, 128);
+  await page.addInitScript(() => {
+    const original = window.fetch.bind(window);
+    let failed = false;
+    window.fetch = (input, init) => {
+      if (!failed && String(input).endsWith("/chunks/258/258")) {
+        failed = true;
+        return new Promise<Response>((_, reject) => {
+          Object.assign(window, {
+            failElevatedTerrain: () =>
+              reject(new TypeError("elevated terrain probe")),
+          });
+        });
+      }
+      return original(input, init);
+    };
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/maps/${hash}/chunks/*/*`, async (route) => {
+    const [x = 0, y = 0] = route
+      .request()
+      .url()
+      .split("/")
+      .slice(-2)
+      .map(Number);
+    if (x > 256 || y > 256) await held;
+    await route.fulfill({
+      json: flatChunk(x, y, x === 258 && y === 258 ? 128 : 0),
+    });
+  });
+  try {
+    await page.goto("/");
+    await expect(page.locator("#playground")).toHaveAttribute(
+      "data-assets",
+      "aoe2-local",
+    );
+    await page.locator("#scene").hover({ position: { x: 640, y: 360 } });
+    await expect(page.locator("#world-position")).toHaveText("8192.0, 8192.0");
+    await expect(page.locator("#tile-inspection")).toContainText(
+      "tile 8192, 8192:",
+    );
+    await expect(page.locator("#tile-inspection")).toContainText("height 0");
+    await expect
+      .poll(() => page.evaluate(() => "failElevatedTerrain" in window))
+      .toBe(true);
+    const logged = page.waitForEvent("console", {
+      predicate: (message) => message.text().includes("elevated terrain probe"),
+    });
+    await page.evaluate(() =>
+      (
+        window as unknown as { failElevatedTerrain(): void }
+      ).failElevatedTerrain(),
+    );
+    await logged;
+    // Tile (8256,8256), height 128, projects to the centre even though only
+    // flat chunks are resident. A stationary frame must not erase its failure.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.locator("#connection")).toHaveText(
+      "Some terrain could not be loaded; retrying.",
+    );
+    expect(world.orders).toEqual([]);
+    release();
+    await expect(page.locator("#connection")).toHaveText("connected", {
+      timeout: 15000,
+    });
+    await expect(page.locator("#tile-inspection")).toContainText("height 128");
+    expect(world.orders).toEqual([]);
+  } finally {
+    release();
   }
 });
