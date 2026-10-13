@@ -92,7 +92,7 @@ pub(crate) fn require_task(
         return Ok(report);
     }
     let history = review::history(root, &evidence.branch)?;
-    let plan = match closing::next(&history, &evidence.head, unix_now()) {
+    let plan = match review::increment::next(root, &history, &evidence.head, unix_now()) {
         Next::Review(plan) => plan,
         Next::FixFirst(why) | Next::Unavailable(why) => {
             return Err(format!("ship: {why}; nothing was pushed").into());
@@ -102,10 +102,11 @@ pub(crate) fn require_task(
     eprintln!(
         "ship: {}{} review on {}",
         tier.name(),
-        if matches!(plan, Plan::Closing { .. }) {
-            " closing"
-        } else {
-            ""
+        match &plan {
+            Plan::Closing { .. } => " closing",
+            Plan::Increment(i) if i.closing => " closing (increment)",
+            Plan::Increment(_) => " full (increment)",
+            Plan::Full => "",
         },
         crate::review::config::runtime_key(options.runtime)
     );
@@ -207,6 +208,8 @@ pub(crate) fn publish_calls_onto(
     }
     let description = if let Some(source) = &report.reused_from {
         format!("review of {} reused (same patch)", short(source))
+    } else if let Some(increment) = &report.increment {
+        format!("passed: {}", increment.sentence())
     } else {
         format!(
             "{}grade {}/10 · {} tier · {} rounds",

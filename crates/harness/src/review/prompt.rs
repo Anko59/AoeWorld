@@ -27,6 +27,22 @@ pub(crate) struct Subject {
     pub(crate) stat: String,
     pub(crate) diff: String,
     pub(crate) facts: String,
+    /// Non-empty for an increment: what is judged and what is not.
+    pub(crate) scope: String,
+}
+
+/// The scope of a review of the commits added after an approved one.
+pub(super) fn scope_note(increment: &super::Increment, files: &[String], from: &str) -> String {
+    let shown: Vec<&str> = files.iter().take(40).map(String::as_str).collect();
+    format!(
+        "This branch was already reviewed and approved at `{}` ({}/10, {} tier). You review ONLY what came after it: a {}. Judge the diff below and nothing else. The approved code is read-only context: do not re-open it. A finding must cite a line of the diff below; a finding anywhere else is recorded as a note and can never block. Read the diff yourself with `git diff {} HEAD -- {}`.",
+        &increment.approved[..12.min(increment.approved.len())],
+        increment.grade,
+        increment.tier,
+        increment.sentence(),
+        &from[..12.min(from.len())],
+        shown.join(" ")
+    )
 }
 
 /// Personas, preamble and grader come from origin/dev, like the config.
@@ -81,11 +97,18 @@ fn subject_text(subject: &Subject, diff_limit: usize) -> String {
         diff.truncate(cut);
         diff.push_str("\n[diff cut here: read the remaining files with `git diff` yourself]\n");
     }
+    let intro = if subject.scope.is_empty() {
+        format!(
+            "`git diff {}..{}` (run it yourself to read more):",
+            &subject.merge_base[..12.min(subject.merge_base.len())],
+            &subject.head[..12.min(subject.head.len())]
+        )
+    } else {
+        part(&subject.scope)
+    };
     format!(
-        "## The task\n\n{}\n\n## The change\n\n`git diff {}..{}` (run it yourself to read more):\n\n```\n{}\n```\n\n```diff\n{diff}\n```\n\n## Deterministic facts (not findings)\n\n{}\n",
+        "## The task\n\n{}\n\n## The change\n\n{intro}\n\n```\n{}\n```\n\n```diff\n{diff}\n```\n\n## Deterministic facts (not findings)\n\n{}\n",
         part(&subject.task),
-        &subject.merge_base[..12.min(subject.merge_base.len())],
-        &subject.head[..12.min(subject.head.len())],
         part(&subject.stat),
         part(&subject.facts)
     )
@@ -162,7 +185,9 @@ pub(crate) fn cross_round(
     } else {
         "You may add a new finding only if it is `major` or `critical`."
     };
-    let task = if closing {
+    let task = if closing && !subject.scope.is_empty() {
+        "Closing review of the commits added after an approved review: audit the diff above and nothing else; the approved code is read-only context. In round 1 there may be no finding to vote on: report a new finding only if it is inside the diff above. Later, vote on the other reviewers' findings: `upheld` if the problem is real and inside the diff, `refuted` (cite the code) if not, `partial` or `unverifiable`."
+    } else if closing {
         "Closing review: verify the other reviewers' findings are fixed.\n\nEarlier reviews of this branch confirmed the findings below; the diff above is what changed since (the fixes). For each, vote `upheld` if the problem is still present at HEAD, `partial` if it is only partly fixed, `refuted` if it is fixed (cite the fixing code and the test that proves it) or `unverifiable`. A new finding must be in the diff above."
     } else {
         "verify the other reviewers' findings\n\nAssume each finding below is wrong until the code proves it right. Do not agree for its own sake and do not refute for its own sake. Vote on every finding below: `upheld`, `partial` (real but a different severity or scope), `refuted` (cite the code that disproves it) or `unverifiable`."

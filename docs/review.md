@@ -219,8 +219,9 @@ budget for checking fixes. `make ship` decides from the stored reports
    not count and the same commit may be reviewed again. Three incomplete
    reviews within an hour mean the reviewers are unavailable: `make ship`
    refuses for the rest of that hour, then reviews again.
-2. **Every later review is a closing review.** There is no second full blind
-   review. A severe finding of the full review (critical, or a major test
+2. **Every later review of the same code is a closing review.** There is no
+   second full blind review of it (new commits after a pass are another matter:
+   [below](#commits-after-an-approval)). A severe finding of the full review (critical, or a major test
    weakening: the harness's `severe` predicate) is carried like any other
    blocking finding: such a finding is usually a small fix, and the closing
    review must show it fixed.
@@ -238,8 +239,56 @@ budget for checking fixes. `make ship` decides from the stored reports
    closing review, means split at once. If only new non-severe blocking
    findings in the fixes remain, fix and commit them for another closing
    review within the budget.
-4. **Budget spent: split.** If the third closing review fails, split. A passing
-   full or closing review settles the earlier history, as before.
+4. **Budget spent: split.** If the third closing review fails, split.
+5. **A passing review is final for the code it passed.** It settles the
+   earlier history: the findings and the budget of everything before it are
+   closed, and the code it approved is never reviewed again, by a full review
+   or otherwise. A commit added after it starts a new increment with a fresh
+   budget (one first review, then up to three closing reviews of its fixes),
+   and the first review judges **only the diff from the approved state to
+   HEAD** ([below](#commits-after-an-approval)).
+
+### Commits after an approval
+
+The *approved state* is the newest passing full or closing review of the
+branch (a reuse report never counts) that `make ship` can place in the branch
+now, in this order:
+
+1. its commit is in HEAD's history: the increment is the diff from that commit
+   to HEAD (only the branch's own files, so a rebase or a
+   merge of `dev` does not bring dev's changes in);
+2. after a rebase, a commit of the branch (up to 100) whose own patch is
+   byte-identical to the approved one by the
+   [patch identity](#what-happens-next): the increment is the diff from that
+   commit to HEAD;
+3. after a rebase that changed the patch by conflict resolution, the files
+   whose changed lines differ from the approved patch (or that it did not
+   have): their whole diff against the merge base is the increment, so the
+   changed hunks are always reviewed (coarser than a hunk, never looser);
+4. otherwise, or when a stored report cannot be read or a file name cannot be
+   named exactly, nothing is approved and the whole diff gets a full review.
+
+A rebase that leaves the approved patch unchanged keeps
+[reuse](#what-happens-next) and has no increment to review.
+
+The increment gets a **closing-style** review (strong models, at least two
+reviewers, no blind round, a pass on "no blocking finding left") when it is at
+most 200 changed lines **and** the floor of the files it changes is not above
+the tier of the passed review. Otherwise it gets a **full** review of the
+increment at the tier you chose (never below the floor of the whole change).
+Both judge the increment's diff, and the approved diff is only read-only
+context. **A finding must cite a line inside the increment's hunks**; anything
+else is recorded as a note (`Notes outside the increment`, in the report and
+the pull request) and can never block, whatever its severity: the code is
+approved. Every line of every new commit is still reviewed; the reviewers
+cannot skip one. The report and the pull request's review line say which ran:
+`closing review of 12 lines since <sha>, approved 9/10`.
+
+Budget: the pass closed the earlier budget, so the first review of an increment
+takes the full review's slot, whatever its style, and its failures are
+followed by up to three closing reviews of the fixes, then a split, exactly as
+for a new branch. A branch ends in a pass or a split: every increment either
+passes, or spends at most four reviews. Nothing asks a person.
 
 To **split**: break the change into smaller pull requests on new branches
 (each with its own budget, smaller diffs review better), close the original,

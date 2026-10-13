@@ -49,7 +49,9 @@ agent policy refuses `$` in agent-set Make values.
    three closing reviews of the fixes and carried findings. Severe findings
    or unresolved carried blockers end the budget early; when it is spent
    `make ship` says to split the change
-   ([review](review.md#when-reviews-do-not-converge)). A stored passing review
+   ([review](review.md#when-reviews-do-not-converge)). Commits added after a
+   passing review are reviewed on their own diff, never by a new review of the
+   approved code ([review](review.md#commits-after-an-approval)). A stored passing review
    may also be reused after a rebase when the branch's own patch matches,
    even after edits to its parent. The harness compares byte-exact paths,
    modes and changed text lines, ignoring context, offsets and hunk grouping;

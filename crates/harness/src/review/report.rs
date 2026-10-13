@@ -1,7 +1,10 @@
 //! The review report: stored as JSON next to the ship evidence
 //! (`<git common dir>/aoe-ship/reviews/<sha>-<tier>.json`, where agents cannot
 //! write) and rendered as Markdown for the pull request.
-use super::protocol::{ARBITER, Finding, Status, blocking, ruling};
+use super::{
+    Increment,
+    protocol::{ARBITER, Finding, Status, blocking, ruling},
+};
 use crate::ship::git;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
@@ -54,6 +57,10 @@ pub(crate) struct Report {
     /// The branch `base` and `merge_base` come from: `dev`, or the parent of a
     /// stacked pull request.
     pub(crate) base_branch: String,
+    /// Set when this review judged only the commits added after a passing
+    /// review, and which ones (docs/review.md).
+    #[serde(default)]
+    pub(crate) increment: Option<Increment>,
 }
 
 fn hex(digest: impl AsRef<[u8]>) -> String {
@@ -270,7 +277,7 @@ impl Report {
 
     pub(crate) fn headline(&self) -> String {
         format!(
-            "{} **{}: {}/10** ({} tier · {} reviewer{} · {} round{} · {} {}): {} confirmed · {} disputed · {} refuted",
+            "{} **{}: {}/10** ({} tier · {} reviewer{} · {} round{} · {} {}): {} confirmed · {} disputed · {} refuted{}",
             self.badge(),
             if self.closing {
                 "Closing review"
@@ -288,6 +295,10 @@ impl Report {
             self.count(Status::Confirmed),
             self.count(Status::Disputed),
             self.count(Status::Refuted),
+            self.increment
+                .as_ref()
+                .map(|increment| format!(" · {}", increment.sentence()))
+                .unwrap_or_default(),
         )
     }
 
@@ -303,7 +314,28 @@ impl Report {
                 &source[..12.min(source.len())]
             ));
         }
-        if self.closing {
+        if let Some(increment) = &self.increment {
+            out.push_str(&format!(
+                "The branch was approved at `{}` ({}/10, {} tier); this review judged only what came after it, as a {}. Approved code is not re-opened, so a finding outside the increment is a note, not a blocker (docs/review.md).\n\n",
+                &increment.approved[..12.min(increment.approved.len())],
+                increment.grade,
+                increment.tier,
+                increment.sentence(),
+            ));
+            if !increment.outside.is_empty() {
+                out.push_str("Notes outside the increment (not blocking):\n\n");
+                for r in &increment.outside {
+                    out.push_str(&format!(
+                        "- `{:?}` `{}{}` — {}\n",
+                        r.severity,
+                        r.file,
+                        r.line.map(|l| format!(":{l}")).unwrap_or_default(),
+                        r.claim
+                    ));
+                }
+                out.push('\n');
+            }
+        } else if self.closing {
             out.push_str(&format!(
                 "Closing review after one full review: it {} on \"no blocking finding left\"; the grade is reported, not gated (docs/review.md).\n\n",
                 if self.passes() { "passed" } else { "failed" }

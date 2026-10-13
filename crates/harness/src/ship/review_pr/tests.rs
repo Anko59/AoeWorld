@@ -66,6 +66,7 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
         change_fingerprint: None,
         policy_fingerprint: None,
         reused_from: None,
+        increment: None,
         task_fingerprint: None,
         base_branch: "dev".into(),
     };
