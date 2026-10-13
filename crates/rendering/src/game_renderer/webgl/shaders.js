@@ -144,6 +144,14 @@ out vec4 result;
 vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     vec4 center = textureLod(atlas, vec3(uv, float(page)), 0.0);
     vec2 size = vec2(textureSize(atlas, 0).xy);
+    vec2 extent = rect.zw * size;
+    vec2 local = (uv - rect.xy - .5 / size) / max(rect.zw - 1.0 / size, 1.0 / size) - .5;
+    float distance = abs(local.x) + abs(local.y);
+    bool diamond = abs(extent.x - 2.0 * extent.y + 1.0) <= 1.0;
+    if (center.a == 0.0 && diamond && min(extent.x, extent.y) > 2.0 && distance >= .47 && distance <= .50001) {
+        vec2 inward = mix(uv, rect.xy + rect.zw * .5, 2.0 / min(extent.x, extent.y));
+        center = textureLod(atlas, vec3(inward, float(page)), 0.0);
+    }
     vec2 px = dx * size, py = dy * size;
     float footprint = max(dot(px,px), dot(py,py));
     if (!(all(lessThanEqual(abs(rect),vec4(3.402823e38))) && all(lessThanEqual(abs(uv),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint > 1.5625 && footprint <= 3.402823e38)) return center;
@@ -361,7 +369,7 @@ void main() {
         if (weight <= 0.0) continue;
         if (tiled) layer = tiledLayer(header, tile, local, gx, gy);
         vec4 sampled = landscape ? terrainSample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy)
-                                : textureLod(atlas, vec3(layer.uv, float(layer.page)), 0.0);
+                                : terrainSample(layer.uv, layer.page, layer.rect, vec2(0), vec2(0));
         if (mixing) sampled = mixed(sampled, material, vPages.w, vTint);
         if (single) texel = sampled; else texel += sampled * weight;
     }

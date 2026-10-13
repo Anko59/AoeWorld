@@ -174,9 +174,12 @@ fn joined_cliff_walls_use_straight_native_rock_and_share_the_ledge_vertices() {
     for wall in &walls {
         let address = wall.texture_uv.unwrap();
         assert_eq!(address.page, 2, "native rock, never snow or gravel");
+        assert_eq!(address.uv[0], art.scenery.cliff_faces[4].atlas.uv[0]);
+        assert_eq!(address.uv[2], art.scenery.cliff_faces[4].atlas.uv[2]);
         assert_eq!(
-            address, art.scenery.cliff_faces[4].atlas,
-            "joined east walls keep one orientation"
+            Some(address),
+            walls[0].texture_uv,
+            "joined east walls keep one orientation and texture phase"
         );
         assert_eq!(wall.tint, 0, "retain the authored face lighting");
         assert!(!wall.pickable);

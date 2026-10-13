@@ -206,7 +206,7 @@ impl MapChunkGenerator {
             None
         };
         let mut decoration = None;
-        if base.surface.kind == SurfaceKind::Cliff
+        if base.surface.kind == SurfaceKind::CliffLedge
             && let Some(piece) = memo.cliff(position)?
             && piece.anchor
         {
@@ -248,7 +248,7 @@ impl MapChunkGenerator {
                         position.y.saturating_add(dy),
                     );
                     if memo.base(near)?.is_some_and(|tile| {
-                        tile.surface.kind == SurfaceKind::Cliff
+                        tile.surface.is_cliff()
                             && tile.geographic_height_centimeters
                                 > base.geographic_height_centimeters
                     }) {
@@ -428,7 +428,7 @@ fn appearance(base: Tile, density: DensitySample) -> LandscapeAppearance {
         Biome::Savanna => EcologicalPalette::Savanna,
         _ => EcologicalPalette::Treeless,
     };
-    let exposure = if base.surface.kind == SurfaceKind::Cliff
+    let exposure = if base.surface.is_cliff()
         || base.material == GroundMaterial::Rock
         || matches!(
             height_band,

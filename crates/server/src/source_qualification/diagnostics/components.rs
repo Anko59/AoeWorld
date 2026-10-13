@@ -1,7 +1,5 @@
 use aoe_core::{TileCoord, WorldConfig};
-use aoe_map::{
-    EnvironmentPageError, MapChunkGenerator, MapPackage, ObjectKind, SurfaceKind, WaterKind,
-};
+use aoe_map::{EnvironmentPageError, MapChunkGenerator, MapPackage, ObjectKind, WaterKind};
 use aoe_simulation::Terrain;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -306,7 +304,7 @@ fn blocker_reason(
     let geographic_rise_cm = source
         .geographic_height_centimeters
         .abs_diff(destination.geographic_height_centimeters);
-    if source.surface.kind == SurfaceKind::Cliff || destination.surface.kind == SurfaceKind::Cliff {
+    if source.surface.is_cliff() || destination.surface.is_cliff() {
         boundary_terrain.cliff_surface_edges += 1;
         boundary_terrain.cliff_geographic_rise_sum_cm = boundary_terrain
             .cliff_geographic_rise_sum_cm

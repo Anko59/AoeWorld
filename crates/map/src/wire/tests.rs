@@ -280,6 +280,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
         assert!(surface_kind(value).is_ok(), "surface {value}");
         assert!(exposure_from(value).is_ok(), "exposure {value}");
     }
+    assert_eq!(surface_kind(3), Ok(crate::SurfaceKind::CliffLedge));
     for value in 0..=1 {
         assert!(diagonal(value).is_ok(), "diagonal {value}");
     }
@@ -295,7 +296,7 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     assert_eq!(biome(10), Err(CompactChunkError::InvalidEnum));
     assert_eq!(provenance(5), Err(CompactChunkError::InvalidEnum));
     assert_eq!(water_kind(5), Err(CompactChunkError::InvalidEnum));
-    assert_eq!(surface_kind(3), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(surface_kind(4), Err(CompactChunkError::InvalidEnum));
     assert_eq!(diagonal(2), Err(CompactChunkError::InvalidEnum));
     assert_eq!(resource_kind(4), Err(CompactChunkError::InvalidEnum));
     assert_eq!(object_kind(5), Err(CompactChunkError::InvalidEnum));

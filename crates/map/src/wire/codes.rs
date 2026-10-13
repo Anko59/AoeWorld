@@ -74,6 +74,7 @@ pub(super) fn surface_kind(value: u8) -> Result<SurfaceKind, CompactChunkError> 
         0 => Ok(SurfaceKind::Plateau),
         1 => Ok(SurfaceKind::Ramp),
         2 => Ok(SurfaceKind::Cliff),
+        3 => Ok(SurfaceKind::CliffLedge),
         _ => Err(CompactChunkError::InvalidEnum),
     }
 }

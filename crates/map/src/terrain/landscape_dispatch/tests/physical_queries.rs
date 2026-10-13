@@ -1,5 +1,5 @@
 use super::*;
-use crate::{EdgePassability, ResourceOverlay, SurfaceKind};
+use crate::{EdgePassability, ResourceOverlay};
 
 fn expected_edge(from: Tile, to: Tile) -> EdgePassability {
     if !from.passable
@@ -112,7 +112,7 @@ fn base_edges_match_composed_physics_on_fallback_dense_and_provider() {
                 assert_eq!(composed.surface, base.surface);
                 assert_eq!(composed.game_height_level, base.game_height_level);
                 saw_water |= base.water != WaterKind::None;
-                saw_cliff |= base.surface.kind == SurfaceKind::Cliff;
+                saw_cliff |= base.surface.is_cliff();
                 for (dx, dy) in [(1, 0), (0, 1), (1, 1), (-1, 1)] {
                     let next = TileCoord::new(x + dx, y + dy);
                     let Some(other) = generator.tile_at_with_cancel(next, &|| false).unwrap()

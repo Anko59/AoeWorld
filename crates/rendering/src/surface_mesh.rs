@@ -11,6 +11,8 @@ pub(crate) mod floor;
 pub(crate) mod landscape;
 pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
 mod lod;
+mod skirts;
+use skirts::{Edge, SkirtSurface, append_edge_skirt};
 pub(crate) mod mix;
 pub use directory::write_terrain_directory;
 pub use lod::projected_surface_triangles;
@@ -103,6 +105,11 @@ pub fn pick_surface_point(
 ) -> Option<[f64; 2]> {
     let mut best: Option<(f64, [i32; 2], bool, bool, [f64; 2])> = None;
     for triangle in triangles {
+        // Faces close the rendered relief but are not order targets. Continue
+        // to the nearest eligible ground instead of rejecting the whole ray.
+        if triangle.skirt || !triangle.pickable {
+            continue;
+        }
         let Some(weights) = barycentric(triangle.points, screen) else {
             continue;
         };
@@ -308,135 +315,6 @@ pub(crate) fn tint_atlas_pixels(pixels: &[u8], tint: u8) -> Option<Vec<u8>> {
     Some(tinted)
 }
 
-#[derive(Clone, Copy)]
-enum Edge {
-    East,
-    South,
-}
-
-fn append_edge_skirt(
-    result: &mut Vec<ProjectedSurfaceTriangle>,
-    projection: &Camera,
-    tile: [i32; 2],
-    sample: SceneTerrain,
-    neighbor: Option<&SceneTerrain>,
-    edge: Edge,
-) {
-    let Some(neighbor) = neighbor else {
-        return;
-    };
-    // Modeled water has an independent level from the terrain underneath it.
-    // Its banks (and downstream level changes) need the same closed vertical
-    // seam as cliffs, even when both adjacent top surfaces are plateaus.
-    if sample.surface.water == 0
-        && neighbor.surface.water == 0
-        && sample.surface.kind != SceneTerrainSurface::CLIFF
-        && neighbor.surface.kind != SceneTerrainSurface::CLIFF
-    {
-        return;
-    }
-    let current = effective_heights(sample);
-    let adjacent = effective_heights(*neighbor);
-    let (current_indices, neighbor_indices) = match edge {
-        Edge::East => ([1, 2], [0, 3]),
-        Edge::South => ([2, 3], [1, 0]),
-    };
-    let shore = (sample.surface.water != 0) != (neighbor.surface.water != 0);
-    // Different top heights need a closing strip, even at a one-level beach.
-    if current_indices
-        .iter()
-        .zip(neighbor_indices)
-        .all(|(current_index, neighbor_index)| current[*current_index] == adjacent[neighbor_index])
-    {
-        return;
-    }
-    let mut top = [0.0; 2];
-    let mut bottom = [0.0; 2];
-    for index in 0..2 {
-        top[index] =
-            f64::from(current[current_indices[index]].max(adjacent[neighbor_indices[index]]));
-        bottom[index] =
-            f64::from(current[current_indices[index]].min(adjacent[neighbor_indices[index]]));
-    }
-    let world_xy = match edge {
-        Edge::East => [
-            [f64::from(tile[0] + 1), f64::from(tile[1])],
-            [f64::from(tile[0] + 1), f64::from(tile[1] + 1)],
-        ],
-        Edge::South => [
-            [f64::from(tile[0] + 1), f64::from(tile[1] + 1)],
-            [f64::from(tile[0]), f64::from(tile[1] + 1)],
-        ],
-    };
-    let points = [
-        project_world(projection, world_xy[0], top[0]),
-        project_world(projection, world_xy[1], top[1]),
-        project_world(projection, world_xy[1], bottom[1]),
-        project_world(projection, world_xy[0], bottom[0]),
-    ];
-    // A shoreline's ground bank owns the side material, including when the
-    // modeled water level sits above the adjacent terrain.
-    let bank = if sample.surface.water != 0 && neighbor.surface.water == 0 {
-        *neighbor
-    } else {
-        sample
-    };
-    let water_step = sample.surface.water != 0 && neighbor.surface.water != 0;
-    let material = if water_step {
-        5
-    } else if shore && bank.surface.kind != SceneTerrainSurface::CLIFF {
-        bank.material
-    } else {
-        4
-    };
-    let gentle = shore && material != 4 && top.iter().zip(bottom).all(|(a, b)| a - b <= 1.0);
-    let tint = if water_step || gentle { 0 } else { 3 };
-    let color = darken(surface_color(bank), if gentle { 1.0 } else { 0.62 });
-    result.push(ProjectedSurfaceTriangle {
-        appearance: landscape::pack(bank.appearance),
-        floor_strengths: None,
-        mix: [0; 6],
-        points: [points[0], points[1], points[2]],
-        color,
-        tile,
-        skirt: true,
-        material,
-        texture_mode: 4,
-        tint,
-        texture_uv: None,
-        texture_blend: None,
-        texture_tile: tile,
-        texture_materials: gentle.then_some([material; 3]),
-        pickable: false,
-        order: skirt_order(edge),
-    });
-    result.push(ProjectedSurfaceTriangle {
-        appearance: landscape::pack(bank.appearance),
-        floor_strengths: None,
-        mix: [0; 6],
-        points: [points[0], points[2], points[3]],
-        color,
-        tile,
-        skirt: true,
-        material,
-        texture_mode: 5,
-        tint,
-        texture_uv: None,
-        texture_blend: None,
-        texture_tile: tile,
-        texture_materials: gentle.then_some([material; 3]),
-        pickable: false,
-        order: skirt_order(edge) + 1,
-    });
-}
-
-fn skirt_order(edge: Edge) -> u8 {
-    match edge {
-        Edge::East => 2,
-        Edge::South => 4,
-    }
-}
-
 fn project_world(projection: &Camera, world_xy: [f64; 2], elevation: f64) -> SurfacePoint {
     SurfacePoint {
         world: [world_xy[0], world_xy[1], elevation],
@@ -449,10 +327,6 @@ fn tile_key(position: [f64; 2]) -> [i32; 2] {
         (position[0] - 0.5).round() as i32,
         (position[1] - 0.5).round() as i32,
     ]
-}
-
-fn effective_heights(sample: SceneTerrain) -> [i16; 4] {
-    sample.surface.corner_game_height_levels
 }
 
 fn surface_color(sample: SceneTerrain) -> [f32; 3] {

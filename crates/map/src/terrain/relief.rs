@@ -1,6 +1,6 @@
 //! Mountain relief derived from the prepared elevation field: cliff lines on
 //! steep slopes. A cliff is an Age of Empires II style piece: a three-by-three
-//! tile cell of impassable ground that carries one cliff sprite. Pieces sit
+//! tile cell of impassable ground with a level ledge. Pieces sit
 //! where a contour level crosses a steep cell, so a line of pieces follows the
 //! real contour. Lines are broken by passes and never close around a summit.
 //! Relief and passes use geography only. The reserved start cells are the
@@ -14,7 +14,7 @@ pub(crate) use cover::Cover;
 mod rocks;
 pub(crate) use rocks::{MAX_ROCK_PER_THOUSAND, SCREE_REACH};
 
-/// Side of one cliff piece in tiles, the footprint of the original sprites.
+/// Side of one connected cliff ledge in tiles.
 pub(crate) const CLIFF_CELL_TILES: i32 = 3;
 /// Contour interval in game centimetres: eight game metres, four tile widths.
 const CONTOUR_GAME_CENTIMETERS: i64 = 800;
@@ -40,7 +40,10 @@ pub(crate) struct CliffPiece {
     /// east, southeast.
     pub facing: u8,
     pub variant: u8,
-    /// The centre tile of the cell, which carries the sprite.
+    /// Highest source corner of the whole cell. All nine tiles support this
+    /// ledge, so adjacent pieces on a straight contour share a top edge.
+    pub top_level: i16,
+    /// The centre tile of the cell, which carries the anchor record.
     pub anchor: bool,
 }
 
@@ -105,6 +108,7 @@ pub(super) fn cliff_at<E>(
     Ok(Some(CliffPiece {
         facing,
         variant,
+        top_level: (highest / 100).clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16,
         anchor: tile.x.rem_euclid(CLIFF_CELL_TILES) == 1
             && tile.y.rem_euclid(CLIFF_CELL_TILES) == 1,
     }))
@@ -154,7 +158,7 @@ pub(super) fn smooth(key: u64, x: i64, y: i64, period: i64) -> i64 {
 
 impl MapChunkGenerator {
     /// Cliff piece of a tile from the bound elevation field, for the composer:
-    /// it places the piece's sprite on the anchor tile.
+    /// it records the piece on the anchor tile.
     pub(crate) fn cliff_piece_with_cancel(
         &self,
         tile: TileCoord,

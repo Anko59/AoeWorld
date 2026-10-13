@@ -207,12 +207,32 @@ fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64;
     let rect = address.uv;
     let side = f64::from(GAME_ATLAS_SIDE);
     // Preserve the reference add/multiply order at texel boundaries.
-    sample_atlas(
-        atlas,
-        address.page,
-        (f64::from(rect[0]) * side + 0.5) + local[0] * (f64::from(rect[2]) * side - 1.0).max(0.0),
-        (f64::from(rect[1]) * side + 0.5) + local[1] * (f64::from(rect[3]) * side - 1.0).max(0.0),
-    )
+    let sample = |local: [f64; 2]| {
+        sample_atlas(
+            atlas,
+            address.page,
+            (f64::from(rect[0]) * side + 0.5)
+                + local[0] * (f64::from(rect[2]) * side - 1.0).max(0.0),
+            (f64::from(rect[1]) * side + 0.5)
+                + local[1] * (f64::from(rect[3]) * side - 1.0).max(0.0),
+        )
+    };
+    let center = sample(local);
+    let distance = (local[0] - 0.5).abs() + (local[1] - 0.5).abs();
+    let extent = f64::from(rect[2].min(rect[3])) * side;
+    let diamond = ((f64::from(rect[2]) - 2.0 * f64::from(rect[3])) * side + 1.0).abs() <= 1.0;
+    // The mesh owns coverage. Only repair the native diamond's one-texel
+    // staircase; retain transparency elsewhere and leave object alpha alone.
+    if center[3] == 0
+        && diamond
+        && rect.iter().all(|v| v.is_finite())
+        && extent > 2.0
+        && (0.47..=0.50001).contains(&distance)
+    {
+        sample(local.map(|v| v + (0.5 - v) * (2.0 / extent)))
+    } else {
+        center
+    }
 }
 
 struct RasterPlane {

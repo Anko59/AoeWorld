@@ -66,17 +66,26 @@ water or shore face uses a procedural flat tint. Gravel 15017 is approved only f
 the shore band uses reviewed sand 15010. Animation is not implemented.
 ## Cliff pieces
 
-Cliff decorations draw group 226. The downhill screen direction selects the
-face: southwest/west uses slots 1,2,18 (upper-right ridge), southeast/east
-4,5,16 (upper-left ridge), and front-facing corners 3,15,17,19,24 join both
-ridges. Opposing faces use native art rather than mirroring the sun direction.
-Every piece draws its whole upright source frame
-through the shared object path at native art scale times 128/96, with the raw
-hotspot and shared ground clearance. No ground-plane strips or extra shadows
-are emitted. Cell tops retain surrounding ground; only vertical skirts are
-rock. The runtime atlas restrains the trial cliff palette to warm neutral stone
-while retaining luminance relief and alpha; original pack pixels are unchanged. A pack without group 226 shows the impassable cells as bare
-rock-tinted ground.
+Cliff records mark three-by-three impassable cells along steep contours,
+with the same open passes. All nine tiles share a ledge at the highest source
+corner of the cell. Adjacent cells on a straight ridge agree on that height.
+The current surface tag distinguishes these ledges from continuous steep
+ground, which keeps its shared sloping corners at every mesh LOD.
+The snowy or grassy top meets a closed mesh face at the same world vertices;
+per-vertex depth replaces the constant-depth cliff billboard.
+
+East and south walls sample the opaque interior of reviewed native straight
+faces 4 and 1 respectively; face four avoids its lower silhouette notch.
+The mesh owns their silhouette and junctions;
+random corner frames never interrupt a straight run. Source lighting and the
+runtime atlas palette correction remain intact. Coarse cliff cells retain the
+ledge and closed faces inside the existing triangle bound. Without complete
+face art, walls retain their procedural rock fallback.
+
+Native terrain diamonds have staircase alpha masks. At the continuous mesh
+edge only, a transparent nearest texel samples one texel inward toward the
+frame centre. This closes snow pinholes without changing object silhouettes,
+fully transparent textures, or coverage outside the diamond.
 
 ## Loose rocks
 
