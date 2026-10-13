@@ -164,3 +164,147 @@ fn unavailable_sources_are_explicit_and_large_or_wrapped_selections_use_overview
         assert!(PreparationPlan::resolve(input, true).is_err());
     }
 }
+
+#[tokio::test]
+async fn explicit_source_choices_never_become_procedural_fallback() {
+    use crate::map_jobs::{JobState, Manager, StartError};
+
+    let (state, _, _) = crate::map_jobs::tests::state_with_job();
+    for (latitude, longitude, regional) in [
+        (
+            MapRequest::default().center_latitude_e7,
+            MapRequest::default().center_longitude_e7,
+            true,
+        ),
+        (-178_000_000, 1_798_000_000, false),
+    ] {
+        for worker in [false, true] {
+            for preparation in [
+                PreparationPreference::Automatic,
+                PreparationPreference::Overview,
+                PreparationPreference::Detailed,
+            ] {
+                for hydrology_mode in [
+                    HydrologyMode::Vectors,
+                    HydrologyMode::Automatic,
+                    HydrologyMode::None,
+                ] {
+                    let input = CreationRequest {
+                        request: MapRequest {
+                            center_latitude_e7: latitude,
+                            center_longitude_e7: longitude,
+                            ..MapRequest::default()
+                        },
+                        preparation,
+                        hydrology_mode,
+                    };
+                    let case = format!("{input:?}, worker={worker}");
+                    let expected_error = if !worker && hydrology_mode == HydrologyMode::Vectors {
+                        Some(
+                            "With rivers requires a configured geographic worker; procedural fallback cannot supply source river data.",
+                        )
+                    } else if !worker && preparation != PreparationPreference::Automatic {
+                        Some("Source preparation requires a configured geographic worker.")
+                    } else if worker
+                        && preparation == PreparationPreference::Detailed
+                        && hydrology_mode == HydrologyMode::None
+                    {
+                        Some(
+                            "Detailed preparation includes rivers; choose overview for a map without rivers.",
+                        )
+                    } else if worker && preparation == PreparationPreference::Detailed && !regional
+                    {
+                        Some(
+                            "Creator detailed mode supports squares up to 120 km, centers within 75° latitude and 170° longitude; use overview for this selection.",
+                        )
+                    } else {
+                        None
+                    };
+                    let result = PreparationPlan::resolve(input, worker);
+                    if let Some(error) = expected_error {
+                        assert_eq!(result.unwrap_err(), error, "{case}");
+                    } else {
+                        let plan = result.unwrap_or_else(|error| panic!("{case}: {error}"));
+                        if worker {
+                            let detailed = preparation == PreparationPreference::Detailed
+                                || (preparation == PreparationPreference::Automatic
+                                    && regional
+                                    && hydrology_mode == HydrologyMode::Vectors);
+                            assert_eq!(
+                                plan.mode,
+                                if detailed {
+                                    PreparationMode::Detailed
+                                } else {
+                                    PreparationMode::Overview
+                                },
+                                "{case}"
+                            );
+                            assert_eq!(
+                                plan.hydrology_mode,
+                                if detailed {
+                                    HydrologyMode::Vectors
+                                } else {
+                                    hydrology_mode
+                                },
+                                "{case}"
+                            );
+                        } else {
+                            assert_eq!(plan.mode, PreparationMode::ProceduralFallback, "{case}");
+                            assert!(
+                                plan.explanation.contains("No geographic worker configured"),
+                                "{case}"
+                            );
+                        }
+                    }
+                    if worker {
+                        continue;
+                    }
+                    *state.map_jobs.lock().await = Manager::default();
+                    let submitted = crate::map_jobs::start(&state, input, None).await;
+                    if let Some(error) = expected_error {
+                        assert!(
+                            matches!(submitted, Err(StartError::Invalid(ref actual)) if actual == error),
+                            "{case}: {submitted:?}"
+                        );
+                        assert!(state.map_jobs.lock().await.jobs.is_empty(), "{case}");
+                        continue;
+                    }
+                    let job = submitted.unwrap();
+                    let completed =
+                        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                            loop {
+                                let job = crate::map_jobs::status(&state, job.id).await.unwrap();
+                                if job.state == JobState::Completed {
+                                    break job;
+                                }
+                                assert_ne!(job.state, JobState::Failed, "{case}: {job:?}");
+                                tokio::task::yield_now().await;
+                            }
+                        })
+                        .await
+                        .expect("procedural job completes");
+                    assert!(
+                        completed
+                            .preparation
+                            .explanation
+                            .contains("No geographic worker configured")
+                    );
+                    assert_eq!(
+                        serde_json::to_value(&completed.preparation_notes).unwrap(),
+                        serde_json::json!(["geographic_worker_unavailable"]),
+                        "{case}"
+                    );
+                    let packages = state.map_packages.read().await;
+                    let package = &packages[completed.content_hash.as_ref().unwrap()];
+                    assert_eq!(
+                        package.preparation_notes, completed.preparation_notes,
+                        "{case}"
+                    );
+                    assert!(package.source_locks.is_empty(), "{case}");
+                    assert!(package.environment.hydrology_evidence.is_none(), "{case}");
+                    package.validate().unwrap();
+                }
+            }
+        }
+    }
+}

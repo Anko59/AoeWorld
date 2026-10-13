@@ -313,3 +313,40 @@ fn outside_coverage_note_is_explicit_bound_to_identity_and_required_in_the_curre
     value.as_object_mut().unwrap().remove("preparation_notes");
     assert!(serde_json::from_value::<MapPackage>(value).is_err());
 }
+
+#[test]
+fn missing_worker_note_identifies_only_procedural_packages_and_is_content_hashed() {
+    let note: crate::PreparationNote =
+        serde_json::from_value(serde_json::json!("geographic_worker_unavailable")).unwrap();
+    assert!(
+        note.description()
+            .contains("No geographic worker configured")
+    );
+    let original = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
+    let marked = original.clone().with_preparation_note(note).unwrap();
+    let outside = original
+        .clone()
+        .with_preparation_note(crate::PreparationNote::OutsideRiverCoverage)
+        .unwrap();
+    assert_ne!(original.content_hash, marked.content_hash);
+    assert_ne!(outside.content_hash, marked.content_hash);
+    marked.validate().unwrap();
+    let restored: MapPackage =
+        serde_json::from_value(serde_json::to_value(&marked).unwrap()).unwrap();
+    assert_eq!(marked, restored);
+    let mut forged = original;
+    forged.preparation_notes = vec![note];
+    assert!(forged.validate().is_err());
+    let sourced = MapPackage::new(1, MapRequest::default(), vec![source("fixture")]).unwrap();
+    assert!(sourced.with_preparation_note(note).is_err());
+    let prepared = MapPackage::with_prepared_environment(
+        1,
+        MapRequest::default(),
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        environment(),
+    )
+    .unwrap();
+    assert!(prepared.with_preparation_note(note).is_err());
+}
