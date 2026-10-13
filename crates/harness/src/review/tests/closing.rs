@@ -136,14 +136,19 @@ fn a_diverging_branch_is_split_without_a_person() {
 }
 
 #[test]
-fn a_severe_full_review_splits_at_once() {
+fn a_severe_full_review_goes_to_a_closing_review_that_must_show_it_fixed() {
+    // A critical finding or a weakened test is usually a small fix: the closing
+    // review carries it and splits only if it is still there.
     let critical = [report("c", 1, 4, &[Severity::Critical])];
-    assert!(matches!(next(&critical, "d", NOW), Next::Split(why) if why.contains("critical")));
+    assert!(matches!(
+        next(&critical, "d", NOW),
+        Next::Review(Plan::Closing { prior, .. }) if prior.len() == 1
+    ));
     let mut weakened = report("c", 1, 4, &[Severity::Major]);
     weakened.findings[0].reported.category = "test-integrity".into();
     assert!(matches!(
         next(&[weakened], "d", NOW),
-        Next::Split(why) if why.contains("major test weakening")
+        Next::Review(Plan::Closing { prior, .. }) if prior.len() == 1
     ));
 }
 
