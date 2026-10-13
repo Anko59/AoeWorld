@@ -395,12 +395,29 @@ fn incomplete_reviews_do_not_spend_the_budget() {
 }
 
 #[test]
-fn a_diverging_branch_is_told_to_split() {
+fn a_severe_full_review_is_closed_or_split_by_its_closing_review() {
     let (_temp, root) = fixture("true");
+    // The full review finds something critical: the next step is a fix and a
+    // closing review, not a split.
     let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
         assert_eq!(*plan, Plan::Full);
         let mut report = unstored(root, tier, 4);
         report.findings = finding(crate::review::protocol::Severity::Critical);
+        report.store(root).unwrap();
+        Ok(report)
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(!error.contains("Split the change"), "{error}");
+    commit(&root, "fix");
+    // The closing review still upholds the carried critical finding: split.
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, plan| {
+        let Plan::Closing { prior, .. } = plan else {
+            panic!("a severe full review leads to a closing review: {plan:?}");
+        };
+        assert_eq!(prior.len(), 1);
+        let mut report = failed_closing(root, tier);
+        report.findings = prior.clone();
         report.store(root).unwrap();
         Ok(report)
     })
