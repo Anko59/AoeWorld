@@ -120,7 +120,6 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let Some(content_hash) = client.map_content_hash else {
             return;
         };
-        feedback::retain_visible_failures(&mut client);
         if !heights::ensure_bounds(shared.clone(), &mut client, content_hash) {
             return;
         }
@@ -157,8 +156,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                         "map chunk request failed: {error:?}"
                     )));
                     client.terrain_bounds.failures.chunks.insert((x, y));
-                    feedback::retain_visible_failures(&mut client);
-                    if client.terrain_bounds.failures.chunks.contains(&(x, y)) {
+                    if feedback::chunk_is_visible(&client, (x, y)) {
                         feedback::terrain_failed(&mut client);
                     }
                     heights::defer_failed_chunks(&mut client);
@@ -400,8 +398,11 @@ fn visible_chunks(client: &mut Client) -> Vec<Request<Option<AbortController>>> 
     let update = client
         .terrain_requests
         .reconcile(&demanded, Option::is_some, || AbortController::new().ok());
-    for controller in update.cancelled.into_iter().flatten() {
-        controller.abort();
+    for (coordinate, controller) in update.cancelled {
+        client.terrain_bounds.failures.chunks.remove(&coordinate);
+        if let Some(controller) = controller {
+            controller.abort();
+        }
     }
     update.started
 }

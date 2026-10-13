@@ -4,11 +4,51 @@ use crate::resource_state::ResourceStateCache;
 use aoe_core::TileCoord;
 use aoe_map::{ObjectKind, ResourceNode};
 use aoe_protocol::{CommandResult, MAX_ACK_HISTORY};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, VecDeque};
+
+const MAX_FAILED_CHUNKS: usize = 64;
+
+#[derive(Default)]
+pub(crate) struct FailedChunks(VecDeque<(i32, i32)>);
+
+impl FailedChunks {
+    pub fn insert(&mut self, coordinate: (i32, i32)) -> bool {
+        if self.contains(&coordinate) {
+            return false;
+        }
+        if self.len() == MAX_FAILED_CHUNKS {
+            self.0.pop_front();
+        }
+        self.0.push_back(coordinate);
+        true
+    }
+
+    pub fn remove(&mut self, coordinate: &(i32, i32)) -> bool {
+        let old_len = self.len();
+        self.0.retain(|value| value != coordinate);
+        self.len() != old_len
+    }
+
+    pub fn contains(&self, coordinate: &(i32, i32)) -> bool {
+        self.0.contains(coordinate)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(i32, i32)> {
+        self.0.iter()
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct TerrainFailures {
-    pub chunks: BTreeSet<(i32, i32)>,
+    pub chunks: FailedChunks,
     pub bounds: bool,
 }
 
@@ -19,16 +59,23 @@ impl TerrainFailures {
     }
 }
 
-pub(in super::super) fn retain_visible_failures(client: &mut Client) {
+pub(in super::super) fn chunk_is_visible(client: &Client, coordinate: (i32, i32)) -> bool {
     // Unloaded terrain can project into view above the resident height range.
     let bounds = client.terrain_bounds.levels.unwrap_or((i16::MIN, i16::MAX));
-    client.terrain_bounds.failures.chunks.retain(|&coordinate| {
-        heights::chunk_may_be_visible(client.camera, client.config, coordinate, bounds)
-    });
+    heights::chunk_may_be_visible(client.camera, client.config, coordinate, bounds)
+}
+
+fn has_visible_failure(client: &Client) -> bool {
+    let failures = &client.terrain_bounds.failures;
+    failures.bounds
+        || failures
+            .chunks
+            .iter()
+            .any(|&coordinate| chunk_is_visible(client, coordinate))
 }
 
 pub(in super::super) fn connection_label(client: &Client) -> &str {
-    if client.status == "connected" {
+    if client.status == "connected" && has_visible_failure(client) {
         client
             .terrain_bounds
             .failures
