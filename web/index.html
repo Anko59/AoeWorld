@@ -304,8 +304,11 @@
     };
     document.getElementById('map-preparation').addEventListener('change', event => {
       const rivers = document.getElementById('map-hydrology');
-      rivers.disabled = event.target.value === 'detailed';
-      if (rivers.disabled) rivers.value = 'vectors';
+      const detailed = event.target.value === 'detailed';
+      if (detailed && !rivers.disabled) rivers.dataset.chosen = rivers.value;
+      if (!detailed && rivers.disabled) rivers.value = rivers.dataset.chosen ?? 'automatic';
+      rivers.disabled = detailed;
+      if (detailed) rivers.value = 'vectors';
     });
     region.addEventListener('change', selectRegion);
     for (const id of ['map-latitude', 'map-longitude', 'map-side-km']) document.getElementById(id).addEventListener('input', updatePreview);
