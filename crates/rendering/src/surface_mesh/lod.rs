@@ -1,6 +1,7 @@
 use super::*;
 use aoe_core::Camera;
 mod banks;
+mod budget;
 mod cliffs;
 mod landscape;
 
@@ -91,7 +92,7 @@ pub fn projected_surface_triangles(
     landscape::assign(&mut cells, &owners);
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
-    let divisions = appearance::texture_subdivisions(size, cells.len());
+    let divisions = budget::subdivisions(&cells, grid);
     let texture_step = size / divisions;
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
