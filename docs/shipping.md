@@ -188,7 +188,12 @@ marker, the level against the floor (with its reason), the video against the
 level (required or not, length, voice-over, unreadable file) and the title. It
 prints `description: OK (level <level>, floor <floor>)` or a numbered list of
 every problem. `make ship` runs the same check before the lock wait, the gates
-and the review, and stops with the whole list.
+and the review, and stops with the whole list. Both take the base, the parent
+pull request, the review-ahead scope of a local unpublished parent and the
+rule "a title is required unless the branch has an open pull request or only
+reviews ahead" from the same `gh` lookup, so a stacked child is checked against
+its parent. Without a usable `gh`, `make describe-check` prints
+`title: not checked (gh unavailable)` after `OK` when no title was given.
 
 ### The floor
 

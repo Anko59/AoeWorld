@@ -1,6 +1,7 @@
-use super::{Request, publish, run, summary};
+use super::{Request, early, publish, run, summary};
 use crate::ship::{
-    Options, lock,
+    Options, github, lock,
+    stack::Parent,
     tests::{fixture, run as git_run},
 };
 use std::{fs, path::Path};
@@ -35,7 +36,7 @@ fn write(root: &Path, text: &str) -> std::path::PathBuf {
 }
 
 fn problems(root: &Path, request: &Request) -> String {
-    run(root, request).err().expect("problems").to_string()
+    run(root, request).expect_err("problems").to_string()
 }
 
 #[test]
@@ -167,4 +168,103 @@ fn make_ship_with_a_bad_description_stops_before_the_lock_and_the_gates() {
     assert!(error.contains("description: 2 problems"), "{error}");
     assert!(!root.join("gate-ran").exists(), "a gate ran");
     assert!(!lock::path(&root).unwrap().exists(), "the lock was taken");
+}
+
+fn open_pr(base: &str) -> github::OpenPr {
+    serde_json::from_str(&format!(
+        r#"{{"url":"https://github.com/o/r/pull/9","baseRefName":"{base}"}}"#
+    ))
+    .unwrap()
+}
+
+fn parent_pr(branch: &str) -> Parent {
+    Parent {
+        number: 7,
+        branch: branch.into(),
+        url: "https://github.com/o/r/pull/7".into(),
+    }
+}
+
+/// The situation of a branch shipped to `base`, given the pull requests `gh` would list.
+fn stand(
+    root: &Path,
+    base: &str,
+    parent: Option<Parent>,
+    own: Option<github::OpenPr>,
+) -> github::Situation {
+    github::situation_with(root, base, || Ok(parent), || Ok(own)).expect("situation")
+}
+
+#[test]
+fn a_title_is_required_only_for_a_new_published_pull_request() {
+    let (_temp, root) = fixture("true");
+    git_run(&root, &["branch", "parent"]);
+    // First ship to dev: required; an open pull request keeps its title.
+    assert!(stand(&root, "dev", None, None).title_required());
+    assert!(!stand(&root, "dev", None, Some(open_pr("dev"))).title_required());
+    // Review ahead of a local parent without a pull request: nothing is published.
+    assert!(!stand(&root, "parent", None, None).title_required());
+    // Stacked on a parent that has its pull request: a new child needs a title.
+    let child = stand(&root, "parent", Some(parent_pr("parent")), None);
+    assert!(child.title_required() && !child.review_ahead);
+    let open = stand(
+        &root,
+        "parent",
+        Some(parent_pr("parent")),
+        Some(open_pr("parent")),
+    );
+    assert!(!open.title_required());
+}
+
+#[test]
+fn a_stacked_child_is_checked_against_its_local_parent_not_the_parents_lines() {
+    let (_temp, root) = fixture("true");
+    git_run(&root, &["checkout", "-q", "-b", "parent"]);
+    fs::write(root.join("gates/note.txt"), "1\n2\n3\n4\n5\n6\n").unwrap();
+    git_run(&root, &["add", "-A"]);
+    git_run(&root, &["commit", "-q", "-m", "parent: gates"]);
+    git_run(&root, &["checkout", "-q", "-b", "child"]);
+    fs::write(root.join("child.txt"), "one\n").unwrap();
+    git_run(&root, &["add", "-A"]);
+    git_run(&root, &["commit", "-q", "-m", "child"]);
+    let options = Options {
+        body_file: Some(write(&root, BODY)),
+        base: "parent".into(),
+        ..Options::default()
+    };
+    let body = options.body_file.clone().unwrap();
+    // Review ahead: no title yet is no problem, and the floor is the child's own (low).
+    let ahead = stand(&root, "parent", None, None);
+    let checked = early(&root, &options, &body, Some(&ahead), true).expect("child only");
+    assert_eq!(
+        summary(&checked.decision),
+        "description: OK (level low, floor low)"
+    );
+    // Stacked on a published parent: the same child diff, but the title is required.
+    drop(ahead);
+    let stacked = stand(&root, "parent", Some(parent_pr("parent")), None);
+    let _scope = crate::review::base::scope("parent");
+    let message = early(&root, &options, &body, Some(&stacked), false)
+        .expect_err("problems")
+        .to_string();
+    assert!(message.contains("needs SHIP_TITLE"), "{message}");
+}
+
+#[test]
+fn without_the_situation_a_local_parent_cannot_be_resolved() {
+    let (_temp, root) = fixture("true");
+    git_run(&root, &["checkout", "-q", "-b", "parent"]);
+    git_run(&root, &["checkout", "-q", "-b", "child"]);
+    let options = Options {
+        base: "parent".into(),
+        ..Options::default()
+    };
+    let body = write(&root, BODY);
+    let message = early(&root, &options, &body, None, true)
+        .expect_err("problems")
+        .to_string();
+    assert!(
+        message.contains("cannot be checked against the floor"),
+        "{message}"
+    );
 }

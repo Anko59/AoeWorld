@@ -28,6 +28,7 @@ pub(super) struct Request<'a> {
 }
 
 /// The description the check accepted and the level decision to record.
+#[derive(Debug)]
 pub(super) struct Checked {
     pub(super) text: String,
     pub(super) decision: Decision,
@@ -58,20 +59,35 @@ impl std::error::Error for Problems {}
 /// gates and the review), then the lock, then the ship.
 pub(super) fn publish(root: &Path, options: &Options) -> super::Result<()> {
     if let Some(body) = &options.body_file {
-        run(
-            root,
-            &Request {
-                body,
-                title: options.title.as_deref(),
-                title_required: title_required(root, &options.base),
-                video: options.video.as_deref(),
-                base: &options.base,
-                fetch: true,
-            },
-        )?;
+        super::stack::refuse_base(&options.base, &git::branch(root)?)?;
+        let situation = github::situation(root, &options.base).ok();
+        early(root, options, body, situation.as_ref(), true)?;
     }
     let _lock = super::lock::acquire(root, "make ship")?;
     super::ship(root, options).map(|_| ())
+}
+
+/// The check `make ship` runs up front, with the base, parent and scope of
+/// the ship itself (`situation` and its scope live until it returns). A failed `gh` lookup
+/// leaves the title and a local parent to the preflight, which stops on it.
+pub(super) fn early(
+    root: &Path,
+    options: &Options,
+    body: &Path,
+    situation: Option<&github::Situation>,
+    fetch: bool,
+) -> Result<Checked, Problems> {
+    run(
+        root,
+        &Request {
+            body,
+            title: options.title.as_deref(),
+            title_required: situation.is_some_and(github::Situation::title_required),
+            video: options.video.as_deref(),
+            base: &options.base,
+            fetch,
+        },
+    )
 }
 
 /// `make describe-check`: the description check alone; read-only, no lock.
@@ -80,20 +96,19 @@ pub(super) fn command(root: &Path) -> super::Result<()> {
     let body = env("SHIP_BODY").map(PathBuf::from).ok_or(
         "SHIP_BODY is required: `make describe-check SHIP_BODY=<file> [SHIP_TITLE=…] [SHIP_VIDEO=<file>]`",
     )?;
-    let video = env("SHIP_VIDEO").map(PathBuf::from);
-    let title = env("SHIP_TITLE");
-    let checked = run(
-        root,
-        &Request {
-            body: &body,
-            title: title.as_deref(),
-            title_required: false,
-            video: video.as_deref(),
-            base: &env("SHIP_BASE").unwrap_or_else(|| "dev".into()),
-            fetch: false,
-        },
-    )?;
+    let options = Options {
+        title: env("SHIP_TITLE"),
+        video: env("SHIP_VIDEO").map(PathBuf::from),
+        base: env("SHIP_BASE").unwrap_or_else(|| "dev".into()),
+        ..Options::default()
+    };
+    super::stack::refuse_base(&options.base, &git::branch(root)?)?;
+    let situation = github::situation(root, &options.base);
+    let checked = early(root, &options, &body, situation.as_ref().ok(), false)?;
     println!("{}", summary(&checked.decision));
+    if situation.is_err() && options.title.is_none() {
+        println!("title: not checked (gh unavailable)");
+    }
     Ok(())
 }
 
@@ -158,15 +173,4 @@ pub(super) fn run(root: &Path, request: &Request) -> Result<Checked, Problems> {
         Some(decision) if problems.is_empty() => Ok(Checked { text, decision }),
         _ => Err(Problems(problems)),
     }
-}
-
-/// Whether the branch has no open pull request and so needs a title; a
-/// lookup that fails is left to the preflight.
-pub(super) fn title_required(root: &Path, base: &str) -> bool {
-    let open = || -> Result<bool, Box<dyn std::error::Error>> {
-        let branch = git::branch(root)?;
-        let repository = git::origin_repository(root)?;
-        Ok(github::open_pull_request(root, &repository, &branch)?.is_none())
-    };
-    base == crate::review::base::DEV && open().unwrap_or(false)
 }
