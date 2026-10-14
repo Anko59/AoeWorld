@@ -238,17 +238,85 @@ fn deterministic_world_coordinates_chunk_seams_and_extremes() {
         for x in -80..80 {
             let value = first.sample(x, y, source, true);
             assert_eq!(value, identical.sample(x, y, source, true));
-            // Reconstruction from chunk-local coordinates agrees on negative
-            // seams too; no descriptor origin, halo or query-order state.
-            let world_x = x.div_euclid(32) * 32 + x.rem_euclid(32);
-            let world_y = y.div_euclid(32) * 32 + y.rem_euclid(32);
-            assert_eq!(value, first.sample(world_x, world_y, source, true));
             seed_different += usize::from(value != seed_changed.sample(x, y, source, true));
             key_different += usize::from(value != key_changed.sample(x, y, source, true));
         }
     }
     assert!(seed_different > 1000);
     assert!(key_different > 1000);
+
+    // Four neighbouring 32-tile chunks around the world origin, each built
+    // and sampled independently the way a chunk generator does: a fresh
+    // descriptor per chunk and world coordinates derived from that chunk's
+    // own origin plus its local tile indices. Chunk membership and query
+    // order must not change any result, and parcels must continue across
+    // the shared seams exactly as smoothly as they do inside one chunk.
+    const CHUNK_TILES: i32 = 32;
+    const WINDOW: usize = 2 * CHUNK_TILES as usize;
+    let origins = [
+        (-CHUNK_TILES, -CHUNK_TILES),
+        (0, -CHUNK_TILES),
+        (-CHUNK_TILES, 0),
+        (0, 0),
+    ];
+    let mut built = [[LandUse::Uncleared; WINDOW]; WINDOW];
+    for &(origin_x, origin_y) in &origins {
+        let parcels = Parcels::new([1; 32], 4);
+        for local_y in 0..CHUNK_TILES {
+            for local_x in 0..CHUNK_TILES {
+                built[(origin_y + local_y + CHUNK_TILES) as usize]
+                    [(origin_x + local_x + CHUNK_TILES) as usize] =
+                    parcels.sample(origin_x + local_x, origin_y + local_y, source, true);
+            }
+        }
+    }
+    let rebuilt = Parcels::new([1; 32], 4);
+    let (mut interior_pairs, mut interior_matches) = (0_usize, 0_usize);
+    for y in -CHUNK_TILES..CHUNK_TILES {
+        for x in -CHUNK_TILES..CHUNK_TILES {
+            let value = built[(y + CHUNK_TILES) as usize][(x + CHUNK_TILES) as usize];
+            assert_eq!(
+                value,
+                rebuilt.sample(x, y, source, true),
+                "independently built chunks disagree with a direct descriptor at {x},{y}"
+            );
+            if x + 1 < CHUNK_TILES {
+                interior_pairs += 1;
+                interior_matches += usize::from(
+                    value == built[(y + CHUNK_TILES) as usize][(x + 1 + CHUNK_TILES) as usize],
+                );
+            }
+            if y + 1 < CHUNK_TILES {
+                interior_pairs += 1;
+                interior_matches += usize::from(
+                    value == built[(y + 1 + CHUNK_TILES) as usize][(x + CHUNK_TILES) as usize],
+                );
+            }
+        }
+    }
+    // Both shared seams of the 2x2 chunk grid: between columns -1 and 0,
+    // and between rows -1 and 0.
+    let (mut seam_pairs, mut seam_matches) = (0_usize, 0_usize);
+    for y in -CHUNK_TILES..CHUNK_TILES {
+        seam_pairs += 1;
+        seam_matches += usize::from(
+            built[(y + CHUNK_TILES) as usize][(CHUNK_TILES - 1) as usize]
+                == built[(y + CHUNK_TILES) as usize][CHUNK_TILES as usize],
+        );
+    }
+    for x in -CHUNK_TILES..CHUNK_TILES {
+        seam_pairs += 1;
+        seam_matches += usize::from(
+            built[(CHUNK_TILES - 1) as usize][(x + CHUNK_TILES) as usize]
+                == built[CHUNK_TILES as usize][(x + CHUNK_TILES) as usize],
+        );
+    }
+    // A per-chunk realignment or negative-coordinate truncation would drop
+    // seam-crossing neighbours to chance agreement, well below interior.
+    assert!(
+        seam_matches * interior_pairs * 10 >= interior_matches * seam_pairs * 9,
+        "seam matches {seam_matches}/{seam_pairs} against interior {interior_matches}/{interior_pairs}"
+    );
     for x in [i32::MIN, -513, -512, -1, 0, 511, 512, i32::MAX] {
         for y in [i32::MIN, -65, -64, -1, 0, 63, 64, i32::MAX] {
             assert_eq!(
