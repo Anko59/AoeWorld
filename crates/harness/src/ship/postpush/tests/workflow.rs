@@ -48,14 +48,21 @@ fn the_workflow_has_the_triggers_tokens_and_concurrency_the_design_names() {
         "pull-requests: write",
         "group: post-push-update",
         "cancel-in-progress: false",
-        "GH_TOKEN: ${{ secrets.PR_UPDATE_TOKEN }}",
+        "GH_TOKEN: ${{ github.token }}",
+        "contents: write",
+        "actions: write",
         "CARRY_PR: ${{ github.event.pull_request.number }}",
     ] {
         assert!(workflow.contains(line), "{line}");
     }
     // The pull request's own code never runs: the dev checkout is the judge.
     assert_eq!(workflow.matches("ref: dev").count(), 2);
-    for forbidden in ["contents: write", "issues: write", "head.ref", "head.sha"] {
+    for forbidden in [
+        "secrets.PR_UPDATE_TOKEN",
+        "issues: write",
+        "head.ref",
+        "head.sha",
+    ] {
         assert!(!workflow.contains(forbidden), "{forbidden}");
     }
 }

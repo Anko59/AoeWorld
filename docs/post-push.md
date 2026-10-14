@@ -59,16 +59,25 @@ commit restores their original contents. The worktree is removed afterwards.
 A refusal with no conflict also adds one comment explaining the API failure
 and any local replay failure, and remains an error of the run. Forks are skipped.
 
-The rebase must be pushed with a personal token: a push made with the workflow's
-own `GITHUB_TOKEN` starts no CI run, and the rebased pull request would wait
-for a `required` check forever. The workflow reads it from the repository
-secret `PR_UPDATE_TOKEN` (the owner creates it). Without it the job prints a
-notice and does nothing, so the updater is inert until then.
+The updater uses the workflow's own `GITHUB_TOKEN`, with `contents: write`,
+`pull-requests: write`, `statuses: write` and `actions: write`; no personal
+secret is needed. A push made with this token starts neither `pull_request` CI
+nor the `pull_request_target` carry job. After GitHub accepts a rebase, the
+updater polls the PR's head every five seconds for up to two minutes until it
+changes, calls the existing review carry, then dispatches `ci.yml` on the PR's
+head branch. `workflow_dispatch` is an exception to GitHub's token recursion
+rule: a dispatch made with `GITHUB_TOKEN` does start a workflow run, whose
+checks attach to the commit at that branch ref. The dispatch supplies the
+rebased head's merge base with `dev` as the optional `base` input, used by both
+CI selection and the `required` aggregate. Missing base information still
+selects all gates. A head that never moves, a carry error or a dispatch error
+adds a failure comment and fails the updater run. The event-driven carry job
+still serves pushes made by `make ship`.
 
 ## What only GitHub can show
 
 The commands are tested against stubbed `gh` and real Git (`cargo test`, the
 `ship::postpush` tests). After merge, on a real pull request: that
-`pull_request_target` runs from `dev`, the secret and the permissions suffice,
-that `updatePullRequestBranch` rebases and triggers `required`, that the carried
+`pull_request_target` runs from `dev`, the workflow token and permissions suffice,
+that `updatePullRequestBranch` rebases and the explicit dispatch produces `required`, that the carried
 status is accepted for `harness/review`, and what `behind_by` reports.
