@@ -352,15 +352,15 @@ fn typed_modern_evidence_is_sampled_without_turning_modern_water_into_history() 
         .expect("in bounds");
     assert_eq!(
         river.water,
-        WaterKind::Lake,
-        "categorical lake coverage wins over intersecting river evidence"
+        WaterKind::River,
+        "mapped river geometry replaces coarse inland coverage"
     );
     assert_eq!(
         generator
             .tile_at(aoe_core::TileCoord::new(10, 0))
             .unwrap()
             .water,
-        WaterKind::Lake,
+        WaterKind::None,
         "typed evidence does not fill its entire cell with a river"
     );
     assert_eq!(
