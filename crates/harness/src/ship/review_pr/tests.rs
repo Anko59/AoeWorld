@@ -68,6 +68,8 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
         reused_from: None,
         increment: None,
         task_fingerprint: None,
+        note: None,
+        decision: None,
         base_branch: "dev".into(),
     };
     let calls = publication_calls(

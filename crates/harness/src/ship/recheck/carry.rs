@@ -99,6 +99,15 @@ pub(super) fn carry(
             .map(|byte| format!("{byte:02x}"))
             .collect(),
     );
+    carried.note = None;
+    carried.decision = Some(format!(
+        "review: carried {} over the re-check rebase (patch and policy unchanged)",
+        if carried.closing {
+            format!("closing review of {}", short(&report.head))
+        } else {
+            format!("{}/10 of {}", carried.grade, short(&report.head))
+        }
+    ));
     carried.finished = super::super::now();
     carried.store(root)?;
     eprintln!(

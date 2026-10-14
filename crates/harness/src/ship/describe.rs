@@ -453,14 +453,7 @@ pub(crate) fn render(
     out.push_str(&format!(
         "\n### ✅ How\n\n{}\n\n{}> {}\n\n{}\n\n---\n\n# 🤖 For AI\n\n",
         report.headline(),
-        report
-            .reused_from
-            .as_deref()
-            .map(|source| format!(
-                "Review of `{}` reused (same patch).\n\n",
-                &source[..12.min(source.len())]
-            ))
-            .unwrap_or_default(),
+        report.provenance(),
         report.summary.trim().replace('\n', "\n> "),
         extras.metrics,
     ));

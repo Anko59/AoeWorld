@@ -54,6 +54,14 @@ pub(crate) struct Report {
     /// answers for another.
     #[serde(default)]
     pub(crate) task_fingerprint: Option<String>,
+    /// A reused report's remark on what differs from the approved review
+    /// (the description text changed while the patch did not).
+    #[serde(default)]
+    pub(crate) note: Option<String>,
+    /// The `review:` line `make ship` printed before this review ran: which
+    /// of reuse, increment, closing or full review was chosen, and why.
+    #[serde(default)]
+    pub(crate) decision: Option<String>,
     /// The branch `base` and `merge_base` come from: `dev`, or the parent of a
     /// stacked pull request.
     pub(crate) base_branch: String,
@@ -239,28 +247,36 @@ impl Report {
             }))
     }
 
-    /// Whether a complete report already exists for this head at an eligible
-    /// tier against the current base branch, whether it passed or not.
-    pub(crate) fn has_complete(root: &Path, head: &str, tiers: &[&str]) -> Result<bool, String> {
+    /// The complete reports of this head at an eligible tier against the
+    /// current base branch, passing or not.
+    pub(crate) fn complete_for(
+        root: &Path,
+        head: &str,
+        tiers: &[&str],
+    ) -> Result<Vec<Self>, String> {
         let Ok(entries) = fs::read_dir(directory(root)?) else {
-            return Ok(false);
+            return Ok(Vec::new());
         };
+        let prefix = format!("{head}-");
         Ok(entries
             .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(&format!("{head}-"))
-            })
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
             .filter_map(|entry| fs::read(entry.path()).ok())
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
-            .any(|report| {
+            .filter(|report| {
                 report.head == head
                     && report.against_current_base()
                     && tiers.contains(&report.tier.as_str())
                     && report.complete()
-            }))
+            })
+            .collect())
+    }
+
+    #[cfg(test)]
+    /// Whether a complete report already exists for this head at an eligible
+    /// tier against the current base branch, whether it passed or not.
+    pub(crate) fn has_complete(root: &Path, head: &str, tiers: &[&str]) -> Result<bool, String> {
+        Ok(!Self::complete_for(root, head, tiers)?.is_empty())
     }
 
     /// The emoji badge for the grade.
@@ -302,6 +318,21 @@ impl Report {
         )
     }
 
+    /// What the pull request says about how this review came to be: a reused
+    /// review and why, and the `review:` line chosen for the ship.
+    pub(crate) fn provenance(&self) -> String {
+        let reused = self.reused_from.as_deref().map(|source| {
+            let note = self.note.as_ref().map(|n| format!("; {n}"));
+            format!(
+                "Review of `{}` reused (same patch){}.\n\n",
+                &source[..12.min(source.len())],
+                note.unwrap_or_default()
+            )
+        });
+        let decision = self.decision.as_ref().map(|line| format!("{line}\n\n"));
+        reused.unwrap_or_default() + &decision.unwrap_or_default()
+    }
+
     pub(crate) fn markdown(&self) -> String {
         let mut out = format!(
             "{}\n\n> {}\n\n",
@@ -310,9 +341,16 @@ impl Report {
         );
         if let Some(source) = &self.reused_from {
             out.push_str(&format!(
-                "Review of `{}` reused (same patch); CI re-runs every gate on this commit.\n\n",
-                &source[..12.min(source.len())]
+                "Review of `{}` reused (same patch){}; CI re-runs every gate on this commit.\n\n",
+                &source[..12.min(source.len())],
+                self.note
+                    .as_ref()
+                    .map(|n| format!(" ({n})"))
+                    .unwrap_or_default()
             ));
+        }
+        if let Some(decision) = &self.decision {
+            out.push_str(&format!("{decision}\n\n"));
         }
         if let Some(increment) = &self.increment {
             out.push_str(&format!(

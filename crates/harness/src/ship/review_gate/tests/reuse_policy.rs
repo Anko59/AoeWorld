@@ -195,12 +195,18 @@ fn a_changed_description_gets_a_fresh_review() {
     source.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
     source.store(&root).unwrap();
     advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    // The patch is identical: the approval stands for the edited text (see
+    // unchanged_patch.rs). A review of one description still never answers
+    // for another where the code differs.
+    std::fs::write(root.join("more.txt"), "one more line\n").unwrap();
+    run(&root, &["add", "more.txt"]);
+    run(&root, &["commit", "-q", "-m", "more"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
         Report::reuse_for_change(&root, &head, "feature", &["low"], "changed description\n")
             .unwrap()
             .is_none(),
-        "a review of one description never answers for another"
+        "a review of one description never answers for changed code"
     );
 
     let body = temp.path().join("body.md");
@@ -326,23 +332,37 @@ fn a_judge_behind_the_fetched_origin_dev_never_reuses() {
 }
 
 #[test]
-fn an_amended_commit_message_gets_a_fresh_review() {
+fn an_amended_commit_message_keeps_the_approval_of_an_unchanged_patch() {
     let (_temp, root) = fixture("true");
     unstored(&root, Tier::Low, 9).store(&root).unwrap();
     advance_dev_with_file(&root, "BASE.md", "moved base\n");
-    // Without SHIP_BODY the reviewers read the commit log, which changed.
+    // Without SHIP_BODY the reviewers read the commit log, which changed: the
+    // text is not code, so the identical patch stays approved.
+    run(&root, &["commit", "-q", "--amend", "-m", "reworded"]);
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let reused = Report::reuse_for_change(&root, &head, "feature", &["low"], "")
+        .unwrap()
+        .expect("the patch is identical");
+    assert!(reused.note.is_some());
+
+    // A reworded commit that also changed a line is a different patch.
+    let (_temp, root) = fixture("true");
+    unstored(&root, Tier::Low, 9).store(&root).unwrap();
+    advance_dev_with_file(&root, "BASE.md", "moved base\n");
+    std::fs::write(root.join("more.txt"), "one more line\n").unwrap();
+    run(&root, &["add", "more.txt"]);
     run(&root, &["commit", "-q", "--amend", "-m", "reworded"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(
         Report::reuse_for_change(&root, &head, "feature", &["low"], "")
             .unwrap()
             .is_none(),
-        "a review of one commit log never answers for another"
+        "a review of one commit log never answers for changed code"
     );
 }
 
 #[test]
-fn the_same_commit_with_another_description_gets_a_fresh_review() {
+fn the_same_commit_with_another_description_keeps_its_approval() {
     let (temp, root) = fixture("true");
     let mut first = unstored(&root, Tier::Low, 9);
     first.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
@@ -371,12 +391,13 @@ fn the_same_commit_with_another_description_gets_a_fresh_review() {
         body_file: Some(body),
         ..crate::ship::tests::offline()
     };
-    let calls = std::cell::Cell::new(0);
-    crate::ship::review_gate::require(&root, &evidence, &options, &|root, tier, _, task, _| {
-        calls.set(calls.get() + 1);
-        assert_eq!(task, "second description\n");
-        Ok(unstored(root, tier, 9))
+    let reused = crate::ship::review_gate::require(&root, &evidence, &options, &|_, _, _, _, _| {
+        panic!("an approved commit keeps its approval under another description")
     })
     .unwrap();
-    assert_eq!(calls.get(), 1, "the second description was reviewed");
+    assert_eq!(reused.head, head);
+    assert_eq!(
+        reused.note.as_deref(),
+        Some("description text changed after approval; code unchanged")
+    );
 }

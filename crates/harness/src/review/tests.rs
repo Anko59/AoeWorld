@@ -350,6 +350,8 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         reused_from: None,
         increment: None,
         task_fingerprint: None,
+        note: None,
+        decision: None,
         base_branch: "dev".into(),
     };
     assert!(report.passes());
@@ -372,4 +374,5 @@ mod closing;
 mod cumulative;
 mod flow;
 mod limits;
+mod make_review;
 mod pinned;
