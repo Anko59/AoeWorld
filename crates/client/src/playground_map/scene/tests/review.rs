@@ -121,6 +121,7 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
         sent_region: None,
         last_subscribe: 0.0,
         next_sequence: 1,
+        order_feedback: Default::default(),
         units: BTreeMap::from([(
             id,
             GameplayUnitState {
