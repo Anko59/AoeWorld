@@ -124,6 +124,12 @@ fn count(raster: &[u8], class: MinimapClass) -> usize {
 #[path = "minimap_rivers.rs"]
 mod rivers;
 
+#[path = "minimap_relief.rs"]
+mod relief;
+
+#[path = "minimap_dump.rs"]
+mod dump;
+
 #[test]
 fn raster_axis_and_bytes_are_capped_for_every_map_size() {
     assert_eq!(MAX_MINIMAP_SAMPLES_PER_AXIS, 512);
