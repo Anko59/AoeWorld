@@ -362,7 +362,7 @@ fn an_amended_commit_message_keeps_the_approval_of_an_unchanged_patch() {
 }
 
 #[test]
-fn the_same_commit_with_another_description_gets_a_fresh_review() {
+fn the_same_commit_with_another_description_keeps_its_approval() {
     let (temp, root) = fixture("true");
     let mut first = unstored(&root, Tier::Low, 9);
     first.task_fingerprint = Some(Report::task_fingerprint("first description\n"));
@@ -391,12 +391,13 @@ fn the_same_commit_with_another_description_gets_a_fresh_review() {
         body_file: Some(body),
         ..crate::ship::tests::offline()
     };
-    let calls = std::cell::Cell::new(0);
-    crate::ship::review_gate::require(&root, &evidence, &options, &|root, tier, _, task, _| {
-        calls.set(calls.get() + 1);
-        assert_eq!(task, "second description\n");
-        Ok(unstored(root, tier, 9))
+    let reused = crate::ship::review_gate::require(&root, &evidence, &options, &|_, _, _, _, _| {
+        panic!("an approved commit keeps its approval under another description")
     })
     .unwrap();
-    assert_eq!(calls.get(), 1, "the second description was reviewed");
+    assert_eq!(reused.head, head);
+    assert_eq!(
+        reused.note.as_deref(),
+        Some("description text changed after approval; code unchanged")
+    );
 }

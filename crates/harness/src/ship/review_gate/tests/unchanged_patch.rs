@@ -287,3 +287,79 @@ fn a_missing_base_commit_is_a_full_review_that_says_so() {
         )
     );
 }
+
+#[test]
+fn the_same_commit_shipped_again_under_another_description_keeps_its_approval() {
+    let (temp, root) = fixture("true");
+    let source = approved(&root, Tier::Medium, FIRST);
+    let reused = no_reviewer(&root, &options(temp.path(), SECOND, None));
+    assert_eq!(reused.head, source.head);
+    assert_eq!(reused.grade, 9);
+    assert_eq!(
+        reused.task_fingerprint,
+        Some(Report::task_fingerprint(SECOND))
+    );
+    assert_eq!(
+        reused.note.as_deref(),
+        Some("description text changed after approval; code unchanged")
+    );
+    // A second edit, after the reuse, is covered too, and so is the first text.
+    for text in ["third description\n", SECOND, FIRST] {
+        let again = no_reviewer(&root, &options(temp.path(), text, None));
+        assert_eq!(again.head, source.head);
+        assert_eq!(again.task_fingerprint, Some(Report::task_fingerprint(text)));
+    }
+}
+
+#[test]
+fn a_description_edit_after_a_rebase_reuse_keeps_the_approval_again() {
+    let (temp, root) = fixture("true");
+    approved(&root, Tier::Medium, FIRST);
+    advance_dev(&root, &[]);
+    no_reviewer(&root, &options(temp.path(), SECOND, None));
+    let third = no_reviewer(&root, &options(temp.path(), "third description\n", None));
+    assert_eq!(third.head, head(&root));
+    assert_eq!(third.grade, 9);
+}
+
+#[test]
+fn a_failed_review_of_this_commit_is_reviewed_again_under_a_new_description() {
+    let (temp, root) = fixture("true");
+    // On its own branch: on `feature` a failure forbids any review.
+    run(&root, &["checkout", "-q", "-b", "candidate"]);
+    let mut failed = unstored(&root, Tier::Medium, 7);
+    failed.task_fingerprint = Some(Report::task_fingerprint(FIRST));
+    failed.store(&root).unwrap();
+    let (_, seen) = ship(&root, &options(temp.path(), SECOND, None));
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].0, Plan::Full);
+}
+
+#[test]
+fn the_same_commit_under_a_changed_policy_gets_a_full_review_with_the_policy_reason() {
+    let (temp, root) = fixture("true");
+    let source = approved(&root, Tier::Medium, FIRST);
+    let (path, text) = policy_change(&root);
+    advance_dev_policy_only(&root, &path, &text);
+    assert_eq!(head(&root), source.head, "the commit itself is unchanged");
+    let (_, seen) = ship(&root, &options(temp.path(), SECOND, None));
+    assert_eq!(seen[0].0, Plan::Full);
+    assert_eq!(
+        seen[0].1,
+        format!(
+            "review: full review — the review policy on dev changed since the 9/10 of {}",
+            &source.head[..12]
+        )
+    );
+}
+
+/// Move origin/dev without touching `feature`, so its head and base stay.
+fn advance_dev_policy_only(root: &Path, path: &str, text: &str) {
+    run(root, &["checkout", "-q", "dev"]);
+    fs::write(root.join(path), text).unwrap();
+    run(root, &["add", path]);
+    run(root, &["commit", "-q", "-m", "policy"]);
+    run(root, &["push", "-q", "origin", "dev"]);
+    run(root, &["fetch", "-q", "origin", "dev"]);
+    run(root, &["checkout", "-q", "feature"]);
+}

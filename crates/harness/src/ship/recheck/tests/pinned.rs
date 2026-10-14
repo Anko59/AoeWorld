@@ -52,6 +52,28 @@ fn the_passed_review_is_carried_under_the_pinned_judge_without_a_reviewer() {
 }
 
 #[test]
+fn the_carried_review_says_it_was_carried_not_the_original_decision() {
+    let (temp, root) = fixture("true");
+    let (before, mut report, judged) = reviewed(&root);
+    report.decision = Some("review: full review — no passing review of this branch".into());
+    report.note = Some("description text changed after approval; code unchanged".into());
+    advance(&temp, "dev", "other.txt", "o\n");
+    let rebased = before_push_judged(&root, &before, Some(&report), &reviewing(), Some(&judged))
+        .unwrap()
+        .expect("dev moved");
+    let carried = rebased.review.expect("carried");
+    assert_eq!(
+        carried.decision,
+        Some(format!(
+            "review: carried 9/10 of {} over the re-check rebase (patch and policy unchanged)",
+            &before.head[..12]
+        ))
+    );
+    assert_eq!(carried.note, None);
+    assert!(carried.markdown().contains("review: carried 9/10 of"));
+}
+
+#[test]
 fn a_changed_review_policy_on_dev_stops_with_the_policy_message() {
     let (temp, root) = fixture("true");
     let (before, report, judged) = reviewed(&root);

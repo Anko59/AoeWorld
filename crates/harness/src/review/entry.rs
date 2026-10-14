@@ -137,20 +137,7 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
                 println!("{}", report.markdown());
                 return Ok(());
             }
-            // `make review` spends the same budget as `make ship`.
-            let head = git::git(&root, &["rev-parse", "HEAD"])?;
-            let plan = match increment::next(
-                &root,
-                &history(&root, &git::branch(&root)?)?,
-                &head,
-                now(),
-            ) {
-                closing::Next::Review(plan) => plan,
-                closing::Next::FixFirst(why)
-                | closing::Next::Split(why)
-                | closing::Next::Unavailable(why) => return Err(why.into()),
-            };
-            let report = review(&root, tier, runtime, &task, &plan)?;
+            let report = review_current(&root, tier, runtime, &task, &review)?;
             println!("{}", report.markdown());
             if report.passes() {
                 Ok(())
@@ -175,6 +162,32 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
             Ok(())
         }
     }
+}
+
+type CurrentReviewer<'a> = dyn Fn(&Path, Tier, Runtime, &str, &Plan) -> Result<Report> + 'a;
+
+/// `make review` on the default base: the same budget and the same `review:`
+/// line as `make ship`, printed and stored before any reviewer starts.
+pub(crate) fn review_current(
+    root: &Path,
+    tier: Tier,
+    runtime: Runtime,
+    task: &str,
+    reviewer: &CurrentReviewer<'_>,
+) -> Result<Report> {
+    let head = git::git(root, &["rev-parse", "HEAD"])?;
+    let plan = match increment::next(root, &history(root, &git::branch(root)?)?, &head, now()) {
+        closing::Next::Review(plan) => plan,
+        closing::Next::FixFirst(why)
+        | closing::Next::Split(why)
+        | closing::Next::Unavailable(why) => {
+            return Err(why.into());
+        }
+    };
+    crate::ship::review_gate::announce(&plan, "requested with make review");
+    let reviewed = reviewer(root, tier, runtime, task, &plan);
+    drop(super::take_announced());
+    reviewed
 }
 
 /// Review-only entry for a stacked base. Local parents do not need a PR;

@@ -247,28 +247,36 @@ impl Report {
             }))
     }
 
-    /// Whether a complete report already exists for this head at an eligible
-    /// tier against the current base branch, whether it passed or not.
-    pub(crate) fn has_complete(root: &Path, head: &str, tiers: &[&str]) -> Result<bool, String> {
+    /// The complete reports of this head at an eligible tier against the
+    /// current base branch, passing or not.
+    pub(crate) fn complete_for(
+        root: &Path,
+        head: &str,
+        tiers: &[&str],
+    ) -> Result<Vec<Self>, String> {
         let Ok(entries) = fs::read_dir(directory(root)?) else {
-            return Ok(false);
+            return Ok(Vec::new());
         };
+        let prefix = format!("{head}-");
         Ok(entries
             .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(&format!("{head}-"))
-            })
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
             .filter_map(|entry| fs::read(entry.path()).ok())
             .filter_map(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
-            .any(|report| {
+            .filter(|report| {
                 report.head == head
                     && report.against_current_base()
                     && tiers.contains(&report.tier.as_str())
                     && report.complete()
-            }))
+            })
+            .collect())
+    }
+
+    #[cfg(test)]
+    /// Whether a complete report already exists for this head at an eligible
+    /// tier against the current base branch, whether it passed or not.
+    pub(crate) fn has_complete(root: &Path, head: &str, tiers: &[&str]) -> Result<bool, String> {
+        Ok(!Self::complete_for(root, head, tiers)?.is_empty())
     }
 
     /// The emoji badge for the grade.

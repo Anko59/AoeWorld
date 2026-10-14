@@ -61,7 +61,8 @@ impl Report {
     /// tiers, the merge grade and the policy fingerprint all come from it, and
     /// it must be origin/dev itself: a judge built from an older origin/dev
     /// never reuses. Any complete report for this head at an eligible tier
-    /// against the current base blocks reuse, including a failing one.
+    /// against the current base is the only source for that head: a passing one
+    /// stands whatever the description, a failing one blocks reuse.
     pub(crate) fn reuse_decision(
         root: &Path,
         head: &str,
@@ -139,40 +140,52 @@ impl Report {
                 floor.name()
             ));
         }
-        if Self::has_complete(root, head, &tiers)? {
-            return declined(
-                "this exact commit already has a complete review that cannot answer again (it failed, or was made for another description or policy)",
-            );
-        }
         let config = super::config::Config::load(root)?;
         let wanted_task = Self::task_fingerprint(&Self::effective_task(root, head, task)?);
         let (merge_base, wanted_identity) = git::change_identity(root, &target, head)?;
         let wanted_fingerprint = git::change_fingerprint(root, &target, head)?.1;
         let mut unreadable = 0;
-        let mut candidates: Vec<Self> = Vec::new();
-        for entry in fs::read_dir(directory(root)?)
-            .into_iter()
-            .flatten()
-            .flatten()
-        {
-            let Some(report) = fs::read(entry.path())
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
-            else {
-                unreadable += 1;
-                continue;
-            };
-            // The same commit against the same base was answered above.
-            if (report.head != head || !report.against_current_base())
-                && !branch.is_empty()
-                && report.branch == branch
-                && full_id(&report.head)
-                && report.reused_from.is_none()
-                && report.complete()
-                && report.passes()
-                && (report.closing || report.grade >= config.merge_grade)
+        let mut candidates: Vec<Self> = Self::complete_for(root, head, &tiers)?;
+        if candidates.is_empty() {
+            for entry in fs::read_dir(directory(root)?)
+                .into_iter()
+                .flatten()
+                .flatten()
             {
-                candidates.push(report);
+                let Some(report) = fs::read(entry.path())
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
+                else {
+                    unreadable += 1;
+                    continue;
+                };
+                if report.head != head
+                    && !branch.is_empty()
+                    && report.branch == branch
+                    && full_id(&report.head)
+                    && report.reused_from.is_none()
+                    && report.complete()
+                    && report.passes()
+                    && (report.closing || report.grade >= config.merge_grade)
+                {
+                    candidates.push(report);
+                }
+            }
+        } else {
+            // This exact commit was reviewed before: its passing review stands
+            // whatever the description (also after an earlier reuse); one that
+            // failed means a review.
+            // Only this branch's own review, and one that records the task
+            // its reviewers saw (a report without it is never reused).
+            candidates.retain(|report| {
+                !branch.is_empty()
+                    && report.branch == branch
+                    && report.task_fingerprint.is_some()
+                    && report.passes()
+                    && (report.closing || report.grade >= config.merge_grade)
+            });
+            if candidates.is_empty() {
+                return declined("this exact commit's review did not pass");
             }
         }
         candidates.sort_by_key(|report| std::cmp::Reverse(report.finished));
@@ -183,7 +196,11 @@ impl Report {
                 continue;
             }
             let task_changed = source.task_fingerprint.as_deref() != Some(wanted_task.as_str());
-            let source_head = std::mem::replace(&mut source.head, head.to_owned());
+            let source_head = source
+                .reused_from
+                .clone()
+                .unwrap_or_else(|| std::mem::replace(&mut source.head, head.to_owned()));
+            source.head = head.to_owned();
             source.branch = branch.to_owned();
             source.base = target_commit.clone();
             source.base_branch = target.clone();

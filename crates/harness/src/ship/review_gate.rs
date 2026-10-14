@@ -60,6 +60,16 @@ pub(crate) fn require(
     require_task(root, evidence, options, &task, reviewer)
 }
 
+/// Print the `review:` line for the review about to run and remember it for the
+/// report that review stores: the one announcement of `make ship` and
+/// `make review`.
+pub(crate) fn announce(plan: &Plan, why: &str) -> String {
+    let line = why::line(plan, why);
+    eprintln!("{line}");
+    review::announce(&line);
+    line
+}
+
 /// Same review step with already-frozen task text (the review-only entry).
 pub(crate) fn require_task(
     root: &Path,
@@ -97,9 +107,7 @@ pub(crate) fn require_task(
         }
         Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
     };
-    let line = why::line(&plan, &why);
-    eprintln!("{line}");
-    review::announce(&line);
+    let line = announce(&plan, &why);
     eprintln!(
         "ship: {}{} review on {}",
         tier.name(),

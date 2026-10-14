@@ -185,9 +185,13 @@ a case set this small shows large differences only.
   approval; code unchanged`, and no reviewer runs. This is the same code
   path as every other reuse, not a second copy: the task text is compared
   only after the patch is known to be identical, so where the patch differs
-  the description never decides anything (the increment below applies). A
-  new review of the same commit under another description is not covered:
-  it still needs a review.
+  the description never decides anything (the increment below applies). The
+  same commit shipped again under another description (also a second edit,
+  after an earlier reuse) keeps its approval the same way: its passing,
+  complete report is stored again under the new task fingerprint with the
+  same note, and no reviewer runs. A failed report of that commit, or a
+  changed policy or tier, still means a review, and the `review:` line names
+  that first failing condition.
   Another branch's identical patch never answers this branch's findings.
   A complete report for the target head against the current base blocks
   copying another review over it, including a failing verdict.
