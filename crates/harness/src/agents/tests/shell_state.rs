@@ -195,6 +195,39 @@ fn substitutions_inside_parameter_and_arithmetic_expansions_are_judged() {
 }
 
 #[test]
+fn quoted_commands_inside_parameter_expansions_are_literal() {
+    let fixture = Fixture::new();
+    // Inside `${...}`, bash keeps a single-quoted or escaped substitution as
+    // literal text: it does not run, so it is not judged as a command.
+    for command in [
+        "echo ${x:-'$(cargo build)'}",
+        "echo ${x:-'`cargo build`'}",
+        "echo ${x:-'\"$(cargo build)\"'}",
+        "echo ${x:-\\$(cargo build)}",
+    ] {
+        allowed(&fixture, Role::Main, command);
+    }
+    // Unquoted or double-quoted, the inner command still runs and is judged:
+    // double quotes do not suppress a substitution, and a `'` inside them is
+    // literal data.
+    for command in [
+        "echo ${x:-$(cargo build)}",
+        "echo \"${x:-$(cargo build)}\"",
+        "echo ${x:-\"$(cargo build)\"}",
+        "echo ${x:-\"'$(cargo build)'\"}",
+        "echo ${x:-\"\\\"'$(cargo build)'\\\"\"}",
+        "echo ${x:-\\'$(cargo build)\\'}",
+        "echo $(( $(cargo build) ))",
+    ] {
+        denied(&fixture, Role::Main, command);
+    }
+    // Agents refuse every other `${...}` form regardless.
+    for role in AGENTS {
+        denied(&fixture, role, "echo ${x:-'$(cargo build)'}");
+    }
+}
+
+#[test]
 fn a_backslash_newline_inside_single_quotes_is_literal_data() {
     let fixture = Fixture::new();
     for role in AGENTS {
@@ -206,6 +239,34 @@ fn a_backslash_newline_inside_single_quotes_is_literal_data() {
         }
     }
     allowed(&fixture, Role::Main, "echo 'a\\\nb'");
+}
+
+#[test]
+fn comments_end_quote_tracking_before_line_continuations() {
+    let fixture = Fixture::new();
+    for role in AGENTS {
+        // An apostrophe inside a comment does not open a quote, so a later
+        // backslash-newline still continues the line.
+        for command in [
+            "# don't continue lines\necho a\\\nb",
+            "echo a; # don't\nprintf \\\nx",
+            "echo a;# don't\nprintf \\\nx",
+            "echo a && # don't\nprintf \\\nx",
+            "echo a | # don't\nprintf \\\nx",
+            "(echo a)# don't\nprintf \\\nx",
+        ] {
+            denied(&fixture, role, command);
+        }
+        // A `#` at the start of a word ends at the newline: a backslash
+        // right before that newline is comment data, not a continuation.
+        allowed(&fixture, role, "echo a #x\\\necho b");
+        // A `#` inside a word or inside quotes is not a comment.
+        for command in ["echo a#b \\\nc", "echo '#x' \\\nb", "echo \"#x\" \\\nb"] {
+            denied(&fixture, role, command);
+        }
+    }
+    // `${#x}` keeps its `#` inside the word.
+    allowed(&fixture, Role::Main, "echo ${#x}");
 }
 
 #[test]
