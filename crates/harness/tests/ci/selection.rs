@@ -38,7 +38,7 @@ fn dispatch_base_and_cadence_are_recomputed_by_both_cli_commands() {
             "workflow_dispatch",
             "feature/example",
             "",
-            Some("origin/dev"),
+            Some(base.as_str()),
         ),
         ("workflow_dispatch", "dev", "", None),
         ("workflow_dispatch", "main", "", None),
@@ -79,6 +79,21 @@ fn dispatch_base_and_cadence_are_recomputed_by_both_cli_commands() {
             } else {
                 "skipped"
             });
+        }
+        if event == "workflow_dispatch" && branch == "feature/example" {
+            // dev advances between the selection and the final check.
+            let moved = git(
+                root,
+                &[
+                    "commit-tree",
+                    "-p",
+                    &base,
+                    "-m",
+                    "dev moved",
+                    &format!("{base}^{{tree}}"),
+                ],
+            );
+            git(root, &["update-ref", "refs/remotes/origin/dev", &moved]);
         }
         let mut check = setup("ci-check");
         check

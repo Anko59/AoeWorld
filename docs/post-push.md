@@ -67,8 +67,10 @@ updater polls the PR's head every five seconds for up to two minutes until it
 changes, calls the existing review carry, then dispatches `ci.yml` on the PR's
 head branch. `workflow_dispatch` is an exception to GitHub's token recursion
 rule: a dispatch made with `GITHUB_TOKEN` does start a workflow run. The
-harness chooses `origin/dev` as the comparison base for dispatches on feature
-branches, using the merge base and `pr` cadence, just like a pull request.
+harness chooses the merge base of the head with `origin/dev` as the comparison
+base for dispatches on feature branches, with the `pr` cadence, just like a pull
+request; the merge base does not change when dev advances between the selection
+and the final check. The `required` status step does not run on `dev`/`main`.
 The dispatcher supplies no base. Dispatches on `dev`/`main` and other events
 without a base still select all gates; an unavailable comparison also selects all.
 

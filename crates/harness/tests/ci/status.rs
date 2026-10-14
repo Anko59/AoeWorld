@@ -84,7 +84,7 @@ fn workflow_scopes_status_write_and_always_reports_the_dispatch_result() {
         .unwrap();
     for line in [
         "permissions: { contents: read, statuses: write }",
-        "if: ${{ always() && github.event_name == 'workflow_dispatch' }}",
+        "if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref_name != 'dev' && github.ref_name != 'main' }}",
         "GH_TOKEN: ${{ github.token }}",
         "JOB_STATUS: ${{ job.status }}",
         "run: make ci-dispatch-status",

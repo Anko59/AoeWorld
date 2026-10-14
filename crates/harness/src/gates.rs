@@ -245,7 +245,9 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
     Ok(manifest)
 }
 
-// A dispatcher chooses a ref, never the comparison that determines its gates.
+// A dispatcher chooses a ref, never the comparison that determines its gates:
+// a dispatch compares with its merge base with dev, which stays the same when
+// dev advances between the selection and the final check.
 fn requested_ci_base() -> Option<String> {
     std::env::var("AOE_BASE_SHA")
         .ok()
@@ -254,7 +256,8 @@ fn requested_ci_base() -> Option<String> {
             (std::env::var("GITHUB_EVENT_NAME").as_deref() == Ok("workflow_dispatch")
                 && std::env::var("GITHUB_REF_NAME")
                     .is_ok_and(|name| name != "dev" && name != "main"))
-            .then(|| "origin/dev".to_owned())
+            .then(|| git_output(&["merge-base", "origin/dev", "HEAD"]).ok())
+            .flatten()
         })
 }
 
