@@ -143,11 +143,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                 // stale geometry or cause the normal five-second failure backoff.
                 return;
             }
-            if result.is_ok() {
-                client.capture.failures.remove(&(x, y));
-            } else {
-                client.capture.failures.insert((x, y));
-            }
+            client.capture.chunk_received((x, y), result.is_err());
             match result {
                 Ok(chunk) => {
                     client.terrain_bounds.failures.chunks.remove(&(x, y));

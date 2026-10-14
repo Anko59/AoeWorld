@@ -5,7 +5,7 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, PointerEvent, WheelEvent};
 
 #[path = "playground_controls/navigation.rs"]
-mod navigation;
+pub(super) mod navigation;
 
 pub(super) fn map_changed(hash: Option<[u8; 32]>) {
     navigation::map_changed(hash);

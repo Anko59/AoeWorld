@@ -1,82 +1,56 @@
 //! Camera links and cheap presentation evidence, independent of gameplay authority.
 use super::{Client, map};
 use aoe_core::{Camera, ScreenPoint, WorldConfig};
-use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
-#[derive(Default)]
-pub(crate) struct Fragment {
-    x: Option<f64>,
-    y: Option<f64>,
-    zoom: Option<f64>,
-    pub renderer: Option<&'static str>,
-}
-
-pub(crate) fn parse_fragment(hash: &str) -> Fragment {
-    let mut fragment = Fragment::default();
-    for part in hash.trim_start_matches('#').split('&') {
-        let Some((key, value)) = part.split_once('=') else {
-            continue;
-        };
-        let number = || value.parse::<f64>().ok().filter(|value| value.is_finite());
-        match key {
-            "x" => fragment.x = number(),
-            "y" => fragment.y = number(),
-            "zoom" => fragment.zoom = number(),
-            "renderer" => {
-                fragment.renderer = match value {
-                    "webgpu" => Some("webgpu"),
-                    "webgl2" => Some("webgl2"),
-                    "canvas" => Some("canvas"),
-                    _ => None,
-                };
-            }
-            _ => {}
-        }
-    }
-    fragment
-}
+pub(crate) struct Fragment(pub [f64; 4]);
 
 impl Fragment {
     fn has_camera(&self) -> bool {
-        self.x.is_some() || self.y.is_some() || self.zoom.is_some()
+        self.0[..3].iter().any(|value| value.is_finite())
+    }
+
+    pub fn renderer(&self) -> Option<&'static str> {
+        match self.0[3] as u32 {
+            1 => Some("webgpu"),
+            2 => Some("webgl2"),
+            3 => Some("canvas"),
+            _ => None,
+        }
     }
 
     pub fn apply(&self, mut camera: Camera, config: WorldConfig) -> Camera {
         if !self.has_camera() {
             return camera;
         }
-        if let Some(zoom) = self.zoom {
-            // Use the same allowed range as wheel zoom, without moving its focus.
+        if self.0[2].is_finite() {
             camera = camera.zoom_around(
                 ScreenPoint {
                     x: camera.viewport[0] / 2.0,
                     y: camera.viewport[1] / 2.0,
                 },
-                zoom,
+                self.0[2],
             );
         }
-        if let Some(x) = self.x {
-            camera.center[0] = x.clamp(0.0, f64::from(config.width_tiles) - 1.0);
-        }
-        if let Some(y) = self.y {
-            camera.center[1] = y.clamp(0.0, f64::from(config.height_tiles) - 1.0);
+        for axis in 0..2 {
+            if self.0[axis].is_finite() {
+                let extent = [config.width_tiles, config.height_tiles][axis];
+                camera.center[axis] = self.0[axis].clamp(0.0, f64::from(extent) - 1.0);
+            }
         }
         camera.clamp_center(config)
     }
 }
 
-pub(super) fn current(document: &web_sys::Document) -> Fragment {
-    parse_fragment(
-        &document
-            .location()
-            .and_then(|location| location.hash().ok())
-            .unwrap_or_default(),
-    )
+pub(super) fn current() -> Fragment {
+    let mut values = [f64::NAN, f64::NAN, f64::NAN, 0.0];
+    super::controls::navigation::camera_fragment(&mut values);
+    Fragment(values)
 }
 
 fn apply_current(client: &mut Client) {
-    let fragment = current(&client.document);
+    let fragment = current();
     if !fragment.has_camera() {
         return;
     }
@@ -119,7 +93,7 @@ impl ChunkCounts {
     pub fn for_visible(
         visible: &[(i32, i32)],
         resident: impl Fn(&(i32, i32)) -> bool,
-        failures: &BTreeSet<(i32, i32)>,
+        failures: &[(i32, i32)],
     ) -> Self {
         let mut counts = Self::default();
         for coordinate in visible {
@@ -135,30 +109,27 @@ impl ChunkCounts {
 #[derive(Default)]
 pub(crate) struct Capture {
     world_known: bool,
-    pub failures: BTreeSet<(i32, i32)>,
+    // Only the current, bounded visible demand survives settle_counts pruning.
+    pub failures: Vec<(i32, i32)>,
     pub frame: u64,
-    last_frame: Option<u64>,
-    last_counts: Option<ChunkCounts>,
+}
+
+impl Capture {
+    pub fn chunk_received(&mut self, coordinate: (i32, i32), failed: bool) {
+        if !failed {
+            self.failures.retain(|key| *key != coordinate);
+        } else if !self.failures.contains(&coordinate) {
+            self.failures.push(coordinate);
+        }
+    }
 }
 
 pub(super) fn update(client: &mut Client) {
     let counts = map::heights::settle_counts(client);
-    let capture = &mut client.capture;
-    if capture.last_counts.map(|value| value.pending) != Some(counts.pending) {
-        let _ = client
-            .canvas
-            .set_attribute("data-chunks-pending", &counts.pending.to_string());
-    }
-    if capture.last_counts.map(|value| value.failed) != Some(counts.failed) {
-        let _ = client
-            .canvas
-            .set_attribute("data-chunks-failed", &counts.failed.to_string());
-    }
-    capture.last_counts = Some(counts);
-    if capture.last_frame != Some(capture.frame) {
-        let _ = client
-            .canvas
-            .set_attribute("data-frame", &capture.frame.to_string());
-        capture.last_frame = Some(capture.frame);
-    }
+    super::controls::navigation::capture_update(
+        &client.canvas,
+        counts.pending,
+        counts.failed,
+        client.capture.frame,
+    );
 }

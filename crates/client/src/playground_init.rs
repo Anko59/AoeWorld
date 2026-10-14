@@ -11,7 +11,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         .get_element_by_id("scene")
         .ok_or("No canvas")?
         .dyn_into()?;
-    let backend = super::capture::current(&document).renderer;
+    let backend = super::capture::current().renderer();
     let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await
         .map_err(|error| JsValue::from_str(&error))?;
