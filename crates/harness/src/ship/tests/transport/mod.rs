@@ -88,3 +88,14 @@ fn a_failed_push_keeps_pre_push_output_from_both_streams() {
     assert!(error.contains("pre-push gate details"), "{error}");
     assert!(error.contains("gate failed"), "{error}");
 }
+
+#[test]
+fn a_rejected_non_fast_forward_push_says_to_ship_with_force() {
+    let rejected = " ! [rejected]        abc -> feature (non-fast-forward)";
+    let (result, waits, calls) = run(&[rejected], "push");
+    let error = result.unwrap_err();
+    assert_eq!((calls, waits.len()), (1, 0));
+    assert!(error.contains("SHIP_FORCE=1"), "{error}");
+    let (result, _, _) = run(&["connection refused"], "push");
+    assert!(!result.unwrap_err().contains("SHIP_FORCE"));
+}

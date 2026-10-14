@@ -50,6 +50,12 @@ pub(crate) fn output_with(
             error.push('\n');
             error.push_str(String::from_utf8_lossy(&output.stdout).trim());
         }
+        if stderr.contains("(non-fast-forward)") {
+            error.push_str(
+                "\nThe branch on origin is not an ancestor of this head (it was rebased): ship again \
+                 with SHIP_FORCE=1 to push with a lease.",
+            );
+        }
         if publickey {
             let socket = command
                 .get_envs()
