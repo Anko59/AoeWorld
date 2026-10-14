@@ -6,7 +6,7 @@
 //! comes from reviewer output, so it is treated as untrusted text.
 use super::{
     AGENT_LABEL, BODY_LIMIT, MARKER, TITLE_LIMIT, Target, duplicate_index, fingerprint,
-    marked_body, marker_line,
+    marker_line, validate_text,
 };
 use crate::review::{
     Report,
@@ -20,10 +20,7 @@ const FIELD_LIMIT: usize = 8_000;
 const LINE_LIMIT: usize = 300;
 /// What one pull request's section of the standing issue may hold.
 const SECTION_LIMIT: usize = 8_000;
-/// The sections kept in the standing issue; older ones fold into one line.
-const MAX_SECTIONS: usize = 30;
 const SECTION_HEADING: &str = "## PR #";
-const FOLDED: &str = "> Folded ";
 const INTRO: &str = "Minor and nit findings of passing reviews, one section per pull request (docs/issues.md#review-follow-ups). `make ship` adds each section; tick findings off as they are fixed.";
 
 /// One issue to file: deduplicated by its title, commented with `note` when
@@ -260,18 +257,40 @@ fn record(target: &Target, root: &Path, section: &Section) -> super::Result<Opti
         Some(index) => {
             let issue = &target.issues[index];
             let number = issue.number.to_string();
-            let current = target.gh(
-                root,
-                &["issue", "view", &number, "--json", "body", "--jq", ".body"],
-                None,
-            )?;
-            let body = marked_body(&standing_body(&current, section), STANDING_TITLE)?;
-            target.gh(
-                root,
-                &["issue", "edit", &number, "--body-file", "-"],
-                Some(body.as_bytes()),
-            )?;
-            Ok(Some(issue.url.clone()))
+            for _ in 0..3 {
+                let current: Snapshot = serde_json::from_str(&target.gh(
+                    root,
+                    &["issue", "view", &number, "--json", "body,updatedAt"],
+                    None,
+                )?)?;
+                let body = standing_body(&current.body, section);
+                validate_text("ISSUE_BODY", &body, BODY_LIMIT)?;
+                // GitHub has no compare-and-set for issue edits. Keep this
+                // check immediately before the write to narrow the race.
+                let updated = target.gh(
+                    root,
+                    &[
+                        "issue",
+                        "view",
+                        &number,
+                        "--json",
+                        "updatedAt",
+                        "--jq",
+                        ".updatedAt",
+                    ],
+                    None,
+                )?;
+                if updated != current.updated_at {
+                    continue;
+                }
+                target.gh(
+                    root,
+                    &["issue", "edit", &number, "--body-file", "-"],
+                    Some(body.as_bytes()),
+                )?;
+                return Ok(Some(issue.url.clone()));
+            }
+            Err("standing issue was busy after 3 attempts; leaving it untouched".into())
         }
         None if section.items.is_empty() => Ok(None),
         None => {
@@ -287,94 +306,60 @@ fn record(target: &Target, root: &Path, section: &Section) -> super::Result<Opti
     }
 }
 
-/// The new body of the standing issue: `section` replaces the section of its
-/// pull request, or is appended; an empty section removes it. While there are
-/// more than `MAX_SECTIONS` sections, or the body would not fit, the oldest
-/// section folds into the one-line summary.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Snapshot {
+    body: String,
+    updated_at: String,
+}
+
+/// Splice only this PR's section; retain every byte outside it, including
+/// owner text, other checklists, whitespace and the fingerprint marker.
 pub(super) fn standing_body(current: &str, section: &Section) -> String {
-    let mut standing = Standing::parse(current);
-    standing.sections.retain(|(pr, _)| *pr != section.pr);
-    if !section.items.is_empty() {
-        standing.sections.push((section.pr, section.render()));
+    if current.is_empty() && !section.items.is_empty() {
+        return format!("{INTRO}\n\n{}\n", section.render());
     }
-    while standing.sections.len() > 1
-        && (standing.sections.len() > MAX_SECTIONS
-            || standing.render().chars().count() > body_budget(STANDING_TITLE))
-    {
-        let (pr, _) = standing.sections.remove(0);
-        standing.folded += 1;
-        standing.last_folded = pr;
+    let mut offset = 0;
+    let mut start = None;
+    let mut end = current.len();
+    let mut insertion = current.len();
+    for line in current.split_inclusive('\n') {
+        let pr = line.strip_prefix(SECTION_HEADING).and_then(|rest| {
+            rest.split(|c: char| !c.is_ascii_digit())
+                .next()?
+                .parse::<u64>()
+                .ok()
+        });
+        if line.starts_with(MARKER) {
+            insertion = offset;
+        }
+        if start.is_some() && (pr.is_some() || line.starts_with(MARKER)) {
+            end = offset;
+            break;
+        }
+        if pr == Some(section.pr) {
+            start = Some(offset);
+        }
+        offset += line.len();
     }
-    standing.render()
-}
-
-/// The standing issue as its sections: the intro and the summary line are
-/// generated, the sections are kept as they are (ticks included).
-#[derive(Default)]
-struct Standing {
-    folded: u64,
-    last_folded: u64,
-    sections: Vec<(u64, String)>,
-}
-
-impl Standing {
-    fn parse(body: &str) -> Self {
-        let mut standing = Self::default();
-        let mut section: Option<(u64, String)> = None;
-        for line in body.lines() {
-            if line.starts_with(MARKER) {
-                continue;
-            }
-            let heading = line
-                .strip_prefix(SECTION_HEADING)
-                .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
-                .and_then(|number| number.parse().ok());
-            if let Some(pr) = heading {
-                standing.sections.extend(section.take());
-                section = Some((pr, line.to_owned()));
-            } else if let Some((_, text)) = section.as_mut() {
-                text.push('\n');
-                text.push_str(line);
-            } else if let Some(summary) = line.strip_prefix(FOLDED) {
-                standing.folded = summary
-                    .split_whitespace()
-                    .next()
-                    .and_then(|n| n.parse().ok())
-                    .unwrap_or(0);
-                standing.last_folded = summary
-                    .split_once('#')
-                    .and_then(|(_, n)| n.split(|c: char| !c.is_ascii_digit()).next())
-                    .and_then(|n| n.parse().ok())
-                    .unwrap_or(0);
-            }
-        }
-        standing.sections.extend(section);
-        for (_, text) in &mut standing.sections {
-            let trimmed = text.trim_end().len();
-            text.truncate(trimmed);
-        }
-        standing
-    }
-
-    fn render(&self) -> String {
-        let mut body = format!("{INTRO}\n");
-        if self.folded > 0 {
-            let noun = if self.folded == 1 {
-                "section"
-            } else {
-                "sections"
-            };
-            body.push_str(&format!(
-                "\n{FOLDED}{} earlier review {noun}, up to #{}.\n",
-                self.folded, self.last_folded
-            ));
-        }
-        for (_, text) in &self.sections {
-            body.push('\n');
-            body.push_str(text);
-            body.push('\n');
-        }
-        body
+    if let Some(start) = start {
+        // Separating whitespace belongs to the surrounding body.
+        let end = start + current[start..end].trim_end().len();
+        let replacement = if section.items.is_empty() {
+            String::new()
+        } else {
+            section.render()
+        };
+        format!("{}{replacement}{}", &current[..start], &current[end..])
+    } else if section.items.is_empty() {
+        current.to_owned()
+    } else {
+        format!(
+            "{}\n{}\n\n{}",
+            &current[..insertion],
+            section.render(),
+            &current[insertion..]
+        )
     }
 }
 

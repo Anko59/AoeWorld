@@ -52,12 +52,17 @@ fingerprint and deduplication as `make issue`:
   and posts a comment stating that none remain at the current revision.
   Otherwise, the same list is posted as a comment on that pull request.
 
-No issue is opened per pull request. The standing issue keeps at most 30
-sections and stays within the 60,000-character body limit: older sections fold
-into one line, `> Folded N earlier review sections, up to #M.` It is found by
-its fingerprint marker and the `agent-found` label, as duplicates are; `make
-ship` runs under the person's `gh` account, so unlike the nightly issues it is
-not authored by `github-actions[bot]`.
+No issue is opened per pull request. Updates splice only the current pull
+request's section into a fresh body, preserving every other byte, including
+checked findings and owner edits. Before writing, the harness checks that
+`updatedAt` still matches the read; a change restarts from a fresh body, up to
+three attempts. If the standing issue stays busy or the body would exceed
+60,000 characters, it is left untouched and the pull request comment is still
+posted. GitHub issue edits have no compare-and-set, so an edit after the last
+timestamp check can still race the write. The issue is found by its fingerprint
+marker and the `agent-found` label, as duplicates are; `make ship` runs under
+the person's `gh` account, so unlike nightly issues it is not authored by
+`github-actions[bot]`.
 
 Refuted findings are not leftovers. Reviewer text is untrusted: control
 characters and `<` are neutralised, so it can never carry the fingerprint

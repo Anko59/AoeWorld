@@ -23,11 +23,8 @@ fn an_empty_reship_removes_only_its_section_and_comments_with_the_current_revisi
         other_report.head = "fedcba9876543210fedcba9876543210fedcba9876".into();
         let other = plan(43, OTHER_PR, &other_report).section.unwrap();
         let other_body = other.render().replace("- [ ]", "- [x]");
-        let current = marked_body(
-            &standing_body(&first_body, &other).replace("- [ ] other.rs", "- [x] other.rs"),
-            STANDING_TITLE,
-        )
-        .unwrap();
+        let current =
+            standing_body(&first_body, &other).replace("- [ ] other.rs", "- [x] other.rs");
         let (listing, _) = listed_with_standing(&[], &other);
         stub.set("GH_LIST_JSON", &listing.to_string());
         stub.set("GH_VIEW_BODY", &current);
