@@ -29,8 +29,9 @@ qualification still needed. A missing gate is an explicit limit, not a pass.
 
 ## Local live gate triage
 
-`gate-run` retains its legacy local ledger fields with schema 2. That ledger,
-its reasons, and its stdout/stderr log files remain **UNSANITIZED LOCAL** data.
+`gate-run` writes its local ledger (schema 2) fresh from this run, never
+reading an old one; that ledger, its reasons, and its stdout/stderr log files
+remain **UNSANITIZED LOCAL** data.
 Console JSON is a separate generated whitelist: actual fixed-Make typed exit
 (including numeric Make exit, not recipe exit), bounded raw-tail lengths/BLAKE3,
 measured duration, log-retention outcome, original-source/private endpoint

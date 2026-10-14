@@ -1,5 +1,6 @@
 //! The character-level lexer behind [`super::parse`]: quotes, escapes,
 //! substitutions, redirections and here-documents.
+use super::scan::{continues_line, inner_substitutions, plain_parameter};
 use super::{Join, Parsed, Word, valid_name};
 
 pub(super) enum Token {
@@ -34,11 +35,6 @@ const HEREDOC: &str =
     "agents do not use here-documents or here-strings; write files with the editor tools";
 const CONTINUATION: &str = "agents do not continue lines with a backslash-newline";
 
-/// The parameter forms agents may expand: a name, `1`…`9` or `?$#@*`.
-fn plain_parameter(name: &str) -> bool {
-    valid_name(name) || (name.len() == 1 && "123456789?$#@*".contains(name))
-}
-
 impl<'a> Lexer<'a> {
     pub(super) fn new(source: &str, parsed: &'a mut Parsed) -> Self {
         Self {
@@ -55,7 +51,7 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn tokens(mut self) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
-        if self.chars.windows(2).any(|pair| pair == ['\\', '\n']) {
+        if continues_line(&self.chars) {
             self.parsed.opaque = Some(CONTINUATION);
         }
         while let Some(c) = self.peek(0) {
@@ -316,10 +312,13 @@ impl<'a> Lexer<'a> {
         match self.peek(0) {
             Some('(') if self.peek(1) == Some('(') => {
                 self.at += 2;
-                self.balanced(')')?;
+                let inner = self.balanced(')')?;
                 if self.peek(0) == Some(')') {
                     self.at += 1;
                 }
+                self.parsed
+                    .substitutions
+                    .append(&mut inner_substitutions(&inner));
                 self.parsed.opaque = Some(ARITHMETIC);
                 word.computed = true;
             }
@@ -335,7 +334,11 @@ impl<'a> Lexer<'a> {
             }
             Some('{') => {
                 self.at += 1;
-                if !plain_parameter(&self.balanced('}')?) {
+                let inner = self.balanced('}')?;
+                self.parsed
+                    .substitutions
+                    .append(&mut inner_substitutions(&inner));
+                if !plain_parameter(&inner) {
                     self.parsed.opaque = Some(EXPANSION);
                 }
                 word.computed = true;

@@ -172,6 +172,56 @@ fn agents_refuse_every_reviewed_assignment_bypass() {
 }
 
 #[test]
+fn substitutions_inside_parameter_and_arithmetic_expansions_are_judged() {
+    let fixture = Fixture::new();
+    // A `$(...)` or backtick inside `${...}` or `$(( ))` is a line of its own:
+    // every role, the main session included, judges it (#185).
+    for command in [
+        "echo ${x:-$(cargo build)}",
+        "echo ${x:-`cargo build`}",
+        "echo ${x:-$(echo $(cargo build))}",
+        "echo $(( $(cargo build) ))",
+        "echo $(( $(cargo build) + 1 ))",
+    ] {
+        denied(&fixture, Role::Main, command);
+    }
+    for command in ["echo ${x:-$(make lint)}", "echo $(( $(echo 1) + 1 ))"] {
+        allowed(&fixture, Role::Main, command);
+    }
+    for role in AGENTS {
+        denied(&fixture, role, "echo ${x:-$(cargo build)}");
+        denied(&fixture, role, "echo $(( $(cargo build) ))");
+    }
+}
+
+#[test]
+fn a_backslash_newline_inside_single_quotes_is_literal_data() {
+    let fixture = Fixture::new();
+    for role in AGENTS {
+        allowed(&fixture, role, "echo 'a\\\nb'");
+        allowed(&fixture, role, "printf 'x\\\ny'");
+        // Outside single quotes the pair still continues the line (#190).
+        for command in ["echo a\\\nb", "echo \"a\\\nb\""] {
+            denied(&fixture, role, command);
+        }
+    }
+    allowed(&fixture, Role::Main, "echo 'a\\\nb'");
+}
+
+#[test]
+fn agents_use_dirs_only_without_options() {
+    let fixture = Fixture::new();
+    for role in AGENTS {
+        allowed(&fixture, role, "dirs");
+        // `dirs -c` clears the directory stack: every option is refused.
+        for command in ["dirs -c", "dirs -l", "dirs -p", "dirs -v"] {
+            denied(&fixture, role, command);
+        }
+    }
+    allowed(&fixture, Role::Main, "dirs -c");
+}
+
+#[test]
 fn agents_keep_ordinary_commands_and_prefix_assignments() {
     let fixture = Fixture::new();
     for role in AGENTS {

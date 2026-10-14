@@ -80,6 +80,7 @@ pub(crate) struct Parsed {
 }
 
 mod lexer;
+mod scan;
 use lexer::{Lexer, Token};
 
 pub(crate) fn parse(source: &str) -> Result<Parsed, String> {

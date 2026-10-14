@@ -79,6 +79,9 @@ pub(crate) fn shell_state(context: &Context, base: &str, args: &[Word]) -> Verdi
     }
     match base {
         "printf" => printf(args),
+        "dirs" if args.iter().any(|word| word.text.starts_with('-')) => {
+            Err("agents use `dirs` without options (`dirs -c` clears the directory stack)".into())
+        }
         "wait" if args.iter().any(|word| word.text.starts_with('-')) => {
             Err("agents use `wait` without options (`-p` assigns a variable)".into())
         }
