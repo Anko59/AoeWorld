@@ -45,6 +45,29 @@ export function initNavigation() {
   let samples = 0;
   let panImpulse = [0, 0];
 
+  function rasterState(value) {
+    if (panel.dataset.raster !== value) panel.dataset.raster = value;
+  }
+
+  function drawRaster(url, signal) {
+    return new Promise((resolve, reject) => {
+      function finish(error) {
+        image.removeEventListener('load', loaded);
+        image.removeEventListener('error', failed);
+        signal.removeEventListener('abort', aborted);
+        if (error) reject(error); else resolve();
+      }
+      const loaded = () => finish();
+      const failed = () => finish(new Error('Minimap image could not be drawn'));
+      const aborted = () => finish(new DOMException('Minimap request aborted', 'AbortError'));
+      if (signal.aborted) { aborted(); return; }
+      image.addEventListener('load', loaded);
+      image.addEventListener('error', failed);
+      signal.addEventListener('abort', aborted, { once: true });
+      image.setAttribute('href', url);
+    });
+  }
+
   function overview(value) {
     expanded = value;
     panel.classList.toggle('expanded', value);
@@ -128,9 +151,11 @@ export function initNavigation() {
     if (hash === mapHash) return;
     mapHash = hash;
     panel.dataset.mapHash = hash;
+    rasterState('pending');
     stopPanning();
     pending = [NaN, NaN];
     request?.abort();
+    request = null;
     image.removeAttribute('href');
     samples = 0;
     overview(expanded);
@@ -140,18 +165,29 @@ export function initNavigation() {
     const timeout = setTimeout(() => controller.abort(), 45000);
     try {
       const response = await fetch(`/maps/${hash}/minimap`, { signal: controller.signal });
-      if (!response.ok || Number(response.headers.get('content-length') ?? 0) > MAX_MINIMAP_BYTES) return;
+      if (!response.ok || Number(response.headers.get('content-length') ?? 0) > MAX_MINIMAP_BYTES) {
+        throw new Error('Minimap raster request failed or exceeded its byte limit');
+      }
       const raster = decodeMinimap(await response.arrayBuffer());
-      if (mapHash !== hash || !raster) return;
+      if (mapHash !== hash || request !== controller) return;
+      if (!raster) throw new Error('Invalid minimap raster');
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = raster.samples;
       const context = canvas.getContext('2d');
-      if (!context) return;
+      if (!context) throw new Error('Minimap drawing context unavailable');
       context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
-      image.setAttribute('href', canvas.toDataURL());
+      await drawRaster(canvas.toDataURL(), controller.signal);
+      if (mapHash !== hash || request !== controller) return;
       samples = raster.samples;
       overview(expanded);
+      rasterState('ready');
     } catch (error) {
+      if (mapHash === hash && request === controller) {
+        image.removeAttribute('href');
+        samples = 0;
+        overview(expanded);
+        rasterState('failed');
+      }
       if (error.name !== 'AbortError') console.warn('Minimap terrain unavailable; using schematic', error);
     } finally {
       clearTimeout(timeout);
