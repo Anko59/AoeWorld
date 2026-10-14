@@ -1,5 +1,6 @@
 use super::*;
 use std::cell::{Cell, RefCell};
+mod open_map;
 
 #[derive(Default)]
 struct FakeRuntime {
@@ -48,6 +49,11 @@ impl Runtime for FakeRuntime {
 
 fn built_checkout() -> tempfile::TempDir {
     let temp = tempfile::tempdir().expect("checkout");
+    let maps = temp
+        .path()
+        .join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY);
+    std::fs::create_dir_all(&maps).expect("package directory");
+    std::fs::write(maps.join(format!("{}.json", "ab".repeat(32))), b"{}").expect("package");
     let server = temp.path().join("target/release/aoe-server");
     let wasm = temp.path().join("web/pkg/aoe_client_bg.wasm");
     let worker = temp.path().join("target/release/aoe-map-worker");
