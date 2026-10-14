@@ -269,7 +269,7 @@ fn terrain_sprite(
             uv: frame.atlas.uv,
             depths: [0.0; 4],
             terrain_blend: [[0.0; 4]; 2],
-            pages: [frame.atlas.page, 0, 0, 0],
+            pages: [frame.atlas.page, 0, 0, Sprite::NEAREST_TERRAIN_QUAD],
         },
         frame,
     ))

@@ -22,5 +22,7 @@ fn webgl_terrain_filter_attenuates_checker_preserves_coverage_depth_and_rects() 
         }
     }
     render(&mut renderer, &mut [fixture::sprite().0]);
-    assert_pixel(&canvas, 48, 48, [255, 255, 255, 255]);
+    // Minified object sprites take the bounded box kernel (two white, two
+    // black taps of the checker at 8x8 pixels), matching the Canvas kernel.
+    assert_pixel(&canvas, 48, 48, [128, 128, 128, 255]);
 }

@@ -1,8 +1,12 @@
 use std::{env, error::Error, fs, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=src/sprites.wgsl");
-    let template = fs::read_to_string("src/sprites.wgsl")?;
+    let mut template = String::new();
+    for path in ["src/sprites.wgsl", "src/web/sampling.wgsl"] {
+        println!("cargo:rerun-if-changed={path}");
+        template.push_str(&fs::read_to_string(path)?);
+        template.push('\n');
+    }
     let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("missing Cargo output directory")?);
     for (mixed, filename) in [(false, "ordinary.wgsl"), (true, "mixing.wgsl")] {
         fs::write(output.join(filename), shader_source(&template, mixed))?;

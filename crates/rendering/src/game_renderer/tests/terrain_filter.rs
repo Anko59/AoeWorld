@@ -83,8 +83,10 @@ fn canvas_terrain_filter_attenuates_checker_preserves_coverage_depth_and_rects()
         false,
     )
     .unwrap();
+    // Minified object sprites take the bounded box kernel: the deterministic
+    // average of the 49x25 checker at 8x8 pixels (two white, two black taps).
     assert_eq!(
         pixel(&presentation.color_buffer, 48, 48),
-        [255, 255, 255, 255]
+        [128, 128, 128, 255]
     );
 }
