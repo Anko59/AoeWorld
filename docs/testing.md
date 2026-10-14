@@ -10,7 +10,14 @@ full-distance offline movement/replay regressions; debug assertions and integer
 overflow checks remain enabled. Distances, tick limits, and gate floors are
 unchanged. `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
-Chromium through a disposable ChromeDriver container. Browser-only regressions
+Chromium through a disposable ChromeDriver container. On failure it retries the
+browser suites exactly once only when every named failed test reports a WebGL
+context/graphics error, with no value assertion or unrelated panic (#391).
+The retry is announced in the log; its result decides the gate. Incomplete or
+unrecognized diagnostics fail immediately. Complete failed-run stdout is kept
+under `reports/process/` for classification alongside the usual bounded excerpt;
+classification is limited to 8 MiB and requires a complete stderr tail. Native
+suites and the duel's focused checks do not retry. Browser-only regressions
 must use `#[wasm_bindgen_test]`; native `#[test]` cases in WASM-only modules do
 not run in this gate. It writes
 `reports/wasm/browser.json`; a successful WASM compilation alone does not pass
