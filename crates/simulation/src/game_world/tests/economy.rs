@@ -2,6 +2,7 @@ use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_map::{ResourceKind, ResourceNode};
 
+mod fixture;
 mod gathering;
 mod training;
 
@@ -15,13 +16,23 @@ fn village() -> (GameWorld, EntityId, EntityId) {
 }
 
 fn resource_world(kind: ResourceKind) -> (GameWorld, ResourceNode, EntityId) {
-    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
-    let generator = package.generator();
-    let mut world = GameWorld::from_map(package).unwrap();
+    let (package, pages, water) = fixture::flat_fixture(false);
+    let generator = package
+        .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
+        .unwrap();
+    let mut world =
+        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
     for y in 0..8 {
         for x in 0..8 {
             for node in generator.chunk(x, y).unwrap().resources {
                 if node.kind != kind {
+                    continue;
+                }
+                if kind == ResourceKind::Wood
+                    && world
+                        .nearest_resource(node.tile, kind, 10, Some(node.id))
+                        .is_none()
+                {
                     continue;
                 }
                 for dy in -1..=1 {
@@ -192,4 +203,50 @@ fn replay_includes_economy_orders_carries_buildings_and_training() {
     a.issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     assert_ne!(a.canonical_hash(), b.canonical_hash());
+}
+
+#[test]
+fn water_never_accepts_a_town_center_or_a_starting_village() {
+    let (package, pages, water) = fixture::flat_fixture(true);
+    let mut world =
+        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    let before = world.canonical_hash();
+    assert_eq!(
+        world.place_town_center(PlayerId(0), TileCoord::new(100, 100)),
+        Err(EconomyError::InvalidFootprint)
+    );
+    assert_eq!(world.canonical_hash(), before);
+    assert!(
+        world
+            .initialize_village(PlayerId(0), TileCoord::new(100, 100))
+            .is_err()
+    );
+    assert_eq!(world.canonical_hash(), before);
+}
+
+#[test]
+fn a_certified_clearing_can_hold_the_center_while_the_scout_uses_its_perimeter() {
+    let mut world = world();
+    let start = TileCoord::new(64, 64);
+    // A bounded impassable ring models the edge of the certified 5x5 clearing.
+    for y in -3_i32..=3 {
+        for x in -3_i32..=3 {
+            if x.abs() == 3 || y.abs() == 3 {
+                world
+                    .economy
+                    .blocked_tiles
+                    .insert(TileCoord::new(start.x + x, start.y + y));
+            }
+        }
+    }
+    let scout = world.initialize_village(PlayerId(0), start).unwrap();
+    let center = world.buildings().next().unwrap();
+    assert!(center.footprint.contains(start));
+    assert!(
+        !center
+            .footprint
+            .contains(world.unit(scout).unwrap().position.tile_floor())
+    );
+    assert_eq!(scout, EntityId(0));
+    assert_eq!(world.unit_count(), 4);
 }

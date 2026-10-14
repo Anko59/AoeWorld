@@ -10,7 +10,19 @@ fn each_resource_uses_its_exact_rate_and_the_ten_unit_carry_cap() {
     ] {
         let (mut world, node, id) = resource_world(kind);
         world.issue_gather(PlayerId(0), id, node.id).unwrap();
-        advance(&mut world, 20 * 10);
+        for tick in 1..=200_u32 {
+            world.advance();
+            let expected = (tick * u32::from(hundredths) / (world.config().tick_hz * 100)) as u16;
+            assert_eq!(
+                world
+                    .unit(id)
+                    .unwrap()
+                    .carried
+                    .map_or(0, |load| load.amount),
+                expected,
+                "{kind:?}, tick {tick}"
+            );
+        }
         let unit = world.unit(id).unwrap();
         assert_eq!(
             unit.carried,
@@ -67,6 +79,12 @@ fn depleted_nodes_deposit_partial_load_then_find_only_nearby_same_type() {
         .nearest_resource(node.tile, node.kind, 10, Some(node.id))
         .unwrap();
     assert_ne!(replacement.id, node.id);
+    assert_eq!(replacement.kind, node.kind);
+    assert!(
+        replacement.tile.x.abs_diff(node.tile.x).pow(2)
+            + replacement.tile.y.abs_diff(node.tile.y).pow(2)
+            <= 100
+    );
     world.issue_gather(PlayerId(0), id, node.id).unwrap();
     let before = world.player_economy(PlayerId(0)).unwrap().stockpile.wood;
     for _ in 0..4000 {
@@ -170,4 +188,48 @@ fn a_failed_resource_sink_never_depletes_or_creates_carried_resources() {
     assert_eq!(world.unit(id).unwrap().carried, None);
     advance(&mut world, 200);
     assert_eq!(world.unit(id).unwrap().carried.unwrap().amount, 3);
+}
+
+#[test]
+fn all_four_loads_deposit_into_only_the_matching_player_stockpile_field() {
+    fn amount(stockpile: crate::Stockpile, kind: ResourceKind) -> u32 {
+        match kind {
+            ResourceKind::Food => stockpile.food,
+            ResourceKind::Wood => stockpile.wood,
+            ResourceKind::Gold => stockpile.gold,
+            ResourceKind::Stone => stockpile.stone,
+        }
+    }
+    for kind in [
+        ResourceKind::Food,
+        ResourceKind::Wood,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let (mut world, node, id) = resource_world(kind);
+        world.initialize_village(PlayerId(0), node.tile).unwrap();
+        let before = world.player_economy(PlayerId(0)).unwrap().stockpile;
+        world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        for _ in 0..4000 {
+            world.advance();
+            if amount(world.player_economy(PlayerId(0)).unwrap().stockpile, kind)
+                != amount(before, kind)
+            {
+                break;
+            }
+        }
+        let after = world.player_economy(PlayerId(0)).unwrap().stockpile;
+        assert_eq!(amount(after, kind), amount(before, kind) + 10);
+        for other in [
+            ResourceKind::Food,
+            ResourceKind::Wood,
+            ResourceKind::Gold,
+            ResourceKind::Stone,
+        ] {
+            if other != kind {
+                assert_eq!(amount(after, other), amount(before, other));
+            }
+        }
+        assert_eq!(world.unit(id).unwrap().carried, None);
+    }
 }

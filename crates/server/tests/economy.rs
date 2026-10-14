@@ -65,8 +65,8 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
         .unwrap();
     let start = villager.position.tile_floor();
     let mut resources = Vec::new();
-    for y in (start.y - 10).max(0)..=start.y + 10 {
-        for x in (start.x - 10).max(0)..=start.x + 10 {
+    for y in 0..side {
+        for x in 0..side {
             if let Some(node) = generator.object_at(TileCoord::new(x, y))
                 && node.kind == ResourceKind::Wood
             {
@@ -80,7 +80,9 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
             node.id,
         )
     });
-    let node = resources[0];
+    let node = *resources
+        .first()
+        .expect("headless fixture needs a wood node");
     let center = buildings[0].id;
     let initial = players
         .iter()
