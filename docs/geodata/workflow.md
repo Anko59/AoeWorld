@@ -102,7 +102,7 @@ than evidence for a particular real-world mine, herd, or stand of trees.
 normalized request, projection metadata, source locks, prepared-page roots,
 generation recipe version, and content hash are validated before activation.
 There is exactly one current schema (`MAP_SCHEMA_VERSION = 1`) and one recipe
-(`GENERATION_RECIPE_VERSION = 2`); the strict reader rejects unknown fields and
+(`GENERATION_RECIPE_VERSION = 1`); the strict reader rejects unknown fields and
 any other schema or recipe. The server persists prepared pages alongside the
 manifest, serves immutable chunk responses keyed by that hash, and rejects
 missing or inconsistent roots. Keep package artifacts outside Git. When the

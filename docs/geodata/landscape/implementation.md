@@ -20,7 +20,7 @@ client chunk caches.
 | Contract | Current version | Any other value |
 | --- | --- | --- |
 | Map package schema (`MAP_SCHEMA_VERSION`) | 1 | Rejected by the strict reader |
-| Generation recipe (`GENERATION_RECIPE_VERSION`) | 2 | Rejected; regenerate the package |
+| Generation recipe (`GENERATION_RECIPE_VERSION`) | 1 | Rejected; regenerate the package |
 | Hydrology water model (`HYDROLOGY_WATER_MODEL_VERSION`) | 1 | Rejected |
 | Compact chunk (`CHUNK_FORMAT_VERSION`) | 5 | Leading byte rejected |
 | Gameplay and top-level protocol `VERSION` | 1 | No negotiation |

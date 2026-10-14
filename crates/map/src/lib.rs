@@ -77,4 +77,4 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// The only deterministic generation recipe: the composed landscape. It is part
 /// of canonical package identity; packages naming any other value are rejected.
-pub const GENERATION_RECIPE_VERSION: u16 = 2;
+pub const GENERATION_RECIPE_VERSION: u16 = 1;
