@@ -1,5 +1,5 @@
 use super::{
-    Config, Holder, Slot, TOKEN_VAR, acquire_at,
+    Config, DIR_VAR, Holder, Slot, TOKEN_VAR, acquire_at,
     guard::{dir, hold, is_heavy, nonce},
     status::render,
     verify,
@@ -318,14 +318,16 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let (_temp, root) = checkout();
     let slots = dir(&root).unwrap();
     let outer = hold(&root, "slow").expect("the only slot is free");
-    assert_eq!(outer.env().len(), 1);
-    assert_eq!(outer.env()[0].0, TOKEN_VAR);
+    let env = outer.env();
+    assert_eq!(env.len(), 2);
+    assert_eq!(env[0].0, TOKEN_VAR);
+    assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
     let begun = Instant::now();
     let light = hold(&root, "fmt-check").expect("a static gate never waits");
     assert!(light.env().is_empty());
     let nested = hold(&root, "slow").expect("the same process already holds the slot");
-    assert!(nested.env().is_empty());
+    assert_eq!(nested.env(), env, "a nested gate passes the held slot on");
     assert!(begun.elapsed() < Duration::from_secs(2));
     assert_eq!(tickets(&slots), 1, "still one ticket");
     drop((light, nested));
@@ -465,3 +467,5 @@ fn status_lists_running_holders_then_the_queue() {
         ["heavy slots: 0 of 2 in use (AOE_HEAVY_SLOTS to change)"]
     );
 }
+mod makefile;
+mod roots;

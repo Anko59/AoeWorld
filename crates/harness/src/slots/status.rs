@@ -1,11 +1,11 @@
 //! `make load-status` and `make ship-status`: who holds the heavy slots. Read-only.
-use super::{Config, Holder, SLOTS_VAR, guard::dir, queue};
+use super::{Config, Holder, SLOTS_VAR, guard::slot_dir, queue};
 use crate::{ship::lock::utc, slots::queue::Result};
 use std::path::Path;
 
 pub(crate) fn print_status(root: &Path) -> Result<()> {
     let config = Config::load(root)?;
-    for line in render(config.slots, &queue::alive::<Holder>(&dir(root)?)?) {
+    for line in render(config.slots, &queue::alive::<Holder>(&slot_dir(root)?)?) {
         println!("{line}");
     }
     Ok(())

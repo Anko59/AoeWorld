@@ -25,11 +25,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) use guard::hold;
+pub(crate) use guard::{hold, hold_snapshot, run_in_slot};
+
+/// `run_in_slot` for the checkout the process runs in.
+pub(crate) fn run_here(gate: &str, argv: &[String]) -> queue::Result<i32> {
+    run_in_slot(Path::new("."), gate, argv)
+}
 pub(crate) use status::print_status;
 
 /// The environment variable that carries a held slot to child processes.
 pub(crate) const TOKEN_VAR: &str = "AOE_HEAVY_SLOT";
+/// The shared slot directory a holder names for its children (a snapshot's own Git directory is not it).
+pub(crate) const DIR_VAR: &str = "AOE_HEAVY_DIR";
 /// Environment variables forwarded into Docker by the Makefile.
 pub(crate) const SLOTS_VAR: &str = "AOE_HEAVY_SLOTS";
 pub(crate) const WAIT_VAR: &str = "AOE_HEAVY_WAIT_MINUTES";

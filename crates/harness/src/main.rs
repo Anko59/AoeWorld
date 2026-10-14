@@ -31,7 +31,7 @@ mod ship;
 mod slots;
 mod wasm_test;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::{
     path::{Path, PathBuf},
     time::Duration,
@@ -92,6 +92,12 @@ enum Command {
     Lint,
     TestUnit,
     LoadStatus,
+    /// Run `argv` holding the heavy slot of gate `gate` (the registry decides whether it is heavy).
+    Slot {
+        gate: String,
+        #[arg(last = true, required = true)]
+        argv: Vec<String>,
+    },
     TestWasm,
     TestE2e,
     TestCreatorSource,
@@ -199,8 +205,12 @@ enum AssetCommand {
     Verify { pack: Option<PathBuf> },
 }
 
-fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
-    let _slot = slots::guard::guard(&command)?;
+fn run(command: Command, gate: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // The agent hook takes no slot: a broken registry must not stop it judging edits.
+    let _slot = match command {
+        Command::Agents(_) => None,
+        _ => Some(slots::guard::guard(gate)?),
+    };
     match command {
         Command::Assets { command } => match command {
             AssetCommand::Inspect { input } => {
@@ -292,6 +302,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         Command::Lint => native::lint()?,
         Command::TestUnit => native::test_unit()?,
         Command::LoadStatus => slots::print_status(Path::new("."))?,
+        Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv)?),
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,
@@ -332,8 +343,8 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Preflight => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
-            run(Command::TestUnit)?;
-            run(Command::PerfSmoke)?;
+            run(Command::TestUnit, "test-unit")?;
+            run(Command::PerfSmoke, "perf-smoke")?;
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,
         Command::HooksCheck => hooks::check(Path::new("."))?,
@@ -474,7 +485,11 @@ fn format_invocations(check: bool) -> [Vec<&'static str>; 2] {
 }
 
 fn main() {
-    if let Err(error) = run(Args::parse().command) {
+    // The subcommand's name is the gate it runs: a heavy gate is the make target of that name.
+    let matches = Args::command().get_matches();
+    let gate = matches.subcommand_name().unwrap_or_default().to_owned();
+    let args = Args::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    if let Err(error) = run(args.command, &gate) {
         eprintln!("error: {error}");
         std::process::exit(1);
     }

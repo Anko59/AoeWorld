@@ -1,41 +1,45 @@
-//! The process-level view of the heavy slots: which commands take one, and holding it.
-use super::{Config, Holder, POLL, REPORT_EVERY, Slot, TOKEN_VAR, acquire_at, queue::Result};
+//! The process-level view of the heavy slots: which gates take one, and holding it.
+use super::{
+    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, TOKEN_VAR, acquire_at, queue::Result,
+};
 use crate::{
-    Command,
     gates::registry::{Cadence, Registry},
     ship::git,
 };
 use std::{
+    ffi::OsStr,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-/// The token of the slot this process holds (itself or inherited), so a nested heavy
-/// command in the same process (preflight running test-unit) does not take another.
-static HELD: Mutex<Option<String>> = Mutex::new(None);
+/// What a process holding a slot hands to the processes it starts: the token and the directory.
+type Env = Vec<(&'static str, String)>;
+
+/// The environment of the slot this process holds (itself or inherited), so a nested heavy
+/// gate in the same process (preflight running test-unit) passes it on instead of taking another.
+static HELD: Mutex<Option<Env>> = Mutex::new(None);
 
 /// A slot (or nothing, for light or nested work) for as long as this lives.
 #[derive(Debug)]
 pub(crate) struct Guard {
-    slot: Option<Slot>,
+    _slot: Option<Slot>,
+    env: Env,
     outermost: bool,
 }
 
 impl Guard {
     fn none() -> Self {
         Self {
-            slot: None,
+            _slot: None,
+            env: Vec::new(),
             outermost: false,
         }
     }
 
     /// The environment that hands this slot to a child process.
-    pub(crate) fn env(&self) -> Vec<(&'static str, String)> {
-        self.slot
-            .iter()
-            .map(|slot| (TOKEN_VAR, slot.token().to_owned()))
-            .collect()
+    pub(crate) fn env(&self) -> Env {
+        self.env.clone()
     }
 }
 
@@ -47,43 +51,49 @@ impl Drop for Guard {
     }
 }
 
-/// `<git common dir>/aoe-ship/heavy-slots`, shared by every worktree.
+/// `<git common dir>/aoe-ship/heavy-slots`, shared by every worktree of the repository.
 pub(crate) fn dir(root: &Path) -> Result<PathBuf> {
     let common = git::git(
         root,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )?;
+    )
+    .map_err(|error| {
+        format!(
+            "heavy slot: no git directory for {} ({error}); cannot find the shared slot queue",
+            root.display()
+        )
+    })?;
     Ok(PathBuf::from(common).join("aoe-ship/heavy-slots"))
 }
 
-/// The gate a harness command runs, when it may be heavy (the registry decides).
-fn gate_of(command: &Command) -> Option<&'static str> {
-    Some(match command {
-        Command::Lint => "lint",
-        Command::TestUnit => "test-unit",
-        Command::TestWasm => "test-wasm",
-        Command::TestE2e => "test-e2e",
-        Command::TestCreatorSource => "test-creator-source",
-        Command::TestGeographicMatrix => "test-geographic-matrix",
-        Command::TestGeographicVisuals => "test-geographic-visuals",
-        Command::FuzzSmoke => "fuzz-smoke",
-        Command::FuzzNightly => "fuzz-nightly",
-        Command::MutationNightly(_) => "mutation-nightly",
-        Command::PerfSmoke => "perf-smoke",
-        Command::PerfCi => "perf-ci",
-        Command::PerfFull => "perf-full",
-        Command::PerfPressure => "perf-pressure",
-        Command::PerfStress => "perf-stress",
-        Command::PerfTimingReport => "perf-timing",
-        Command::PerfSoak10 => "perf-soak-10",
-        Command::PerfSoak30 => "perf-soak-30",
-        Command::Preflight => "preflight",
-        _ => return None,
-    })
+/// The shared slot directory: the one a holder named for its children, else the repository's.
+pub(crate) fn slot_dir(root: &Path) -> Result<PathBuf> {
+    slot_dir_with(std::env::var_os(DIR_VAR).as_deref(), root)
 }
 
-/// Whether the registry marks `gate` heavy. `preflight` is heavy when any gate of the
-/// preflight cadence is, since it runs them under one slot.
+pub(crate) fn slot_dir_with(inherited: Option<&OsStr>, root: &Path) -> Result<PathBuf> {
+    match inherited.filter(|value| !value.is_empty()) {
+        Some(value) => Ok(PathBuf::from(value)),
+        None => dir(root),
+    }
+}
+
+/// The checkout (or snapshot) holding `gates/registry.json` at or above `from`, so a gate run
+/// from a subdirectory such as `fuzz/` reads the same registry as the root. `None` outside every
+/// checkout: there is no registry, so no gate there is heavy.
+pub(crate) fn checkout_of(from: &Path) -> Result<Option<PathBuf>> {
+    let start = from
+        .canonicalize()
+        .map_err(|error| format!("heavy slot: cannot resolve {} ({error})", from.display()))?;
+    Ok(start
+        .ancestors()
+        .find(|dir| dir.join("gates/registry.json").is_file())
+        .map(Path::to_path_buf))
+}
+
+/// Whether the registry marks heavy the gate named `gate`: the one whose id is that name or whose
+/// `command` is `make <name>` (a gate's id is its make target). `preflight` is heavy when any gate
+/// of the preflight cadence is, since it runs them under one slot.
 pub(crate) fn is_heavy(registry: &Registry, gate: &str) -> bool {
     if gate == "preflight" {
         return registry
@@ -91,34 +101,56 @@ pub(crate) fn is_heavy(registry: &Registry, gate: &str) -> bool {
             .iter()
             .any(|g| g.heavy && g.cadences.contains(&Cadence::Preflight));
     }
-    registry.gates.iter().any(|g| g.id == gate && g.heavy)
+    let command = format!("make {gate}");
+    registry
+        .gates
+        .iter()
+        .any(|g| g.heavy && (g.id == gate || g.command == command))
 }
 
-/// The slot for a harness command, taken before it starts its deadline clock.
-pub(crate) fn guard(command: &Command) -> Result<Guard> {
-    match gate_of(command) {
-        Some(gate) => hold(Path::new("."), gate),
+/// The slot for a harness command, named by its subcommand: a make target runs its harness
+/// command under the same name, so the registry decides for both ways of starting a gate.
+pub(crate) fn guard(gate: &str) -> Result<Guard> {
+    hold(Path::new("."), gate)
+}
+
+/// Take a slot for `gate` if the registry says it is heavy, announcing a wait on stderr. Returns
+/// at once, holding nothing, for light gates; a process that already holds one passes it on.
+pub(crate) fn hold(from: &Path, gate: &str) -> Result<Guard> {
+    match checkout_of(from)? {
+        Some(root) => hold_in(&root, gate, || slot_dir(&root)),
         None => Ok(Guard::none()),
     }
 }
 
-/// Take a slot for `gate` if the registry says it is heavy, announcing a wait on stderr.
-/// Returns at once, holding nothing, for light gates and when this process already holds one.
-pub(crate) fn hold(root: &Path, gate: &str) -> Result<Guard> {
-    let registry = match Registry::load(root) {
-        Ok(registry) => registry,
-        Err(error) => {
-            eprintln!("heavy slot: no registry ({error}); running {gate} without a slot");
-            return Ok(Guard::none());
-        }
-    };
+/// A gate run in the snapshot checkout `root` of the real checkout `source`: it queues in
+/// `source`'s shared directory, not in the snapshot's own Git directory (which is deleted with it).
+pub(crate) fn hold_snapshot(root: &Path, source: &Path, gate: &str) -> Result<Guard> {
+    hold_in(root, gate, || slot_dir(source))
+}
+
+fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> Result<Guard> {
+    if !root.join("gates/registry.json").is_file() {
+        return Ok(Guard::none());
+    }
+    let registry = Registry::load(root).map_err(|error| {
+        format!(
+            "heavy slot: cannot read the registry of {} ({error})",
+            root.display()
+        )
+    })?;
     if !is_heavy(&registry, gate) {
         return Ok(Guard::none());
     }
     let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
-    if held.is_some() {
-        return Ok(Guard::none());
+    if let Some(env) = held.as_ref() {
+        return Ok(Guard {
+            _slot: None,
+            env: env.clone(),
+            outermost: false,
+        });
     }
+    let slots = slots()?;
     let config = Config::load(root)?;
     let holder = Holder {
         worktree: root
@@ -135,7 +167,7 @@ pub(crate) fn hold(root: &Path, gate: &str) -> Result<Guard> {
     };
     let inherited = std::env::var(TOKEN_VAR).ok();
     let slot = acquire_at(
-        &dir(root)?,
+        &slots,
         config.slots,
         &holder,
         inherited.as_deref(),
@@ -144,11 +176,32 @@ pub(crate) fn hold(root: &Path, gate: &str) -> Result<Guard> {
         REPORT_EVERY,
         &mut |line| eprintln!("{line}"),
     )?;
-    *held = Some(slot.token().to_owned());
+    let env = vec![
+        (TOKEN_VAR, slot.token().to_owned()),
+        (DIR_VAR, slots.display().to_string()),
+    ];
+    *held = Some(env.clone());
     Ok(Guard {
-        slot: Some(slot),
+        _slot: Some(slot),
+        env,
         outermost: true,
     })
+}
+
+/// Run `argv` as gate `gate` holding its slot, and return its exit code. The orchestrator
+/// container runs a make target's steps this way, so the slot is taken before they start.
+pub(crate) fn run_in_slot(from: &Path, gate: &str, argv: &[String]) -> Result<i32> {
+    let (program, args) = argv
+        .split_first()
+        .ok_or("heavy slot: no command to run under the slot")?;
+    let guard = hold(from, gate)?;
+    let status = std::process::Command::new(program)
+        .args(args)
+        .envs(guard.env())
+        .status()
+        .map_err(|error| format!("heavy slot: cannot start {program} ({error})"))?;
+    drop(guard);
+    Ok(status.code().unwrap_or(1))
 }
 
 /// 128 random bits as hex (the kernel's randomness; the clock if it cannot be read).

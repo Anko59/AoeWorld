@@ -21,28 +21,32 @@ GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT
 HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),-v $(HARNESS_CARGO_CACHE):$(ROOT)/.cache/cargo) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),-v $(HARNESS_TARGET_CACHE):$(ROOT)/target)
-HEAVY_ENV := -e AOE_HEAVY_SLOT -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := -e AOE_HEAVY_SLOT -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+# A snapshot's slot directory is the real repository's Git directory: mount it unless a mount covers it.
+HEAVY_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
+HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(AOE_HEAVY_DIR)))
+HEAVY_DIR_MOUNT := $(if $(HEAVY_DIR_EXTERNAL),-v $(HEAVY_DIR_EXTERNAL):$(HEAVY_DIR_EXTERNAL))
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
-ROOT_MOUNTS := $(GIT_MOUNT) -v $(ROOT):$(ROOT) $(CACHE_MOUNTS)
+ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) -v $(ROOT):$(ROOT) $(CACHE_MOUNTS)
 DOCKER_RUN := docker run --rm --init $(HEAVY_ENV) --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS $(TMP_MOUNT) -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
-GEODATA_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_RUN := docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_PATHS := $(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)
 SOURCE_QUAL_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(SOURCE_QUAL_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 SOURCE_QUAL_MOUNTS := $(foreach directory,$(SOURCE_QUAL_EXTERNAL_DIRS),-v $(directory):$(directory))
 SOURCE_QUAL_CARGO_HOME ?= $(ROOT)/.cache/cargo
-SOURCE_QUAL_RUN := docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(SOURCE_QUAL_CARGO_HOME) $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+SOURCE_QUAL_RUN := docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(SOURCE_QUAL_CARGO_HOME) $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
 SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
-BROWSER_RUN := docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
-DEV_ORCH_BASE := docker run --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
+BROWSER_RUN := docker run $(HEAVY_ENV) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
+DEV_ORCH_BASE := docker run $(HEAVY_ENV) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
 DEV_ORCH_RUN := $(DEV_ORCH_BASE) $(ORCH_IMAGE)
 HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
 HARNESS_SCOPE ?= working
-override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e CARGO_HOME=$(HARNESS_ROOT_REAL)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
+override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e CARGO_HOME=$(HARNESS_ROOT_REAL)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(HEAVY_DIR_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
 HARNESS_POLICY_ANCHOR ?= /tmp/aoeworld-policy-anchor.json
 HARNESS_CANDIDATE ?= $(shell git rev-parse HEAD)
 HARNESS_TASK_FILE ?= /tmp/aoeworld-task.json
@@ -63,7 +67,7 @@ override HARNESS_TASK_FILE_REAL := $(realpath $(HARNESS_TASK_FILE))
 override HARNESS_POLICY_ANCHOR_REAL := $(realpath $(HARNESS_POLICY_ANCHOR))
 override HARNESS_READONLY_GIT_MOUNT := $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL):ro)
 override HARNESS_READONLY_ROOT_MOUNTS := $(HARNESS_READONLY_GIT_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL):ro
-override HARNESS_READONLY_BASE := docker run --rm --init --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=512m --user $(UID):$(GID) -e HOME=/tmp $(HARNESS_READONLY_ROOT_MOUNTS) -w $(HARNESS_ROOT_REAL)
+override HARNESS_READONLY_BASE := docker run $(HEAVY_ENV) --rm --init --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=512m --user $(UID):$(GID) -e HOME=/tmp $(HARNESS_READONLY_ROOT_MOUNTS) -w $(HARNESS_ROOT_REAL)
 override HARNESS_TASK_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_TASK_FILE_REAL):$(HARNESS_TASK_FILE_REAL):ro $(ORCH_IMAGE)
 override HARNESS_POLICY_RUN = $(HARNESS_READONLY_BASE) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_POLICY_ANCHOR_REAL):$(HARNESS_POLICY_ANCHOR_REAL):ro $(ORCH_IMAGE)
 
@@ -200,7 +204,7 @@ bootstrap: orchestrator-tools browser-deps
 doctor:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- doctor
 
-include make/agents.mk make/ship.mk make/qualification.mk
+include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check
@@ -214,7 +218,7 @@ contracts-check:
 
 REVIEW_QUOTE = '$(subst ','"'"',$(1))'
 REVIEW_COMMA := ,
-REVIEW_RUN = docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
+REVIEW_RUN = docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
 review-subject: tools
 	@$(if $(filter undefined,$(origin GIT_INDEX_FILE)),:,$(error review-subject Make wrapper does not support defined GIT_INDEX_FILE; use the CLI with an explicitly mounted intentional index))
 	@$(if $(findstring $(REVIEW_COMMA),$(REVIEW_OUTPUT)$(REVIEW_INPUT)),$(error review-subject Docker mount paths must not contain CSV commas),:)
@@ -233,7 +237,7 @@ lint:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- lint
 
 deny: policy-tools
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo deny --locked check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo deny --locked check
 
 test-unit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
@@ -322,32 +326,23 @@ test-wasm: browser-tools orchestrator-tools
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
 
 fuzz-smoke: fuzz-tools
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
 
 fuzz-nightly: fuzz-tools
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
 
 mutation-nightly: mutation-tools
 	@mkdir -p reports/mutation
-	@docker run --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e CARGO_HOME=$(ROOT)/.cache/cargo -e CARGO_TARGET_DIR=$(ROOT)/.cache/mutation/driver-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
-
-coverage: coverage-tools browser-deps orchestrator-tools build-wasm
-	@mkdir -p reports/coverage
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked --workspace --lcov --output-path reports/coverage/native.lcov
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e AOE_E2E_COVERAGE=1 -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-e2e-%p.profraw -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/llvm-cov-target/debug/aoe-harness test-e2e
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-wasm-%p.profraw -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/llvm-cov-target/debug/aoe-harness test-wasm
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/coverage/native.lcov
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --json --output-path reports/coverage/native.json
-	@$(MAKE) --no-print-directory coverage-check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e CARGO_HOME=$(ROOT)/.cache/cargo -e CARGO_TARGET_DIR=$(ROOT)/.cache/mutation/driver-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
 
 coverage-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- coverage-check
 
 ci-select:
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-select
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-select
 
 ci-check:
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-check
 
 perf-smoke:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-smoke
@@ -376,23 +371,6 @@ perf-baseline-propose: perf-instructions perf-wasm-size
 perf-hardware-check: tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-hardware-check
 
-perf-instructions: analysis-tools
-	@mkdir -p reports/perf
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-simulation --bench instructions -- --output-format=json > reports/perf/simulation.ndjson
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-protocol --bench instructions -- --output-format=json > reports/perf/protocol.ndjson
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-assets --bench instructions -- --output-format=json > reports/perf/assets.ndjson
-
-perf-timing: tools
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-simulation --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-protocol --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-assets --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-timing-report
-
-perf-wasm-size: build-wasm analysis-tools
-	@mkdir -p reports/perf
-	@docker run --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/pkg/aoe_client_bg.wasm -o reports/perf/optimized.wasm
-	@docker run --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/optimized.wasm > reports/perf/optimized.wasm.gz
-
 qa-validate:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- qa-validate
 
@@ -414,28 +392,33 @@ pre-push:
 build:
 	@$(DOCKER_RUN) cargo build --workspace --locked
 
-build-wasm:
-	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
-	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
-
 .PHONY: test-memory-source
 test-memory-source: build-wasm browser-deps
-	@docker run --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e AOE_POLISH_SOURCE_REQUIRED=1 $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) xvfb-run -a npx playwright test tests/memory/source-route.shared-surfaces.spec.ts
+	@$(SLOT_RUN) test-memory-source -- make --no-print-directory test-memory-source-steps
 
-test-e2e: build-wasm browser-deps orchestrator-tools
-	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
+test-memory-source-steps:
+	@docker run $(HEAVY_ENV) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e AOE_POLISH_SOURCE_REQUIRED=1 $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) xvfb-run -a npx playwright test tests/memory/source-route.shared-surfaces.spec.ts
+
 
 test-creator-source: build-wasm browser-deps orchestrator-tools
+	@$(SLOT_RUN) test-creator-source -- make --no-print-directory test-creator-source-steps
+
+test-creator-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-creator-source
 
 test-geographic-matrix: orchestrator-tools
+	@$(SLOT_RUN) test-geographic-matrix -- make --no-print-directory test-geographic-matrix-steps
+
+test-geographic-matrix-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-matrix
 
 test-geographic-visuals: build-wasm browser-deps orchestrator-tools
+	@$(SLOT_RUN) test-geographic-visuals -- make --no-print-directory test-geographic-visuals-steps
+
+test-geographic-visuals-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-visuals
@@ -474,10 +457,10 @@ release-publish: orchestrator-tools
 	@docker run --rm --init $(HEAVY_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish
 
 release-source-check: tools
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
 
 release-main-source-check: tools
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
 
 release-verify-published: orchestrator-tools
 	@docker run --rm --init $(HEAVY_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_RELEASE_SOURCE_SHA -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify-published
@@ -495,4 +478,4 @@ release-rehearse: orchestrator-tools
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_CANDIDATE -e AOE_RELEASE_PREVIOUS $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse
 
 repo-policy-check:
-	@docker run --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check
+	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check
