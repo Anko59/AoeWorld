@@ -485,3 +485,6 @@ fn coarse_offcentre_rivers_rasterize_as_continuous_lines() {
 
 #[path = "sampler/channel_rules.rs"]
 mod channel_rules;
+
+#[path = "sampler/lake_raster.rs"]
+mod lake_raster;
