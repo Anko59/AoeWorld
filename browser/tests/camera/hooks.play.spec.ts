@@ -43,6 +43,11 @@ test("camera fragment parser preserves decimals, invalid parts, and zoom limits"
       unknown: parse("#toString=1&__proto__=2&renderer=constructor"),
       bareKeys: parse("#x=10&x&zoom=2&zoom&renderer=canvas&renderer"),
       question: parse("#?x=7&y=2"),
+      hostile: (() => {
+        const started = performance.now();
+        const value = parse("#x=" + "1".repeat(80000) + "!&y=290.5&zoom=2");
+        return { value, elapsed: performance.now() - started };
+      })(),
     };
   });
   expect(parsed.decimal).toEqual([300.25, 400.5, 1.75, 3]);
@@ -66,6 +71,9 @@ test("camera fragment parser preserves decimals, invalid parts, and zoom limits"
   expect(parsed.unknown).toEqual([null, null, null, 0]);
   expect(parsed.bareKeys).toEqual([10, null, 2, 3]);
   expect(parsed.question).toEqual([null, 2, null, 0]);
+  // A crafted link must be rejected promptly, not by exploring digit splits.
+  expect(parsed.hostile.value).toEqual([null, 290.5, 2, 0]);
+  expect(parsed.hostile.elapsed).toBeLessThan(250);
 });
 
 test("spectator camera fragments settle on controller-opened terrain and pan without history writes", async ({
