@@ -174,8 +174,20 @@ a case set this small shows large differences only.
   keeps literal whitespace changes distinct. Conflict resolution that changes the patch
   requires another review. The stored SHA-256 fingerprint is informational;
   equality is checked from Git, never trusted from the report.
-  Only the same branch name and task qualify (the effective `SHIP_BODY` or
-  `REVIEW_TASK` text is fingerprinted), at the required tier or higher.
+  Only the same branch name qualifies, at the required tier or higher.
+  **An unchanged approved patch stays approved** whatever the description:
+  the newest passing, complete, non-reused review of the branch whose own
+  patch is identical to the current one (each against its own base), whose
+  policy fingerprint is unchanged and whose tier is not below the floor or
+  the requested tier, is reused when only the `SHIP_BODY`/`REVIEW_TASK` text
+  (or the commit log standing in for it) changed. The reuse report records
+  the new task fingerprint and the note `description text changed after
+  approval; code unchanged`, and no reviewer runs. This is the same code
+  path as every other reuse, not a second copy: the task text is compared
+  only after the patch is known to be identical, so where the patch differs
+  the description never decides anything (the increment below applies). A
+  new review of the same commit under another description is not covered:
+  it still needs a review.
   Another branch's identical patch never answers this branch's findings.
   A complete report for the target head against the current base blocks
   copying another review over it, including a failing verdict.
@@ -186,7 +198,20 @@ a case set this small shows large differences only.
   from that commit. Reuse writes a report for the current head and base,
   pointing to the original passing full or closing review; a reuse report
   never becomes a source. The status and PR description say
-  `review of <sha> reused (same patch)`.
+  `review of <sha> reused (same patch)` (and the note, when the description
+  changed).
+- **Every ship says why.** `make ship` and `make review` print one line
+  before any reviewer starts, record it in the report and put it in the PR
+  description: `review: reusing 9/10 of 76994762b3c1 (patch and policy
+  unchanged; description text changed)`, `review: closing review of 12 lines
+  since 8107b508a0d2, approved 9/10` (an increment), or `review: full review
+  — <reason>`. When a passing review exists but cannot be used, the reason is
+  the first failing condition: `the patch differs from the 9/10 of <sha>`,
+  `the <g>/10 of <sha> is a <tier> review and this ship needs at least
+  <tier>`, `the review policy on dev changed since the 9/10 of <sha>`,
+  `the base commit of the 9/10 of <sha> is missing`, `N stored review
+  report(s) are unreadable and no readable passing review of this branch
+  exists`; otherwise `no passing review of this branch`.
   Gates **always run before reuse** on the current tree, and CI runs them
   again. The same patch can behave differently after a parent deletes code it
   relies on; patch identity does not establish semantic equivalence.

@@ -54,6 +54,14 @@ pub(crate) struct Report {
     /// answers for another.
     #[serde(default)]
     pub(crate) task_fingerprint: Option<String>,
+    /// A reused report's remark on what differs from the approved review
+    /// (the description text changed while the patch did not).
+    #[serde(default)]
+    pub(crate) note: Option<String>,
+    /// The `review:` line `make ship` printed before this review ran: which
+    /// of reuse, increment, closing or full review was chosen, and why.
+    #[serde(default)]
+    pub(crate) decision: Option<String>,
     /// The branch `base` and `merge_base` come from: `dev`, or the parent of a
     /// stacked pull request.
     pub(crate) base_branch: String,
@@ -302,6 +310,21 @@ impl Report {
         )
     }
 
+    /// What the pull request says about how this review came to be: a reused
+    /// review and why, and the `review:` line chosen for the ship.
+    pub(crate) fn provenance(&self) -> String {
+        let reused = self.reused_from.as_deref().map(|source| {
+            let note = self.note.as_ref().map(|n| format!("; {n}"));
+            format!(
+                "Review of `{}` reused (same patch){}.\n\n",
+                &source[..12.min(source.len())],
+                note.unwrap_or_default()
+            )
+        });
+        let decision = self.decision.as_ref().map(|line| format!("{line}\n\n"));
+        reused.unwrap_or_default() + &decision.unwrap_or_default()
+    }
+
     pub(crate) fn markdown(&self) -> String {
         let mut out = format!(
             "{}\n\n> {}\n\n",
@@ -310,9 +333,16 @@ impl Report {
         );
         if let Some(source) = &self.reused_from {
             out.push_str(&format!(
-                "Review of `{}` reused (same patch); CI re-runs every gate on this commit.\n\n",
-                &source[..12.min(source.len())]
+                "Review of `{}` reused (same patch){}; CI re-runs every gate on this commit.\n\n",
+                &source[..12.min(source.len())],
+                self.note
+                    .as_ref()
+                    .map(|n| format!(" ({n})"))
+                    .unwrap_or_default()
             ));
+        }
+        if let Some(decision) = &self.decision {
+            out.push_str(&format!("{decision}\n\n"));
         }
         if let Some(increment) = &self.increment {
             out.push_str(&format!(

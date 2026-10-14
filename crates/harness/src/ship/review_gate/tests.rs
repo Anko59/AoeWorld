@@ -13,6 +13,7 @@ mod patch_reuse;
 mod reuse;
 mod reuse_policy;
 mod stacked;
+mod unchanged_patch;
 use crate::review::{Plan, Report, Tier};
 use std::{cell::Cell, path::Path};
 
@@ -59,6 +60,8 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         task_fingerprint: Report::effective_task(root, "HEAD", "")
             .ok()
             .map(|task| Report::task_fingerprint(&task)),
+        note: None,
+        decision: None,
         base_branch: crate::review::base::current(),
     }
 }

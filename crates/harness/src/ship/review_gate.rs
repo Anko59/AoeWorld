@@ -10,6 +10,8 @@ use crate::review::{
 };
 use std::{fs, path::Path};
 
+mod why;
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -72,27 +74,21 @@ pub(crate) fn require_task(
         .filter(|t| **t >= tier)
         .map(|t| t.name())
         .collect();
-    // The description is part of what was reviewed: reuse needs the same.
     if let Some(report) = Report::load_passing(root, &evidence.head, &eligible, task)? {
         eprintln!(
-            "ship: reusing the passing {} review of this commit",
+            "review: reusing the passing {} review of this commit",
             report.tier
         );
         return Ok(report);
     }
-    let has_complete = Report::has_complete(root, &evidence.head, &eligible)?;
-    // A complete failing review is an explicit verdict for this commit. It
-    // must not be replaced by a review of another commit's change.
-    if !has_complete
-        && let Some(report) =
-            Report::reuse_for_change(root, &evidence.head, &evidence.branch, &eligible, task)?
+    let why = match Report::reuse_decision(root, &evidence.head, &evidence.branch, &eligible, task)?
     {
-        eprintln!(
-            "ship: review of {} reused (same patch)",
-            short(report.reused_from.as_deref().unwrap_or_default())
-        );
-        return Ok(report);
-    }
+        review::Reuse::Reused(report) => {
+            eprintln!("{}", report.decision.as_deref().unwrap_or_default());
+            return Ok(*report);
+        }
+        review::Reuse::Declined(reason) => reason,
+    };
     let history = review::history(root, &evidence.branch)?;
     let plan = match review::increment::next(root, &history, &evidence.head, unix_now()) {
         Next::Review(plan) => plan,
@@ -101,6 +97,9 @@ pub(crate) fn require_task(
         }
         Next::Split(why) => return Err(split(&evidence.branch, &why).into()),
     };
+    let line = why::line(&plan, &why);
+    eprintln!("{line}");
+    review::announce(&line);
     eprintln!(
         "ship: {}{} review on {}",
         tier.name(),
@@ -112,7 +111,10 @@ pub(crate) fn require_task(
         },
         crate::review::config::runtime_key(options.runtime)
     );
-    let report = reviewer(root, tier, options.runtime, task, &plan)?;
+    let reviewed = reviewer(root, tier, options.runtime, task, &plan);
+    drop(review::take_announced());
+    let mut report = reviewed?;
+    report.decision.get_or_insert(line);
     eprintln!("{}", report.markdown());
     // A review takes minutes: only a review of the very commit the gates
     // passed, still checked out, unlocks the push.
@@ -209,7 +211,15 @@ pub(crate) fn publish_calls_onto(
         return Err(format!("a {}/10 review publishes nothing", report.grade).into());
     }
     let description = if let Some(source) = &report.reused_from {
-        format!("review of {} reused (same patch)", short(source))
+        format!(
+            "review of {} reused (same patch){}",
+            short(source),
+            report
+                .note
+                .as_ref()
+                .map(|note| format!("; {note}"))
+                .unwrap_or_default()
+        )
     } else if let Some(increment) = &report.increment {
         format!("passed: {}", increment.sentence())
     } else {

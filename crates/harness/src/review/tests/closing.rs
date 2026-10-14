@@ -51,6 +51,8 @@ pub(super) fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]
         reused_from: None,
         increment: None,
         task_fingerprint: None,
+        note: None,
+        decision: None,
         base_branch: "dev".into(),
     }
 }

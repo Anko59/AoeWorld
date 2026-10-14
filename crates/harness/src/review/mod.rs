@@ -14,6 +14,7 @@ mod prompt;
 pub(crate) mod protocol;
 mod report;
 mod reuse;
+pub(crate) use reuse::{Reuse, announce, take_announced};
 mod runner;
 mod session;
 #[cfg(test)]
@@ -404,6 +405,8 @@ fn review_with_branch(
         reused_from: None,
         // What the reviewers saw: the commit log stands in for an empty task.
         task_fingerprint: Some(Report::task_fingerprint(&subject.task)),
+        note: None,
+        decision: reuse::take_announced(),
         base_branch: base::current(),
         increment: match plan {
             Plan::Increment(increment) => Some(Increment {
