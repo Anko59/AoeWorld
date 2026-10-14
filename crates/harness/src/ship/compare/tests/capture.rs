@@ -84,13 +84,19 @@ fn a_map_other_than_the_package_asked_for_is_refused() {
 
 #[test]
 fn failed_chunks_are_refused_with_their_count() {
+    // Three chunks keep failing for 12 s; the page counts them as pending too.
     let mut capture = settled("webgpu", HASH);
-    capture.history.push(Sample {
-        at: 1750,
-        pending: 0,
-        failed: 3,
-        frame: 9,
-    });
+    capture.history = (0..=49)
+        .map(|i| {
+            let missing = if i == 0 { 0 } else { 3 };
+            Sample {
+                at: i * 250,
+                pending: missing,
+                failed: missing,
+                frame: 9,
+            }
+        })
+        .collect();
     let reason = refusal(&bookmark("webgpu"), HASH, &capture).expect("refused");
     assert!(reason.contains("3 chunks failed"), "{reason}");
 }

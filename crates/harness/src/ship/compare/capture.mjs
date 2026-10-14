@@ -4,7 +4,8 @@
 // no controller, no lease, no minimap clicks, no wheel. Each view is a camera
 // fragment (`#x=…&y=…&zoom=…&renderer=…`, web/navigation.js). The page is polled
 // until the settle rule holds (same rule as settle.rs: nothing pending and the
-// frame unchanged for the window, 1.5 s or four frame intervals), then the read
+// frame unchanged for the window, 1.5 s to 4 s by frame time), or a chunk has
+// failed for 12 s (every chunk still missing failed), then the read
 // back camera, map and renderer and the scene rectangles go to <name>.json, and
 // the screenshot to <name>.png. The checks are in Rust (capture.rs).
 import { chromium } from "playwright";
@@ -49,20 +50,40 @@ async function sample(page) {
   return { at, ...read };
 }
 
-// The settle window, as settle.rs decides it: at least 1.5 s, and four times
-// the last interval between two frame changes when that is longer.
+// The settle window, as settle.rs decides it: 1.5 s, or four times the median
+// of the last five frame times (gaps between frame changes of at most 1 s),
+// capped at 4 s.
 const QUIET_MS = 1500;
+const QUIET_MAX_MS = 4000;
 const FRAME_INTERVALS = 4;
+const IDLE_MS = 1000;
+const FRAME_SAMPLES = 5;
+const FAILED_MS = 12000;
 function windowMs(history) {
-  const changes = [];
+  const frameTimes = [];
+  let previous = null;
   for (let i = 1; i < history.length; i++) {
-    if (history[i].frame !== history[i - 1].frame) changes.push(history[i].at);
+    if (history[i].frame === history[i - 1].frame) continue;
+    if (previous !== null && history[i].at - previous <= IDLE_MS) frameTimes.push(history[i].at - previous);
+    previous = history[i].at;
   }
-  const interval = changes.length >= 2 ? changes.at(-1) - changes.at(-2) : 0;
-  return Math.max(QUIET_MS, FRAME_INTERVALS * interval);
+  const recent = frameTimes.slice(-FRAME_SAMPLES).sort((a, b) => a - b);
+  if (recent.length === 0) return QUIET_MS;
+  const middle = recent.length >> 1;
+  const median = recent.length % 2 === 1 ? recent[middle] : Math.floor((recent[middle - 1] + recent[middle]) / 2);
+  return Math.min(QUIET_MAX_MS, Math.max(QUIET_MS, FRAME_INTERVALS * median));
 }
-// Nothing pending, and the frame unchanged for the window. Failed chunks are
-// judged by settle.rs once the window closes, so they do not keep polling.
+// How long every chunk still missing has failed (failed equals pending, above
+// zero), as settle.rs measures it; 0 when that is not the case now.
+function failingFor(history) {
+  const failing = (s) => s.failed > 0 && s.failed === s.pending;
+  const last = history.at(-1);
+  if (!last || !failing(last)) return 0;
+  let start = history.length - 1;
+  while (start > 0 && failing(history[start - 1])) start--;
+  return last.at - history[start].at;
+}
+// Nothing pending, and the frame unchanged for the window.
 function quiet(history) {
   const last = history.at(-1);
   if (!last || last.pending !== 0) return false;
@@ -105,7 +126,7 @@ async function view(page, index, item) {
   const deadline = started + plan.view_timeout_ms;
   for (;;) {
     history.push(await sample(page));
-    if ((quiet(history) && landed(history, item)) || Date.now() > deadline) break;
+    if ((quiet(history) && landed(history, item)) || failingFor(history) >= FAILED_MS || Date.now() > deadline) break;
     await sleep(plan.poll_ms);
   }
   const last = history.at(-1);

@@ -1,19 +1,32 @@
 //! When a captured view is settled, decided from the page's samples of
 //! `#scene` (`data-chunks-pending`, `data-chunks-failed`, `data-frame`), as
 //! agreed in issue #360: nothing pending, and the frame unchanged for a window
-//! of polling. The window is at least 1.5 s, and four times the last interval
-//! between frame changes when a software frame is slower than that. A quiet
+//! of polling. The window is 1.5 s, or four times the median frame time when
+//! software frames are slower, capped at 4 s. A frame time is an interval
+//! between two frame changes no longer than 1 s: a longer gap is idle time
+//! (waiting for chunks, or a late redraw), not the time a frame takes. A quiet
 //! view that was already drawn settles when the window closes; a frame or
-//! pending change restarts it. Chunks that failed and then loaded on retry are
-//! not failures: a view fails only if chunks still count as failed when the
-//! window closes. `capture.mjs` polls with the same rule to know when to stop;
-//! this decision is the one the run reports.
+//! pending change restarts it. A chunk that failed and loaded on retry is not a
+//! failure. The page counts a failed chunk as pending too, so a view fails only
+//! when every chunk still missing has failed (`failed == pending`) for 12 s,
+//! two of the client's 5 s retry cycles. `capture.mjs` polls with the same
+//! rules to know when to stop; this decision is the one the run reports.
 use serde::Deserialize;
 
 /// The shortest the frame must stay unchanged, with nothing pending, to settle.
 pub(crate) const QUIET_MS: i64 = 1500;
-/// The window is at least this many measured intervals between frame changes.
+/// The longest the window may be.
+pub(crate) const QUIET_MAX_MS: i64 = 4000;
+/// The window is this many median frame times.
 pub(crate) const FRAME_INTERVALS: i64 = 4;
+/// The longest gap between two frame changes that counts as frame time; a
+/// longer gap is idle.
+pub(crate) const IDLE_MS: i64 = 1000;
+/// The window's median is taken over at most this many recent frame times.
+pub(crate) const FRAME_SAMPLES: usize = 5;
+/// How long every chunk still missing must have failed to fail the view: two
+/// of the client's 5 s retry cycles.
+pub(crate) const FAILED_MS: i64 = 12_000;
 
 /// One poll of the page. `at` is the poll's time in epoch milliseconds. A
 /// missing attribute is -1 (never settled).
@@ -34,7 +47,7 @@ pub(crate) enum Verdict {
         quiet_ms: i64,
         window_ms: i64,
     },
-    /// Chunks still count as failed when the window closes; the count is the
+    /// Every chunk still missing has failed for `FAILED_MS`; the count is the
     /// latest one.
     Failed {
         failed: i64,
@@ -47,20 +60,42 @@ pub(crate) enum Verdict {
     NoSamples,
 }
 
+/// A sample where every chunk still missing has failed.
+fn failing(sample: &Sample) -> bool {
+    sample.failed > 0 && sample.failed == sample.pending
+}
+
 /// How long the frame must stay unchanged to settle: `QUIET_MS`, or
-/// `FRAME_INTERVALS` times the last interval between two frame changes in the
-/// history when that is longer.
+/// `FRAME_INTERVALS` times the median of the last `FRAME_SAMPLES` frame times
+/// (intervals between two frame changes of at most `IDLE_MS`), capped at
+/// `QUIET_MAX_MS`.
 pub(crate) fn window_ms(history: &[Sample]) -> i64 {
-    let changes: Vec<i64> = history
-        .windows(2)
-        .filter(|pair| pair[0].frame != pair[1].frame)
-        .map(|pair| pair[1].at)
-        .collect();
-    let interval = changes
-        .windows(2)
-        .last()
-        .map_or(0, |pair| pair[1] - pair[0]);
-    QUIET_MS.max(FRAME_INTERVALS * interval)
+    let mut frame_times = Vec::new();
+    let mut previous_change = None;
+    for pair in history.windows(2) {
+        if pair[0].frame == pair[1].frame {
+            continue;
+        }
+        if let Some(previous) = previous_change {
+            let gap = pair[1].at - previous;
+            if gap <= IDLE_MS {
+                frame_times.push(gap);
+            }
+        }
+        previous_change = Some(pair[1].at);
+    }
+    let mut recent = frame_times[frame_times.len().saturating_sub(FRAME_SAMPLES)..].to_vec();
+    if recent.is_empty() {
+        return QUIET_MS;
+    }
+    recent.sort_unstable();
+    let middle = recent.len() / 2;
+    let median = if recent.len() % 2 == 1 {
+        recent[middle]
+    } else {
+        (recent[middle - 1] + recent[middle]) / 2
+    };
+    (FRAME_INTERVALS * median).clamp(QUIET_MS, QUIET_MAX_MS)
 }
 
 /// The chunk failures that loaded again: the drops in `data-chunks-failed`
@@ -80,7 +115,20 @@ pub(crate) fn decide(history: &[Sample]) -> Verdict {
     let Some(last) = history.last() else {
         return Verdict::NoSamples;
     };
-    if last.pending != 0 {
+    // The failing run opens at the first sample since a sample that was not
+    // failing: every chunk still missing has been failing since then.
+    if failing(last) {
+        let run_start = history
+            .iter()
+            .rposition(|s| !failing(s))
+            .map_or(0, |index| index + 1);
+        if last.at - history[run_start].at >= FAILED_MS {
+            return Verdict::Failed {
+                failed: last.failed,
+            };
+        }
+    }
+    if last.pending != 0 || last.failed != 0 {
         return Verdict::Unsettled {
             pending: last.pending,
             failed: last.failed,
@@ -97,11 +145,6 @@ pub(crate) fn decide(history: &[Sample]) -> Verdict {
     if quiet_ms < window_ms {
         return Verdict::Unsettled {
             pending: last.pending,
-            failed: last.failed,
-        };
-    }
-    if last.failed > 0 {
-        return Verdict::Failed {
             failed: last.failed,
         };
     }

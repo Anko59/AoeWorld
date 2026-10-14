@@ -282,14 +282,17 @@ that fails any check, naming the reason:
 - the view settled (the rule agreed in issue #360): `#scene`
   `data-chunks-pending` is 0 and `data-frame` has stayed unchanged for the
   window of polling (every 250 ms). The window is 1.5 s, or four times the
-  last interval between two frame changes when a software frame is slower
-  (`window_ms` in `report.json`). A quiet view that was already drawn settles
-  when the window closes; a frame or pending change restarts it. Chunks that
-  failed and loaded on retry are not failures: a view whose
-  `data-chunks-failed` is still not 0 when the window closes fails and names
-  the count (`recovered_chunk_failures` in `report.json` counts the drops), and
-  one that does not settle within `COMPARE_VIEW_TIMEOUT_SECONDS` (default 90)
-  fails too.
+  median of the last five frame times when that is longer, capped at 4 s
+  (`window_ms` in `report.json`). A frame time is an interval between two
+  frame changes of at most 1 s; a longer gap is idle (waiting for chunks, or a
+  late redraw) and is not counted. A quiet view that was already drawn settles
+  when the window closes; a frame or pending change restarts it. A chunk that
+  failed and loaded on retry is not a failure (`recovered_chunk_failures` in
+  `report.json` counts the drops). A view fails, naming the count, when every
+  chunk still missing has failed (`data-chunks-failed` equals
+  `data-chunks-pending`, above 0) for 12 s, two of the client's 5 s retries.
+  A view that neither settles nor fails within `COMPARE_VIEW_TIMEOUT_SECONDS`
+  (default 90) fails too.
 
 The viewport is 1280×720 at device scale 1. If the two sides end on different
 cameras the view is "camera mismatch", not a pixel difference. The count covers
