@@ -3,6 +3,7 @@
 - [Engineering guide](agent-engineering.md)
 - [Agent runtimes](agent-runtimes.md)
 - [Shipping](shipping.md)
+- [After the push](post-push.md)
 - [Adversarial review](review.md)
 - [Credentials (keyring)](credentials.md)
 - [Issues](issues.md)

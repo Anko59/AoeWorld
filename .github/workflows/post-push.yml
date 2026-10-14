@@ -1,0 +1,63 @@
+name: AoeWorld post-push
+
+# What happens to a pull request after `make ship` pushed it (docs/post-push.md).
+# The logic is `aoe-harness carry-review` and `aoe-harness update-prs`; this
+# file only decides when they run and with which token.
+on:
+  # The workflow file and the harness come from `dev`, never from the pull
+  # request: the pull request is read as Git data, none of its code runs.
+  pull_request_target:
+    types: [synchronize]
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  carry:
+    if: ${{ github.event_name == 'pull_request_target' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+    concurrency:
+      group: post-push-carry-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
+      - run: make tools
+      - run: make carry-review
+        env:
+          CARRY_PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+
+  update:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # One run at a time, and a running update is never cancelled halfway.
+    concurrency:
+      group: post-push-update
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: ./.github/actions/docker-setup
+      - run: make tools
+      - run: make update-prs
+        env:
+          UPDATE_MAX_PRS: '5'
+          # A personal token: a rebase pushed with the workflow token starts no CI run.
+          GH_TOKEN: ${{ secrets.PR_UPDATE_TOKEN }}

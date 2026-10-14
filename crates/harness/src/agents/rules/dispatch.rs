@@ -30,6 +30,9 @@ const PERSON_TARGETS: &[&str] = &[
     // It opens, comments on and closes nightly issues: CI and the main session.
     "nightly-triage",
     "metric-regressions",
+    // They post a status, comment on and rebase pull requests: CI and the main session.
+    "carry-review",
+    "update-prs",
 ];
 pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
     let spec = Spec {

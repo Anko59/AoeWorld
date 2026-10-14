@@ -414,4 +414,4 @@ fn parse_issue_input(input: &str) -> Result<(String, Vec<String>, String)> {
 mod test_stub;
 #[cfg(test)]
 #[path = "issues/tests/mod.rs"]
-mod tests;
+pub(in crate::ship) mod tests;

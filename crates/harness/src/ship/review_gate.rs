@@ -277,6 +277,15 @@ pub(crate) fn publish_calls_onto(
 /// pull request.
 pub(crate) fn publish(root: &Path, url: &str, report: &Report, base: &str) -> Result<()> {
     let repository = git::origin_repository(root)?;
+    // What was approved, for the workflow that carries the status over a
+    // rebase; the ship does not fail for it, only the later carry would.
+    if base == crate::review::base::DEV
+        && let Err(error) = super::postpush::marker::record(root, url, report)
+    {
+        eprintln!(
+            "ship: the review marker was not written ({error}); a rebase will not carry the review"
+        );
+    }
     for call in publish_calls_onto(&repository, url, report, base)? {
         super::github::publish_call(root, &call)?;
     }
