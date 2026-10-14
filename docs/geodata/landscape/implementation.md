@@ -276,6 +276,55 @@ Families are semantic intent, not approval of conifer, scrub or tropical art;
 the renderer falls back to approved broadleaf frames (see
 [the rendering ADR](../../adr/0004-rendering.md)).
 
+#### Real-package observations
+
+Measured 2026-10-14 with generator revision
+`853efcb0a9449ccfca11e4c2f44c737a5a1d7816`. Requests were extracted unchanged
+from stored France `52f51c96…` and Finland `5a63a78c…` manifests: respectively
+46.2° N, 2.2° E, 1,200 km and 61.5° N, 25.5° E, 30 km; both 600 CE,
+30:1 compression, seed 1, and the single current `circa600_v1` request profile.
+Sequential Dockerized `make map-generate` runs reused the landscape worktree's
+geodata cache. A temporary cached-catalog adapter avoided metadata HTTP;
+all nine source digests matched the stored manifests, with zero download bytes.
+The adapter was removed afterward. Both regenerated packages passed
+`make map-verify`:
+
+- France: `52f51c964d807e1aec7f06a725cc3c86aeaaeceae68d4571c70ac56971ac1909`.
+- Finland: `9300e457f2719284b664a65f65c989be3ab5290b0e94e9c18524a5330284fa57`.
+
+A temporary measurement helper ran through `make map-test`, using verified
+resident pages and ordinary `landscape_chunk_with_cancel` composition, without
+activation or depletion overlays. France sampled chunks `(39i,39j)` for
+`i,j = 0..16`: 289 chunks, 295,936 tiles. Finland enumerated all chunks
+`(i,j)`, `i,j = 0..15`: 256 chunks, 250,000 tiles, including partial edges.
+The raw class was read with `source_biome_class_with_cancel` at each emitted
+`ObjectKind::Tree` tile; these are tree-conditioned counts, not page histograms.
+Every sampled chunk round-tripped the current compact codec, version byte 5.
+
+| Map | Trees | Raw PNV class → tree count | Tree family → count | Biome fallback |
+| --- | ---: | --- | --- | --- |
+| France sample | 18,286 | 0: 416; 4: 1,931; 9: 5,706; 13: 10,233 | Broadleaf: 13,499; conifer: 2,856; dry scrub: 1,931; tropical: 0 | 2,347 / 18,286 = 12.83496% |
+| Finland census | 43,001 | 0: 681; 8: 936; 9: 16; 15: 41,368 | Broadleaf: 23; conifer: 42,978; dry scrub: 0; tropical: 0 | 681 / 43,001 = 1.58368% |
+
+All other raw classes had zero trees in these enumerations. Fallback counts
+mean the biome-family branch: classes outside 8/9/13/15/17, including class
+0 (nodata), rather than a single fixed broadleaf default. Class 9 yielded
+2,850 broadleaf / 2,856 conifer in France and 8 / 8 in Finland, consistent
+with modeled equally likely stands, not a required exact botanical proportion.
+Class 13 supplied France's 10,233 direct broadleaf trees; Finland's classes
+8/15 supplied 42,304 direct conifers. France's 416 nodata trees were broadleaf;
+Finland's 681 were 15 broadleaf / 666 conifer through the resolved base biome.
+
+Class 4's legend says “warm-temperate evergreen and mixed forest”, yet its
+Woodland fallback produced all 1,931 France dry-scrub trees. This follows the
+published mapping; the visual family's ecological plausibility is unqualified.
+Finland had no class-13 trees, and tropical trees appeared in neither map.
+France's full PNV grid contains four class-8 samples and one class-15 sample,
+but neither supplied a tree in the bounded sample; their absence here does
+not establish whole-map absence. The helper was removed before the docs-only
+commit. These native observations do not qualify rendering backends,
+historical botanical accuracy, or finished RTS performance.
+
 ## Chunk wire
 
 `/maps/{hash}/chunks/{x}/{y}` always serves one compact format, version byte 5.
