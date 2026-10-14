@@ -78,6 +78,8 @@ fn only_auto_merge_pull_requests_that_are_behind_are_rebased() {
         1,
         "{calls}"
     );
+    // A rebase that lands posts no conflict or failure comment.
+    assert!(!calls.contains("aoe-harness:update-"), "{calls}");
 }
 
 #[test]

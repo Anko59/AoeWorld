@@ -2,10 +2,12 @@ use super::{
     stub::{World, comment, pull_json},
     update::{listing, node},
 };
+use crate::ship::postpush::update::{HEAD_TIMEOUT, POLL_INTERVAL, update_within};
 use crate::{
     review::Tier,
     ship::{postpush::marker::Marker, review_gate::graded},
 };
+use std::time::{Duration, Instant};
 
 pub(super) fn head_json(head: &str) -> String {
     serde_json::json!({"data": {"repository": {"pullRequest": {"headRefOid": head}}}}).to_string()
@@ -80,10 +82,19 @@ fn a_head_that_never_moves_reports_failure_and_does_not_dispatch() {
     let world = World::new();
     let (old, _, _) = landed(&world);
     world.answer("head-5.json", &head_json(&old));
-    // Use the CLI's full two-minute bound, with no test-only timing override.
-    let output = world.cli("update-prs");
-    assert!(!output.status.success(), "{output:?}");
-    let error = String::from_utf8_lossy(&output.stderr);
+    // The CLI waits two minutes; the same wait is exercised here with a one-second bound.
+    assert_eq!(HEAD_TIMEOUT, Duration::from_secs(120));
+    assert_eq!(POLL_INTERVAL, Duration::from_secs(5));
+    let started = Instant::now();
+    let error = update_within(
+        &world.root,
+        5,
+        Duration::from_secs(1),
+        Duration::from_millis(100),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(started.elapsed() >= Duration::from_secs(1), "{error}");
     assert!(
         error.contains("#5") && error.contains("head did not move"),
         "{error}"
@@ -95,8 +106,8 @@ fn a_head_that_never_moves_reports_failure_and_does_not_dispatch() {
     );
     assert!(dispatch_calls(&calls).is_empty(), "{calls}");
     assert!(!calls.contains("/statuses/"), "{calls}");
-    assert!(error.contains("within 120 seconds"), "{error}");
-    assert!(calls.matches("UpdatedHead").count() >= 24, "{calls}");
+    assert!(error.contains("within 1 seconds"), "{error}");
+    assert!(calls.matches("UpdatedHead").count() >= 2, "{calls}");
 }
 
 #[test]

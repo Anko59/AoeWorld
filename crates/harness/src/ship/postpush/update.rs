@@ -12,8 +12,8 @@ use std::{
 };
 
 const DEFAULT_MAX: usize = 5;
-const POLL_INTERVAL: Duration = Duration::from_secs(5);
-const HEAD_TIMEOUT: Duration = Duration::from_secs(120);
+pub(super) const POLL_INTERVAL: Duration = Duration::from_secs(5);
+pub(super) const HEAD_TIMEOUT: Duration = Duration::from_secs(120);
 const CONFLICT_TAG: &str = "<!-- aoe-harness:update-conflict ";
 const FAILURE_TAG: &str = "<!-- aoe-harness:update-failure ";
 
@@ -98,6 +98,16 @@ fn behind(root: &Path, repository: &str, pr: &Waiting) -> Result<bool> {
 }
 
 pub(super) fn update(root: &Path, max: usize) -> Result<()> {
+    update_within(root, max, HEAD_TIMEOUT, POLL_INTERVAL)
+}
+
+/// [`update`] with the bound on how long a rebased head may take to appear.
+pub(super) fn update_within(
+    root: &Path,
+    max: usize,
+    timeout: Duration,
+    interval: Duration,
+) -> Result<()> {
     let repository = git::origin_repository(root)?;
     let mut handled = 0;
     let mut problems = Vec::new();
@@ -126,7 +136,7 @@ pub(super) fn update(root: &Path, max: usize) -> Result<()> {
             ],
         );
         match rebased {
-            Ok(_) => match finish_rebase(root, &repository, &pr, HEAD_TIMEOUT, POLL_INTERVAL) {
+            Ok(_) => match finish_rebase(root, &repository, &pr, timeout, interval) {
                 Ok(()) => println!(
                     "update-prs: #{} rebased onto {BASE} (was {}), review checked and CI dispatched",
                     pr.number,
