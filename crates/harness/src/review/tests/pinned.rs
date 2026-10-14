@@ -191,3 +191,25 @@ fn the_stored_task_fingerprint_is_the_task_the_reviewers_saw() {
         );
     }
 }
+
+#[test]
+fn a_low_tier_review_runs_and_reports_the_light_model_from_origin_dev() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    let policy = Policy::pin(root, None, Tier::Low, Runtime::Claude, &Plan::Full).unwrap();
+    assert_eq!(policy.model.model, "claude-haiku-5-5");
+    let ask = Fetching {
+        root,
+        moved: rev(root, "refs/remotes/origin/dev"),
+        prompts: Mutex::new(Vec::new()),
+    };
+    let report =
+        review_with_branch(root, "feature", Tier::Low, &policy, "t", &Plan::Full, &ask).unwrap();
+    assert_eq!(report.model, "claude-haiku-5-5", "the model that ran");
+    assert_eq!(report.effort, "medium");
+    assert!(
+        report.headline().contains("claude-haiku-5-5 medium"),
+        "the review line names the model: {}",
+        report.headline()
+    );
+}

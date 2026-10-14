@@ -24,7 +24,7 @@ Harness and pi.
 
 | Tier | Reviewers (personas) | Rounds | Models |
 |---|---|---|---|
-| low | 1 (quick: correctness + test integrity) | 1 | average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
+| low | 1 (quick: correctness + test integrity) | 1 | light where the family has one (Claude Haiku 5.5 medium), else average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
 | medium | 3 (correctness, spec, test integrity) | ≤ 3 until convergence | average |
 | high | 5 (adds hostile input, performance) | ≤ 3 | average, reasoning one step higher |
 | xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
@@ -35,6 +35,23 @@ it as a reviewer: for days it graded working, verified changes 2–6/10 on
 contrived attacks. Codex now reviews on GPT‑6.1 Sol (medium) at the average and
 strong levels alike; use `make review-calibrate` (below) before trusting any
 other model as a reviewer.
+
+The **light** model is the one exception to the average and strong levels. It
+is per runtime family and used only by tier low's reviewer and grader sessions
+(`light` in `gates/review.json`; a family without it keeps its average model).
+Closing reviews, the arbiter and every other tier never use it. Claude Haiku
+5.5 (medium) is light for Claude, on `make review-calibrate` over the 30 seeds at
+tier low, medium effort:
+
+| Model | Planted defects blocked | Clean cases wrongly blocked | Mean grade, clean | Mean grade, planted |
+|---|---|---|---|---|
+| Sonnet 5.5 (average) | 20/20 | 0/10 | 9.2 | 3.5 |
+| Haiku 5.5 (light) | 20/20 | 0/10 | 8.6 | 3.8 |
+
+The seed set is too easy to separate the two above that tier, so Haiku is used
+for low only; medium, high and max keep their models. This is a limit: the set
+shows no recall gap, so it cannot tell whether Haiku misses subtler defects
+than Sonnet does; widening the seeds is tracked in #377.
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset, performance and map/geodata changes need `medium` (map and geodata still
