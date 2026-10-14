@@ -15,6 +15,7 @@ use super::{
 use crate::{
     gates::registry::{Cadence, Gate, Registry},
     review::{Report, base},
+    slots::SlotEnv,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -134,7 +135,7 @@ pub(super) fn before_push_judged(
             carry::policy_unchanged(root, report, &judged)?;
             carry::patch_unchanged(root, evidence, &latest)?;
         }
-        results = static_gates(root)?;
+        results = static_gates(root, &options.slots)?;
         if let Some(failed) = results.iter().find(|r| r.verdict != GateVerdict::Pass) {
             return Err(failure(options, failed, &gained).into());
         }
@@ -269,7 +270,7 @@ fn rebase(
 /// Every `static` gate of the preflight cadence, whole-repository: the
 /// structure, format, docs and architecture checks and `lint`, which compiles
 /// the workspace (clippy), so no separate compile check is added.
-fn static_gates(root: &Path) -> Result<Vec<GateResult>> {
+fn static_gates(root: &Path, slots: &SlotEnv) -> Result<Vec<GateResult>> {
     let registry = Registry::load(root)?;
     let gates: Vec<&Gate> = registry
         .gates
@@ -280,7 +281,7 @@ fn static_gates(root: &Path) -> Result<Vec<GateResult>> {
         "ship: re-check: {} static gate(s) on the rebased result",
         gates.len()
     );
-    let results = run::run_gates(root, &gates);
+    let results = run::run_gates(root, &gates, slots);
     for result in &results {
         eprintln!("{}", result.line());
     }

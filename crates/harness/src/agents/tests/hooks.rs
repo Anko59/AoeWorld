@@ -2,12 +2,20 @@ use super::{
     super::{Event, Runtime, respond, role::Role, shell},
     Fixture,
 };
+use crate::slots::SlotEnv;
 use serde_json::{Value, json};
 use std::fs;
 
 fn call(fixture: &Fixture, event: Event, input: Value) -> Option<Value> {
     let bytes = serde_json::to_vec(&input).expect("json");
-    respond(Runtime::Claude, event, Some(&bytes), fixture.root(), None)
+    respond(
+        Runtime::Claude,
+        event,
+        Some(&bytes),
+        fixture.root(),
+        None,
+        &SlotEnv::default(),
+    )
 }
 
 fn decision(answer: &Option<Value>) -> Option<&str> {
@@ -38,7 +46,8 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
             Event::PreToolUse,
             None,
             fixture.root(),
-            None
+            None,
+            &SlotEnv::default(),
         )),
         Some("deny")
     );
@@ -48,7 +57,8 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
             Event::PreToolUse,
             Some(b"{not json"),
             fixture.root(),
-            None
+            None,
+            &SlotEnv::default(),
         )),
         Some("deny")
     );
@@ -62,7 +72,14 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
     assert_eq!(decision(&no_command), Some("deny"));
     // Other events never block on bad input.
     assert_eq!(
-        respond(Runtime::Claude, Event::Stop, None, fixture.root(), None),
+        respond(
+            Runtime::Claude,
+            Event::Stop,
+            None,
+            fixture.root(),
+            None,
+            &SlotEnv::default(),
+        ),
         None
     );
 }

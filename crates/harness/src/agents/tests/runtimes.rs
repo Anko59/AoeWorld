@@ -7,6 +7,7 @@ use super::{
     },
     Fixture,
 };
+use crate::slots::SlotEnv;
 use serde_json::{Value, json};
 use std::{fs, path::Path};
 
@@ -31,6 +32,7 @@ fn hook(
         Some(&bytes),
         fixture.root(),
         role,
+        &SlotEnv::default(),
     )
 }
 
@@ -193,6 +195,7 @@ fn pi_tools_use_path_and_the_launched_role_wins() {
         Some(&bytes),
         fixture.root(),
         Some("reviewer"),
+        &SlotEnv::default(),
     );
     assert!(denied(&answer));
 }
@@ -236,6 +239,7 @@ fn codex_edits_are_checked_against_the_structure_rules() {
         Some(&bytes),
         fixture.root(),
         None,
+        &SlotEnv::default(),
     )
     .expect("block");
     assert_eq!(answer["decision"], "block");

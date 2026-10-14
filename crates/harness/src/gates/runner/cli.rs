@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     gates::scopes::{Kind, Snapshot},
     process::Cancellation,
+    slots::SlotEnv,
 };
 use evidence::{EndpointProof, JudgeIdentity, Metadata, PrivateOutput};
 use std::time::Instant;
@@ -39,7 +40,7 @@ pub(crate) struct Options {
     per_gate_seconds: u64,
 }
 
-pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
+pub(crate) fn execute(root: &Path, options: Options, slots: &SlotEnv) -> Result<()> {
     let started = Instant::now();
     let total = Duration::from_secs(options.total_seconds);
     let cancellation = Cancellation::default();
@@ -114,6 +115,7 @@ pub(crate) fn execute(root: &Path, options: Options) -> Result<()> {
         cancellation,
         started,
         total,
+        slots,
     };
     let mut ledger = run(
         &mut runtime,

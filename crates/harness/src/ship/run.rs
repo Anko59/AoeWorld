@@ -3,6 +3,7 @@
 use crate::{
     gates::registry::{Capability, Gate},
     process::{Cancellation, CaptureExit, capture_command, load},
+    slots::SlotEnv,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, process::Command, time::Duration};
@@ -43,7 +44,7 @@ impl GateResult {
     }
 }
 
-pub(crate) fn run_gates(root: &Path, gates: &[&Gate]) -> Vec<GateResult> {
+pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
     let mut docker: Option<bool> = None;
     gates
         .iter()
@@ -59,14 +60,14 @@ pub(crate) fn run_gates(root: &Path, gates: &[&Gate]) -> Vec<GateResult> {
                     tail: String::new(),
                 };
             }
-            run_one(root, gate)
+            run_one(root, gate, slots)
         })
         .collect()
 }
 
-fn run_one(root: &Path, gate: &Gate) -> GateResult {
+fn run_one(root: &Path, gate: &Gate, slots: &SlotEnv) -> GateResult {
     // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
-    let slot = match crate::slots::hold(root, &gate.id) {
+    let slot = match crate::slots::hold(root, &gate.id, slots) {
         Ok(slot) => slot,
         Err(error) => {
             return GateResult {

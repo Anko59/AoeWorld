@@ -3,7 +3,10 @@
 use super::{SERIAL, checkout, git, tickets};
 use crate::{
     gates::registry::Registry,
-    slots::guard::{checkout_of, dir, hold, hold_snapshot, is_heavy, run_in_slot, slot_dir_with},
+    slots::{
+        SlotEnv,
+        guard::{checkout_of, dir, hold, hold_snapshot, is_heavy, run_in_slot, slot_dir_with},
+    },
 };
 use std::{ffi::OsStr, fs, path::Path};
 
@@ -17,7 +20,7 @@ fn a_gate_run_from_a_subdirectory_reads_the_checkouts_registry_and_queue() {
         checkout_of(&fuzz).unwrap(),
         Some(root.canonicalize().unwrap())
     );
-    let slot = hold(&fuzz, "slow").expect("the only slot is free");
+    let slot = hold(&fuzz, "slow", &SlotEnv::default()).expect("the only slot is free");
     assert_eq!(tickets(&dir(&root).unwrap()), 1, "the root's queue");
     drop(slot);
     assert_eq!(tickets(&dir(&root).unwrap()), 0);
@@ -28,7 +31,8 @@ fn a_directory_outside_every_checkout_takes_no_slot_because_no_gate_is_heavy_the
     let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let temp = tempfile::tempdir().expect("temp");
     assert_eq!(checkout_of(temp.path()).unwrap(), None);
-    let guard = hold(temp.path(), "slow").expect("no registry, so nothing waits");
+    let guard =
+        hold(temp.path(), "slow", &SlotEnv::default()).expect("no registry, so nothing waits");
     assert!(guard.env().is_empty());
 }
 
@@ -36,7 +40,7 @@ fn a_directory_outside_every_checkout_takes_no_slot_because_no_gate_is_heavy_the
 fn a_checkout_whose_registry_cannot_be_read_fails_instead_of_running_unslotted() {
     let (_temp, root) = checkout();
     fs::write(root.join("gates/registry.json"), "not json").unwrap();
-    let error = hold(&root, "slow")
+    let error = hold(&root, "slow", &SlotEnv::default())
         .expect_err("a registry that cannot be read is no answer")
         .to_string();
     assert!(error.contains("cannot read the registry"), "{error}");
@@ -80,7 +84,8 @@ fn a_snapshot_queues_in_the_real_repositorys_directory_not_its_own() {
         &["init", "-q", snapshot.to_str().unwrap()],
     );
     let real_dir = dir(&real).unwrap();
-    let slot = hold_snapshot(&snapshot, &real, "slow").expect("the real queue has a slot");
+    let slot = hold_snapshot(&snapshot, &real, "slow", &SlotEnv::default())
+        .expect("the real queue has a slot");
     assert_eq!(tickets(&real_dir), 1, "the ticket is in the real queue");
     assert_eq!(
         tickets(&dir(&snapshot).unwrap()),
@@ -100,16 +105,24 @@ fn run_in_slot_holds_the_slot_for_the_child_and_returns_its_status() {
         &root,
         "slow",
         &shell(r#"test -n "$AOE_HEAVY_SLOT" && test -n "$AOE_HEAVY_DIR" && exit 3; exit 9"#),
+        &SlotEnv::default(),
     )
     .expect("the slot is free");
     assert_eq!(code, 3, "the child sees the token and the queue");
     assert_eq!(tickets(&dir(&root).unwrap()), 0, "released when it exits");
-    let code = run_in_slot(
-        &root,
-        "fmt-check",
-        &shell(r#"test -z "${AOE_HEAVY_SLOT:-}" && exit 4; exit 5"#),
-    )
-    .expect("a light gate never waits");
+    // `env -u` clears what this process inherited, so the child sees only what the wrapper adds.
+    let cleared = vec![
+        "env".to_owned(),
+        "-u".to_owned(),
+        "AOE_HEAVY_SLOT".to_owned(),
+        "-u".to_owned(),
+        "AOE_HEAVY_DIR".to_owned(),
+        "sh".to_owned(),
+        "-c".to_owned(),
+        r#"test -z "${AOE_HEAVY_SLOT:-}" && exit 4; exit 5"#.to_owned(),
+    ];
+    let code = run_in_slot(&root, "fmt-check", &cleared, &SlotEnv::default())
+        .expect("a light gate never waits");
     assert_eq!(code, 4, "a light gate passes no slot");
 }
 
