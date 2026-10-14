@@ -77,9 +77,13 @@ pub(in crate::ship) fn file(root: &Path, url: &str, report: &Report) -> Vec<Stri
         return vec![format!("no pull request number in {url}")];
     };
     let plan = plan(pr, url, report);
-    if plan.issues.is_empty() && plan.section.is_none() {
-        return Vec::new();
-    }
+    // An empty current list still clears this PR's earlier section.
+    let section = plan.section.unwrap_or_else(|| Section {
+        pr,
+        url: url.to_owned(),
+        head: report.head[..12.min(report.head.len())].to_owned(),
+        items: Vec::new(),
+    });
     let target = match Target::load(root) {
         Ok(target) => target,
         Err(error) => return vec![format!("could not list open issues: {error}")],
@@ -91,22 +95,21 @@ pub(in crate::ship) fn file(root: &Path, url: &str, report: &Report) -> Vec<Stri
             Err(error) => problems.push(format!("{}: {error}", item.title)),
         }
     }
-    if let Some(section) = &plan.section {
-        // The comment is posted even when the standing issue cannot be
-        // updated: the findings must reach the pull request either way.
-        let recorded = match record(&target, root, section) {
-            Ok(url) => {
+    // The comment is posted even when the standing issue cannot be updated.
+    let recorded = match record(&target, root, &section) {
+        Ok(recorded) => {
+            if let Some(url) = &recorded {
                 eprintln!("ship: review follow-ups recorded in {url}");
-                Some(url)
             }
-            Err(error) => {
-                problems.push(format!("{STANDING_TITLE}: {error}"));
-                None
-            }
-        };
-        if let Err(error) = comment(&target, root, section, recorded.as_deref()) {
-            problems.push(format!("comment on #{}: {error}", section.pr));
+            recorded
         }
+        Err(error) => {
+            problems.push(format!("{STANDING_TITLE}: {error}"));
+            None
+        }
+    };
+    if let Err(error) = comment(&target, root, &section, recorded.as_deref()) {
+        problems.push(format!("comment on #{}: {error}", section.pr));
     }
     problems
 }
@@ -250,8 +253,9 @@ fn items(pr: u64, findings: &[&Finding]) -> Vec<String> {
 }
 
 /// Put `section` into the standing issue, which is opened when it is
-/// missing. Returns the issue's URL.
-fn record(target: &Target, root: &Path, section: &Section) -> super::Result<String> {
+/// missing and there are findings. An empty section removes this PR's list.
+/// Returns the issue's URL when one exists.
+fn record(target: &Target, root: &Path, section: &Section) -> super::Result<Option<String>> {
     match duplicate_index(&target.issues, STANDING_TITLE) {
         Some(index) => {
             let issue = &target.issues[index];
@@ -267,27 +271,32 @@ fn record(target: &Target, root: &Path, section: &Section) -> super::Result<Stri
                 &["issue", "edit", &number, "--body-file", "-"],
                 Some(body.as_bytes()),
             )?;
-            Ok(issue.url.clone())
+            Ok(Some(issue.url.clone()))
         }
+        None if section.items.is_empty() => Ok(None),
         None => {
             let body = standing_body("", section);
             let outcome = target.create(root, STANDING_TITLE, &labels("priority:low"), &body)?;
-            Ok(outcome
-                .strip_prefix("opened ")
-                .unwrap_or(outcome.as_str())
-                .to_owned())
+            Ok(Some(
+                outcome
+                    .strip_prefix("opened ")
+                    .unwrap_or(outcome.as_str())
+                    .to_owned(),
+            ))
         }
     }
 }
 
 /// The new body of the standing issue: `section` replaces the section of its
-/// pull request, or is appended. While there are more than `MAX_SECTIONS`
-/// sections, or the body would not fit, the oldest section folds into the
-/// one-line summary.
+/// pull request, or is appended; an empty section removes it. While there are
+/// more than `MAX_SECTIONS` sections, or the body would not fit, the oldest
+/// section folds into the one-line summary.
 pub(super) fn standing_body(current: &str, section: &Section) -> String {
     let mut standing = Standing::parse(current);
     standing.sections.retain(|(pr, _)| *pr != section.pr);
-    standing.sections.push((section.pr, section.render()));
+    if !section.items.is_empty() {
+        standing.sections.push((section.pr, section.render()));
+    }
     while standing.sections.len() > 1
         && (standing.sections.len() > MAX_SECTIONS
             || standing.render().chars().count() > body_budget(STANDING_TITLE))
@@ -376,6 +385,18 @@ fn comment(
     section: &Section,
     recorded: Option<&str>,
 ) -> super::Result<()> {
+    if section.items.is_empty() {
+        let body = format!(
+            "No open minor or nit findings in the passing review of PR #{} at {}.\n",
+            section.pr, section.head
+        );
+        target.gh(
+            root,
+            &["pr", "comment", &section.pr.to_string(), "--body-file", "-"],
+            Some(body.as_bytes()),
+        )?;
+        return Ok(());
+    }
     let mut body = format!(
         "Minor and nit findings of the passing review at {}",
         section.head

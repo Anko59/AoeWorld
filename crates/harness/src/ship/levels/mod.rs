@@ -186,12 +186,10 @@ fn untracked(root: &Path) -> Result<Vec<String>> {
 /// nested repository, a FIFO, an unreadable file) is an `Err` with the reason.
 fn untracked_lines(path: &Path, binary: u64) -> std::result::Result<u64, String> {
     let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
-    let bytes = if meta.file_type().is_symlink() {
-        std::fs::read_link(path)
-            .map_err(|e| e.to_string())?
-            .into_os_string()
-            .into_encoded_bytes()
-    } else if meta.is_file() {
+    if meta.file_type().is_symlink() {
+        return Ok(1);
+    }
+    let bytes = if meta.is_file() {
         std::fs::read(path).map_err(|e| e.to_string())?
     } else {
         return Err("not a regular file or symlink, such as a nested repository".to_owned());

@@ -5,6 +5,9 @@ use super::super::{
 use super::*;
 use crate::review::protocol::Reported;
 
+#[path = "reship.rs"]
+mod reship;
+
 const PR: &str = "https://github.com/project/checkout/pull/42";
 const OTHER_PR: &str = "https://github.com/project/checkout/pull/43";
 
@@ -169,8 +172,9 @@ fn a_review_with_only_refuted_findings_files_nothing() {
     ]);
     let plan = plan(42, PR, &only_refuted);
     assert!(plan.issues.is_empty() && plan.section.is_none());
-    // Nothing to file: no GitHub call is made, so no stub is needed.
-    assert!(file(Path::new("/nonexistent"), PR, &only_refuted).is_empty());
+    let stub = Stub::new(&serde_json::json!([]));
+    assert!(file(&stub.root, PR, &only_refuted).is_empty());
+    assert!(!stub.calls().contains("<create>"));
 }
 
 #[test]

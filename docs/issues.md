@@ -47,8 +47,10 @@ fingerprint and deduplication as `make issue`:
   and **nit** findings: one section per pull request, headed
   `## PR #<pr> — <url>`, with a `- [ ] <file>:<line> — <claim>` line per
   finding. The first such review opens the issue; later ones append their
-  section, and a pull request shipped again replaces its own. The same list is
-  posted as a comment on that pull request.
+  section, and a pull request shipped again replaces its own. A passing review
+  with no remaining minor or nit findings removes that pull request's section
+  and posts a comment stating that none remain at the current revision.
+  Otherwise, the same list is posted as a comment on that pull request.
 
 No issue is opened per pull request. The standing issue keeps at most 30
 sections and stays within the 60,000-character body limit: older sections fold

@@ -35,6 +35,22 @@ fn a_dangling_symlink_counts_as_one_line() {
 }
 
 #[test]
+fn a_symlink_target_with_a_newline_stays_one_line_at_the_low_floor_boundary() {
+    let (_temp, root) = fixture("true");
+    // The fixture already changes two README lines; add 57 documentation lines.
+    fs::write(root.join("extra.md"), "x\n".repeat(57)).unwrap();
+    symlink("a\nb", root.join("dangling.md")).unwrap();
+    let change = working(&root);
+    assert_eq!(part(&change, "dangling.md").expect("counted").lines, 1);
+    assert_eq!(change.lines, 60);
+    assert_eq!(
+        Levels::load(&root).unwrap().floor(&change).level,
+        Level::Low
+    );
+    assert_eq!(change.uncommitted, 2);
+}
+
+#[test]
 fn a_nested_repository_is_left_out_and_the_floor_is_still_computed() {
     let (_temp, root) = fixture("true");
     let nested = root.join("nested");
