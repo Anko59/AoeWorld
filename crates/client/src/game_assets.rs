@@ -185,11 +185,14 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             let depth_slot = WATER_DEPTH_ROLES
                 .iter()
                 .position(|role| *role == selection.role);
-            let domain = if let Some(slot) = terrain_slot {
+            if let Some(slot) = terrain_slot {
                 terrain_topology[slot] = selection.terrain_topology.map(renderer_topology);
-                AtlasDomain::Terrain
             } else if let Some(slot) = depth_slot {
                 depth_topology[slot] = selection.terrain_topology.map(renderer_topology);
+            }
+            // Match the private packing proof: reviewed topology owns the
+            // domain, even for selected sheets with no displayed role (marsh).
+            let domain = if selection.terrain_topology.is_some() {
                 AtlasDomain::Terrain
             } else {
                 AtlasDomain::Objects

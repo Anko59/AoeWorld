@@ -66,7 +66,8 @@ three-page runtime atlas allocation.
 The Age of Kings trial lacks the new mountain sheets. Snow 15026 is present
 in the Conquerors trial; the HD rock sheet is available as `DLC_ROCK.slp` in
 WololoKingdoms conversion resources, imported privately as terrain 15033.
-Use a current local pack containing the required snow source.
+Both mountain sheets are optional: packs without them start with the base dirt
+detail fallback; packs containing them draw their native ground art.
 
 The current local pack is intentionally a narrow gameplay mapping. Its
 versioned catalog renders four visually reviewed resource roles when their

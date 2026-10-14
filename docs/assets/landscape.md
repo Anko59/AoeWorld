@@ -1,9 +1,9 @@
 # Reviewed landscape catalog and candidates
 
 Catalog v11 keeps approved art separate from discovery. Required sources remain
-cavalry 3008/3004, five base terrain sheets and soft snow 15026. Optional full conifer 4654 and palm 4653
-prefixes, three water depth sheets, four ground-variety sheets, rock 15033
-and ice 15024 bring the ceiling to 1,674 frames
+cavalry 3008/3004 and five base terrain sheets. Optional full conifer 4654 and palm 4653
+prefixes, three water depth sheets, four ground-variety sheets, rock 15033,
+soft snow 15026 and ice 15024 bring the ceiling to 1,674 frames
 (1,474 terrain/200 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
@@ -116,10 +116,10 @@ boulders painted into the cliff faces are not used as separate objects.
 
 ## Snow ground
 
-Snow (scene material 7) draws soft ground 15026 as authored, including mixed
-borders. Authored mountain relief supplies the top shading: coarse ramp and
-cliff markers cannot paint grey or dark polygons onto pure rock/snow. Mixed
-layers cancel that face shade for mountains while grass/dirt retain theirs.
+Snow (scene material 7) draws optional soft ground 15026 as authored, including
+mixed borders. A pack without it uses the base dirt detail fallback. Authored
+mountain relief supplies the top shading: coarse ramp and cliff markers cannot
+paint grey or dark polygons onto pure rock/snow. Mixed layers cancel that face shade for mountains while grass/dirt retain theirs.
 Frozen water (material 8) draws the separate blue ice 15024 sheet.
 The native-ice flag avoids per-pixel directory checks. Snow no longer uses an
 ice-detail or whitening kernel. Climatic snow and bare rock stay authoritative

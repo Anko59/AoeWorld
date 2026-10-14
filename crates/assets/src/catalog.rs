@@ -71,7 +71,7 @@ impl SpriteSource {
 
 /// Sources required for a local-pack game to start. They are deliberately
 /// ordered by render role, not by incidental archive order.
-pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
+pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
     SpriteSource {
         role: AssetRole::CavalryWalking,
         archive: "graphics.drs",
@@ -143,7 +143,6 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 8] = [
             rows: 10,
         }),
     },
-    variety(AssetRole::Snow, 15026, "10x10 periodic soft snow ground"),
 ];
 
 /// Reviewed resource art that a renderer loads when its local pack provides
@@ -246,7 +245,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 9] = [
 /// the same x-major, reversed-y order as the required sheets: grass and dirt
 /// mix 15006, grass with brown patches 15009, darker grass 15001 and pebbly
 /// beach 15017. A pack without one draws its base sheet instead.
-pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 10] = [
+pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 11] = [
     SpriteSource {
         role: AssetRole::ForestFloor,
         archive: "terrain.drs",
@@ -312,6 +311,9 @@ pub const OPTIONAL_TERRAIN_SOURCES: [SpriteSource; 10] = [
             rows: 8,
         }),
     },
+    // The base trial and CI fixtures lack this sheet; keep startup independent
+    // of the expanded mountain pack, just as for optional native rock.
+    variety(AssetRole::Snow, 15026, "10x10 periodic soft snow ground"),
 ];
 
 const fn variety(role: AssetRole, id: u32, interpretation: &'static str) -> SpriteSource {
