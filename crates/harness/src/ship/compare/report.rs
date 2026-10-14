@@ -1,16 +1,16 @@
 //! What a run found, per view: the cameras read back on each side, the
 //! changed-pixel count of the scene and the table printed at the end.
-use super::{bookmarks::Renderer, pixels::Rect};
+use super::{bookmarks::Renderer, pixels::Rect, settle::Sample};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Two cameras are "the same view" within this many tiles and this zoom ratio.
-const SAME_TILES: f64 = 0.5;
-const SAME_ZOOM: f64 = 0.01;
+/// A camera fragment lands exactly, so this only absorbs float text.
+pub(crate) const SAME_TILES: f64 = 0.01;
+pub(crate) const SAME_ZOOM: f64 = 0.001;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) struct Camera {
-    pub(crate) world: [f64; 2],
     pub(crate) x: f64,
     pub(crate) y: f64,
     pub(crate) zoom: f64,
@@ -24,16 +24,19 @@ impl Camera {
     }
 }
 
-/// `<name>.json` as `capture.mjs` writes it.
+/// `<name>.json` as `capture.mjs` writes it: the camera and the map the page
+/// reports, the settle history and the rectangles over the scene.
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct Capture {
     pub(crate) camera: Option<Camera>,
-    pub(crate) chunks: Option<u64>,
+    #[serde(default)]
+    pub(crate) history: Vec<Sample>,
     pub(crate) settle_ms: Option<u64>,
     pub(crate) scene: Option<Rect>,
     #[serde(default)]
     pub(crate) masks: Vec<Rect>,
     pub(crate) renderer: Option<String>,
+    pub(crate) map_hash: Option<String>,
     pub(crate) error: Option<String>,
     #[serde(default)]
     pub(crate) page_errors: Vec<String>,
@@ -43,9 +46,11 @@ pub(crate) struct Capture {
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub(crate) struct Observed {
     pub(crate) camera: Camera,
-    pub(crate) chunks_loaded: u64,
+    /// The frame counter when the view settled.
+    pub(crate) frame: u64,
     pub(crate) settle_ms: u64,
     pub(crate) reported_renderer: Option<String>,
+    pub(crate) map_hash: Option<String>,
     pub(crate) page_errors: Vec<String>,
 }
 
@@ -97,8 +102,7 @@ pub(crate) struct SideInfo {
     pub(crate) url: String,
     pub(crate) packages: String,
     pub(crate) map_hashes: BTreeMap<String, String>,
-    /// Whether a gameplay controller session was opened on this server and
-    /// whose it was.
+    /// The session that captured the views: a spectator, never a controller.
     pub(crate) controller_lease: String,
 }
 

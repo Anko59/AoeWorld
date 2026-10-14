@@ -1,0 +1,145 @@
+use super::parse;
+use crate::ship::compare::{
+    bookmarks::Bookmark,
+    capture::{fragment, refusal},
+    report::{Camera, Capture},
+    server,
+    settle::Sample,
+};
+
+const HASH: &str = "ab12";
+
+fn bookmark(renderer: &str) -> Bookmark {
+    let text = format!(
+        r#"{{"name": "alps", "map": "france", "x": 17109, "y": 9921, "zoom": 1, "renderer": "{renderer}"}}"#
+    );
+    parse(&[text]).expect("file").bookmarks.remove(0)
+}
+
+fn settled(renderer: &str, map_hash: &str) -> Capture {
+    Capture {
+        camera: Some(Camera {
+            x: 17109.0,
+            y: 9921.0,
+            zoom: 1.0,
+        }),
+        history: vec![
+            Sample {
+                at: 0,
+                pending: 0,
+                failed: 0,
+                frame: 9,
+            },
+            Sample {
+                at: 1500,
+                pending: 0,
+                failed: 0,
+                frame: 9,
+            },
+        ],
+        renderer: Some(renderer.into()),
+        map_hash: Some(map_hash.into()),
+        ..Capture::default()
+    }
+}
+
+#[test]
+fn the_url_is_the_bookmark_as_a_camera_fragment() {
+    assert_eq!(
+        fragment(&bookmark("webgl2")),
+        "x=17109&y=9921&zoom=1&renderer=webgl2"
+    );
+    let fractional = parse(&[
+        r#"{"name": "a", "map": "france", "x": 252.5, "y": 0.25, "zoom": 0.698}"#.to_owned(),
+    ])
+    .expect("file");
+    assert_eq!(
+        fragment(&fractional.bookmarks[0]),
+        "x=252.5&y=0.25&zoom=0.698&renderer=webgpu"
+    );
+}
+
+#[test]
+fn a_settled_matching_view_is_accepted() {
+    assert_eq!(
+        refusal(&bookmark("webgl2"), HASH, &settled("webgl2", HASH)),
+        None
+    );
+}
+
+#[test]
+fn a_renderer_that_differs_from_the_bookmark_is_refused_naming_both() {
+    let reason = refusal(&bookmark("webgl2"), HASH, &settled("webgpu", HASH)).expect("refused");
+    assert!(
+        reason.contains("webgl2") && reason.contains("webgpu"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_map_other_than_the_package_asked_for_is_refused() {
+    let reason = refusal(&bookmark("webgpu"), HASH, &settled("webgpu", "cd34")).expect("refused");
+    assert!(reason.contains("cd34") && reason.contains(HASH), "{reason}");
+}
+
+#[test]
+fn failed_chunks_are_refused_with_their_count() {
+    let mut capture = settled("webgpu", HASH);
+    capture.history.push(Sample {
+        at: 1750,
+        pending: 0,
+        failed: 3,
+        frame: 9,
+    });
+    let reason = refusal(&bookmark("webgpu"), HASH, &capture).expect("refused");
+    assert!(reason.contains("3 chunks failed"), "{reason}");
+}
+
+#[test]
+fn a_view_that_did_not_settle_or_did_not_land_is_refused() {
+    let mut pending = settled("webgpu", HASH);
+    pending.history = vec![Sample {
+        at: 0,
+        pending: 4,
+        failed: 0,
+        frame: 3,
+    }];
+    let reason = refusal(&bookmark("webgpu"), HASH, &pending).expect("refused");
+    assert!(reason.contains("not settled"), "{reason}");
+
+    let mut elsewhere = settled("webgpu", HASH);
+    elsewhere.camera = Some(Camera {
+        x: 17110.0,
+        y: 9921.0,
+        zoom: 1.0,
+    });
+    let reason = refusal(&bookmark("webgpu"), HASH, &elsewhere).expect("refused");
+    assert!(reason.contains("17110"), "{reason}");
+
+    let broken = Capture {
+        error: Some("the page never loaded".into()),
+        ..Capture::default()
+    };
+    assert_eq!(
+        refusal(&bookmark("webgpu"), HASH, &broken).as_deref(),
+        Some("the page never loaded")
+    );
+}
+
+#[test]
+fn the_side_environment_opens_the_package_at_server_start() {
+    let env = server::side_env("pack", std::path::Path::new("/maps"), HASH);
+    assert!(
+        env.contains(&("AOE_OPEN_MAP_PACKAGE", HASH.to_owned())),
+        "{env:?}"
+    );
+    assert!(
+        env.contains(&("AOE_MAP_PACKAGE_DIRECTORY", "/maps".to_owned())),
+        "{env:?}"
+    );
+    assert!(
+        !env.iter()
+            .any(|(name, _)| name.contains("WHEEL") || name.contains("LEASE")),
+        "{env:?}"
+    );
+}

@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -28,7 +28,8 @@ pub(crate) struct Server {
 
 impl Server {
     /// `binary` serves `tree/web` (it serves `web/` relative to its working
-    /// directory) with `packages` as its stored maps, on a free loopback port.
+    /// directory) with `packages` as its stored maps and `open` (a package's
+    /// content hash) open from the start, on a free loopback port.
     ///
     /// The server only accepts an asset pack that is a child of the
     /// `local-assets/packs` of its working directory, so a tree without a
@@ -39,6 +40,7 @@ impl Server {
         local_assets: &Path,
         pack: &str,
         packages: &Path,
+        open: &str,
         log: &Path,
     ) -> Result<Self> {
         if !tree.join("local-assets").exists() {
@@ -51,8 +53,7 @@ impl Server {
             .current_dir(tree)
             .env("AOE_BIND", address.to_string())
             .env("AOE_SCENARIO", "smoke")
-            .env("AOE_ASSET_PACK", Path::new("local-assets/packs").join(pack))
-            .env("AOE_MAP_PACKAGE_DIRECTORY", packages.canonicalize()?)
+            .envs(side_env(pack, &packages.canonicalize()?, open))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(fs::File::create(log)?)
@@ -130,6 +131,22 @@ fn healthy(address: SocketAddr) -> bool {
     stream.read_exact(&mut prefix).is_ok() && &prefix == b"HTTP/1.1 200"
 }
 
+/// The environment a side's server runs with: its asset pack, its package
+/// directory and the one package it opens at start (the spectator's map).
+pub(crate) fn side_env(pack: &str, packages: &Path, open: &str) -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "AOE_ASSET_PACK",
+            Path::new("local-assets/packs")
+                .join(pack)
+                .display()
+                .to_string(),
+        ),
+        ("AOE_MAP_PACKAGE_DIRECTORY", packages.display().to_string()),
+        ("AOE_OPEN_MAP_PACKAGE", open.to_owned()),
+    ]
+}
+
 /// COMPARE_BEFORE / COMPARE_AFTER given as a URL: plain `http` on loopback
 /// with an explicit port and nothing else, like SHOWCASE_APP_URL.
 pub(crate) fn running_url(name: &str, value: &str) -> Result<String> {
@@ -169,14 +186,44 @@ struct Stored {
     request: StoredRequest,
 }
 
+/// A stored package that carries a map's request: its hash and file date.
+struct Match {
+    hash: String,
+    request: String,
+    modified: SystemTime,
+}
+
+/// The UTC calendar day of `time`, as `YYYY-MM-DD`.
+pub(crate) fn utc_date(time: SystemTime) -> String {
+    let days = i64::try_from(
+        time.duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            / 86_400,
+    )
+    .unwrap_or_default();
+    // Howard Hinnant's civil-from-days, for days since 1970-01-01.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
 /// For each map name, the content hash of the stored package in `directory`
-/// whose request is the map's. Package files are `<64 hex>.json`.
+/// whose request is the map's. Package files are `<64 hex>.json`. A map with
+/// two such packages is refused: the run never picks one silently.
 pub(crate) fn resolve_maps(
     directory: &Path,
     maps: &BTreeMap<String, MapRequest>,
     wanted: &[&str],
 ) -> Result<BTreeMap<String, String>> {
-    let mut found: BTreeMap<String, String> = BTreeMap::new();
+    let mut matches: BTreeMap<String, Vec<Match>> = BTreeMap::new();
     let entries = fs::read_dir(directory).map_err(|e| format!("{}: {e}", directory.display()))?;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -197,18 +244,49 @@ pub(crate) fn resolve_maps(
                 && request.center_longitude_e7 == r.center_longitude_e7
                 && request.requested_side_meters == r.requested_side_meters;
             if same && wanted.contains(&map.as_str()) {
-                found.entry(map.clone()).or_insert_with(|| hash.to_owned());
+                let modified = entry.metadata()?.modified()?;
+                matches.entry(map.clone()).or_default().push(Match {
+                    hash: hash.to_owned(),
+                    request: format!(
+                        "{}/{} e7, {} m",
+                        r.center_latitude_e7, r.center_longitude_e7, r.requested_side_meters
+                    ),
+                    modified,
+                });
             }
         }
     }
+    let mut found = BTreeMap::new();
     for map in wanted {
-        if !found.contains_key(*map) {
+        let Some(list) = matches.remove(*map) else {
             return Err(format!(
                 "no stored package for map `{map}` in {}: copy a current-format package there (or point COMPARE_BEFORE_PACKAGES / COMPARE_AFTER_PACKAGES at one); `make map-generate` makes them",
                 directory.display()
             )
             .into());
+        };
+        if let [only] = list.as_slice() {
+            found.insert((*map).to_owned(), only.hash.clone());
+            continue;
         }
+        let mut lines: Vec<String> = list
+            .iter()
+            .map(|m| {
+                format!(
+                    "  {} request {} modified {}",
+                    m.hash,
+                    m.request,
+                    utc_date(m.modified)
+                )
+            })
+            .collect();
+        lines.sort();
+        return Err(format!(
+            "several stored packages for map `{map}` in {}:\n{}\nkeep one there, or point COMPARE_BEFORE_PACKAGES / COMPARE_AFTER_PACKAGES at a directory holding one",
+            directory.display(),
+            lines.join("\n")
+        )
+        .into());
     }
     Ok(found)
 }

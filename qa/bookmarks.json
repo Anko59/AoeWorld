@@ -18,7 +18,8 @@
    "x": 252,
    "y": 252,
    "zoom": 1,
-   "note": "Start area of the Finland map (map session QA, 2026-10-13)."
+   "note": "Start area of the Finland map (map session QA, 2026-10-13).",
+   "verified": true
   },
   {
    "name": "finland-conifer-forest",
@@ -43,7 +44,8 @@
    "y": 100,
    "zoom": 1,
    "renderer": "webgl2",
-   "note": "The same forest through the WebGL2 renderer."
+   "note": "The same forest through the WebGL2 renderer.",
+   "verified": true
   },
    {
     "name": "finland-conifer-forest-webgl2-zoom-out",
@@ -78,7 +80,8 @@
    "x": 10186,
    "y": 5076,
    "zoom": 1,
-   "note": "Paris basin."
+   "note": "Paris basin.",
+   "verified": true
   },
   {
    "name": "france-brittany-shore",
@@ -86,7 +89,8 @@
    "x": 1660,
    "y": 5449,
    "zoom": 1,
-   "note": "Brittany coast; shoreline rendering."
+   "note": "Brittany coast; shoreline rendering.",
+   "verified": true
   },
   {
    "name": "france-brittany-close-shore",
@@ -148,7 +152,8 @@
    "x": 17109,
    "y": 9921,
    "zoom": 1,
-   "note": "Alps cliffs and snowy slope."
+   "note": "Alps cliffs and snowy slope.",
+   "verified": true
   },
   {
    "name": "france-alps-cliffs-webgl2",
