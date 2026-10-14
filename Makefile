@@ -88,7 +88,7 @@ HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
 HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
 override SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-comment perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
 help:
 	@echo 'AoeWorld'
@@ -154,6 +154,7 @@ help:
 	@echo '  make perf-instructions Run pinned Gungraun/Callgrind kernels'
 	@echo '  make perf-timing    Collect informational Criterion microbenchmarks'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
+	@echo '  make perf-comment   Post the informational CI performance comment on a pull request'
 	@echo '  make qa-validate     Validate reports/qa/session.json'
 	@echo '  make qa-serve        Serve restricted MCP browser tools on stdio'
 	@echo '  make release-build  Build local runtime images from clean dev with evidence'
@@ -367,6 +368,12 @@ perf-soak-30:
 
 perf-baseline-propose: perf-instructions perf-wasm-size
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-baseline-propose
+
+# The pull request's informational performance comment (item 12 of #388).
+# PR and run arrive through the environment; GITHUB_TOKEN authorizes gh.
+# PERF_COMMENT_PRINT=1 prints the comment instead of posting it.
+perf-comment:
+	@docker run $(HEAVY_ENV) --rm --init --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- perf-comment
 
 perf-hardware-check: tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-hardware-check

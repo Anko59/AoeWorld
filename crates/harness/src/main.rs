@@ -11,6 +11,7 @@ mod input_json;
 mod mutation;
 mod native;
 mod perf;
+mod perf_comment;
 mod perf_hardware;
 mod perf_micro;
 mod perf_pressure;
@@ -119,6 +120,8 @@ enum Command {
     #[command(name = "perf-soak-30")]
     PerfSoak30,
     PerfBaselinePropose,
+    /// Post or rewrite the pull request's one informational CI performance comment.
+    PerfComment,
     PerfHardwareCheck {
         #[arg(long, default_value = "reports/perf/hardware-environment.json")]
         environment: PathBuf,
@@ -281,6 +284,7 @@ fn run(
             perf_micro::propose()?;
             perf_size::propose()?;
         }
+        Command::PerfComment => perf_comment::run()?,
         Command::PerfHardwareCheck {
             environment,
             samples,

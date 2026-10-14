@@ -108,6 +108,16 @@ economy, and fog of war require representative workloads before acceptance.
 
 Repeated map chunk timings and deterministic ground-variety work bounds are
 recorded in [ground variety evidence](geodata/landscape/ground-variety.md).
+
+On pull requests whose `target-performance` job ran, CI posts one informational
+performance comment and rewrites it in place on later runs (`make perf-comment`).
+It shows the optimized WASM size and the pinned kernels' instruction counts as
+deterministic rows; tick and protocol-pressure timings appear only beyond the
+±10% noise band configured in `crates/harness/src/perf_comment/noise.json`, and
+the CI job durations of the run. The comment never gates a merge, and it does
+not measure real frame rate: CI renders in software and the 1080p check is
+dedicated-hardware qualification only.
+
 `AOE_MAP_SAMPLES=15 make map-perf` benchmarks a fixed synthetic chunk in release
 mode; adding `AOE_MAP_PACKAGE=/path/to/hash.json` selects its prepared center
 chunk. Raw samples and provenance go to `reports/perf/map-chunk.json` and `.md`.
