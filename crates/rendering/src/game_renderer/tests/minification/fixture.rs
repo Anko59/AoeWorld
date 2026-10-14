@@ -8,7 +8,12 @@ pub(crate) const BACKGROUND: [u8; 4] = [41, 74, 36, 255];
 /// One sixteenth of a screen pixel: shifts every sample point off atlas texel
 /// boundaries so nearest picks agree across backends, without changing which
 /// texels a pixel's footprint covers.
-const PHASE: f64 = 1.0 / 16.0;
+pub(crate) const PHASE: f64 = 1.0 / 16.0;
+/// Halo-phase shift: at two texels per screen pixel a column's tap pair
+/// straddles the green/transparent boundary in both orientations, while every
+/// pixel centre stays strictly inside the frame rectangle (away from the
+/// neighbouring atlas entry). Dyadic, so f32 rounding cannot move a tap.
+pub(crate) const HALO_PHASE: f64 = 0.375;
 
 pub(crate) const BLACK: [u8; 4] = [0, 0, 0, 255];
 pub(crate) const GREEN: [u8; 4] = [0, 255, 0, 255];
@@ -20,9 +25,7 @@ pub(crate) const HIDDEN_RED: [u8; 4] = [255, 0, 0, 0];
 /// Frame rectangles on page 2, sixteen texels wide and directly adjacent, so
 /// a tap escaping a frame's own rectangle would sample its neighbour.
 pub(crate) const CHECKER: [f32; 4] = [0.0, 64.0, 16.0, 16.0];
-pub(crate) const RED_NEIGHBOUR: [f32; 4] = [16.0, 64.0, 16.0, 16.0];
 pub(crate) const HALO: [f32; 4] = [32.0, 64.0, 16.0, 16.0];
-pub(crate) const BLUE_NEIGHBOUR: [f32; 4] = [48.0, 64.0, 16.0, 16.0];
 
 pub(crate) fn atlas() -> Vec<u8> {
     let mut bytes = vec![0; crate::GAME_ATLAS_BYTES];
@@ -65,18 +68,22 @@ pub(crate) fn halo(local_x: u32) -> [u8; 4] {
 pub(crate) struct Placed {
     pub(crate) sprite: Sprite,
     pub(crate) frame: GameFrame,
-    pub(crate) bounds: [u32; 4],
     pub(crate) left_top: [f64; 2],
-    pub(crate) size: [f64; 2],
 }
 
 /// Places `size` screen pixels of `rect` with its top-left at `left_top`
-/// (plus the phase shift), with the same floor/ceil bounds the Canvas
-/// renderer derives from the frame size. `flipped` mirrors the frame's own
-/// x span exactly as flipped unit sprites do.
-pub(crate) fn placed(rect: [f32; 4], left_top: [f64; 2], size: [f64; 2], flipped: bool) -> Placed {
+/// (plus `phase`); the Canvas renderer derives the floor/ceil bounds from
+/// the frame size itself. `flipped` mirrors the frame's own x span
+/// exactly as flipped unit sprites do.
+pub(crate) fn placed(
+    rect: [f32; 4],
+    left_top: [f64; 2],
+    size: [f64; 2],
+    flipped: bool,
+    phase: f64,
+) -> Placed {
     let side = f64::from(crate::GAME_ATLAS_SIDE);
-    let left_top = [left_top[0] + PHASE, left_top[1] + PHASE];
+    let left_top = [left_top[0] + phase, left_top[1] + phase];
     let span = [f64::from(rect[2]), f64::from(rect[3])];
     let uv = [
         (f64::from(rect[0]) + if flipped { span[0] } else { 0.0 }) / side,
@@ -107,18 +114,10 @@ pub(crate) fn placed(rect: [f32; 4], left_top: [f64; 2], size: [f64; 2], flipped
         size: size.map(|value| value as f32),
         anchor: [0.0; 2],
     };
-    let bounds = [
-        left_top[0].floor() as u32,
-        left_top[1].floor() as u32,
-        (left_top[0] + size[0]).ceil() as u32,
-        (left_top[1] + size[1]).ceil() as u32,
-    ];
     Placed {
         sprite,
         frame,
-        bounds,
         left_top,
-        size,
     }
 }
 

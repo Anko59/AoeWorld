@@ -280,6 +280,12 @@ pub(super) fn raster_sprite(
         f64::from(sprite.uv[2]),
         f64::from(sprite.uv[3]),
     ];
+    // Minified sprites share the bounded box kernel; the quad is axis
+    // aligned, so the tap offsets are constant across the sprite.
+    let offsets = filter::sprite_offsets(
+        sprite.uv,
+        [f64::from(frame.size[0]), f64::from(frame.size[1])],
+    );
     for y in bounds[1]..bounds[3] {
         let texture_v =
             v + (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]) * source_height;
@@ -287,7 +293,13 @@ pub(super) fn raster_sprite(
             if layer_depth < depth[y as usize * width as usize + x as usize] {
                 continue;
             }
+            // The GPU quad covers only its own rectangle: pixel centres past
+            // the edges are outside the coverage and must not sample.
             let horizontal = (f64::from(x) + 0.5 - origin_x) / f64::from(frame.size[0]);
+            let vertical = (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]);
+            if !(0.0..1.0).contains(&horizontal) || !(0.0..1.0).contains(&vertical) {
+                continue;
+            }
             let texture_u = u + source_width * horizontal;
             let mut source = sample_atlas(
                 atlas,
@@ -295,6 +307,16 @@ pub(super) fn raster_sprite(
                 texture_u * f64::from(GAME_ATLAS_SIDE),
                 texture_v * f64::from(GAME_ATLAS_SIDE),
             );
+            if let Some(offsets) = &offsets {
+                source = filter::sprite_sample(
+                    atlas,
+                    sprite.pages[0],
+                    sprite.uv,
+                    [texture_u, texture_v],
+                    offsets,
+                    source,
+                );
+            }
             if source[3] == 0 {
                 continue;
             }

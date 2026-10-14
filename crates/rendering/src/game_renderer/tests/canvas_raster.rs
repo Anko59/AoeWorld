@@ -222,57 +222,66 @@ fn canvas_sprite_kernel_preserves_flip_tint_alpha_equal_depth_and_background() {
                 f64::NAN,
                 f64::INFINITY,
             ] {
-                let sprite = crate::web::Sprite {
-                    position: [0.17, -0.11],
-                    radius: [0.25; 2],
-                    color: tint,
-                    uv: [
-                        0.03125,
-                        0.0625,
-                        if flipped {
-                            -97.0 / 2048.0
-                        } else {
-                            97.0 / 2048.0
+                for size in [
+                    [43.25, 29.75],
+                    // Minified footprints, including both sides of the 1.5625
+                    // threshold at 97/78 ≈ 1.24 and 97/77 ≈ 1.26 texels per pixel.
+                    [78.25, 54.5],
+                    [77.0, 54.0],
+                    [10.5, 7.25],
+                ] {
+                    let sprite = crate::web::Sprite {
+                        position: [0.17, -0.11],
+                        radius: [0.25; 2],
+                        color: tint,
+                        uv: [
+                            0.03125,
+                            0.0625,
+                            if flipped {
+                                -97.0 / 2048.0
+                            } else {
+                                97.0 / 2048.0
+                            },
+                            49.0 / 2048.0,
+                        ],
+                        depths: [0.0; 4],
+                        terrain_blend: [[0.0; 4]; 2],
+                        pages: [0; 4],
+                    };
+                    let frame = crate::GameFrame {
+                        atlas: crate::AtlasAddress {
+                            page: sprite.pages[0],
+                            uv: sprite.uv,
                         },
-                        49.0 / 2048.0,
-                    ],
-                    depths: [0.0; 4],
-                    terrain_blend: [[0.0; 4]; 2],
-                    pages: [0; 4],
-                };
-                let frame = crate::GameFrame {
-                    atlas: crate::AtlasAddress {
-                        page: sprite.pages[0],
-                        uv: sprite.uv,
-                    },
-                    size: [43.25, 29.75],
-                    anchor: [20.0, 27.0],
-                };
-                let mut actual = buffers(3);
-                let mut expected = actual.clone();
-                raster_sprite(
-                    sprite,
-                    frame,
-                    layer_depth,
-                    &atlas,
-                    [f64::from(WIDTH), f64::from(HEIGHT)],
-                    BOUNDS,
-                    WIDTH,
-                    &mut actual.0,
-                    &mut actual.1,
-                );
-                reference::raster_sprite(
-                    sprite,
-                    frame,
-                    layer_depth,
-                    &atlas,
-                    [f64::from(WIDTH), f64::from(HEIGHT)],
-                    BOUNDS,
-                    WIDTH,
-                    &mut expected.0,
-                    &mut expected.1,
-                );
-                parity(&actual, &expected);
+                        size: size.map(|value| value as f32),
+                        anchor: [20.0, 27.0],
+                    };
+                    let mut actual = buffers(3);
+                    let mut expected = actual.clone();
+                    raster_sprite(
+                        sprite,
+                        frame,
+                        layer_depth,
+                        &atlas,
+                        [f64::from(WIDTH), f64::from(HEIGHT)],
+                        BOUNDS,
+                        WIDTH,
+                        &mut actual.0,
+                        &mut actual.1,
+                    );
+                    reference::raster_sprite(
+                        sprite,
+                        frame,
+                        layer_depth,
+                        &atlas,
+                        [f64::from(WIDTH), f64::from(HEIGHT)],
+                        BOUNDS,
+                        WIDTH,
+                        &mut expected.0,
+                        &mut expected.1,
+                    );
+                    parity(&actual, &expected);
+                }
             }
         }
     }

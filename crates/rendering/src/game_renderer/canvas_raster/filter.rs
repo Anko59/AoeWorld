@@ -1,4 +1,5 @@
-//! Terrain only: bounded pixel-quadrant box samples, retaining nearest coverage.
+//! Terrain and object sprites: bounded pixel-quadrant box samples.
+//! Terrain retains nearest coverage; sprites take the average coverage.
 use super::*;
 
 pub(super) fn gradients(plane: &RasterPlane, uv: [[f64; 2]; 3]) -> [[f64; 2]; 2] {
@@ -63,6 +64,73 @@ pub(super) fn sample(
         result[channel] = ((sums[channel] + sums[3] / 2) / sums[3]) as u8;
     }
     result
+}
+
+/// Object sprites minified below one and a quarter texel: the tap offsets of
+/// the same bounded box kernel, from the uv step per screen pixel. The quad
+/// is axis aligned, so the offsets are constant across the sprite.
+pub(super) fn sprite_offsets(uv: [f32; 4], size: [f64; 2]) -> Option<[[f64; 2]; 4]> {
+    let side = f64::from(GAME_ATLAS_SIDE);
+    let gradient = [f64::from(uv[2]) / size[0], f64::from(uv[3]) / size[1]];
+    let footprint = (gradient[0] * side)
+        .powi(2)
+        .max((gradient[1] * side).powi(2));
+    if uv.map(f64::from).iter().any(|value| !value.is_finite())
+        || gradient.iter().any(|value| !value.is_finite())
+        || !footprint.is_finite()
+        || footprint <= 1.5625
+    {
+        return None;
+    }
+    Some(
+        [[-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25], [0.25, 0.25]]
+            .map(|[sx, sy]| [sx * gradient[0], sy * gradient[1]]),
+    )
+}
+
+/// One minified sprite texel: the premultiplied box average of the four
+/// taps, clamped into the sprite's own atlas rectangle (the uv span may be
+/// negative for mirrored sprites, so order the corners). Transparent taps
+/// contribute no colour; a fully transparent footprint keeps `center`.
+pub(super) fn sprite_sample(
+    atlas: &[u8],
+    page: u32,
+    uv: [f32; 4],
+    texture: [f64; 2],
+    offsets: &[[f64; 2]; 4],
+    center: [u8; 4],
+) -> [u8; 4] {
+    let side = f64::from(GAME_ATLAS_SIDE);
+    let rect = uv.map(f64::from);
+    let mut lo = [0.0; 2];
+    let mut hi = [0.0; 2];
+    for axis in 0..2 {
+        let start = rect[axis] * side;
+        let end = (rect[axis] + rect[axis + 2]) * side;
+        lo[axis] = start.min(end) + 0.5;
+        hi[axis] = start.max(end) - 0.5;
+    }
+    let mut sums = [0_u32; 4];
+    for offset in offsets {
+        let point: [f64; 2] = std::array::from_fn(|axis| {
+            (texture[axis] * side + offset[axis] * side).clamp(lo[axis], hi[axis])
+        });
+        let tap = sample_atlas(atlas, page, point[0], point[1]);
+        for channel in 0..3 {
+            sums[channel] += u32::from(tap[channel]) * u32::from(tap[3]);
+        }
+        sums[3] += u32::from(tap[3]);
+    }
+    if sums[3] == 0 {
+        return center;
+    }
+    std::array::from_fn(|channel| {
+        if channel < 3 {
+            (f64::from(sums[channel]) / f64::from(sums[3]) + 0.5).floor() as u8
+        } else {
+            (f64::from(sums[3]) / 4.0 + 0.5).floor() as u8
+        }
+    })
 }
 
 #[path = "filter/tests.rs"]

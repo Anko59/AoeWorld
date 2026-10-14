@@ -45,7 +45,13 @@ fn rendered(placed: &Placed) -> Vec<u8> {
 
 #[wasm_bindgen_test]
 fn canvas_quarter_size_checker_averages_without_single_pixel_extremes() {
-    let placed = fixture::placed(fixture::CHECKER, [32.0, 32.0], [4.0; 2], false);
+    let placed = fixture::placed(
+        fixture::CHECKER,
+        [32.0, 32.0],
+        [4.0; 2],
+        false,
+        fixture::PHASE,
+    );
     // Every output pixel's four clamped taps land on the same checker parity
     // classes: two green and two black texels.
     let expected = fixture::box_average([
@@ -87,17 +93,24 @@ fn canvas_quarter_size_checker_averages_without_single_pixel_extremes() {
 
 #[wasm_bindgen_test]
 fn canvas_minified_edge_takes_no_colour_from_hidden_or_adjacent_texels() {
-    let placed = fixture::placed(fixture::HALO, [40.0, 32.0], [8.0; 2], false);
+    let placed = fixture::placed(
+        fixture::HALO,
+        [40.0, 32.0],
+        [8.0; 2],
+        false,
+        fixture::HALO_PHASE,
+    );
     let image = rendered(&placed);
     let left = placed.left_top[0] as u32;
     let top = placed.left_top[1] as u32;
-    // Column taps (frame-local x): {0,1},{1,3},{3,5},{5,7} opaque green,
-    // {7,9} mixed, {9,11},{11,13},{13,15} fully transparent.
+    // Column tap pairs (frame-local x), two texels per pixel, phase 3/8:
+    // {0,0} clamped, {1,2}, {3,4}, {5,6} opaque green, {7,8} mixed, {9,10},
+    // {11,12}, {13,14} fully transparent.
     let mixed = fixture::box_average([
         fixture::halo(7),
         fixture::halo(7),
-        fixture::halo(9),
-        fixture::halo(9),
+        fixture::halo(8),
+        fixture::halo(8),
     ])
     .unwrap();
     for row in 0..8 {
@@ -126,7 +139,13 @@ fn canvas_minified_edge_takes_no_colour_from_hidden_or_adjacent_texels() {
 
 #[wasm_bindgen_test]
 fn canvas_native_size_checker_stays_pixel_exact() {
-    let placed = fixture::placed(fixture::CHECKER, [32.0, 32.0], [16.0; 2], false);
+    let placed = fixture::placed(
+        fixture::CHECKER,
+        [32.0, 32.0],
+        [16.0; 2],
+        false,
+        fixture::PHASE,
+    );
     let image = rendered(&placed);
     let left = placed.left_top[0] as u32;
     let top = placed.left_top[1] as u32;
@@ -146,15 +165,24 @@ fn canvas_native_size_checker_stays_pixel_exact() {
 
 #[wasm_bindgen_test]
 fn canvas_flipped_minified_sprite_mirrors_within_its_own_rectangle() {
-    let placed = fixture::placed(fixture::HALO, [40.0, 32.0], [8.0; 2], true);
+    let placed = fixture::placed(
+        fixture::HALO,
+        [40.0, 32.0],
+        [8.0; 2],
+        true,
+        fixture::HALO_PHASE,
+    );
     let image = rendered(&placed);
     let left = placed.left_top[0] as u32;
     let top = placed.left_top[1] as u32;
+    // Mirrored span: screen-left columns tap the transparent half ({15,15}
+    // clamped, {13,14}, {11,12}, {9,10}), column 4 straddles local {7,8},
+    // and columns 5..7 tap {5,6}, {3,4}, {1,2} opaque green.
     let mixed = fixture::box_average([
+        fixture::halo(7),
+        fixture::halo(7),
         fixture::halo(8),
         fixture::halo(8),
-        fixture::halo(6),
-        fixture::halo(6),
     ])
     .unwrap();
     for row in 0..8 {

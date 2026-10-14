@@ -45,6 +45,16 @@
    "renderer": "webgl2",
    "note": "The same forest through the WebGL2 renderer."
   },
+   {
+    "name": "finland-conifer-forest-webgl2-zoom-out",
+    "map": "finland",
+    "x": 100,
+    "y": 100,
+    "zoom": 0.25,
+    "renderer": "webgl2",
+    "note": "Conifer canopy at quarter zoom through the WebGL2 path",
+    "verified": false
+   },
   {
    "name": "finland-lakeshore",
    "map": "finland",

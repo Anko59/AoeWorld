@@ -135,18 +135,37 @@ pub(super) fn raster_sprite(
     let origin_x = center_x - f64::from(frame.size[0]) * 0.5;
     let origin_y = center_y - f64::from(frame.size[1]) * 0.5;
     let [u, v, source_width, source_height] = sprite.uv.map(f64::from);
+    let offsets = reference_sprite_offsets(
+        sprite.uv,
+        [f64::from(frame.size[0]), f64::from(frame.size[1])],
+    );
     for y in bounds[1]..bounds[3] {
         let texture_v =
             v + (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]) * source_height;
         for x in bounds[0]..bounds[2] {
             let horizontal = (f64::from(x) + 0.5 - origin_x) / f64::from(frame.size[0]);
+            let vertical = (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]);
+            if !(0.0..1.0).contains(&horizontal) || !(0.0..1.0).contains(&vertical) {
+                continue;
+            }
             let texture_u = u + source_width * horizontal;
+            let texture = [texture_u, texture_v];
             let mut source = sample_atlas(
                 atlas,
                 sprite.pages[0],
-                texture_u * f64::from(GAME_ATLAS_SIDE),
-                texture_v * f64::from(GAME_ATLAS_SIDE),
+                texture[0] * f64::from(GAME_ATLAS_SIDE),
+                texture[1] * f64::from(GAME_ATLAS_SIDE),
             );
+            if let Some(offsets) = &offsets {
+                source = reference_sprite_sample(
+                    atlas,
+                    sprite.pages[0],
+                    sprite.uv,
+                    texture,
+                    offsets,
+                    source,
+                );
+            }
             for channel in 0..4 {
                 source[channel] = (f32::from(source[channel]) * sprite.color[channel])
                     .clamp(0.0, 255.0)
@@ -155,6 +174,66 @@ pub(super) fn raster_sprite(
             write_fragment(x, y, width, layer_depth, source, color, depth);
         }
     }
+}
+
+fn reference_sprite_offsets(uv: [f32; 4], size: [f64; 2]) -> Option<[[f64; 2]; 4]> {
+    let side = f64::from(GAME_ATLAS_SIDE);
+    let gradient = [f64::from(uv[2]) / size[0], f64::from(uv[3]) / size[1]];
+    let footprint = (gradient[0] * side)
+        .powi(2)
+        .max((gradient[1] * side).powi(2));
+    if uv.map(f64::from).iter().any(|value| !value.is_finite())
+        || gradient.iter().any(|value| !value.is_finite())
+        || !footprint.is_finite()
+        || footprint <= 1.5625
+    {
+        return None;
+    }
+    Some(
+        [[-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25], [0.25, 0.25]]
+            .map(|[sx, sy]| [sx * gradient[0], sy * gradient[1]]),
+    )
+}
+
+fn reference_sprite_sample(
+    atlas: &[u8],
+    page: u32,
+    uv: [f32; 4],
+    texture: [f64; 2],
+    offsets: &[[f64; 2]; 4],
+    center: [u8; 4],
+) -> [u8; 4] {
+    let side = f64::from(GAME_ATLAS_SIDE);
+    let rect = uv.map(f64::from);
+    let mut lo = [0.0; 2];
+    let mut hi = [0.0; 2];
+    for axis in 0..2 {
+        let start = rect[axis] * side;
+        let end = (rect[axis] + rect[axis + 2]) * side;
+        lo[axis] = start.min(end) + 0.5;
+        hi[axis] = start.max(end) - 0.5;
+    }
+    let mut sums = [0_u32; 4];
+    for offset in offsets {
+        let point: [f64; 2] = std::array::from_fn(|axis| {
+            (texture[axis] * side + offset[axis] * side).clamp(lo[axis], hi[axis])
+        });
+        let tap = sample_atlas(atlas, page, point[0], point[1]);
+        for channel in 0..3 {
+            sums[channel] += u32::from(tap[channel]) * u32::from(tap[3]);
+        }
+        sums[3] += u32::from(tap[3]);
+    }
+    if sums[3] == 0 {
+        return center;
+    }
+    std::array::from_fn(|channel| {
+        if channel < 3 {
+            (f64::from(sums[channel]) / f64::from(sums[3]) + 0.5).floor() as u8
+        } else {
+            (f64::from(sums[3]) / 4.0 + 0.5).floor() as u8
+        }
+    })
 }
 
 pub(super) fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {

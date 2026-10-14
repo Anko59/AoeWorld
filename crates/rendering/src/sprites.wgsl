@@ -25,39 +25,14 @@ struct VertexOutput {
     @location(10) @interpolate(flat) rect3: vec4<f32>,
 };
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
-    switch mode {
-        case 0u: {
-            if corner == 0u { return vec2<f32>(0.5, 0.0); }
-            if corner == 1u { return vec2<f32>(1.0, 0.5); }
-            return vec2<f32>(0.5, 1.0);
-        }
-        case 1u: {
-            if corner == 0u { return vec2<f32>(0.5, 0.0); }
-            if corner == 1u { return vec2<f32>(0.5, 1.0); }
-            return vec2<f32>(0.0, 0.5);
-        }
-        case 2u: {
-            if corner == 0u { return vec2<f32>(0.5, 0.0); }
-            if corner == 1u { return vec2<f32>(1.0, 0.5); }
-            return vec2<f32>(0.0, 0.5);
-        }
-        case 3u: {
-            if corner == 0u { return vec2<f32>(1.0, 0.5); }
-            if corner == 1u { return vec2<f32>(0.5, 1.0); }
-            return vec2<f32>(0.0, 0.5);
-        }
-        case 4u: {
-            if corner == 0u { return vec2<f32>(0.3, 0.3); }
-            if corner == 1u { return vec2<f32>(0.7, 0.3); }
-            return vec2<f32>(0.7, 0.7);
-        }
-        case 5u: {
-            if corner == 0u { return vec2<f32>(0.3, 0.3); }
-            if corner == 1u { return vec2<f32>(0.7, 0.7); }
-            return vec2<f32>(0.3, 0.7);
-        }
-        default: { return vec2<f32>(0.0, 0.0); }
-    }
+    var table = array<vec2<f32>, 18>(
+        vec2<f32>(0.5, 0.0), vec2<f32>(1.0, 0.5), vec2<f32>(0.5, 1.0), vec2<f32>(0.5, 0.0),
+        vec2<f32>(0.5, 1.0), vec2<f32>(0.0, 0.5), vec2<f32>(0.5, 0.0), vec2<f32>(1.0, 0.5),
+        vec2<f32>(0.0, 0.5), vec2<f32>(1.0, 0.5), vec2<f32>(0.5, 1.0), vec2<f32>(0.0, 0.5),
+        vec2<f32>(0.3, 0.3), vec2<f32>(0.7, 0.3), vec2<f32>(0.7, 0.7), vec2<f32>(0.3, 0.3),
+        vec2<f32>(0.7, 0.7), vec2<f32>(0.3, 0.7));
+    let index = min(mode * 3u + corner, 17u);
+    return select(vec2<f32>(0.0, 0.0), table[index], mode < 6u);
 }
 fn terrain_atlas_uv(rect: vec4<f32>, local: vec2<f32>) -> vec2<f32> {
     let pixel = vec2<f32>(1.0) / vec2<f32>(textureDimensions(sprite_atlas));
@@ -169,6 +144,33 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     return out;
 }
 
+// Bounded pixel-quadrant box average shared by terrain and object sprites:
+// four quantized nearest taps inside the pixel footprint, clamped to the
+// sampled rectangle so atlas neighbours never bleed. Alpha below zero
+// signals "no average available; keep the nearest centre".
+fn box_average(uv: vec2<f32>, page: i32, rect: vec4<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
+    let size = vec2<f32>(textureDimensions(sprite_atlas));
+    let px = dx * size;
+    let py = dy * size;
+    let footprint = max(dot(px, px), dot(py, py));
+    let bounded = all(abs(rect) <= vec4<f32>(3.402823e38)) && all(abs(uv) <= vec2<f32>(3.402823e38))
+        && all(abs(dx) <= vec2<f32>(3.402823e38)) && all(abs(dy) <= vec2<f32>(3.402823e38))
+        && footprint > 1.5625 && footprint <= 3.402823e38;
+    if !bounded { return vec4<f32>(-1.0); }
+    // Mirrored sprites carry a negative uv span, so order the corners.
+    let lo = min(rect.xy, rect.xy + rect.zw) + 0.5 / size;
+    let hi = max(rect.xy, rect.xy + rect.zw) - 0.5 / size;
+    var sum = vec4<f32>(0.0);
+    for (var i = 0u; i < 4u; i++) {
+        let sx = select(-1.0, 1.0, (i & 2u) != 0u);
+        let sy = select(-1.0, 1.0, (i & 1u) != 0u);
+        let tap = floor(textureSampleLevel(sprite_atlas, sprite_sampler, clamp(uv + 0.25 * (sx * dx + sy * dy), lo, hi), page, 0.0) * 255.0 + 0.5);
+        sum += vec4<f32>(tap.rgb * tap.a, tap.a);
+    }
+    if sum.a == 0.0 { return vec4<f32>(-1.0); }
+    return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, floor(sum.a / 4.0 + 0.5) / 255.0);
+}
+
 fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
     var center = textureSampleLevel(sprite_atlas, sprite_sampler, uv, i32(page), 0.0);
     let size = vec2<f32>(textureDimensions(sprite_atlas));
@@ -180,21 +182,10 @@ fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: 
         let inward = mix(uv, rect.xy + rect.zw * 0.5, 2.0 / min(extent.x, extent.y));
         center = textureSampleLevel(sprite_atlas, sprite_sampler, inward, i32(page), 0.0);
     }
-    let px = dx * size;
-    let py = dy * size;
-    let footprint = max(dot(px, px), dot(py, py));
-    if !(all(abs(rect) <= vec4<f32>(3.402823e38)) && all(abs(uv) <= vec2<f32>(3.402823e38)) && all(abs(dx) <= vec2<f32>(3.402823e38)) && all(abs(dy) <= vec2<f32>(3.402823e38)) && footprint > 1.5625 && footprint <= 3.402823e38) { return center; }
-    let lo = rect.xy + 0.5 / size;
-    let hi = lo + max(rect.zw - 1.0 / size, vec2<f32>(0.0));
-    var sum = vec4<f32>(0.0);
-    for (var i = 0u; i < 4u; i++) {
-        let sx = select(-1.0, 1.0, (i & 2u) != 0u);
-        let sy = select(-1.0, 1.0, (i & 1u) != 0u);
-        let tap = floor(textureSampleLevel(sprite_atlas, sprite_sampler, clamp(uv + 0.25 * (sx * dx + sy * dy), lo, hi), i32(page), 0.0) * 255.0 + 0.5);
-        sum += vec4<f32>(tap.rgb * tap.a, tap.a);
-    }
-    if sum.a == 0.0 { return center; }
-    return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, center.a);
+    // The mesh owns terrain coverage, so the surface keeps its nearest alpha.
+    let average = box_average(uv, i32(page), rect, dx, dy);
+    if average.a < 0.0 { return center; }
+    return vec4<f32>(average.rgb, center.a);
 }
 
 struct Layer {
@@ -322,7 +313,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let dx3 = dpdx(in.uv3);
     let dy3 = dpdy(in.uv3);
     if in.solid == 0u {
-        let texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+        var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+        let average = box_average(in.uv, i32(in.pages.x), in.rect, dx, dy);
+        if average.a >= 0.0 { texel = average; }
         if texel.a <= 0.0 { discard; }
         return texel * in.color;
     }
