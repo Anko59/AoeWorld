@@ -15,7 +15,7 @@ mod why;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-pub(in crate::ship) use tests::graded;
+pub(in crate::ship) use tests::{graded, publish_calls};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -195,21 +195,10 @@ fn short(sha: &str) -> &str {
     &sha[..12.min(sha.len())]
 }
 
-/// The `gh` calls that publish a passing review into dev: the
-/// `harness/review` success status on the reviewed commit, then GitHub
-/// auto-merge (squash).
-pub(crate) fn publish_calls(
-    repository: &str,
-    url: &str,
-    report: &Report,
-) -> Result<Vec<Vec<String>>> {
-    publish_calls_onto(repository, url, report, crate::review::base::DEV)
-}
-
-/// `publish_calls` for a pull request into `base`: auto-merge is armed only
+/// The publication calls for a pull request into `base`: auto-merge is armed only
 /// into dev, never into a stacked parent branch, which GitHub would merge
 /// into without the parent's review.
-pub(crate) fn publish_calls_onto(
+fn publish_calls_onto(
     repository: &str,
     url: &str,
     report: &Report,
@@ -277,13 +266,11 @@ pub(crate) fn publish_calls_onto(
 /// pull request.
 pub(crate) fn publish(root: &Path, url: &str, report: &Report, base: &str) -> Result<()> {
     let repository = git::origin_repository(root)?;
-    // What was approved, for the workflow that carries the status over a
-    // rebase; the ship does not fail for it, only the later carry would.
-    if base == crate::review::base::DEV
-        && let Err(error) = super::postpush::marker::record(root, url, report)
-    {
+    // Both ship and review-pr publish here: every approval records the marker
+    // before its status. Marker failure warns; only the later carry would fail.
+    if let Err(error) = super::postpush::marker::record(root, url, report) {
         eprintln!(
-            "ship: the review marker was not written ({error}); a rebase will not carry the review"
+            "review: the review marker was not written ({error}); a rebase will not carry the review"
         );
     }
     for call in publish_calls_onto(&repository, url, report, base)? {

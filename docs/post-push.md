@@ -20,8 +20,8 @@ also writes a pull request comment that starts with the hidden line
 `head`, its own-patch `patch` identity (SHA-256 of the exact changed bytes
 against the base, as `review/reuse.rs` computes it, recomputed from Git), the
 review `policy` fingerprint (`Report::policy_fingerprint_at`), `tier` and
-`grade`. The next ship edits that comment in place; if it cannot, it adds one.
-A comment, not the status description: a description holds 140 characters and
+`grade`. The next passing review edits that comment in place; if it cannot,
+it adds one. A comment, not the status description: a description holds 140 characters and
 the two fingerprints are 128. A marker that cannot be written is a warning;
 the ship still succeeds, only a later rebase will not carry the review.
 
@@ -53,7 +53,11 @@ to the head the run saw. At most `UPDATE_MAX_PRS` (5) pull requests per run,
 oldest first; one run at a time (concurrency group `post-push-update`, never
 cancelled halfway). A rebase that GitHub refuses with conflicting files leaves
 the pull request untouched and adds one comment naming the files (once per
-head); a refusal with no conflict is an error of the run. Forks are skipped.
+head). Conflict diagnosis replays the PR commits in order in a temporary detached
+worktree, naming the files of the first conflicting commit, even if a later
+commit restores their original contents. The worktree is removed afterwards.
+A refusal with no conflict also adds one comment explaining the API failure
+and any local replay failure, and remains an error of the run. Forks are skipped.
 
 The rebase must be pushed with a personal token: a push made with the workflow's
 own `GITHUB_TOKEN` starts no CI run, and the rebased pull request would wait

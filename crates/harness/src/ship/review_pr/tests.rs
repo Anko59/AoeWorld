@@ -1,3 +1,14 @@
+/// Inspect the shared status/merge calls plus this command's report comment.
+fn publication_calls(
+    repository: &str,
+    url: &str,
+    report: &review::Report,
+) -> Result<Vec<Vec<String>>> {
+    let mut calls = review_gate::publish_calls(repository, url, report)?;
+    calls.push(comment_call(repository, url, report));
+    Ok(calls)
+}
+
 use super::*;
 
 fn metadata(base_name: &str, cross_repository: bool) -> PrMetadata {

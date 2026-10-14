@@ -1,4 +1,4 @@
-//! What `make ship` approved, kept on the pull request. It is a comment with a
+//! What `make ship` or `make review-pr` approved, kept on the pull request. It is a comment with a
 //! hidden marker line, updated in place by the next ship, not the status
 //! description: a status description holds 140 characters and the two
 //! fingerprints alone are 128. Only a marker written by someone with write
@@ -53,7 +53,7 @@ impl Marker {
 
     pub(super) fn render(&self) -> String {
         format!(
-            "{TAG}\n<!-- {} -->\nReview passed on `{}` ({}/10, {} tier). `make ship` keeps this \
+            "{TAG}\n<!-- {} -->\nReview passed on `{}` ({}/10, {} tier). `make ship` and `make review-pr` keep this \
              comment current; when `dev` moves and the pull request is rebased, \
              `aoe-harness carry-review` carries `harness/review` to the new head only if the \
              patch and the review policy are unchanged (docs/post-push.md).",

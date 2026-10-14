@@ -34,7 +34,7 @@ pub(super) fn decide(
 ) -> Result<Decision> {
     let Some(marker) = marker else {
         return Ok(Decision::Refuse(
-            "no review marker from a maintainer on this pull request (`make ship` writes it)"
+            "no review marker from a maintainer on this pull request (`make ship` and `make review-pr` write it)"
                 .into(),
         ));
     };

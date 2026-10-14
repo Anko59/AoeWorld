@@ -11,6 +11,13 @@ use std::{ffi::OsString, fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::
 const GH: &str = r#"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
+if [ "$1 $2" = "pr view" ]; then
+  case "$*" in
+    *headRefOid*) cat "$GH_DIR/review-meta.json" ;;
+    *) echo '{"body":"Dependency update"}' ;;
+  esac
+  exit 0
+fi
 [ "$1" = api ] || exit 0
 all="$*"
 case "$all" in
@@ -100,6 +107,8 @@ impl World {
         world.set("GH_LOG", &world.log.display().to_string());
         world.set("GH_DIR", &world.dir.display().to_string());
         for name in [
+            "AOE_JUDGE_REV",
+            "SHIP_BASE",
             "GITHUB_REPOSITORY",
             "GH_REPO",
             "AOE_AGENT_ROLE",
@@ -133,6 +142,36 @@ impl World {
 
     pub(super) fn clear(&self) {
         fs::write(&self.log, "").unwrap();
+    }
+
+    /// Runs the branch's compiled CLI, with this world's Git and API fixtures.
+    pub(super) fn cli(&self, command: &str) -> std::process::Output {
+        let binary = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("aoe-harness");
+        let output = std::process::Command::new(binary)
+            .current_dir(&self.root)
+            .arg(command)
+            .output()
+            .unwrap();
+        use std::io::Write;
+        let proof = format!(
+            "$ aoe-harness {command}\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::io::stdout().write_all(proof.as_bytes()).unwrap();
+        output
+    }
+
+    pub(super) fn script(&self, name: &str, body: &str) {
+        let path = self.temp.path().join("bin").join(name);
+        fs::write(&path, body).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     pub(super) fn head(&self) -> String {

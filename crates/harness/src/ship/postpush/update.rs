@@ -4,12 +4,13 @@
 //! (`updatePullRequestBranch`, REBASE). A rebase that conflicts leaves the pull
 //! request untouched and adds one comment naming the files. At most
 //! `UPDATE_MAX_PRS` pull requests are handled per run, the oldest first.
-use super::{BASE, Result, api, comments, fetch, post_comment, require_main_session, short};
+use super::{BASE, Result, api, comments, post_comment, require_main_session, short};
 use crate::ship::{git, github::gh};
-use std::{path::Path, process::Command};
+use std::path::Path;
 
 const DEFAULT_MAX: usize = 5;
 const CONFLICT_TAG: &str = "<!-- aoe-harness:update-conflict ";
+const FAILURE_TAG: &str = "<!-- aoe-harness:update-failure ";
 
 const LIST: &str = "query ListWaiting($owner: String!, $name: String!) { \
     repository(owner: $owner, name: $name) { \
@@ -97,37 +98,6 @@ fn behind(root: &Path, repository: &str, pr: &Waiting) -> Result<bool> {
     Ok(compare["behind_by"].as_u64().unwrap_or(0) > 0)
 }
 
-/// The files `head` and `dev` both change in conflicting ways, best effort.
-fn conflicting_files(root: &Path, number: u64) -> Vec<String> {
-    let Ok(head) = fetch(root, &format!("refs/pull/{number}/head")) else {
-        return Vec::new();
-    };
-    let Ok(base) = fetch(root, &format!("refs/heads/{BASE}")) else {
-        return Vec::new();
-    };
-    let merged = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args([
-            "merge-tree",
-            "--write-tree",
-            "--name-only",
-            "--no-messages",
-            &base,
-            &head,
-        ])
-        .output();
-    // A conflict exits 1 and prints the tree, then one conflicted file per line.
-    match merged {
-        Ok(out) if out.status.code() == Some(1) => String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .skip(1)
-            .map(str::to_owned)
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
 pub(super) fn update(root: &Path, max: usize) -> Result<()> {
     let repository = git::origin_repository(root)?;
     let mut handled = 0;
@@ -162,14 +132,17 @@ pub(super) fn update(root: &Path, max: usize) -> Result<()> {
                 pr.number,
                 short(&pr.head)
             ),
-            Err(error) => {
-                let files = conflicting_files(root, pr.number);
-                if files.is_empty() {
+            Err(error) => match super::replay::conflicting_files(root, pr.number, &pr.head) {
+                Ok(files) if !files.is_empty() => conflict(root, &repository, &pr, &files)?,
+                diagnosis => {
+                    let detail = match diagnosis {
+                        Ok(_) => "local commit replay succeeded; no conflicting files".to_owned(),
+                        Err(why) => format!("conflict diagnosis unavailable: {why}"),
+                    };
+                    failure(root, &repository, &pr, &format!("{error}; {detail}"))?;
                     problems.push(format!("#{}: {error}", pr.number));
-                } else {
-                    conflict(root, &repository, &pr, &files)?;
                 }
-            }
+            },
         }
     }
     if problems.is_empty() {
@@ -180,28 +153,49 @@ pub(super) fn update(root: &Path, max: usize) -> Result<()> {
 
 /// One comment per head, so a conflict that stays does not repeat on every push.
 fn conflict(root: &Path, repository: &str, pr: &Waiting, files: &[String]) -> Result<()> {
-    let tag = format!("{CONFLICT_TAG}{} -->", pr.head);
-    if comments(root, repository, pr.number)?
-        .iter()
-        .any(|comment| comment.body.starts_with(&tag))
-    {
-        return Ok(());
-    }
     let list = files
         .iter()
         .map(|f| format!("`{f}`"))
         .collect::<Vec<_>>()
         .join(", ");
-    post_comment(
+    refusal(
         root,
         repository,
-        pr.number,
+        pr,
+        CONFLICT_TAG,
         &format!(
-            "{tag}\nThis pull request could not be rebased onto `{BASE}` ({} files conflict: {list}). \
+            "This pull request could not be rebased onto `{BASE}` ({} files conflict: {list}). \
              It is left as it is: rebase it, resolve the conflict, and ship again.",
             files.len()
         ),
     )?;
     println!("update-prs: #{} conflicts with {BASE} in {list}", pr.number);
     Ok(())
+}
+
+fn failure(root: &Path, repository: &str, pr: &Waiting, why: &str) -> Result<()> {
+    refusal(
+        root,
+        repository,
+        pr,
+        FAILURE_TAG,
+        &format!(
+            "This pull request could not be rebased onto `{BASE}` for another reason: {why}. \
+         It is left as it is; retry the update after resolving this failure."
+        ),
+    )?;
+    println!("update-prs: #{} rebase failed: {why}", pr.number);
+    Ok(())
+}
+
+/// One comment per head and kind: a transient failure cannot hide a conflict.
+fn refusal(root: &Path, repository: &str, pr: &Waiting, prefix: &str, message: &str) -> Result<()> {
+    let tag = format!("{prefix}{} -->", pr.head);
+    if comments(root, repository, pr.number)?
+        .iter()
+        .any(|comment| comment.body.starts_with(&tag))
+    {
+        return Ok(());
+    }
+    post_comment(root, repository, pr.number, &format!("{tag}\n{message}"))
 }

@@ -117,9 +117,8 @@ pub(super) fn execute(root: &Path) -> Result<()> {
         .into());
     }
     let url = format!("https://github.com/{repository}/pull/{number}");
-    for call in publication_calls(&repository, &url, &report)? {
-        super::github::publish_call(root, &call)?;
-    }
+    review_gate::publish(root, &url, &report, &metadata.base_name)?;
+    super::github::publish_call(root, &comment_call(&repository, &url, &report))?;
     Ok(())
 }
 
@@ -230,15 +229,9 @@ impl Drop for Worktree {
     }
 }
 
-/// Status and merge calls come from ship's shared publisher; this adds the PR comment.
-fn publication_calls(
-    repository: &str,
-    url: &str,
-    report: &review::Report,
-) -> Result<Vec<Vec<String>>> {
-    // The merge call is pinned to the reviewed commit (--match-head-commit).
-    let mut calls = review_gate::publish_calls(repository, url, report)?;
-    calls.push(vec![
+/// The ordinary review report, after the shared marker/status publisher succeeds.
+fn comment_call(repository: &str, url: &str, report: &review::Report) -> Vec<String> {
+    vec![
         "pr".into(),
         "comment".into(),
         url.into(),
@@ -246,8 +239,7 @@ fn publication_calls(
         repository.into(),
         "--body".into(),
         report.markdown(),
-    ]);
-    Ok(calls)
+    ]
 }
 
 fn dependency_major_bump(root: &Path, base: &str, head: &str) -> Result<bool> {

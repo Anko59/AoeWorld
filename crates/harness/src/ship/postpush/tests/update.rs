@@ -117,14 +117,40 @@ fn a_conflicting_pull_request_is_left_alone_with_one_comment_naming_the_files() 
 }
 
 #[test]
-fn a_failure_without_conflicting_files_posts_no_comment_and_fails_the_run() {
+fn a_failure_without_conflicting_files_comments_and_fails_the_run() {
     let world = World::new();
-    listing(&world, &[node(5, true, false)]);
-    behind(&world, 5, 2);
+    let head = world.head();
+    world.publish_pull(5, &head);
+    world.move_dev("unrelated.txt", "dev moved\n");
+    let mut pr = node(5, true, false);
+    pr["headRefOid"] = head.clone().into();
+    listing(&world, &[pr]);
+    world.answer(&format!("compare-{head}.json"), "{\"behind_by\":2}");
     world.answer("rebase-fails-PR_5", "502 bad gateway");
     let error = update(&world.root, 5).unwrap_err().to_string();
     assert!(error.contains("#5") && error.contains("502"), "{error}");
-    assert!(!world.calls().contains("<--method>"));
+    let calls = world.calls();
+    assert!(calls.contains("<POST>"), "{calls}");
+    assert!(calls.contains("502 bad gateway"), "{calls}");
+    assert!(calls.contains("no conflicting files"), "{calls}");
+    // An earlier transient failure must not suppress a later conflict diagnosis.
+    world.answer(
+        "comments-5.json",
+        &serde_json::json!([comment(
+            1,
+            "NONE",
+            &format!("<!-- aoe-harness:update-failure {head} -->\nprior API failure")
+        )])
+        .to_string(),
+    );
+    world.move_dev("README.md", "conflicting dev change\n");
+    world.clear();
+    update(&world.root, 5).unwrap();
+    let calls = world.calls();
+    assert!(
+        calls.contains("<POST>") && calls.contains("README.md"),
+        "{calls}"
+    );
 }
 
 #[test]
@@ -137,5 +163,85 @@ fn without_the_personal_token_the_workflow_does_nothing() {
     assert_eq!(
         fs::read_to_string(world.temp.path().join("gh.log")).unwrap(),
         ""
+    );
+}
+
+#[test]
+fn replay_names_the_first_conflict_even_when_the_final_tree_merge_is_clean() {
+    use crate::ship::{git, tests::run};
+    let world = World::new();
+    run(&world.root, &["checkout", "-q", "--detach", "origin/dev"]);
+    fs::write(world.root.join("f.txt"), "a\n").unwrap();
+    run(&world.root, &["add", "f.txt"]);
+    run(&world.root, &["commit", "-q", "-m", "base f"]);
+    run(&world.root, &["push", "-q", "origin", "HEAD:dev"]);
+    run(&world.root, &["checkout", "-q", "-B", "feature"]);
+    fs::write(world.root.join("f.txt"), "c\n").unwrap();
+    fs::write(world.root.join("g.txt"), "feature\n").unwrap();
+    run(&world.root, &["add", "-A"]);
+    run(
+        &world.root,
+        &["commit", "-q", "-m", "first conflicting commit"],
+    );
+    fs::write(world.root.join("f.txt"), "a\n").unwrap();
+    run(&world.root, &["commit", "-q", "-am", "restore f"]);
+    let head = world.head();
+    world.publish_pull(9, &head);
+    let dev = world.move_dev("f.txt", "b\n");
+    run(&world.root, &["fetch", "-q", "origin", "dev"]);
+    assert!(git::git(&world.root, &["merge-tree", "--write-tree", &dev, &head]).is_ok());
+    let mut pr = node(9, true, false);
+    pr["headRefOid"] = head.clone().into();
+    listing(&world, &[pr]);
+    world.answer(&format!("compare-{head}.json"), "{\"behind_by\":1}");
+    world.answer("rebase-fails-PR_9", "rebase conflict");
+    let before = git::git(&world.root, &["worktree", "list", "--porcelain"]).unwrap();
+    let output = world.cli("update-prs");
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("conflicts with dev in `f.txt`"));
+    let calls = world.calls();
+    assert!(calls.contains("1 files conflict: `f.txt`"), "{calls}");
+    assert_eq!(calls.matches("<POST>").count(), 1, "{calls}");
+    assert_eq!(world.head(), head, "the real branch stays untouched");
+    assert_eq!(
+        git::git(&world.root, &["worktree", "list", "--porcelain"]).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn a_non_conflict_local_replay_failure_is_explained_in_the_comment() {
+    use std::os::unix::fs::PermissionsExt;
+    let world = World::new();
+    let head = world.head();
+    world.publish_pull(9, &head);
+    world.move_dev("unrelated.txt", "dev moved\n");
+    let mut pr = node(9, true, false);
+    pr["headRefOid"] = head.clone().into();
+    listing(&world, &[pr]);
+    world.answer(&format!("compare-{head}.json"), "{\"behind_by\":1}");
+    world.answer("rebase-fails-PR_9", "API rebase refused");
+    let hook = world.root.join(".git/hooks/pre-rebase");
+    fs::write(
+        &hook,
+        "#!/bin/sh\necho 'replay blocked by fixture hook' >&2\nexit 1\n",
+    )
+    .unwrap();
+    fs::set_permissions(hook, fs::Permissions::from_mode(0o755)).unwrap();
+    let before = crate::ship::git::git(&world.root, &["worktree", "list", "--porcelain"]).unwrap();
+    let output = world.cli("update-prs");
+    assert!(!output.status.success(), "{output:?}");
+    let calls = world.calls();
+    assert!(calls.contains("<POST>"), "{calls}");
+    assert!(calls.contains("API rebase refused"), "{calls}");
+    assert!(
+        calls.contains("local commit replay failed")
+            && calls.contains("replay blocked by fixture hook"),
+        "{calls}"
+    );
+    assert_eq!(world.head(), head);
+    assert_eq!(
+        crate::ship::git::git(&world.root, &["worktree", "list", "--porcelain"]).unwrap(),
+        before
     );
 }

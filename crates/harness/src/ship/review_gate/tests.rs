@@ -1,12 +1,12 @@
 use super::super::{
     Options, git,
     github::description,
-    judge,
-    review_gate::publish_calls,
-    ship_with,
+    judge, ship_with,
     tests::{fixture, offline, run},
 };
 
+mod publish;
+pub(in crate::ship) use publish::publish_calls;
 mod after_approval;
 mod ahead;
 mod patch_reuse;
