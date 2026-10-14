@@ -88,9 +88,9 @@ agent policy refuses `$` in agent-set Make values.
    `origin`'s GitHub repository, found by head branch (never by a number),
    with the review appended; posts the `harness/review` status and a review
    marker comment and, into `dev` only, arms auto-merge ([after the push](post-push.md)).
-9. **Files the review's leftovers** as issues: one per confirmed or disputed
-   critical or major finding, and one `Review follow-ups for #<pr>` checklist
-   for the minor and nit ones, deduplicated across ships
+9. **Files the review's leftovers**: one issue per confirmed or disputed
+   critical or major finding; the minor and nit ones become a section of the
+   standing issue `Review follow-ups` and a pull request comment
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
 
@@ -193,47 +193,47 @@ cannot loosen its own limits (the working tree only while dev lacks the file).
 
 `make describe-check SHIP_BODY=<file> [SHIP_TITLE=…] [SHIP_VIDEO=<file>]` runs
 every description rule at once (every role; read-only, no lock, no fetch): the
-template sections and their line limits, the `Why` grounding element, the level
-marker, the level against the floor (with its reason), the video against the
-level (required or not, length, voice-over, unreadable file) and the title. It
-prints `description: OK (level <level>, floor <floor>)` or a numbered list of
-every problem. `make ship` runs the same check before the lock wait, the gates
-and the review, and stops with the whole list. Both take the base, the parent
-pull request, the review-ahead scope of a local unpublished parent and the
-rule "a title is required unless the branch has an open pull request or only
-reviews ahead" from the same `gh` lookup, so a stacked child is checked against
-its parent. Without a usable `gh`, `make describe-check` prints
-`title: not checked (gh unavailable)` after `OK` when no title was given.
+template and its line limits, the `Why` grounding element, the level marker, the
+level against the floor (with its reason), the video against the level and the
+title. It prints `description: OK (level <level>, floor <floor>)` or a numbered
+list of every problem; `make ship` runs the same check before the lock wait, the
+gates and the review. Both take the base, the parent pull request and the title
+rule from one `gh` lookup, so a stacked child is checked against its parent.
+Without a usable `gh`, `title: not checked (gh unavailable)` follows `OK` when no
+title was given.
+
+Both count the working tree the commit will hold: staged, unstaged and untracked
+files that Git would not ignore, against the merge base. An untracked symlink
+counts as one line (its target path); a nested repository, a directory or an
+unreadable entry is left out with a note on stderr. `describe-check` prints
+`uncommitted: N changed files counted …`, N being the counted files not committed yet.
 
 ### The floor
 
 The agent picks the level, but never below the floor `make ship` computes from
-the change: `make level-floor` prints it (every role; read-only) and the rule
-that demands it. A rule names a level, a minimum of changed lines (added plus
-removed against the merge base; a binary file counts as 61 in all, not per side) and optionally the
-registry suites or path prefixes the change must touch (a `behaviour` rule
-counts only files that are neither tests nor documentation or configuration); the floor is the
-highest level of any matching rule. Today:
+the change: `make level-floor` prints it for the committed change (every role;
+read-only) with the rule that demands it. A rule names a level, a minimum of
+changed lines (added plus removed against the merge base; a binary file counts as
+61 in all, not per side) and optionally the registry suites or path prefixes the
+change must touch (a `behaviour` rule counts only files that are neither tests nor
+documentation or configuration); the floor is the highest level of any matching
+rule. Today, the four rules of `gates/levels.json`:
 
-- more than 60 changed lines: at least `medium`;
-- any product suite selected (native, gameplay, browser, assets, performance,
-  map, release, everything) by a file that can change behaviour: at least
-  `medium`. Test files (the `is_test` classification of the roles) and the
-  documentation and configuration paths of `gates/levels.json` (`docs/`,
+- a changed baseline (`baselines/`) moves a gate: at least `medium`;
+- any product suite (native, gameplay, browser, assets, performance, map,
+  release, everything) selected by a file that can change behaviour: at least
+  `medium`. Test files and the documentation and configuration paths (`docs/`,
   `skills/`, `make/`, `.github/`, `gates/`, `AGENTS.md`, `CLAUDE.md`, `*.md`)
-  select nothing here, so a test-only change, a docs-only change or a
-  make/gates/workflow edit of at most 60 lines may be `low`. The floor is
-  about the description only: the gates and the review still run in full on
-  those files. Harness code, `.claude/` and `.agents/` still count as
-  behaviour;
+  select nothing here, so a docs-only, test-only or make/gates/workflow change of
+  at most 60 lines may be `low`; the gates and the review run in full anyway;
+- more than 60 changed lines: at least `medium`;
 - 200 or more changed lines touching the harness, gates or instructions
   (`everything`), the map or geodata crates (`map`) or `crates/protocol/`: at
-  least `high`; only the changed lines inside those paths count towards the 200, and the rest of the change is judged by the other rules.
+  least `high`, counting only the changed lines inside those paths.
 
-Shipping below the floor is refused before any gate runs, with the reason and
-the level to use. The chosen level, the floor, its reason and the metrics row
-set of the level are recorded in the ship
-evidence (`level`) and shown in the "For AI" part, which also carries the
+Shipping below the floor is refused before any gate runs, with the reason and the
+level to use. The chosen level, the floor, its reason and the metrics row set are
+recorded in the ship evidence (`level`) and shown in the "For AI" part with the
 `<!-- level: … -->` marker.
 
 ### Tracking

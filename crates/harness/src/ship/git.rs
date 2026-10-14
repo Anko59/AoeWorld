@@ -5,6 +5,12 @@ mod patch;
 pub(crate) type Result<T> = std::result::Result<T, String>;
 
 pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String> {
+    Ok(git_raw(root, args)?.trim().to_owned())
+}
+
+/// `git` output as it is, untrimmed: for `-z` lists, where a leading space
+/// belongs to the first path.
+pub(crate) fn git_raw(root: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
@@ -12,7 +18,7 @@ pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String> {
         .output()
         .map_err(|e| format!("git: {e}"))?;
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
         Err(format!(
             "git {}: {}",

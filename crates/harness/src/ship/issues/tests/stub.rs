@@ -17,13 +17,31 @@ for arg in "$@"; do
   fi
 done
 case "$1" in
+  --version) printf 'gh version 2.100.0\n' ;;
   api) printf '%s' "$GH_LIST_JSON" ;;
-  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'
-    else
-      # Like the real gh, read a body piped on stdin (`--body-file -`) to its
-      # end: exiting first closes the pipe under the writer (EPIPE).
-      case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
-    fi ;;
+  issue) case "$2" in
+    create|edit)
+      cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"
+      if [ "$2" = create ]; then printf 'https://github.com/project/checkout/issues/99\n'; fi ;;
+    view)
+      if [ -n "${GH_VIEW_RESPONSES-}" ]; then
+        count=$(cat "$GH_VIEW_RESPONSES/count")
+        count=$((count + 1))
+        printf '%s' "$count" > "$GH_VIEW_RESPONSES/count"
+        cat "$GH_VIEW_RESPONSES/$count"
+      else
+        case " $* " in
+          *" body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
+          *" updatedAt "*) printf '2026-10-14T00:00:00Z' ;;
+          *) printf '%s' "${GH_VIEW_BODY-}" ;;
+        esac
+      fi ;;
+    # Like the real gh, read a body piped on stdin (`--body-file -`) to its
+    # end: exiting first closes the pipe under the writer (EPIPE).
+    *) case " $* " in *" --body-file - "*) cat > /dev/null ;; esac ;;
+  esac ;;
+  pr) if [ "$2" = list ]; then printf '%s' "${GH_OPEN_PR-}"; fi
+    case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;
 esac
 "#;
 
@@ -88,13 +106,39 @@ impl Stub {
         stub.set("GITHUB_REPOSITORY", "wrong/override");
         stub.set("GH_REPO", "wrong/override");
         stub.unset("GH_FAIL");
+        stub.unset("GH_VIEW_BODY");
+        stub.unset("GH_VIEW_RESPONSES");
+        stub.unset("GH_OPEN_PR");
+        stub.set(
+            "GH_VIEW_JSON",
+            r#"{"body":"","updatedAt":"2026-10-14T00:00:00Z"}"#,
+        );
         stub.unset("AOE_AGENT_ROLE");
         stub
     }
 
     pub(super) fn set(&mut self, name: &'static str, value: &str) {
+        if name == "GH_VIEW_BODY" {
+            self.set(
+                "GH_VIEW_JSON",
+                &serde_json::json!({
+                    "body": value, "updatedAt": "2026-10-14T00:00:00Z"
+                })
+                .to_string(),
+            );
+        }
         self.saved.push((name, std::env::var_os(name)));
         unsafe { std::env::set_var(name, value) };
+    }
+
+    pub(super) fn view_responses(&mut self, responses: &[String]) {
+        let directory = self._temp.path().join("views");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("count"), "0").unwrap();
+        for (index, response) in responses.iter().enumerate() {
+            fs::write(directory.join((index + 1).to_string()), response).unwrap();
+        }
+        self.set("GH_VIEW_RESPONSES", directory.to_str().unwrap());
     }
 
     pub(super) fn unset(&mut self, name: &'static str) {

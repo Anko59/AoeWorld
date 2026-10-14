@@ -75,6 +75,39 @@ fn a_level_below_the_floor_names_the_floor_and_its_reason() {
     );
 }
 
+#[test]
+fn the_check_counts_uncommitted_lines_towards_the_floor() {
+    let (_temp, root) = fixture("true");
+    // The committed change is 2 lines; the untracked gate file adds 200 more
+    // before it is committed, so the early check must find `low` below `high`.
+    // The description lives outside the checkout, as a real one does.
+    fs::write(root.join("gates/new.txt"), "x\n".repeat(200)).unwrap();
+    let body = _temp.path().join("body.md");
+    fs::write(&body, BODY).unwrap();
+    let message = problems(&root, &request(&body));
+    assert!(message.contains("1 problem;"), "{message}");
+    assert!(message.contains("below the floor `high`"), "{message}");
+    assert!(
+        message.contains("gate files: 200 of 202 changed lines (need 5 for high)"),
+        "{message}"
+    );
+}
+
+#[test]
+fn the_uncommitted_files_counted_are_reported_with_a_passing_description() {
+    let (temp, root) = fixture("true");
+    // Twenty untracked files of two lines (42 with the committed README): a
+    // directory counts each of its files.
+    fs::create_dir_all(root.join("web/new")).unwrap();
+    for n in 0..20 {
+        fs::write(root.join(format!("web/new/f{n}.ts")), "a\nb\n").unwrap();
+    }
+    let body = temp.path().join("body.md");
+    fs::write(&body, BODY).unwrap();
+    let checked = run(&root, &request(&body)).expect("a low change passes");
+    assert_eq!(checked.uncommitted, 20);
+}
+
 fn with_probe(root: &Path, banner: &str) {
     fs::write(root.join("probe.txt"), banner).unwrap();
     let makefile = fs::read_to_string(root.join("Makefile")).unwrap();

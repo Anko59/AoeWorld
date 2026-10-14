@@ -1,3 +1,5 @@
+mod checkout;
+
 use super::{
     super::{
         describe::{Level, level_section},
@@ -24,6 +26,7 @@ fn change(lines: u64, suites: &[&str], files: &[&str]) -> Change {
             suites,
             behaviour: true,
         }],
+        ..Change::default()
     }
 }
 
@@ -77,6 +80,19 @@ fn a_malformed_config_is_refused() {
             .contains("unknown variant `everything`")
     );
     assert!(broken(&|v| v["floor"][0]["reason"] = "".into()).contains("reason"));
+    // A rule that counts its own lines needs the subject of "N of M changed lines".
+    let counted = 3;
+    assert_eq!(good["floor"][counted]["min_changed_lines"], 200);
+    assert!(
+        broken(&|v| {
+            v["floor"][counted]
+                .as_object_mut()
+                .unwrap()
+                .remove("subject");
+        })
+        .contains("needs a subject")
+    );
+    assert!(broken(&|v| v["floor"][counted]["subject"] = "  ".into()).contains("needs a subject"));
     assert!(
         Levels::parse("not json")
             .unwrap_err()
@@ -129,10 +145,20 @@ fn the_floor_follows_size_and_what_the_change_touches() {
     );
 }
 
+/// The change of `files` (`lines` on the first file, as one count) classified by `registry`.
+fn from_files(levels: &Levels, registry: &Registry, lines: u64, files: Vec<String>) -> Change {
+    let counted = files
+        .into_iter()
+        .enumerate()
+        .map(|(index, file)| (file, if index == 0 { lines } else { 0 }))
+        .collect();
+    Change::from_parts(levels, registry, counted)
+}
+
 fn real(lines: u64, files: &[&str]) -> Change {
     let registry = Registry::parse(include_bytes!("../../../../../gates/registry.json")).unwrap();
     let files = files.iter().map(|f| (*f).to_owned()).collect();
-    Change::from_files(&committed(), &registry, lines, files)
+    from_files(&committed(), &registry, lines, files)
 }
 
 #[test]
@@ -181,11 +207,21 @@ fn docs_and_configuration_edits_may_be_low_but_harness_code_may_not() {
 
 #[test]
 fn binary_files_count_as_large_changes() {
+    // `git diff --numstat -z`: each record ends with a NUL.
     assert_eq!(
-        numstat_parts("3\t4\ta.rs\n-\t-\tlogo.png\n", 61),
+        numstat_parts("3\t4\ta.rs\0-\t-\tlogo.png\0", 61),
         vec![("a.rs".to_owned(), 7), ("logo.png".to_owned(), 61)]
     );
     assert!(numstat_parts("", 61).is_empty());
+}
+
+#[test]
+fn numstat_paths_are_raw_even_when_git_would_quote_them() {
+    // Without `-z` Git prints this path as `"gates/\303\251 \"q\".txt"`.
+    assert_eq!(
+        numstat_parts("250\t0\tgates/é \"q\".txt\0", 61),
+        vec![("gates/é \"q\".txt".to_owned(), 250)]
+    );
 }
 
 /// A change of `(path, lines)` pairs, classified like a real one.

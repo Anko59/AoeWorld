@@ -43,18 +43,37 @@ fingerprint and deduplication as `make issue`:
 - one issue per confirmed or disputed **critical** or **major** finding, titled
   `Review finding at <file>:<line>: <claim>` and labelled `agent-found`,
   `review-follow-up` and `priority:critical` or `priority:high`;
-- one checklist issue per pull request, `Review follow-ups for #<pr>`
-  (`priority:low`), with a `- [ ] <file>:<line> — <claim>` line per confirmed or
-  disputed **minor** or **nit** finding.
+- one **standing** issue, `Review follow-ups` (`priority:low`), for the **minor**
+  and **nit** findings: one section per pull request, headed
+  `## PR #<pr> — <url>`, with a `- [ ] <file>:<line> — <claim>` line per
+  finding. The first such review opens the issue; later ones append their
+  section, and a pull request shipped again replaces its own. A passing review
+  with no remaining minor or nit findings removes that pull request's section
+  and posts a comment stating that none remain at the current revision.
+  Otherwise, the same list is posted as a comment on that pull request.
+
+No issue is opened per pull request. Updates splice only the current pull
+request's section into a fresh body, preserving every other byte, including
+checked findings and owner edits, except when folding is needed. After the
+splice, while there are more than 30 sections or the body would not fit within
+60,000 characters including its fingerprint marker, the oldest sections fold
+into one summary line counting the sections folded and the last PR folded.
+Retained sections stay byte-identical. Before writing, the harness checks that
+`updatedAt` still matches the read; a change restarts the splice and folding
+from a fresh body, up to three attempts. If the standing issue stays busy or
+cannot fit even after folding down to one section, it is left untouched and
+the pull request comment is still posted. GitHub issue edits have no
+compare-and-set, so an edit after the last timestamp check can still race the
+write. The issue is found by its fingerprint
+marker and the `agent-found` label, as duplicates are; `make ship` runs under
+the person's `gh` account, so unlike nightly issues it is not authored by
+`github-actions[bot]`.
 
 Refuted findings are not leftovers. Reviewer text is untrusted: control
 characters and `<` are neutralised, so it can never carry the fingerprint
-marker, and every body is built in memory, clipped so that it stays within
-60,000 characters with the marker appended, and sent on standard input. A
-second ship of the same pull request comments on the open issues instead of
-opening new ones; the checklist's comment repeats the new review's list, so a
-finding new in that round is kept. A follow-up that cannot be filed is reported and never fails
-the ship: the review already passed; file it with `make issue`.
+marker, and every body is built in memory and sent on standard input. A
+follow-up that cannot be filed is reported and never fails the ship: the review
+already passed; file it with `make issue`.
 
 ## Nightly triage
 
