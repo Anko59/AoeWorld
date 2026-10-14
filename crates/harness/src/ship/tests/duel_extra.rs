@@ -12,6 +12,8 @@ mod fixes;
 mod keep;
 #[path = "duel/qualify.rs"]
 mod qualify;
+#[path = "duel/wasm_flow.rs"]
+mod wasm_flow;
 
 #[test]
 fn unrelated_red_failures_are_refused_without_launching_the_implementer() {

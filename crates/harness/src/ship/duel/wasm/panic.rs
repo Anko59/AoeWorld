@@ -9,7 +9,13 @@ const MESSAGE_LINES: usize = 3;
 pub(super) fn parse(output: &str) -> Vec<Panic> {
     let lines: Vec<_> = output.lines().collect();
     let mut found: Vec<Panic> = Vec::new();
+    let mut test: Option<String> = None;
     for (at, line) in lines.iter().enumerate() {
+        match owner(line) {
+            Owner::Failing(name) => test = Some(name),
+            Owner::Passing => test = None,
+            Owner::None => {}
+        }
         let Some((_, rest)) = line.split_once("panicked at ") else {
             continue;
         };
@@ -38,6 +44,7 @@ pub(super) fn parse(output: &str) -> Vec<Panic> {
             location: format!("{path}:{row}:{column}"),
             path,
             message,
+            test: test.clone(),
         };
         if !found.contains(&panic) {
             found.push(panic);
@@ -62,4 +69,33 @@ pub(crate) fn normalize(path: &str) -> String {
         }
     }
     parts.join("/")
+}
+
+enum Owner {
+    Failing(String),
+    Passing,
+    None,
+}
+
+/// Which test a line hands the following panics to: a failing test's `FAIL` line or `---- name output ----`
+/// header, or a passing test's line (after which a panic belongs to no named test).
+fn owner(line: &str) -> Owner {
+    let line = line.trim();
+    if let Some(rest) = line.strip_prefix("test ")
+        && let Some((name, status)) = rest.rsplit_once(" ... ")
+    {
+        return match status.trim() {
+            "FAIL" | "FAILED" => Owner::Failing(name.to_owned()),
+            "ok" => Owner::Passing,
+            _ => Owner::None,
+        };
+    }
+    if let Some(rest) = line.strip_prefix("---- ")
+        && let Some(name) = rest
+            .strip_suffix(" output ----")
+            .or_else(|| rest.strip_suffix(" stdout ----"))
+    {
+        return Owner::Failing(name.to_owned());
+    }
+    Owner::None
 }

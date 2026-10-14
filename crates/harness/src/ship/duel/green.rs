@@ -3,7 +3,7 @@ use super::{authored, focus::CheckReport, specs};
 use crate::ship::git;
 use std::{fs, path::Path};
 
-pub(super) fn validate(
+pub(in crate::ship) fn validate(
     root: &Path,
     paths: &[String],
     base: Option<&str>,

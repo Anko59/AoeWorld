@@ -18,6 +18,12 @@ SwiftShader and a game-only project with default browser launch settings. It and
 `make duel-check` first validate the stored packages in `local-assets/map-packages`;
 packages from before a format change fail with an "invalid stored map package"
 error, which names the files and says to regenerate them or move the directory aside.
+In `make duel`, a wasm run that panics (a shared helper's assertion prints no test
+name) or aborts after printing tests is a failed run, saved in `check.json` with the
+panic's location and assertion. At green the implementer keeps its attempts and sees
+them. At red a nameless panic counts only inside a file the tester changed; a panic that
+follows a named, pre-existing failing test belongs to that test and never counts. Otherwise
+round 1 refuses the check and keeps the tester's work, and an attack round drops the attack.
 Game checks cover rendered pixels, movement, resize, and compatibility startup
 after a missing WebGPU API, null WebGPU context, or unavailable adapter. WebGL2
 checks require real shader pixels, depth/material parity, moving units, bound-

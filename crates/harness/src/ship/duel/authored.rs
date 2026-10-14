@@ -17,7 +17,7 @@ pub(super) fn has_failure(
     evidence(root, paths, report).map(|(authored, _)| authored)
 }
 
-pub(super) fn evidence(
+pub(in crate::ship) fn evidence(
     root: &Path,
     paths: &[String],
     report: &CheckReport,
@@ -180,8 +180,27 @@ fn has_failure_with_notes(
             }
         }
     }
-    // A panic raised in a file the tester changed this round (a shared test helper) is red too.
+    // A panic raised in a file the tester changed this round (a shared test helper) is red too,
+    // unless a named failing test explains it: that test's verdict stands, and a pre-existing
+    // (untouched) one never makes this round red, wherever its assertion panicked.
+    let explained = !report.failed.is_empty()
+        && report
+            .failed
+            .iter()
+            .all(|name| report.untouched.contains(name));
     for panic in &report.panics {
+        if panic
+            .test
+            .as_ref()
+            .is_some_and(|name| report.untouched.contains(name))
+            || (panic.test.is_none() && explained)
+        {
+            notes.push(format!(
+                "the panic at {} belongs to a pre-existing failing test, not to this round",
+                panic.location
+            ));
+            continue;
+        }
         if paths.iter().any(|changed| {
             let changed = super::wasm::normalize(changed);
             panic.path == changed || panic.path.ends_with(&format!("/{changed}"))
