@@ -241,10 +241,12 @@ These are modelling choices, not observed geography:
 
 The warped segments joining four-adjacent wet cell centres lie in the
 protected core, wide enough that the nearest tile row is always water, so
-source lake cells stay connected; detached ponds or islets may appear
-only inside the shoreline reach. Modeled water
+source coverage cells stay connected; detached ponds or islets may appear
+only inside the shoreline reach. Mapped natural lakes keep their exact sampled
+mask, preserving source bays and islands without procedural warp. Modeled water
 keeps its surface level, kind and provenance from the wet cell that owns the
-tile; a water corner rounded off the model falls back to categorical coverage.
+tile. With mapped hydrology, only categorical ocean coverage remains as fallback;
+coarse HYDE inland coverage cannot fill bays or islands outside the mapped lake.
 
 Shaping is physical: it decides `water`, and therefore passability, edges,
 start search and navigation. The shore band is composition: the beach and
@@ -386,7 +388,8 @@ layer must match the same SHA-pinned extent and query padding.
 `AOE_MAP_HYDROLOGY_MODE=vectors` requests rivers explicitly.
 `PreparedHydrology::prepare_vectors` uses prepared overview context without
 WorldCover catalog or raster work. Typed evidence and modeled water share the
-1024 axis; categorical water stays at 128 and modern land cover is class-0 nodata,
+1024 axis; categorical ocean stays at 128, coarse inland coverage is cleared,
+and modern land cover is class-0 nodata,
 not an observation. Axes, mode and lock counts (7 overview, 2 vector) are defined
 in `aoe_map` environment/preparation and used by geodata, worker and server.
 Cancellation is checked before publishing the manifest; orphan immutable pages

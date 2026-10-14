@@ -260,8 +260,9 @@ fn mapped_lake_on_dry_overview_uses_its_modeled_surface_for_terrain_queries() {
     let modern_land = generator
         .tile_at_with_cancel(TileCoord::new(0, 127), &|| false)
         .expect("modern land query")
-        .expect("historical fallback tile");
-    assert_eq!(modern_land.water, WaterKind::Lake);
+        .expect("land outside the mapped lake");
+    // Coarse inland coverage no longer extends the mapped lake's outline.
+    assert_eq!(modern_land.water, WaterKind::None);
 
     let coast = generator
         .tile_at_with_cancel(TileCoord::new(127, 0), &|| false)

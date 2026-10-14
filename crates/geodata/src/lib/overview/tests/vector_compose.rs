@@ -16,7 +16,7 @@ fn offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots() {
     )
     .unwrap();
     let vegetation = VegetationPatchDocument::empty(request, 128).unwrap();
-    let prepared = prepare_overview_fields_from_verified_sources(
+    let mut prepared = prepare_overview_fields_from_verified_sources(
         request,
         axes,
         true,
@@ -25,6 +25,27 @@ fn offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots() {
         fixture.sources.clone(),
     )
     .unwrap();
+    // Coarse inland coverage deliberately covers the entire synthetic footprint.
+    for page in &mut prepared.water_pages {
+        page.inland_coverage_percent.fill(100);
+    }
+    for (level, index) in prepared
+        .environment
+        .water
+        .as_mut()
+        .unwrap()
+        .levels
+        .iter_mut()
+        .enumerate()
+    {
+        let pages = prepared
+            .water_pages
+            .iter()
+            .filter(|p| usize::from(p.level) == level)
+            .cloned()
+            .collect::<Vec<_>>();
+        index.ordered_page_root = aoe_map::ordered_water_page_root(&pages).unwrap();
+    }
     let overview = GeneratedMap::from_prepared(request, prepared).unwrap();
     let original = overview.clone();
     let vectors = vector_fixture(request, &overview.elevation_pages, &overview.water_pages);
@@ -45,7 +66,16 @@ fn offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots() {
             .all(|lock| !lock.id.contains("worldcover"))
     );
     assert_eq!(composed.elevation_pages, original.elevation_pages);
-    assert_eq!(composed.water_pages, original.water_pages);
+    assert!(
+        composed
+            .water_pages
+            .iter()
+            .all(|p| p.inland_coverage_percent.iter().all(|v| *v == 0)),
+        "mapped vector water must replace coarse inland coverage"
+    );
+    for (after, before) in composed.water_pages.iter().zip(&original.water_pages) {
+        assert_eq!(after.ocean_coverage_percent, before.ocean_coverage_percent);
+    }
     assert_eq!(composed.vegetation_pages, original.vegetation_pages);
     assert_eq!(
         composed.historical_land_use_pages,

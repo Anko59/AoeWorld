@@ -13,6 +13,26 @@
  },
  "bookmarks": [
   {
+   "name": "finland-whole-lake",
+   "map": "finland",
+   "x": 210,
+   "y": 250,
+   "zoom": 0.25,
+   "renderer": "webgpu",
+   "note": "Southern P\u00e4ij\u00e4nne outline, bays and islands at quarter zoom.",
+   "verified": true
+  },
+  {
+   "name": "finland-lake-bank",
+   "map": "finland",
+   "x": 240,
+   "y": 210,
+   "zoom": 1,
+   "renderer": "webgpu",
+   "note": "Bay and island edge filled by coarse inland coverage; source shoreline at full zoom.",
+   "verified": true
+  },
+  {
    "name": "finland-start",
    "map": "finland",
    "x": 252,

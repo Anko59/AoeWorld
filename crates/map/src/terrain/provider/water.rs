@@ -1,5 +1,5 @@
-//! Shaped provider water: prepared coverage and modeled hydrology are read
-//! through the shared shoreline shaping, never as raw nearest cells.
+//! Provider water: mapped lakes keep their sampled outline; ocean coverage
+//! uses the shared shoreline shaping.
 use super::helpers::{load_page, page_index};
 use super::water_model::{self, ModeledWater};
 use crate::terrain::fallback::{
@@ -59,10 +59,21 @@ impl<'a> Cells<'a> {
     }
 
     fn coverage(&mut self, x: i64, y: i64) -> Result<(u8, u8), EnvironmentPageError> {
+        // Mapped inland water owns its outline. Coarse HYDE coverage must
+        // not fill mapped bays or islands, including nearby-water queries.
+        let mapped = self
+            .generator
+            .provider_environment
+            .as_ref()
+            .is_some_and(|environment| environment.hydrology_evidence.is_some());
         match self.page(x, y)? {
             (EnvironmentPage::Water(page), index) => Ok((
                 page.ocean_coverage_percent[index],
-                page.inland_coverage_percent[index],
+                if mapped {
+                    0
+                } else {
+                    page.inland_coverage_percent[index]
+                },
             )),
             _ => Err(EnvironmentPageError::Corrupt),
         }
@@ -162,15 +173,17 @@ pub(in crate::terrain) fn sample(
     let nearest = nearest
         .or_else(|| observation.and_then(observed_open_water))
         .filter(|model| model.0 != HydrologyKind::River);
-    let mut modeled = if nearest.is_some() && grid.shaped() {
-        let mut cells = Cells::new(generator, PageLayer::HydrologyEvidence, cancelled);
-        // A rounded-off water corner falls back to categorical coverage; a
-        // land correction still applies where no shaped water reaches.
-        shoreline::sample(key, grid, tile, &mut |x, y| cells.modeled(x, y))?
-            .or(nearest.filter(|model| !open_water(model.0)))
-    } else {
-        nearest
-    };
+    // Lake bays and islands belong to the mapped mask, not procedural warp.
+    let mut modeled =
+        if nearest.is_some_and(|model| model.0 == HydrologyKind::Ocean) && grid.shaped() {
+            let mut cells = Cells::new(generator, PageLayer::HydrologyEvidence, cancelled);
+            // A rounded-off water corner falls back to ocean coverage; a
+            // land correction still applies where no shaped water reaches.
+            shoreline::sample(key, grid, tile, &mut |x, y| cells.modeled(x, y))?
+                .or(nearest.filter(|model| !open_water(model.0)))
+        } else {
+            nearest
+        };
     // Lake/ocean evidence and categorical coverage also protect mouths when
     // no water model exists. Explicit land corrections retain their precedence.
     let protected = matches!(water, WaterKind::Lake | WaterKind::Ocean)

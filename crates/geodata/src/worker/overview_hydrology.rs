@@ -150,9 +150,8 @@ pub fn preflight(
 }
 
 impl GeneratedMap {
-    /// Adds verified typed vector evidence/model without replacing any overview
-    /// pyramid. Categorical water stays at 128; modeled water has its own 1024
-    /// axis, consumed independently by eager and provider-backed terrain APIs.
+    /// Adds verified vector water and removes coarse HYDE inland coverage.
+    /// Overview ocean stays at 128; mapped inland water has its own 1024 axis.
     pub fn with_overview_vector_hydrology(
         mut self,
         hydrology: PreparedHydrology,
@@ -215,6 +214,21 @@ impl GeneratedMap {
             ));
         }
         let mut environment = self.package.environment.clone();
+        for page in &mut self.water_pages {
+            page.inland_coverage_percent.fill(0);
+        }
+        let water = environment.water.as_mut().ok_or(GeodataError::Preparation(
+            "overview vector composition has no ocean pyramid",
+        ))?;
+        for (level, index) in water.levels.iter_mut().enumerate() {
+            let pages = self
+                .water_pages
+                .iter()
+                .filter(|page| usize::from(page.level) == level)
+                .cloned()
+                .collect::<Vec<_>>();
+            index.ordered_page_root = aoe_map::ordered_water_page_root(&pages)?;
+        }
         environment.hydrology_evidence = Some(hydrology.evidence_index);
         let mut locks = self.package.source_locks.clone();
         locks.extend(hydrology.source_locks);
