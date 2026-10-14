@@ -147,6 +147,10 @@ independently, with the normal world and zoom clamps; panning never rewrites
 the fragment. Optional `renderer=webgpu|webgl2|canvas` chooses the initial
 backend, retaining capability fallbacks; later renderer changes are ignored.
 `#minimap` exposes `data-camera-x`, `data-camera-y` and `data-zoom` together.
+Its `data-raster` describes the raster for its current `data-map-hash`: `pending`
+before or during the request, `ready` after decoding and loading the drawn terrain
+image, or `failed` after a request, decode or drawing failure (schematic shown).
+Changing maps resets it to `pending`; only state changes write the attribute.
 `#scene` exposes `data-chunks-pending`, `data-chunks-failed` and `data-frame`:
 pending includes queued visible demand and retries, so zero means visible
 terrain has loaded; failed counts visible failures until success or panning
