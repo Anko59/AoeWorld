@@ -8,6 +8,9 @@ use crate::review::protocol::Reported;
 #[path = "reship.rs"]
 mod reship;
 
+#[path = "folding.rs"]
+mod folding;
+
 #[path = "fresh.rs"]
 mod fresh;
 
@@ -400,24 +403,6 @@ fn a_pull_request_shipped_again_replaces_its_own_section() {
     assert_eq!(next.matches("## PR #42").count(), 1, "{next}");
     assert!(next.contains("- [ ] k.rs:2"));
     assert!(!next.contains("d.rs:4"));
-}
-
-#[test]
-fn appending_past_thirty_sections_preserves_every_existing_section() {
-    let mut body = String::new();
-    for pr in 1..=30 {
-        let section = plan(pr, PR, &minor("old.rs", 1)).section.unwrap();
-        body = standing_body(&body, &section);
-    }
-    let previous = body.clone();
-    let section = plan(99, OTHER_PR, &minor("new.rs", 1)).section.unwrap();
-    body = standing_body(&body, &section);
-    assert!(
-        body.starts_with(&previous),
-        "older sections must stay byte-identical"
-    );
-    assert_eq!(body.matches("## PR #").count(), 31);
-    assert!(body.contains("## PR #1 ") && body.contains("## PR #99 "));
 }
 
 #[test]

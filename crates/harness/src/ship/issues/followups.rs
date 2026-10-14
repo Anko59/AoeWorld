@@ -20,7 +20,10 @@ const FIELD_LIMIT: usize = 8_000;
 const LINE_LIMIT: usize = 300;
 /// What one pull request's section of the standing issue may hold.
 const SECTION_LIMIT: usize = 8_000;
+/// The sections kept in the standing issue; older ones fold into one line.
+const MAX_SECTIONS: usize = 30;
 const SECTION_HEADING: &str = "## PR #";
+const FOLDED: &str = "> Folded ";
 const INTRO: &str = "Minor and nit findings of passing reviews, one section per pull request (docs/issues.md#review-follow-ups). `make ship` adds each section; tick findings off as they are fixed.";
 
 /// One issue to file: deduplicated by its title, commented with `note` when
@@ -313,54 +316,12 @@ struct Snapshot {
     updated_at: String,
 }
 
-/// Splice only this PR's section; retain every byte outside it, including
-/// owner text, other checklists, whitespace and the fingerprint marker.
+mod standing;
+
+/// Splice this PR's section into the fresh body, then fold the oldest sections
+/// past the count or size bound. All retained sections stay byte-identical.
 pub(super) fn standing_body(current: &str, section: &Section) -> String {
-    if current.is_empty() && !section.items.is_empty() {
-        return format!("{INTRO}\n\n{}\n", section.render());
-    }
-    let mut offset = 0;
-    let mut start = None;
-    let mut end = current.len();
-    let mut insertion = current.len();
-    for line in current.split_inclusive('\n') {
-        let pr = line.strip_prefix(SECTION_HEADING).and_then(|rest| {
-            rest.split(|c: char| !c.is_ascii_digit())
-                .next()?
-                .parse::<u64>()
-                .ok()
-        });
-        if line.starts_with(MARKER) {
-            insertion = offset;
-        }
-        if start.is_some() && (pr.is_some() || line.starts_with(MARKER)) {
-            end = offset;
-            break;
-        }
-        if pr == Some(section.pr) {
-            start = Some(offset);
-        }
-        offset += line.len();
-    }
-    if let Some(start) = start {
-        // Separating whitespace belongs to the surrounding body.
-        let end = start + current[start..end].trim_end().len();
-        let replacement = if section.items.is_empty() {
-            String::new()
-        } else {
-            section.render()
-        };
-        format!("{}{replacement}{}", &current[..start], &current[end..])
-    } else if section.items.is_empty() {
-        current.to_owned()
-    } else {
-        format!(
-            "{}\n{}\n\n{}",
-            &current[..insertion],
-            section.render(),
-            &current[insertion..]
-        )
-    }
+    standing::update(current, section)
 }
 
 /// The pull request comment with the same list, pointing at the standing issue.

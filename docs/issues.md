@@ -54,12 +54,17 @@ fingerprint and deduplication as `make issue`:
 
 No issue is opened per pull request. Updates splice only the current pull
 request's section into a fresh body, preserving every other byte, including
-checked findings and owner edits. Before writing, the harness checks that
-`updatedAt` still matches the read; a change restarts from a fresh body, up to
-three attempts. If the standing issue stays busy or the body would exceed
-60,000 characters, it is left untouched and the pull request comment is still
-posted. GitHub issue edits have no compare-and-set, so an edit after the last
-timestamp check can still race the write. The issue is found by its fingerprint
+checked findings and owner edits, except when folding is needed. After the
+splice, while there are more than 30 sections or the body would not fit within
+60,000 characters including its fingerprint marker, the oldest sections fold
+into one summary line counting the sections folded and the last PR folded.
+Retained sections stay byte-identical. Before writing, the harness checks that
+`updatedAt` still matches the read; a change restarts the splice and folding
+from a fresh body, up to three attempts. If the standing issue stays busy or
+cannot fit even after folding down to one section, it is left untouched and
+the pull request comment is still posted. GitHub issue edits have no
+compare-and-set, so an edit after the last timestamp check can still race the
+write. The issue is found by its fingerprint
 marker and the `agent-found` label, as duplicates are; `make ship` runs under
 the person's `gh` account, so unlike nightly issues it is not authored by
 `github-actions[bot]`.
