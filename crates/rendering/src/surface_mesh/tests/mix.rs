@@ -435,3 +435,36 @@ fn natural_rock_uses_native_ground_at_both_zooms_with_a_dirt_fallback() {
         assert_eq!(mix::art_layer(source, 4, 0, 0), source.map(f32::from));
     }
 }
+
+#[wasm_bindgen_test]
+fn absent_mountain_sheets_keep_base_texture_fallback_at_both_zooms() {
+    let frame = |slot: usize| GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [slot as f32 / 16.0, 0.0, 0.01, 0.01],
+        },
+        size: [97.0, 49.0],
+        anchor: [0.0, 0.0],
+    };
+    let mut art = test_art(frame(0));
+    art.terrain[2] = vec![frame(2)];
+    art.terrain[4].clear();
+    art.terrain[11].clear();
+    for material in [4, 7] {
+        assert_eq!(
+            terrain_texture_frame(&art, material, [-3, 8])
+                .unwrap()
+                .atlas,
+            frame(2).atlas
+        );
+        for zoom in [1.0, 0.25] {
+            let mut faces = mesh(&halves(material, 0), zoom);
+            apply_terrain_textures(&mut faces, &art);
+            assert!(faces.iter().any(|face| face.mix != [0; 6]));
+            assert!(faces.iter().all(|face| face.texture_uv.is_some()));
+            assert!(faces.iter().any(|face| face.material == material
+                && face.mix == [0; 6]
+                && face.texture_uv == Some(frame(2).atlas)));
+        }
+    }
+}
