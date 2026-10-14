@@ -48,6 +48,7 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
         scenery: crate::SceneryArt {
             cliff_faces: vec![frame; 25],
             rocks: Vec::new(),
+            ..Default::default()
         },
     };
     let mut faces = [

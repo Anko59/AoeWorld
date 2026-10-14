@@ -478,5 +478,7 @@ fn height_probe_eviction_keeps_new_low_coordinates_and_bounds_duplicate_metadata
     assert!(probes.is_empty() && order.is_empty());
 }
 
+#[path = "playground_map/tests/dressing.rs"]
+mod dressing;
 #[path = "playground_map/tests/feedback.rs"]
 mod feedback;

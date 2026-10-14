@@ -46,3 +46,28 @@ fn canvas_native_species_body_and_alpha_silhouette_pixels_and_removal() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_dressing_anchor_pixels() {
+    let (canvas, context) = target_canvas().unwrap();
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    for kind in [18, 19, 20] {
+        let drawn = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)]);
+        assert!(!drawn.is_empty());
+        let layers = drawn
+            .iter()
+            .map(|(s, f, d, id)| WorldLayer::Sprite(*s, *f, *d, *id))
+            .collect::<Vec<_>>();
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &fixture::atlas(),
+            &mut presentation,
+            &layers,
+            fixture::camera(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(pixel(&presentation.color_buffer, 64, 64), [255, 0, 0, 255]);
+    }
+}

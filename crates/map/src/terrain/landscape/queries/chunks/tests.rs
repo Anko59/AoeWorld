@@ -433,3 +433,66 @@ fn ground_variety_changes_only_the_drawn_sheet_and_stays_in_its_family() {
         assert!(seen.len() >= 3, "class {class} shows {seen:?}");
     }
 }
+
+#[test]
+fn meadow_dressing_forms_noticeable_patches_and_preserves_physics() {
+    let generator = fixture(128, 8, 100);
+    let meadow = |_: TileCoord, _: Tile| LandscapePolicy {
+        wildness_per_thousand: Some(0),
+        support_per_thousand: 0,
+    };
+    for (cx, cy) in [(0, 0), (1, 1), (2, 2)] {
+        let scene = generator
+            .evaluate_landscape_chunk_with_cancel(
+                cx,
+                cy,
+                &meadow,
+                &|_| Reservations::default(),
+                &|| false,
+            )
+            .unwrap()
+            .unwrap();
+        let vegetation = scene
+            .decorations
+            .iter()
+            .filter(|d| d.family != DecorationFamily::Stone && d.family != DecorationFamily::Cliff)
+            .collect::<Vec<_>>();
+        assert!(
+            (80..240).contains(&vegetation.len()),
+            "noticeable meadow: {}",
+            vegetation.len()
+        );
+        let clustered = vegetation
+            .iter()
+            .filter(|d| {
+                vegetation.iter().any(|other| {
+                    other.tile != d.tile
+                        && (other.tile.x - d.tile.x).abs() <= 2
+                        && (other.tile.y - d.tile.y).abs() <= 2
+                })
+            })
+            .count();
+        assert!(clustered * 4 > vegetation.len() * 3, "natural patches");
+        for d in &scene.decorations {
+            assert!(!scene.resources.iter().any(|r| r.node.tile == d.tile));
+            let point = generator
+                .evaluate_landscape_point_with_cancel(
+                    d.tile,
+                    &meadow,
+                    &|_| Reservations::default(),
+                    &|| false,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(point.decoration, Some(*d), "chunk traversal and boundaries");
+            assert_eq!(
+                point.tile.terrain.surface,
+                generator.sample_base_tile(d.tile).surface
+            );
+            assert_eq!(
+                point.tile.terrain.passable,
+                generator.sample_base_tile(d.tile).passable
+            );
+        }
+    }
+}

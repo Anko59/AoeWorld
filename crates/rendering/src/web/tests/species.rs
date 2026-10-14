@@ -31,3 +31,27 @@ async fn webgpu_native_species_body_and_alpha_silhouette_pixels_and_removal() {
     }
     renderer.device.destroy();
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_dressing_anchor_pixels() {
+    let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
+    let clear = fixture::CLEAR.map(|v| f64::from(v) / 255.0);
+    let color = wgpu::Color {
+        r: clear[0],
+        g: clear[1],
+        b: clear[2],
+        a: clear[3],
+    };
+    for kind in [18, 19, 20] {
+        let sprites = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)])
+            .into_iter()
+            .map(|(s, _, _, _)| s)
+            .collect::<Vec<_>>();
+        assert!(!sprites.is_empty());
+        renderer.render_world_layers(&[], &sprites, clear).unwrap();
+        for pixel in read_pixels_with_clear(&renderer, 2, [[64, 64]], color).await {
+            assert_pixel(pixel, [255, 0, 0, 255]);
+        }
+    }
+    renderer.device.destroy();
+}

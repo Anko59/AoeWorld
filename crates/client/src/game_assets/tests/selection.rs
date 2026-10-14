@@ -29,7 +29,7 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert!(ranges[AssetRole::Rock as usize].is_some());
-    assert_eq!(ROLE_SLOTS, 27);
+    assert_eq!(ROLE_SLOTS, 33);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }
@@ -62,7 +62,16 @@ fn source_indices_preserve_frame_order_and_reject_missing_or_duplicate_frames() 
 
 #[wasm_bindgen_test]
 fn optional_tree_families_require_complete_unique_native_prefixes() {
-    for role in [AssetRole::TreeConifer, AssetRole::TreePalm] {
+    for role in [
+        AssetRole::TreeConifer,
+        AssetRole::TreePalm,
+        AssetRole::Shrub,
+        AssetRole::GrassTuft,
+        AssetRole::DeadwoodStump,
+        AssetRole::DeadwoodLog,
+        AssetRole::GrassReeds,
+        AssetRole::DeadwoodTree,
+    ] {
         let selection = OPTIONAL_RESOURCE_SOURCES
             .iter()
             .find(|source| source.role == role)
@@ -89,14 +98,13 @@ fn optional_tree_families_require_complete_unique_native_prefixes() {
             Some(expected)
         );
         // Presence is never downgraded to absence by an incomplete/duplicate prefix.
-        value["frames"].as_array_mut().unwrap().pop();
-        let missing: Manifest = serde_json::from_value(value.clone()).unwrap();
+        let mut missing_value = value.clone();
+        missing_value["frames"][0]["frame"] = selection.frames.into();
+        let missing: Manifest = serde_json::from_value(missing_value).unwrap();
         assert!(source_present(&missing, &identity));
         assert!(source_frames(&missing, &identity, selection.frames).is_none());
-        value["frames"].as_array_mut().unwrap().push(template);
-        let last = selection.frames as usize - 1;
-        value["frames"][last]["source"] = identity.clone().into();
-        value["frames"][last]["frame"] = (selection.frames - 1).into();
+        let first = value["frames"][0].clone();
+        value["frames"].as_array_mut().unwrap().push(first);
         let duplicate: Manifest = serde_json::from_value(value).unwrap();
         assert!(source_present(&duplicate, &identity));
         assert!(source_frames(&duplicate, &identity, selection.frames).is_none());
@@ -292,7 +300,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_200_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_221_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -322,6 +330,6 @@ async fn full_catalog_packs_1474_terrain_frames_and_200_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    assert_eq!(count(objects, [120, 120, 120, 255]), 200);
+    assert_eq!(count(objects, [120, 120, 120, 255]), 221);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }

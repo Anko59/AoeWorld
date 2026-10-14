@@ -128,3 +128,127 @@ fn assert_broadleaf_fallback(art: &GameArt, family: u8) {
         assert!(!fixture::drawn(art, &[fixture::resource(family, variant)]).is_empty());
     }
 }
+
+#[wasm_bindgen_test]
+fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() {
+    let mut art = fixture::dressing_art();
+    for (kind, count) in [(18, 3), (19, 9), (20, 6)] {
+        let frames = (0..count)
+            .map(|i| GameFrame {
+                anchor: [-3.0, 25.0],
+                size: [29.0, 20.0],
+                ..fixture::frame(i * 16)
+            })
+            .collect::<Vec<_>>();
+        match kind {
+            18 => {
+                art.scenery.shrubs = std::iter::repeat_n(fixture::frame(1900), 3)
+                    .chain(frames.clone())
+                    .collect()
+            }
+            19 => {
+                art.scenery.grass = frames[..7].to_vec();
+                art.scenery.reeds = frames[7..].to_vec();
+            }
+            _ => {
+                art.scenery.stumps = frames[..3].to_vec();
+                art.scenery.logs = frames[3..5].to_vec();
+                art.scenery.snags = frames[5..].to_vec();
+            }
+        }
+        let mut seen = vec![false; count];
+        for variant in 0..=255 {
+            for orientation in 0..8 {
+                let resource = SceneResource {
+                    visual_variant: variant,
+                    visual_family: orientation,
+                    ..fixture::dressing(kind)
+                };
+                let selected = scene_resource_frame(&art, resource).unwrap();
+                let index = frames
+                    .iter()
+                    .position(|f| f.atlas == selected.atlas)
+                    .unwrap();
+                seen[index] = true;
+                assert_eq!(selected.anchor, [-3.0, 25.0]);
+                for zoom in [1.0, 0.25] {
+                    let camera = SceneCamera {
+                        zoom,
+                        ..fixture::camera()
+                    };
+                    let drawn = world_sprite_frames(&art, &[], &[resource], &[], camera, 0);
+                    let (_, native, depth, _) = drawn.last().unwrap();
+                    let scale = 128.0 / 96.0 * zoom as f32;
+                    assert_eq!(native.size, selected.size.map(|p| p * scale));
+                    assert_eq!(native.anchor, selected.anchor.map(|p| p * scale));
+                    assert_eq!(*depth, 2.5);
+                    assert!(resource_sprite_bounds(resource, selected, camera).is_some());
+                }
+            }
+        }
+        assert!(seen.into_iter().all(|v| v));
+    }
+    art.walking = vec![fixture::frame(640); 50];
+    art.standing = art.walking.clone();
+    let resources = [
+        fixture::dressing(18),
+        SceneResource {
+            id: 9,
+            ..fixture::resource(0, 0)
+        },
+    ];
+    let unit = SceneUnit {
+        id: EntityId(11),
+        position: [0.5; 2],
+        moving: false,
+        selected: false,
+        facing: 0,
+        elevation_meters: 0.0,
+    };
+    let layers = direct_world_layers([], &art, &[], &resources, &[unit], fixture::camera(), 0);
+    let ids = layers
+        .iter()
+        .filter_map(|l| match l {
+            WorldLayer::Sprite(_, _, _, id) => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        [7, 7, 9, 9, 11, 11],
+        "equal-depth scenery/tree/unit tie order"
+    );
+    let unit = SceneUnit {
+        position: [0.4; 2],
+        ..unit
+    };
+    let layers = direct_world_layers([], &art, &[], &resources, &[unit], fixture::camera(), 0);
+    let ids = layers
+        .iter()
+        .filter_map(|l| match l {
+            WorldLayer::Sprite(_, _, _, id) => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ids, [11, 11, 7, 7, 9, 9], "ground depth before stable IDs");
+}
+
+#[wasm_bindgen_test]
+fn absent_or_incomplete_dressing_never_substitutes_harvestable_art() {
+    for kind in [18, 19, 20] {
+        assert!(scene_resource_frame(&fixture::art(), fixture::dressing(kind)).is_none());
+        let mut art = fixture::dressing_art();
+        match kind {
+            18 => {
+                art.scenery.shrubs.pop();
+            }
+            19 => {
+                art.scenery.grass.pop();
+            }
+            _ => {
+                art.scenery.stumps.pop();
+            }
+        }
+        assert!(scene_resource_frame(&art, fixture::dressing(kind)).is_none());
+    }
+}

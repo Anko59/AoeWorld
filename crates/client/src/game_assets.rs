@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::Ice as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::DeadwoodTree as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -274,6 +274,12 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             scenery: aoe_rendering::SceneryArt {
                 cliff_faces: group(AssetRole::CliffFace),
                 rocks: group(AssetRole::RockPile),
+                shrubs: group(AssetRole::Shrub),
+                grass: group(AssetRole::GrassTuft),
+                stumps: group(AssetRole::DeadwoodStump),
+                reeds: group(AssetRole::GrassReeds),
+                snags: group(AssetRole::DeadwoodTree),
+                logs: group(AssetRole::DeadwoodLog),
             },
         },
         pixels,

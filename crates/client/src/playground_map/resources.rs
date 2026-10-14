@@ -39,7 +39,7 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
     select_visible_resources(
-        resources.chain(decorations::scenery(client, &scene)),
+        resources.chain(decorations::scenery(&scene)),
         &client.art,
         camera,
     )

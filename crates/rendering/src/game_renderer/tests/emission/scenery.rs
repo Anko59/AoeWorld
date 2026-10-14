@@ -28,6 +28,7 @@ fn art() -> GameArt {
         scenery: crate::SceneryArt {
             cliff_faces,
             rocks: Vec::new(),
+            ..Default::default()
         },
     }
 }

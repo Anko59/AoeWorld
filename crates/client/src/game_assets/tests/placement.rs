@@ -331,3 +331,29 @@ fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
     .unwrap();
     assert_eq!(&pixels[to..to + 4], &[190, 115, 35, 255]);
 }
+
+#[wasm_bindgen_test]
+fn dressing_catalog_prefixes_preserve_native_signed_hotspots_and_object_page() {
+    for (id, count, anchor) in [
+        (4474, 6, [28, 6]),
+        (2561, 7, [23, 15]),
+        (1035, 3, [-3, 13]),
+        (1252, 2, [63, 18]),
+        (4584, 2, [19, 9]),
+        (1262, 1, [94, 172]),
+    ] {
+        let source = OPTIONAL_RESOURCE_SOURCES
+            .iter()
+            .find(|source| source.id == id)
+            .unwrap();
+        assert_eq!(source.frames, count);
+        let mut value = manifest::fixture();
+        value["frames"][0]["anchor_x"] = anchor[0].into();
+        value["frames"][0]["anchor_y"] = anchor[1].into();
+        let manifest: Manifest = serde_json::from_value(value).unwrap();
+        let places = plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap();
+        let frame = record(&manifest.frames[0], places[0]);
+        assert_eq!(frame.atlas.page, 2);
+        assert_eq!(frame.anchor, anchor.map(|v| v as f32));
+    }
+}

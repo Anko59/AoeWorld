@@ -46,17 +46,17 @@ pub(super) fn for_scene(client: &Client, scene: &scene::PreparedScene) -> Vec<Sc
 }
 
 /// Whole scenery sprites standing on their centre tile.
-pub(super) fn scenery<'a>(
-    _client: &'a Client,
-    scene: &'a scene::PreparedScene,
-) -> impl Iterator<Item = SceneResource> + 'a {
+pub(super) fn scenery(scene: &scene::PreparedScene) -> impl Iterator<Item = SceneResource> + '_ {
     scene.decorations.iter().filter_map(|decoration| {
-        let kind = if decoration.family == aoe_map::DecorationFamily::Cliff as u8 {
-            SceneResource::CLIFF
-        } else if decoration.family == aoe_map::DecorationFamily::Stone as u8 {
-            SceneResource::ROCK
-        } else {
-            return None;
+        let kind = match decoration.family {
+            family if family == aoe_map::DecorationFamily::Cliff as u8 => SceneResource::CLIFF,
+            family if family == aoe_map::DecorationFamily::Stone as u8 => SceneResource::ROCK,
+            family if family == aoe_map::DecorationFamily::Shrub as u8 => SceneResource::SHRUB,
+            family if family == aoe_map::DecorationFamily::Grass as u8 => SceneResource::GRASS,
+            family if family == aoe_map::DecorationFamily::Deadwood as u8 => {
+                SceneResource::DEADWOOD
+            }
+            _ => return None,
         };
         let [x, y] = decoration.position.map(|value| value.floor() as u64);
         Some(SceneResource {
@@ -64,11 +64,7 @@ pub(super) fn scenery<'a>(
             position: decoration.position,
             kind,
             visual_variant: decoration.visual_variant,
-            visual_family: if kind == SceneResource::CLIFF {
-                decoration.orientation
-            } else {
-                0
-            },
+            visual_family: decoration.orientation,
             elevation_meters: decoration.elevation_meters,
         })
     })
