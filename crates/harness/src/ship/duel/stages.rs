@@ -2,6 +2,7 @@
 use super::{
     baseline,
     focus::{self, CheckReport, Scope},
+    wasm,
 };
 use crate::ship::git;
 use std::{fs, path::Path};
@@ -24,6 +25,11 @@ pub(crate) fn native(root: &Path) -> git::Result<()> {
 }
 
 pub(crate) fn browser(root: &Path) -> git::Result<()> {
+    browser_with(root, &wasm::run_suites)
+}
+
+/// `browser` with the wasm suites run by `wasm_runner`.
+pub(crate) fn browser_with(root: &Path, wasm_runner: wasm::Runner) -> git::Result<()> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     let cache = root.join(".cache/duel");
     let mut report: CheckReport =
@@ -44,7 +50,7 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
         } else {
             &root
         };
-        let checked = focus::run_scope(check_root, &scope, &cache);
+        let checked = focus::run_scope(check_root, &scope, &cache, wasm_runner);
         let mut browser = match checked {
             Ok(report) => report,
             Err(error) => CheckReport {
@@ -70,13 +76,7 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
                     .extend(baseline::untouched(&root, &base, &scope, &wasm)?);
             }
         }
-        report.passed &= browser.passed;
-        report.build_failed |= browser.build_failed;
-        report.unavailable = report.unavailable.or(browser.unavailable);
-        report.tests.extend(browser.tests);
-        report.failed.extend(browser.failed);
-        report.untouched.extend(browser.untouched);
-        report.locations.extend(browser.locations);
+        report.merge(browser);
     }
     focus::save(&cache, &report)?;
     if let Some(reason) = report.unavailable {
@@ -84,9 +84,6 @@ pub(crate) fn browser(root: &Path) -> git::Result<()> {
     } else if report.passed {
         Ok(())
     } else {
-        Err(format!(
-            "focused tests failed: {}",
-            report.failed.join(", ")
-        ))
+        Err(format!("focused tests failed: {}", report.failure_text()))
     }
 }

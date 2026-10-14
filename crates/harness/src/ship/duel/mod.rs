@@ -1,5 +1,5 @@
 //! Main-session driver: a tester's red tests, then an implementer's green code.
-mod authored;
+pub(in crate::ship) mod authored;
 mod baseline;
 mod browser;
 #[cfg(test)]
@@ -13,10 +13,13 @@ pub(crate) mod focus;
 #[cfg(test)]
 #[path = "tests/focus.rs"]
 mod focus_tests;
-mod green;
+pub(in crate::ship) mod green;
 pub(crate) mod output;
+#[cfg(test)]
+#[path = "tests/panics.rs"]
+mod panics_tests;
 mod qualify;
-mod runner;
+pub(in crate::ship) mod runner;
 mod scope;
 mod specs;
 pub(crate) mod stages;
@@ -126,6 +129,42 @@ fn clean(result: std::io::Result<()>) {
     }
 }
 
+pub(in crate::ship) fn implementer_prompt(
+    task: &str,
+    command: &str,
+    tests: &str,
+    tester: &str,
+    attempt: usize,
+    failing: &str,
+) -> String {
+    format!(
+        "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}. If the tests cannot compile for a reason other than missing production code (for example a syntax error in a test), stop and report `DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with that message instead of retrying.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the implementation.\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
+    )
+}
+
+/// Why a round-1 red that only panicked (or aborted) outside this round's files cannot be judged:
+/// the tests say nothing, so the duel stops and keeps them. An attack round drops the attack
+/// like any other unrelated red result instead, and the earlier commits stand.
+pub(in crate::ship) fn panic_only_refusal(
+    round: u32,
+    red: &focus::CheckReport,
+    authored_red: bool,
+) -> Option<String> {
+    (round == 1 && !red.passed && !authored_red && !red.build_failed && red.failed.is_empty()).then(
+        || {
+            red.panics.first().map_or_else(
+                || "the run failed without a named test or a panic".to_owned(),
+                |p| {
+                    format!(
+                        "the run panicked at {} which this round did not change",
+                        p.location
+                    )
+                },
+            )
+        },
+    )
+}
+
 fn rounds(
     root: &Path,
     task: &str,
@@ -205,6 +244,12 @@ fn rounds(
             }
             authored
         };
+        if let Some(what) = panic_only_refusal(round, &red_report, authored_red) {
+            *kept = true;
+            return Err(format!(
+                "check could not complete: no tester-authored failing test: {what}\n{tail}\nthe tester's test changes are kept, uncommitted, in the working tree; fix the check and rerun `make duel` to continue from them, or choose the check with DUEL_CHECK='<command>' (currently `{command}`)"
+            ));
+        }
         if red_report.passed || !authored_red {
             let outcome = discard(root, &head, resumed)?;
             let unrelated = if red_report.passed {
@@ -234,9 +279,7 @@ fn rounds(
         let mut failing = tail;
         let mut green = false;
         for attempt in 1..=3 {
-            let prompt = format!(
-                "Task:\n{task}\n\nImplementer: smallest production change, never a test. Tests must stay byte-identical to commit {tests}. If the tests cannot compile for a reason other than missing production code (for example a syntax error in a test), stop and report `DUEL_TEST_BUILD_ERROR: <reason>` on its own line. The driver ends the duel with that message instead of retrying.\n{CONTRACT}\nFocused check: `{command}`. Run this exact command after writing the implementation.\nTester report:\n{tester}\nFailing check `{command}` (attempt {attempt}):\n{failing}"
-            );
+            let prompt = implementer_prompt(task, command, &tests, &tester, attempt, &failing);
             let (exit, report) = runner::agent(root, options, "implementer", &prompt)?;
             summary.push_str(&format!(
                 "\nImplementer last report (attempt {attempt}):\n{report}\n"

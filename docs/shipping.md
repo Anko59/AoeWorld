@@ -372,8 +372,8 @@ no tests there: a file with `wasm_bindgen_test`s (or no tests, a helper) runs wa
 with `#[test]`s runs nextest, one with both runs both. The wasm results are named
 `<package>$<module path>::<test>` and follow the same red/green/authorship rules, and a
 wasm compile failure of the test target is a build-failed red. A wasm run that exits
-non-zero with neither a named failing test nor a compile error (a crash, a timeout, a
-lock-file error) makes the check unavailable, never red; rerun it or use `DUEL_CHECK`. Fuzz targets in their separate workspace and other unsupported paths
+non-zero with no test line, panic or compile error (a crash, a timeout) makes the check
+unavailable; rerun it or use `DUEL_CHECK`. A panic is a failed run ([testing](testing.md)). Fuzz targets in their separate workspace and other unsupported paths
 stop before the implementer launches and require `DUEL_CHECK` (for example
 `make fuzz-smoke`). Red means a selected package fails to build or at least
 one failing test belongs to a tester-changed file, matched by nextest binary id

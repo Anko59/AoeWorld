@@ -4,9 +4,7 @@ use crate::{
     process::{Cancellation, CaptureExit, capture_command, capture_command_retaining_stdout},
     ship::git,
 };
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fs,
     io::{BufRead, BufReader},
     path::Path,
@@ -14,19 +12,8 @@ use std::{
     time::Duration,
 };
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub(crate) struct CheckReport {
-    pub(crate) passed: bool,
-    #[serde(default)]
-    pub(crate) build_failed: bool,
-    #[serde(default)]
-    pub(crate) unavailable: Option<String>,
-    pub(crate) tests: Vec<String>,
-    pub(crate) failed: Vec<String>,
-    pub(crate) untouched: Vec<String>,
-    #[serde(default)]
-    pub(crate) locations: BTreeMap<String, (String, usize)>,
-}
+mod report;
+pub(crate) use report::{CheckReport, Panic};
 
 pub(crate) use super::scope::Scope;
 
@@ -128,7 +115,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     // The original scope is persisted for the separate browser adapter.
     scope.specs.clear();
     scope.wasm.clear();
-    let result = run_scope(check_root, &scope, &cache);
+    let result = run_scope(check_root, &scope, &cache, &super::wasm::run_suites);
     let mut report = match result {
         Ok(report) => report,
         Err(error) => {
@@ -149,10 +136,7 @@ pub(crate) fn execute(root: &Path) -> git::Result<()> {
     if report.passed {
         Ok(())
     } else {
-        Err(format!(
-            "focused tests failed: {}",
-            report.failed.join(", ")
-        ))
+        Err(format!("focused tests failed: {}", report.failure_text()))
     }
 }
 pub(super) fn save(cache: &Path, report: &CheckReport) -> git::Result<()> {
@@ -172,7 +156,12 @@ pub(super) fn save(cache: &Path, report: &CheckReport) -> git::Result<()> {
     );
     Ok(())
 }
-pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result<CheckReport> {
+pub(super) fn run_scope(
+    root: &Path,
+    scope: &Scope,
+    cache: &Path,
+    wasm_runner: super::wasm::Runner,
+) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
         ..Default::default()
@@ -256,10 +245,10 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
             Ok(browser) => browser,
             Err(read) => return Err(missing_report(&report_path, checked, read)),
         };
-        report.passed &= browser.failed.is_empty();
-        report.locations.extend(browser.locations);
-        report.tests.extend(browser.tests);
-        report.failed.extend(browser.failed);
+        report.merge(CheckReport {
+            passed: browser.failed.is_empty(),
+            ..browser
+        });
         if let Err(error) = checked {
             if report.failed.is_empty() {
                 return Err(error);
@@ -268,11 +257,7 @@ pub(super) fn run_scope(root: &Path, scope: &Scope, cache: &Path) -> git::Result
         }
     }
     if !scope.wasm.is_empty() {
-        let wasm = super::wasm::check(root, &scope.wasm, cache)?;
-        report.passed &= wasm.passed;
-        report.build_failed |= wasm.build_failed;
-        report.tests.extend(wasm.tests);
-        report.failed.extend(wasm.failed);
+        report.merge(super::wasm::check(root, &scope.wasm, cache, wasm_runner)?);
     }
     report.tests.sort();
     report.tests.dedup();
