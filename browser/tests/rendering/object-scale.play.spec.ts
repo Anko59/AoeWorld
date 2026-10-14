@@ -19,39 +19,66 @@ test.beforeEach(async ({ request }) => {
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
-function colorBox(image: PNG, color: readonly number[]): Box | undefined {
-  let box: Box | undefined;
+function colorBoxes(image: PNG, color: readonly number[]): Box[] {
+  const seen = new Uint8Array(image.width * image.height);
+  const result: Box[] = [];
+  const limitX = image.width - 280;
+  const matches = (pixel: number) => {
+    return color.every((value, channel) => {
+      return Math.abs((image.data[pixel * 4 + channel] ?? 0) - value) <= 6;
+    });
+  };
   for (let y = 0; y < image.height; y++) {
-    for (let x = 0; x < image.width - 280; x++) {
-      const offset = (y * image.width + x) * 4;
-      if (
-        color.some(
-          (value, channel) =>
-            Math.abs((image.data[offset + channel] ?? 0) - value) > 6,
-        )
-      )
-        continue;
-      box ??= { left: x, top: y, right: x, bottom: y };
-      box.left = Math.min(box.left, x);
-      box.right = Math.max(box.right, x);
-      box.bottom = Math.max(box.bottom, y);
+    for (let x = 0; x < limitX; x++) {
+      const pixel = y * image.width + x;
+      if (seen[pixel] || !matches(pixel)) continue;
+      const box: Box = { left: x, top: y, right: x, bottom: y };
+      const pending = [pixel];
+      seen[pixel] = 1;
+      for (let next = 0; next < pending.length; next++) {
+        const item = pending[next];
+        if (item === undefined) throw new Error("Missing component pixel");
+        const row = Math.floor(item / image.width);
+        const column = item % image.width;
+        box.left = Math.min(box.left, column);
+        box.right = Math.max(box.right, column);
+        box.top = Math.min(box.top, row);
+        box.bottom = Math.max(box.bottom, row);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = column + dx;
+            const yy = row + dy;
+            if (xx < 0 || xx >= limitX || yy < 0 || yy >= image.height) {
+              continue;
+            }
+            const neighbor = yy * image.width + xx;
+            if (!seen[neighbor] && matches(neighbor)) {
+              seen[neighbor] = 1;
+              pending.push(neighbor);
+            }
+          }
+        }
+      }
+      result.push(box);
     }
   }
-  return box;
+  return result;
 }
 
-async function box(page: Page, color: readonly number[]): Promise<Box> {
-  let found: Box | undefined;
+async function boxes(page: Page, color: readonly number[]): Promise<Box[]> {
+  let found: Box[] = [];
   await expect
     .poll(async () => {
-      found = colorBox(
+      found = colorBoxes(
         PNG.sync.read(await page.locator("#scene").screenshot()),
         color,
       );
-      return found === undefined ? 0 : found.bottom - found.top + 1;
+      return (
+        found.length > 0 &&
+        found.every((box) => box.bottom - box.top + 1 > ART.anchorY)
+      );
     })
-    .toBeGreaterThan(ART.anchorY);
-  if (!found) throw new Error("sprite colour is not on screen");
+    .toBe(true);
   return found;
 }
 
@@ -84,7 +111,10 @@ for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
       y: scene.height / 2 + (east + south) * 32,
     };
 
-    const tree = await box(page, TREE_COLOR);
+    const trees = await boxes(page, TREE_COLOR);
+    expect(trees).toHaveLength(1);
+    const tree = trees[0];
+    if (!tree) throw new Error("Missing tree sprite");
     // 25 by 45 native pixels fill 33 by 60 of the 128-pixel tile's screen.
     expect(tree.right - tree.left + 1).toBeGreaterThanOrEqual(32);
     expect(tree.right - tree.left + 1).toBeLessThanOrEqual(35);
@@ -100,11 +130,15 @@ for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
     // The rows below the hotspot are drawn over the nearer ground, not cut.
     expect(tree.bottom + 1 - hotspot.y).toBeGreaterThan(2.5);
 
-    const rider = await box(page, RIDER_COLOR);
-    expect(rider.right - rider.left + 1).toBeGreaterThanOrEqual(32);
-    expect(rider.right - rider.left + 1).toBeLessThanOrEqual(35);
-    expect(rider.bottom - rider.top + 1).toBeGreaterThanOrEqual(59);
-    expect(rider.bottom - rider.top + 1).toBeLessThanOrEqual(61);
+    const riders = await boxes(page, RIDER_COLOR);
+    // Keep the original per-sprite scale limits for the scout and every villager.
+    expect(riders).toHaveLength(4);
+    for (const rider of riders) {
+      expect(rider.right - rider.left + 1).toBeGreaterThanOrEqual(32);
+      expect(rider.right - rider.left + 1).toBeLessThanOrEqual(35);
+      expect(rider.bottom - rider.top + 1).toBeGreaterThanOrEqual(59);
+      expect(rider.bottom - rider.top + 1).toBeLessThanOrEqual(61);
+    }
     await expect(page.getByRole("alert")).toBeEmpty();
   });
 }
