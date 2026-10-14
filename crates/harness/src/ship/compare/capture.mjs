@@ -3,10 +3,11 @@
 // plan.url, which has plan.map_hash open from its start (AOE_OPEN_MAP_PACKAGE):
 // no controller, no lease, no minimap clicks, no wheel. Each view is a camera
 // fragment (`#x=…&y=…&zoom=…&renderer=…`, web/navigation.js). The page is polled
-// until the settle rule holds (same rule as settle.rs: nothing pending or
-// failed and the frame unchanged for 1.5 s of polling), then the read back
-// camera, map and renderer and the scene rectangles go to <name>.json, and the
-// screenshot to <name>.png. The checks are in Rust (capture.rs).
+// until the settle rule holds (same rule as settle.rs: nothing pending and the
+// frame unchanged for the window, 1.5 s to 4 s by frame time), or a chunk has
+// failed for 12 s (every chunk still missing failed), then the read
+// back camera, map and renderer and the scene rectangles go to <name>.json, and
+// the screenshot to <name>.png. The checks are in Rust (capture.rs).
 import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -49,19 +50,52 @@ async function sample(page) {
   return { at, ...read };
 }
 
-// The settle rule, as settle.rs decides it: the last sample has nothing pending
-// or failed, and the frame has been unchanged since a sample at least 1.5 s
-// earlier. The camera must also be where the fragment put it.
+// The settle window, as settle.rs decides it: 1.5 s, or four times the median
+// of the last five frame times (gaps between frame changes of at most 1 s),
+// capped at 4 s.
 const QUIET_MS = 1500;
-function settled(history, view) {
+const QUIET_MAX_MS = 4000;
+const FRAME_INTERVALS = 4;
+const IDLE_MS = 1000;
+const FRAME_SAMPLES = 5;
+const FAILED_MS = 12000;
+function windowMs(history) {
+  const frameTimes = [];
+  let previous = null;
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].frame === history[i - 1].frame) continue;
+    if (previous !== null && history[i].at - previous <= IDLE_MS) frameTimes.push(history[i].at - previous);
+    previous = history[i].at;
+  }
+  const recent = frameTimes.slice(-FRAME_SAMPLES).sort((a, b) => a - b);
+  if (recent.length === 0) return QUIET_MS;
+  const middle = recent.length >> 1;
+  const median = recent.length % 2 === 1 ? recent[middle] : Math.floor((recent[middle - 1] + recent[middle]) / 2);
+  return Math.min(QUIET_MAX_MS, Math.max(QUIET_MS, FRAME_INTERVALS * median));
+}
+// How long every chunk still missing has failed (failed equals pending, above
+// zero), as settle.rs measures it; 0 when that is not the case now.
+function failingFor(history) {
+  const failing = (s) => s.failed > 0 && s.failed === s.pending;
   const last = history.at(-1);
-  if (!last || last.pending !== 0 || last.failed !== 0) return false;
+  if (!last || !failing(last)) return 0;
+  let start = history.length - 1;
+  while (start > 0 && failing(history[start - 1])) start--;
+  return last.at - history[start].at;
+}
+// Nothing pending, and the frame unchanged for the window.
+function quiet(history) {
+  const last = history.at(-1);
+  if (!last || last.pending !== 0) return false;
   let start = history.length - 1;
   while (start > 0 && history[start - 1].pending === 0 && history[start - 1].frame === last.frame) start--;
-  const c = last.camera;
-  const landed = c && Math.abs(c.x - view.x) <= CAMERA_TILES && Math.abs(c.y - view.y) <= CAMERA_TILES
+  return last.at - history[start].at >= windowMs(history);
+}
+// The camera must also be where the fragment put it.
+function landed(history, view) {
+  const c = history.at(-1)?.camera;
+  return Boolean(c) && Math.abs(c.x - view.x) <= CAMERA_TILES && Math.abs(c.y - view.y) <= CAMERA_TILES
     && Math.abs(c.zoom / view.zoom - 1) <= CAMERA_ZOOM;
-  return last.at - history[start].at >= QUIET_MS && landed;
 }
 
 // The rectangles of the scene and of the HUD over it (rounded outward to pixels).
@@ -92,15 +126,16 @@ async function view(page, index, item) {
   const deadline = started + plan.view_timeout_ms;
   for (;;) {
     history.push(await sample(page));
-    if (settled(history, item) || Date.now() > deadline) break;
+    if ((quiet(history) && landed(history, item)) || failingFor(history) >= FAILED_MS || Date.now() > deadline) break;
     await sleep(plan.poll_ms);
   }
   const last = history.at(-1);
-  const isSettled = settled(history, item);
+  // A view with chunks still failed at the close is refused by settle.rs: no screenshot.
+  const isSettled = quiet(history) && landed(history, item) && last.failed === 0;
   const parts = isSettled ? await rectangles(page) : {};
   if (isSettled) await page.screenshot({ path: `${item.name}.png`, caret: "hide", animations: "disabled" });
   writeFileSync(`${item.name}.json`, JSON.stringify({
-    name: item.name, history: history.slice(-400), camera: last.camera, map_hash: last.map_hash,
+    name: item.name, history, camera: last.camera, map_hash: last.map_hash,
     renderer: last.renderer, settle_ms: Date.now() - started, ...parts, page_errors: errors.splice(0),
   }));
 }
