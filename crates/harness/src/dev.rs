@@ -198,6 +198,26 @@ fn writable_directory(root: &Path, relative: &str) -> Result<(PathBuf, PathBuf)>
     Ok((source.clone(), source))
 }
 
+fn validate_open_map(hash: &str, directory: &Path) -> Result<()> {
+    let reason = if hash.len() != 64
+        || !hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        "invalid content hash"
+    } else if !directory.join(format!("{hash}.json")).is_file() {
+        "unknown stored map package"
+    } else {
+        return Ok(());
+    };
+    Err(format!(
+        "AOE_OPEN_MAP_PACKAGE {hash:?} in {}: {reason}",
+        directory.display()
+    )
+    .replace(['\r', '\n'], " ")
+    .into())
+}
+
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
@@ -261,6 +281,9 @@ fn start_with<R: Runtime>(
     let worker = verified_worker(root)?;
     let (map_directory, map_target) =
         writable_directory(root, aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY)?;
+    if let Some(hash) = open_map {
+        validate_open_map(hash, &map_target)?;
+    }
     let (cache_directory, cache_target) =
         writable_directory(root, aoe_server::Config::DEFAULT_GEODATA_CACHE_DIRECTORY)?;
     let map_mount = format!("{}:{}:rw", map_directory.display(), map_target.display());
