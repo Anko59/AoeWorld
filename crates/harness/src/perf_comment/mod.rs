@@ -165,8 +165,10 @@ struct JobsJson {
     jobs: Vec<JobJson>,
 }
 
+/// One job as the REST API lists it. `gh run view --json jobs` is not used:
+/// the gh of the orchestrator image (2.23) reports the run's end as every
+/// job's `completedAt`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct JobJson {
     name: String,
     conclusion: Option<String>,
@@ -180,21 +182,10 @@ fn wall_seconds(job: &JobJson) -> Option<u64> {
     u64::try_from(end.saturating_sub(start)).ok()
 }
 
-fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
-    let text = gh_text(
-        root,
-        &[
-            "run",
-            "view",
-            &run.to_string(),
-            "--repo",
-            repo,
-            "--json",
-            "jobs",
-        ],
-    )?;
+/// The jobs of `repos/{repo}/actions/runs/{run}/jobs` with their wall time.
+pub(crate) fn parse_jobs(text: &str, run: u64) -> Result<Vec<Job>> {
     let parsed: JobsJson =
-        serde_json::from_str(&text).map_err(|error| format!("run {run}: jobs: {error}"))?;
+        serde_json::from_str(text).map_err(|error| format!("run {run}: jobs: {error}"))?;
     Ok(parsed
         .jobs
         .into_iter()
@@ -204,6 +195,17 @@ fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
             conclusion: job.conclusion,
         })
         .collect())
+}
+
+fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
+    let text = gh_text(
+        root,
+        &[
+            "api",
+            &format!("repos/{repo}/actions/runs/{run}/jobs?per_page=100"),
+        ],
+    )?;
+    parse_jobs(&text, run)
 }
 
 /// The first comment id in `gh`'s jq output (one id per line).

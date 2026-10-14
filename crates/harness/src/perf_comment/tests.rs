@@ -1,7 +1,7 @@
 //! Fixture artifact directories, rendered tables and the in-place comment
 //! arguments. All `gh` and download flows stay behind pure seams.
 use super::reports::{self, Report, WasmRule};
-use super::{comment_args, comment_id, epoch_seconds, format_duration, render};
+use super::{comment_args, comment_id, epoch_seconds, format_duration, parse_jobs, render};
 use std::{fs, path::Path};
 use tempfile::tempdir;
 
@@ -456,4 +456,21 @@ fn a_report_without_the_core_file_is_refused_and_the_rule_computes_its_cap() {
     // regression (150 * 1.05 = 157.5, so 158).
     assert_eq!(rule.cap, 158);
     assert_eq!(reports::wasm_rule_at(&dir.path().join("gone.json")), None);
+}
+
+#[test]
+fn job_durations_use_each_jobs_own_completion() {
+    // Shape of `repos/{repo}/actions/runs/38553757064/jobs`: every job ends at
+    // its own time, not at the end of the run.
+    let text = r#"{"total_count": 2, "jobs": [
+        {"name": "select", "conclusion": "success",
+         "started_at": "2026-10-14T11:02:21Z", "completed_at": "2026-10-14T11:04:17Z"},
+        {"name": "static", "conclusion": "success",
+         "started_at": "2026-10-14T11:04:20Z", "completed_at": "2026-10-14T11:15:14Z"}]}"#;
+    let jobs = parse_jobs(text, 38553757064).unwrap();
+    let seconds: Vec<_> = jobs
+        .iter()
+        .map(|job| (job.name.as_str(), job.seconds))
+        .collect();
+    assert_eq!(seconds, [("select", Some(116)), ("static", Some(654))]);
 }
