@@ -14,6 +14,7 @@ fn config(directory: Option<&FsPath>) -> crate::Config {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: directory.map(FsPath::to_owned),
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     }

@@ -60,6 +60,7 @@ pub(super) fn cache_status(client: &Client) -> String {
 pub(super) fn clear_terrain_cache(client: &mut Client) {
     client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
+    client.capture.failures.clear();
     client.terrain_bounds = Default::default();
     client.terrain_height_bounds = None;
     client.terrain_resident_height_bounds = None;
@@ -131,6 +132,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                 // stale geometry or cause the normal five-second failure backoff.
                 return;
             }
+            client.capture.chunk_received((x, y), result.is_err());
             match result {
                 Ok(chunk) => {
                     client.terrain_bounds.failures.chunks.remove(&(x, y));

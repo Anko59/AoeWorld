@@ -229,6 +229,7 @@ pub(super) async fn network() -> Result<Sample> {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };

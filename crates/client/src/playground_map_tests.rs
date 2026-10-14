@@ -4,6 +4,9 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[path = "playground_controls/tests/capture_tests.rs"]
+mod capture_tests;
+
 #[wasm_bindgen_test]
 fn snow_ice_mud_and_shallows_have_distinct_scene_materials() {
     let materials = [

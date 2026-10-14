@@ -1,6 +1,29 @@
 // The strategic map is one bounded raster per map; it never requests detailed world chunks.
 import { MAX_MINIMAP_BYTES, decodeMinimap, minimapWorldPoint } from '/minimap.js';
 
+const MAX_NUMBER_TEXT = 64;
+
+// Preserve literal values and last-key-wins semantics of existing camera links.
+export function parseCameraFragment(hash) {
+  const values = new Float64Array([NaN, NaN, NaN, 0]);
+  const source = hash.replace(/^#+/, '').split('&').filter(part => part.includes('=')).join('&');
+  // The prefix prevents URLSearchParams from stripping a literal leading '?'.
+  const params = new URLSearchParams('&' + source.replaceAll('%', '%25').replaceAll('+', '%2B'));
+  for (const [key, text] of params) {
+    const index = ['x', 'y', 'zoom'].indexOf(key);
+    if (index !== -1) {
+      // Bounded and unambiguous: a crafted run of digits cannot backtrack.
+      const number = text.length <= MAX_NUMBER_TEXT && text.trim() === text
+        && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
+      values[index] = Number.isFinite(number)
+        ? (index === 2 ? Math.max(0.25, Math.min(3, number)) : number) : NaN;
+    } else if (key === 'renderer') {
+      values[3] = Math.max(0, ['', 'webgpu', 'webgl2', 'canvas'].indexOf(text));
+    }
+  }
+  return values;
+}
+
 export function initNavigation() {
   const panel = document.getElementById('minimap');
   const svg = document.getElementById('minimap-map');
@@ -137,6 +160,7 @@ export function initNavigation() {
   }
 
   window.aoeNavigation = {
+    fragment: () => parseCameraFragment(location.hash),
     map: changeMap,
     frame(state) {
       if (state.length !== 11 || !Array.from(state.slice(0, 4)).every(Number.isFinite)) {
@@ -149,6 +173,7 @@ export function initNavigation() {
       panel.dataset.worldHeight = String(world[1]);
       panel.dataset.cameraX = String(center[0]);
       panel.dataset.cameraY = String(center[1]);
+      panel.dataset.zoom = String(state[8]);
       marker(camera, center);
       marker(primary, [state[4], state[5]]);
       const points = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {

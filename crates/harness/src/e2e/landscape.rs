@@ -158,6 +158,7 @@ fn config(directory: &Path) -> Result<aoe_server::Config> {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: Some(directory.to_owned()),
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     })

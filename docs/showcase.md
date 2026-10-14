@@ -139,6 +139,25 @@ SHOWCASE_BEFORE_URL=http://127.0.0.1:8082/ make showcase SHOWCASE_STORYBOARD=.ca
 `DEV_PORT` is described in [local development](local-development.md); run
 `make down` in each worktree afterwards.
 
+## Play capture hooks
+
+Play camera links use `/#x=320.5&y=350.25&zoom=1.75`, on load and
+`hashchange`, for controllers and spectators. Each finite value applies
+independently, with the normal world and zoom clamps; panning never rewrites
+the fragment. Optional `renderer=webgpu|webgl2|canvas` chooses the initial
+backend, retaining capability fallbacks; later renderer changes are ignored.
+`#minimap` exposes `data-camera-x`, `data-camera-y` and `data-zoom` together.
+`#scene` exposes `data-chunks-pending`, `data-chunks-failed` and `data-frame`:
+pending includes queued visible demand and retries, so zero means visible
+terrain has loaded; failed counts visible failures until success or panning
+away. Counts change only when needed; the frame counter advances only on a
+successful presentation. While height metadata loads, pending stays nonzero.
+`AOE_OPEN_MAP_PACKAGE=<content hash> make dev` opens a package from
+`local-assets/map-packages` before listening, using the controller's open-map
+operation. Unset preserves the default world; an invalid or unknown hash
+refuses startup with one plain error naming the hash and package directory.
+Terrain reads and camera navigation need no controller lease.
+
 ## Network
 
 Every take runs with `--network none`: the recorder's container has no

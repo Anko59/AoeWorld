@@ -23,6 +23,7 @@ mod minimap;
 pub(crate) use minimap::MinimapCache;
 use minimap::minimap;
 mod routes;
+mod startup;
 pub(super) use routes::routes;
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";

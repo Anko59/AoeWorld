@@ -18,6 +18,7 @@ async fn composed_chunks_use_the_current_format_and_authoritative_resources() {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };

@@ -108,6 +108,7 @@ pub(in super::super) fn render_if_changed(
     client
         .rendered_frame
         .record_success(scene, units, resources, grid, animation);
+    client.capture.frame = client.capture.frame.saturating_add(1);
     Ok(true)
 }
 

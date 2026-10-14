@@ -12,6 +12,8 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Document, Event, HtmlCanvasElement, MessageEvent, WebSocket};
 
+#[path = "playground_controls/capture.rs"]
+mod capture;
 #[path = "playground_controls.rs"]
 mod controls;
 #[path = "playground_fixture.rs"]
@@ -34,6 +36,7 @@ pub(super) struct Client {
     pub socket: Option<WebSocket>,
     pub connection_id: u64,
     pub camera: Camera,
+    pub capture: capture::Capture,
     pub config: WorldConfig,
     pub primary: Option<EntityId>,
     pub role: Option<GameplayRole>,
@@ -239,6 +242,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.rendered_frame.clear();
                 client.status = "connected".to_owned();
                 resize(&mut client);
+                capture::world_received(&mut client, map_changed);
                 subscribe(&mut client);
             }
             Ok(GameplayServerMessage::Snapshot {
@@ -457,6 +461,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.camera.center[0],
             client.camera.center[1],
         );
+        capture::update(&mut client);
         let surface_fixture = client.surface_fixture;
         drop(client);
         if !surface_fixture {

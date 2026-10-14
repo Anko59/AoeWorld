@@ -7,6 +7,20 @@ export function navigation_frame(state) {
   const output = window.aoeNavigation?.frame(state.subarray(0, 11));
   if (output) state.set(output, 11);
 }
+export function camera_fragment(state) {
+  const values = window.aoeNavigation?.fragment();
+  if (values) state.set(values);
+}
+const presentations = new WeakMap();
+export function capture_update(canvas, pending, failed, frame) {
+  const previous = presentations.get(canvas) ?? [];
+  const values = [pending, failed, frame];
+  const names = ['data-chunks-pending', 'data-chunks-failed', 'data-frame'];
+  for (let index = 0; index < values.length; index++) {
+    if (previous[index] !== values[index]) canvas.setAttribute(names[index], String(values[index]));
+  }
+  presentations.set(canvas, values);
+}
 export function navigation_map(hash) { window.aoeNavigation?.map(hash); }
 export function gameplay_key(event) {
   if (event.repeat || event.ctrlKey || event.altKey || event.metaKey ||
@@ -18,6 +32,13 @@ export function gameplay_key(event) {
 ")]
 extern "C" {
     fn navigation_frame(state: &mut [f64]);
+    pub(in super::super) fn camera_fragment(state: &mut [f64]);
+    pub(in super::super) fn capture_update(
+        canvas: &web_sys::HtmlCanvasElement,
+        pending: usize,
+        failed: usize,
+        frame: u64,
+    );
     fn navigation_map(hash: &[u8]);
     pub(super) fn gameplay_key(event: &web_sys::Event) -> u32;
 }

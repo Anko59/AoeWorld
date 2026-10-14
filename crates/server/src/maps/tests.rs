@@ -259,6 +259,7 @@ async fn source_height_bounds_http_payload_uses_verified_pages_and_is_cached() {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: Some(directory.path().to_owned()),
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };
@@ -304,6 +305,7 @@ async fn height_bounds_endpoint_returns_not_found_for_unknown_hash() {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };

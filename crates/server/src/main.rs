@@ -1,14 +1,21 @@
 use aoe_server::{AppState, Config, app};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
+    if let Err(error) = run().await {
+        eprintln!("{}", error.to_string().replace(['\r', '\n'], " "));
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let config = Config::from_env()?;
     let build = std::env::var("AOE_BUILD_SHA")
         .ok()
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| option_env!("AOE_BUILD_SHA").unwrap_or("local").to_owned());
-    let state = AppState::new(&config, build)?;
+    let state = AppState::at_boot(&config, build).await?;
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld listening");
     tokio::spawn(state.clone().run_ticks());

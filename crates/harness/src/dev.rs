@@ -198,10 +198,32 @@ fn writable_directory(root: &Path, relative: &str) -> Result<(PathBuf, PathBuf)>
     Ok((source.clone(), source))
 }
 
+fn validate_open_map(hash: &str, directory: &Path) -> Result<()> {
+    let reason = if hash.len() != 64
+        || !hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        "invalid content hash"
+    } else if !directory.join(format!("{hash}.json")).is_file() {
+        "unknown stored map package"
+    } else {
+        return Ok(());
+    };
+    Err(format!(
+        "AOE_OPEN_MAP_PACKAGE {hash:?} in {}: {reason}",
+        directory.display()
+    )
+    .replace(['\r', '\n'], " ")
+    .into())
+}
+
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
     let asset_pack = std::env::var("AOE_ASSET_PACK").ok();
+    let open_map =
+        std::env::var_os("AOE_OPEN_MAP_PACKAGE").map(|value| value.to_string_lossy().into_owned());
     let port = dev_port(std::env::var("DEV_PORT").ok().as_deref())?;
     let build = build_identity(&root)?;
     start_with(
@@ -210,6 +232,7 @@ pub fn start() -> Result<()> {
         &scenario,
         &build,
         asset_pack.as_deref(),
+        open_map.as_deref(),
         port,
     )
 }
@@ -220,6 +243,7 @@ fn start_with<R: Runtime>(
     scenario: &str,
     build: &str,
     asset_pack: Option<&str>,
+    open_map: Option<&str>,
     port: u16,
 ) -> Result<()> {
     let name = name(root);
@@ -257,6 +281,9 @@ fn start_with<R: Runtime>(
     let worker = verified_worker(root)?;
     let (map_directory, map_target) =
         writable_directory(root, aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY)?;
+    if let Some(hash) = open_map {
+        validate_open_map(hash, &map_target)?;
+    }
     let (cache_directory, cache_target) =
         writable_directory(root, aoe_server::Config::DEFAULT_GEODATA_CACHE_DIRECTORY)?;
     let map_mount = format!("{}:{}:rw", map_directory.display(), map_target.display());
@@ -267,7 +294,7 @@ fn start_with<R: Runtime>(
     );
     let worker_env = format!("AOE_MAP_WORKER={}", worker.display());
     let cache_env = format!("AOE_GEODATA_CACHE={}", cache_target.display());
-    runtime.docker(&[
+    let mut arguments = vec![
         "run",
         "--rm",
         "-d",
@@ -305,7 +332,17 @@ fn start_with<R: Runtime>(
         root.to_str().ok_or("non-UTF-8 checkout path")?,
         RUST_TOOLS_IMAGE,
         executable.to_str().ok_or("non-UTF-8 server path")?,
-    ])?;
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<Vec<_>>();
+    if let Some(hash) = open_map {
+        arguments.splice(
+            1..1,
+            ["-e".to_owned(), format!("AOE_OPEN_MAP_PACKAGE={hash}")],
+        );
+    }
+    runtime.docker(&arguments.iter().map(String::as_str).collect::<Vec<_>>())?;
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
         if runtime.healthy(port) {

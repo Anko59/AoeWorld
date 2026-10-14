@@ -217,6 +217,7 @@ pub(crate) async fn network(scenario: Scenario) -> Result<ClientResult, Box<dyn 
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };
@@ -239,6 +240,7 @@ pub(crate) async fn gameplay_network(scenario: Scenario) -> Result<ClientResult,
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: None,
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };

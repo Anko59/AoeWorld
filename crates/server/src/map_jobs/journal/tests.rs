@@ -175,6 +175,7 @@ async fn recreated_server_loads_completed_history_after_packages() {
         tick_hz: 20,
         asset_pack: None,
         map_package_directory: Some(directory.path().to_owned()),
+        open_map_package: None,
         map_worker: None,
         geodata_cache_directory: ".cache/geodata".into(),
     };

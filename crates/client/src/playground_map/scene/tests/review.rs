@@ -102,6 +102,7 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
         socket: None,
         connection_id: 0,
         camera: scene.camera,
+        capture: Default::default(),
         config: WorldConfig::default(),
         primary: Some(id),
         role: None,

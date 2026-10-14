@@ -1,5 +1,6 @@
 use super::*;
 use std::cell::{Cell, RefCell};
+mod open_map;
 
 #[derive(Default)]
 struct FakeRuntime {
@@ -48,6 +49,11 @@ impl Runtime for FakeRuntime {
 
 fn built_checkout() -> tempfile::TempDir {
     let temp = tempfile::tempdir().expect("checkout");
+    let maps = temp
+        .path()
+        .join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY);
+    std::fs::create_dir_all(&maps).expect("package directory");
+    std::fs::write(maps.join(format!("{}.json", "ab".repeat(32))), b"{}").expect("package");
     let server = temp.path().join("target/release/aoe-server");
     let wasm = temp.path().join("web/pkg/aoe_client_bg.wasm");
     let worker = temp.path().join("target/release/aoe-map-worker");
@@ -115,6 +121,7 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
         "smoke",
         "revision",
         Some("local-assets/packs/example"),
+        Some(&"ab".repeat(32)),
         8080,
     )
     .expect("start");
@@ -152,6 +159,7 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
         )));
     assert!(run.contains(&"--security-opt".to_owned()));
     assert!(run.contains(&"no-new-privileges".to_owned()));
+    assert!(run.contains(&format!("AOE_OPEN_MAP_PACKAGE={}", "ab".repeat(32))));
     let mounts = run
         .windows(2)
         .filter_map(|pair| (pair[0] == "-v").then_some(pair[1].as_str()))
@@ -207,9 +215,31 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
 fn invalid_configuration_or_missing_build_never_launches_docker_container() {
     let checkout = built_checkout();
     let runtime = FakeRuntime::default();
-    assert!(start_with(&runtime, checkout.path(), "unknown", "revision", None, 8080).is_err());
+    assert!(
+        start_with(
+            &runtime,
+            checkout.path(),
+            "unknown",
+            "revision",
+            None,
+            None,
+            8080
+        )
+        .is_err()
+    );
     std::fs::remove_file(checkout.path().join("web/pkg/aoe_client_bg.wasm")).expect("remove WASM");
-    assert!(start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080).is_err());
+    assert!(
+        start_with(
+            &runtime,
+            checkout.path(),
+            "smoke",
+            "revision",
+            None,
+            None,
+            8080
+        )
+        .is_err()
+    );
     assert!(
         !runtime
             .calls
@@ -226,8 +256,16 @@ fn missing_or_nonexecutable_worker_never_launches_docker_container() {
     let worker = checkout.path().join("target/release/aoe-map-worker");
     assert!(is_executable(&worker));
     std::fs::remove_file(&worker).expect("remove worker");
-    let missing = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
-        .expect_err("missing worker");
+    let missing = start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8080,
+    )
+    .expect_err("missing worker");
     assert!(missing.to_string().contains("aoe-map-worker"));
     #[cfg(unix)]
     {
@@ -235,8 +273,16 @@ fn missing_or_nonexecutable_worker_never_launches_docker_container() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&worker, std::fs::Permissions::from_mode(0o644))
             .expect("remove executable bit");
-        let rejected = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
-            .expect_err("nonexecutable worker");
+        let rejected = start_with(
+            &runtime,
+            checkout.path(),
+            "smoke",
+            "revision",
+            None,
+            None,
+            8080,
+        )
+        .expect_err("nonexecutable worker");
         assert!(rejected.to_string().contains("aoe-map-worker"));
     }
     assert!(
@@ -258,7 +304,16 @@ fn writable_cache_mount_uses_canonical_target_for_a_symlink() {
     symlink(external.path(), checkout.path().join(".cache")).expect("cache symlink");
     let runtime = FakeRuntime::default();
     runtime.healthy.set(true);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080).expect("start");
+    start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8080,
+    )
+    .expect("start");
     let calls = runtime.calls.borrow();
     let run = calls
         .iter()
@@ -280,9 +335,17 @@ fn failed_start_stops_only_its_checkout_container() {
         dies_on_start: true,
         ..Default::default()
     };
-    let error = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
-        .expect_err("failed start")
-        .to_string();
+    let error = start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8080,
+    )
+    .expect_err("failed start")
+    .to_string();
     assert!(error.contains("startup failed"));
     let calls = runtime.calls.borrow();
     assert!(
@@ -299,8 +362,16 @@ fn existing_running_lab_is_not_replaced() {
     runtime.exists.set(true);
     runtime.running.set(true);
     runtime.published.set(8080);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
-        .expect("already running");
+    start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8080,
+    )
+    .expect("already running");
     assert!(
         !runtime
             .calls
@@ -332,7 +403,16 @@ fn the_chosen_host_port_maps_to_the_fixed_container_port() {
     let checkout = built_checkout();
     let runtime = FakeRuntime::default();
     runtime.healthy.set(true);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8082).expect("start");
+    start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8082,
+    )
+    .expect("start");
     let calls = runtime.calls.borrow();
     let run = calls
         .iter()
@@ -354,8 +434,8 @@ fn two_checkouts_run_side_by_side_on_their_own_ports() {
     let (one, two) = (FakeRuntime::default(), FakeRuntime::default());
     one.healthy.set(true);
     two.healthy.set(true);
-    start_with(&one, first.path(), "smoke", "revision", None, 8080).expect("first");
-    start_with(&two, second.path(), "smoke", "revision", None, 8082).expect("second");
+    start_with(&one, first.path(), "smoke", "revision", None, None, 8080).expect("first");
+    start_with(&two, second.path(), "smoke", "revision", None, None, 8082).expect("second");
     let run = |runtime: &FakeRuntime| {
         runtime
             .calls
@@ -388,10 +468,27 @@ fn a_lab_running_on_another_port_is_reported_not_moved() {
     runtime.exists.set(true);
     runtime.running.set(true);
     runtime.published.set(8082);
-    start_with(&runtime, checkout.path(), "smoke", "revision", None, 8082).expect("same port");
-    let error = start_with(&runtime, checkout.path(), "smoke", "revision", None, 8080)
-        .expect_err("other port")
-        .to_string();
+    start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8082,
+    )
+    .expect("same port");
+    let error = start_with(
+        &runtime,
+        checkout.path(),
+        "smoke",
+        "revision",
+        None,
+        None,
+        8080,
+    )
+    .expect_err("other port")
+    .to_string();
     assert!(error.contains("http://127.0.0.1:8082"), "{error}");
     assert!(error.contains("make down"), "{error}");
     assert!(!runtime.calls.borrow().iter().any(|args| matches!(

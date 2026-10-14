@@ -8,6 +8,7 @@ pub struct Config {
     pub tick_hz: u32,
     pub asset_pack: Option<PathBuf>,
     pub map_package_directory: Option<PathBuf>,
+    pub open_map_package: Option<String>,
     pub map_worker: Option<PathBuf>,
     pub geodata_cache_directory: PathBuf,
 }
@@ -56,6 +57,8 @@ impl Config {
         if let Some(cache) = configured_geodata_cache(env::var_os("AOE_GEODATA_CACHE"))? {
             config.geodata_cache_directory = cache;
         }
+        config.open_map_package =
+            env::var_os("AOE_OPEN_MAP_PACKAGE").map(|value| value.to_string_lossy().into_owned());
         Ok(config)
     }
 
@@ -74,6 +77,7 @@ impl Config {
             tick_hz,
             asset_pack: None,
             map_package_directory: Some(PathBuf::from(Self::DEFAULT_MAP_PACKAGE_DIRECTORY)),
+            open_map_package: None,
             map_worker: None,
             geodata_cache_directory: PathBuf::from(Self::DEFAULT_GEODATA_CACHE_DIRECTORY),
         })
