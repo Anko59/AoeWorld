@@ -51,7 +51,13 @@ fn moved_policy(root: &Path) -> (String, String) {
     fs::write(&grader, format!("{text}\nMOVED-GRADER-MARKER\n")).unwrap();
     let path = root.join("gates/review.json");
     let mut config: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    config["models"]["claude"]["average"]["model"] = serde_json::json!("claude-moved-model");
+    // Move every Claude model entry, so whichever one a tier reads (light,
+    // average or strong) has moved and "model from the pin" stays meaningful.
+    let family = config["models"]["claude"].as_object_mut().unwrap();
+    assert!(family.contains_key("light"), "the tests' tier reads light");
+    for entry in family.values_mut() {
+        entry["model"] = serde_json::json!("claude-moved-model");
+    }
     fs::write(&path, config.to_string()).unwrap();
     git(root, &["commit", "-q", "-am", "move the review policy"]);
     let moved = rev(root, "HEAD");
