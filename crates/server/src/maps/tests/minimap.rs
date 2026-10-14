@@ -109,6 +109,7 @@ fn raster_of(package: &MapPackage, generator: &MapChunkGenerator) -> Vec<u8> {
         generator,
         package.estimate.tiles_per_side,
         package.estimate.geographic_millimeters_per_tile,
+        package.environment.samples_per_axis,
         &|| false,
     )
     .expect("raster")
@@ -123,6 +124,12 @@ fn count(raster: &[u8], class: MinimapClass) -> usize {
 
 #[path = "minimap_rivers.rs"]
 mod rivers;
+
+#[path = "minimap_relief.rs"]
+mod relief;
+
+#[path = "minimap_dump.rs"]
+mod dump;
 
 #[test]
 fn raster_axis_and_bytes_are_capped_for_every_map_size() {
@@ -229,20 +236,26 @@ fn synthetic_coast_forest_and_mountain_are_distinct_classes() {
 fn cancellation_and_missing_pages_fail_without_a_partial_raster() {
     let (package, generator) = coast_forest_mountain();
     assert_eq!(
-        minimap_raster(&generator, package.estimate.tiles_per_side, 60_000, &|| {
-            true
-        }),
+        minimap_raster(
+            &generator,
+            package.estimate.tiles_per_side,
+            60_000,
+            4,
+            &|| { true }
+        ),
         Err(MinimapError::Page(EnvironmentPageError::Cancelled))
     );
     assert_eq!(
-        minimap_raster(&generator, 0, 60_000, &|| false),
+        minimap_raster(&generator, 0, 60_000, 4, &|| false),
         Err(MinimapError::EmptyMap)
     );
     let empty = package
         .generator_with_page_provider(Arc::new(MemoryPageProvider::default()))
         .expect("generator");
     assert_eq!(
-        minimap_raster(&empty, package.estimate.tiles_per_side, 60_000, &|| false),
+        minimap_raster(&empty, package.estimate.tiles_per_side, 60_000, 4, &|| {
+            false
+        }),
         Err(MinimapError::Page(EnvironmentPageError::Missing))
     );
     assert_eq!(

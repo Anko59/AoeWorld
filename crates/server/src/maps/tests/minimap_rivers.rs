@@ -152,7 +152,7 @@ fn subpixel_source_river_remains_continuous_in_the_minimap() {
             .water,
         WaterKind::None
     );
-    let raster = minimap_raster(&generator, 2048, 60000, &|| false).expect("strategic river");
+    let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("strategic river");
     for y in 0..512 {
         assert_eq!(
             raster[MINIMAP_HEADER_BYTES + y * 512 + 16] & 15,
@@ -165,7 +165,7 @@ fn subpixel_source_river_remains_continuous_in_the_minimap() {
 #[test]
 fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
     let generator = river_fixture(true);
-    let raster = minimap_raster(&generator, 2048, 60000, &|| false).expect("corrected raster");
+    let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("corrected raster");
     for row in [256, 300, 400, 511] {
         let position = TileCoord::new(66, row * 4 + 2);
         assert!(

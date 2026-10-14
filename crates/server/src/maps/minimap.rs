@@ -36,6 +36,9 @@ pub(crate) const FLAT_SHADE: u8 = 8;
 /// Summed per-axis rise, in per-mille, that changes the shade by one step.
 const SHADE_STEP_PER_MILLE: i64 = 25;
 
+#[path = "minimap_relief.rs"]
+mod relief;
+
 /// Low nibble of every raster byte. Values are part of the client contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -141,11 +144,12 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
 /// Deterministic raster of the composed landscape: `MINIMAP_HEADER_BYTES`
 /// then row-major bytes, class in the low nibble and relief shade in the high
 /// nibble. Performs exactly `samples²` point queries and allocates at most
-/// `MAX_MINIMAP_BYTES` plus four bytes of height per sample.
+/// `MAX_MINIMAP_BYTES` plus at most 24 bytes of scratch per sample.
 pub(crate) fn minimap_raster(
     generator: &MapChunkGenerator,
     tiles_per_side: u64,
     geographic_millimeters_per_tile: u64,
+    elevation_samples_per_axis: u16,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Vec<u8>, MinimapError> {
     let samples = minimap_samples(tiles_per_side);
@@ -193,6 +197,13 @@ pub(crate) fn minimap_raster(
         * u128::from(geographic_millimeters_per_tile.max(1))
         / u128::from(samples))
     .clamp(1, i64::MAX as u128) as i64;
+    let shades = relief::shades(
+        &heights,
+        side,
+        spacing_millimeters,
+        relief::radius(samples, tiles_per_side, elevation_samples_per_axis),
+    );
+    drop(heights);
     let mut raster =
         Vec::with_capacity((MINIMAP_HEADER_BYTES + side * side).min(MAX_MINIMAP_BYTES));
     raster.extend_from_slice(&MINIMAP_MAGIC);
@@ -204,28 +215,12 @@ pub(crate) fn minimap_raster(
             let shade = if class as u8 >= MinimapClass::Shore as u8 {
                 FLAT_SHADE
             } else {
-                shade(&heights, side, x, y, spacing_millimeters)
+                shades[y * side + x]
             };
             raster.push(class as u8 | shade << 4);
         }
     }
     Ok(raster)
-}
-
-/// Light from the north-west: ground rising toward the south-east is lit.
-fn shade(heights: &[i32], side: usize, x: usize, y: usize, spacing_millimeters: i64) -> u8 {
-    let axis = |before: usize, after: usize, low: usize, high: usize| {
-        if high == low {
-            return 0;
-        }
-        (i64::from(heights[after]) - i64::from(heights[before])) / (high - low) as i64
-    };
-    let (left, right) = (x.saturating_sub(1), (x + 1).min(side - 1));
-    let (up, down) = (y.saturating_sub(1), (y + 1).min(side - 1));
-    let rise_centimeters = axis(y * side + left, y * side + right, left, right)
-        + axis(up * side + x, down * side + x, up, down);
-    let per_mille = rise_centimeters.saturating_mul(10_000) / spacing_millimeters;
-    (i64::from(FLAT_SHADE) + per_mille / SHADE_STEP_PER_MILLE).clamp(0, 15) as u8
 }
 
 pub(crate) fn package_minimap(
@@ -246,6 +241,7 @@ pub(crate) fn package_minimap(
         &generator,
         package.estimate.tiles_per_side,
         package.estimate.geographic_millimeters_per_tile,
+        package.environment.samples_per_axis,
         cancelled,
     )
 }

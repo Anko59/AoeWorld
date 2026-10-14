@@ -50,6 +50,11 @@ nibble and north-west relief shade in the high nibble, at most 262,152 bytes.
 One raster is generated at a time off the async runtime within 30 seconds,
 never partially, and the four most recent are cached. The client rejects any
 other shape and keeps its schematic map; it requests no chunks for the map.
+Relief averages the unquantized directional slope with a mirrored separable
+box before encoding its shade. Its radius follows four elevation facets,
+bounded by a four-pixel minimum and one eighth of the raster axis (smaller
+rasters use a smaller window). Sliding sums keep filtering linear in raster
+area, with bounded scratch; class queries, colours and water shading are unchanged.
 
 `aoe-map` is the environment-independent boundary for frozen geographic map
 identity. It validates the 600 CE request, physical compression and bounded
