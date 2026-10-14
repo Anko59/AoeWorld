@@ -88,7 +88,7 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
         serde_json::from_str(include_str!("../../../../gates/levels.json")).unwrap();
     levels["floor"] = serde_json::json!([
         {"level": "medium", "min_changed_lines": 61, "reason": "size"},
-        {"level": "high", "suites": ["everything"], "min_changed_lines": 5, "reason": "gates"}
+        {"level": "high", "suites": ["everything"], "min_changed_lines": 5, "subject": "gate files", "reason": "gates"}
     ]);
     fs::write(root.join("gates/levels.json"), levels.to_string()).unwrap();
     // The registry runs `make <gate>`; the recipe is the fixture's behaviour.
