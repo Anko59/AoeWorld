@@ -10,6 +10,9 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         moving,
         planning: false,
         facing: 0,
+        kind: aoe_protocol::UnitKind::Scout,
+        task: aoe_protocol::UnitTask::Idle,
+        carried: None,
     }
 }
 

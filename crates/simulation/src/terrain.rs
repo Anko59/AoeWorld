@@ -120,7 +120,9 @@ impl Terrain {
                 else {
                     return Ok(false);
                 };
-                Ok(sample.passable && object.is_none_or(|node| !overlay.blocks_node(node)))
+                Ok(!overlay.blocks_tile(tile)
+                    && sample.passable
+                    && object.is_none_or(|node| !overlay.blocks_node(node)))
             }
         }
     }
@@ -146,12 +148,14 @@ impl Terrain {
             Self::Map { generator, overlay } => {
                 let step_clear = |from, to| {
                     Ok::<_, aoe_map::EnvironmentPageError>(
-                        matches!(
-                            generator.edge_between_with_cancel(from, to, cancelled)?,
-                            EdgePassability::Passable
-                        ) && generator
-                            .object_at_with_cancel(to, cancelled)?
-                            .is_none_or(|node| !overlay.blocks_node(node)),
+                        !overlay.blocks_tile(to)
+                            && matches!(
+                                generator.edge_between_with_cancel(from, to, cancelled)?,
+                                EdgePassability::Passable
+                            )
+                            && generator
+                                .object_at_with_cancel(to, cancelled)?
+                                .is_none_or(|node| !overlay.blocks_node(node)),
                     )
                 };
                 if !step_clear(from, to)? {

@@ -48,6 +48,9 @@ fn subscription_response_classification_accepts_only_expected_error_or_stationar
         tick: Tick(1),
         changed_units: vec![],
         removals: vec![],
+        changed_players: Vec::new(),
+        changed_buildings: Vec::new(),
+        building_removals: Vec::new(),
     };
     for code in [409, 400] {
         assert_eq!(classify(&tick, code), Ok(false));
@@ -71,6 +74,9 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         moving: false,
         planning: false,
         facing: 0,
+        kind: aoe_protocol::UnitKind::Scout,
+        task: aoe_protocol::UnitTask::Idle,
+        carried: None,
     };
     let messages = [
         GameplayServerMessage::Tick {
@@ -78,24 +84,36 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
             tick: Tick(1),
             changed_units: vec![],
             removals: vec![],
+            changed_players: Vec::new(),
+            changed_buildings: Vec::new(),
+            building_removals: Vec::new(),
         },
         GameplayServerMessage::Tick {
             revision: 0,
             tick: Tick(1),
             changed_units: vec![],
             removals: vec![],
+            changed_players: Vec::new(),
+            changed_buildings: Vec::new(),
+            building_removals: Vec::new(),
         },
         GameplayServerMessage::Tick {
             revision: 1,
             tick: Tick(1),
             changed_units: vec![unit],
             removals: vec![],
+            changed_players: Vec::new(),
+            changed_buildings: Vec::new(),
+            building_removals: Vec::new(),
         },
         GameplayServerMessage::Tick {
             revision: 1,
             tick: Tick(1),
             changed_units: vec![],
             removals: vec![EntityId(0)],
+            changed_players: Vec::new(),
+            changed_buildings: Vec::new(),
+            building_removals: Vec::new(),
         },
     ];
     for message in messages {
@@ -114,6 +132,8 @@ fn subscription_response_classification_does_not_hide_other_server_messages() {
             revision: 1,
             tick: Tick(1),
             units: vec![],
+            players: Vec::new(),
+            buildings: Vec::new(),
         },
         GameplayServerMessage::CommandAck {
             sequence: 1,

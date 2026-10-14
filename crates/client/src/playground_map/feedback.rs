@@ -130,6 +130,13 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedSequence => "The order could not be confirmed. Please try again.",
         RejectedRateLimited => "Too many orders at once. Please try again shortly.",
         RejectedQueueFull => "The order queue is full. Please try again shortly.",
+        RejectedNotOwner => "Cannot give orders: this entity belongs to another player.",
+        RejectedWrongUnitKind => "This unit kind cannot perform that order.",
+        RejectedInvalidResource => "Cannot gather: the resource is unknown or exhausted.",
+        RejectedInsufficientFood => "Cannot train: not enough food.",
+        RejectedPopulationCap => "Cannot train: the population cap is reached or reserved.",
+        RejectedTrainingQueueFull => "Cannot train: the training queue is full.",
+        RejectedResourceUnavailable => "Cannot give orders: resource terrain is unavailable.",
         RejectedInvalidDestination => match blocker {
             Some(ObjectKind::Tree) => "Cannot move there: a tree is in the way.",
             Some(ObjectKind::ForageBush) => "Cannot move there: a forage bush is in the way.",

@@ -1,5 +1,5 @@
 use crate::GameplayService;
-use aoe_core::{PlayerId, WorldPosition};
+use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::{
     ElevationPage, EnvironmentPageProvider, GAME_TILE_METERS, HistoricalLandUsePage, MapPackage,
     PotentialBiomePage, PreparedEnvironment, WaterPage,
@@ -25,9 +25,7 @@ impl GameplayService {
                 return Err(GameWorldError::StartSearchLimit);
             }
         };
-        let position =
-            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
-        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        let primary_unit_id = initialize_village(&mut world, tile)?;
         Ok(Self::from_world(
             world,
             primary_unit_id,
@@ -67,9 +65,7 @@ impl GameplayService {
                 return Err(GameWorldError::StartSearchLimit);
             }
         };
-        let position =
-            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
-        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        let primary_unit_id = initialize_village(&mut world, tile)?;
         Ok(Some(Self::from_world(
             world,
             primary_unit_id,
@@ -105,9 +101,7 @@ impl GameplayService {
                 return Err(GameWorldError::StartSearchLimit);
             }
         };
-        let position =
-            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
-        let primary_unit_id = world.spawn_unit(PlayerId(0), position)?;
+        let primary_unit_id = initialize_village(&mut world, tile)?;
         Ok(Some(Self::from_world(
             world,
             primary_unit_id,
@@ -150,3 +144,15 @@ pub(crate) fn map_metadata(package: &MapPackage) -> MapMetadata {
 #[path = "gameplay_map/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn initialize_village(
+    world: &mut GameWorld,
+    tile: TileCoord,
+) -> Result<EntityId, GameWorldError> {
+    world
+        .initialize_village(PlayerId(0), tile)
+        .map_err(|error| match error {
+            aoe_simulation::EconomyError::Movement(error) => error,
+            _ => GameWorldError::InvalidPosition,
+        })
+}

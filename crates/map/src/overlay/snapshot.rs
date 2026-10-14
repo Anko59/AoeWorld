@@ -82,6 +82,7 @@ impl ResourceOverlay {
         Ok(Self {
             remaining,
             revision: snapshot.revision,
+            obstacles: Default::default(),
         })
     }
 }

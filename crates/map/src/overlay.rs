@@ -1,5 +1,6 @@
 use crate::{MapChunkGenerator, ResourceNode};
-use std::collections::BTreeMap;
+use aoe_core::{TileCoord, TileRect};
+use std::collections::{BTreeMap, BTreeSet};
 
 mod snapshot;
 pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
@@ -11,6 +12,7 @@ pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 65_536;
 pub struct ResourceOverlay {
     remaining: BTreeMap<u64, u16>,
     revision: u64,
+    obstacles: BTreeSet<TileCoord>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,6 +41,32 @@ pub enum ResourceOverlayError {
 }
 
 impl ResourceOverlay {
+    /// Transient building collision, reconstructed by the simulation on start.
+    /// It is separate from resource revisions and their persisted snapshots.
+    pub fn add_footprint(&mut self, rect: TileRect) -> Result<(), ResourceOverlayError> {
+        let area = u64::try_from(rect.width())
+            .unwrap_or(u64::MAX)
+            .saturating_mul(u64::try_from(rect.height()).unwrap_or(u64::MAX));
+        if rect.min.x < 0
+            || rect.min.y < 0
+            || area == 0
+            || area > 256
+            || (self.obstacles.len() as u64).saturating_add(area) > 256
+        {
+            return Err(ResourceOverlayError::Capacity);
+        }
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                self.obstacles.insert(TileCoord::new(x, y));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn blocks_tile(&self, tile: TileCoord) -> bool {
+        self.obstacles.contains(&tile)
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }

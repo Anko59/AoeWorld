@@ -55,7 +55,7 @@ impl GameWorld {
         content_hash: [u8; 32],
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(), ResourceOverlayError> {
-        if !self.units.is_empty() {
+        if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         let Terrain::Map { generator, overlay } = &mut self.terrain else {

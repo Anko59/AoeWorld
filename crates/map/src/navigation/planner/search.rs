@@ -209,7 +209,9 @@ pub(super) fn checked_walkable(
     let Some((sample, object)) = terrain.tile_and_node_with_cancel(tile, cancelled)? else {
         return Ok(false);
     };
-    Ok(sample.passable && object.is_none_or(|node| !overlay.blocks_node(node)))
+    Ok(!overlay.blocks_tile(tile)
+        && sample.passable
+        && object.is_none_or(|node| !overlay.blocks_node(node)))
 }
 
 fn diagonal_clear_checked(

@@ -289,7 +289,9 @@ fn walkable_with_overlay(
         .tile_and_node_with_cancel(tile, &|| false)
         .is_ok_and(|pair| {
             pair.is_some_and(|(sample, node)| {
-                sample.passable && node.is_none_or(|node| !overlay.blocks_node(node))
+                !overlay.blocks_tile(tile)
+                    && sample.passable
+                    && node.is_none_or(|node| !overlay.blocks_node(node))
             })
         })
 }

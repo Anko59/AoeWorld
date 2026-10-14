@@ -16,7 +16,7 @@ pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 64;
 pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 2;
 
 impl GameWorld {
-    pub fn advance(&mut self) -> Vec<GameUnit> {
+    pub(crate) fn advance_movement(&mut self) -> Vec<GameUnit> {
         let movers = std::mem::take(&mut self.active_movers);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
@@ -55,8 +55,7 @@ impl GameWorld {
                 continue;
             };
             self.units[index].state.previous_position = self.units[index].state.position;
-            let denominator = self.config.move_speed_subunits_per_tick_denominator;
-            let speed = self.config.move_speed_subunits_per_tick as u64;
+            let (speed, denominator) = self.movement_speed(self.units[index].state.kind);
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;
@@ -104,7 +103,7 @@ impl GameWorld {
                         break;
                     }
                 };
-                if !terrain_ok {
+                if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
                     self.clear_planner(index);
                     self.units[index].state.moving = false;
                     self.units[index].state.planning = false;
@@ -205,12 +204,21 @@ impl GameWorld {
                 still_moving.push(id);
             }
             self.plan_route_ahead(index, &mut planner_allowance);
+            if !self.economy.gatherers.contains_key(&id) {
+                let unit = &mut self.units[index].state;
+                unit.task = if unit.moving || unit.planning {
+                    crate::UnitTask::Moving
+                } else if unit.carried.is_some() {
+                    crate::UnitTask::Carrying
+                } else {
+                    crate::UnitTask::Idle
+                };
+            }
             changed.push(self.units[index].state);
         }
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.tick.0 = self.tick.0.saturating_add(1);
-        self.planning_budget = MAX_ROUTE_WORK_PER_TICK;
         changed.sort_by_key(|unit| unit.id);
         changed
     }
@@ -221,7 +229,9 @@ impl GameWorld {
         destination: aoe_core::TileCoord,
     ) -> Option<MapRoutePlan> {
         if !self.terrain.has_map_navigation() {
-            return None;
+            return self
+                .uniform_building_route(origin, destination)
+                .map(MapRoutePlan::Outcome);
         }
         let budget = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
         if let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget) {
