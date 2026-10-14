@@ -156,3 +156,32 @@ fn webgl_native_size_checker_stays_pixel_exact() {
     }
     assert_pixel(&canvas, left + 16, top, fixture::BACKGROUND);
 }
+
+#[wasm_bindgen_test]
+fn webgl_terrain_quads_keep_dev_pixels_at_quarter_and_native_zoom_with_objects() {
+    for zoom in [0.25, 1.0] {
+        let (_, quads, atlas) = terrain_pixels::scene(zoom);
+        let expected = terrain_pixels::nearest_image(&quads, &atlas, true);
+        let (canvas, mut renderer) = target(&atlas);
+        for objects in [false, true] {
+            let mut packets: Vec<_> = quads.iter().map(|q| q.0).collect();
+            if objects {
+                packets.push(
+                    fixture::placed(fixture::CHECKER, [4.0; 2], [4.0; 2], false, fixture::PHASE)
+                        .sprite,
+                );
+            }
+            assert!(renderer.render(&mut packets).unwrap());
+            for [x, y] in terrain_pixels::PROBES {
+                assert_eq!(
+                    pixel(&canvas, x, y),
+                    fixture::pixel(&expected, x, y),
+                    "terrain zoom{zoom} objects{objects} pixel{x},{y}"
+                );
+            }
+            if objects {
+                assert_pixel(&canvas, 5, 5, [0, 128, 0, 255]);
+            }
+        }
+    }
+}

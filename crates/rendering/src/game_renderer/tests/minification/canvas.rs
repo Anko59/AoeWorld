@@ -200,3 +200,52 @@ fn canvas_flipped_minified_sprite_mirrors_within_its_own_rectangle() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_terrain_quads_keep_dev_pixels_at_quarter_and_native_zoom_with_objects() {
+    for zoom in [0.25, 1.0] {
+        let (camera, quads, atlas) = terrain_pixels::scene(zoom);
+        let expected = terrain_pixels::nearest_image(&quads, &atlas, false);
+        let (canvas, context) = target().unwrap();
+        let mut presentation = CanvasPresentation::new(128, 128);
+        let mut layers: Vec<_> = quads
+            .iter()
+            .map(|&(s, f, d, id)| WorldLayer::Sprite(s, f, d, id))
+            .collect();
+        for objects in [false, true] {
+            if objects {
+                let object =
+                    fixture::placed(fixture::CHECKER, [4.0; 2], [4.0; 2], false, fixture::PHASE);
+                layers.push(WorldLayer::Sprite(object.sprite, object.frame, 0.0, 1));
+            }
+            render_canvas_world(
+                &canvas,
+                &context,
+                &atlas,
+                &mut presentation,
+                &layers,
+                camera,
+                false,
+            )
+            .unwrap();
+            for y in 0..128 {
+                for x in 0..128 {
+                    if objects && (4..8).contains(&x) && (4..8).contains(&y) {
+                        continue;
+                    }
+                    assert_eq!(
+                        fixture::pixel(&presentation.color_buffer, x, y),
+                        fixture::pixel(&expected, x, y),
+                        "terrain zoom{zoom} objects{objects} pixel{x},{y}"
+                    );
+                }
+            }
+            if objects {
+                assert_eq!(
+                    fixture::pixel(&presentation.color_buffer, 5, 5),
+                    [0, 128, 0, 255]
+                );
+            }
+        }
+    }
+}

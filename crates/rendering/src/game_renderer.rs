@@ -54,7 +54,7 @@ mod canvas_depth_tests;
 
 #[cfg(test)]
 #[path = "game_renderer/minification_tests.rs"]
-mod minification_tests;
+pub(crate) mod minification_tests;
 
 #[cfg(test)]
 #[path = "game_renderer/tests/webgl.rs"]
