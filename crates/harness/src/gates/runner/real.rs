@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     gates::scopes::Snapshot,
     process::{self, Cancellation, CaptureExit},
+    slots::SlotEnv,
 };
 use evidence::{EndpointProof, PrivateOutput};
 use std::time::Instant;
@@ -14,6 +15,7 @@ pub(super) struct Local<'a> {
     pub(super) cancellation: Cancellation,
     pub(super) started: Instant,
     pub(super) total: Duration,
+    pub(super) slots: &'a SlotEnv,
 }
 impl Runtime for Local<'_> {
     fn now_ms(&self) -> u64 {
@@ -124,6 +126,7 @@ impl Runtime for Local<'_> {
             root,
             gate,
             deadline,
+            self.slots,
         )
     }
 }
@@ -226,6 +229,7 @@ fn make_fixed(
     root: &ExecutionRoot,
     gate: &GateId,
     deadline: Duration,
+    slots: &SlotEnv,
 ) -> Receipt {
     let cargo = source.join(".cache/cargo");
     let target = source.join("target");
@@ -251,7 +255,7 @@ fn make_fixed(
     };
     // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
     // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
-    let slot = match crate::slots::hold_snapshot(root.path(), source, gate.as_str()) {
+    let slot = match crate::slots::hold_snapshot(root.path(), source, gate.as_str(), slots) {
         Ok(slot) => slot,
         Err(error) => {
             return Receipt {
@@ -324,7 +328,15 @@ pub(super) fn fixture_make(
     gate: &GateId,
     deadline: Duration,
 ) -> Receipt {
-    make_fixed(source, output, cancellation, root, gate, deadline)
+    make_fixed(
+        source,
+        output,
+        cancellation,
+        root,
+        gate,
+        deadline,
+        &SlotEnv::default(),
+    )
 }
 
 #[cfg(test)]

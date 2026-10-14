@@ -29,6 +29,7 @@ mod stop;
 #[cfg(test)]
 mod tests;
 
+use crate::slots::SlotEnv;
 use context::{Access, Context};
 use role::Role;
 pub(crate) use role::{is_test as is_test_path, protected as protected_path};
@@ -129,9 +130,12 @@ pub(crate) enum Commands {
     },
 }
 
-pub(crate) fn execute(command: Commands) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn execute(
+    command: Commands,
+    slots: &SlotEnv,
+) -> Result<(), Box<dyn std::error::Error>> {
     match command {
-        Commands::AgentHook { runtime, event } => run(runtime, event),
+        Commands::AgentHook { runtime, event } => run(runtime, event, slots),
         Commands::Prune { home, keep } => {
             prune::prune(&home, &keep, std::time::SystemTime::now());
             Ok(())
@@ -140,7 +144,7 @@ pub(crate) fn execute(command: Commands) -> Result<(), Box<dyn std::error::Error
     }
 }
 
-fn run(runtime: Runtime, event: Event) -> Result<(), Box<dyn std::error::Error>> {
+fn run(runtime: Runtime, event: Event, slots: &SlotEnv) -> Result<(), Box<dyn std::error::Error>> {
     let mut bytes = Vec::new();
     let read = std::io::stdin()
         .take(INPUT_LIMIT as u64 + 1)
@@ -151,7 +155,7 @@ fn run(runtime: Runtime, event: Event) -> Result<(), Box<dyn std::error::Error>>
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
     let role = std::env::var("AOE_AGENT_ROLE").ok();
-    if let Some(answer) = respond(runtime, event, input, &root, role.as_deref()) {
+    if let Some(answer) = respond(runtime, event, input, &root, role.as_deref(), slots) {
         println!("{answer}");
     }
     Ok(())
@@ -178,6 +182,7 @@ pub(crate) fn respond(
     bytes: Option<&[u8]>,
     root: &Path,
     launched_role: Option<&str>,
+    slots: &SlotEnv,
 ) -> Option<Value> {
     let input: Option<Input> = bytes.and_then(|b| serde_json::from_slice(b).ok());
     let Some(input) = input.filter(|i| event.accepts(&i.hook_event_name)) else {
@@ -216,7 +221,12 @@ pub(crate) fn respond(
                 })
             })
         }
-        Event::Stop => stop::respond(&context, &input.session_id, input.agent_id.as_deref()),
+        Event::Stop => stop::respond(
+            &context,
+            &input.session_id,
+            input.agent_id.as_deref(),
+            slots,
+        ),
         Event::SessionStart => Some(session::start(
             &context,
             runtime,

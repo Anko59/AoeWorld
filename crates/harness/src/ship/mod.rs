@@ -122,6 +122,9 @@ pub(crate) struct Options {
     /// Showcase video for the "What" section (SHIP_VIDEO).
     #[arg(long)]
     pub(crate) video: Option<PathBuf>,
+    /// The heavy-slot environment of this process, read once by `execute`.
+    #[arg(skip)]
+    pub(crate) slots: Box<crate::slots::SlotEnv>,
 }
 
 impl Default for Options {
@@ -140,17 +143,19 @@ impl Default for Options {
             no_review: false,
             level: None,
             video: None,
+            slots: Box::default(),
         }
     }
 }
 
-pub(crate) fn execute(command: Commands) -> Result<()> {
+pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
         Commands::Duel => duel::execute(&root).map_err(Into::into),
         Commands::DuelCheck => duel::stages::native(&root).map_err(Into::into),
         Commands::DuelBrowserCheck => duel::stages::browser(&root).map_err(Into::into),
         Commands::Ship(mut options) => {
+            options.slots = Box::new(slots.clone());
             // `make ship` passes these through the environment, never through shell text.
             let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
             options.title = options.title.or_else(|| env("SHIP_TITLE"));
@@ -193,7 +198,7 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 None => println!("no evidence for {head}; run `make ship`"),
             }
             lock::print_status(&root)?;
-            crate::slots::print_status(&root)
+            crate::slots::print_status(&root, slots)
         }
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),
@@ -234,7 +239,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
         &subject.head[..12],
         subject.branch
     );
-    let results = run::run_gates(root, &gates);
+    let results = run::run_gates(root, &gates, &options.slots);
     if git::subject(root).ok().as_ref() != Some(&subject) {
         return Err("HEAD, the tree or the branch changed while the gates ran; no evidence written. Commit, then ship again".into());
     }

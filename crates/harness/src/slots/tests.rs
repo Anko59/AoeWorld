@@ -1,5 +1,5 @@
 use super::{
-    Config, DIR_VAR, Holder, Slot, TOKEN_VAR, acquire_at,
+    Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     guard::{dir, hold, is_heavy, nonce},
     status::render,
     verify,
@@ -317,16 +317,17 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_temp, root) = checkout();
     let slots = dir(&root).unwrap();
-    let outer = hold(&root, "slow").expect("the only slot is free");
+    let outer = hold(&root, "slow", &SlotEnv::default()).expect("the only slot is free");
     let env = outer.env();
     assert_eq!(env.len(), 2);
     assert_eq!(env[0].0, TOKEN_VAR);
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
     let begun = Instant::now();
-    let light = hold(&root, "fmt-check").expect("a static gate never waits");
+    let light = hold(&root, "fmt-check", &SlotEnv::default()).expect("a static gate never waits");
     assert!(light.env().is_empty());
-    let nested = hold(&root, "slow").expect("the same process already holds the slot");
+    let nested =
+        hold(&root, "slow", &SlotEnv::default()).expect("the same process already holds the slot");
     assert_eq!(nested.env(), env, "a nested gate passes the held slot on");
     assert!(begun.elapsed() < Duration::from_secs(2));
     assert_eq!(tickets(&slots), 1, "still one ticket");
@@ -355,7 +356,7 @@ fn a_gate_that_waited_longer_than_its_budget_still_gets_its_whole_budget() {
     }))
     .unwrap();
     let begun = Instant::now();
-    let results = crate::ship::run::run_gates(&root, &[&gate]);
+    let results = crate::ship::run::run_gates(&root, &[&gate], &SlotEnv::default());
     releaser.join().unwrap();
     assert!(begun.elapsed() >= WAIT, "it did wait");
     let [result] = results.as_slice() else {
@@ -397,7 +398,10 @@ fn config_defaults_overrides_and_limits() {
     }
     assert!(config(None, Some("soon")).is_err());
     assert!(Config::from_values(0, None, None).is_err());
-    let committed = Config::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    let committed = Config::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        &SlotEnv::default(),
+    );
     assert!(committed.is_ok_and(|c| (1..=8).contains(&c.slots)));
 }
 
@@ -454,5 +458,6 @@ fn status_lists_running_holders_then_the_queue() {
         ["heavy slots: 0 of 2 in use (AOE_HEAVY_SLOTS to change)"]
     );
 }
+mod environment;
 mod makefile;
 mod roots;

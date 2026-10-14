@@ -1,6 +1,6 @@
 use super::{Commands, closing, floor, history, increment, now};
 use super::{Config, Live, Plan, Report, Result, Tier, config::Model, review_with_branch, trusted};
-use crate::{agents::Runtime, ship::git};
+use crate::{agents::Runtime, ship::git, slots::SlotEnv};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -95,7 +95,7 @@ impl Policy {
     }
 }
 
-pub(crate) fn execute(command: Commands) -> Result<()> {
+pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
         Commands::Review {
@@ -132,7 +132,8 @@ pub(crate) fn execute(command: Commands) -> Result<()> {
                 None => String::new(),
             };
             if requested_base != super::base::DEV {
-                let report = review_on_base(&root, &requested_base, tier, runtime, &task, &review)?;
+                let report =
+                    review_on_base(&root, &requested_base, tier, runtime, &task, &review, slots)?;
                 println!("{}", report.markdown());
                 return Ok(());
             }
@@ -185,6 +186,7 @@ pub(crate) fn review_on_base(
     runtime: Runtime,
     task: &str,
     reviewer: &crate::ship::review_gate::Reviewer<'_>,
+    slots: &SlotEnv,
 ) -> Result<Report> {
     use crate::ship::{Options, evidence::Verdict, judge, review_gate, stack};
     stack::refuse_base(base, &git::branch(root)?)?;
@@ -200,6 +202,7 @@ pub(crate) fn review_on_base(
         no_fetch: true,
         tier: Some(tier),
         runtime,
+        slots: Box::new(slots.clone()),
         ..Options::default()
     };
     let evidence = judge(root, &options)?;

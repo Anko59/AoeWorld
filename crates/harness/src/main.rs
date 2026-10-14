@@ -1,5 +1,6 @@
 mod agents;
 mod architecture;
+mod assets;
 mod coverage;
 mod dev;
 mod e2e;
@@ -48,7 +49,7 @@ struct Args {
 enum Command {
     Assets {
         #[command(subcommand)]
-        command: AssetCommand,
+        command: assets::AssetCommand,
     },
     Doctor,
     Dev {
@@ -198,62 +199,18 @@ enum DevCommand {
     Logs,
 }
 
-#[derive(Subcommand)]
-enum AssetCommand {
-    Inspect { input: Option<PathBuf> },
-    Import { input: Option<PathBuf> },
-    Verify { pack: Option<PathBuf> },
-}
-
-fn run(command: Command, gate: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn run(
+    command: Command,
+    gate: &str,
+    slots: &slots::SlotEnv,
+) -> Result<(), Box<dyn std::error::Error>> {
     // The agent hook takes no slot: a broken registry must not stop it judging edits.
     let _slot = match command {
         Command::Agents(_) => None,
-        _ => Some(slots::guard::guard(gate)?),
+        _ => Some(slots::guard::guard(gate, slots)?),
     };
     match command {
-        Command::Assets { command } => match command {
-            AssetCommand::Inspect { input } => {
-                let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial"));
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&aoe_assets::pack::inspect(&input)?)?
-                );
-            }
-            AssetCommand::Import { input } => {
-                let input = input.unwrap_or_else(|| {
-                    let trial = PathBuf::from("local-assets/trial");
-                    let game_data = trial.join("Data");
-                    if game_data.is_dir() { game_data } else { trial }
-                });
-                println!(
-                    "{}",
-                    aoe_assets::pack::import(&input, Path::new("local-assets/packs"))?.display()
-                );
-            }
-            AssetCommand::Verify { pack } => {
-                let packs = if let Some(pack) = pack {
-                    vec![pack]
-                } else {
-                    std::fs::read_dir("local-assets/packs")?
-                        .filter_map(|item| item.ok().map(|value| value.path()))
-                        .filter(|path| path.is_dir())
-                        .collect()
-                };
-                if packs.is_empty() {
-                    return Err("no local asset packs found".into());
-                }
-                for pack in packs {
-                    let manifest = aoe_assets::pack::verify(&pack)?;
-                    println!(
-                        "verified {}: {} frames across {} pages",
-                        pack.display(),
-                        manifest.frames.len(),
-                        manifest.pages.len()
-                    );
-                }
-            }
-        },
+        Command::Assets { command } => assets::run(command)?,
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
@@ -301,8 +258,8 @@ fn run(command: Command, gate: &str) -> Result<(), Box<dyn std::error::Error>> {
         Command::FmtCheck => format_commands(true)?,
         Command::Lint => native::lint()?,
         Command::TestUnit => native::test_unit()?,
-        Command::LoadStatus => slots::print_status(Path::new("."))?,
-        Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv)?),
+        Command::LoadStatus => slots::print_status(Path::new("."), slots)?,
+        Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,
@@ -331,7 +288,7 @@ fn run(command: Command, gate: &str) -> Result<(), Box<dyn std::error::Error>> {
         } => perf_hardware::check(&environment, &samples, &baseline)?,
         Command::QaValidate(options) => qa::execute(options)?,
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
-        Command::GateRun(options) => gates::runner::execute(Path::new("."), options)?,
+        Command::GateRun(options) => gates::runner::execute(Path::new("."), options, slots)?,
         Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
         Command::SupervisorModel(options) => {
             gates::policy::supervisor::execute(Path::new("."), options)?
@@ -343,14 +300,14 @@ fn run(command: Command, gate: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Preflight => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
-            run(Command::TestUnit, "test-unit")?;
-            run(Command::PerfSmoke, "perf-smoke")?;
+            run(Command::TestUnit, "test-unit", slots)?;
+            run(Command::PerfSmoke, "perf-smoke", slots)?;
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,
         Command::HooksCheck => hooks::check(Path::new("."))?,
-        Command::Agents(command) => agents::execute(command)?,
-        Command::Ship(command) => ship::execute(command)?,
-        Command::Review(command) => review::execute(command)?,
+        Command::Agents(command) => agents::execute(command, slots)?,
+        Command::Ship(command) => ship::execute(command, slots)?,
+        Command::Review(command) => review::execute(command, slots)?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,
         Command::ReleaseSourceCheck => release_promotion::source()?,
@@ -489,7 +446,9 @@ fn main() {
     let matches = Args::command().get_matches();
     let gate = matches.subcommand_name().unwrap_or_default().to_owned();
     let args = Args::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-    if let Err(error) = run(args.command, &gate) {
+    // The one read of the heavy-slot variables: every gate, hook and ship run below takes this.
+    let slots = slots::SlotEnv::process();
+    if let Err(error) = run(args.command, &gate, &slots) {
         eprintln!("error: {error}");
         std::process::exit(1);
     }

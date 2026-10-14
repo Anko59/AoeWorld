@@ -20,6 +20,7 @@ use crate::ship::lock::utc;
 use queue::{Result, Ticket, read_json};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::OsString,
     path::Path,
     thread,
     time::{Duration, Instant},
@@ -28,8 +29,8 @@ use std::{
 pub(crate) use guard::{hold, hold_snapshot, run_in_slot};
 
 /// `run_in_slot` for the checkout the process runs in.
-pub(crate) fn run_here(gate: &str, argv: &[String]) -> queue::Result<i32> {
-    run_in_slot(Path::new("."), gate, argv)
+pub(crate) fn run_here(gate: &str, argv: &[String], slots: &SlotEnv) -> queue::Result<i32> {
+    run_in_slot(Path::new("."), gate, argv, slots)
 }
 pub(crate) use status::print_status;
 
@@ -44,6 +45,32 @@ const DEFAULT_WAIT_MINUTES: u64 = 90;
 const MAX_SLOTS: usize = 8;
 pub(crate) const POLL: Duration = Duration::from_secs(1);
 pub(crate) const REPORT_EVERY: Duration = Duration::from_secs(300);
+
+/// The four `AOE_HEAVY_*` variables as values. Only `SlotEnv::process` reads the real environment,
+/// once, at the process entry point; everything below it is given a `SlotEnv`, so no test depends
+/// on the environment of the process that runs it (the audit in `slots/tests/environment.rs`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SlotEnv {
+    /// `AOE_HEAVY_SLOT`: the token of the slot a parent holds.
+    pub(crate) token: Option<String>,
+    /// `AOE_HEAVY_DIR`: the shared queue the parent named.
+    pub(crate) dir: Option<OsString>,
+    /// `AOE_HEAVY_SLOTS`: the slot count override.
+    pub(crate) slots: Option<String>,
+    /// `AOE_HEAVY_WAIT_MINUTES`: the wait override.
+    pub(crate) wait: Option<String>,
+}
+
+impl SlotEnv {
+    pub(crate) fn process() -> Self {
+        Self {
+            token: std::env::var(TOKEN_VAR).ok(),
+            dir: std::env::var_os(DIR_VAR),
+            slots: std::env::var(SLOTS_VAR).ok(),
+            wait: std::env::var(WAIT_VAR).ok(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Holder {
@@ -107,13 +134,13 @@ pub(crate) struct Config {
 impl Config {
     /// `gates/heavy.json` sets the default slots; `AOE_HEAVY_SLOTS` (1-8) and
     /// `AOE_HEAVY_WAIT_MINUTES` (default 90; 0 fails at once) override.
-    pub(crate) fn load(root: &Path) -> Result<Self> {
+    pub(crate) fn load(root: &Path, slots: &SlotEnv) -> Result<Self> {
         let text = std::fs::read_to_string(root.join("gates/heavy.json"))?;
         let committed: Committed = serde_json::from_str(&text)?;
         Self::from_values(
             committed.slots,
-            std::env::var(SLOTS_VAR).ok().as_deref(),
-            std::env::var(WAIT_VAR).ok().as_deref(),
+            slots.slots.as_deref(),
+            slots.wait.as_deref(),
         )
     }
 

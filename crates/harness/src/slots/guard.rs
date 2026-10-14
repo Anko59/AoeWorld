@@ -1,6 +1,7 @@
 //! The process-level view of the heavy slots: which gates take one, and holding it.
 use super::{
-    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, TOKEN_VAR, acquire_at, queue::Result,
+    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    queue::Result,
 };
 use crate::{
     gates::registry::{Cadence, Registry},
@@ -67,8 +68,8 @@ pub(crate) fn dir(root: &Path) -> Result<PathBuf> {
 }
 
 /// The shared slot directory: the one a holder named for its children, else the repository's.
-pub(crate) fn slot_dir(root: &Path) -> Result<PathBuf> {
-    slot_dir_with(std::env::var_os(DIR_VAR).as_deref(), root)
+pub(crate) fn slot_dir(root: &Path, slots: &SlotEnv) -> Result<PathBuf> {
+    slot_dir_with(slots.dir.as_deref(), root)
 }
 
 pub(crate) fn slot_dir_with(inherited: Option<&OsStr>, root: &Path) -> Result<PathBuf> {
@@ -110,26 +111,36 @@ pub(crate) fn is_heavy(registry: &Registry, gate: &str) -> bool {
 
 /// The slot for a harness command, named by its subcommand: a make target runs its harness
 /// command under the same name, so the registry decides for both ways of starting a gate.
-pub(crate) fn guard(gate: &str) -> Result<Guard> {
-    hold(Path::new("."), gate)
+pub(crate) fn guard(gate: &str, slots: &SlotEnv) -> Result<Guard> {
+    hold(Path::new("."), gate, slots)
 }
 
 /// Take a slot for `gate` if the registry says it is heavy, announcing a wait on stderr. Returns
 /// at once, holding nothing, for light gates; a process that already holds one passes it on.
-pub(crate) fn hold(from: &Path, gate: &str) -> Result<Guard> {
+pub(crate) fn hold(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
     match checkout_of(from)? {
-        Some(root) => hold_in(&root, gate, || slot_dir(&root)),
+        Some(root) => hold_in(&root, gate, slots, || slot_dir(&root, slots)),
         None => Ok(Guard::none()),
     }
 }
 
 /// A gate run in the snapshot checkout `root` of the real checkout `source`: it queues in
 /// `source`'s shared directory, not in the snapshot's own Git directory (which is deleted with it).
-pub(crate) fn hold_snapshot(root: &Path, source: &Path, gate: &str) -> Result<Guard> {
-    hold_in(root, gate, || slot_dir(source))
+pub(crate) fn hold_snapshot(
+    root: &Path,
+    source: &Path,
+    gate: &str,
+    env: &SlotEnv,
+) -> Result<Guard> {
+    hold_in(root, gate, env, || slot_dir(source, env))
 }
 
-fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> Result<Guard> {
+fn hold_in(
+    root: &Path,
+    gate: &str,
+    env: &SlotEnv,
+    queue: impl FnOnce() -> Result<PathBuf>,
+) -> Result<Guard> {
     if !root.join("gates/registry.json").is_file() {
         return Ok(Guard::none());
     }
@@ -150,8 +161,8 @@ fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> 
             outermost: false,
         });
     }
-    let slots = slots()?;
-    let config = Config::load(root)?;
+    let queue = queue()?;
+    let config = Config::load(root, env)?;
     let holder = Holder {
         worktree: root
             .canonicalize()
@@ -165,12 +176,11 @@ fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> 
             .map_or(0, |d| d.as_secs()),
         nonce: nonce(),
     };
-    let inherited = std::env::var(TOKEN_VAR).ok();
     let slot = acquire_at(
-        &slots,
+        &queue,
         config.slots,
         &holder,
-        inherited.as_deref(),
+        env.token.as_deref(),
         config.wait,
         POLL,
         REPORT_EVERY,
@@ -178,7 +188,7 @@ fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> 
     )?;
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
-        (DIR_VAR, slots.display().to_string()),
+        (DIR_VAR, queue.display().to_string()),
     ];
     *held = Some(env.clone());
     Ok(Guard {
@@ -190,11 +200,11 @@ fn hold_in(root: &Path, gate: &str, slots: impl FnOnce() -> Result<PathBuf>) -> 
 
 /// Run `argv` as gate `gate` holding its slot, and return its exit code. The orchestrator
 /// container runs a make target's steps this way, so the slot is taken before they start.
-pub(crate) fn run_in_slot(from: &Path, gate: &str, argv: &[String]) -> Result<i32> {
+pub(crate) fn run_in_slot(from: &Path, gate: &str, argv: &[String], env: &SlotEnv) -> Result<i32> {
     let (program, args) = argv
         .split_first()
         .ok_or("heavy slot: no command to run under the slot")?;
-    let guard = hold(from, gate)?;
+    let guard = hold(from, gate, env)?;
     let status = std::process::Command::new(program)
         .args(args)
         .envs(guard.env())

@@ -11,6 +11,7 @@ use super::{
 use crate::{
     gates::registry::{Cadence, Registry},
     ship::run::{GateResult, GateVerdict},
+    slots::SlotEnv,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -145,6 +146,7 @@ pub(crate) fn respond(
     context: &Context,
     session: &str,
     agent: Option<&str>,
+    slots: &SlotEnv,
 ) -> Option<serde_json::Value> {
     if context.role == Role::Reviewer {
         return None;
@@ -167,7 +169,7 @@ pub(crate) fn respond(
             })
             .ok()
             .flatten();
-            cached.unwrap_or_else(|| execute(root, scope, fingerprint))
+            cached.unwrap_or_else(|| execute(root, scope, fingerprint, slots))
         }
         Err(error) => Run {
             fingerprint: String::new(),
@@ -291,7 +293,7 @@ fn changed(root: &Path, merge_base: Option<&str>) -> Result<Vec<String>, String>
     Ok(paths)
 }
 
-fn execute(root: &Path, scope: Scope, fingerprint: String) -> Run {
+fn execute(root: &Path, scope: Scope, fingerprint: String, slots: &SlotEnv) -> Run {
     let finish = |verdict, report| Run {
         fingerprint: fingerprint.clone(),
         scope,
@@ -331,7 +333,7 @@ fn execute(root: &Path, scope: Scope, fingerprint: String) -> Run {
         .filter_map(|id| registry.gates.iter().find(|g| &g.id == id))
         .filter(|g| g.r#static && (scope == Scope::Full || g.cadences.contains(&Cadence::Edit)))
         .collect();
-    let results = crate::ship::run::run_gates(root, &gates);
+    let results = crate::ship::run::run_gates(root, &gates, slots);
     let verdict = if results.iter().any(|r| r.verdict == GateVerdict::Fail) {
         Verdict::Fail
     } else if results
