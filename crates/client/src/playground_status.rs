@@ -1,7 +1,11 @@
 use super::{Client, map, set_text};
 
 pub(super) fn update(client: &Client) {
-    set_text(&client.document, "connection", &client.status);
+    set_text(
+        &client.document,
+        "connection",
+        map::feedback::connection_label(client),
+    );
     set_text(&client.document, "unit-state", &label(client));
     set_text(
         &client.document,

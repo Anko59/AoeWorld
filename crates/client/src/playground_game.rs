@@ -53,6 +53,7 @@ pub(super) struct Client {
     pub sent_region: Option<TileRect>,
     pub last_subscribe: f64,
     pub next_sequence: u64,
+    pub order_feedback: map::feedback::OrderFeedback,
     pub units: BTreeMap<EntityId, GameplayUnitState>,
     pub presentation: map::presentation::Presentation,
     pub selected: Option<EntityId>,
@@ -167,6 +168,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let _ = old.close();
         }
         client.status = "connecting".to_owned();
+        client.order_feedback.clear();
         client.sent_region = None;
         client.connection_id
     };
@@ -304,6 +306,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 storage::save_token(resume_token);
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
+                client.order_feedback.clear();
                 client.units.clear();
                 let tick_hz = client.config.tick_hz;
                 client.presentation.reset(tick_hz);
@@ -324,16 +327,13 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 controls::map_changed(None);
                 client.status = "map changed; reconnecting".to_owned();
             }
-            Ok(GameplayServerMessage::CommandAck { result, .. }) => {
-                client.status = match result {
-                    aoe_protocol::CommandResult::Accepted => "connected",
-                    aoe_protocol::CommandResult::RejectedUnreachable => "order unreachable",
-                    aoe_protocol::CommandResult::RejectedPathBudgetExceeded => {
-                        "path planning limit reached"
-                    }
-                    _ => "order rejected",
-                }
-                .to_owned();
+            Ok(GameplayServerMessage::CommandAck {
+                sequence, result, ..
+            }) => {
+                client.status = client
+                    .order_feedback
+                    .acknowledge(sequence, result)
+                    .to_owned();
             }
             Ok(GameplayServerMessage::Error { message, .. }) => {
                 client.status = format!("server error: {message}")
@@ -395,17 +395,21 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
     );
     let Ok(destination) = destination else { return };
     let destination = client.config.snap_ground_position(destination);
+    let sequence = client.next_sequence;
     let message = GameplayClientMessage::MoveOrder {
-        sequence: client.next_sequence,
+        sequence,
         entity_id: client.primary.unwrap_or(EntityId(0)),
         destination,
     };
     client.next_sequence = client.next_sequence.saturating_add(1);
-    if let Ok(bytes) = encode_gameplay_client(&message) {
-        let _ = client
+    if let Ok(bytes) = encode_gameplay_client(&message)
+        && client
             .socket
             .as_ref()
-            .and_then(|socket| socket.send_with_u8_array(&bytes).ok());
+            .is_some_and(|socket| socket.send_with_u8_array(&bytes).is_ok())
+    {
+        let blocker = map::feedback::blocker_at(client, destination.tile_floor());
+        client.order_feedback.record(sequence, blocker);
     }
 }
 

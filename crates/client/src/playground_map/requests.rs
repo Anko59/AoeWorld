@@ -12,7 +12,7 @@ pub(crate) struct Request<T> {
 
 pub(crate) struct Update<T> {
     pub started: Vec<Request<T>>,
-    pub cancelled: Vec<T>,
+    pub cancelled: Vec<(Coordinate, T)>,
 }
 
 pub(crate) struct RequestWindow<T> {
@@ -64,7 +64,7 @@ impl<T: Clone> RequestWindow<T> {
         let mut cancelled = Vec::new();
         self.pending.retain(|request| {
             if !wanted.contains(&request.coordinate) && can_cancel(&request.handle) {
-                cancelled.push(request.handle.clone());
+                cancelled.push((request.coordinate, request.handle.clone()));
                 false
             } else {
                 // A browser without cancellation support retains its slots until

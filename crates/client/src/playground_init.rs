@@ -58,6 +58,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         sent_region: None,
         last_subscribe: 0.0,
         next_sequence: 1,
+        order_feedback: Default::default(),
         units: BTreeMap::new(),
         presentation: Default::default(),
         selected: None,

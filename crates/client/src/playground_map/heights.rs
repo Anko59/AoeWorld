@@ -86,6 +86,7 @@ pub(super) fn chunk_height_bounds(chunk: &CachedChunk) -> Option<(i16, i16)> {
 #[derive(Default)]
 pub(crate) struct MapHeightBounds {
     pub levels: Option<(i16, i16)>,
+    pub(super) failures: feedback::TerrainFailures,
     pending: bool,
     retry_after: f64,
     chunk_retry_after: f64,
@@ -115,9 +116,16 @@ pub(super) fn ensure_bounds(
         }
         client.terrain_bounds.pending = false;
         match result {
-            Ok(bounds) => client.terrain_bounds.levels = Some(bounds),
+            Ok(bounds) => {
+                client.terrain_bounds.levels = Some(bounds);
+                client.terrain_bounds.failures.bounds = false;
+            }
             Err(error) => {
-                client.status = format!("map height bounds unavailable: {error:?}");
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "map height bounds unavailable: {error:?}"
+                )));
+                client.terrain_bounds.failures.bounds = true;
+                feedback::terrain_failed(&mut client);
                 client.terrain_bounds.retry_after = super::super::now() + 5_000.0;
             }
         }
