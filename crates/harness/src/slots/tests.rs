@@ -410,7 +410,6 @@ fn the_registry_decides_which_gates_are_heavy() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let registry = Registry::load(&root).unwrap();
     for heavy in [
-        "lint",
         "test-unit",
         "test-wasm",
         "test-e2e",
@@ -422,6 +421,7 @@ fn the_registry_decides_which_gates_are_heavy() {
         assert!(is_heavy(&registry, heavy), "{heavy}");
     }
     for light in [
+        "lint",
         "fmt-check",
         "structure-check",
         "test-placement",

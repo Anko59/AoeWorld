@@ -13,7 +13,7 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | test-placement | `make test-placement` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | merge-base Rust test placement audit |
 | architecture-check | `make architecture-check` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 180 | — | Cargo metadata and source boundary audit |
 | docs-check | `make docs-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | registry table and local link validation |
-| lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | yes | Clippy exit status |
+| lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Clippy exit status |
 | deny | `make deny` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Cargo advisory, source, license, and bans audit |
 | test-unit | `make test-unit` | lint | native | [Pr, Ci, Nightly, Preflight] | 900 | yes | native unit, integration, and doctest results |
 | coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 3600 | yes | LCOV production-line thresholds and JSON report |

@@ -20,36 +20,41 @@ fn heavy_is_optional_and_defaults_to_light() {
 
 #[test]
 fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
-    let heavy: BTreeSet<_> = registry()
+    // The whole set, so dropping any one flag fails here.
+    let registry = registry();
+    let heavy: BTreeSet<_> = registry
         .gates
         .iter()
         .filter(|gate| gate.heavy)
-        .map(|gate| gate.id.clone())
+        .map(|gate| gate.id.as_str())
         .collect();
-    for id in [
-        "lint",
+    let expected: BTreeSet<&str> = [
+        "build-wasm",
+        "coverage",
+        "fuzz-nightly",
+        "fuzz-smoke",
+        "mutation-nightly",
+        "perf-ci",
+        "perf-full",
+        "perf-instructions",
+        "perf-pressure",
+        "perf-smoke",
+        "perf-soak-10",
+        "perf-soak-30",
+        "perf-stress",
+        "perf-timing",
+        "release-build",
+        "test-e2e",
         "test-unit",
         "test-wasm",
-        "test-e2e",
-        "coverage",
-        "mutation-nightly",
-        "perf-smoke",
-    ] {
-        assert!(
-            heavy.contains(id),
-            "{id} compiles or runs the workspace's tests"
-        );
-    }
-    for id in [
-        "fmt-check",
-        "structure-check",
-        "test-placement",
-        "architecture-check",
-        "docs-check",
-        "deny",
-        "browser-check",
-    ] {
-        assert!(!heavy.contains(id), "{id} is a cheap static gate");
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(heavy, expected);
+    // Static gates run in the Stop hook: they must never queue for a slot,
+    // or a busy machine would block a session from stopping.
+    for gate in registry.gates.iter().filter(|gate| gate.r#static) {
+        assert!(!gate.heavy, "{} is static and must not queue", gate.id);
     }
 }
 
