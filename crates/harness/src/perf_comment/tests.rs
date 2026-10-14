@@ -1,6 +1,6 @@
 //! Fixture artifact directories, rendered tables and the in-place comment
 //! arguments. All `gh` and download flows stay behind pure seams.
-use super::reports::{self, Report};
+use super::reports::{self, Report, WasmRule};
 use super::{comment_args, comment_id, epoch_seconds, format_duration, render};
 use std::{fs, path::Path};
 use tempfile::tempdir;
@@ -70,81 +70,254 @@ fn percentiles_are_nearest_rank() {
 }
 
 #[test]
-fn noise_band_is_ten_percent_from_the_committed_config() {
+fn noise_config_keeps_widening_and_run_count() {
     let noise = render::Noise::load().expect("noise.json");
-    assert_eq!(noise.percent(), 10);
-    assert!(!noise.moved(Some(100), Some(110)));
-    assert!(noise.moved(Some(100), Some(111)));
-    assert!(!noise.moved(Some(100), Some(90)));
-    assert!(noise.moved(Some(100), Some(89)));
-    assert!(noise.moved(Some(0), Some(1)));
-    assert!(!noise.moved(Some(5), Some(5)));
-    assert!(!noise.moved(None, Some(5)));
+    assert_eq!(noise.widening_percent(), 25);
+    assert_eq!(noise.dev_runs(), 5);
 }
 
 #[test]
-fn deterministic_rows_always_and_timing_only_beyond_the_band() {
-    let dir = tempdir().expect("directory");
-    let dev = dir.path().join("dev");
-    let pr = dir.path().join("pr");
-    fixture(
-        &dev,
-        &[
-            ("smoke", vec![1000, 1000, 1000, 1000]),
-            ("target-hotspot", vec![1000, 1000, 1000, 1000]),
-        ],
-        &[("simulation::advance", 100)],
-        1000,
-        100,
-        Some((vec![1000; 10], 5, 0)),
+fn the_band_is_devs_range_widened_by_a_quarter() {
+    let noise = render::Noise::load().expect("noise.json");
+    // A real range widens at both ends.
+    assert_eq!(
+        noise.band(&[1000, 900, 1100, 1000, 1000]),
+        Some((850.0, 1150.0))
     );
+    // Equal values have an empty range: the median widens instead.
+    assert_eq!(noise.band(&[1000, 1000, 1000]), Some((750.0, 1250.0)));
+    assert_eq!(noise.band(&[700, 700]), Some((525.0, 875.0)));
+    assert_eq!(noise.band(&[]), None);
+}
+
+#[test]
+fn timing_rows_come_from_devs_own_band() {
+    let dir = tempdir().expect("directory");
+    let mut devs = Vec::new();
+    for (i, hotspot) in [1000u64, 900, 1100, 1000, 1000].into_iter().enumerate() {
+        let path = dir.path().join(format!("dev-{i}"));
+        fixture(
+            &path,
+            &[
+                ("smoke", vec![1000; 4]),
+                ("target-hotspot", vec![hotspot; 4]),
+            ],
+            &[("simulation::advance", 100)],
+            1000,
+            100,
+            Some((vec![1000; 10], 5, 0)),
+        );
+        devs.push((100 + i as u64, read(&path)));
+    }
+    let pr_path = dir.path().join("pr");
     fixture(
-        &pr,
-        &[
-            ("smoke", vec![1050, 1050, 1050, 1050]),
-            ("target-hotspot", vec![800, 800, 800, 800]),
-        ],
+        &pr_path,
+        &[("smoke", vec![1300; 4]), ("target-hotspot", vec![1140; 4])],
         &[("simulation::advance", 100)],
         1100,
         120,
-        Some((vec![2000; 10], 5, 1)),
+        Some((vec![2400; 10], 5, 2)),
     );
     let noise = render::Noise::load().expect("noise.json");
     let comment = render::comment(render::Input {
         repository: "o/r",
         run: 1,
-        dev_run: Some(2),
-        dev: Some(&read(&dev)),
-        pr: Some(&read(&pr)),
+        devs: &devs,
+        pr: Some(&read(&pr_path)),
         jobs: &[],
-        cap: Some(150),
+        wasm: Some(WasmRule {
+            baseline: 150,
+            cap: 158,
+        }),
         noise: &noise,
     });
     assert!(comment.starts_with(render::MARKER));
-    // Deterministic rows: absolute values, the change, and the cap.
+    // Deterministic rows: absolute values, the change, baseline and cap.
     assert!(
         comment.contains(
             "| Optimized WASM raw (bytes) | 1000 | 1100 | +100 (+10.0%) | deterministic |"
         )
     );
     assert!(comment.contains(
-        "| Optimized WASM gzip (bytes) | 100 | 120 | +20 (+20.0%) | deterministic; cap 150 |"
+        "| Optimized WASM gzip (bytes) | 100 | 120 | +20 (+20.0%) | deterministic; baseline 150, cap 158 |"
     ));
     assert!(comment.contains(
         "| Instructions: simulation::advance | 100 | 100 | +0 (+0.0%) | deterministic |"
     ));
-    // Timing rows: −20% and +100% show, +5% and the unchanged backlog hide.
+    // Shown: outside dev's own band. Smoke spans [750, 1250]; the pressure
+    // latency and the missed deadlines leave their bands by far.
+    assert!(
+        comment.contains(
+            "| Tick p50, smoke (ns) | 1000 | 1300 | +300 (+30.0%) | timing, noisy runner |"
+        )
+    );
+    // The nearest-rank p95 of the same samples is their maximum, so it sits
+    // outside the same band and shows too.
+    assert!(
+        comment.contains(
+            "| Tick p95, smoke (ns) | 1000 | 1300 | +300 (+30.0%) | timing, noisy runner |"
+        )
+    );
     assert!(comment.contains(
-        "| Tick p50, target-hotspot (ns) | 1000 | 800 | −200 (−20.0%) | timing, noisy runner |"
-    ));
-    assert!(comment.contains(
-        "| Pressure snapshot latency p50 (µs) | 1000 | 2000 | +1000 (+100.0%) | timing, noisy runner |"
+        "| Pressure snapshot latency p50 (µs) | 1000 | 2400 | +1400 (+140.0%) | timing, noisy runner |"
     ));
     assert!(
-        comment.contains("| Pressure missed offer deadlines | 0 | 1 | +1 | timing, noisy runner |")
+        comment.contains("| Pressure missed offer deadlines | 0 | 2 | +2 | timing, noisy runner |")
     );
-    assert!(!comment.contains("Tick p50, smoke"));
+    // Hidden: inside dev's own band, even when they moved against the newest
+    // dev run. target-hotspot spans [850, 1150], so p50 1140 and p95 1140 stay quiet.
+    assert!(!comment.contains("Tick p50, target-hotspot"));
+    assert!(!comment.contains("Tick p95, target-hotspot"));
     assert!(!comment.contains("max response backlog |"));
+    // The band is described, and unchanged instruction counts say why the
+    // shown timing differences mean nothing.
+    assert!(comment.contains("across its last 5 successful runs"));
+    assert!(comment.contains("widened by 25% of that range"));
+    assert!(
+        comment.contains(
+            "instruction counts unchanged: timing differences are most likely runner noise"
+        )
+    );
+}
+
+#[test]
+fn fewer_than_three_dev_reports_hide_all_timings_with_the_note() {
+    let dir = tempdir().expect("directory");
+    let mut devs = Vec::new();
+    for i in 0..2 {
+        let path = dir.path().join(format!("dev-{i}"));
+        fixture(
+            &path,
+            &[("smoke", vec![1000; 4])],
+            &[("simulation::advance", 100)],
+            1000,
+            100,
+            Some((vec![1000; 10], 5, 0)),
+        );
+        devs.push((10 + i as u64, read(&path)));
+    }
+    let pr_path = dir.path().join("pr");
+    fixture(
+        &pr_path,
+        &[("smoke", vec![2000; 4])],
+        &[("simulation::advance", 100)],
+        1000,
+        100,
+        Some((vec![2000; 10], 5, 3)),
+    );
+    let noise = render::Noise::load().expect("noise.json");
+    let comment = render::comment(render::Input {
+        repository: "o/r",
+        run: 1,
+        devs: &devs,
+        pr: Some(&read(&pr_path)),
+        jobs: &[],
+        wasm: None,
+        noise: &noise,
+    });
+    // Deterministic rows survive …
+    assert!(comment.contains(
+        "| Instructions: simulation::advance | 100 | 100 | +0 (+0.0%) | deterministic |"
+    ));
+    // … but no timing row appears, however large the gap, and the comment
+    // says why. The instruction line still holds: the measured paths did not
+    // change, whatever the hidden timings did.
+    assert!(!comment.contains("timing, noisy runner"));
+    assert!(comment.contains("No timing rows: only 2 successful `dev` runs"));
+    assert!(comment.contains("needs at least 3"));
+    assert!(
+        comment.contains(
+            "instruction counts unchanged: timing differences are most likely runner noise"
+        )
+    );
+}
+
+#[test]
+fn changed_instruction_counts_silence_the_unchanged_line() {
+    let dir = tempdir().expect("directory");
+    let mut devs = Vec::new();
+    for i in 0..3 {
+        let path = dir.path().join(format!("dev-{i}"));
+        fixture(
+            &path,
+            &[("smoke", vec![1000; 4])],
+            &[("simulation::advance", 100)],
+            1000,
+            100,
+            None,
+        );
+        devs.push((10 + i as u64, read(&path)));
+    }
+    let pr_path = dir.path().join("pr");
+    fixture(
+        &pr_path,
+        &[("smoke", vec![1000; 4])],
+        &[("simulation::advance", 101)],
+        1000,
+        100,
+        None,
+    );
+    let noise = render::Noise::load().expect("noise.json");
+    let comment = render::comment(render::Input {
+        repository: "o/r",
+        run: 1,
+        devs: &devs,
+        pr: Some(&read(&pr_path)),
+        jobs: &[],
+        wasm: None,
+        noise: &noise,
+    });
+    assert!(comment.contains(
+        "| Instructions: simulation::advance | 100 | 101 | +1 (+1.0%) | deterministic |"
+    ));
+    assert!(!comment.contains("instruction counts unchanged"));
+}
+
+#[test]
+fn the_wasm_note_marks_only_values_over_the_cap() {
+    let dir = tempdir().expect("directory");
+    let mut devs = Vec::new();
+    for i in 0..3 {
+        let path = dir.path().join(format!("dev-{i}"));
+        fixture(&path, &[("smoke", vec![1000; 4])], &[], 1000, 100, None);
+        devs.push((10 + i as u64, read(&path)));
+    }
+    let noise = render::Noise::load().expect("noise.json");
+    let at_cap = dir.path().join("at-cap");
+    fixture(&at_cap, &[], &[], 1000, 158, None);
+    let comment = render::comment(render::Input {
+        repository: "o/r",
+        run: 1,
+        devs: &devs,
+        pr: Some(&read(&at_cap)),
+        jobs: &[],
+        wasm: Some(WasmRule {
+            baseline: 150,
+            cap: 158,
+        }),
+        noise: &noise,
+    });
+    assert!(comment.contains(
+        "| Optimized WASM gzip (bytes) | 100 | 158 | +58 (+58.0%) | deterministic; baseline 150, cap 158 |"
+    ));
+    assert!(!comment.contains("PR over cap"));
+    let over_cap = dir.path().join("over-cap");
+    fixture(&over_cap, &[], &[], 1000, 159, None);
+    let comment = render::comment(render::Input {
+        repository: "o/r",
+        run: 1,
+        devs: &devs,
+        pr: Some(&read(&over_cap)),
+        jobs: &[],
+        wasm: Some(WasmRule {
+            baseline: 150,
+            cap: 158,
+        }),
+        noise: &noise,
+    });
+    assert!(comment.contains(
+        "| Optimized WASM gzip (bytes) | 100 | 159 | +59 (+59.0%) | deterministic; baseline 150, cap 158; PR over cap |"
+    ));
 }
 
 #[test]
@@ -156,11 +329,10 @@ fn missing_dev_report_says_so_instead_of_failing() {
     let comment = render::comment(render::Input {
         repository: "o/r",
         run: 1,
-        dev_run: None,
-        dev: None,
+        devs: &[],
         pr: Some(&read(&pr)),
         jobs: &[],
-        cap: None,
+        wasm: None,
         noise: &noise,
     });
     assert!(comment.contains("dev` run uploaded a `performance-report`"));
@@ -171,6 +343,7 @@ fn missing_dev_report_says_so_instead_of_failing() {
         comment
             .contains("| Optimized WASM gzip (bytes) | — | 10 | — | deterministic; cap unknown |")
     );
+    assert!(comment.contains("No timing rows: only 0 successful `dev` runs"));
 }
 
 #[test]
@@ -179,8 +352,7 @@ fn missing_pr_artifact_is_stated_and_job_durations_render() {
     let comment = render::comment(render::Input {
         repository: "o/r",
         run: 5,
-        dev_run: Some(2),
-        dev: None,
+        devs: &[(2, fixture_report())],
         pr: None,
         jobs: &[
             super::Job {
@@ -199,7 +371,7 @@ fn missing_pr_artifact_is_stated_and_job_durations_render() {
                 seconds: Some(5),
             },
         ],
-        cap: None,
+        wasm: None,
         noise: &noise,
     });
     assert!(comment.contains("uploaded no `performance-report` artifact"));
@@ -208,6 +380,21 @@ fn missing_pr_artifact_is_stated_and_job_durations_render() {
     assert!(!comment.contains("native-coverage"));
     assert!(comment.contains("**Not measured here:** real frame rate"));
     assert!(!comment.contains("| Metric |"));
+}
+
+/// One fixture dev report, for inputs that only need the dev side to exist.
+/// The parsed `Report` owns its data, so the temporary directory may go.
+fn fixture_report() -> Report {
+    let dir = tempdir().expect("directory");
+    fixture(
+        &dir.path().join("dev"),
+        &[("smoke", vec![1000; 4])],
+        &[],
+        10,
+        10,
+        None,
+    );
+    read(&dir.path().join("dev"))
 }
 
 #[test]
@@ -254,7 +441,7 @@ fn run_job_wall_time_uses_timestamps_across_fields() {
 }
 
 #[test]
-fn a_report_without_the_core_file_is_refused() {
+fn a_report_without_the_core_file_is_refused_and_the_rule_computes_its_cap() {
     let dir = tempdir().expect("directory");
     assert!(reports::read(dir.path()).is_err());
     let cap = dir.path().join("cap.json");
@@ -263,6 +450,10 @@ fn a_report_without_the_core_file_is_refused() {
         serde_json::json!({"version": 1, "optimized_gzip_bytes": 150}).to_string(),
     )
     .expect("baseline");
-    assert_eq!(reports::wasm_cap_at(&cap), Some(150));
-    assert_eq!(reports::wasm_cap_at(&dir.path().join("gone.json")), None);
+    let rule = reports::wasm_rule_at(&cap).expect("rule");
+    assert_eq!(rule.baseline, 150);
+    // The cap is the gate's own rule: the smallest value it calls a
+    // regression (150 * 1.05 = 157.5, so 158).
+    assert_eq!(rule.cap, 158);
+    assert_eq!(reports::wasm_rule_at(&dir.path().join("gone.json")), None);
 }

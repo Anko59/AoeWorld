@@ -82,9 +82,15 @@ fn report_of(root: &Path, repo: &str, run: u64, scratch: &Path) -> Option<Report
     reports::read(&dir).ok()
 }
 
-/// The latest successful `dev` run of the CI workflow that uploaded the
-/// artifact. Missing or expired artifacts fall through to earlier runs.
-fn dev_report(root: &Path, repo: &str, scratch: &Path) -> Result<Option<(u64, Report)>> {
+/// The successful `dev` runs of the CI workflow that uploaded the artifact,
+/// newest first, at most `limit` of them. Missing or expired artifacts fall
+/// through to earlier runs; cancelled runs crowd the list.
+fn dev_reports(
+    root: &Path,
+    repo: &str,
+    scratch: &Path,
+    limit: usize,
+) -> Result<Vec<(u64, Report)>> {
     let ids = gh_text(
         root,
         &[
@@ -104,15 +110,19 @@ fn dev_report(root: &Path, repo: &str, scratch: &Path) -> Result<Option<(u64, Re
             ".[] | select(.conclusion == \"success\") | .databaseId",
         ],
     )?;
+    let mut reports = Vec::new();
     for id in ids.lines() {
+        if reports.len() >= limit {
+            break;
+        }
         let Ok(run) = id.trim().parse::<u64>() else {
             continue;
         };
         if let Some(report) = report_of(root, repo, run, scratch) {
-            return Ok(Some((run, report)));
+            reports.push((run, report));
         }
     }
-    Ok(None)
+    Ok(reports)
 }
 
 /// Whole seconds between two RFC 3339 timestamps (`…Z`).
@@ -270,18 +280,17 @@ pub(crate) fn run() -> Result<()> {
     let repo = git::origin_repository(root)?;
     let scratch = tempfile::tempdir().map_err(|error| format!("temporary directory: {error}"))?;
     let pr_report = report_of(root, &repo, run, scratch.path());
-    let dev = dev_report(root, &repo, scratch.path())?;
-    let job_list = jobs(root, &repo, run)?;
-    let cap = reports::wasm_cap_at(Path::new("baselines/perf/wasm.json"));
     let noise = Noise::load()?;
+    let devs = dev_reports(root, &repo, scratch.path(), noise.dev_runs())?;
+    let job_list = jobs(root, &repo, run)?;
+    let wasm = reports::wasm_rule_at(Path::new("baselines/perf/wasm.json"));
     let body = render::comment(render::Input {
         repository: &repo,
         run,
-        dev_run: dev.as_ref().map(|(run, _)| *run),
-        dev: dev.as_ref().map(|(_, report)| report),
+        devs: &devs,
         pr: pr_report.as_ref(),
         jobs: &job_list,
-        cap,
+        wasm,
         noise: &noise,
     });
     if print {

@@ -133,9 +133,16 @@ pub(crate) fn read(dir: &Path) -> Result<Report, String> {
     })
 }
 
-/// The WASM size cap the pull request's own gate compares against
-/// (`baselines/perf/wasm.json` of the checked-out revision).
-pub(crate) fn wasm_cap_at(path: &Path) -> Option<u64> {
+/// The WASM size rule the pull request's own gate applies: the baseline in
+/// `baselines/perf/wasm.json` of the checked-out revision and the cap the
+/// gate's comparison threshold derives from it.
+#[derive(Debug, PartialEq)]
+pub(crate) struct WasmRule {
+    pub(crate) baseline: u64,
+    pub(crate) cap: u64,
+}
+
+pub(crate) fn wasm_rule_at(path: &Path) -> Option<WasmRule> {
     #[derive(Deserialize)]
     struct Baseline {
         optimized_gzip_bytes: u64,
@@ -143,5 +150,8 @@ pub(crate) fn wasm_cap_at(path: &Path) -> Option<u64> {
     let bytes = fs::read(path).ok()?;
     serde_json::from_slice::<Baseline>(&bytes)
         .ok()
-        .map(|baseline| baseline.optimized_gzip_bytes)
+        .map(|baseline| WasmRule {
+            baseline: baseline.optimized_gzip_bytes,
+            cap: crate::perf::regression_floor(baseline.optimized_gzip_bytes),
+        })
 }
