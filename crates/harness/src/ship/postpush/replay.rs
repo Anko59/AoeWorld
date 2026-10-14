@@ -53,20 +53,7 @@ pub(super) fn conflicting_files(
     let base = fetch(root, &format!("refs/heads/{BASE}"))?;
     let fork = git::git(root, &["merge-base", &base, &head])?;
     let worktree = Worktree::create(root, &head)?;
-    let replay = Command::new("git")
-        .arg("-C")
-        .arg(&worktree.path)
-        .args([
-            "rebase",
-            "--no-autostash",
-            "--no-autosquash",
-            "--no-rebase-merges",
-            "--onto",
-            &base,
-            &fork,
-        ])
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output()?;
+    let replay = replay_command(&worktree.path, &base, &fork).output()?;
     if replay.status.success() {
         return Ok(Vec::new());
     }
@@ -96,4 +83,27 @@ pub(super) fn conflicting_files(
         .into());
     }
     Ok(files)
+}
+
+/// The local replay of a pull request's commits onto the base. Replaying
+/// creates commits, so it carries its own committer identity: a fresh CI
+/// runner has none configured and would stop before the conflicting commit.
+pub(super) fn replay_command(worktree: &Path, base: &str, fork: &str) -> Command {
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(worktree)
+        .args([
+            "rebase",
+            "--no-autostash",
+            "--no-autosquash",
+            "--no-rebase-merges",
+            "--onto",
+            base,
+            fork,
+        ])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_COMMITTER_NAME", "aoe-harness conflict check")
+        .env("GIT_COMMITTER_EMAIL", "aoe-harness@localhost");
+    command
 }

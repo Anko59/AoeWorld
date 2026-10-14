@@ -245,3 +245,62 @@ fn a_non_conflict_local_replay_failure_is_explained_in_the_comment() {
         before
     );
 }
+
+#[test]
+fn the_conflict_replay_needs_no_configured_committer_identity() {
+    // A fresh CI runner has no user.name/user.email: the replay must still
+    // create the first commit and stop at the one that conflicts.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["-c", "user.name=setup", "-c", "user.email=setup@localhost"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    };
+    std::fs::create_dir_all(&root).unwrap();
+    git(&["init", "-q", "-b", "dev"]);
+    std::fs::write(root.join("f.txt"), "a\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "base"]);
+    let fork = git(&["rev-parse", "HEAD"]);
+    git(&["checkout", "-qb", "feature"]);
+    std::fs::write(root.join("g.txt"), "new\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "adds g"]);
+    std::fs::write(root.join("f.txt"), "c\n").unwrap();
+    git(&["commit", "-qam", "changes f"]);
+    git(&["checkout", "-q", "dev"]);
+    std::fs::write(root.join("f.txt"), "b\n").unwrap();
+    git(&["commit", "-qam", "dev changes f"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    git(&["checkout", "-q", "feature"]);
+    let mut replay = super::super::replay::replay_command(&root, &base, &fork);
+    let replay = replay
+        .env("HOME", &home)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env_remove("GIT_AUTHOR_NAME")
+        .env_remove("GIT_AUTHOR_EMAIL")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&replay.stderr);
+    assert!(!replay.status.success(), "the second commit conflicts");
+    assert!(!stderr.contains("identity unknown"), "{stderr}");
+    let unmerged = git(&["diff", "--name-only", "--diff-filter=U"]);
+    assert_eq!(
+        unmerged, "f.txt",
+        "the replay reached the conflicting commit"
+    );
+}
