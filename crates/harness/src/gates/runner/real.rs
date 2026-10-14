@@ -249,14 +249,32 @@ fn make_fixed(
             }),
         };
     };
+    // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
+    // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
+    let slot = match crate::slots::hold_snapshot(root.path(), source, gate.as_str()) {
+        Ok(slot) => slot,
+        Err(error) => {
+            return Receipt {
+                exit: Exit::StartError,
+                reason: error.to_string(),
+                log: None,
+                triage: Some(triage::CommandObservation::NotStarted {
+                    reason: triage::Precondition::PreconditionUnavailable,
+                }),
+            };
+        }
+    };
+    let slot_env = slot.env();
+    let mut environment = vec![
+        ("HARNESS_CARGO_CACHE", cargo),
+        ("HARNESS_TARGET_CACHE", target),
+    ];
+    environment.extend(slot_env.iter().map(|(name, value)| (*name, value.as_str())));
     let captured: process::Captured = process::capture_in(
         root.path(),
         "make",
         &["--", gate.as_str()],
-        &[
-            ("HARNESS_CARGO_CACHE", cargo),
-            ("HARNESS_TARGET_CACHE", target),
-        ],
+        &environment,
         deadline,
         cancellation,
     );

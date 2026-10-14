@@ -1,0 +1,285 @@
+//! Audits of the Makefile and make/*.mk, so a new recipe cannot forget the heavy slot: every
+//! container that a recipe starts forwards `AOE_HEAVY_SLOT` (through `$(HEAVY_ENV)`), and every
+//! gate whose recipe runs a container outside a harness command runs under the slot wrapper.
+use crate::gates::registry::Registry;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+};
+
+const FORWARDS: &str = "$(HEAVY_ENV)";
+
+fn repository() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// The Makefile and every make/*.mk, by repository-relative name and text.
+fn make_files(root: &Path) -> Vec<(String, String)> {
+    let mut names = vec!["Makefile".to_owned()];
+    for entry in fs::read_dir(root.join("make")).expect("make/") {
+        let name = entry.expect("entry").file_name();
+        let name = name.to_string_lossy();
+        if name.ends_with(".mk") {
+            names.push(format!("make/{name}"));
+        }
+    }
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| {
+            let text = fs::read_to_string(root.join(&name)).expect(&name);
+            (name, text)
+        })
+        .collect()
+}
+
+/// The variable a definition line assigns (`NAME :=`, `NAME =`, `NAME ?=`, `override NAME =`).
+fn assigned(line: &str) -> Option<&str> {
+    let line = line.strip_prefix("override ").unwrap_or(line);
+    let name = line
+        .split(|c: char| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
+        .next()?;
+    let rest = line[name.len()..].trim_start();
+    let assigns = rest.starts_with(":=") || rest.starts_with('=') || rest.starts_with("?=");
+    (!name.is_empty() && assigns).then_some(name)
+}
+
+/// The variables whose definition has `seed` in it, or refers to one that does (a closure).
+fn variables_reaching(texts: &str, seed: &str) -> BTreeSet<String> {
+    let definitions: Vec<(&str, &str)> = texts
+        .lines()
+        .filter_map(|line| Some((assigned(line)?, line)))
+        .collect();
+    let mut found = BTreeSet::new();
+    loop {
+        let before = found.len();
+        for (name, line) in &definitions {
+            let refers = found
+                .iter()
+                .any(|other| line.contains(&format!("$({other})")));
+            if line.contains(seed) || refers {
+                found.insert((*name).to_owned());
+            }
+        }
+        if found.len() == before {
+            return found;
+        }
+    }
+}
+
+fn refers(line: &str, variables: &BTreeSet<String>) -> bool {
+    variables
+        .iter()
+        .any(|name| line.contains(&format!("$({name})")))
+}
+
+fn joined(files: &[(String, String)]) -> String {
+    files
+        .iter()
+        .map(|(_, text)| text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Container lines (a literal `docker run`, or a variable that holds one) that do not forward
+/// the heavy slot, as `file:line: text`.
+fn unforwarded(files: &[(String, String)]) -> Vec<String> {
+    let all = joined(files);
+    let forwarding = variables_reaching(&all, FORWARDS);
+    let containers = variables_reaching(&all, "docker run");
+    let mut gaps = Vec::new();
+    for (name, text) in files {
+        for (number, line) in text.lines().enumerate() {
+            if line.trim_start().starts_with('#') {
+                continue;
+            }
+            let container = line.contains("docker run") || refers(line, &containers);
+            if container && !line.contains(FORWARDS) && !refers(line, &forwarding) {
+                gaps.push(format!("{name}:{}: {}", number + 1, line.trim()));
+            }
+        }
+    }
+    gaps
+}
+
+/// The recipe lines of `target`: the tab-indented lines after its rule, in the first file that has it.
+fn recipe<'a>(files: &'a [(String, String)], target: &str) -> Option<Vec<&'a str>> {
+    for (_, text) in files {
+        let lines: Vec<&str> = text.lines().collect();
+        let Some(at) = lines.iter().position(|line| is_rule_for(line, target)) else {
+            continue;
+        };
+        return Some(
+            lines[at + 1..]
+                .iter()
+                .take_while(|line| line.starts_with('\t'))
+                .copied()
+                .collect(),
+        );
+    }
+    None
+}
+
+fn is_rule_for(line: &str, target: &str) -> bool {
+    !line.starts_with(['\t', '#', '.'])
+        && !line.contains(":=")
+        && line
+            .split_once(':')
+            .is_some_and(|(name, _)| name.trim() == target)
+}
+
+#[test]
+fn every_container_a_recipe_starts_forwards_the_heavy_slot() {
+    let gaps = unforwarded(&make_files(&repository()));
+    assert!(gaps.is_empty(), "these do not forward the slot:\n{gaps:#?}");
+}
+
+#[test]
+fn the_forwarding_audit_catches_a_container_that_drops_the_slot() {
+    let files = [(
+        "Makefile".to_owned(),
+        [
+            "HEAVY_ENV := -e AOE_HEAVY_SLOT",
+            "DOCKER_RUN := docker run $(HEAVY_ENV) img",
+            "BROWSER := docker run img",
+            "lint:",
+            "\t@$(DOCKER_RUN) cargo test",
+            "\t@docker run --rm img cargo test",
+            "\t@$(BROWSER) npm test",
+            "\t@mkdir -p reports",
+        ]
+        .join("\n"),
+    )];
+    let gaps = unforwarded(&files);
+    assert_eq!(gaps.len(), 3, "{gaps:#?}");
+    assert!(gaps[0].starts_with("Makefile:3:"), "{gaps:#?}");
+    assert!(gaps[1].starts_with("Makefile:6:"), "{gaps:#?}");
+    assert!(gaps[2].starts_with("Makefile:7:"), "{gaps:#?}");
+}
+
+#[test]
+fn a_gate_that_runs_containers_outside_a_harness_command_runs_under_the_slot() {
+    let root = repository();
+    let registry = Registry::load(&root).expect("the committed registry");
+    let files = make_files(&root);
+    let containers = variables_reaching(&joined(&files), "docker run");
+    let mut problems = Vec::new();
+    for gate in registry.gates.iter().filter(|gate| !gate.r#static) {
+        let Some(target) = gate.command.strip_prefix("make ") else {
+            problems.push(format!("{}: its command is not a make target", gate.id));
+            continue;
+        };
+        let Some(lines) = recipe(&files, target) else {
+            problems.push(format!("{target}: no make target of that name"));
+            continue;
+        };
+        let bare = lines.iter().any(|line| {
+            (line.contains("docker run") || refers(line, &containers))
+                && !line.contains("aoe-harness")
+                && !line.contains("crates/harness/Cargo.toml")
+        });
+        let wrapped = lines
+            .iter()
+            .any(|line| line.contains(&format!("$(SLOT_RUN) {target} -- ")));
+        if bare && !wrapped {
+            problems.push(format!(
+                "{target}: a container runs outside any harness command; run the steps as `$(SLOT_RUN) {target} -- make {target}-steps`"
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// Each variable's definition line, by name (the first definition wins).
+fn definitions(files: &[(String, String)]) -> BTreeMap<String, String> {
+    let mut found = BTreeMap::new();
+    for (_, text) in files {
+        for line in text.lines() {
+            if let Some(name) = assigned(line) {
+                found
+                    .entry(name.to_owned())
+                    .or_insert_with(|| line.to_owned());
+            }
+        }
+    }
+    found
+}
+
+/// The upper-case variables a line references as `$(NAME)`.
+fn references(line: &str) -> Vec<String> {
+    line.split("$(")
+        .skip(1)
+        .filter_map(|rest| {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || *c == '_')
+                .collect();
+            (!name.is_empty() && rest[name.len()..].starts_with(')')).then_some(name)
+        })
+        .collect()
+}
+
+/// What the lines pass into containers (`-e NAME`) and what make reads from the environment
+/// (a referenced variable that no makefile defines), through every variable they reach.
+fn environment_read(
+    lines: &[&str],
+    definitions: &BTreeMap<String, String>,
+) -> (BTreeSet<String>, BTreeSet<String>) {
+    let (mut forwarded, mut read, mut seen) = (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let mut pending: Vec<String> = lines.iter().map(|line| (*line).to_owned()).collect();
+    while let Some(text) = pending.pop() {
+        for pair in text.split_whitespace().collect::<Vec<_>>().windows(2) {
+            if pair[0] == "-e" && !pair[1].contains('=') {
+                forwarded.insert(pair[1].to_owned());
+            }
+        }
+        for name in references(&text) {
+            match definitions.get(&name) {
+                Some(definition) if seen.insert(name.clone()) => pending.push(definition.clone()),
+                Some(_) => {}
+                None => {
+                    read.insert(name);
+                }
+            }
+        }
+    }
+    (forwarded, read)
+}
+
+#[test]
+fn the_slot_wrapper_passes_every_environment_variable_its_steps_read() {
+    let files = make_files(&repository());
+    let definitions = definitions(&files);
+    let wrapper = definitions.get("SLOT_RUN").expect("SLOT_RUN is defined");
+    let (provided, _) = environment_read(&[wrapper.as_str()], &definitions);
+    let mut steps = Vec::new();
+    for target in steps_targets(&files) {
+        steps.extend(recipe(&files, &target).expect("a steps target has a recipe"));
+    }
+    assert!(!steps.is_empty(), "the wrapped gates have steps");
+    let (forwarded, read) = environment_read(&steps, &definitions);
+    let missing: BTreeSet<String> = forwarded
+        .union(&read)
+        .filter(|name| !provided.contains(*name))
+        .cloned()
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "SLOT_RUN does not pass these to the steps (add them to SLOT_ENV): {missing:?}"
+    );
+}
+
+/// The `<target>-steps` targets the slot wrapper runs.
+fn steps_targets(files: &[(String, String)]) -> Vec<String> {
+    let mut targets: Vec<String> = files
+        .iter()
+        .flat_map(|(_, text)| text.lines())
+        .filter(|line| !line.starts_with(['\t', '#', '.']) && !line.contains(":="))
+        .filter_map(|line| line.split_once(':').map(|(name, _)| name.trim().to_owned()))
+        .filter(|name| name.ends_with("-steps"))
+        .collect();
+    targets.sort();
+    targets.dedup();
+    targets
+}

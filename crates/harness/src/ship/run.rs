@@ -65,8 +65,22 @@ pub(crate) fn run_gates(root: &Path, gates: &[&Gate]) -> Vec<GateResult> {
 }
 
 fn run_one(root: &Path, gate: &Gate) -> GateResult {
+    // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
+    let slot = match crate::slots::hold(root, &gate.id) {
+        Ok(slot) => slot,
+        Err(error) => {
+            return GateResult {
+                gate: gate.id.clone(),
+                verdict: GateVerdict::Unavailable,
+                seconds: 0.0,
+                summary: error.to_string(),
+                tail: String::new(),
+            };
+        }
+    };
     let mut command = Command::new("sh");
     command.arg("-c").arg(&gate.command).current_dir(root);
+    command.envs(slot.env());
     let captured = capture_command(
         command,
         Duration::from_secs(u64::from(gate.budget_s)),

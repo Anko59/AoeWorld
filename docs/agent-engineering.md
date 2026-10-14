@@ -50,3 +50,14 @@ an assurance that old hostile PASS bytes were erased. Neither capture metadata,
 hashes, modes, coding/Docker UID, nor fixture mocks authenticate a restricted
 worker, controller, publisher, hidden verdict, approval, runtime QA, or served
 build. Qualification and authorization remain independent required planes.
+
+## Heavy gates queue
+
+Gates that compile or run the workspace's tests (`lint`, `test-unit`,
+`test-wasm`, `test-e2e`, coverage, mutation, perf; the `heavy` flag in
+`gates/registry.json`) take one of two machine-wide slots and queue first come,
+first served, so many agents on one machine no longer push each other past their
+deadlines ([gates](gates.md)). Do not wait for the load to fall by hand, and
+never scan processes to decide when to start: run the target and let it queue.
+Its deadline starts when it runs. `make load-status` shows the holders; a
+queue that outlasts `AOE_HEAVY_WAIT_MINUTES` fails with the holders named.

@@ -26,7 +26,7 @@ fn parse(bytes: &[u8]) -> Result<Registry, Box<dyn Error>> {
 }
 
 fn table(registry: &Registry) -> String {
-    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.\n\n| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Evidence |\n|---|---|---|---|---|---|---|\n".to_owned();
+    let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.\n\n**Heavy slots.** A gate marked `heavy` compiles or runs the workspace's tests, browsers or benchmarks. It takes one machine-wide slot for its whole run (all worktrees of the repository share `<git common dir>/aoe-ship/heavy-slots/`): two at a time by default (`gates/heavy.json`; `AOE_HEAVY_SLOTS=1..8` overrides), the rest queue first come, first served. The deadline counts from when the gate starts running, never from the wait; waiting prints `heavy slot: waiting for <command> in <worktree> (position N)` and a line every 5 minutes, and gives up after `AOE_HEAVY_WAIT_MINUTES` (default 90) with an error naming the holders. Which gates are heavy is the registry's `heavy` flag, and a harness command takes the slot of the gate whose make target has its name. A holder passes its slot to its children in `AOE_HEAVY_SLOT`, and the shared directory in `AOE_HEAVY_DIR` (checked against its live ticket, so a hand-set value is ignored), so `preflight` running `test-unit` takes one slot, not two. Every container a recipe starts forwards both (`HEAVY_ENV` in the Makefile, enforced by an audit test). A heavy gate whose recipe is not one harness command (`build-wasm`, `coverage`, `test-e2e`, the perf targets) runs its `<target>-steps` in the orchestrator container under `aoe-harness slot`, so the slot is taken before its first step. A snapshot checkout queues in the real repository's directory, and a command outside every checkout has no heavy gate. Cheap static gates never queue. A dead holder frees its slot (an OS file lock, no PID files). `make load-status` (and `make ship-status`) list the holders and the queue.\n\n| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Heavy slot | Evidence |\n|---|---|---|---|---|---|---|---|\n".to_owned();
     for gate in &registry.gates {
         let requires = if gate.requires.is_empty() {
             "—".to_owned()
@@ -34,13 +34,14 @@ fn table(registry: &Registry) -> String {
             gate.requires.join(", ")
         };
         output.push_str(&format!(
-            "| {} | `{}` | {} | {} | {:?} | {} | {} |\n",
+            "| {} | `{}` | {} | {} | {:?} | {} | {} | {} |\n",
             gate.id,
             gate.command,
             requires,
             gate.suites.join(", "),
             gate.cadences,
             gate.budget_s,
+            if gate.heavy { "yes" } else { "—" },
             gate.evidence
         ));
     }

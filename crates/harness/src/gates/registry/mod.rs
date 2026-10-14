@@ -63,6 +63,10 @@ pub(crate) struct Gate {
     pub(crate) budget_s: u32,
     /// Describes the check; does NOT make it unconditional.
     pub(crate) r#static: bool,
+    /// Compiles or runs the workspace's tests, browsers or benchmarks: takes one machine-wide
+    /// heavy slot for its whole run and queues for it (docs/gates.md). Absent means light.
+    #[serde(default)]
+    pub(crate) heavy: bool,
     pub(crate) capabilities: Vec<Capability>,
     /// Failure/incompleteness blocks these cadences; runner must enforce later.
     pub(crate) blocks: Vec<Cadence>,
