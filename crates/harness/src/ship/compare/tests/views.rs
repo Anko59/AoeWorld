@@ -6,15 +6,11 @@ use crate::ship::compare::{
     Shot, compare_view,
     pixels::{Image, Rect},
     report::{self, Camera, Capture, Status},
+    settle::Sample,
 };
 
 fn camera(x: f64, zoom: f64) -> Camera {
-    Camera {
-        world: [512.0, 512.0],
-        x,
-        y: 200.0,
-        zoom,
-    }
+    Camera { x, y: 200.0, zoom }
 }
 
 fn shot(image: &Image, at: Camera) -> Shot {
@@ -22,7 +18,20 @@ fn shot(image: &Image, at: Camera) -> Shot {
         png: Some(image.encode().expect("encode")),
         capture: Capture {
             camera: Some(at),
-            chunks: Some(40),
+            history: vec![
+                Sample {
+                    at: 0,
+                    pending: 0,
+                    failed: 0,
+                    frame: 1,
+                },
+                Sample {
+                    at: 1500,
+                    pending: 0,
+                    failed: 0,
+                    frame: 3,
+                },
+            ],
             settle_ms: Some(2400),
             scene: Some(Rect {
                 x: 0,
@@ -220,9 +229,10 @@ fn the_table_has_one_row_per_view() {
 }
 
 #[test]
-fn cameras_are_the_same_view_within_half_a_tile_and_one_percent_zoom() {
+fn cameras_are_the_same_view_within_a_hundredth_of_a_tile_and_a_tenth_percent_zoom() {
+    // A fragment lands exactly: only float text may differ.
     let base = camera(100.0, 1.0);
-    assert!(base.same_view(&camera(100.4, 1.005)));
-    assert!(!base.same_view(&camera(100.6, 1.0)));
-    assert!(!base.same_view(&camera(100.0, 1.02)));
+    assert!(base.same_view(&camera(100.004, 1.0005)));
+    assert!(!base.same_view(&camera(100.02, 1.0)));
+    assert!(!base.same_view(&camera(100.0, 1.01)));
 }

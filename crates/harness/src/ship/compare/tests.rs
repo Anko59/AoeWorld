@@ -1,8 +1,11 @@
 use crate::ship::compare::bookmarks::Bookmarks;
 
 mod bookmarks;
+mod capture;
+mod packages;
 mod pixels;
 mod settings;
+mod settle;
 mod views;
 
 // Shared by the test modules.

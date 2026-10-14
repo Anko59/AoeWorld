@@ -1,12 +1,12 @@
-// Captures the views of one side of a comparison (plan.json, written by
-// `aoe-harness compare`): one browser, one session, the one app at plan.url.
-// The session is the gameplay controller of a server that only this run uses,
-// so there is no lease to wait out. For each view it places the camera, waits
-// until the frame is settled, then writes <name>.png and <name>.json (the
-// camera as read back, the scene rectangle and the HUD rectangles over it).
-// Everything the page must be asked sits behind `camera` and `settle` below: a
-// camera URL fragment or a "chunks loaded" attribute in the client would
-// replace those two objects and nothing else.
+// Captures the views of one side, one map and one renderer (plan.json, written
+// by `aoe-harness compare`). One browser page is a spectator of the one app at
+// plan.url, which has plan.map_hash open from its start (AOE_OPEN_MAP_PACKAGE):
+// no controller, no lease, no minimap clicks, no wheel. Each view is a camera
+// fragment (`#x=…&y=…&zoom=…&renderer=…`, web/navigation.js). The page is polled
+// until the settle rule holds (same rule as settle.rs: nothing pending or
+// failed and the frame unchanged for 1.5 s of polling), then the read back
+// camera, map and renderer and the scene rectangles go to <name>.json, and the
+// screenshot to <name>.png. The checks are in Rust (capture.rs).
 import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -18,127 +18,53 @@ const WEBGPU_ARGS = [
   "--ignore-gpu-blocklist", "--enable-gpu", "--enable-features=Vulkan",
   "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader", "--disable-vulkan-surface",
 ];
-const WEBGL2_ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
-const WHEEL_RATE = 0.0015; // crates/client/src/playground_controls.rs: zoom *= exp(-delta * rate)
-const TILE_TOLERANCE = 0.05;
-const ZOOM_TOLERANCE = 0.002;
+// The `browser-defaults` project's launch, and what `forceWebGl` does in
+// browser/tests/rendering/backends.ts: no navigator.gpu, so WebGL2 is the backend.
+const WEBGL2_ARGS = [];
+const CAMERA_TILES = 0.01;
+const CAMERA_ZOOM = 0.001;
 
 const errors = [];
-let inflight = 0;
 
-// --- the camera: read it, place it ------------------------------------------
-
-// `aoeNavigation.frame` receives the camera state every frame (navigation.js):
-// state[0..1] world size in tiles, [2..3] centre in tiles, [8] zoom.
-const camera = {
-  async instrument(page) {
-    await page.evaluate(() => {
-      const nav = window.aoeNavigation;
-      if (!nav || nav.__compare) return;
-      const frame = nav.frame;
-      nav.frame = function (state) {
-        window.__compareState = Array.from(state);
-        return frame.call(this, state);
-      };
-      nav.__compare = true;
-    });
-  },
-  async read(page) {
-    return page.evaluate(() => {
-      const s = window.__compareState;
-      if (!s) return null;
-      return { world: [s[0], s[1]], x: s[2], y: s[3], zoom: s[8] };
-    });
-  },
-  // Zoom first (the wheel zooms around the pointer, which sits on the scene
-  // centre), then the minimap click, which sets the centre directly.
-  async place(page, view) {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const now = await this.read(page);
-      if (Math.abs(Math.log(now.zoom / view.zoom)) < ZOOM_TOLERANCE) break;
-      const box = await page.locator("#scene").boundingBox();
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.wheel(0, Math.log(now.zoom / view.zoom) / WHEEL_RATE);
-      await sleep(700);
-    }
-    let at = null;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const now = await this.read(page);
-      const want = [view.x, view.y];
-      // A click lands where the letterboxed square minimap maps it (minimap.js);
-      // aim again from the camera read back until it is where the bookmark is.
-      const aim = at ? [at[0] + want[0] - now.x, at[1] + want[1] - now.y] : want;
-      if (at && Math.abs(want[0] - now.x) < TILE_TOLERANCE && Math.abs(want[1] - now.y) < TILE_TOLERANCE) break;
-      at = aim;
-      const rect = await page.locator("#minimap-map").boundingBox();
-      const side = Math.min(rect.width, rect.height);
-      const left = rect.x + (rect.width - side) / 2;
-      const top = rect.y + (rect.height - side) / 2;
-      await page.mouse.click(left + (at[0] / now.world[0]) * side, top + (at[1] / now.world[1]) * side);
-      await sleep(900);
-    }
-    return this.read(page);
-  },
-};
-
-// --- settling ---------------------------------------------------------------
-
-// The status line says "terrain cache: … (N / 512 chunks)". Settled: that
-// count, the camera and the number of map requests in flight are unchanged for
-// plan.settle_polls polls in a row, within plan.view_timeout_ms.
-const settle = {
-  async signature(page) {
-    const text = (await page.locator("#terrain-cache").textContent()) ?? "";
-    const chunks = Number(/\((\d+) \/ \d+ chunks\)/.exec(text)?.[1] ?? NaN);
-    const cam = await camera.read(page);
-    return { chunks, cam, inflight };
-  },
-  async wait(page) {
-    const deadline = Date.now() + plan.view_timeout_ms;
-    let last = "";
-    let same = 0;
-    let signature;
-    do {
-      await sleep(plan.poll_ms);
-      signature = await this.signature(page);
-      const key = JSON.stringify(signature);
-      same = key === last ? same + 1 : 0;
-      last = key;
-      if (same >= plan.settle_polls && signature.inflight === 0 && signature.chunks > 0) return signature;
-    } while (Date.now() < deadline);
-    throw new Error(`not settled in ${plan.view_timeout_ms} ms (chunks ${signature.chunks}, ${signature.inflight} requests in flight)`);
-  },
-};
-
-// --- the page ---------------------------------------------------------------
-
-async function ready(page) {
-  await page.waitForSelector("#creator-toggle", { timeout: 60_000 });
-  await page.waitForFunction(() => document.querySelector("#connection")?.textContent === "connected", null, { timeout: 60_000 });
-  await camera.instrument(page);
-  await page.waitForFunction(() => window.__compareState !== undefined, null, { timeout: 30_000 });
+// One poll of the page, stamped with the time it was taken. A missing
+// attribute reads as -1 (never settled).
+async function sample(page) {
+  const at = Date.now();
+  const read = await page.evaluate(() => {
+    const num = (v) => (v === null || v === "" ? -1 : Number(v));
+    const scene = document.getElementById("scene");
+    const minimap = document.getElementById("minimap");
+    const camera = minimap?.dataset.cameraX === undefined ? null : {
+      x: Number(minimap.dataset.cameraX), y: Number(minimap.dataset.cameraY), zoom: Number(minimap.dataset.zoom),
+    };
+    return {
+      pending: num(scene?.getAttribute("data-chunks-pending")),
+      failed: num(scene?.getAttribute("data-chunks-failed")),
+      frame: num(scene?.getAttribute("data-frame")),
+      camera,
+      map_hash: minimap?.dataset.mapHash ?? null,
+      renderer: document.getElementById("playground")?.dataset.renderer ?? null,
+    };
+  });
+  return { at, ...read };
 }
 
-async function openMap(page, hash) {
-  if (await page.locator(`#minimap[data-map-hash="${hash}"]`).count()) return;
-  await page.click("#creator-toggle");
-  await page.selectOption("#map-package", hash);
-  await page.click("#open-map");
-  try {
-    await page.waitForFunction(
-      () => /Saved map active:/.test(document.querySelector("#map-estimate")?.textContent ?? ""),
-      null, { timeout: 60_000 });
-  } catch {
-    const said = (await page.locator("#map-estimate").textContent().catch(() => "")) ?? "";
-    throw new Error(`the map did not open (${said.trim().slice(0, 160) || "no message"}): a spectator session cannot open maps`);
-  }
-  await page.reload();
-  await page.waitForSelector(`#minimap[data-map-hash="${hash}"]`, { timeout: 60_000 });
-  await ready(page);
+// The settle rule, as settle.rs decides it: the last sample has nothing pending
+// or failed, and the frame has been unchanged since a sample at least 1.5 s
+// earlier. The camera must also be where the fragment put it.
+const QUIET_MS = 1500;
+function settled(history, view) {
+  const last = history.at(-1);
+  if (!last || last.pending !== 0 || last.failed !== 0) return false;
+  let start = history.length - 1;
+  while (start > 0 && history[start - 1].pending === 0 && history[start - 1].frame === last.frame) start--;
+  const c = last.camera;
+  const landed = c && Math.abs(c.x - view.x) <= CAMERA_TILES && Math.abs(c.y - view.y) <= CAMERA_TILES
+    && Math.abs(c.zoom / view.zoom - 1) <= CAMERA_ZOOM;
+  return last.at - history[start].at >= QUIET_MS && landed;
 }
 
-// The scene is the canvas; the HUD is every positioned element that overlaps
-// it and does not contain it. Rectangles are rounded outward to whole pixels.
+// The rectangles of the scene and of the HUD over it (rounded outward to pixels).
 async function rectangles(page) {
   return page.evaluate(() => {
     const canvas = document.getElementById("scene");
@@ -155,51 +81,56 @@ async function rectangles(page) {
       if (el.parentElement?.closest("#minimap, #status, #map-creator") && !el.matches("#minimap, #status, #map-creator")) continue;
       masks.push(box(r));
     }
-    return { scene: box(scene), masks, renderer: document.getElementById("playground")?.dataset.renderer ?? null };
+    return { scene: box(scene), masks };
   });
 }
 
-async function capture(page, view) {
+async function view(page, index, item) {
   const started = Date.now();
-  try {
-    await openMap(page, view.map_hash);
-    const placed = await camera.place(page, view);
-    const settled = await settle.wait(page);
-    const parts = await rectangles(page);
-    await page.screenshot({ path: `${view.name}.png`, caret: "hide", animations: "disabled" });
-    writeFileSync(`${view.name}.json`, JSON.stringify({
-      name: view.name, camera: settled.cam, placed, chunks: settled.chunks, settle_ms: Date.now() - started, ...parts,
-      page_errors: errors.splice(0),
-    }));
-    return true;
-  } catch (error) {
-    writeFileSync(`${view.name}.json`, JSON.stringify({ name: view.name, error: String(error.message ?? error), page_errors: errors.splice(0) }));
-    return false;
+  if (index > 0) await page.evaluate((fragment) => { location.hash = fragment; }, item.fragment);
+  const history = [];
+  const deadline = started + plan.view_timeout_ms;
+  for (;;) {
+    history.push(await sample(page));
+    if (settled(history, item) || Date.now() > deadline) break;
+    await sleep(plan.poll_ms);
   }
+  const last = history.at(-1);
+  const isSettled = settled(history, item);
+  const parts = isSettled ? await rectangles(page) : {};
+  if (isSettled) await page.screenshot({ path: `${item.name}.png`, caret: "hide", animations: "disabled" });
+  writeFileSync(`${item.name}.json`, JSON.stringify({
+    name: item.name, history: history.slice(-400), camera: last.camera, map_hash: last.map_hash,
+    renderer: last.renderer, settle_ms: Date.now() - started, ...parts, page_errors: errors.splice(0),
+  }));
 }
 
 const browser = await chromium.launch({ args: plan.renderer === "webgpu" ? WEBGPU_ARGS : WEBGL2_ARGS });
 const context = await browser.newContext({
-  viewport: { width: plan.viewport.width, height: plan.viewport.height },
+  viewport: { width: plan.viewport[0], height: plan.viewport[1] },
   deviceScaleFactor: 1,
   serviceWorkers: "block",
 });
+if (plan.renderer === "webgl2") {
+  await context.addInitScript(() => { Object.defineProperty(navigator, "gpu", { value: undefined }); });
+}
 const page = await context.newPage();
 page.on("pageerror", (e) => errors.push(e.message));
-page.on("request", (r) => { if (new URL(r.url()).pathname.startsWith("/maps/")) inflight++; });
-for (const done of ["requestfinished", "requestfailed"]) {
-  page.on(done, (r) => { if (new URL(r.url()).pathname.startsWith("/maps/")) inflight = Math.max(0, inflight - 1); });
-}
-let failed = 0;
 try {
-  await page.goto(plan.url, { waitUntil: "load", timeout: 60_000 });
-  await ready(page);
-  for (const view of plan.views) failed += (await capture(page, view)) ? 0 : 1;
-} catch (error) {
-  for (const view of plan.views) {
-    try { readFileSync(`${view.name}.json`); } catch { writeFileSync(`${view.name}.json`, JSON.stringify({ name: view.name, error: String(error.message ?? error), page_errors: [] })); }
+  await page.goto(`${plan.url}#${plan.views[0].fragment}`, { waitUntil: "load", timeout: 60_000 });
+  await page.waitForFunction(() => document.querySelector("#connection")?.textContent === "connected", null, { timeout: 60_000 });
+  await page.waitForFunction(() => document.querySelector("#minimap")?.dataset.mapHash, null, { timeout: 60_000 });
+  for (const [index, item] of plan.views.entries()) {
+    try {
+      await view(page, index, item);
+    } catch (error) {
+      writeFileSync(`${item.name}.json`, JSON.stringify({ name: item.name, error: String(error.message ?? error), page_errors: errors.splice(0) }));
+    }
   }
-  failed = plan.views.length;
+} catch (error) {
+  for (const item of plan.views) {
+    writeFileSync(`${item.name}.json`, JSON.stringify({ name: item.name, error: `the page did not start: ${error.message ?? error}`, page_errors: errors.splice(0) }));
+  }
 }
 await context.close();
 await browser.close();
