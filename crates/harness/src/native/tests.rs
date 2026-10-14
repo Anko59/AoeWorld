@@ -268,3 +268,25 @@ fn real_assertion_canary_rejects_compiled_staged_mutation_and_retains_noisy_fail
     drop(retained_log);
     assert!(!retained_path.exists());
 }
+
+#[test]
+fn the_wasm_check_compiles_the_test_targets_of_every_wasm_package() {
+    let args = wasm_check_args();
+    assert_eq!(
+        &args[..5],
+        [
+            "check",
+            "--locked",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--tests"
+        ]
+    );
+    let packages: Vec<&str> = args[5..]
+        .chunks(2)
+        .inspect(|pair| assert_eq!(pair[0], "-p"))
+        .map(|pair| pair[1])
+        .collect();
+    assert_eq!(packages, crate::wasm_test::packages());
+    assert!(packages.contains(&"aoe-client") && packages.contains(&"aoe-rendering"));
+}

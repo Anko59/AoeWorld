@@ -68,6 +68,10 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     snapshot.run_checked(crate::architecture::check)?;
     snapshot.run_checked(crate::gates::docs_check)?;
     cargo(&clippy, 600)?;
+    // A tests-only index skips test targets here too, so red wasm tests wait as well.
+    if clippy.contains(&"--all-targets") {
+        cargo(&crate::native::wasm_check_args(), 600)?;
+    }
     println!(
         "static input: {}",
         serde_json::to_string(&snapshot.identity)?
