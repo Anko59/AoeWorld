@@ -61,3 +61,7 @@ deadlines ([gates](gates.md)). Do not wait for the load to fall by hand, and
 never scan processes to decide when to start: run the target and let it queue.
 Its deadline starts when it runs. `make load-status` shows the holders; a
 queue that outlasts `AOE_HEAVY_WAIT_MINUTES` fails with the holders named.
+
+A new field in `gates/registry.json` ships in two changes: first the code that
+reads it (the judge built from `dev` parses the file strictly and refuses an
+unknown field), then the file that uses it.

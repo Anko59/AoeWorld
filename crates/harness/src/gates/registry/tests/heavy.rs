@@ -19,10 +19,38 @@ fn heavy_is_optional_and_defaults_to_light() {
 }
 
 #[test]
-fn no_committed_gate_is_heavy_until_the_flags_are_set() {
-    // The flags land in their own change: the judge built from dev must first
-    // know the field before gates/registry.json may carry it.
-    assert!(registry().gates.iter().all(|gate| !gate.heavy));
+fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
+    let heavy: BTreeSet<_> = registry()
+        .gates
+        .iter()
+        .filter(|gate| gate.heavy)
+        .map(|gate| gate.id.clone())
+        .collect();
+    for id in [
+        "lint",
+        "test-unit",
+        "test-wasm",
+        "test-e2e",
+        "coverage",
+        "mutation-nightly",
+        "perf-smoke",
+    ] {
+        assert!(
+            heavy.contains(id),
+            "{id} compiles or runs the workspace's tests"
+        );
+    }
+    for id in [
+        "fmt-check",
+        "structure-check",
+        "test-placement",
+        "architecture-check",
+        "docs-check",
+        "deny",
+        "browser-check",
+    ] {
+        assert!(!heavy.contains(id), "{id} is a cheap static gate");
+    }
 }
 
 #[test]
