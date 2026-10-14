@@ -117,9 +117,7 @@ fn changing_type_drops_load_and_move_cancels_gathering() {
     world.issue_gather(PlayerId(0), id, node.id).unwrap();
     advance(&mut world, 200);
     assert!(world.unit(id).unwrap().carried.is_some());
-    let gold = world
-        .nearest_resource(node.tile, ResourceKind::Gold, 10, None)
-        .unwrap();
+    let (_, gold, _) = resource_world(ResourceKind::Gold);
     world.issue_gather(PlayerId(0), id, gold.id).unwrap();
     assert!(world.unit(id).unwrap().carried.is_none());
     let current = world.unit(id).unwrap().position;

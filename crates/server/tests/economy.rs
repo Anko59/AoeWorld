@@ -1,5 +1,5 @@
 use aoe_core::{PlayerId, Seed, TileCoord, TileRect};
-use aoe_map::{MapPackage, MapRequest, ResourceKind};
+use aoe_map::{MapPackage, ResourceKind};
 use aoe_protocol::{CommandResult, GameplayServerMessage, UnitKind};
 use aoe_server::GameplayService;
 use tokio::sync::mpsc;
@@ -32,16 +32,22 @@ async fn default_game_starts_with_four_units() {
 
 #[tokio::test]
 async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
-    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
-    let generator = package.generator();
-    let service = GameplayService::from_map(package).unwrap();
+    let (package, pages) = flat_package();
+    let side = package.estimate.tiles_per_side as i32;
+    let generator = package
+        .generator_with_environment(pages.clone(), Vec::new(), Vec::new(), Vec::new())
+        .unwrap();
+    let service =
+        GameplayService::from_prepared_map(package, pages, Vec::new(), Vec::new(), Vec::new())
+            .unwrap()
+            .unwrap();
     let (tx, mut rx) = mpsc::channel(64);
     let (id, _) = service.register(None, tx).await;
     service
         .subscribe(
             id,
             1,
-            TileRect::new(TileCoord::new(0, 0), TileCoord::new(512, 512)),
+            TileRect::new(TileCoord::new(0, 0), TileCoord::new(side, side)),
         )
         .await;
     let GameplayServerMessage::Snapshot {
@@ -83,6 +89,7 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
     assert_eq!(initial.stockpile.wood, 200);
     service.queue_gather(id, 1, villager.id, node.id).await;
     service.queue_train(id, 2, center, UnitKind::Villager).await;
+    let mut log = vec!["headless game: town center, three villagers, scout, wood 200".to_owned()];
     let mut wood = 200;
     let mut population = 4;
     let mut accepted = 0;
@@ -101,16 +108,20 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
                     for player in changed_players {
                         if player.player == PlayerId(0) {
                             if player.stockpile.wood != wood {
-                                println!(
+                                let line = format!(
                                     "tick {tick}: wood deposited, stockpile {} -> {}",
                                     wood, player.stockpile.wood
                                 );
+                                println!("{line}");
+                                log.push(line);
                             }
                             if player.population_used != population {
-                                println!(
+                                let line = format!(
                                     "tick {tick}: villager trained, population {} / {}",
                                     player.population_used, player.population_cap
                                 );
+                                println!("{line}");
+                                log.push(line);
                             }
                             wood = player.stockpile.wood;
                             population = player.population_used;
@@ -133,10 +144,72 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
         depleted,
         "gathering must publish through the existing depletion overlay"
     );
-    println!(
+    let line = format!(
         "headless village PASS: wood {wood}, population {population}/5, commands {accepted}/2"
     );
+    println!("{line}");
+    log.push(line);
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/economy");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("headless.log"), log.join("\n") + "\n").unwrap();
     service.resync(id, 2).await;
     let messages = drain(&mut rx);
     assert!(messages.iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision: 2, units, players, buildings, .. } if units.len() == 5 && players[0].stockpile.wood == wood && buildings[0].training_queue.is_empty())));
+}
+
+#[path = "economy/wire_tests.rs"]
+mod wire_tests;
+
+fn flat_package() -> (MapPackage, Vec<aoe_map::ElevationPage>) {
+    use aoe_map::*;
+    let zero = ElevationPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        geographic_height_centimeters: vec![0; 4],
+    };
+    let overview = ElevationPage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        geographic_height_centimeters: vec![0],
+    };
+    let environment = PreparedEnvironment {
+        samples_per_axis: 2,
+        geographic_millimeters_per_sample: 1_000_000,
+        page_samples: ENVIRONMENT_PAGE_SAMPLES,
+        elevation: FieldPyramid {
+            levels: vec![
+                PyramidLevel {
+                    samples_per_axis: 2,
+                    ordered_page_root: ordered_page_root(std::slice::from_ref(&zero)).unwrap(),
+                },
+                PyramidLevel {
+                    samples_per_axis: 1,
+                    ordered_page_root: ordered_page_root(std::slice::from_ref(&overview)).unwrap(),
+                },
+            ],
+        },
+        water: None,
+        vegetation: None,
+        historical_land_use: None,
+        hydrology_evidence: None,
+    };
+    let package = MapPackage::with_prepared_environment(
+        1,
+        MapRequest {
+            requested_side_meters: 3_840,
+            ..MapRequest::default()
+        },
+        Vec::new(),
+        ProjectionMetadata::default(),
+        EnvironmentalProvenance::default(),
+        environment,
+    )
+    .unwrap();
+    (package, vec![zero, overview])
 }
