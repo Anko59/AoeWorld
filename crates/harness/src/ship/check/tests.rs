@@ -69,7 +69,10 @@ fn a_level_below_the_floor_names_the_floor_and_its_reason() {
     let message = problems(&root, &request(&body));
     assert!(message.contains("1 problem;"), "{message}");
     assert!(message.contains("below the floor `high`"), "{message}");
-    assert!(message.contains(": gates;"), "{message}");
+    assert!(
+        message.contains("gate files: 6 of 13 changed lines (need 5 for high)"),
+        "{message}"
+    );
 }
 
 fn with_probe(root: &Path, banner: &str) {

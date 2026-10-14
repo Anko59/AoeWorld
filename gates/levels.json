@@ -41,8 +41,8 @@
   "floor": [
     {
       "level": "medium",
-      "min_changed_lines": 61,
-      "reason": "more than 60 changed lines: low is for the smallest PRs only"
+      "path_prefixes": ["baselines/"],
+      "reason": "a changed baseline moves a gate: at least medium"
     },
     {
       "level": "medium",
@@ -51,10 +51,16 @@
       "reason": "product code that changes behaviour needs at least medium"
     },
     {
+      "level": "medium",
+      "min_changed_lines": 61,
+      "reason": "more than 60 changed lines: low is for the smallest PRs only"
+    },
+    {
       "level": "high",
       "suites": ["everything", "map"],
       "path_prefixes": ["crates/protocol/"],
       "min_changed_lines": 200,
+      "subject": "harness, gates, protocol or map/geodata lines",
       "reason": "harness, gates, protocol or map/geodata changes of 200 or more lines need at least high"
     }
   ]

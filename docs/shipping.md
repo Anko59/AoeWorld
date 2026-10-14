@@ -228,7 +228,7 @@ highest level of any matching rule. Today:
   behaviour;
 - 200 or more changed lines touching the harness, gates or instructions
   (`everything`), the map or geodata crates (`map`) or `crates/protocol/`: at
-  least `high`. Tests and docs count towards this size rule.
+  least `high`; only the changed lines inside those paths count towards the 200, and the rest of the change is judged by the other rules.
 
 Shipping below the floor is refused before any gate runs, with the reason and
 the level to use. The chosen level, the floor, its reason and the metrics row

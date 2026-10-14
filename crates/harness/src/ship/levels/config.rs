@@ -55,8 +55,10 @@ pub(crate) struct Spec {
     pub(crate) target_percent: u32,
 }
 
-/// A rule matches when the change is at least `min_changed_lines` long and,
-/// if it names suites or path prefixes, touches one of them.
+/// A rule matches when the lines it covers are at least `min_changed_lines` and,
+/// if it names suites or path prefixes, a file of the change is in one of them.
+/// A scoped rule covers only the changed lines of its own files; an unscoped
+/// one covers the whole change.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Rule {
@@ -71,7 +73,41 @@ pub(crate) struct Rule {
     /// and the `inert` paths do not.
     #[serde(default)]
     pub(crate) behaviour: bool,
+    /// What the covered lines are, for "N of M changed lines" in the reason of
+    /// a scoped rule with a minimum (required then).
+    #[serde(default)]
+    pub(crate) subject: Option<String>,
     pub(crate) reason: String,
+}
+
+impl Rule {
+    fn scoped(&self) -> bool {
+        !self.suites.is_empty() || !self.path_prefixes.is_empty()
+    }
+
+    /// The changed lines this rule covers and whether it touches any file.
+    fn covered(&self, change: &Change) -> (u64, bool) {
+        if !self.scoped() {
+            return (change.lines, true);
+        }
+        let mut lines = 0;
+        let mut touched = false;
+        for part in &change.parts {
+            if self.behaviour && !part.behaviour {
+                continue;
+            }
+            let hit = self.suites.iter().any(|s| part.suites.contains(s))
+                || self
+                    .path_prefixes
+                    .iter()
+                    .any(|p| part.path.starts_with(p.as_str()));
+            if hit {
+                lines += part.lines;
+                touched = true;
+            }
+        }
+        (lines, touched)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -141,6 +177,13 @@ impl Levels {
             if rule.reason.trim().is_empty() {
                 problems.push("every floor rule needs a reason".to_owned());
             }
+            let counted = rule.min_changed_lines > 0 && rule.scoped();
+            if counted && rule.subject.as_deref().is_none_or(|s| s.trim().is_empty()) {
+                problems.push(format!(
+                    "floor rule `{}` counts its own lines and needs a subject",
+                    rule.reason
+                ));
+            }
         }
         if problems.is_empty() {
             Ok(config)
@@ -188,34 +231,45 @@ impl Levels {
             .unwrap_or(Level::Max)
     }
 
-    /// The highest level any matching rule demands, and why.
+    /// The highest level any matching rule demands, and why. A scoped rule
+    /// with a minimum counts only the changed lines in its own paths, and when
+    /// those are not all of the change the reason says how many they are.
     pub(crate) fn floor(&self, change: &Change) -> Floor {
-        let mut floor = Floor {
-            level: Level::Low,
-            reason: "docs, configuration or a small change".to_owned(),
-        };
-        for rule in &self.floor {
-            let scoped = !rule.suites.is_empty() || !rule.path_prefixes.is_empty();
-            let suites = if rule.behaviour {
-                &change.behaviour_suites
-            } else {
-                &change.suites
-            };
-            let touches = rule.suites.iter().any(|s| suites.contains(s))
-                || rule
-                    .path_prefixes
-                    .iter()
-                    .any(|p| change.files.iter().any(|f| f.starts_with(p.as_str())));
-            if change.lines >= rule.min_changed_lines
-                && (!scoped || touches)
-                && rule.level > floor.level
-            {
-                floor = Floor {
-                    level: rule.level,
-                    reason: rule.reason.clone(),
-                };
+        let mut top: Option<(usize, &Rule)> = None;
+        let mut reasons = Vec::new();
+        let mut detailed = Vec::new();
+        for (index, rule) in self.floor.iter().enumerate() {
+            let (lines, touched) = rule.covered(change);
+            if rule.min_changed_lines > 0 && rule.scoped() && touched && lines != change.lines {
+                let subject = rule.subject.as_deref().unwrap_or_default();
+                reasons.push(format!(
+                    "{subject}: {lines} of {} changed lines (need {} for {})",
+                    change.lines,
+                    rule.min_changed_lines,
+                    rule.level.name()
+                ));
+                detailed.push(index);
+            }
+            let applies = lines >= rule.min_changed_lines && (!rule.scoped() || touched);
+            if applies && top.is_none_or(|(_, best)| rule.level > best.level) {
+                top = Some((index, rule));
             }
         }
-        floor
+        let level = match top {
+            Some((index, rule)) => {
+                if !detailed.contains(&index) {
+                    reasons.push(rule.reason.clone());
+                }
+                rule.level
+            }
+            None => {
+                reasons.push("docs, configuration or a small change".to_owned());
+                Level::Low
+            }
+        };
+        Floor {
+            level,
+            reason: reasons.join("; "),
+        }
     }
 }

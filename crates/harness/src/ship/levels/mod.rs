@@ -19,12 +19,21 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// What the floor rules read about a change.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Change {
+    /// Every changed line: the sum of the parts.
     pub(crate) lines: u64,
-    pub(crate) files: Vec<String>,
+    /// Each changed file with its own lines, so a rule counts only its paths.
+    pub(crate) parts: Vec<Part>,
+}
+
+/// One changed file: its lines (added plus removed) and the suites it selects.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Part {
+    pub(crate) path: String,
+    pub(crate) lines: u64,
     pub(crate) suites: BTreeSet<String>,
-    /// The suites selected by the files that can change behaviour: not test
-    /// files and not documentation or configuration (`Levels::is_inert`).
-    pub(crate) behaviour_suites: BTreeSet<String>,
+    /// Behaviour changes: not a test and not documentation or configuration
+    /// (`Levels::is_inert`). Only these count towards a `behaviour` rule.
+    pub(crate) behaviour: bool,
 }
 
 impl Change {
@@ -36,60 +45,128 @@ impl Change {
         }
     }
 
-    /// The change of `files` (`lines` added plus removed) classified by `registry`.
+    /// The change of `files` (`lines` on the first file, as one count) classified by `registry`.
+    #[cfg(test)]
     pub(crate) fn from_files(
         levels: &Levels,
         registry: &Registry,
         lines: u64,
         files: Vec<String>,
     ) -> Self {
-        let active: Vec<String> = files
-            .iter()
-            .filter(|f| !is_test_path(f) && !levels.is_inert(f))
-            .cloned()
+        let parts = files
+            .into_iter()
+            .enumerate()
+            .map(|(index, file)| (file, if index == 0 { lines } else { 0 }))
             .collect();
-        let suites = registry.classify(&files).suites;
-        let behaviour_suites = if active.is_empty() {
-            BTreeSet::new()
-        } else {
-            registry.classify(&active).suites
-        };
+        Self::from_parts(levels, registry, parts)
+    }
+
+    /// The change of `(path, lines)` pairs classified by `registry`.
+    pub(crate) fn from_parts(
+        levels: &Levels,
+        registry: &Registry,
+        counted: Vec<(String, u64)>,
+    ) -> Self {
+        let parts: Vec<Part> = counted
+            .into_iter()
+            .map(|(path, lines)| {
+                let behaviour = !is_test_path(&path) && !levels.is_inert(&path);
+                let suites = registry.classify(std::slice::from_ref(&path)).suites;
+                Part {
+                    path,
+                    lines,
+                    suites,
+                    behaviour,
+                }
+            })
+            .collect();
         Self {
-            lines,
-            files,
-            suites,
-            behaviour_suites,
+            lines: parts.iter().map(|part| part.lines).sum(),
+            parts,
         }
     }
 
     /// The change from the merge base with `origin/<base>` to HEAD.
     pub(crate) fn collect(root: &Path, levels: &Levels, base: &str, fetch: bool) -> Result<Self> {
         let (_, merge_base) = git::base(root, base, fetch)?;
-        let files = git::changed(root, &merge_base)?;
-        let numstat = git::git(root, &["diff", "--numstat", &merge_base, "HEAD"])?;
+        let numstat = git::git(
+            root,
+            &["diff", "--numstat", "--no-renames", &merge_base, "HEAD"],
+        )?;
+        Self::classified(
+            root,
+            levels,
+            numstat_parts(&numstat, levels.binary_file_lines),
+        )
+    }
+
+    /// The change as `make ship` will see it once committed: the working tree
+    /// against the merge base, with the untracked files that are not ignored.
+    pub(crate) fn collect_working(
+        root: &Path,
+        levels: &Levels,
+        base: &str,
+        fetch: bool,
+    ) -> Result<Self> {
+        let (_, merge_base) = git::base(root, base, fetch)?;
+        let numstat = git::git(root, &["diff", "--numstat", "--no-renames", &merge_base])?;
+        let mut counted = numstat_parts(&numstat, levels.binary_file_lines);
+        for path in untracked(root)? {
+            let lines = untracked_lines(&root.join(&path), levels.binary_file_lines)?;
+            counted.push((path, lines));
+        }
+        Self::classified(root, levels, counted)
+    }
+
+    fn classified(root: &Path, levels: &Levels, counted: Vec<(String, u64)>) -> Result<Self> {
         // The registry of origin/dev, like the review floor: a branch cannot
         // change which suites its own files select.
         let registry =
             Registry::parse(crate::review::trusted(root, "gates/registry.json")?.as_bytes())?;
         levels.check_suites(registry.suites.iter().map(|s| s.id.as_str()))?;
-        let lines = numstat_lines(&numstat, levels.binary_file_lines);
-        Ok(Self::from_files(levels, &registry, lines, files))
+        Ok(Self::from_parts(levels, &registry, counted))
     }
 }
 
-/// Lines added plus removed; a binary file (`-` in numstat) counts as
-/// `binary` lines in all.
-fn numstat_lines(numstat: &str, binary: u64) -> u64 {
+/// `(path, lines added plus removed)` of each file in `git diff --numstat`; a
+/// binary file (`-` in numstat) counts as `binary` lines.
+fn numstat_parts(numstat: &str, binary: u64) -> Vec<(String, u64)> {
     numstat
         .lines()
-        .map(|l| {
-            let mut columns = l.split('\t').take(2).map(|n| n.parse::<u64>());
-            match (columns.next(), columns.next()) {
-                (Some(Ok(added)), Some(Ok(removed))) => added + removed,
+        .filter_map(|l| {
+            let mut columns = l.splitn(3, '\t');
+            let added = columns.next()?;
+            let removed = columns.next()?;
+            let path = columns.next()?;
+            let lines = match (added.parse::<u64>(), removed.parse::<u64>()) {
+                (Ok(added), Ok(removed)) => added + removed,
                 _ => binary,
-            }
+            };
+            Some((path.to_owned(), lines))
         })
-        .sum()
+        .collect()
+}
+
+/// The untracked files that Git does not ignore.
+fn untracked(root: &Path) -> Result<Vec<String>> {
+    Ok(
+        git::git(root, &["ls-files", "--others", "--exclude-standard", "-z"])?
+            .split('\0')
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
+/// Lines of a new file, counted as Git counts them when it is added; a file
+/// with a NUL byte is binary.
+fn untracked_lines(path: &Path, binary: u64) -> Result<u64> {
+    let bytes = std::fs::read(path)?;
+    if bytes.contains(&0) {
+        return Ok(binary);
+    }
+    let newlines = bytes.iter().filter(|byte| **byte == b'\n').count() as u64;
+    Ok(newlines + u64::from(bytes.last().is_some_and(|byte| *byte != b'\n')))
 }
 
 /// The lowest level a change may use and the rule that demands it.

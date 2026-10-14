@@ -105,6 +105,14 @@ pub(super) fn command(root: &Path) -> super::Result<()> {
     super::stack::refuse_base(&options.base, &git::branch(root)?)?;
     let situation = github::situation(root, &options.base);
     let checked = early(root, &options, &body, situation.as_ref().ok(), false)?;
+    let uncommitted = git::git(root, &["status", "--porcelain"])?;
+    let uncommitted = uncommitted.lines().count();
+    if uncommitted > 0 {
+        println!(
+            "uncommitted: {uncommitted} changed file{} counted as the ship will see them after commit",
+            if uncommitted == 1 { "" } else { "s" }
+        );
+    }
     println!("{}", summary(&checked.decision));
     if situation.is_err() && options.title.is_none() {
         println!("title: not checked (gh unavailable)");
@@ -153,7 +161,7 @@ pub(super) fn run(root: &Path, request: &Request) -> Result<Checked, Problems> {
     }
     let mut decision = None;
     if let Some(level) = found.level {
-        match Change::collect(root, &levels, request.base, request.fetch) {
+        match Change::collect_working(root, &levels, request.base, request.fetch) {
             Ok(change) => {
                 let (level_problems, floor) = level_problems(level, &levels, &change, video.take());
                 problems.extend(level_problems);

@@ -4,7 +4,7 @@ use super::{
         evidence::{Evidence, Verdict},
         tests::{fixture, run},
     },
-    Change, Decision, Levels, RowSet, current_floor, numstat_lines,
+    Change, Decision, Levels, Part, RowSet, current_floor, numstat_parts,
     stats::{Distribution, marker},
 };
 use crate::gates::registry::Registry;
@@ -15,17 +15,15 @@ fn committed() -> Levels {
 }
 
 fn change(lines: u64, suites: &[&str], files: &[&str]) -> Change {
+    let suites: BTreeSet<String> = suites.iter().map(|s| (*s).to_owned()).collect();
     Change {
         lines,
-        files: files.iter().map(|f| (*f).to_owned()).collect(),
-        suites: suites
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect::<BTreeSet<_>>(),
-        behaviour_suites: suites
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect::<BTreeSet<_>>(),
+        parts: vec![Part {
+            path: files.first().copied().unwrap_or_default().to_owned(),
+            lines,
+            suites,
+            behaviour: true,
+        }],
     }
 }
 
@@ -183,8 +181,93 @@ fn docs_and_configuration_edits_may_be_low_but_harness_code_may_not() {
 
 #[test]
 fn binary_files_count_as_large_changes() {
-    assert_eq!(numstat_lines("3\t4\ta.rs\n-\t-\tlogo.png\n", 61), 7 + 61);
-    assert_eq!(numstat_lines("", 61), 0);
+    assert_eq!(
+        numstat_parts("3\t4\ta.rs\n-\t-\tlogo.png\n", 61),
+        vec![("a.rs".to_owned(), 7), ("logo.png".to_owned(), 61)]
+    );
+    assert!(numstat_parts("", 61).is_empty());
+}
+
+/// A change of `(path, lines)` pairs, classified like a real one.
+fn counted(files: &[(&str, u64)]) -> Change {
+    let registry = Registry::parse(include_bytes!("../../../../../gates/registry.json")).unwrap();
+    let files = files
+        .iter()
+        .map(|(path, lines)| ((*path).to_owned(), *lines))
+        .collect();
+    Change::from_parts(&committed(), &registry, files)
+}
+
+#[test]
+fn only_the_lines_in_the_sensitive_paths_count_against_high() {
+    let levels = committed();
+    let big = counted(&[
+        ("crates/harness/src/dev.rs", 18),
+        ("crates/client/src/a.rs", 900),
+    ]);
+    let floor = levels.floor(&big);
+    assert_eq!(floor.level, Level::Medium);
+    assert_eq!(
+        floor.reason,
+        "harness, gates, protocol or map/geodata lines: 18 of 918 changed lines (need 200 for high); product code that changes behaviour needs at least medium"
+    );
+    let harness = counted(&[
+        ("crates/harness/src/dev.rs", 200),
+        ("crates/client/src/a.rs", 10),
+    ]);
+    let floor = levels.floor(&harness);
+    assert_eq!(floor.level, Level::High);
+    assert_eq!(
+        floor.reason,
+        "harness, gates, protocol or map/geodata lines: 200 of 210 changed lines (need 200 for high)"
+    );
+    // Lines in several sensitive paths add up; one file counts once.
+    let both = counted(&[("crates/harness/src/a.rs", 150), ("gates/x.json", 150)]);
+    assert_eq!(levels.floor(&both).level, Level::High);
+    assert_eq!(
+        levels
+            .floor(&counted(&[("crates/harness/src/a.rs", 199)]))
+            .level,
+        Level::Medium
+    );
+    // A baseline moves a gate: its own reason, not the behaviour one.
+    let baseline = counted(&[
+        ("baselines/perf/wasm.json", 8),
+        ("docs/performance.md", 5),
+        ("crates/harness/src/ship/issues/tests/stub.rs", 1),
+    ]);
+    let floor = levels.floor(&baseline);
+    assert_eq!(floor.level, Level::Medium);
+    // A baseline is in `everything`, so the high rule counts its 8 lines too.
+    assert_eq!(
+        floor.reason,
+        "harness, gates, protocol or map/geodata lines: 9 of 14 changed lines (need 200 for high); a changed baseline moves a gate: at least medium"
+    );
+    let alone = counted(&[("baselines/perf/wasm.json", 8)]);
+    assert_eq!(
+        levels.floor(&alone).reason,
+        "a changed baseline moves a gate: at least medium"
+    );
+}
+
+#[test]
+fn the_floor_of_a_dirty_tree_is_the_floor_after_the_commit() {
+    let (_temp, root) = fixture("true");
+    let levels = Levels::load(&root).unwrap();
+    let clean = Change::collect_working(&root, &levels, "dev", false).unwrap();
+    assert_eq!((levels.floor(&clean).level, clean.lines), (Level::Low, 2));
+    // A new, untracked gate file of 200 lines is in the change before its commit.
+    fs::write(root.join("gates/new.txt"), "x\n".repeat(200)).unwrap();
+    let dirty = Change::collect_working(&root, &levels, "dev", false).unwrap();
+    assert_eq!(dirty.lines, 202);
+    assert_eq!(levels.floor(&dirty).level, Level::High, "{dirty:?}");
+    // The committed view does not see it until it is committed.
+    let committed_only = Change::collect(&root, &levels, "dev", false).unwrap();
+    assert_eq!(committed_only.lines, 2);
+    run(&root, &["add", "-A"]);
+    run(&root, &["commit", "-q", "-m", "harness"]);
+    let after = Change::collect(&root, &levels, "dev", false).unwrap();
+    assert_eq!(levels.floor(&after), levels.floor(&dirty));
 }
 
 #[test]
@@ -245,13 +328,19 @@ fn the_floor_is_computed_from_a_real_checkout() {
     let (_temp, root) = fixture("true");
     let (floor, change) = current_floor(&root).unwrap();
     assert_eq!((floor.level, change.lines), (Level::Low, 2));
-    assert_eq!(change.files, vec!["README.md".to_owned()]);
+    let paths: Vec<&str> = change.parts.iter().map(|part| part.path.as_str()).collect();
+    assert_eq!(paths, ["README.md"]);
     fs::write(root.join("gates/extra.txt"), "x\ny\nz\nw\nv\n").unwrap();
     run(&root, &["add", "-A"]);
     run(&root, &["commit", "-q", "-m", "gates"]);
     let (floor, change) = current_floor(&root).unwrap();
     assert_eq!(floor.level, Level::High, "{change:?}");
-    assert!(change.suites.contains("everything"));
+    assert!(
+        change
+            .parts
+            .iter()
+            .any(|part| part.suites.contains("everything"))
+    );
 }
 
 #[test]
