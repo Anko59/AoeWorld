@@ -257,6 +257,71 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
 }
 
 #[test]
+fn only_the_low_tiers_reviewers_run_on_the_light_model() {
+    let text = include_str!("../../../../gates/review.json");
+    let config = Config::parse(text).expect("committed config");
+    let low = config.model_for(Tier::Low, Runtime::Claude, false);
+    assert_eq!(
+        (low.model.as_str(), low.effort.as_str()),
+        ("claude-haiku-5-5", "medium")
+    );
+    // Closing reviews (strong, whatever the tier) and the arbiter keep Opus.
+    assert_eq!(
+        config.model_for(Tier::Low, Runtime::Claude, true).model,
+        "claude-opus-5-5"
+    );
+    assert_eq!(
+        config.arbiter_model(Runtime::Claude).model,
+        "claude-opus-5-5"
+    );
+    for tier in [Tier::Medium, Tier::High, Tier::Xhigh, Tier::Max] {
+        assert_ne!(
+            config.model_for(tier, Runtime::Claude, false).model,
+            "claude-haiku-5-5",
+            "tier {} never uses the light model",
+            tier.name()
+        );
+    }
+    // Other families have no light model: low stays on their average one.
+    assert_eq!(
+        config.model_for(Tier::Low, Runtime::Codex, false).model,
+        "gpt-6.1-sol"
+    );
+    // Without `light` the low tier runs on the average model, as before.
+    let mut without: serde_json::Value = serde_json::from_str(text).unwrap();
+    without["models"]["claude"]
+        .as_object_mut()
+        .unwrap()
+        .remove("light");
+    let without = Config::parse(&without.to_string()).expect("light is optional");
+    let today = without.model_for(Tier::Low, Runtime::Claude, false);
+    assert_eq!(
+        (today.model.as_str(), today.effort.as_str()),
+        ("claude-sonnet-5-5", "medium")
+    );
+    // A light model is checked like the others: its effort, its name and no
+    // unknown field.
+    let mut wrong: serde_json::Value = serde_json::from_str(text).unwrap();
+    wrong["models"]["claude"]["light"]["effort"] = serde_json::json!("minimal");
+    assert!(
+        Config::parse(&wrong.to_string()).is_err(),
+        "an effort the runtime refuses is refused for light too"
+    );
+    let mut wrong: serde_json::Value = serde_json::from_str(text).unwrap();
+    wrong["models"]["claude"]["light"]["model"] = serde_json::json!(" ");
+    assert!(
+        Config::parse(&wrong.to_string()).is_err(),
+        "a light model needs a name"
+    );
+    let mut broken: serde_json::Value = serde_json::from_str(text).unwrap();
+    broken["models"]["claude"]["light"]["surprise"] = serde_json::json!(true);
+    assert!(
+        Config::parse(&broken.to_string()).is_err(),
+        "unknown fields in light are refused"
+    );
+}
+
+#[test]
 fn a_review_passes_only_complete_and_at_the_merge_grade() {
     let mut report = Report {
         version: 1,

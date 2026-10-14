@@ -54,6 +54,10 @@ pub(crate) struct Model {
 pub(crate) struct Family {
     pub(crate) average: Model,
     pub(crate) strong: Model,
+    /// A lighter model for the reviewers and grader of tier low only; absent
+    /// means the average model is used, as before.
+    #[serde(default)]
+    pub(crate) light: Option<Model>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -123,7 +127,8 @@ impl Config {
             match config.models.get(runtime) {
                 None => problems.push(format!("models for {runtime} are missing")),
                 Some(family) => {
-                    for model in [&family.average, &family.strong] {
+                    let light = family.light.iter();
+                    for model in [&family.average, &family.strong].into_iter().chain(light) {
                         if model.model.trim().is_empty()
                             || !efforts(runtime).contains(&model.effort.as_str())
                         {
@@ -155,13 +160,15 @@ impl Config {
     }
 
     /// The model for a review: a closing review (docs/review.md) runs on the
-    /// strong models whatever the tier.
+    /// strong models whatever the tier. Tier low's reviewers and grader use
+    /// the family's `light` model when it has one; the arbiter never does.
     pub(crate) fn model_for(&self, tier: Tier, runtime: Runtime, closing: bool) -> Model {
         let family = &self.models[runtime_key(runtime)];
         let tier_config = &self.tiers[&tier];
-        let mut model = match (closing, tier_config.strength) {
-            (true, _) | (_, Strength::Strong) => family.strong.clone(),
-            (false, Strength::Average) => family.average.clone(),
+        let mut model = match (closing, tier_config.strength, &family.light) {
+            (false, _, Some(light)) if tier == Tier::Low => light.clone(),
+            (true, _, _) | (_, Strength::Strong, _) => family.strong.clone(),
+            (false, Strength::Average, _) => family.average.clone(),
         };
         if tier_config.reasoning_bump {
             model.effort = bump(runtime_key(runtime), &model.effort).to_owned();

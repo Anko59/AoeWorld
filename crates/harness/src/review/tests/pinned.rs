@@ -51,7 +51,13 @@ fn moved_policy(root: &Path) -> (String, String) {
     fs::write(&grader, format!("{text}\nMOVED-GRADER-MARKER\n")).unwrap();
     let path = root.join("gates/review.json");
     let mut config: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    config["models"]["claude"]["average"]["model"] = serde_json::json!("claude-moved-model");
+    // Move every Claude model entry, so whichever one a tier reads (light,
+    // average or strong) has moved and "model from the pin" stays meaningful.
+    let family = config["models"]["claude"].as_object_mut().unwrap();
+    assert!(family.contains_key("light"), "the tests' tier reads light");
+    for entry in family.values_mut() {
+        entry["model"] = serde_json::json!("claude-moved-model");
+    }
     fs::write(&path, config.to_string()).unwrap();
     git(root, &["commit", "-q", "-am", "move the review policy"]);
     let moved = rev(root, "HEAD");
@@ -190,4 +196,26 @@ fn the_stored_task_fingerprint_is_the_task_the_reviewers_saw() {
             "the fingerprint of {task:?} is of what the reviewers saw"
         );
     }
+}
+
+#[test]
+fn a_low_tier_review_runs_and_reports_the_light_model_from_origin_dev() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    let policy = Policy::pin(root, None, Tier::Low, Runtime::Claude, &Plan::Full).unwrap();
+    assert_eq!(policy.model.model, "claude-haiku-5-5");
+    let ask = Fetching {
+        root,
+        moved: rev(root, "refs/remotes/origin/dev"),
+        prompts: Mutex::new(Vec::new()),
+    };
+    let report =
+        review_with_branch(root, "feature", Tier::Low, &policy, "t", &Plan::Full, &ask).unwrap();
+    assert_eq!(report.model, "claude-haiku-5-5", "the model that ran");
+    assert_eq!(report.effort, "medium");
+    assert!(
+        report.headline().contains("claude-haiku-5-5 medium"),
+        "the review line names the model: {}",
+        report.headline()
+    );
 }
