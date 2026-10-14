@@ -1,3 +1,5 @@
+mod ci;
+
 use std::{path::PathBuf, process::Command};
 
 fn root() -> PathBuf {

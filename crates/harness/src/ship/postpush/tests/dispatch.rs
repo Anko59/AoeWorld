@@ -13,20 +13,16 @@ pub(super) fn head_json(head: &str) -> String {
     serde_json::json!({"data": {"repository": {"pullRequest": {"headRefOid": head}}}}).to_string()
 }
 
-fn landed(world: &World) -> (String, String, String) {
+fn landed(world: &World) -> (String, String) {
     let marker = Marker::of(&world.root, &graded(&world.root, Tier::Low, 9)).unwrap();
     let old = world.head();
-    let base = world.move_dev("elsewhere.txt", "dev moved\n");
+    world.move_dev("elsewhere.txt", "dev moved\n");
     let head = world.rebase_onto_dev();
     assert_ne!(old, head);
     let mut pr = node(5, true, false);
     pr["headRefOid"] = old.clone().into();
     listing(world, &[pr]);
     world.answer(&format!("compare-{old}.json"), "{\"behind_by\":1}");
-    world.answer(
-        &format!("compare-{head}.json"),
-        &serde_json::json!({"merge_base_commit": {"sha": base}}).to_string(),
-    );
     world.answer("head-5.json", &head_json(&head));
     world.publish_pull(5, &head);
     world.answer("pull-5.json", &pull_json("open", "dev", &head));
@@ -34,7 +30,7 @@ fn landed(world: &World) -> (String, String, String) {
         "comments-5.json",
         &serde_json::json!([comment(1, "OWNER", &marker.render())]).to_string(),
     );
-    (old, head, base)
+    (old, head)
 }
 
 fn dispatch_calls(calls: &str) -> Vec<&str> {
@@ -45,11 +41,11 @@ fn dispatch_calls(calls: &str) -> Vec<&str> {
 }
 
 #[test]
-fn the_updater_cli_carries_then_dispatches_the_branch_with_its_rebased_base() {
+fn the_updater_cli_carries_then_dispatches_the_branch_without_a_dispatcher_chosen_base() {
     let mut world = World::new();
     world.set("GITHUB_ACTIONS", "true");
     world.set("GH_TOKEN", "workflow-token");
-    let (old, head, base) = landed(&world);
+    let (old, head) = landed(&world);
     // GitHub first returns the old head, then the accepted rebase lands.
     world.answer("poll-old-5.json", &head_json(&old));
     let output = world.cli("update-prs");
@@ -70,8 +66,9 @@ fn the_updater_cli_carries_then_dispatches_the_branch_with_its_rebased_base() {
     assert_eq!(dispatched.len(), 1, "{calls}");
     assert!(dispatched[0].contains("<POST>"), "{calls}");
     assert!(dispatched[0].contains("<ref=feature/5>"), "{calls}");
+    assert!(!dispatched[0].contains("inputs["), "{calls}");
     assert!(
-        dispatched[0].contains(&format!("<inputs[base]={base}>")),
+        !calls.contains(&format!("/compare/dev...{head}>")),
         "{calls}"
     );
     assert_eq!(calls.matches("UpdatedHead").count(), 2, "{calls}");
@@ -80,7 +77,7 @@ fn the_updater_cli_carries_then_dispatches_the_branch_with_its_rebased_base() {
 #[test]
 fn a_head_that_never_moves_reports_failure_and_does_not_dispatch() {
     let world = World::new();
-    let (old, _, _) = landed(&world);
+    let (old, _) = landed(&world);
     world.answer("head-5.json", &head_json(&old));
     // The CLI waits two minutes; the same wait is exercised here with a one-second bound.
     assert_eq!(HEAD_TIMEOUT, Duration::from_secs(120));

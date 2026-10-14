@@ -1,5 +1,6 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 pub(crate) mod contracts;
+pub(crate) mod dispatch_status;
 mod paths;
 pub(crate) mod placement;
 pub(crate) mod policy;
@@ -244,10 +245,21 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
     Ok(manifest)
 }
 
-pub fn ci_select() -> Result<(), Box<dyn Error>> {
-    let base = std::env::var("AOE_BASE_SHA")
+// A dispatcher chooses a ref, never the comparison that determines its gates.
+fn requested_ci_base() -> Option<String> {
+    std::env::var("AOE_BASE_SHA")
         .ok()
-        .filter(|value| !value.is_empty());
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            (std::env::var("GITHUB_EVENT_NAME").as_deref() == Ok("workflow_dispatch")
+                && std::env::var("GITHUB_REF_NAME")
+                    .is_ok_and(|name| name != "dev" && name != "main"))
+            .then(|| "origin/dev".to_owned())
+        })
+}
+
+pub fn ci_select() -> Result<(), Box<dyn Error>> {
+    let base = requested_ci_base();
     let selection = current_selection(base.as_deref())?;
     let json = serde_json::to_string(&selection)?;
     fs::create_dir_all("reports/gates")?;
@@ -296,9 +308,7 @@ fn check_selection(
 pub fn ci_check() -> Result<(), Box<dyn Error>> {
     let manifest = std::env::var("AOE_SELECTION_JSON")?;
     let results = std::env::var("AOE_JOB_RESULTS_JSON")?;
-    let base = std::env::var("AOE_BASE_SHA")
-        .ok()
-        .filter(|value| !value.is_empty());
+    let base = requested_ci_base();
     let expected = current_selection(base.as_deref())?;
     check_selection(&manifest, &results, &expected)?;
     println!(

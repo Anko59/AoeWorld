@@ -240,19 +240,8 @@ fn finish_rebase(
     timeout: Duration,
     interval: Duration,
 ) -> Result<()> {
-    let head = moved_head(root, repository, pr, timeout, interval)?;
+    moved_head(root, repository, pr, timeout, interval)?;
     carry::carry(root, pr.number).map_err(|error| format!("review carry failed: {error}"))?;
-    // Even if dev advances again, the merge base identifies the dev commit this
-    // head was rebased onto, rather than including unrelated later dev changes.
-    let compare = api(
-        root,
-        &[&format!("repos/{repository}/compare/{BASE}...{head}")],
-    )?;
-    let base = compare
-        .pointer("/merge_base_commit/sha")
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.is_empty())
-        .ok_or("the rebased head comparison has no merge base")?;
     if pr.branch.is_empty() {
         return Err("the pull request has no headRefName for CI dispatch".into());
     }
@@ -265,15 +254,10 @@ fn finish_rebase(
             &format!("repos/{repository}/actions/workflows/ci.yml/dispatches"),
             "-f",
             &format!("ref={}", pr.branch),
-            "-f",
-            &format!("inputs[base]={base}"),
         ],
     )
     .map_err(|error| format!("CI dispatch failed: {error}"))?;
-    println!(
-        "update-prs: #{} CI dispatched on {} with base {base}",
-        pr.number, pr.branch
-    );
+    println!("update-prs: #{} CI dispatched on {}", pr.number, pr.branch);
     Ok(())
 }
 

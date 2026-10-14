@@ -8,10 +8,6 @@ on:
   push:
     branches: [dev, main]
   workflow_dispatch:
-    inputs:
-      base:
-        type: string
-        required: false
 
 permissions:
   contents: read
@@ -38,7 +34,7 @@ jobs:
       - run: make tools
       - id: manifest
         env:
-          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: make ci-select
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -164,6 +160,7 @@ jobs:
           if-no-files-found: ignore
 
   required:
+    permissions: { contents: read, statuses: write }
     if: always()
     needs: [select, static, native-coverage, browser, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
@@ -176,11 +173,17 @@ jobs:
       - run: make tools
       - name: Validate selection and selected jobs
         env:
-          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
+          AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
           AOE_JOB_RESULTS_JSON: >-
             {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
         run: make ci-check
+      - name: Report dispatched aggregate as a commit status
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: make ci-dispatch-status
 
   dev-artifacts:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}

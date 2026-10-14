@@ -33,10 +33,6 @@ fn behind(world: &World, number: u64, by: u64) {
         &format!("pull-{number}.json"),
         &super::stub::pull_json("open", "dev", &head),
     );
-    world.answer(
-        &format!("compare-{head}.json"),
-        &serde_json::json!({"merge_base_commit": {"sha": "dev-base"}}).to_string(),
-    );
 }
 
 fn rebased(world: &World) -> Vec<String> {
