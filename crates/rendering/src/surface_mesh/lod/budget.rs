@@ -8,6 +8,22 @@ pub(super) fn subdivisions(cells: &[Option<CellSample>], grid: CellGrid) -> i32 
     if divisions == 1 {
         return divisions;
     }
+    let skirts = skirt_reserve(cells, grid);
+    while divisions > 1
+        && cells
+            .len()
+            .saturating_mul(2)
+            .saturating_mul(divisions as usize)
+            .saturating_mul(divisions as usize)
+            .saturating_add(skirts)
+            > MAX_SURFACE_TRIANGLES
+    {
+        divisions /= 2;
+    }
+    divisions
+}
+
+pub(super) fn skirt_reserve(cells: &[Option<CellSample>], grid: CellGrid) -> usize {
     let mut skirts = 0;
     for (index, cell) in cells.iter().enumerate() {
         let Some(cell) = cell else { continue };
@@ -27,16 +43,5 @@ pub(super) fn subdivisions(cells: &[Option<CellSample>], grid: CellGrid) -> i32 
             }
         }
     }
-    while divisions > 1
-        && cells
-            .len()
-            .saturating_mul(2)
-            .saturating_mul(divisions as usize)
-            .saturating_mul(divisions as usize)
-            .saturating_add(skirts)
-            > MAX_SURFACE_TRIANGLES
-    {
-        divisions /= 2;
-    }
-    divisions
+    skirts
 }

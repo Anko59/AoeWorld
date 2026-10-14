@@ -231,11 +231,7 @@ fn reviewed_catalog_is_complete_in_original_source_and_frame_order() {
     assert_eq!(TERRAIN_ROLES[4], AssetRole::Rock);
     assert_eq!(
         WATER_DEPTH_ROLES,
-        [
-            AssetRole::WaterMedium,
-            AssetRole::WaterDeep,
-            AssetRole::Shallows
-        ]
+        [AssetRole::WaterMedium, AssetRole::WaterDeep, AssetRole::Ice]
     );
 }
 

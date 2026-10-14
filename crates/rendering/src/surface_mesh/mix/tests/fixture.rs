@@ -13,15 +13,16 @@ use crate::{
     SceneTerrainSurface,
 };
 
-/// Art groups: grass, dry grass, dirt, sand, (unused paving), water, forest floor.
-const COLORS: [[u8; 4]; 8] = [
+/// Art groups: grass, dry grass, dirt, sand, native rock, water, forest floor.
+const COLORS: [[u8; 4]; 9] = [
     [40, 170, 30, 255],
     [150, 150, 60, 255],
     [180, 130, 70, 255],
     [230, 200, 140, 255],
-    [0, 0, 0, 0],
+    [155, 120, 95, 255],
     [30, 90, 200, 255],
     [110, 65, 25, 255],
+    [230, 235, 240, 255],
     [75, 120, 170, 255],
 ];
 /// Columns of scene material, west to east: the last one continues eastwards.
@@ -65,7 +66,7 @@ fn frame(group: usize) -> GameFrame {
 
 pub(crate) fn art() -> GameArt {
     let mut terrain: [Vec<GameFrame>; 12] = Default::default();
-    for group in [0, 1, 2, 3, 5, 6] {
+    for group in [0, 1, 2, 3, 4, 5, 6] {
         terrain[group] = vec![frame(group)];
     }
     GameArt {
@@ -89,6 +90,7 @@ pub(crate) fn atlas() -> Vec<u8> {
 fn snow_art() -> GameArt {
     let mut art = art();
     art.terrain[11] = vec![frame(7)];
+    art.water_depth[2].0 = vec![frame(8)];
     art
 }
 
@@ -204,6 +206,13 @@ pub(crate) fn assert_shore(pixels: [[u8; 4]; 5]) {
 pub(crate) fn snow_scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
     let mut faces = projected_surface_triangles(&terrain(case), camera(case));
     apply_terrain_textures(&mut faces, &snow_art());
+    // Exercise the mixed ramp shader on flat geometry to isolate colour from
+    // projection: authored mountain relief must match the unshaded pure tops.
+    if case == 7 {
+        for face in faces.iter_mut().filter(|face| face.mix != [0; 6]) {
+            face.tint = 1;
+        }
+    }
     faces
 }
 
@@ -213,7 +222,7 @@ fn color(material: u8) -> [f32; 4] {
         13 => 1,
         14 | 15 => 0,
         16 => 3,
-        4 | 7 | 9 => 2,
+        7 | 9 => 2,
         8 => 5,
         6 => 0,
         material => usize::from(material),
@@ -230,10 +239,10 @@ pub(crate) fn expected(case: usize, probe: usize) -> [u8; 4] {
 fn expected_for(case: usize, probe: usize, native_snow: bool) -> [u8; 4] {
     let color = |material| {
         if native_snow && material == 7 {
-            // Independent white/cool snow oracle over the synthetic ice colour.
-            [226.13333, 229.95833, 233.78333, 255.0]
-        } else if native_snow && material == 8 {
+            // Authored soft snow stays distinct from the frozen-water sheet.
             COLORS[7].map(f32::from)
+        } else if native_snow && material == 8 {
+            COLORS[8].map(f32::from)
         } else {
             color(material)
         }
@@ -327,7 +336,7 @@ pub(crate) fn assert_soft(case: usize, pixel: &dyn Fn(u32, u32) -> [u8; 4]) {
     }
 }
 
-/// Ice stays blue; snow becomes white, including snow-rock and snow-ice edges.
+/// Ice stays blue; soft snow keeps its authored white across mixed edges.
 pub(crate) fn assert_snow_probe(case: usize, probe: usize, actual: [u8; 4]) {
     let expected = expected_for(case, probe, true);
     for channel in 0..4 {

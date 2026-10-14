@@ -1,6 +1,42 @@
 use super::*;
 
 #[test]
+fn mountain_snow_source_is_ground_art_instead_of_cracked_ice() {
+    let source = REQUIRED_RENDER_SOURCES
+        .iter()
+        .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+        .find(|source| source.role == AssetRole::Snow)
+        .expect("native snow ground source");
+    assert_ne!(
+        source.id, 15024,
+        "15024 is cracked ice, not soft snow ground"
+    );
+    assert!(
+        source
+            .terrain_topology
+            .is_some_and(|topology| topology.supports_frames(source.frames))
+    );
+}
+
+#[test]
+fn mountain_rock_has_a_native_ground_source_separate_from_gravel_and_paving() {
+    let source = REQUIRED_RENDER_SOURCES
+        .iter()
+        .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+        .find(|source| source.role == AssetRole::Rock)
+        .expect("native rock ground source");
+    assert!(
+        ![15017, 15018].contains(&source.id),
+        "gravel and paving are not mountain rock ground"
+    );
+    assert!(
+        source
+            .terrain_topology
+            .is_some_and(|topology| topology.supports_frames(source.frames))
+    );
+}
+
+#[test]
 fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
     let mut roles = REQUIRED_RENDER_SOURCES
         .iter()
@@ -23,13 +59,14 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 10);
+    assert_eq!(VERSION, 11);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
     assert_eq!(AssetRole::Gravel as usize, 22);
     assert_eq!(AssetRole::Snow as usize, 24);
-    assert_eq!(OPTIONAL_TERRAIN_SOURCES[8].id, 15024);
+    assert_eq!(OPTIONAL_TERRAIN_SOURCES[8].id, 15033);
+    assert_eq!(OPTIONAL_TERRAIN_SOURCES[9].id, 15024);
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[4..8]
             .iter()
@@ -97,9 +134,9 @@ fn paving_is_not_approved_as_natural_rock() {
             .iter()
             .chain(OPTIONAL_RESOURCE_SOURCES.iter())
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
-            .all(|source| source.role != AssetRole::Rock && source.id != 15018)
+            .all(|source| source.id != 15018)
     );
-    assert!(NATURAL_ROCK_FALLBACK.contains("procedural"));
+    assert!(NATURAL_ROCK_FALLBACK.contains("native rock"));
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[0].terrain_topology,
         Some(TerrainFrameTopology::CoordinateStableAccents)

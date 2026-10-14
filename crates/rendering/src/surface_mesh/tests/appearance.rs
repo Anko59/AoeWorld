@@ -65,7 +65,7 @@ fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
 }
 
 #[wasm_bindgen_test]
-fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
+fn native_mountain_and_ice_sheets_preserve_scene_geometry() {
     let frame = GameFrame {
         atlas: crate::AtlasAddress {
             page: 0,
@@ -75,35 +75,24 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
         anchor: [48.0, 24.0],
     };
     let mut art = test_art(frame);
-    art.terrain[4][0].atlas.uv[0] = 0.9; // Deliberately distinct paving sentinel.
-    // The ice sheet becomes white snow; frozen water keeps its authored colour.
+    art.terrain[4][0].atlas.uv[0] = 0.9;
     art.terrain[11][0].atlas.uv[0] = 0.7;
-    for material in [7, 8] {
-        let sample = SceneTerrain {
-            appearance: None,
-            position: [0.5, 0.5],
-            material,
-            elevation_meters: 0.0,
-            surface: SceneTerrainSurface::flat(0.0),
-        };
-        let mut triangles =
-            projected_surface_triangles(&[sample], camera([0.5, 0.5], 1.0, [256.0, 128.0]));
-        let before = triangles.clone();
-        apply_terrain_textures(&mut triangles, &art);
-        for (old, new) in before.iter().zip(&triangles) {
-            assert_eq!(new.tint, if material == 7 { 6 } else { old.tint });
-            assert_eq!(new.texture_uv, Some(art.terrain[11][0].atlas));
-            assert!(new.texture_blend.is_none());
-        }
-    }
-    // Without the sheet they keep the procedural tints.
-    art.terrain[11].clear();
-    for (material, base_tint) in [(4, 5), (7, 6), (8, 8), (9, 9)] {
+    art.water_depth[2].0 = vec![GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 0,
+            uv: [0.6, 0.0, 0.01, 0.01],
+        },
+        ..frame
+    }];
+    for (material, atlas) in [
+        (4, art.terrain[4][0].atlas),
+        (7, art.terrain[11][0].atlas),
+        (8, art.water_depth[2].0[0].atlas),
+    ] {
         for ramp in [false, true] {
-            let tint = base_tint + if ramp { 16 } else { 0 };
             let mut sample = SceneTerrain {
                 appearance: None,
-                position: [0.5, 0.5],
+                position: [0.5; 2],
                 material,
                 elevation_meters: 0.0,
                 surface: SceneTerrainSurface::flat(0.0),
@@ -113,36 +102,33 @@ fn procedural_materials_ignore_paving_and_preserve_scene_geometry() {
                 sample.surface.corner_game_height_levels = [0, 1, 1, 0];
             }
             let mut triangles =
-                projected_surface_triangles(&[sample], camera([0.5, 0.5], 1.0, [256.0, 128.0]));
+                projected_surface_triangles(&[sample], camera([0.5; 2], 1.0, [256.0, 128.0]));
             let before = triangles.clone();
+            apply_terrain_textures(&mut triangles, &art);
             apply_terrain_textures(&mut triangles, &art);
             for (old, new) in before.iter().zip(&triangles) {
                 assert_eq!(new.material, material);
-                assert_eq!(new.tint, tint);
-                assert_eq!(new.texture_uv, Some(frame.atlas));
+                assert_eq!(new.tint, if material == 8 { old.tint } else { 0 });
+                assert_eq!(new.texture_uv, Some(atlas));
                 assert!(new.texture_blend.is_none());
                 assert_eq!(new.pickable, old.pickable);
-                assert_eq!(
-                    new.points.map(|point| point.world),
-                    old.points.map(|point| point.world)
-                );
+                assert_eq!(new.points.map(|p| p.world), old.points.map(|p| p.world));
             }
-            apply_terrain_textures(&mut triangles, &art);
-            assert!(triangles.iter().all(|triangle| triangle.tint == tint));
         }
     }
-    let source = [170, 85, 40, 123];
-    let rock = procedural_tint(source, 5);
-    let snow = procedural_tint(source, 6);
-    let ice = procedural_tint(source, 8);
-    assert_eq!(rock[0], rock[1]);
-    assert_eq!(rock[1], rock[2]);
-    assert!(
-        snow[0] > 210 && snow[0] < snow[1] && snow[1] < snow[2] && snow[0].abs_diff(snow[2]) <= 9
-    );
-    assert!(ice[2] > ice[0] + 40);
-    for tint in 5..=10 {
-        assert_eq!(procedural_tint(source, tint)[3], 123);
+    art.water_depth[2].0.clear();
+    for (material, tint) in [(8, 8), (9, 9)] {
+        let sample = SceneTerrain {
+            appearance: None,
+            position: [0.5; 2],
+            material,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+        };
+        let mut triangles =
+            projected_surface_triangles(&[sample], camera([0.5; 2], 1.0, [256.0, 128.0]));
+        apply_terrain_textures(&mut triangles, &art);
+        assert!(triangles.iter().all(|face| face.tint == tint));
     }
 }
 
@@ -463,22 +449,16 @@ fn art_subdivision_budget_holds_for_sparse_and_large_lod_inputs() {
 }
 
 #[wasm_bindgen_test]
-fn native_ice_detail_becomes_white_snow_with_faint_cool_relief_and_unchanged_alpha() {
+fn native_snow_and_ice_preserve_their_separate_authored_colours_and_alpha() {
     use crate::surface_mesh::{landscape, mix};
-    let mut whites = Vec::new();
-    for source in [
-        [75, 120, 170, 255],
-        [160, 220, 255, 128],
-        [235, 245, 255, 255],
-    ] {
-        let snow = mix::art_layer(source, 7, landscape::NATIVE_ICE, 0);
-        let ice = mix::art_layer(source, 8, landscape::NATIVE_ICE, 0);
-        assert_eq!(ice, source.map(f32::from));
-        assert_eq!(snow[3], f32::from(source[3]));
-        assert!(snow[0] >= 225.0 && snow[2] <= 255.0, "white snow: {snow:?}");
-        assert!(snow[0] < snow[1] && snow[1] < snow[2]);
-        assert!(snow[2] - snow[0] < 9.0, "soft cool shading: {snow:?}");
-        whites.push(snow[0]);
+    for source in [[230, 235, 240, 255], [210, 220, 230, 128]] {
+        assert_eq!(
+            mix::art_layer(source, 7, landscape::NATIVE_ICE, 0),
+            source.map(f32::from)
+        );
+        assert_eq!(
+            mix::art_layer(source, 8, landscape::NATIVE_ICE, 0),
+            source.map(f32::from)
+        );
     }
-    assert!(whites[2] - whites[0] < 18.0, "cracks become faint relief");
 }

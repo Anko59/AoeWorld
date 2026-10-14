@@ -67,7 +67,7 @@ impl ProjectedSurfaceTriangle {
 
 /// The displayed sheet and its forest-floor strength. Shallow water overlays
 /// ground; loaded deeper water completes the shore halo but keeps its own faces.
-fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
+pub(super) fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
     let appearance = sample.appearance?;
     if sample.surface.water != 0 || appearance::water_material(sample.material) {
         return match sample.material {
@@ -182,6 +182,10 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             continue;
         };
         if base == over {
+            // Coverage owns pure quads too. The older single-owner splat can
+            // disagree with this support, especially on a coarse patch.
+            triangle.material = base;
+            triangle.texture_materials = Some([base; 3]);
             continue;
         }
         // A shore needs a complete source halo: an unloaded cell must not be
@@ -389,30 +393,33 @@ pub(crate) fn weights(shares: [f32; 3], middle: bool, noise: f32) -> [f32; 3] {
     }
 }
 
-/// Preserve authored ice; snow uses its white kernel at borders and junctions.
+/// Mountain sheets retain their authored colour on borders and junctions.
 pub(crate) fn art_layer(texel: [u8; 4], material: u8, appearance: u32, tint: u8) -> [f32; 4] {
     let mut sample = if appearance & super::landscape::NATIVE_ICE != 0 && material == 8 {
         texel.map(f32::from)
     } else {
         layer(texel, material)
     };
-    // Snow is diffuse: compensate its layer before the shared ramp shade,
-    // keeping rock/grass lighting and matching the pure snow tint's 0.98.
-    if material == 7 && tint == 1 {
+    // Mixed faces keep the ordinary shade on grass/dirt. Cancel it only on
+    // mountain layers so their authored relief matches neighbouring pure tops.
+    if matches!(material, 4 | 7) {
+        let shade = match tint {
+            1 => 0.92,
+            2 => 0.78,
+            3 => 0.72,
+            _ => 1.0,
+        };
         for channel in &mut sample[..3] {
-            *channel *= 0.98 / 0.92;
+            *channel /= shade;
         }
     }
     sample
 }
 
-/// One layer's colour before blending: procedural rock, snow, ice and mud are
-/// dirt or water detail on a neutral base, every other sheet is itself.
+/// Ice and mud use bounded detail; native ground sheets retain their colours.
 pub(crate) fn layer(texel: [u8; 4], material: u8) -> [f32; 4] {
     let texel = texel.map(f32::from);
     let (base, amount) = match material {
-        4 => ([0.18; 3], 0.55),
-        7 => ([0.82, 0.835, 0.85], 0.14),
         8 => ([0.42, 0.57, 0.65], 0.20),
         9 => ([0.10, 0.08, 0.05], 0.35),
         _ => return texel,

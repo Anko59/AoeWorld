@@ -65,7 +65,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             });
         }
     }
-    if extents.len() != MAX_REVIEWED_FRAMES as usize || counts != [1274, 200] {
+    if extents.len() != MAX_REVIEWED_FRAMES as usize || counts != [1474, 200] {
         return Err("incomplete semantic selection".into());
     }
     let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
@@ -171,7 +171,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
             });
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1274, 200));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 200));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());

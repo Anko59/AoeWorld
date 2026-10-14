@@ -18,7 +18,7 @@ pub(crate) fn pack(value: Option<SceneTerrainAppearance>) -> u32 {
 /// Packet variant flag; metadata bits0..28 retain their original meaning.
 pub(crate) const INTERPOLATED_FLOOR: u32 = 1 << 29;
 
-/// Mixed faces with an authored ice sheet. Snow always uses the white kernel.
+/// Mixed faces with an authored ice sheet, separate from soft snow ground.
 pub(crate) const NATIVE_ICE: u32 = 1 << 31;
 
 pub(crate) fn quantized_floor(value: u16) -> u8 {
