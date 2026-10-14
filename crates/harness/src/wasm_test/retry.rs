@@ -5,12 +5,12 @@ use std::{fs, path::Path, process::Command};
 
 type SuiteOutcome = (
     std::result::Result<(), process::ProcessError>,
-    Option<usize>,
+    Option<Vec<String>>,
 );
 
 pub(super) struct Failure {
     pub(super) error: Box<dyn std::error::Error>,
-    pub(super) context_failures: Option<usize>,
+    pub(super) context_failures: Option<Vec<String>>,
 }
 
 impl From<Box<dyn std::error::Error>> for Failure {
@@ -57,14 +57,10 @@ fn run_suite(arguments: &[String], environment: &[(&str, &str)]) -> Result<Suite
         let (_, path) = stdout.keep()?;
         eprintln!("test-wasm: complete runner stdout: {}", path.display());
         // Oversized or unreadable diagnostics are not evidence for a retry.
-        if matches!(captured.exit, CaptureExit::Failed(Some(1)))
-            && captured.stderr.len() < 64 * 1024
-            && fs::metadata(&path).is_ok_and(|metadata| metadata.len() <= 8 * 1024 * 1024)
-            && let Ok(mut output) = fs::read_to_string(&path)
+        if fs::metadata(&path).is_ok_and(|metadata| metadata.len() <= 8 * 1024 * 1024)
+            && let Ok(output) = fs::read_to_string(&path)
         {
-            output.push('\n');
-            output.push_str(&String::from_utf8_lossy(&captured.stderr));
-            context_failures = context_only_failures(&output);
+            context_failures = classify_completed(&captured.exit, &output, &captured.stderr);
         }
     }
     Ok((
@@ -76,7 +72,10 @@ fn run_suite(arguments: &[String], environment: &[(&str, &str)]) -> Result<Suite
 fn context_message(message: &str) -> bool {
     // Rust expect/unwrap prints its label followed by the context's quoted Err.
     // The error may arise during creation, upload, or drawing; the label is not
-    // the evidence. Value assertions are rejected independently below.
+    // the evidence. An assertion mentioning WebGL is not a context Err.
+    if message.starts_with("assertion ") || message.starts_with("pixel ") {
+        return false;
+    }
     let Some(error) = message
         .rsplit_once(": \"")
         .and_then(|(_, error)| error.strip_suffix('"'))
@@ -93,32 +92,34 @@ fn context_message(message: &str) -> bool {
         || error.starts_with("WebGL2 link: ")
 }
 
-/// Number of failures, only when all named failures and all panics are context errors.
-pub(super) fn context_only_failures(output: &str) -> Option<usize> {
+/// Exit, capture bounds and UTF-8 are part of the retry decision, not parser hints.
+pub(super) fn classify_completed(
+    exit: &CaptureExit,
+    stdout: &str,
+    stderr: &[u8],
+) -> Option<Vec<String>> {
+    if !matches!(exit, CaptureExit::Failed(Some(1)))
+        || stdout.len() > 8 * 1024 * 1024
+        || stderr.len() >= 64 * 1024
+    {
+        return None;
+    }
+    let stderr = std::str::from_utf8(stderr).ok()?;
+    context_failures(&format!("{stdout}\n{stderr}"))
+}
+
+/// Identify context panics in named failure blocks of a complete runner result.
+/// Other failed tests do not veto the one retry; the second full pass decides.
+pub(super) fn context_failures(output: &str) -> Option<Vec<String>> {
     let lines: Vec<_> = output.lines().map(str::trim).collect();
     if lines.iter().any(|line| {
-        line.starts_with("assertion ")
-            || line.starts_with("pixel ")
-            || line.contains("RuntimeError:")
-            || line.contains("fatal runtime error:")
-            || line.starts_with("error[E")
+        line.starts_with("error[E")
             || (line.starts_with("error:")
                 && !line.starts_with("error: test failed, to rerun pass "))
-            || (line.starts_with("Error:") && *line != "Error: some tests failed")
             || line.contains("output capture truncated")
             || line.contains("earlier output truncated")
     }) {
         return None;
-    }
-    for (index, line) in lines.iter().enumerate() {
-        if line.contains("panicked at ")
-            && (!line.starts_with("panicked at ")
-                || !lines
-                    .get(index + 1)
-                    .is_some_and(|message| context_message(message)))
-        {
-            return None;
-        }
     }
     let summaries: Vec<_> = lines
         .iter()
@@ -128,12 +129,28 @@ pub(super) fn context_only_failures(output: &str) -> Option<usize> {
     let [(summary_index, summary)] = summaries.as_slice() else {
         return None;
     };
-    let failed = summary
+    let parts: Vec<_> = summary
         .strip_prefix("test result: FAILED. ")?
         .split("; ")
-        .find_map(|part| part.strip_suffix(" failed"))?
+        .collect();
+    let [passed, failed, ignored, filtered, duration] = parts.as_slice() else {
+        return None;
+    };
+    passed.strip_suffix(" passed")?.parse::<usize>().ok()?;
+    let failed = failed.strip_suffix(" failed")?.parse::<usize>().ok()?;
+    ignored.strip_suffix(" ignored")?.parse::<usize>().ok()?;
+    filtered
+        .strip_suffix(" filtered out")?
         .parse::<usize>()
         .ok()?;
+    let seconds = duration
+        .strip_prefix("finished in ")?
+        .strip_suffix('s')?
+        .parse::<f64>()
+        .ok()?;
+    if !seconds.is_finite() || seconds < 0.0 {
+        return None;
+    }
     if failed == 0 {
         return None;
     }
@@ -157,21 +174,66 @@ pub(super) fn context_only_failures(output: &str) -> Option<usize> {
     if names.len() != failed || headers.len() != failed {
         return None;
     }
+    let mut contexts = Vec::new();
+    let mut blocks = Vec::new();
     for (position, (start, name)) in headers.iter().enumerate() {
-        if names[position] != *name || names[..position].contains(name) {
+        if names[position] != *name || name.is_empty() || names[..position].contains(name) {
             return None;
         }
         let end = headers
             .get(position + 1)
             .map_or(list_start, |(index, _)| *index);
-        if lines[start + 1..end]
+        let block = &lines[start + 1..end];
+        // Both caught Rust panics and JS-only failures have runner failure details.
+        if !block.iter().any(|line| {
+            line.starts_with("panicked at ")
+                || *line == "JS exception that was thrown:"
+                || line.starts_with("note: ")
+        }) {
+            return None;
+        }
+        if block
+            .windows(2)
+            .any(|pair| pair[0].starts_with("panicked at ") && context_message(pair[1]))
+        {
+            contexts.push((*name).to_owned());
+        }
+        blocks.push((*start, end));
+    }
+    // The runner repeats test panic output in its console dump. Accept only
+    // matching, named repeats; a runner panic/exception outside test details fails closed.
+    let mut invoked = None;
+    let mut console = false;
+    for (index, line) in lines.iter().enumerate() {
+        if *line == "console output:" && index > *summary_index {
+            console = true;
+        } else if *line == "--- stderr ---" || *line == "Error: some tests failed" {
+            console = false;
+            invoked = None;
+        } else if console && let Some(name) = line.strip_prefix("Invoking test: ") {
+            invoked = names.iter().position(|failed| *failed == name);
+        }
+        let in_block = blocks
             .iter()
-            .filter(|line| line.starts_with("panicked at "))
-            .count()
-            != 1
+            .any(|(start, end)| index > *start && index < *end);
+        if line.contains("panicked at ") && !in_block {
+            let position = invoked?;
+            let (start, end) = blocks[position];
+            let message = lines.get(index + 1)?;
+            if !lines[start + 1..end]
+                .windows(2)
+                .any(|pair| pair == [*line, *message])
+            {
+                return None;
+            }
+        }
+        if !in_block
+            && (line.contains("RuntimeError:")
+                || line.contains("fatal runtime error:")
+                || (line.starts_with("Error:") && *line != "Error: some tests failed"))
         {
             return None;
         }
     }
-    Some(failed)
+    (!contexts.is_empty()).then_some(contexts)
 }

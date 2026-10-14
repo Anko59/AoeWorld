@@ -126,11 +126,12 @@ pub fn run() -> Result<()> {
         .ok_or("non-UTF-8 WebDriver configuration path")?;
     let environment = runner_environment(&remote, capabilities);
     if let Err(failure) = retry::run_suites(&environment) {
-        let Some(count) = failure.context_failures else {
+        let Some(names) = failure.context_failures else {
             return Err(failure.error);
         };
         eprintln!(
-            "test-wasm: retrying once: {count} tests failed only on the runner's WebGL context (#391)"
+            "test-wasm: retrying once: runner WebGL context errors in: {} (#391)",
+            names.join(", ")
         );
         retry::run_suites(&environment).map_err(|failure| failure.error)?;
     }

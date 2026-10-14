@@ -1,7 +1,10 @@
 use super::*;
 
-// Exact panic messages from the 2026-10-14 first-attempt logs:
-// 38560009588 and 38612471456 (context + pixel 64), 38603174196 (pixel 32).
+fn context_count(output: &str) -> Option<usize> {
+    retry::context_failures(output).map(|names| names.len())
+}
+
+// Panic messages from the real first-attempt diagnostics retained in tests/fixtures.
 const CONTEXT: &str =
     "actual WebGL2 context and linked shaders: \"WebGL2 graphics operation failed\"";
 const PIXEL_64: &str = "pixel 64,64: channel 0, expected 255";
@@ -14,6 +17,8 @@ fn failure_output(messages: &[&str]) -> String {
             "---- webgl_{index} output ----\n    error output:\n        panicked at crates/rendering/src/game_renderer/tests/webgl.rs:289:37:\n        {message}\n\n        Stack:\n\n"
         ));
     }
+    // wasm-bindgen-test 0.3.78 reports the caught Rust panic as a JS exception.
+    output = output.replace("        Stack:\n\n", "        Stack:\n\n    JS exception that was thrown:\n        RuntimeError: unreachable\n\n");
     output.push_str("failures:\n\n");
     for index in 0..messages.len() {
         output.push_str(&format!("    webgl_{index}\n"));
@@ -26,19 +31,19 @@ fn failure_output(messages: &[&str]) -> String {
 }
 
 #[test]
-fn retry_classification_requires_every_failure_to_be_only_a_context_error() {
+fn retry_classification_requires_any_named_context_failure() {
     for (name, output, expected) in [
         ("context only", failure_output(&[CONTEXT; 7]), Some(7)),
         (
             "dev and PR401 mixed",
             failure_output(&[CONTEXT, PIXEL_64]),
-            None,
+            Some(1),
         ),
         ("PR401 pixel assertion", failure_output(&[PIXEL_32]), None),
         (
             "mixed pixel assertion",
             failure_output(&[CONTEXT, PIXEL_32]),
-            None,
+            Some(1),
         ),
         (
             "panic",
@@ -46,6 +51,35 @@ fn retry_classification_requires_every_failure_to_be_only_a_context_error() {
             None,
         ),
         ("empty", String::new(), None),
+        (
+            "compile error",
+            format!(
+                "error[E0308]: mismatched types\n{}",
+                failure_output(&[CONTEXT])
+            ),
+            None,
+        ),
+        (
+            "unrelated failure alongside context",
+            failure_output(&[
+                CONTEXT,
+                "index out of bounds: the len is 0 but the index is 1",
+            ]),
+            Some(1),
+        ),
+        (
+            "fatal message inside another named test",
+            failure_output(&[CONTEXT, "fatal runtime error: stack overflow"]),
+            Some(1),
+        ),
+        (
+            "fatal runner error outside named tests",
+            format!(
+                "{}fatal runtime error: stack overflow\n",
+                failure_output(&[CONTEXT])
+            ),
+            None,
+        ),
         (
             "missing failure detail",
             failure_output(&[CONTEXT]).replace("1 failed", "2 failed"),
@@ -74,7 +108,7 @@ fn retry_classification_requires_every_failure_to_be_only_a_context_error() {
             failure_output(&[&format!(
                 "{CONTEXT}\n        assertion `left == right` failed"
             )]),
-            None,
+            Some(1),
         ),
         (
             "missing named failure",
@@ -82,6 +116,16 @@ fn retry_classification_requires_every_failure_to_be_only_a_context_error() {
             None,
         ),
         ("zero failures", failure_output(&[]), None),
+        (
+            "malformed summary",
+            failure_output(&[CONTEXT]).replace("234 passed", "garbage passed"),
+            None,
+        ),
+        (
+            "duplicate test name",
+            failure_output(&[CONTEXT, PIXEL_32]).replace("webgl_1", "webgl_0"),
+            None,
+        ),
         (
             "runner abort",
             format!("{}RuntimeError: unreachable\n", failure_output(&[CONTEXT])),
@@ -104,7 +148,7 @@ fn retry_classification_requires_every_failure_to_be_only_a_context_error() {
             None,
         ),
     ] {
-        assert_eq!(retry::context_only_failures(&output), expected, "{name}");
+        assert_eq!(context_count(&output), expected, "{name}");
     }
 }
 
@@ -118,10 +162,7 @@ fn context_creation_and_context_reported_shader_failures_are_retryable() {
         "WebGL2 link: linking failed",
     ] {
         let message = format!("actual WebGL2 context and linked shaders: {message:?}");
-        assert_eq!(
-            retry::context_only_failures(&failure_output(&[&message])),
-            Some(1)
-        );
+        assert_eq!(context_count(&failure_output(&[&message])), Some(1));
     }
 }
 
@@ -133,10 +174,7 @@ fn graphics_errors_are_recognized_at_upload_render_and_unwrap_sites() {
         "called `Result::unwrap()` on an `Err` value",
     ] {
         let message = format!("{label}: \"WebGL2 graphics operation failed\"");
-        assert_eq!(
-            retry::context_only_failures(&failure_output(&[&message])),
-            Some(1)
-        );
+        assert_eq!(context_count(&failure_output(&[&message])), Some(1));
     }
 }
 
@@ -155,4 +193,61 @@ fn browser_suites_get_more_than_the_runner_default_of_twenty_seconds() {
 fn current_checkout_has_report_identity_and_a_free_local_port() {
     assert_eq!(git("rev-parse", "HEAD").expect("revision").len(), 40);
     assert!(unused_port().expect("port") > 0);
+}
+
+#[test]
+fn real_runner_diagnostics_keep_exceptions_console_dump_and_artifact_limits() {
+    let pixel = include_str!("tests/fixtures/pixel-38603174196.txt");
+    assert!(pixel.contains(PIXEL_32));
+    assert!(pixel.contains("JS exception that was thrown:\n        RuntimeError: unreachable"));
+    assert_eq!(context_count(pixel), None);
+    let dev = include_str!("tests/fixtures/dev-38560009588.txt");
+    assert!(dev.contains(CONTEXT) && dev.contains(PIXEL_64));
+    assert!(dev.starts_with("[output capture truncated]"));
+    assert_eq!(context_count(dev), None);
+
+    // A complete surviving dev failure block, verbatim including its JS exception,
+    // with a synthetic single-failure envelope. Never claim this is the complete dev run.
+    let name =
+        "game_renderer::webgl_tests::webgl_three_native_materials_use_shared_barycentric_weights";
+    let block = include_str!("tests/fixtures/context-section.txt");
+    let output = format!(
+        "failures:\n\n{block}\nfailures:\n\n    {name}\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 filtered out; finished in 1.00s\n"
+    );
+    assert_eq!(context_count(&output), Some(1));
+    // The real runner repeats panics under named Invoking test entries after the summary.
+    let output = format!(
+        "{output}console output:\n    Invoking test: {name}\n    panicked at crates/rendering/src/game_renderer/tests/webgl.rs:289:37:\n    {CONTEXT}\n"
+    );
+    assert_eq!(context_count(&output), Some(1));
+}
+
+#[test]
+fn completion_metadata_must_prove_a_normal_exit_one_and_untruncated_capture() {
+    use crate::process::CaptureExit;
+    let output = failure_output(&[CONTEXT]);
+    assert_eq!(
+        retry::classify_completed(&CaptureExit::Failed(Some(1)), &output, b"").unwrap(),
+        ["webgl_0"]
+    );
+    for exit in [
+        CaptureExit::Success,
+        CaptureExit::Failed(Some(2)),
+        CaptureExit::Failed(None),
+        CaptureExit::Deadline,
+        CaptureExit::Cancelled,
+    ] {
+        assert!(retry::classify_completed(&exit, &output, b"").is_none());
+    }
+    for stderr in [
+        vec![b' '; 64 * 1024],
+        vec![0xff],
+        b"error[E0308]: mismatched types".to_vec(),
+    ] {
+        assert!(
+            retry::classify_completed(&CaptureExit::Failed(Some(1)), &output, &stderr).is_none()
+        );
+    }
+    let oversized = format!("{}{}", " ".repeat(8 * 1024 * 1024), output);
+    assert!(retry::classify_completed(&CaptureExit::Failed(Some(1)), &oversized, b"").is_none());
 }

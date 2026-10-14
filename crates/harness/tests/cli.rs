@@ -123,3 +123,4 @@ fn ci_selection_manifest_and_aggregate_execute_through_cli() {
             .success()
     );
 }
+mod wasm_cli;

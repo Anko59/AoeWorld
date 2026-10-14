@@ -1,0 +1,33 @@
+---- game_renderer::webgl_tests::webgl_three_native_materials_use_shared_barycentric_weights output ----
+    error output:
+        panicked at crates/rendering/src/game_renderer/tests/webgl.rs:289:37:
+        actual WebGL2 context and linked shaders: "WebGL2 graphics operation failed"
+        
+        Stack:
+        
+        Error
+            at http://127.0.0.1:45829/wasm-bindgen-test:755:25
+            at logError (http://127.0.0.1:45829/wasm-bindgen-test:1917:18)
+            at __wbg_new_af0ec6b7fe765f33 (http://127.0.0.1:45829/wasm-bindgen-test:754:57)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::Error::new::__wbg_new_af0ec6b7fe765f33::h7f309e00f7a7f3b7 externref shim (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3520]:0x1efbed)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::h61cc677508b5107b (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[1291]:0x194517)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::{{closure}}::{{closure}}::h811a3c0943d01e4b (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[2109]:0x1d3042)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_with_hook::h51c5edeeb48e69d3 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[1955]:0x1cc5e6)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_handler::{{closure}}::hdf8d658790ccee4c (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[2187]:0x1d5912)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::sys::backtrace::__rust_end_short_backtrace::h88020ccf76d2d661 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3910]:0x1f10de)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_begin_unwind (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3296]:0x1ee1a8)
+        
+        
+    
+    JS exception that was thrown:
+        RuntimeError: unreachable
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::__rust_abort (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[4028]:0x1f14dd)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::__rust_start_panic (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[4012]:0x1f1475)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_panic (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3597]:0x1f0129)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_with_hook::h51c5edeeb48e69d3 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[1955]:0x1cc61b)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_handler::{{closure}}::hdf8d658790ccee4c (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[2187]:0x1d5912)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::sys::backtrace::__rust_end_short_backtrace::h88020ccf76d2d661 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3910]:0x1f10de)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_begin_unwind (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[3296]:0x1ee1a8)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.core::panicking::panic_fmt::h806e647715990138 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[2921]:0x1e9082)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.core::result::unwrap_failed::h28bb9ae37aca2287 (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[2757]:0x1e5de0)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.aoe_rendering::game_renderer::webgl_tests::target::h85c0499958f1ac6a (http://127.0.0.1:45829/wasm-bindgen-test_bg.wasm:wasm-function[1305]:0x19612e)

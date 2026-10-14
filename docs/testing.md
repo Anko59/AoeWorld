@@ -11,10 +11,15 @@ overflow checks remain enabled. Distances, tick limits, and gate floors are
 unchanged. `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
-browser suites exactly once only when every named failed test reports a WebGL
-context/graphics error, with no value assertion or unrelated panic (#391).
-The retry is announced in the log; its result decides the gate. Incomplete or
-unrecognized diagnostics fail immediately. Complete failed-run stdout is kept
+browser suites exactly once when at least one named failed test reports a runner
+WebGL context/graphics error (#391), even alongside value assertions or other test
+failures. The log names the tests with context errors; the second full run decides
+the gate. Only the existing narrow WebGL2 creation, lost-context, graphics,
+shader, and link error messages qualify. Caught Rust panics include the runner's
+`JS exception that was thrown:` / `RuntimeError: unreachable` section; that is
+normal test failure detail. A pixel-only failure does not retry. Incomplete or
+unrecognized diagnostics, compile errors, non-1 exits, cancellation, and timeouts
+fail immediately. Complete failed-run stdout is kept
 under `reports/process/` for classification alongside the usual bounded excerpt;
 classification is limited to 8 MiB and requires a complete stderr tail. Native
 suites and the duel's focused checks do not retry. Browser-only regressions
