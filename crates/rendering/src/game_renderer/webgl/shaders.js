@@ -171,9 +171,19 @@ vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
         vec2 inward = mix(uv, rect.xy + rect.zw * .5, 2.0 / min(extent.x, extent.y));
         center = textureLod(atlas, vec3(inward, float(page)), 0.0);
     }
-    vec4 average = boxAverage(uv, page, rect, dx, dy);
-    if (average.a < 0.0) return center;
-    return vec4(average.rgb, center.a);
+    vec2 px = dx * size, py = dy * size;
+    float footprint = max(dot(px,px), dot(py,py));
+    if (!(all(lessThanEqual(abs(rect),vec4(3.402823e38))) && all(lessThanEqual(abs(uv),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint > 1.5625 && footprint <= 3.402823e38)) return center;
+    vec2 lo = rect.xy + .5 / size;
+    vec2 hi = lo + max(rect.zw - 1.0 / size, vec2(0));
+    vec4 sum = vec4(0);
+    for (int i=0; i<4; i++) {
+        float sx = (i & 2) != 0 ? 1.0 : -1.0, sy = (i & 1) != 0 ? 1.0 : -1.0;
+        vec4 tap = floor(textureLod(atlas, vec3(clamp(uv + .25 * (sx * dx + sy * dy), lo, hi), float(page)), 0.0) * 255.0 + .5);
+        sum += vec4(tap.rgb * tap.a, tap.a);
+    }
+    if (sum.a == 0.0) return center;
+    return vec4(floor(sum.rgb / sum.a + .5) / 255.0, center.a);
 }
 struct Layer { vec2 uv; uint page; vec4 rect; vec2 dx; vec2 dy; };
 vec4 directory(uint entry) {
@@ -296,8 +306,11 @@ void main() {
     vec2 dx3 = dFdx(vUv3), dy3 = dFdy(vUv3);
     if (vSolid == 0u) {
         vec4 texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
-        vec4 average = boxAverage(vUv, vPages.x, vRect, dx, dy);
-        if (average.a >= 0.0) texel = average;
+        // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
+        if ((vPages.w & 1u) == 0u) {
+            vec4 average = boxAverage(vUv, vPages.x, vRect, dx, dy);
+            if (average.a >= 0.0) texel = average;
+        }
         if (texel.a <= 0.0) discard;
         result = texel * vColor;
         return;

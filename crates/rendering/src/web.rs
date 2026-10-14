@@ -29,9 +29,14 @@ pub(crate) struct Sprite {
     /// three values so the depth buffer interpolates the actual surface plane.
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
-    /// Primary, secondary, tertiary atlas layers, then appearance (zero: none).
+    /// Primary, secondary, tertiary atlas layers. Surface w stores appearance;
+    /// quad w stores NEAREST_TERRAIN_QUAD or zero for filtered object sampling.
     pub(crate) pages: [u32; 4],
 }
+impl Sprite {
+    pub(crate) const NEAREST_TERRAIN_QUAD: u32 = 1;
+}
+
 pub struct Renderer {
     adapter_label: String,
     surface: wgpu::Surface<'static>,

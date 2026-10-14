@@ -280,12 +280,17 @@ pub(super) fn raster_sprite(
         f64::from(sprite.uv[2]),
         f64::from(sprite.uv[3]),
     ];
-    // Minified sprites share the bounded box kernel; the quad is axis
-    // aligned, so the tap offsets are constant across the sprite.
-    let offsets = filter::sprite_offsets(
-        sprite.uv,
-        [f64::from(frame.size[0]), f64::from(frame.size[1])],
-    );
+    // Terrain also arrives as quads: retain its original nearest lookup and
+    // floor/ceil coverage. Only object quads use the minification kernel.
+    let terrain = sprite.pages[3] & crate::web::Sprite::NEAREST_TERRAIN_QUAD != 0;
+    let offsets = if terrain {
+        None
+    } else {
+        filter::sprite_offsets(
+            sprite.uv,
+            [f64::from(frame.size[0]), f64::from(frame.size[1])],
+        )
+    };
     for y in bounds[1]..bounds[3] {
         let texture_v =
             v + (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]) * source_height;
@@ -293,11 +298,11 @@ pub(super) fn raster_sprite(
             if layer_depth < depth[y as usize * width as usize + x as usize] {
                 continue;
             }
-            // The GPU quad covers only its own rectangle: pixel centres past
-            // the edges are outside the coverage and must not sample.
+            // Object quad coverage matches GPU pixel centres. Terrain keeps
+            // its original floor/ceil bounds, including edge samples.
             let horizontal = (f64::from(x) + 0.5 - origin_x) / f64::from(frame.size[0]);
             let vertical = (f64::from(y) + 0.5 - origin_y) / f64::from(frame.size[1]);
-            if !(0.0..1.0).contains(&horizontal) || !(0.0..1.0).contains(&vertical) {
+            if !terrain && (!(0.0..1.0).contains(&horizontal) || !(0.0..1.0).contains(&vertical)) {
                 continue;
             }
             let texture_u = u + source_width * horizontal;
