@@ -1,7 +1,7 @@
 //! Fixture artifact directories, rendered tables and the in-place comment
 //! arguments. All `gh` and download flows stay behind pure seams.
 use super::reports::{self, Report, WasmRule};
-use super::{comment_args, comment_id, epoch_seconds, format_duration, parse_jobs, render};
+use super::{comment_args, epoch_seconds, format_duration, own_comment, parse_jobs, render};
 use std::{fs, path::Path};
 use tempfile::tempdir;
 
@@ -127,7 +127,7 @@ fn timing_rows_come_from_devs_own_band() {
         jobs: &[],
         wasm: Some(WasmRule {
             baseline: 150,
-            cap: 158,
+            cap: 157,
         }),
         noise: &noise,
     });
@@ -139,7 +139,7 @@ fn timing_rows_come_from_devs_own_band() {
         )
     );
     assert!(comment.contains(
-        "| Optimized WASM gzip (bytes) | 100 | 120 | +20 (+20.0%) | deterministic; baseline 150, cap 158 |"
+        "| Optimized WASM gzip (bytes) | 100 | 120 | +20 (+20.0%) | deterministic; baseline 150, cap 157 |"
     ));
     assert!(comment.contains(
         "| Instructions: simulation::advance | 100 | 100 | +0 (+0.0%) | deterministic |"
@@ -284,7 +284,7 @@ fn the_wasm_note_marks_only_values_over_the_cap() {
     }
     let noise = render::Noise::load().expect("noise.json");
     let at_cap = dir.path().join("at-cap");
-    fixture(&at_cap, &[], &[], 1000, 158, None);
+    fixture(&at_cap, &[], &[], 1000, 157, None);
     let comment = render::comment(render::Input {
         repository: "o/r",
         run: 1,
@@ -293,16 +293,16 @@ fn the_wasm_note_marks_only_values_over_the_cap() {
         jobs: &[],
         wasm: Some(WasmRule {
             baseline: 150,
-            cap: 158,
+            cap: 157,
         }),
         noise: &noise,
     });
     assert!(comment.contains(
-        "| Optimized WASM gzip (bytes) | 100 | 158 | +58 (+58.0%) | deterministic; baseline 150, cap 158 |"
+        "| Optimized WASM gzip (bytes) | 100 | 157 | +57 (+57.0%) | deterministic; baseline 150, cap 157 |"
     ));
     assert!(!comment.contains("PR over cap"));
     let over_cap = dir.path().join("over-cap");
-    fixture(&over_cap, &[], &[], 1000, 159, None);
+    fixture(&over_cap, &[], &[], 1000, 158, None);
     let comment = render::comment(render::Input {
         repository: "o/r",
         run: 1,
@@ -311,12 +311,12 @@ fn the_wasm_note_marks_only_values_over_the_cap() {
         jobs: &[],
         wasm: Some(WasmRule {
             baseline: 150,
-            cap: 158,
+            cap: 157,
         }),
         noise: &noise,
     });
     assert!(comment.contains(
-        "| Optimized WASM gzip (bytes) | 100 | 159 | +59 (+59.0%) | deterministic; baseline 150, cap 158; PR over cap |"
+        "| Optimized WASM gzip (bytes) | 100 | 158 | +58 (+58.0%) | deterministic; baseline 150, cap 157; PR over cap |"
     ));
 }
 
@@ -399,9 +399,19 @@ fn fixture_report() -> Report {
 
 #[test]
 fn the_comment_is_updated_in_place_through_its_id() {
-    assert_eq!(comment_id("123\n"), Some(123));
-    assert_eq!(comment_id("123\n456\n"), Some(123));
-    assert_eq!(comment_id(""), None);
+    let marker = render::MARKER;
+    // Two pages as `gh api --paginate` prints them. A person quoting the
+    // marker, or the bot mentioning it mid-text, is never the comment to edit.
+    let pages = format!(
+        r#"[{{"id": 1, "body": "{marker} quoted", "user": {{"login": "someone"}}}},
+            {{"id": 2, "body": "see {marker}", "user": {{"login": "github-actions[bot]"}}}}]
+           [{{"id": 3, "body": "{marker}\n## CI", "user": {{"login": "github-actions[bot]"}}}},
+            {{"id": 4, "body": "{marker}\n## CI", "user": {{"login": "github-actions[bot]"}}}}]"#
+    );
+    assert_eq!(own_comment(&pages).unwrap(), Some(3));
+    assert_eq!(own_comment("[]").unwrap(), None);
+    assert_eq!(own_comment("").unwrap(), None);
+    assert!(own_comment("{").is_err());
     let body = Path::new("/scratch/comment.md");
     assert_eq!(
         comment_args(Some(42), "o/r", 7, body),
@@ -452,9 +462,12 @@ fn a_report_without_the_core_file_is_refused_and_the_rule_computes_its_cap() {
     .expect("baseline");
     let rule = reports::wasm_rule_at(&cap).expect("rule");
     assert_eq!(rule.baseline, 150);
-    // The cap is the gate's own rule: the smallest value it calls a
-    // regression (150 * 1.05 = 157.5, so 158).
-    assert_eq!(rule.cap, 158);
+    // The cap is the gate's own rule: the largest value it still passes
+    // (150 * 1.05 = 157.5, so 157 passes and 158 regresses).
+    assert_eq!(rule.cap, 157);
+    let verdict = |size| crate::perf::compare("gzip", Some(size), Some(150)).verdict;
+    assert_eq!(verdict(rule.cap), crate::perf::Verdict::Pass);
+    assert_eq!(verdict(rule.cap + 1), crate::perf::Verdict::Regression);
     assert_eq!(reports::wasm_rule_at(&dir.path().join("gone.json")), None);
 }
 

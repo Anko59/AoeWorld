@@ -373,7 +373,7 @@ perf-baseline-propose: perf-instructions perf-wasm-size
 # PR and run arrive through the environment; GITHUB_TOKEN authorizes gh.
 # PERF_COMMENT_PRINT=1 prints the comment instead of posting it.
 perf-comment:
-	@docker run $(HEAVY_ENV) --rm --init --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- perf-comment
+	@docker run $(HEAVY_ENV) --rm --init --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e GITHUB_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- perf-comment
 
 perf-hardware-check: tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-hardware-check

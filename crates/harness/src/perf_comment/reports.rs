@@ -152,6 +152,8 @@ pub(crate) fn wasm_rule_at(path: &Path) -> Option<WasmRule> {
         .ok()
         .map(|baseline| WasmRule {
             baseline: baseline.optimized_gzip_bytes,
-            cap: crate::perf::regression_floor(baseline.optimized_gzip_bytes),
+            // The largest size the gate still passes: one below the smallest
+            // value it calls a regression.
+            cap: crate::perf::regression_floor(baseline.optimized_gzip_bytes) - 1,
         })
 }

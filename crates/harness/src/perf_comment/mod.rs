@@ -208,32 +208,48 @@ fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
     parse_jobs(&text, run)
 }
 
-/// The first comment id in `gh`'s jq output (one id per line).
-pub(crate) fn comment_id(output: &str) -> Option<u64> {
-    output
-        .lines()
-        .next()
-        .and_then(|line| line.trim().parse::<u64>().ok())
+/// The comment to rewrite: one of the workflow's own comments that starts
+/// with the hidden marker. Anyone can quote the marker in a comment; only the
+/// bot's own comment is ever edited. `pages` is `gh api --paginate` output: one
+/// JSON array per page, concatenated (the image's gh 2.23 has no `--slurp`).
+pub(crate) fn own_comment(pages: &str) -> Result<Option<u64>> {
+    #[derive(Deserialize)]
+    struct User {
+        login: String,
+    }
+    #[derive(Deserialize)]
+    struct Comment {
+        id: u64,
+        #[serde(default)]
+        body: String,
+        user: Option<User>,
+    }
+    for page in serde_json::Deserializer::from_str(pages).into_iter::<Vec<Comment>>() {
+        let page = page.map_err(|error| format!("comments: {error}"))?;
+        let own = page.into_iter().find(|comment| {
+            comment
+                .user
+                .as_ref()
+                .is_some_and(|user| user.login == "github-actions[bot]")
+                && comment.body.starts_with(render::MARKER)
+        });
+        if let Some(comment) = own {
+            return Ok(Some(comment.id));
+        }
+    }
+    Ok(None)
 }
 
-/// The comment to rewrite, found by its hidden marker in the pull request's
-/// comments.
 fn existing_comment(root: &Path, repo: &str, pr: u64) -> Result<Option<u64>> {
-    let jq = format!(
-        ".[] | select(.body | contains(\"{}\")) | .id",
-        render::MARKER
-    );
-    let output = gh_text(
+    let pages = gh_text(
         root,
         &[
             "api",
             "--paginate",
             &format!("repos/{repo}/issues/{pr}/comments?per_page=100"),
-            "--jq",
-            &jq,
         ],
     )?;
-    Ok(comment_id(&output))
+    own_comment(&pages)
 }
 
 /// The `gh` arguments that update the existing comment in place, or create
