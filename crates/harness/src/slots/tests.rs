@@ -337,39 +337,40 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
 
 #[test]
 fn a_gate_that_waited_longer_than_its_budget_still_gets_its_whole_budget() {
+    // The wait (4 s) is longer than the whole budget (3 s) and the command is
+    // instant: if the clock included the wait the gate would be over budget.
+    // Wide margins, so a loaded machine cannot fail this by timing alone.
+    const WAIT: Duration = Duration::from_millis(4000);
     let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_temp, root) = checkout();
     let occupant = take(&dir(&root).unwrap(), 1, "lint", Duration::ZERO).expect("free");
     let releaser = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(2500));
+        thread::sleep(WAIT);
         drop(occupant);
     });
     let gate: Gate = serde_json::from_value(serde_json::json!({
-        "id": "slow", "command": "sleep 1", "requires": [], "select": "fixture",
+        "id": "slow", "command": "true", "requires": [], "select": "fixture",
         "evidence": "exit status", "suites": ["static"], "cadences": ["preflight"],
-        "budget_s": 2, "static": false, "heavy": true, "capabilities": [], "blocks": []
+        "budget_s": 3, "static": false, "heavy": true, "capabilities": [], "blocks": []
     }))
     .unwrap();
     let begun = Instant::now();
     let results = crate::ship::run::run_gates(&root, &[&gate]);
     releaser.join().unwrap();
-    assert!(
-        begun.elapsed() >= Duration::from_millis(2500),
-        "it did wait"
-    );
+    assert!(begun.elapsed() >= WAIT, "it did wait");
     let [result] = results.as_slice() else {
         panic!("one result")
     };
     assert_eq!(result.line().split_whitespace().nth(1), Some("slow"));
     assert!(
-        result.seconds < 2.0,
-        "the clock covers the run only: {}",
-        result.seconds
+        matches!(result.verdict, crate::ship::run::GateVerdict::Pass),
+        "a wait longer than the budget must not spend it: {}",
+        result.line()
     );
     assert!(
-        matches!(result.verdict, crate::ship::run::GateVerdict::Pass),
-        "{}",
-        result.line()
+        result.seconds < WAIT.as_secs_f32(),
+        "the clock covers the run only, not the {WAIT:?} wait: {}",
+        result.seconds
     );
 }
 
