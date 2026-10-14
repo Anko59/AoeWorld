@@ -1,6 +1,7 @@
 # Testing
 
 Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
+(`make lint` also compiles the test targets of the wasm32 packages `make test-wasm` runs, so wasm-only test code cannot break unnoticed; clippy is not denied for wasm32 yet)
 for focused checks. `make pre-commit` runs static gates; `make preflight` adds
 native tests through pinned cargo-nextest, followed by separate doctests and a
 WASM build. The test profile optimizes map, simulation, server, and procedural
