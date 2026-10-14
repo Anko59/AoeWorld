@@ -12,6 +12,8 @@ pub enum SurfaceKind {
     Plateau,
     Ramp,
     Cliff,
+    /// A deliberately raised contour ledge, distinct from continuous steep ground.
+    CliffLedge,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -37,7 +39,11 @@ pub struct TileSurface {
 
 impl TileSurface {
     pub const fn walkable(self) -> bool {
-        !matches!(self.kind, SurfaceKind::Cliff)
+        !self.is_cliff()
+    }
+
+    pub const fn is_cliff(self) -> bool {
+        matches!(self.kind, SurfaceKind::Cliff | SurfaceKind::CliffLedge)
     }
 }
 

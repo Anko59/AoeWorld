@@ -10,7 +10,6 @@ struct Sprite {
 @group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
-
 struct VertexOutput {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
@@ -25,7 +24,6 @@ struct VertexOutput {
     @location(9) @interpolate(flat) rect2: vec4<f32>,
     @location(10) @interpolate(flat) rect3: vec4<f32>,
 };
-
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
     switch mode {
         case 0u: {
@@ -61,12 +59,10 @@ fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
         default: { return vec2<f32>(0.0, 0.0); }
     }
 }
-
 fn terrain_atlas_uv(rect: vec4<f32>, local: vec2<f32>) -> vec2<f32> {
     let pixel = vec2<f32>(1.0) / vec2<f32>(textureDimensions(sprite_atlas));
     return rect.xy + pixel * 0.5 + local * max(rect.zw - pixel, vec2<f32>(0.0));
 }
-
 fn directory(entry: u32) -> vec4<f32> {
     return floor(textureLoad(sprite_atlas, vec2<u32>(entry % 2048u, entry / 2048u), 0u, 0u) * 255.0 + 0.5);
 }
@@ -174,8 +170,16 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
 }
 
 fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {
-    let center = textureSampleLevel(sprite_atlas, sprite_sampler, uv, i32(page), 0.0);
+    var center = textureSampleLevel(sprite_atlas, sprite_sampler, uv, i32(page), 0.0);
     let size = vec2<f32>(textureDimensions(sprite_atlas));
+    let extent = rect.zw * size;
+    let local = (uv - rect.xy - 0.5 / size) / max(rect.zw - 1.0 / size, 1.0 / size) - 0.5;
+    let distance = abs(local.x) + abs(local.y);
+    let diamond = abs(extent.x - 2.0 * extent.y + 1.0) <= 1.0;
+    if center.a == 0.0 && diamond && min(extent.x, extent.y) > 2.0 && distance >= 0.47 && distance <= 0.50001 {
+        let inward = mix(uv, rect.xy + rect.zw * 0.5, 2.0 / min(extent.x, extent.y));
+        center = textureSampleLevel(sprite_atlas, sprite_sampler, inward, i32(page), 0.0);
+    }
     let px = dx * size;
     let py = dy * size;
     let footprint = max(dot(px, px), dot(py, py));
@@ -450,7 +454,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if landscape {
             sample = terrain_sample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy);
         } else {
-            sample = textureSampleLevel(sprite_atlas, sprite_sampler, layer.uv, i32(layer.page), 0.0);
+            sample = terrain_sample(layer.uv, layer.page, layer.rect, vec2<f32>(0.0), vec2<f32>(0.0));
         }
         // #if mixing
         if mixing { sample = mixed(sample, material, in.pages.w, in.tint_kind); }

@@ -1,6 +1,47 @@
 use super::*;
 use crate::CompactChunk;
 
+#[test]
+fn straight_contour_cells_share_a_level_ledge_and_keep_their_downhill_direction() {
+    let generator = plane(-432, 0);
+    let mut joined = 0;
+    for y in (601..739).step_by(3) {
+        for x in (97..670).step_by(3) {
+            let anchor = TileCoord::new(x, y);
+            let next = TileCoord::new(x, y + 3);
+            let Some(first) = generator
+                .cliff_piece_with_cancel(anchor, &|| false)
+                .unwrap()
+            else {
+                continue;
+            };
+            let Some(second) = generator.cliff_piece_with_cancel(next, &|| false).unwrap() else {
+                continue;
+            };
+            assert_eq!(first.facing, second.facing, "a straight ridge never flips");
+            let ledge = generator
+                .sample_base_tile(anchor)
+                .surface
+                .corner_game_height_levels;
+            assert_eq!(ledge, [ledge[0]; 4], "rock supports a level ledge");
+            for at in [anchor, next] {
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let tile = generator.sample_base_tile(TileCoord::new(at.x + dx, at.y + dy));
+                        assert_eq!(tile.surface.corner_game_height_levels, ledge);
+                        assert_eq!(tile.game_height_level, ledge[0]);
+                        assert!(!tile.passable);
+                    }
+                }
+            }
+            let below = generator.sample_base_tile(TileCoord::new(x + 2, y));
+            assert!(ledge[0] > below.surface.corner_game_height_levels[0]);
+            joined += 1;
+        }
+    }
+    assert!(joined > 100, "fixture must exercise joined runs: {joined}");
+}
+
 /// Maximal runs of `true` as (start, length).
 fn runs(values: &[bool]) -> Vec<(usize, usize)> {
     let mut result = Vec::new();
@@ -205,4 +246,78 @@ fn cliff_cells_below_the_snow_line_take_summer_ground_not_base_snow() {
         }
     }
     assert!(cliffs > 50, "fixture has low cliffs: {cliffs}");
+}
+
+#[test]
+fn a_cliff_cell_has_a_neighbor_on_the_ridge_instead_of_an_isolated_square_mesa() {
+    let generator = alpine(1);
+    let mut checked = 0;
+    for y in (601..745).step_by(3) {
+        for x in (97..745).step_by(3) {
+            let at = TileCoord::new(x, y);
+            if generator
+                .cliff_piece_with_cancel(at, &|| false)
+                .unwrap()
+                .is_none()
+            {
+                continue;
+            }
+            let joined = (-1..=1).any(|dy| {
+                (-1..=1).any(|dx| {
+                    (dx != 0 || dy != 0)
+                        && generator
+                            .cliff_piece_with_cancel(
+                                TileCoord::new(x + dx * 3, y + dy * 3),
+                                &|| false,
+                            )
+                            .unwrap()
+                            .is_some()
+                })
+            });
+            assert!(joined, "isolated cliff cell at {x},{y}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 100, "still retains real ridges: {checked}");
+}
+
+#[test]
+fn ledges_follow_one_contour_height_instead_of_stepping_into_boxes_along_a_ridge() {
+    let generator = plane(-432, 36);
+    let compression = Ratio {
+        numerator: 1,
+        denominator: 1,
+    };
+    let corner = |x: i32, y: i32| Ok::<_, ()>(20_000 - 24 * x + 12 * y);
+    let mut checked = 0;
+    for y in (601..745).step_by(3) {
+        for x in (97..670).step_by(3) {
+            let at = TileCoord::new(x, y);
+            let Some(piece) =
+                crate::terrain::relief::cliff_at(&generator, at, compression, &corner).unwrap()
+            else {
+                continue;
+            };
+            let west = x.div_euclid(3) * 3;
+            let north = y.div_euclid(3) * 3;
+            let lowest = [
+                (west, north),
+                (west + 3, north),
+                (west + 3, north + 3),
+                (west, north + 3),
+            ]
+            .map(|(x, y)| corner(x, y).unwrap())
+            .into_iter()
+            .min()
+            .unwrap();
+            let contour_level = (lowest.div_euclid(800) + 1) * 8;
+            assert_eq!(
+                i32::from(piece.top_level),
+                contour_level,
+                "one contour cannot become an interior box step at {x},{y}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 100, "fixture retains joined contours: {checked}");
 }

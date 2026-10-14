@@ -1,5 +1,4 @@
 use super::*;
-use crate::terrain::surface::SurfaceKind;
 
 #[test]
 fn provider_cliff_cells_spare_channels_fords_and_textured_banks() {
@@ -13,17 +12,13 @@ fn provider_cliff_cells_spare_channels_fords_and_textured_banks() {
     let (mut rivers, mut fords, mut banks, mut cliffs) = (0, 0, 0, 0);
     for point in &tiles {
         let position = point.tile;
-        if point.terrain.surface.kind == SurfaceKind::Cliff {
+        if point.terrain.surface.is_cliff() {
             cliffs += 1;
         }
         if point.terrain.water == WaterKind::River {
             rivers += 1;
             fords += usize::from(point.terrain.material == GroundMaterial::Ford);
-            assert_ne!(
-                point.terrain.surface.kind,
-                SurfaceKind::Cliff,
-                "channel {position:?}"
-            );
+            assert!(!point.terrain.surface.is_cliff(), "channel {position:?}");
             assert!(
                 generator
                     .cliff_piece_with_cancel(position, &|| false)
@@ -36,11 +31,7 @@ fn provider_cliff_cells_spare_channels_fords_and_textured_banks() {
         }) {
             banks += 1;
             assert!(point.terrain.passable, "bank {position:?}");
-            assert_ne!(
-                point.terrain.surface.kind,
-                SurfaceKind::Cliff,
-                "bank {position:?}"
-            );
+            assert!(!point.terrain.surface.is_cliff(), "bank {position:?}");
             assert_eq!(
                 point.terrain.material,
                 GroundMaterial::Dirt,
@@ -82,10 +73,10 @@ fn dense_cliff_cells_keep_fallback_river_banks_open_and_textured() {
                 .unwrap();
             for point in &chunk.tiles {
                 let position = point.tile;
-                cliffs += usize::from(point.terrain.surface.kind == SurfaceKind::Cliff);
+                cliffs += usize::from(point.terrain.surface.is_cliff());
                 if point.terrain.water == WaterKind::River {
                     rivers += 1;
-                    assert_ne!(point.terrain.surface.kind, SurfaceKind::Cliff);
+                    assert!(!point.terrain.surface.is_cliff());
                     assert!(
                         generator
                             .cliff_piece_with_cancel(position, &|| false)
@@ -110,7 +101,7 @@ fn dense_cliff_cells_keep_fallback_river_banks_open_and_textured() {
                         GroundMaterial::Dirt,
                         "bank {position:?}"
                     );
-                    assert_ne!(point.terrain.surface.kind, SurfaceKind::Cliff);
+                    assert!(!point.terrain.surface.is_cliff());
                     assert!(
                         generator
                             .cliff_piece_with_cancel(position, &|| false)

@@ -81,31 +81,37 @@ impl MapChunkGenerator {
                 .unwrap_or([height; 4]);
             Some((height, corner_heights, elevation.compression))
         });
-        let (geographic_height_centimeters, game_height_level, mut surface, elevation_provenance) =
-            match elevation {
-                Some((height, corner_heights, compression)) => (
+        let (
+            geographic_height_centimeters,
+            mut game_height_level,
+            mut surface,
+            elevation_provenance,
+        ) = match elevation {
+            Some((height, corner_heights, compression)) => (
+                height,
+                quantize_game_height(height, compression),
+                surface::from_heights(corner_heights, compression),
+                Provenance::SourceDerived,
+            ),
+            None => {
+                let height = fallback_height(self, tile);
+                (
                     height,
-                    quantize_game_height(height, compression),
-                    surface::from_heights(corner_heights, compression),
-                    Provenance::SourceDerived,
-                ),
-                None => {
-                    let height = fallback_height(self, tile);
-                    (
-                        height,
-                        quantize_game_height(height, compression_fallback()),
-                        surface::from_heights([height; 4], compression_fallback()),
-                        Provenance::Fallback,
-                    )
-                }
-            };
+                    quantize_game_height(height, compression_fallback()),
+                    surface::from_heights([height; 4], compression_fallback()),
+                    Provenance::Fallback,
+                )
+            }
+        };
         // Elevation cannot identify water: inland depressions can be dry, while
         // coastlines require independent, coherent water geometry.
         let (water, water_provenance) = self.dense_water(tile);
         if water == WaterKind::None
-            && matches!(self.cliff_piece_with_cancel(tile, &|| false), Ok(Some(_)))
+            && let Ok(Some(piece)) = self.cliff_piece_with_cancel(tile, &|| false)
         {
-            surface.kind = surface::SurfaceKind::Cliff;
+            surface.kind = surface::SurfaceKind::CliffLedge;
+            surface.corner_game_height_levels = [piece.top_level; 4];
+            game_height_level = piece.top_level;
         }
         let material = match water {
             WaterKind::None => material_for(biome, geographic_height_centimeters),

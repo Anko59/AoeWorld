@@ -1,4 +1,4 @@
-//! Exact pixel/depth parity against the frozen previous raster, not tolerance tests.
+//! Exact pixel/depth parity against the current scalar oracle.
 use super::*;
 use aoe_core::ScreenPoint;
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -108,7 +108,10 @@ fn buffers(seed: usize) -> (Vec<u8>, Vec<f64>) {
 }
 
 fn parity(actual: &(Vec<u8>, Vec<f64>), expected: &(Vec<u8>, Vec<f64>)) {
-    assert_eq!(actual.0, expected.0, "RGBA changed");
+    assert_eq!(actual.0.len(), expected.0.len());
+    for (index, (actual, expected)) in actual.0.iter().zip(&expected.0).enumerate() {
+        assert_eq!(actual, expected, "RGBA byte {index} changed");
+    }
     assert_eq!(
         actual
             .1

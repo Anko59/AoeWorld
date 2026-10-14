@@ -66,17 +66,40 @@ water or shore face uses a procedural flat tint. Gravel 15017 is approved only f
 the shore band uses reviewed sand 15010. Animation is not implemented.
 ## Cliff pieces
 
-Cliff decorations draw group 226. The downhill screen direction selects the
-face: southwest/west uses slots 1,2,18 (upper-right ridge), southeast/east
-4,5,16 (upper-left ridge), and front-facing corners 3,15,17,19,24 join both
-ridges. Opposing faces use native art rather than mirroring the sun direction.
-Every piece draws its whole upright source frame
-through the shared object path at native art scale times 128/96, with the raw
-hotspot and shared ground clearance. No ground-plane strips or extra shadows
-are emitted. Cell tops retain surrounding ground; only vertical skirts are
-rock. The runtime atlas restrains the trial cliff palette to warm neutral stone
-while retaining luminance relief and alpha; original pack pixels are unchanged. A pack without group 226 shows the impassable cells as bare
-rock-tinted ground.
+Cliff records mark three-by-three impassable cells along steep contours,
+with the same open passes. All nine tiles share the uppermost crossed contour
+level. Neighboring cells along that contour cannot create internal box steps.
+The current surface tag distinguishes these ledges from continuous steep
+ground, which keeps its shared sloping corners at every mesh LOD.
+The snowy or grassy top meets a closed mesh face at the same world vertices;
+per-vertex depth replaces the constant-depth cliff billboard.
+
+East and south walls sample ten reviewed opaque rock interiors from the original
+cliff source. A world-coordinate hash chooses compatible lighting groups, and
+one formation spans three tiles rather than repeating a stripe on every tile.
+The selected rectangles retain native strata, highlights and dark crevices while
+excluding transparent silhouette holes. Source lighting and the runtime atlas
+palette correction remain intact. Without complete face art, walls retain their
+procedural rock fallback.
+
+Shared presentation vertices bevel outer and inner corners, roughen the rim,
+and carry the same irregular outline to the foot. Both ground sheets and the upright
+faces use the same lateral deformation, after integer material ownership is assigned.
+Height-dependent offsets are avoided so crossed sheets keep their intersections.
+An edge whose height difference changes sign closes with two triangles meeting
+at the true crossing; uphill ground seams keep their ground appearance.
+Coarse art-patch vertices interpolate the coarse edge deformation, keeping the
+wall closed at minimum zoom inside the existing triangle bound. Missing halos
+retain exact planes until the support is loaded. Isolated contour cells are
+omitted at placement; joined pairs and ridge ends remain deterministic.
+Picking uses presented depth but returns the corresponding source ground
+coordinates. Source span and triangulation occupy unused bits of the private
+order byte; ordinary draw order and the triangle/GPU packet sizes stay unchanged.
+
+Native terrain diamonds have staircase alpha masks. At the continuous mesh
+edge only, a transparent nearest texel samples one texel inward toward the
+frame centre. This closes snow pinholes without changing object silhouettes,
+fully transparent textures, or coverage outside the diamond.
 
 ## Loose rocks
 

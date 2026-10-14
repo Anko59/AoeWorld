@@ -54,6 +54,11 @@ impl SceneTerrainSurface {
     pub const PLATEAU: u8 = 0;
     pub const RAMP: u8 = 1;
     pub const CLIFF: u8 = 2;
+    pub const CLIFF_LEDGE: u8 = 3;
+
+    pub const fn is_cliff(self) -> bool {
+        matches!(self.kind, Self::CLIFF | Self::CLIFF_LEDGE)
+    }
 
     pub const fn flat(elevation_meters: f64) -> Self {
         Self {
@@ -78,7 +83,7 @@ pub struct SceneResource {
 }
 
 impl SceneResource {
-    /// One upright cliff face; visual_family is its downhill screen octant.
+    /// Cliff anchor marker. Faces are terrain geometry, never object billboards.
     pub const CLIFF: u8 = 16;
     /// A loose rock; visual_variant selects its pile and size.
     pub const ROCK: u8 = 17;

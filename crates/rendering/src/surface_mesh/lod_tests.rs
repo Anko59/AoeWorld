@@ -122,7 +122,7 @@ fn authoritative_zero_corners_do_not_create_a_fake_cliff_skirt() {
 }
 
 #[wasm_bindgen_test]
-fn a_frontmost_cliff_occludes_pickable_ground_behind_it() {
+fn a_frontmost_cliff_does_not_cancel_pickable_ground_behind_it() {
     let camera = SceneCamera {
         center: [1.0, 1.0],
         zoom: 1.0,
@@ -151,6 +151,6 @@ fn a_frontmost_cliff_occludes_pickable_ground_behind_it() {
     let triangles = projected_surface_triangles(&[ground, cliff], camera);
     assert_eq!(
         super::super::pick_surface_point(&triangles, ScreenPoint { x: 128.0, y: 32.0 }),
-        None
+        Some([0.5, 0.5])
     );
 }

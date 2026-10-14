@@ -1,6 +1,8 @@
 use super::*;
 use aoe_core::Camera;
 mod banks;
+mod budget;
+mod cliffs;
 mod landscape;
 
 #[cfg(test)]
@@ -90,7 +92,7 @@ pub fn projected_surface_triangles(
     landscape::assign(&mut cells, &owners);
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
-    let divisions = appearance::texture_subdivisions(size, cells.len());
+    let divisions = budget::subdivisions(&cells, grid);
     let texture_step = size / divisions;
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
@@ -99,10 +101,7 @@ pub fn projected_surface_triangles(
         let tile = grid_cell(grid, slot_index);
         let sample = candidate.sample;
         let appearance = super::landscape::pack(sample.appearance);
-        let heights = coarse_heights.as_ref().map_or(
-            corner_heights(sample.surface.corner_game_height_levels),
-            |heights| coarse_corner_heights(heights, grid, tile),
-        );
+        let heights = displayed_heights(sample, tile, grid, coarse_heights.as_ref());
         let color = surface_color(sample);
         let indices = if sample.surface.triangulation == 1 {
             [[0, 1, 3], [1, 2, 3]]
@@ -145,8 +144,8 @@ pub fn projected_surface_triangles(
                         mix: [0; 6],
                         tile,
                         skirt: false,
-                        // Physical cliff cells keep their surrounding ground;
-                        // vertical skirts and upright sprites supply the rock face.
+                        // Physical cliff ledges keep their surrounding ground;
+                        // closed vertical edges supply the native rock face.
                         material: sample.material,
                         // Several world tiles under one face: sample per fragment
                         // by world tile, never one origin frame stretched over all.
@@ -169,35 +168,44 @@ pub fn projected_surface_triangles(
                         texture_materials: (sample.surface.water == 0
                             || appearance::water_material(sample.material))
                         .then_some([sample.material; 3]),
-                        pickable: sample.surface.kind != SceneTerrainSurface::CLIFF,
+                        pickable: !sample.surface.is_cliff(),
                         order: order as u8,
                     });
                 }
             }
         }
-        if size == 1 {
-            append_edge_skirt(
-                &mut result,
-                &camera,
-                tile,
-                sample,
-                grid_neighbor(&cells, grid, [tile[0] + 1, tile[1]]),
-                Edge::East,
-            );
-            append_edge_skirt(
-                &mut result,
-                &camera,
-                tile,
-                sample,
-                grid_neighbor(&cells, grid, [tile[0], tile[1] + 1]),
-                Edge::South,
-            );
+        for (edge, offset) in [(Edge::East, [size, 0]), (Edge::South, [0, size])] {
+            let neighbor_tile = [tile[0] + offset[0], tile[1] + offset[1]];
+            let neighbor = grid_neighbor(&cells, grid, neighbor_tile);
+            if size == 1
+                || sample.surface.kind == SceneTerrainSurface::CLIFF_LEDGE
+                || neighbor.is_some_and(|s| s.surface.kind == SceneTerrainSurface::CLIFF_LEDGE)
+            {
+                append_edge_skirt(
+                    &mut result,
+                    &camera,
+                    tile,
+                    size,
+                    SkirtSurface { sample, heights },
+                    neighbor.map(|sample| SkirtSurface {
+                        sample: *sample,
+                        heights: displayed_heights(
+                            *sample,
+                            neighbor_tile,
+                            grid,
+                            coarse_heights.as_ref(),
+                        ),
+                    }),
+                    edge,
+                );
+            }
         }
     }
     debug_assert!(result.len() <= MAX_SURFACE_TRIANGLES);
     appearance::assign_materials(&mut result, terrain);
     floor::assign(&mut result, terrain);
     mix::assign(&mut result, terrain);
+    cliffs::sculpt(&mut result, &cells, grid, &camera);
     // Material support belongs to the original integer vertices. Bevel their
     // presentation only after the ground and water sheets have been assigned.
     if !bank_cells.is_empty() {
@@ -213,7 +221,7 @@ pub fn projected_surface_triangles(
             .total_cmp(&average_depth(right))
             .then(left.tile.cmp(&right.tile))
             .then(left.skirt.cmp(&right.skirt))
-            .then(left.order.cmp(&right.order))
+            .then(left.draw_order().cmp(&right.draw_order()))
     });
     result
 }
@@ -414,6 +422,22 @@ fn coarse_corner_heights(heights: &CoarseHeights, grid: CellGrid, cell: [i32; 2]
         coarse_height_at(heights, grid, vertices[2]),
         coarse_height_at(heights, grid, vertices[3]),
     ]
+}
+
+fn displayed_heights(
+    sample: SceneTerrain,
+    tile: [i32; 2],
+    grid: CellGrid,
+    coarse: Option<&CoarseHeights>,
+) -> [f64; 4] {
+    let corners = corner_heights(sample.surface.corner_game_height_levels);
+    match coarse {
+        Some(_) if sample.surface.kind == SceneTerrainSurface::CLIFF_LEDGE => {
+            [corners.into_iter().fold(f64::NEG_INFINITY, f64::max); 4]
+        }
+        Some(heights) => coarse_corner_heights(heights, grid, tile),
+        None => corners,
+    }
 }
 
 fn coarse_height_at(heights: &CoarseHeights, grid: CellGrid, point: [i32; 2]) -> f64 {

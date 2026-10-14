@@ -77,8 +77,13 @@ pub(super) fn sample_base_tile_with_cliff(
     );
     let (hydrology_observation, modern_land_cover_class) =
         (sample.observation, sample.modern_land_cover_class);
-    if water == WaterKind::None && source_corners.is_some() && cliff(tile)?.is_some() {
-        surface_kind.kind = surface::SurfaceKind::Cliff;
+    if water == WaterKind::None
+        && source_corners.is_some()
+        && let Some(piece) = cliff(tile)?
+    {
+        surface_kind.kind = surface::SurfaceKind::CliffLedge;
+        surface_kind.corner_game_height_levels = [piece.top_level; 4];
+        game_height_level = piece.top_level;
     }
     let ford = sample.ford && surface_kind.walkable();
     let material = if ford {

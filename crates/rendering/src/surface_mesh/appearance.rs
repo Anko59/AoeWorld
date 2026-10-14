@@ -100,6 +100,9 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
     for triangle in triangles {
+        if super::cliff_art::apply(triangle, art) {
+            continue;
+        }
         // If the bank sheet is only the pack's generic grass placeholder,
         // use neutral rock detail rather than a green vertical beach face.
         if triangle.skirt && !water_material(triangle.material) {
@@ -112,7 +115,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
                 triangle.material = 4;
             }
         }
-        // Physical cliff tops keep grass around the upright face. A pack with
+        // Physical cliff ledges keep surrounding ground. A pack with
         // absent/incomplete face art still needs visible impassable rock.
         if !triangle.pickable && !triangle.skirt && art.scenery.cliff_faces.len() != 25 {
             triangle.material = 4;

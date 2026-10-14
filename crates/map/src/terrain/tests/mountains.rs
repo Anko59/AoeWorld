@@ -84,7 +84,7 @@ pub(super) fn plane(x: i32, y: i32) -> MapChunkGenerator {
 }
 
 pub(super) fn is_cliff(tile: Tile) -> bool {
-    tile.surface.kind == SurfaceKind::Cliff && !tile.passable
+    tile.surface.is_cliff() && !tile.passable
 }
 
 /// Sizes of the four-connected regions of `open`, largest first, and whether

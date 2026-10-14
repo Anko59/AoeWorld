@@ -80,8 +80,8 @@ pub enum DecorationFamily {
     Grass,
     Stone,
     Deadwood,
-    /// Sprite of a cliff piece on the centre tile of its impassable
-    /// three-by-three cell; orientation is the downhill screen octant.
+    /// Anchor record of a cliff ledge on its impassable three-by-three cell;
+    /// orientation is the downhill screen octant. Rock faces belong to the mesh.
     Cliff,
 }
 
