@@ -1,6 +1,7 @@
 //! The few Git facts `ship` needs, each from one plain `git` call.
 use std::{path::Path, process::Command};
 mod patch;
+pub(crate) mod remote;
 
 pub(crate) type Result<T> = std::result::Result<T, String>;
 
@@ -11,12 +12,13 @@ pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String> {
 /// `git` output as it is, untrimmed: for `-z` lists, where a leading space
 /// belongs to the first path.
 pub(crate) fn git_raw(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .map_err(|e| format!("git: {e}"))?;
+    let mut command = Command::new("git");
+    command.arg("-C").arg(root).args(args);
+    let output = if matches!(args.first(), Some(&"fetch" | &"push")) {
+        remote::output(&mut command)?
+    } else {
+        command.output().map_err(|e| format!("git: {e}"))?
+    };
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {

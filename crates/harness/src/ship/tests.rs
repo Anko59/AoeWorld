@@ -304,6 +304,7 @@ mod showcase_pipeline;
 mod showcase_scenes;
 mod showcase_security;
 pub(super) mod stack;
+mod transport;
 
 #[test]
 fn push_keeps_the_ssh_connection_alive_unless_the_caller_chose_ssh() {

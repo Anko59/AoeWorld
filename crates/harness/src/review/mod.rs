@@ -46,6 +46,9 @@ pub(crate) enum Commands {
     /// Review HEAD against origin/dev or SHIP_BASE (a local parent is allowed).
     /// `make review`: REVIEW_TIER, REVIEW_RUNTIME, REVIEW_TASK.
     Review {
+        /// Print ship's stored-review decision; no reviewer, gates or approval write.
+        #[arg(long)]
+        explain: bool,
         /// Defaults to REVIEW_TIER, then to the floor.
         #[arg(long, value_enum)]
         tier: Option<Tier>,

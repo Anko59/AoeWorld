@@ -271,6 +271,62 @@ fn an_unreadable_report_is_a_full_review_that_says_so() {
 }
 
 #[test]
+fn unrelated_unreadable_reports_do_not_count_in_the_review_line() {
+    let (temp, root) = fixture("true");
+    let directory = root.join(".git/aoe-ship/reviews");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join(format!("{}-low-1.json", "0".repeat(40))),
+        b"broken",
+    )
+    .unwrap();
+    fs::write(directory.join("unknown.json"), b"broken").unwrap();
+    fs::write(
+        directory.join("other.json"),
+        br#"{"branch":"other", "head":"unknown"}"#,
+    )
+    .unwrap();
+    let (_, seen) = ship(&root, &options(temp.path(), FIRST, None));
+    assert_eq!(seen[0].0, Plan::Full);
+    assert_eq!(
+        seen[0].1,
+        "review: full review — no passing review of this branch"
+    );
+}
+
+#[test]
+fn an_unreadable_report_with_this_branch_header_still_counts_after_a_rebase() {
+    let (temp, root) = fixture("true");
+    let source = unstored(&root, Tier::Low, 9);
+    fs::write(
+        source.store(&root).unwrap(),
+        br#"{"branch":"feature", "head":"missing"}"#,
+    )
+    .unwrap();
+    advance_dev(&root, &[]);
+    let (_, seen) = ship(&root, &options(temp.path(), FIRST, None));
+    assert!(
+        seen[0]
+            .1
+            .contains("1 stored review report(s) are unreadable")
+    );
+}
+
+#[test]
+fn an_unreadable_report_with_a_lineage_filename_counts_without_a_matching_header() {
+    let (temp, root) = fixture("true");
+    let source = unstored(&root, Tier::Low, 9);
+    fs::write(source.store(&root).unwrap(), br#"{"branch":"other"}"#).unwrap();
+    advance_dev(&root, &[]);
+    let (_, seen) = ship(&root, &options(temp.path(), FIRST, None));
+    assert!(
+        seen[0]
+            .1
+            .contains("1 stored review report(s) are unreadable")
+    );
+}
+
+#[test]
 fn a_missing_base_commit_is_a_full_review_that_says_so() {
     let (temp, root) = fixture("true");
     let mut source = unstored(&root, Tier::Low, 9);
@@ -362,4 +418,26 @@ fn advance_dev_policy_only(root: &Path, path: &str, text: &str) {
     run(root, &["push", "-q", "origin", "dev"]);
     run(root, &["fetch", "-q", "origin", "dev"]);
     run(root, &["checkout", "-q", "feature"]);
+}
+
+#[test]
+fn a_rate_limited_incomplete_review_says_to_wait_without_changing_the_commit() {
+    use super::{graded, pushed, reviewed, ship_with};
+    let (_temp, root) = fixture("true");
+    let error = ship_with(&root, &reviewed(), &|root, tier, _, _, _| {
+        let mut report = graded(root, tier, 9);
+        report
+            .failures
+            .push("round 1, quick: reviewer rate-limited after 3 attempts".into());
+        report.store(root).unwrap();
+        Ok(report)
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("rate-limited"), "{error}");
+    assert!(
+        error.contains("wait and ship again; nothing needs changing"),
+        "{error}"
+    );
+    assert!(!pushed(&root));
 }

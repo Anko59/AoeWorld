@@ -6,6 +6,8 @@ use super::{Report, base, report::directory};
 use crate::ship::git;
 use std::{fs, path::Path};
 
+mod unreadable;
+
 /// Why a stored review does or does not answer for the current branch tip.
 pub(crate) enum Reuse {
     Reused(Box<Report>),
@@ -116,6 +118,22 @@ impl Report {
         task: &str,
         judge: Option<&str>,
     ) -> Result<Reuse, String> {
+        let decision = Self::inspect_reuse(root, head, branch, tiers, task, judge)?;
+        if let Reuse::Reused(report) = &decision {
+            report.store(root)?;
+        }
+        Ok(decision)
+    }
+
+    /// The same decision without saving an approval: for `review --explain`.
+    pub(crate) fn inspect_reuse(
+        root: &Path,
+        head: &str,
+        branch: &str,
+        tiers: &[&str],
+        task: &str,
+        judge: Option<&str>,
+    ) -> Result<Reuse, String> {
         let declined = |why: &str| Ok(Reuse::Declined(why.to_owned()));
         let (_pin, policy) = super::trusted::pin(root, judge)?;
         let dev = git::git(root, &["rev-parse", "refs/remotes/origin/dev"])?;
@@ -147,16 +165,20 @@ impl Report {
         let mut unreadable = 0;
         let mut candidates: Vec<Self> = Self::complete_for(root, head, &tiers)?;
         if candidates.is_empty() {
+            let lineage = unreadable::lineage(root, branch, head, &target_commit);
             for entry in fs::read_dir(directory(root)?)
                 .into_iter()
                 .flatten()
                 .flatten()
             {
-                let Some(report) = fs::read(entry.path())
-                    .ok()
-                    .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
+                let bytes = fs::read(entry.path()).ok();
+                let Some(report) = bytes
+                    .as_deref()
+                    .and_then(|bytes| serde_json::from_slice::<Self>(bytes).ok())
                 else {
-                    unreadable += 1;
+                    if unreadable::belongs(&entry.path(), bytes.as_deref(), branch, &lineage) {
+                        unreadable += 1;
+                    }
                     continue;
                 };
                 if report.head != head
@@ -226,7 +248,6 @@ impl Report {
             source.finished = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |duration| duration.as_secs());
-            source.store(root)?;
             return Ok(Reuse::Reused(Box::new(source)));
         }
         Ok(Reuse::Declined(first.unwrap_or_else(|| {
