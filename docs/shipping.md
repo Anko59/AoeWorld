@@ -86,8 +86,8 @@ agent policy refuses `$` in agent-set Make values.
    `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the connection for minutes (#209).
 8. **Creates or updates** the pull request against the base (`dev`) on
    `origin`'s GitHub repository, found by head branch (never by a number),
-   with the review appended; posts the `harness/review` status and, into
-   `dev` only, arms auto-merge.
+   with the review appended; posts the `harness/review` status and a review
+   marker comment and, into `dev` only, arms auto-merge ([after the push](post-push.md)).
 9. **Files the review's leftovers** as issues: one per confirmed or disputed
    critical or major finding, and one `Review follow-ups for #<pr>` checklist
    for the minor and nit ones, deduplicated across ships

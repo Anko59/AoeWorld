@@ -1,7 +1,7 @@
 use super::*;
 use std::{fs, os::unix::fs::PermissionsExt, process::Command, sync::Mutex};
 
-pub(super) static ENVIRONMENT: Mutex<()> = Mutex::new(());
+pub(in crate::ship) static ENVIRONMENT: Mutex<()> = Mutex::new(());
 
 fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
     Issue {

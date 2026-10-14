@@ -16,6 +16,7 @@ mod issues;
 mod levels;
 pub(crate) mod lock;
 mod metrics;
+mod postpush;
 pub(crate) mod prepush;
 mod recheck;
 pub(crate) mod review_gate;
@@ -74,6 +75,10 @@ pub(crate) enum Commands {
     NightlyTriage,
     /// Open, update or close the nightly issue for metric regressions.
     MetricRegressions,
+    /// Carry `harness/review` to the rebased head of pull request CARRY_PR when its patch and the policy are unchanged.
+    CarryReview,
+    /// Rebase the open pull requests with auto-merge that are behind dev (UPDATE_MAX_PRS).
+    UpdatePrs,
     /// Write and print the metrics snapshot of HEAD or METRICS_REV.
     Metrics,
     /// Pre-push: succeed only if `make ship` evidence covers the pushed HEAD.
@@ -208,6 +213,8 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
         Commands::LevelStats => levels::print_stats(&root),
         Commands::NightlyTriage => issues::triage::execute(&root),
         Commands::MetricRegressions => issues::regressions::execute(&root),
+        Commands::CarryReview => postpush::carry::execute(&root),
+        Commands::UpdatePrs => postpush::update::execute(&root),
         Commands::Metrics => Ok(metrics::snapshot::command(&root)?),
     }
 }
