@@ -1,6 +1,8 @@
 // The strategic map is one bounded raster per map; it never requests detailed world chunks.
 import { MAX_MINIMAP_BYTES, decodeMinimap, minimapWorldPoint } from '/minimap.js';
 
+const MAX_NUMBER_TEXT = 64;
+
 // Preserve literal values and last-key-wins semantics of existing camera links.
 export function parseCameraFragment(hash) {
   const values = new Float64Array([NaN, NaN, NaN, 0]);
@@ -10,7 +12,9 @@ export function parseCameraFragment(hash) {
   for (const [key, text] of params) {
     const index = ['x', 'y', 'zoom'].indexOf(key);
     if (index !== -1) {
-      const number = text.trim() === text && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
+      // Bounded and unambiguous: a crafted run of digits cannot backtrack.
+      const number = text.length <= MAX_NUMBER_TEXT && text.trim() === text
+        && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
       values[index] = Number.isFinite(number)
         ? (index === 2 ? Math.max(0.25, Math.min(3, number)) : number) : NaN;
     } else if (key === 'renderer') {
