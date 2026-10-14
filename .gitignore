@@ -1,5 +1,5 @@
 /target/
-/local-assets/
+/local-assets
 /reports/
 /coverage/
 /browser/node_modules/

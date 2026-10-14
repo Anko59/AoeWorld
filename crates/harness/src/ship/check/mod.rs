@@ -32,6 +32,8 @@ pub(super) struct Request<'a> {
 pub(super) struct Checked {
     pub(super) text: String,
     pub(super) decision: Decision,
+    /// The uncommitted files counted into the change (see `Change::uncommitted`).
+    pub(super) uncommitted: usize,
 }
 
 /// Every problem found, one line each.
@@ -105,8 +107,7 @@ pub(super) fn command(root: &Path) -> super::Result<()> {
     super::stack::refuse_base(&options.base, &git::branch(root)?)?;
     let situation = github::situation(root, &options.base);
     let checked = early(root, &options, &body, situation.as_ref().ok(), false)?;
-    let uncommitted = git::git(root, &["status", "--porcelain"])?;
-    let uncommitted = uncommitted.lines().count();
+    let uncommitted = checked.uncommitted;
     if uncommitted > 0 {
         println!(
             "uncommitted: {uncommitted} changed file{} counted as the ship will see them after commit",
@@ -160,11 +161,13 @@ pub(super) fn run(root: &Path, request: &Request) -> Result<Checked, Problems> {
         _ => {}
     }
     let mut decision = None;
+    let mut uncommitted = 0;
     if let Some(level) = found.level {
         match Change::collect_working(root, &levels, request.base, request.fetch) {
             Ok(change) => {
                 let (level_problems, floor) = level_problems(level, &levels, &change, video.take());
                 problems.extend(level_problems);
+                uncommitted = change.uncommitted;
                 decision = Some(Decision {
                     chosen: level,
                     floor: floor.level,
@@ -178,7 +181,11 @@ pub(super) fn run(root: &Path, request: &Request) -> Result<Checked, Problems> {
         }
     }
     match decision {
-        Some(decision) if problems.is_empty() => Ok(Checked { text, decision }),
+        Some(decision) if problems.is_empty() => Ok(Checked {
+            text,
+            decision,
+            uncommitted,
+        }),
         _ => Err(Problems(problems)),
     }
 }

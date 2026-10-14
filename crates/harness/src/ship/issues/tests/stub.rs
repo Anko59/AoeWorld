@@ -18,12 +18,16 @@ for arg in "$@"; do
 done
 case "$1" in
   api) printf '%s' "$GH_LIST_JSON" ;;
-  issue) if [ "$2" = create ]; then cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"; printf 'https://github.com/project/checkout/issues/99\n'
-    else
-      # Like the real gh, read a body piped on stdin (`--body-file -`) to its
-      # end: exiting first closes the pipe under the writer (EPIPE).
-      case " $* " in *" --body-file - "*) cat > /dev/null ;; esac
-    fi ;;
+  issue) case "$2" in
+    create|edit)
+      cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"
+      if [ "$2" = create ]; then printf 'https://github.com/project/checkout/issues/99\n'; fi ;;
+    view) printf '%s' "${GH_VIEW_BODY-}" ;;
+    # Like the real gh, read a body piped on stdin (`--body-file -`) to its
+    # end: exiting first closes the pipe under the writer (EPIPE).
+    *) case " $* " in *" --body-file - "*) cat > /dev/null ;; esac ;;
+  esac ;;
+  pr) case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;
 esac
 "#;
 
@@ -88,6 +92,7 @@ impl Stub {
         stub.set("GITHUB_REPOSITORY", "wrong/override");
         stub.set("GH_REPO", "wrong/override");
         stub.unset("GH_FAIL");
+        stub.unset("GH_VIEW_BODY");
         stub.unset("AOE_AGENT_ROLE");
         stub
     }

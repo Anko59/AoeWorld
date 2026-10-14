@@ -23,6 +23,9 @@ pub(crate) struct Change {
     pub(crate) lines: u64,
     /// Each changed file with its own lines, so a rule counts only its paths.
     pub(crate) parts: Vec<Part>,
+    /// How many of the `parts` are uncommitted (staged, unstaged or untracked
+    /// and not ignored); always 0 for the committed change.
+    pub(crate) uncommitted: usize,
 }
 
 /// One changed file: its lines (added plus removed) and the suites it selects.
@@ -43,22 +46,6 @@ impl Change {
             lines,
             ..Self::default()
         }
-    }
-
-    /// The change of `files` (`lines` on the first file, as one count) classified by `registry`.
-    #[cfg(test)]
-    pub(crate) fn from_files(
-        levels: &Levels,
-        registry: &Registry,
-        lines: u64,
-        files: Vec<String>,
-    ) -> Self {
-        let parts = files
-            .into_iter()
-            .enumerate()
-            .map(|(index, file)| (file, if index == 0 { lines } else { 0 }))
-            .collect();
-        Self::from_parts(levels, registry, parts)
     }
 
     /// The change of `(path, lines)` pairs classified by `registry`.
@@ -83,15 +70,23 @@ impl Change {
         Self {
             lines: parts.iter().map(|part| part.lines).sum(),
             parts,
+            uncommitted: 0,
         }
     }
 
     /// The change from the merge base with `origin/<base>` to HEAD.
     pub(crate) fn collect(root: &Path, levels: &Levels, base: &str, fetch: bool) -> Result<Self> {
         let (_, merge_base) = git::base(root, base, fetch)?;
-        let numstat = git::git(
+        let numstat = git::git_raw(
             root,
-            &["diff", "--numstat", "--no-renames", &merge_base, "HEAD"],
+            &[
+                "diff",
+                "--numstat",
+                "-z",
+                "--no-renames",
+                &merge_base,
+                "HEAD",
+            ],
         )?;
         Self::classified(
             root,
@@ -102,6 +97,9 @@ impl Change {
 
     /// The change as `make ship` will see it once committed: the working tree
     /// against the merge base, with the untracked files that are not ignored.
+    /// An untracked entry that Git would commit as a symlink counts as one
+    /// line; one that cannot be counted (a nested repository, a directory, an
+    /// unreadable file) is left out with a note, never an error.
     pub(crate) fn collect_working(
         root: &Path,
         levels: &Levels,
@@ -109,13 +107,36 @@ impl Change {
         fetch: bool,
     ) -> Result<Self> {
         let (_, merge_base) = git::base(root, base, fetch)?;
-        let numstat = git::git(root, &["diff", "--numstat", "--no-renames", &merge_base])?;
+        let numstat = git::git_raw(
+            root,
+            &["diff", "--numstat", "-z", "--no-renames", &merge_base],
+        )?;
         let mut counted = numstat_parts(&numstat, levels.binary_file_lines);
+        // The files that differ from HEAD: the uncommitted part of the change.
+        let mut uncommitted: BTreeSet<String> = nul_list(&git::git_raw(
+            root,
+            &["diff", "--name-only", "-z", "--no-renames", "HEAD"],
+        )?)
+        .map(str::to_owned)
+        .collect();
         for path in untracked(root)? {
-            let lines = untracked_lines(&root.join(&path), levels.binary_file_lines)?;
-            counted.push((path, lines));
+            match untracked_lines(&root.join(&path), levels.binary_file_lines) {
+                Ok(lines) => {
+                    uncommitted.insert(path.clone());
+                    counted.push((path, lines));
+                }
+                Err(reason) => {
+                    eprintln!("ship: untracked {path} is left out of the floor ({reason})");
+                }
+            }
         }
-        Self::classified(root, levels, counted)
+        let mut change = Self::classified(root, levels, counted)?;
+        change.uncommitted = change
+            .parts
+            .iter()
+            .filter(|part| uncommitted.contains(&part.path))
+            .count();
+        Ok(change)
     }
 
     fn classified(root: &Path, levels: &Levels, counted: Vec<(String, u64)>) -> Result<Self> {
@@ -128,13 +149,19 @@ impl Change {
     }
 }
 
-/// `(path, lines added plus removed)` of each file in `git diff --numstat`; a
-/// binary file (`-` in numstat) counts as `binary` lines.
+/// The records of a NUL-terminated Git list.
+fn nul_list(text: &str) -> impl Iterator<Item = &str> {
+    text.split('\0').filter(|record| !record.is_empty())
+}
+
+/// `(path, lines added plus removed)` of each record of `git diff --numstat
+/// -z` (`added<TAB>removed<TAB>path<NUL>`): the path is raw, so a name with a
+/// quote, a tab or a non-ASCII byte is matched as it is. A binary file (`-`)
+/// counts as `binary` lines.
 fn numstat_parts(numstat: &str, binary: u64) -> Vec<(String, u64)> {
-    numstat
-        .lines()
-        .filter_map(|l| {
-            let mut columns = l.splitn(3, '\t');
+    nul_list(numstat)
+        .filter_map(|record| {
+            let mut columns = record.splitn(3, '\t');
             let added = columns.next()?;
             let removed = columns.next()?;
             let path = columns.next()?;
@@ -149,19 +176,26 @@ fn numstat_parts(numstat: &str, binary: u64) -> Vec<(String, u64)> {
 
 /// The untracked files that Git does not ignore.
 fn untracked(root: &Path) -> Result<Vec<String>> {
-    Ok(
-        git::git(root, &["ls-files", "--others", "--exclude-standard", "-z"])?
-            .split('\0')
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    )
+    let listed = git::git_raw(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    Ok(nul_list(&listed).map(str::to_owned).collect())
 }
 
-/// Lines of a new file, counted as Git counts them when it is added; a file
-/// with a NUL byte is binary.
-fn untracked_lines(path: &Path, binary: u64) -> Result<u64> {
-    let bytes = std::fs::read(path)?;
+/// Lines of an untracked entry, counted as Git counts them when it is added:
+/// a symlink is its target path (one line), a regular file its own bytes, and
+/// a file with a NUL byte is binary. Anything else (a directory such as a
+/// nested repository, a FIFO, an unreadable file) is an `Err` with the reason.
+fn untracked_lines(path: &Path, binary: u64) -> std::result::Result<u64, String> {
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    let bytes = if meta.file_type().is_symlink() {
+        std::fs::read_link(path)
+            .map_err(|e| e.to_string())?
+            .into_os_string()
+            .into_encoded_bytes()
+    } else if meta.is_file() {
+        std::fs::read(path).map_err(|e| e.to_string())?
+    } else {
+        return Err("not a regular file or symlink, such as a nested repository".to_owned());
+    };
     if bytes.contains(&0) {
         return Ok(binary);
     }
