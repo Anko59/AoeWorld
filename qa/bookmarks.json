@@ -29,6 +29,14 @@
    "note": "Conifer forest; QA row also at WebGL2."
   },
   {
+   "name": "finland-conifer-forest-zoom-out",
+   "map": "finland",
+   "x": 100,
+   "y": 100,
+   "zoom": 0.25,
+   "note": "The same conifers minified: canopies must read as smooth masses."
+  },
+  {
    "name": "finland-conifer-forest-webgl2",
    "map": "finland",
    "x": 100,
@@ -113,6 +121,15 @@
    "y": 6197,
    "zoom": 1,
    "note": "Eastern forest, trails and glades.",
+   "verified": false
+  },
+  {
+   "name": "france-eastern-forest-zoom-out",
+   "map": "france",
+   "x": 16056,
+   "y": 6197,
+   "zoom": 0.25,
+   "note": "The same dense forest minified: canopies must read as smooth masses.",
    "verified": false
   },
   {
