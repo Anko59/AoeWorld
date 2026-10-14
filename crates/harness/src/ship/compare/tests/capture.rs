@@ -137,9 +137,56 @@ fn the_side_environment_opens_the_package_at_server_start() {
         env.contains(&("AOE_MAP_PACKAGE_DIRECTORY", "/maps".to_owned())),
         "{env:?}"
     );
-    assert!(
-        !env.iter()
-            .any(|(name, _)| name.contains("WHEEL") || name.contains("LEASE")),
-        "{env:?}"
+}
+
+#[test]
+fn the_side_environment_is_exactly_the_spectator_setup() {
+    // No controller or lease setting: one added to the server's environment has
+    // to be named here on purpose, and that review is what this guards.
+    let env = server::side_env("pack", std::path::Path::new("/maps"), HASH);
+    let names: Vec<&str> = env.iter().map(|(name, _)| *name).collect();
+    assert_eq!(
+        names,
+        [
+            "AOE_ASSET_PACK",
+            "AOE_MAP_PACKAGE_DIRECTORY",
+            "AOE_OPEN_MAP_PACKAGE"
+        ]
     );
+}
+
+#[test]
+fn the_capture_page_watches_the_app_and_never_acts_on_it() {
+    // The page is a spectator: it loads, evaluates, screenshots and reads its
+    // errors. Any other page method (click, mouse, keyboard, ...) or a dispatched
+    // input event would act on the app as a user, so the script may not contain one.
+    const WATCHING: [&str; 5] = ["evaluate", "goto", "waitForFunction", "on", "screenshot"];
+    const ACTING: [&str; 6] = [
+        ".click(",
+        "dispatchEvent",
+        "mouse.",
+        "keyboard.",
+        "WheelEvent",
+        ".wheel(",
+    ];
+    let script = include_str!("../capture.mjs");
+    let calls: Vec<String> = script
+        .split("page.")
+        .skip(1)
+        .map(|rest| {
+            rest.chars()
+                .take_while(|c| c.is_ascii_alphabetic())
+                .collect()
+        })
+        .collect();
+    assert!(!calls.is_empty(), "the script calls the page");
+    for call in &calls {
+        assert!(
+            WATCHING.contains(&call.as_str()),
+            "page.{call} in capture.mjs"
+        );
+    }
+    for act in ACTING {
+        assert!(!script.contains(act), "{act} in capture.mjs");
+    }
 }

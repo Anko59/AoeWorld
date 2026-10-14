@@ -49,6 +49,12 @@ pub(crate) struct Observed {
     /// The frame counter when the view settled.
     pub(crate) frame: u64,
     pub(crate) settle_ms: u64,
+    /// How long the frame had to stay unchanged: 1.5 s, or longer when a
+    /// software frame took longer than that (settle.rs `window_ms`).
+    pub(crate) window_ms: i64,
+    /// Chunk failures that loaded again during the capture (settle.rs
+    /// `recovered_failures`).
+    pub(crate) recovered_chunk_failures: u64,
     pub(crate) reported_renderer: Option<String>,
     pub(crate) map_hash: Option<String>,
     pub(crate) page_errors: Vec<String>,

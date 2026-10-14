@@ -5,6 +5,7 @@ use super::{
     bookmarks::Bookmark,
     pixels::{self, Image},
     report::{Observed, Requested, Status, ViewReport},
+    settle,
 };
 use std::{fs, path::Path};
 
@@ -19,6 +20,8 @@ fn observed(shot: &Shot) -> Option<Observed> {
             .last()
             .map_or(0, |s| u64::try_from(s.frame).unwrap_or(0)),
         settle_ms: c.settle_ms.unwrap_or(0),
+        window_ms: settle::window_ms(&c.history),
+        recovered_chunk_failures: settle::recovered_failures(&c.history),
         reported_renderer: c.renderer.clone(),
         map_hash: c.map_hash.clone(),
         page_errors: c.page_errors.clone(),
