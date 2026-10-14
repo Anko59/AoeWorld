@@ -120,6 +120,26 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  perf-comment:
+    # Item 12 of #388: the measured numbers reach the pull request as ONE
+    # informational comment, updated in place. It is never a gate: the
+    # failing checks stay the checks, and this job does not block the merge.
+    needs: [target-performance]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.target-performance.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
+      - run: make bootstrap
+      - run: make perf-comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AOE_PR_NUMBER: ${{ github.event.pull_request.number }}
+
   fuzz-smoke:
     needs: select
     if: ${{ needs.select.outputs.fuzz_smoke == 'true' }}

@@ -20,6 +20,23 @@ fn comparator_rejects_missing_and_regressed_samples() {
 }
 
 #[test]
+fn regression_floor_is_the_smallest_regressing_value() {
+    for baseline in [0u64, 1, 19, 20, 21, 100, 105, 1_000, 261_677, 1 << 40] {
+        let floor = regression_floor(baseline);
+        assert_eq!(
+            compare("x", Some(floor), Some(baseline)).verdict,
+            Verdict::Regression,
+            "floor of {baseline}"
+        );
+        assert_ne!(
+            compare("x", Some(floor - 1), Some(baseline)).verdict,
+            Verdict::Regression,
+            "below the floor of {baseline}"
+        );
+    }
+}
+
+#[test]
 fn comparator_cartesian_samples_preserve_verdict_and_evidence_fields() {
     let samples = [
         None,
