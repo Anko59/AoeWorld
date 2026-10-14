@@ -21,6 +21,7 @@ pub(super) fn offline_vector_pages(
     Option<RiverTopologyGrid>,
 ) {
     let directory = TestDirectory::new();
+    write_worldcover_decoy(&directory);
     let mut sampler = Sampler {
         request,
         axis,
@@ -33,7 +34,7 @@ pub(super) fn offline_vector_pages(
         river_topology: None,
     };
     let (water, modern) = sampler.pages().expect("offline vector sampling");
-    assert!(!directory.path("worldcover.tif").exists());
+    assert_worldcover_decoy_survives(&directory);
     (water, modern, sampler.take_river_topology().unwrap())
 }
 
@@ -293,6 +294,7 @@ fn sampler_pages_classify_vector_evidence_and_resolve_connected_river_reaches() 
 #[test]
 fn vector_only_pages_never_open_worldcover_and_keep_unobserved_cells() {
     let directory = TestDirectory::new();
+    write_worldcover_decoy(&directory);
     let length = usize::from(AXIS).pow(2);
     let mut sampler = Sampler {
         request: request(),
@@ -306,7 +308,7 @@ fn vector_only_pages_never_open_worldcover_and_keep_unobserved_cells() {
         river_topology: None,
     };
     let (mut water, modern) = sampler.pages().expect("vector-only sampling");
-    assert!(!directory.path("worldcover.tif").exists());
+    assert_worldcover_decoy_survives(&directory);
     assert!(modern[0].worldcover_class.iter().all(|class| *class == 0));
     let index = |row: usize, column: usize| row * usize::from(AXIS) + column;
     assert_eq!(water[0].kind[index(1, 1)], HydrologyKind::NoEvidence as u8);
@@ -488,3 +490,6 @@ mod channel_rules;
 
 #[path = "sampler/lake_raster.rs"]
 mod lake_raster;
+#[path = "sampler/decoy.rs"]
+mod decoy;
+use decoy::{assert_worldcover_decoy_survives, write_worldcover_decoy};
