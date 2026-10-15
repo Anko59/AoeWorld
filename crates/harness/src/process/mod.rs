@@ -240,6 +240,24 @@ fn supervise_reading(
     load: &load::Reader<'_>,
 ) -> Result<(), ProcessError> {
     let captured = capture::capture_command(command, deadline, cancellation);
+    report_captured_reading(program, captured, deadline, load)
+}
+
+/// Preserve normal diagnostics for a caller that also retained complete stdout.
+pub(crate) fn report_captured(
+    program: &str,
+    captured: Captured,
+    deadline: Duration,
+) -> Result<(), ProcessError> {
+    report_captured_reading(program, captured, deadline, &load::read)
+}
+
+fn report_captured_reading(
+    program: &str,
+    captured: Captured,
+    deadline: Duration,
+    load: &load::Reader<'_>,
+) -> Result<(), ProcessError> {
     if matches!(captured.exit, CaptureExit::Success) {
         if captured.truncated {
             io::stderr()

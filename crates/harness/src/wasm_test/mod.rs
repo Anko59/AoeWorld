@@ -1,5 +1,4 @@
 //! Execute wasm-bindgen-test in pinned Chromium through a disposable WebDriver.
-use crate::process;
 use serde::Serialize;
 use std::{
     error::Error,
@@ -11,6 +10,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod retry;
 mod suites;
 pub(crate) use suites::{SUITES, SuiteRun, packages, run_focused};
 
@@ -125,10 +125,15 @@ pub fn run() -> Result<()> {
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
     let environment = runner_environment(&remote, capabilities);
-    for suite in SUITES {
-        let arguments = suite.cargo_arguments();
-        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
-        process::run_with_env("cargo", &arguments, &environment, CARGO_DEADLINE)?;
+    if let Err(failure) = retry::run_suites(&environment) {
+        let Some(names) = failure.context_failures else {
+            return Err(failure.error);
+        };
+        eprintln!(
+            "test-wasm: retrying once: runner WebGL context errors in: {} (#391)",
+            names.join(", ")
+        );
+        retry::run_suites(&environment).map_err(|failure| failure.error)?;
     }
     let report = Report {
         version: 1,
@@ -156,23 +161,4 @@ fn git(first: &str, second: &str) -> Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn browser_suites_get_more_than_the_runner_default_of_twenty_seconds() {
-        let environment = runner_environment("http://127.0.0.1:1/", "caps.json");
-        let timeout = environment
-            .iter()
-            .find(|(name, _)| *name == "WASM_BINDGEN_TEST_TIMEOUT")
-            .map(|(_, value)| value.parse::<u64>().expect("seconds"))
-            .expect("whole-suite timeout");
-        assert!(timeout >= 120 && timeout < CARGO_DEADLINE.as_secs());
-    }
-
-    #[test]
-    fn current_checkout_has_report_identity_and_a_free_local_port() {
-        assert_eq!(git("rev-parse", "HEAD").expect("revision").len(), 40);
-        assert!(unused_port().expect("port") > 0);
-    }
-}
+mod tests;

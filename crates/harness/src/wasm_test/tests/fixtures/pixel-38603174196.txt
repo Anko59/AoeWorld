@@ -1,0 +1,92 @@
+--- stdout ---
+Set timeout to 300 seconds...
+Running headless tests in Chrome on `http://127.0.0.1:32885/`
+Try find `webdriver.json` for configure browser's capabilities:
+Ok
+Loading Wasm module...
+
+running 241 tests
+test game_renderer::webgl_tests::webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad ... FAIL
+
+failures:
+
+---- game_renderer::webgl_tests::webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad output ----
+    error output:
+        panicked at crates/rendering/src/game_renderer/tests/webgl.rs:314:9:
+        pixel 32,32: channel 0, expected 64
+        
+        Stack:
+        
+        Error
+            at http://127.0.0.1:46825/wasm-bindgen-test:755:25
+            at logError (http://127.0.0.1:46825/wasm-bindgen-test:1917:18)
+            at __wbg_new_af0ec6b7fe765f33 (http://127.0.0.1:46825/wasm-bindgen-test:754:57)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::Error::new::__wbg_new_af0ec6b7fe765f33::h7f309e00f7a7f3b7 externref shim (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3520]:0x1efbed)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::h61cc677508b5107b (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1291]:0x194517)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::{{closure}}::{{closure}}::h811a3c0943d01e4b (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2109]:0x1d3042)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_with_hook::h51c5edeeb48e69d3 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1955]:0x1cc5e6)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_handler::{{closure}}::hdf8d658790ccee4c (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2187]:0x1d5912)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::sys::backtrace::__rust_end_short_backtrace::h88020ccf76d2d661 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3910]:0x1f10de)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_begin_unwind (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3296]:0x1ee1a8)
+        
+        
+    
+    JS exception that was thrown:
+        RuntimeError: unreachable
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::__rust_abort (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[4028]:0x1f14dd)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::__rust_start_panic (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[4012]:0x1f1475)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_panic (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3597]:0x1f0129)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_with_hook::h51c5edeeb48e69d3 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1955]:0x1cc61b)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_handler::{{closure}}::hdf8d658790ccee4c (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2187]:0x1d5912)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.std::sys::backtrace::__rust_end_short_backtrace::h88020ccf76d2d661 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3910]:0x1f10de)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_begin_unwind (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3296]:0x1ee1a8)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.core::panicking::panic_fmt::h806e647715990138 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2921]:0x1e9082)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.aoe_rendering::game_renderer::webgl_tests::assert_pixel::h20f1e8781a2b26c1 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1347]:0x19b210)
+            at aoe_rendering-d92fea3c66e9f08b.wasm.aoe_rendering::game_renderer::webgl_tests::webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad::hd97dcbd73c507bce (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1132]:0x17cff3)
+
+failures:
+
+    game_renderer::webgl_tests::webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad
+
+test result: FAILED. 240 passed; 1 failed; 0 ignored; 0 filtered out; finished in 38.25s
+
+console output:
+    using deprecated parameters for the initialization function; pass a single object instead
+    layers=12517 surfaces=1156 allocs=102 reallocs=0 bytes=6593520 peak_live=3205440
+    Invoking test: game_renderer::webgl_tests::webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad
+    panicked at crates/rendering/src/game_renderer/tests/webgl.rs:314:9:
+    pixel 32,32: channel 0, expected 64
+    
+    Stack:
+    
+    Error
+        at http://127.0.0.1:46825/wasm-bindgen-test:755:25
+        at logError (http://127.0.0.1:46825/wasm-bindgen-test:1917:18)
+        at __wbg_new_af0ec6b7fe765f33 (http://127.0.0.1:46825/wasm-bindgen-test:754:57)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::Error::new::__wbg_new_af0ec6b7fe765f33::h7f309e00f7a7f3b7 externref shim (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3520]:0x1efbed)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::panic_handling::h61cc677508b5107b (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1291]:0x194517)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.wasm_bindgen_test::__rt::Context::new::{{closure}}::{{closure}}::h811a3c0943d01e4b (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2109]:0x1d3042)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_with_hook::h51c5edeeb48e69d3 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[1955]:0x1cc5e6)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.std::panicking::panic_handler::{{closure}}::hdf8d658790ccee4c (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[2187]:0x1d5912)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.std::sys::backtrace::__rust_end_short_backtrace::h88020ccf76d2d661 (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3910]:0x1f10de)
+        at aoe_rendering-d92fea3c66e9f08b.wasm.__rustc[9e6a08e89e4b9111]::rust_begin_unwind (http://127.0.0.1:46825/wasm-bindgen-test_bg.wasm:wasm-function[3296]:0x1ee1a8)
+    
+    
+
+--- stderr ---
+   Compiling serde_json v1.0.151
+   Compiling wasm-bindgen-futures v0.4.78
+   Compiling web-sys v0.3.105
+   Compiling memchr v2.8.3
+   Compiling wasm-bindgen-test v0.3.78
+   Compiling wgpu-types v30.0.1
+   Compiling wgpu v30.0.1
+   Compiling aoe-rendering v0.1.0 (/home/runner/work/AoeWorld/AoeWorld/crates/rendering)
+    Finished `release` profile [optimized] target(s) in 19.53s
+     Running unittests src/lib.rs (target/wasm32-unknown-unknown/release/deps/aoe_rendering-d92fea3c66e9f08b.wasm)
+Error: some tests failed
+error: test failed, to rerun pass `-p aoe-rendering --lib`
+
+Caused by:
+  process didn't exit successfully: `wasm-bindgen-test-runner /home/runner/work/AoeWorld/AoeWorld/target/wasm32-unknown-unknown/release/deps/aoe_rendering-d92fea3c66e9f08b.wasm` (exit status: 1)
+note: test exited abnormally; to see the full output pass --no-capture to the harness.
