@@ -160,6 +160,7 @@ jobs:
           if-no-files-found: ignore
 
   required:
+    permissions: { contents: read, statuses: write }
     if: always()
     needs: [select, static, native-coverage, browser, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
@@ -177,6 +178,12 @@ jobs:
           AOE_JOB_RESULTS_JSON: >-
             {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
         run: make ci-check
+      - name: Report dispatched aggregate as a commit status
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref_name != 'dev' && github.ref_name != 'main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: make ci-dispatch-status
 
   dev-artifacts:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}

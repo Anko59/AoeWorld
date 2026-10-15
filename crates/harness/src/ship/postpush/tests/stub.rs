@@ -22,6 +22,10 @@ fi
 all="$*"
 case "$all" in
   *"--method POST"*|*"--method PATCH"*)
+    case "$4" in
+      */dispatches*) [ -f "$GH_DIR/dispatch-fails" ] && { echo "dispatch denied" >&2; exit 1; } ;;
+      */statuses/*) [ -f "$GH_DIR/carry-fails" ] && { echo "status denied" >&2; exit 1; } ;;
+    esac
     [ -f "$GH_DIR/write-fails" ] && { echo "stub failure" >&2; exit 1; }
     echo '{}' ;;
   *UpdateBranch*)
@@ -29,6 +33,12 @@ case "$all" in
     if [ -f "$GH_DIR/rebase-fails-$id" ]; then cat "$GH_DIR/rebase-fails-$id" >&2; exit 1; fi
     echo '{"data":{}}' ;;
   *ListWaiting*) cat "$GH_DIR/list.json" ;;
+  *UpdatedHead*)
+    n=$(printf '%s\n' "$@" | sed -n 's/^number=//p')
+    if [ -f "$GH_DIR/poll-old-$n.json" ]; then
+      cat "$GH_DIR/poll-old-$n.json"
+      rm "$GH_DIR/poll-old-$n.json"
+    else cat "$GH_DIR/head-$n.json"; fi ;;
   */compare/*)
     oid=$(printf '%s\n' "$@" | sed -n 's|.*/compare/dev\.\.\.||p')
     cat "$GH_DIR/compare-$oid.json" ;;

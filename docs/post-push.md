@@ -59,16 +59,41 @@ commit restores their original contents. The worktree is removed afterwards.
 A refusal with no conflict also adds one comment explaining the API failure
 and any local replay failure, and remains an error of the run. Forks are skipped.
 
-The rebase must be pushed with a personal token: a push made with the workflow's
-own `GITHUB_TOKEN` starts no CI run, and the rebased pull request would wait
-for a `required` check forever. The workflow reads it from the repository
-secret `PR_UPDATE_TOKEN` (the owner creates it). Without it the job prints a
-notice and does nothing, so the updater is inert until then.
+The updater uses the workflow's own `GITHUB_TOKEN`, with `contents: write`,
+`pull-requests: write`, `statuses: write` and `actions: write`; no personal
+secret is needed. A push made with this token starts neither `pull_request` CI
+nor the `pull_request_target` carry job. After GitHub accepts a rebase, the
+updater polls the PR's head every five seconds for up to two minutes until it
+changes, calls the existing review carry, then dispatches `ci.yml` on the PR's
+head branch. `workflow_dispatch` is an exception to GitHub's token recursion
+rule: a dispatch made with `GITHUB_TOKEN` does start a workflow run. The
+harness chooses the merge base of the head with `origin/dev` as the comparison
+base for dispatches on feature branches, with the `pr` cadence, just like a pull
+request; the merge base does not change when dev advances between the selection
+and the final check. The `required` status step does not run on `dev`/`main`.
+The dispatcher supplies no base. Dispatches on `dev`/`main` and other events
+without a base still select all gates; an unavailable comparison also selects all.
+
+[GitHub does not evaluate dispatch-run workflow-job checks for pull requests](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated).
+The `required` job therefore finishes every dispatch with `make ci-dispatch-status`:
+it posts a commit status named `required` on `GITHUB_SHA`, using the workflow's
+`GITHUB_TOKEN` and the GitHub Actions app. Only this job gets `statuses: write`.
+The status is success only when the aggregate job succeeded, otherwise failure,
+and links to the workflow run. The command refuses other events, execution
+outside GitHub Actions, and the `dev`/`main` refs.
+
+A head that never moves, a carry error or a dispatch error
+adds a failure comment and fails the updater run. The event-driven carry job
+still serves pushes made by `make ship`.
 
 ## What only GitHub can show
 
 The commands are tested against stubbed `gh` and real Git (`cargo test`, the
 `ship::postpush` tests). After merge, on a real pull request: that
-`pull_request_target` runs from `dev`, the secret and the permissions suffice,
-that `updatePullRequestBranch` rebases and triggers `required`, that the carried
+`pull_request_target` runs from `dev`, the workflow token and permissions suffice,
+that `updatePullRequestBranch` rebases and the explicit dispatch commit status
+is accepted as `required` from the Actions app, that the carried
 status is accepted for `harness/review`, and what `behind_by` reports.
+
+The dispatched status satisfying branch protection is verified only after merge
+on a real pull request; local stub tests do not verify that GitHub behavior.

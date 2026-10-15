@@ -2,17 +2,18 @@ use super::stub::{World, comment};
 use crate::ship::postpush::update::{execute, update};
 use std::fs;
 
-fn node(number: u64, auto: bool, cross: bool) -> serde_json::Value {
+pub(super) fn node(number: u64, auto: bool, cross: bool) -> serde_json::Value {
     serde_json::json!({
         "id": format!("PR_{number}"),
         "number": number,
         "headRefOid": format!("head{number}"),
+        "headRefName": format!("feature/{number}"),
         "isCrossRepository": cross,
         "autoMergeRequest": if auto { serde_json::json!({"enabledAt": "t"}) } else { serde_json::Value::Null },
     })
 }
 
-fn listing(world: &World, nodes: &[serde_json::Value]) {
+pub(super) fn listing(world: &World, nodes: &[serde_json::Value]) {
     let data = serde_json::json!({"data": {"repository": {"pullRequests": {"nodes": nodes}}}});
     world.answer("list.json", &data.to_string());
 }
@@ -21,6 +22,16 @@ fn behind(world: &World, number: u64, by: u64) {
     world.answer(
         &format!("compare-head{number}.json"),
         &format!("{{\"behind_by\": {by}}}"),
+    );
+    let head = world.head();
+    world.publish_pull(number, &head);
+    world.answer(
+        &format!("head-{number}.json"),
+        &super::dispatch::head_json(&head),
+    );
+    world.answer(
+        &format!("pull-{number}.json"),
+        &super::stub::pull_json("open", "dev", &head),
     );
 }
 
@@ -56,7 +67,15 @@ fn only_auto_merge_pull_requests_that_are_behind_are_rebased() {
         calls.contains("<oid=head5>") && calls.contains("updateMethod: REBASE"),
         "{calls}"
     );
-    assert!(!calls.contains("<POST>"), "{calls}");
+    assert_eq!(
+        calls
+            .matches("<repos/project/checkout/actions/workflows/ci.yml/dispatches>")
+            .count(),
+        1,
+        "{calls}"
+    );
+    // A rebase that lands posts no conflict or failure comment.
+    assert!(!calls.contains("aoe-harness:update-"), "{calls}");
 }
 
 #[test]
@@ -154,16 +173,14 @@ fn a_failure_without_conflicting_files_comments_and_fails_the_run() {
 }
 
 #[test]
-fn without_the_personal_token_the_workflow_does_nothing() {
+fn a_missing_token_is_not_silently_skipped() {
     let mut world = World::new();
     world.set("GITHUB_ACTIONS", "true");
     world.set("GH_TOKEN", "");
     world.set("AOE_AGENT_ROLE", "main");
+    listing(&world, &[]);
     execute(&world.root).unwrap();
-    assert_eq!(
-        fs::read_to_string(world.temp.path().join("gh.log")).unwrap(),
-        ""
-    );
+    assert!(world.calls().contains("ListWaiting"));
 }
 
 #[test]
