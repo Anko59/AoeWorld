@@ -59,6 +59,11 @@ pub(crate) fn line(context: &Context, text: &str, cwd: Option<PathBuf>, depth: u
         }
         Err(_) => return Ok(()),
     };
+    if agent && parsed.continued_line {
+        return Err(
+            "agents do not continue lines with a backslash-newline; write it plainly".into(),
+        );
+    }
     if let (Some(reason), true) = (parsed.opaque, agent) {
         return Err(format!("{reason}; write it plainly"));
     }

@@ -3,6 +3,7 @@ mod dispatch;
 mod hooks;
 mod prune;
 mod runtimes;
+mod shell_lexer;
 mod shell_state;
 mod stop;
 mod vcs;
