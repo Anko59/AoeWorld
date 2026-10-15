@@ -102,3 +102,23 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
     assert_eq!(frames.len(), 1);
 }
+
+#[wasm_bindgen_test]
+fn native_town_center_front_overhang_clears_its_flat_footprint() {
+    let mut art = art();
+    art.town_center[0][0].size = [195.0, 200.0];
+    art.town_center[0][0].anchor = [103.0, 136.0];
+    let unit = unit(SceneUnitKind::TownCenter);
+    let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit], camera(), 0);
+    let (_, frame, depth, _) = frames
+        .iter()
+        .find(|(_, frame, _, _)| frame.atlas.uv[0] == 500.0 / 4096.0)
+        .unwrap();
+    let foreground = unit.position[0]
+        + unit.position[1]
+        + f64::from(frame.size[1] - frame.anchor[1]) / (aoe_core::ISO_TILE_HEIGHT / 2.0);
+    assert!(
+        *depth > foreground,
+        "native front columns and foundation must clear flat ground"
+    );
+}

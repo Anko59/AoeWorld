@@ -231,7 +231,13 @@ const GROUND_CLEARANCE: f64 = 1.5;
 
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    surface_depth([position[0], position[1], object.elevation_meters()]) + GROUND_CLEARANCE
+    // The native Town Center reaches 64 source pixels below its anchor, farther
+    // than a tree/unit. Its front foundation must clear its own flat footprint.
+    let clearance = match object {
+        WorldObject::Unit(unit) if unit.kind == crate::SceneUnitKind::TownCenter => 3.0,
+        _ => GROUND_CLEARANCE,
+    };
+    surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
 }
 
 #[derive(Clone, Copy)]

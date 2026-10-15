@@ -35,7 +35,7 @@ export function initInterface() {
   });
   for (const event of ['pointerup','pointercancel','lostpointercapture']) scene.addEventListener(event,()=>{ drag=null;box.hidden=true; });
   let previousSelection='', previousQueue='', previousLoads='';
-  window.aoeInterface = { update(state) {
+  const update = state => {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
     });
@@ -88,5 +88,20 @@ export function initInterface() {
     if (signature!==previousLoads) {
       byId('carried-loads').innerHTML=loads.map(actor=>`<span class="load-badge" style="left:${actor.x+12}px;top:${actor.y-36}px">${icon(actor.load[0])}${actor.load[1]}</span>`).join('');previousLoads=signature;
     }
+  };
+  window.aoeInterface = { numeric(values,status) {
+    const kinds=['Scout','Villager','TownCenter'], names=['Scout','Villager','Town Center'];
+    const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Ready to train','Training Villager'];
+    const resources=['food','wood','gold','stone',''];
+    const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
+    let at=16;
+    for (let index=0;index<values[13];index++,at+=8) {
+      const [id,kind,x,y,selected,task,resource,amount]=values.subarray(at,at+8);
+      state.actors.push({id,kind:kinds[kind],x,y,selected:!!selected,load:amount?[resources[resource],amount]:null});
+      if (selected) state.selected.push({id,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount});
+    }
+    for (let index=0;index<values[14];index++,at+=2) state.queue.push([values[at],values[at+1]]);
+    for (let index=0;index<values[15];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
+    update(state);
   }};
 }

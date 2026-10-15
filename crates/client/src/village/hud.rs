@@ -1,79 +1,25 @@
 use super::{Client, building_center, owner, resource_kind};
 use crate::playground::game::{map, position_at};
 use aoe_protocol::{GameplayRole, ResourceKind, UnitKind, UnitTask};
-use serde::Serialize;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function village_update(payload) { window.aoeInterface?.update(JSON.parse(payload)); }"
+    inline_js = "export function village_update(values, status) { window.aoeInterface?.numeric(values, status); }"
 )]
 extern "C" {
-    fn village_update(payload: &str);
+    fn village_update(values: &[f64], status: &str);
 }
 
-#[derive(Serialize)]
-struct Actor {
-    id: u32,
-    kind: &'static str,
-    x: f64,
-    y: f64,
-    selected: bool,
-    load: Option<(&'static str, u16)>,
+fn flag(value: bool) -> f64 {
+    f64::from(u8::from(value))
 }
-#[derive(Serialize)]
+
 struct Target {
     kind: u8,
     x: f64,
     y: f64,
     distance: f64,
-}
-#[derive(Serialize)]
-struct Selected {
-    id: u32,
-    kind: &'static str,
-    name: &'static str,
-    task: &'static str,
-    resource: &'static str,
-    amount: u16,
-}
-#[derive(Serialize)]
-struct Hud<'a> {
-    stockpile: [u32; 4],
-    population: [u16; 2],
-    workers: [u16; 4],
-    selected: Vec<Selected>,
-    queue: Vec<[u64; 2]>,
-    seconds: u64,
-    observer: bool,
-    status: &'a str,
-    actors: Vec<Actor>,
-    resources: Vec<Target>,
-    art: bool,
-}
-
-fn name(kind: ResourceKind) -> &'static str {
-    match kind {
-        ResourceKind::Food => "food",
-        ResourceKind::Wood => "wood",
-        ResourceKind::Gold => "gold",
-        ResourceKind::Stone => "stone",
-    }
-}
-fn unit_name(kind: UnitKind) -> &'static str {
-    match kind {
-        UnitKind::Scout => "Scout",
-        UnitKind::Villager => "Villager",
-    }
-}
-fn task(task: UnitTask) -> &'static str {
-    match task {
-        UnitTask::Idle => "Idle",
-        UnitTask::Moving => "Moving",
-        UnitTask::Gathering => "Gathering",
-        UnitTask::Carrying => "Carrying",
-        UnitTask::Returning => "Returning to Town Center",
-    }
 }
 fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
     let p = map::screen_position(client, position);
@@ -85,91 +31,80 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
-    let mut hud = Hud {
-        stockpile: [0; 4],
-        population: [0; 2],
-        workers: [0; 4],
-        selected: Vec::new(),
-        queue: Vec::new(),
-        seconds: client.village.tick / u64::from(client.config.tick_hz.max(1)),
-        observer: client.role != Some(GameplayRole::Controller),
-        status: map::feedback::connection_label(client),
-        actors: Vec::new(),
-        resources: Vec::new(),
-        art: !client.art.village[0].is_empty(),
-    };
+    // Header: four stockpiles, used/cap, four worker counts, clock, observing,
+    // native-art flag, then actor/queue/resource counts. Actor records are eight
+    // numbers. Decode immediately in JS; never retain a view of WASM memory.
+    let mut values = vec![0.0; 16];
+    values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
+    values[11] = flag(client.role != Some(GameplayRole::Controller));
+    values[12] = flag(!client.art.village[0].is_empty());
+    values[13] = (client.units.len() + client.village.buildings.len()) as f64;
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
-        hud.stockpile = [s.wood, s.food, s.gold, s.stone];
-        hud.population = [player.population_used, player.population_cap];
+        values[..6].copy_from_slice(&[
+            f64::from(s.wood),
+            f64::from(s.food),
+            f64::from(s.gold),
+            f64::from(s.stone),
+            f64::from(player.population_used),
+            f64::from(player.population_cap),
+        ]);
     }
     for unit in client.units.values() {
         let [x, y] = screen(client, position_at(client, unit.id));
-        let selected = client.selected.units.contains(&unit.id);
-        let kind = resource_kind(client, unit.id);
+        let resource = resource_kind(client, unit.id);
         if unit.player == owner
             && unit.kind == UnitKind::Villager
             && matches!(
                 unit.task,
                 UnitTask::Gathering | UnitTask::Carrying | UnitTask::Returning
             )
-            && let Some(kind) = kind
+            && let Some(kind) = resource
         {
-            hud.workers[match kind {
+            values[6 + match kind {
                 ResourceKind::Wood => 0,
                 ResourceKind::Food => 1,
                 ResourceKind::Gold => 2,
                 ResourceKind::Stone => 3,
-            }] += 1;
+            }] += 1.0;
         }
-        hud.actors.push(Actor {
-            id: unit.id.0,
-            kind: unit_name(unit.kind),
+        values.extend_from_slice(&[
+            f64::from(unit.id.0),
+            flag(unit.kind == UnitKind::Villager),
             x,
             y,
-            selected,
-            load: unit.carried.map(|c| (name(c.kind), c.amount)),
-        });
-        if selected {
-            hud.selected.push(Selected {
-                id: unit.id.0,
-                kind: unit_name(unit.kind),
-                name: unit_name(unit.kind),
-                task: task(unit.task),
-                resource: kind.map_or("", name),
-                amount: unit.carried.map_or(0, |c| c.amount),
-            });
-        }
+            flag(client.selected.units.contains(&unit.id)),
+            unit.task as u8 as f64,
+            resource.map_or(4.0, |kind| kind as u8 as f64),
+            f64::from(unit.carried.map_or(0, |load| load.amount)),
+        ]);
     }
-    for b in &client.village.buildings {
-        let [x, y] = screen(client, building_center(b));
-        let selected = client.selected.building_id == Some(b.id);
-        hud.actors.push(Actor {
-            id: b.id.0,
-            kind: "TownCenter",
+    for building in &client.village.buildings {
+        let [x, y] = screen(client, building_center(building));
+        values.extend_from_slice(&[
+            f64::from(building.id.0),
+            2.0,
             x,
             y,
-            selected,
-            load: None,
-        });
-        if selected {
-            hud.selected.push(Selected {
-                id: b.id.0,
-                kind: "TownCenter",
-                name: "Town Center",
-                task: if b.training_queue.is_empty() {
-                    "Ready to train"
-                } else {
-                    "Training Villager"
-                },
-                resource: "",
-                amount: 0,
-            });
-            hud.queue = b
-                .training_queue
-                .iter()
-                .map(|e| [e.progress_ticks, e.total_ticks])
-                .collect();
+            flag(client.selected.building_id == Some(building.id)),
+            if building.training_queue.is_empty() {
+                5.0
+            } else {
+                6.0
+            },
+            4.0,
+            0.0,
+        ]);
+    }
+    if let Some(building) = client
+        .village
+        .buildings
+        .iter()
+        .find(|b| Some(b.id) == client.selected.building_id)
+    {
+        values[14] = building.training_queue.len() as f64;
+        for entry in &building.training_queue {
+            values.extend_from_slice(&[entry.progress_ticks as f64, entry.total_ticks as f64]);
         }
     }
     let focus = client
@@ -178,8 +113,8 @@ pub(in super::super) fn update(client: &Client) {
         .first()
         .or(client.primary.as_ref())
         .map_or(client.camera.center, |id| position_at(client, *id));
-    // Capture targets are bounded to the nearest visible nodes; no world-sized
-    // terrain or sprite list is copied for the interface.
+    let mut targets: Vec<Target> = Vec::new();
+    // Eight nearest visible nodes per resource kind, bounded to 32 targets.
     for chunk in client.terrain_chunks.values() {
         for (node, _) in chunk
             .resources()
@@ -194,30 +129,24 @@ pub(in super::super) fn update(client: &Client) {
             {
                 continue;
             }
+            let kind = node.kind as u8;
             let distance = (position[0] - focus[0]).powi(2) + (position[1] - focus[1]).powi(2);
-            if hud
-                .resources
-                .iter()
-                .filter(|target| target.kind == node.kind as u8)
-                .count()
-                < 8
-            {
-                hud.resources.push(Target {
-                    kind: node.kind as u8,
+            if targets.iter().filter(|t| t.kind == kind).count() < 8 {
+                targets.push(Target {
+                    kind,
                     x,
                     y,
                     distance,
                 });
-            } else if let Some((slot, furthest)) = hud
-                .resources
+            } else if let Some((slot, furthest)) = targets
                 .iter()
                 .enumerate()
-                .filter(|(_, target)| target.kind == node.kind as u8)
+                .filter(|(_, t)| t.kind == kind)
                 .max_by(|a, b| a.1.distance.total_cmp(&b.1.distance))
                 && distance < furthest.distance
             {
-                hud.resources[slot] = Target {
-                    kind: node.kind as u8,
+                targets[slot] = Target {
+                    kind,
                     x,
                     y,
                     distance,
@@ -225,9 +154,11 @@ pub(in super::super) fn update(client: &Client) {
             }
         }
     }
-    if let Ok(json) = serde_json::to_string(&hud) {
-        village_update(&json);
+    values[15] = targets.len() as f64;
+    for target in targets {
+        values.extend_from_slice(&[f64::from(target.kind), target.x, target.y, target.distance]);
     }
+    village_update(&values, map::feedback::connection_label(client));
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
