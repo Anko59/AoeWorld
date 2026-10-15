@@ -339,3 +339,10 @@ fn bootstrap_compilation_has_a_small_hard_resource_envelope() {
         );
     }
 }
+
+#[test]
+fn completed_load_admission_reaches_every_container_with_the_slot() {
+    let files = make_files(&repository());
+    assert!(definitions(&files)["HEAVY_ENV"].contains("-e AOE_HEAVY_LOAD_CHECKED"));
+    assert!(unforwarded(&files).is_empty());
+}

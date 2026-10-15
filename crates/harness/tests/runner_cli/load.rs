@@ -62,6 +62,7 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
                 .current_dir(root.path())
                 .env_remove("AOE_HEAVY_SLOT")
                 .env_remove("AOE_HEAVY_DIR")
+                .env_remove("AOE_HEAVY_LOAD_CHECKED")
                 .env("AOE_HEAVY_SLOTS", "1")
                 .env("AOE_HEAVY_WAIT_MINUTES", "0")
                 .stdout(Stdio::null())

@@ -163,3 +163,58 @@ fn load_wait_holds_the_slot_and_timeout_releases_it_before_work_starts() {
     drop(parent);
     assert_eq!(tickets(&queue), 0);
 }
+
+#[test]
+fn checked_parent_still_takes_a_slot_and_supervised_children_inherit_admission() {
+    use super::{SERIAL, checkout, take, tickets};
+    use crate::slots::{
+        CHECKED_VAR, SlotEnv,
+        guard::{dir, hold_in},
+    };
+    let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (_temp, root) = checkout();
+    let queue = dir(&root).unwrap();
+    let env = SlotEnv {
+        load_checked: true,
+        wait: Some("0".into()),
+        ..SlotEnv::default()
+    };
+    let blocker = take(&queue, 1, "other", Duration::ZERO).unwrap();
+    assert!(
+        hold_in(
+            &root,
+            "slow",
+            &env,
+            || Ok(queue.clone()),
+            || panic!("checked children never read load")
+        )
+        .is_err(),
+        "completed load admission must not bypass a full slot queue"
+    );
+    drop(blocker);
+    let slot = hold_in(
+        &root,
+        "slow",
+        &env,
+        || Ok(queue.clone()),
+        || panic!("checked children never read load"),
+    )
+    .unwrap();
+    assert_eq!(tickets(&queue), 1, "a checked child still owns a slot");
+    assert!(slot.env().contains(&(CHECKED_VAR, "1".into())));
+    let output = root.join("child-env");
+    // This is the same supervised path used by preflight -> cargo nextest ->
+    // integration test -> aoe-harness, not the slot wrapper's special launcher.
+    let script = r#"printf '%s\n%s\n%s' "$AOE_HEAVY_SLOT" "$AOE_HEAVY_DIR" "$AOE_HEAVY_LOAD_CHECKED" > child-env"#;
+    crate::process::run_in(&root, "sh", &["-c", script], &[], Duration::from_secs(10)).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(output).unwrap(),
+        format!("{}\n{}\n1", slot.env()[0].1, queue.display())
+    );
+    drop(slot);
+    assert_eq!(tickets(&queue), 0);
+    assert!(
+        crate::slots::guard::child_env().is_empty(),
+        "admission ends with its guard"
+    );
+}

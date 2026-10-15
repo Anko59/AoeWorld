@@ -39,6 +39,8 @@ pub(crate) use status::print_status;
 pub(crate) const TOKEN_VAR: &str = "AOE_HEAVY_SLOT";
 /// The shared slot directory a holder names for its children (a snapshot's own Git directory is not it).
 pub(crate) const DIR_VAR: &str = "AOE_HEAVY_DIR";
+/// A completed load admission, independent of which queue a child uses.
+pub(crate) const CHECKED_VAR: &str = "AOE_HEAVY_LOAD_CHECKED";
 /// Environment variables forwarded into Docker by the Makefile.
 pub(crate) const SLOTS_VAR: &str = "AOE_HEAVY_SLOTS";
 pub(crate) const WAIT_VAR: &str = "AOE_HEAVY_WAIT_MINUTES";
@@ -47,11 +49,13 @@ const MAX_SLOTS: usize = 8;
 pub(crate) const POLL: Duration = Duration::from_secs(1);
 pub(crate) const REPORT_EVERY: Duration = Duration::from_secs(300);
 
-/// The four `AOE_HEAVY_*` variables as values. Only `SlotEnv::process` reads the real environment,
+/// The `AOE_HEAVY_*` variables as values. Only `SlotEnv::process` reads the real environment,
 /// once, at the process entry point; everything below it is given a `SlotEnv`, so no test depends
 /// on the environment of the process that runs it (the audit in `slots/tests/environment.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SlotEnv {
+    /// The parent already admitted this workload; children must not wait again.
+    pub(crate) load_checked: bool,
     /// `AOE_HEAVY_SLOT`: the token of the slot a parent holds.
     pub(crate) token: Option<String>,
     /// `AOE_HEAVY_DIR`: the shared queue the parent named.
@@ -65,6 +69,7 @@ pub(crate) struct SlotEnv {
 impl SlotEnv {
     pub(crate) fn process() -> Self {
         Self {
+            load_checked: std::env::var(CHECKED_VAR).is_ok_and(|value| value == "1"),
             token: std::env::var(TOKEN_VAR).ok(),
             dir: std::env::var_os(DIR_VAR),
             slots: std::env::var(SLOTS_VAR).ok(),

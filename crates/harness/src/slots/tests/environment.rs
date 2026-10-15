@@ -126,7 +126,7 @@ fn inherited_slot_child() {
     assert_eq!(tickets(&real_dir), 1, "the passed slot is the holder's");
 }
 
-/// The four variables are read in one place. A new reader would bring a process's slot back into
+/// The five variables are read in one place. A new reader would bring a process's slot back into
 /// the tests, so this fails until the reader takes its values as an input instead.
 #[test]
 fn only_the_process_entry_reads_the_slot_variables() {
@@ -151,9 +151,9 @@ fn only_the_process_entry_reads_the_slot_variables() {
         .iter()
         .filter(|r| r.starts_with("slots/mod.rs:"))
         .count();
-    assert_eq!(readers.len(), 4, "{readers:?}");
+    assert_eq!(readers.len(), 5, "{readers:?}");
     assert_eq!(
-        in_process, 4,
+        in_process, 5,
         "only SlotEnv::process reads them: {readers:?}"
     );
 }
@@ -161,6 +161,7 @@ fn only_the_process_entry_reads_the_slot_variables() {
 fn reads_slot_variable(line: &str) -> bool {
     line.contains("env::var")
         && [
+            "CHECKED_VAR",
             "TOKEN_VAR",
             "DIR_VAR",
             "SLOTS_VAR",

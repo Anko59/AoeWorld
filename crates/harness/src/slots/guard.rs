@@ -1,6 +1,6 @@
 //! The process-level view of the heavy slots: which gates take one, and holding it.
 use super::{
-    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    CHECKED_VAR, Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     queue::Result,
 };
 use crate::{
@@ -20,6 +20,15 @@ type Env = Vec<(&'static str, String)>;
 /// The environment of the slot this process holds (itself or inherited), so a nested heavy
 /// gate in the same process (preflight running test-unit) passes it on instead of taking another.
 static HELD: Mutex<Option<Env>> = Mutex::new(None);
+
+/// Supervised children inherit admission even when the caller took its slot in
+/// this process rather than receiving it through the process environment.
+pub(crate) fn child_env() -> Env {
+    HELD.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
 
 /// A slot (or nothing, for light or nested work) for as long as this lives.
 #[derive(Debug)]
@@ -210,12 +219,15 @@ pub(super) fn hold_in(
     )?;
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
-    if matches!(slot, Slot::Owned { .. }) {
+    // A checked parent may also start a child using a different queue. It must
+    // still take that queue's slot, but load admission is already complete.
+    if matches!(slot, Slot::Owned { .. }) && !env.load_checked {
         wait_load()?;
     }
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
+        (CHECKED_VAR, "1".into()),
     ];
     *held = Some(env.clone());
     Ok(Guard {

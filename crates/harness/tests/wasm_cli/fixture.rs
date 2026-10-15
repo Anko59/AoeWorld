@@ -20,7 +20,9 @@ pub(super) fn run(tool: &str) {
                 .unwrap();
             fs::write(calls, (count + 1).to_string()).unwrap();
             if count == 0 || fs::read_to_string(root.join("repeat")).unwrap() == "true" {
-                print!("{}", fs::read_to_string(root.join("diagnostic")).unwrap());
+                // Serial libtest prints its test label without a newline. Keep
+                // the tool's first diagnostic on its own line on one-core CI.
+                print!("\n{}", fs::read_to_string(root.join("diagnostic")).unwrap());
                 let code = fs::read_to_string(root.join("exit"))
                     .unwrap()
                     .parse()
@@ -41,4 +43,43 @@ pub(super) fn run(tool: &str) {
         _ => panic!("unexpected fixture command: {tool} {args}"),
     }
     std::process::exit(0);
+}
+
+/// Exercise an owned slot after a test parent has admitted the workload. One
+/// CPU makes ordinary host load exercise the regression without creating load.
+pub(super) fn command(root: &Path) -> std::process::Command {
+    let load: f64 = fs::read_to_string("/proc/loadavg")
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut command = if load > 1.0 {
+        let status = fs::read_to_string("/proc/self/status").unwrap();
+        let cpu = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+            .unwrap()
+            .trim()
+            .split([',', '-'])
+            .next()
+            .unwrap();
+        eprintln!(
+            "test-wasm load regression: host load {load}, child restricted to CPU {cpu} (1 core)"
+        );
+        let mut command = std::process::Command::new("taskset");
+        command.args(["-c", cpu, env!("CARGO_BIN_EXE_aoe-harness")]);
+        command
+    } else {
+        eprintln!("test-wasm overload rehearsal unavailable: load {load} <= 1");
+        std::process::Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+    };
+    command
+        .env_remove("AOE_HEAVY_SLOT")
+        .env("AOE_HEAVY_DIR", root.join("slots"))
+        .env("AOE_HEAVY_SLOTS", "1")
+        .env("AOE_HEAVY_WAIT_MINUTES", "0")
+        .env("AOE_HEAVY_LOAD_CHECKED", "1");
+    command
 }

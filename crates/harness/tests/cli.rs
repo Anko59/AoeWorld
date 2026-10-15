@@ -12,6 +12,7 @@ fn root() -> PathBuf {
 fn invoke(arguments: &[&str], success: bool) {
     let output = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
         .args(arguments)
+        .env("AOE_HEAVY_LOAD_CHECKED", "1")
         .current_dir(root())
         .output()
         .expect("harness command");
