@@ -127,7 +127,12 @@ pub(crate) fn hold(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
             gate,
             slots,
             || slot_dir(&root, slots),
-            super::load::wait,
+            || {
+                let cancellation = crate::process::Cancellation::default();
+                #[cfg(target_os = "linux")]
+                let _signals = crate::gates::runner::signals::Signals::new(&cancellation)?;
+                super::load::wait(&cancellation)
+            },
         ),
         None => Ok(Guard::none()),
     }
@@ -140,8 +145,15 @@ pub(crate) fn hold_snapshot(
     source: &Path,
     gate: &str,
     env: &SlotEnv,
+    cancellation: &crate::process::Cancellation,
 ) -> Result<Guard> {
-    hold_in(root, gate, env, || slot_dir(source, env), super::load::wait)
+    hold_in(
+        root,
+        gate,
+        env,
+        || slot_dir(source, env),
+        || super::load::wait(cancellation),
+    )
 }
 
 pub(super) fn hold_in(
@@ -165,7 +177,6 @@ pub(super) fn hold_in(
     }
     let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(env) = held.as_ref() {
-        wait_load()?;
         return Ok(Guard {
             _slot: None,
             env: env.clone(),

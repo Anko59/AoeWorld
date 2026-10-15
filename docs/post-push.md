@@ -96,11 +96,14 @@ A head that never moves, a carry error or a dispatch error
 adds a failure comment and fails the updater run. The event-driven carry job
 still serves pushes made by `make ship`.
 
-Before a lease push, ship fetches the branch again. If its only additions since
+Before every push, including without SHIP_FORCE and with an unchanged dev, ship fetches the branch again. If its only additions since
 the ship's starting head are two-parent merges committed by `GitHub
 <noreply@github.com>`, each with a dev second parent, it prints one line and
 leases on the fetched head. Other remote changes refuse the push; the lease
-still rejects a push that races this final fetch. Updater output says
+still rejects a push that races this final fetch. These validation fetches
+disable remote-tracking updates, so a refused attempt cannot authorize the
+same overwrite on an unchanged retry. Without force, ordinary fast-forwards
+remain allowed; other divergence still refuses. Updater output says
 `updated (dev merged in)`.
 
 ## What only GitHub can show

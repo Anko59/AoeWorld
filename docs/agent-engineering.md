@@ -63,8 +63,15 @@ deadlines ([gates](gates.md)). Do not wait for the load to fall by hand, and
 never scan processes to decide when to start: run the target and let it queue.
 Before starting heavy work it also waits up to 30 minutes while the 1-minute
 load exceeds the core count, reporting every 5 minutes. Its deadline starts
-when it runs. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
-the slot before compiling their test steps. `make load-status` shows the holders; a
+when it runs. SIGINT/SIGTERM stops a load wait and releases the slot. Load is
+checked once at admission; nested stages inherit that check, and load rising
+after start never pauses or aborts running gates. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
+the slot before compiling their test steps. The command-only bootstrap before
+admission is static work, serialized across worktrees by flock, with hard
+limits of one CPU, one Cargo job and 2 GiB including swap; it builds no tests.
+This bounded bootstrap permits cold starts without letting gate compilation
+bypass slots. External Cargo/target cache paths and TMPDIR reach both wrapper
+and steps containers. `make load-status` shows the holders; a
 queue that outlasts `AOE_HEAVY_WAIT_MINUTES` fails with the holders named.
 
 A new field in `gates/registry.json` ships in two changes: first the code that

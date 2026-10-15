@@ -46,7 +46,8 @@ pub(super) fn short(sha: &str) -> &str {
 
 /// `gh api` with `args`, its output read as JSON.
 pub(super) fn api(root: &Path, args: &[&str]) -> Result<serde_json::Value> {
-    let mut full = vec!["api"];
+    let (host, _) = git::origin_host_repository(root)?;
+    let mut full = vec!["api", "--hostname", &host];
     full.extend(args);
     Ok(serde_json::from_str(&gh(root, &full)?)?)
 }

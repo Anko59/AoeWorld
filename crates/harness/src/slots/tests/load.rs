@@ -8,6 +8,7 @@ fn exercise(readings: &[Option<f64>], bound: u64) -> (bool, Vec<u64>, Vec<String
     let mut lines = Vec::new();
     let result = wait_with(
         Duration::from_secs(bound),
+        &crate::process::Cancellation::default(),
         &mut || {
             let i = index.get();
             index.set(i + 1);
@@ -52,6 +53,36 @@ fn load_wait_is_bounded_reports_every_five_minutes_and_never_sleeps_in_tests() {
     );
     assert!(!exercise(&[Some(12.1)], 0).0, "overload at bound refuses");
     assert!(exercise(&[None], 0).0, "unsupported load reader starts");
+}
+
+#[test]
+fn cancellation_stops_a_busy_load_wait_before_its_bound() {
+    let cancellation = crate::process::Cancellation::default();
+    let now = Cell::new(Duration::ZERO);
+    let result = wait_with(
+        Duration::from_secs(1800),
+        &cancellation,
+        &mut || {
+            Some(Load {
+                one: 100.0,
+                five: 100.0,
+                fifteen: 100.0,
+                cores: 1,
+            })
+        },
+        &mut || now.get(),
+        &mut |d| {
+            cancellation.cancel();
+            now.set(now.get() + d);
+        },
+        &mut |_| {},
+    );
+    assert!(result.is_err());
+    assert!(
+        now.get() < Duration::from_secs(1800),
+        "cancel must not wait for the overload timeout"
+    );
+    assert!(result.unwrap_err().to_string().contains("cancelled"));
 }
 
 #[test]
@@ -105,8 +136,8 @@ fn load_wait_holds_the_slot_and_timeout_releases_it_before_work_starts() {
     )
     .unwrap();
     assert!(
-        !waited.get(),
-        "nested heavy work rechecks load before starting"
+        waited.get(),
+        "nested heavy work inherits the parent's completed load check"
     );
     drop(nested);
     drop(slot);

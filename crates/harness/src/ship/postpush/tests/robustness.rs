@@ -113,7 +113,7 @@ fn updater_cli_uses_merge_wording() {
     assert!(!out.contains("rebased"), "{out}");
 }
 
-fn remote_commit(world: &World, parents: &[&str], name: &str, email: &str) -> String {
+pub(super) fn remote_commit(world: &World, parents: &[&str], name: &str, email: &str) -> String {
     let tree = git::git(&world.root, &["rev-parse", "HEAD^{tree}"]).unwrap();
     let mut cmd = std::process::Command::new("git");
     cmd.current_dir(&world.root)

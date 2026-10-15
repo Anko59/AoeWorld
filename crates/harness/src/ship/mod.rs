@@ -372,10 +372,18 @@ pub(crate) fn ship_with(
     let expected = lease
         .as_deref()
         .or(options.force.then_some(push_tip.as_deref().unwrap_or("")));
-    let refreshed = expected
-        .map(|tip| git::lease::refresh(root, &evidence.branch, tip, &started_head))
-        .transpose()?;
-    push(root, &evidence, refreshed.as_deref())?;
+    let refreshed = match expected {
+        Some(tip) => git::lease::refresh(root, &evidence.branch, tip, &started_head),
+        None => git::lease::refresh_default(
+            root,
+            &evidence.branch,
+            &started_head,
+            &evidence.head,
+            push_tip.is_some(),
+        ),
+    }
+    .map_err(|error| format!("git push failed: {error}"))?;
+    push(root, &evidence, Some(&refreshed))?;
     if !options.no_pr {
         let mut options = options.clone();
         if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {

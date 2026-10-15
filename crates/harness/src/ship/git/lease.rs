@@ -46,6 +46,33 @@ pub(in crate::ship) fn refresh(
     expected: &str,
     started: &str,
 ) -> Result<String> {
+    refresh_with(root, branch, expected, started, None)
+}
+
+/// Without force, permit normal fast-forwards and only the updater's divergent chain.
+pub(in crate::ship) fn refresh_default(
+    root: &Path,
+    branch: &str,
+    started: &str,
+    head: &str,
+    existed: bool,
+) -> Result<String> {
+    refresh_with(
+        root,
+        branch,
+        if existed { started } else { "" },
+        started,
+        Some(head),
+    )
+}
+
+fn refresh_with(
+    root: &Path,
+    branch: &str,
+    expected: &str,
+    started: &str,
+    fast_forward: Option<&str>,
+) -> Result<String> {
     let reference = format!("refs/heads/{branch}");
     if git(root, &["ls-remote", "origin", &reference])?.is_empty() {
         // Keep the original lease: a deletion must not silently authorize recreation.
@@ -53,15 +80,34 @@ pub(in crate::ship) fn refresh(
     }
     git(
         root,
-        &["fetch", "--quiet", "--no-tags", "origin", &reference],
+        &[
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--refmap=",
+            "origin",
+            &reference,
+        ],
     )?;
     let remote = git(root, &["rev-parse", "FETCH_HEAD^{commit}"])?;
     if remote == expected || remote == started {
         return Ok(remote);
     }
+    if fast_forward
+        .is_some_and(|head| git(root, &["merge-base", "--is-ancestor", &remote, head]).is_ok())
+    {
+        return Ok(remote);
+    }
     git(
         root,
-        &["fetch", "--quiet", "--no-tags", "origin", "refs/heads/dev"],
+        &[
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--refmap=",
+            "origin",
+            "refs/heads/dev",
+        ],
     )?;
     let dev = git(root, &["rev-parse", "FETCH_HEAD^{commit}"])?;
     if remote != started && updater_only(root, started, &remote, &dev)? {

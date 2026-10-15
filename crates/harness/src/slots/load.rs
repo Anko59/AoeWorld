@@ -1,25 +1,37 @@
 //! Wait for machine load before starting heavy work; gate deadlines remain unchanged.
 use super::queue::Result;
-use crate::process::load::{self, Load};
+use crate::process::{
+    Cancellation,
+    load::{self, Load},
+};
 use std::time::{Duration, Instant};
 
 const BOUND: Duration = Duration::from_secs(30 * 60);
 const POLL: Duration = Duration::from_secs(30);
 const REPORT: Duration = Duration::from_secs(5 * 60);
 
-pub(super) fn wait() -> Result<()> {
+pub(super) fn wait(cancellation: &Cancellation) -> Result<()> {
     let start = Instant::now();
     wait_with(
         BOUND,
+        cancellation,
         &mut load::read,
         &mut || start.elapsed(),
-        &mut std::thread::sleep,
+        &mut |duration| {
+            let until = Instant::now() + duration;
+            while !cancellation.cancelled() && Instant::now() < until {
+                std::thread::sleep(
+                    Duration::from_millis(100).min(until.saturating_duration_since(Instant::now())),
+                );
+            }
+        },
         &mut |line| eprintln!("{line}"),
     )
 }
 
 pub(super) fn wait_with(
     bound: Duration,
+    cancellation: &Cancellation,
     read: &mut dyn FnMut() -> Option<Load>,
     elapsed: &mut dyn FnMut() -> Duration,
     sleep: &mut dyn FnMut(Duration),
@@ -28,6 +40,9 @@ pub(super) fn wait_with(
     let mut next_report = Duration::ZERO;
     let mut waited = false;
     loop {
+        if cancellation.cancelled() {
+            return Err("heavy load: cancelled before starting heavy work".into());
+        }
         let now = elapsed();
         let busy = read().filter(Load::overloaded);
         let Some(load) = busy else {

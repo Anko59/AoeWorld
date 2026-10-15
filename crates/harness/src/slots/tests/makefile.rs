@@ -298,3 +298,44 @@ fn direct_compile_heavy_tests_wrap_the_steps_before_cargo() {
         assert!(recipe(&files, &format!("{target}-steps")).is_some());
     }
 }
+
+#[test]
+fn bootstrap_compilation_has_a_small_hard_resource_envelope() {
+    let files = make_files(&repository());
+    let definitions = definitions(&files);
+    let wrapper = &definitions["SLOT_BOOTSTRAP"];
+    assert!(
+        !definitions["SLOT_RUN"].contains(" cargo run "),
+        "slot execution must use the built binary"
+    );
+    assert!(
+        recipe(&files, "slot-bootstrap")
+            .unwrap()
+            .iter()
+            .any(|line| line.contains("flock"))
+    );
+    for target in steps_targets(&files) {
+        let gate = target.strip_suffix("-steps").unwrap();
+        let rule = files
+            .iter()
+            .flat_map(|(_, text)| text.lines())
+            .find(|line| is_rule_for(line, gate))
+            .unwrap();
+        if recipe(&files, gate)
+            .unwrap()
+            .iter()
+            .any(|line| line.contains("$(SLOT_RUN)"))
+        {
+            assert!(
+                rule.contains("slot-bootstrap"),
+                "{gate} needs the bounded bootstrap"
+            );
+        }
+    }
+    for required in ["--memory=2g", "--memory-swap=2g", "--cpus=1", "--jobs=1"] {
+        assert!(
+            wrapper.contains(required),
+            "unbounded pre-slot bootstrap: missing {required}"
+        );
+    }
+}
