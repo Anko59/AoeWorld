@@ -155,10 +155,11 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
     // one reserved layer vector, one ring vector per selected unit, the sort
     // index/scratch. Raising a bound needs a measured justification.
     // Art at the world's tile scale (4/3 of native) brings three more
-    // edge sprites into view: 12,517 layers of 240 bytes, two vectors each.
-    assert_eq!(layers.len(), 12_517, "{report}");
+    // edge sprites into view. Analytic ellipses replace thirty-two ring dots
+    // with one packet per selected unit: 9,417 layers of 240 bytes.
+    assert_eq!(layers.len(), 9_417, "{report}");
     assert_eq!(reallocs, 0, "{report}");
     assert!(allocs <= 102, "{report}");
-    assert!(bytes <= 6_593_520, "{report}");
-    assert!(peak <= 3_205_440, "{report}");
+    assert!(bytes <= 4_733_520, "{report}");
+    assert!(peak <= 2_461_440, "{report}");
 }

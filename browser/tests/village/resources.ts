@@ -53,6 +53,7 @@ export async function frameResource(
   page: Page,
   kind: number,
   zoom = 0.35,
+  centered = false,
 ): Promise<Target> {
   await expect
     .poll(async () =>
@@ -74,8 +75,8 @@ export async function frameResource(
   const dy = (node.y - size.height / 2) / (32 * camera.zoom);
   const worldX = camera.x + (dx + dy) / 2;
   const worldY = camera.y + (dy - dx) / 2;
-  const x = (camera.x + worldX) / 2 + 2;
-  const y = (camera.y + worldY) / 2 + 2;
+  const x = centered ? worldX : (camera.x + worldX) / 2 + 2;
+  const y = centered ? worldY : (camera.y + worldY) / 2 + 2;
   await page.evaluate(
     ([x, y, zoom]) => {
       location.hash = `x=${x}&y=${y}&zoom=${zoom}`;

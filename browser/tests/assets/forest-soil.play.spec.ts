@@ -67,8 +67,13 @@ async function jump(page: Page, target: Point) {
   if (!box) throw new Error("Missing real whole-map navigation control");
   const side = Math.min(box.width, box.height);
   await page.mouse.click(
-    box.x + (box.width - side) / 2 + (side * (target[0] + 0.5)) / width,
-    box.y + (box.height - side) / 2 + (side * (target[1] + 0.5)) / height,
+    box.x +
+      (box.width - side) / 2 +
+      side *
+        (0.5 + ((target[0] + 0.5) / width - (target[1] + 0.5) / height) / 2),
+    box.y +
+      (box.height - side) / 2 +
+      side * (((target[0] + 0.5) / width + (target[1] + 0.5) / height) / 2),
   );
   await page.getByRole("button", { name: "Close map overview" }).click();
   await expect

@@ -122,7 +122,20 @@ test("shared terrain textures, painter transitions, and selection render", async
   }
   const yellow = colorPixels(selected, colors.ring, 12);
   expect(yellow).toBeGreaterThan(24);
-  expect(colorComponents(selected, colors.ring, 18)).toBeGreaterThan(8);
+  // The unit now has one continuous ellipse. Count its connected pixels in
+  // world space, excluding the framed HUD and its gold decorations.
+  const ring = new PNG({ width: 160, height: 100 });
+  PNG.bitblt(
+    selected,
+    ring,
+    Math.floor(box.width / 2) - 80,
+    Math.floor(box.height / 2) - 50,
+    160,
+    100,
+    0,
+    0,
+  );
+  expect(colorComponents(ring, colors.ring, 6)).toBe(1);
   const residency = await residentChunkCount(page);
   expect(residency).toBeGreaterThan(0);
 
@@ -401,6 +414,20 @@ function colorComponents(
   expected: readonly number[],
   tolerance: number,
 ) {
+  // The ellipse is beneath the sprite shadow: brightness changes, hue does
+  // not. Include those dimmed stroke pixels when checking connectivity.
+  const covered = (offset: number) => {
+    const light = (image.data[offset] ?? 0) / (expected[0] ?? 1);
+    return (
+      light >= 0.65 &&
+      light <= 1.05 &&
+      expected.every(
+        (value, channel) =>
+          Math.abs((image.data[offset + channel] ?? 0) - value * light) <=
+          tolerance,
+      )
+    );
+  };
   const seen = new Uint8Array(image.width * image.height);
   let components = 0;
   for (let y = 0; y < image.height; y += 1) {
@@ -408,7 +435,7 @@ function colorComponents(
       const index = y * image.width + x;
       if (seen[index]) continue;
       const offset = index * 4;
-      if (!matches(image.data, offset, expected, tolerance)) continue;
+      if (!covered(offset)) continue;
       components += 1;
       const pending = [index];
       seen[index] = 1;
@@ -428,7 +455,7 @@ function colorComponents(
             continue;
           const next = ny * image.width + nx;
           if (seen[next]) continue;
-          if (!matches(image.data, next * 4, expected, tolerance)) continue;
+          if (!covered(next * 4)) continue;
           seen[next] = 1;
           pending.push(next);
         }

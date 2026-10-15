@@ -28,7 +28,13 @@ fn ordinary_compilation_source_has_no_ground_mixing_path() {
     }
     assert_ne!(ordinary, mixing);
     for source in [&ordinary, &mixing] {
-        assert!(!source.contains("// #"), "unresolved shader directive");
+        assert!(
+            !source
+                .lines()
+                .any(|line| line.trim_start().starts_with("//")),
+            "embedded shaders retain comment-only lines"
+        );
+        assert!(!source.contains(", ") && !source.contains(": "));
         let fragment = source.split("fn fs_main(").nth(1).unwrap();
         let sprite = fragment
             .split("if in.solid == 0u {")

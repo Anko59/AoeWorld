@@ -161,6 +161,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         selected: crate::playground::game::village::selection::Selection {
             units: vec![id],
             building_id: None,
+            resource_id: None,
         },
         village: Default::default(),
         grid: false,
