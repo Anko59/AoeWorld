@@ -42,7 +42,8 @@ fingerprint and deduplication as `make issue`:
 
 - one issue per confirmed or disputed **critical** or **major** finding, titled
   `Review finding at <file>:<line>: <claim>` and labelled `agent-found`,
-  `review-follow-up` and `priority:critical` or `priority:high`;
+  `review-follow-up` and `priority:critical` or `priority:high`; when titles
+  share a fingerprint, the highest severity determines the priority and body;
 - one **standing** issue, `Review follow-ups` (`priority:low`), for the **minor**
   and **nit** findings: one section per pull request, headed
   `## PR #<pr> — <url>`, with a `- [ ] <file>:<line> — <claim>` line per
@@ -85,10 +86,12 @@ the workflow's `needs` context JSON from `NIGHTLY_RESULTS`: at most 64 KiB and
 `skipped`, string `outputs`, and nothing else. For each job:
 
 - `failure` opens `Nightly failure: <job>` (label `nightly-failure`) or comments
-  on that open issue with the run link;
+  on the oldest owned issue with the run link and closes owned duplicates;
 - `success` closes that issue with the run link;
 - `cancelled` and `skipped` prove nothing and change nothing.
 
+The triage job uses one fixed concurrency group across refs without cancelling
+a running triage. Comments stream on stdin, including multibyte bodies.
 It touches only the issues it opened: authored by `github-actions[bot]`,
 labelled `nightly-failure`, titled exactly `Nightly failure: <job>`, and whose
 last fingerprint marker matches that title. An issue a person or agent opens

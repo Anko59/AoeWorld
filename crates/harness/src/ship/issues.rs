@@ -308,7 +308,11 @@ impl Target {
         marked_body(body, title)?;
         if let Some(index) = duplicate_index(&self.issues, title) {
             let number = self.issues[index].number.to_string();
-            self.gh(root, &["issue", "comment", &number, "--body", note], None)?;
+            self.gh(
+                root,
+                &["issue", "comment", &number, "--body-file", "-"],
+                Some(note.as_bytes()),
+            )?;
             return Ok(format!(
                 "already open, commented on {}",
                 self.issues[index].url
