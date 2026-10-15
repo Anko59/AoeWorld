@@ -102,6 +102,7 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
             tier,
             runtime,
             task,
+            explain,
         } => {
             let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
             let requested_base = env("SHIP_BASE").unwrap_or_else(|| super::base::DEV.into());
@@ -131,6 +132,24 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
                 Some(path) => fs::read_to_string(path)?,
                 None => String::new(),
             };
+            if explain {
+                let head = git::git(&root, &["rev-parse", "HEAD"])?;
+                let branch = git::branch(&root)?;
+                let tiers: Vec<_> = <Tier as clap::ValueEnum>::value_variants()
+                    .iter()
+                    .filter(|t| **t >= tier)
+                    .map(|t| t.name())
+                    .collect();
+                let judge = env(trusted::JUDGE_REV);
+                match Report::inspect_reuse(&root, &head, &branch, &tiers, &task, judge.as_deref())?
+                {
+                    super::Reuse::Reused(report) => {
+                        println!("{}", report.decision.as_deref().unwrap_or_default())
+                    }
+                    super::Reuse::Declined(why) => println!("review: full review — {why}"),
+                }
+                return Ok(());
+            }
             if requested_base != super::base::DEV {
                 let report =
                     review_on_base(&root, &requested_base, tier, runtime, &task, &review, slots)?;
@@ -149,8 +168,9 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
                     )
                 } else {
                     format!(
-                        "review incomplete: {} session(s) gave no usable answer",
-                        report.failures.len()
+                        "review incomplete: {} session(s) gave no usable answer; {}",
+                        report.failures.len(),
+                        report.incomplete_message()
                     )
                 }
                 .into())

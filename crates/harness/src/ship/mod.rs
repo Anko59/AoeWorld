@@ -475,10 +475,8 @@ fn push(root: &Path, evidence: &Evidence, force: bool, lease: Option<&str>) -> R
     if let Some(ssh) = ssh_keepalive(caller_chose_ssh(root)) {
         command.env("GIT_SSH_COMMAND", ssh);
     }
-    let status = command.args(["origin", &refspec]).status()?;
-    if !status.success() {
-        return Err(format!("git push failed ({status}; see git's message above)").into());
-    }
+    command.args(["origin", &refspec]);
+    git::remote::run_visible(&mut command)?;
     // Best effort: a commit-id refspec cannot set the upstream itself.
     let _ = git::git(
         root,

@@ -22,6 +22,10 @@ pub(crate) const NO_ANSWER: &str = "no AOE-REVIEW answer";
 /// One reviewer session's budget.
 const BUDGET: Duration = Duration::from_secs(1800);
 
+/// Three total attempts; tests inject the wait without sleeping.
+const RATE_LIMIT_BACKOFF: [Duration; 2] = [Duration::from_secs(60), Duration::from_secs(180)];
+pub(crate) const RATE_LIMIT_ADVICE: &str = "wait and ship again; nothing needs changing";
+
 /// Numbers each session's private dsh patch file within this process.
 static SESSION: AtomicU64 = AtomicU64::new(0);
 
@@ -137,14 +141,58 @@ pub(crate) fn ask(
     model: &Model,
     prompt: &str,
 ) -> Result<String, String> {
-    let (command, scratch) = command(runtime, root, model, prompt)?;
-    let captured = capture_command(command, BUDGET, &Cancellation::default());
-    if let Some(patch) = scratch {
-        let _ = fs::remove_file(patch);
+    ask_with(|| command(runtime, root, model, prompt), thread::sleep)
+}
+
+/// Run the actual process on each attempt, cleaning its private scratch before
+/// waiting. The factory and wait are injectable, never environment overrides.
+pub(super) fn ask_with(
+    mut launch: impl FnMut() -> Result<(Command, Option<PathBuf>), String>,
+    mut wait: impl FnMut(Duration),
+) -> Result<String, String> {
+    for attempt in 0..=RATE_LIMIT_BACKOFF.len() {
+        let (command, scratch) = launch()?;
+        let captured = capture_command(command, BUDGET, &Cancellation::default());
+        if let Some(patch) = scratch {
+            let _ = fs::remove_file(patch);
+        }
+        let stdout = String::from_utf8_lossy(&captured.stdout);
+        let stderr = String::from_utf8_lossy(&captured.stderr);
+        let result = answer(&stdout, &stderr, &captured.exit);
+        if result.is_ok()
+            || !matches!(captured.exit, CaptureExit::Failed(_) | CaptureExit::Success)
+            || !(rate_limited(&stdout) || rate_limited(&stderr))
+        {
+            return result;
+        }
+        if let Some(delay) = RATE_LIMIT_BACKOFF.get(attempt) {
+            eprintln!("reviewer rate-limited; retrying in {}s", delay.as_secs());
+            wait(*delay);
+        } else {
+            return Err(format!(
+                "reviewer rate-limited after {} attempts: {}; {RATE_LIMIT_ADVICE}",
+                attempt + 1,
+                result.unwrap_err()
+            ));
+        }
     }
-    let stdout = String::from_utf8_lossy(&captured.stdout);
-    let stderr = String::from_utf8_lossy(&captured.stderr);
-    answer(&stdout, &stderr, &captured.exit)
+    unreachable!("the last attempt returns")
+}
+
+/// Whole diagnostic words, not a source line numbered 429 or a rate limiter.
+fn rate_limited(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let words: Vec<_> = lower
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    words.windows(3).any(|w| w == ["too", "many", "requests"])
+        || words.windows(2).any(|w| {
+            matches!(
+                w,
+                ["rate", "limit" | "limited"] | ["http" | "status", "429"]
+            )
+        })
 }
 
 /// The answer of a session: read from stdout only (where every runtime prints

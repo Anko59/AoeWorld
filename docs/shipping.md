@@ -81,9 +81,9 @@ agent policy refuses `$` in agent-set Make values.
    the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
    `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
    when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on
-   it; full preflight on the recorded head, identical own patch), covers the clean HEAD
-   (`AOE_SHIP_EVIDENCE`), else runs `make preflight`. The push sets SSH keepalives (unless
-   `GIT_SSH_COMMAND` or `GIT_SSH` is set) because the hook can idle the connection for minutes (#209).
+   it; full preflight on the recorded head, identical own patch), covers clean HEAD (`AOE_SHIP_EVIDENCE`), else runs `make preflight`.
+   The push sets SSH keepalives unless `GIT_SSH_COMMAND` or `GIT_SSH` is set (#209: the hook can idle for minutes).
+   Fetches and pushes retry once after 20s only on `Permission denied (publickey)`; persistent failure names `$SSH_AUTH_SOCK` and says the agent served no key: set `GIT_SSH_COMMAND='ssh -i <key> -o IdentitiesOnly=yes'`.
 8. **Creates or updates** the pull request against the base (`dev`) on
    `origin`'s GitHub repository, found by head branch (never by a number),
    with the review appended; posts the `harness/review` status and a review

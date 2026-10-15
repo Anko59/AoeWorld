@@ -88,6 +88,22 @@ pub(crate) fn directory(root: &Path) -> Result<PathBuf, String> {
 }
 
 impl Report {
+    /// The same actionable incomplete-review message for review-only and ship.
+    pub(crate) fn incomplete_message(&self) -> String {
+        if self
+            .failures
+            .iter()
+            .any(|failure| failure.contains("reviewer rate-limited after "))
+        {
+            format!(
+                "the review was incomplete (rate-limited) and does not count; {}",
+                super::runner::RATE_LIMIT_ADVICE
+            )
+        } else {
+            "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".into()
+        }
+    }
+
     /// Fingerprint the task text exactly as the reviewers receive it.
     pub(crate) fn task_fingerprint(task: &str) -> String {
         hex(sha2::Sha256::digest(task.as_bytes()))

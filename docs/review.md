@@ -6,6 +6,7 @@ adversarial review of its exact commit, graded /10:
 ```sh
 make ship SHIP_TITLE='…' SHIP_BODY=<description file> SHIP_TIER=medium SHIP_RUNTIME=claude
 make review REVIEW_TIER=medium REVIEW_RUNTIME=claude REVIEW_TASK=<description file>   # review only
+target/debug/aoe-harness review --explain   # stored-review decision only, no review or approval write
 ```
 
 `make ship` runs the review of the exact commit after the gates and before
@@ -215,10 +216,16 @@ a case set this small shows large differences only.
   <tier>`, `the review policy on dev changed since the 9/10 of <sha>`,
   `the base commit of the 9/10 of <sha> is missing`, `N stored review
   report(s) are unreadable and no readable passing review of this branch
-  exists`; otherwise `no passing review of this branch`.
+  exists`; otherwise `no passing review of this branch`. Unreadable reports
+  count only when their header identifies this branch or their filename identifies
+  one of its commits (including pre-rebase reflog tips), not shared base ancestors.
   Gates **always run before reuse** on the current tree, and CI runs them
   again. The same patch can behave differently after a parent deletes code it
   relies on; patch identity does not establish semantic equivalence.
+- Reviewer processes that fail with a rate-limit diagnostic get at most three
+  attempts, waiting 60s then 180s. Other process failures are not retried.
+  Exhaustion is incomplete and says `rate-limited`: wait and ship again;
+  nothing needs changing. The existing retry for an unreadable answer is separate.
 - **Fail:** nothing is pushed. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.

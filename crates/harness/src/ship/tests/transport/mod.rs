@@ -1,0 +1,132 @@
+use crate::ship::git::remote::{output_with, tee_stderr};
+use std::{process::Command, time::Duration};
+
+mod paths;
+
+fn run(errors: &[&str], operation: &str) -> (Result<String, String>, Vec<Duration>, usize) {
+    let temp = tempfile::tempdir().unwrap();
+    let counter = temp.path().join("attempts");
+    let mut command = Command::new("sh");
+    command.env("SSH_AUTH_SOCK", "/stub/agent").args([
+        "-c",
+        "echo \"$4\" >> \"$1\"; n=$(wc -l < \"$1\"); if [ \"$n\" = 1 ]; then msg=$2; else msg=$3; fi; if [ -n \"$msg\" ]; then echo \"$msg\" >&2; exit 128; fi; echo recovered",
+        "git-stub",
+        counter.to_str().unwrap(),
+        errors[0],
+        errors.get(1).copied().unwrap_or(errors[0]),
+        operation,
+    ]);
+    let mut waits = Vec::new();
+    let result = output_with(&mut command, |delay| waits.push(delay))
+        .map(|out| String::from_utf8(out.stdout).unwrap());
+    let calls = std::fs::read_to_string(counter).unwrap().lines().count();
+    (result, waits, calls)
+}
+
+#[test]
+fn fetch_and_push_retry_once_only_on_the_exact_publickey_error() {
+    for operation in ["fetch", "push"] {
+        let (result, waits, calls) = run(&["Permission denied (publickey)", ""], operation);
+        assert_eq!(result.as_deref(), Ok("recovered\n"));
+        assert_eq!(calls, 2);
+        assert_eq!(waits, [Duration::from_secs(20)]);
+        for error in [
+            "Permission denied",
+            "Permission denied (password)",
+            "connection refused",
+            "non-fast-forward",
+        ] {
+            let (result, waits, calls) = run(&[error], operation);
+            assert!(result.is_err());
+            assert_eq!(calls, 1, "{error}");
+            assert!(waits.is_empty());
+            assert!(!result.unwrap_err().contains("served no key"));
+        }
+    }
+}
+
+#[test]
+fn exhausted_publickey_errors_name_the_agent_and_explicit_key_workaround() {
+    let (result, waits, calls) = run(&["Permission denied (publickey)"], "fetch");
+    let error = result.unwrap_err();
+    assert_eq!(calls, 2);
+    assert_eq!(waits, [Duration::from_secs(20)]);
+    assert!(error.contains("Permission denied (publickey)"), "{error}");
+    assert!(
+        error.contains("SSH_AUTH_SOCK")
+            && error.contains("/stub/agent")
+            && error.contains("served no key"),
+        "{error}"
+    );
+    assert!(
+        error.contains("GIT_SSH_COMMAND='ssh -i <key> -o IdentitiesOnly=yes'"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_different_error_on_the_second_attempt_is_reported_without_agent_advice() {
+    let (result, waits, calls) = run(
+        &["Permission denied (publickey)", "non-fast-forward"],
+        "push",
+    );
+    assert_eq!(calls, 2);
+    assert_eq!(waits.len(), 1);
+    let error = result.unwrap_err();
+    assert!(error.contains("non-fast-forward"));
+    assert!(!error.contains("served no key"));
+}
+
+#[test]
+fn a_failed_push_keeps_pre_push_output_from_both_streams() {
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "echo 'pre-push gate details'; echo 'gate failed' >&2; exit 1",
+    ]);
+    let error = output_with(&mut command, |_| panic!("ordinary failures never retry")).unwrap_err();
+    assert!(error.contains("pre-push gate details"), "{error}");
+    assert!(error.contains("gate failed"), "{error}");
+}
+
+#[test]
+fn a_rejected_non_fast_forward_push_says_to_ship_with_force() {
+    let rejected = " ! [rejected]        abc -> feature (non-fast-forward)";
+    let (result, waits, calls) = run(&[rejected], "push");
+    let error = result.unwrap_err();
+    assert_eq!((calls, waits.len()), (1, 0));
+    assert!(error.contains("SHIP_FORCE=1"), "{error}");
+    let (result, _, _) = run(&["connection refused"], "push");
+    assert!(!result.unwrap_err().contains("SHIP_FORCE"));
+}
+
+#[test]
+fn push_stderr_is_forwarded_while_the_push_still_runs() {
+    struct Sink {
+        first: Option<std::time::Instant>,
+        bytes: Vec<u8>,
+    }
+    impl std::io::Write for Sink {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            self.first.get_or_insert_with(std::time::Instant::now);
+            self.bytes.extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut sink = Sink {
+        first: None,
+        bytes: Vec::new(),
+    };
+    let mut command = Command::new("sh");
+    command.args(["-c", "echo started >&2; sleep 1; echo done >&2; exit 3"]);
+    let output = tee_stderr(&mut command, &mut sink).unwrap();
+    let finished = std::time::Instant::now();
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.stderr, b"started\ndone\n");
+    assert_eq!(sink.bytes, output.stderr);
+    // The first line reached the sink while the process was still running.
+    assert!(finished - sink.first.unwrap() >= Duration::from_millis(800));
+}

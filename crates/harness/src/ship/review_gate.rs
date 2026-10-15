@@ -168,7 +168,7 @@ pub(crate) fn require_task(
     };
     let history = review::history(root, &evidence.branch)?;
     let next = match closing::next(&history, "", unix_now()) {
-        _ if !report.complete() => "the review was incomplete and does not count; ship again (the same commit may be reviewed again)".to_owned(),
+        _ if !report.complete() => report.incomplete_message(),
         Next::Split(why) => split(&evidence.branch, &why),
         Next::Unavailable(why) => why,
         Next::Review(Plan::Closing { .. }) => "fix and commit every confirmed finding, then ship again: the next review is a closing review of your fixes since the last reviewed commit and every carried blocking finding (docs/review.md)".to_owned(),

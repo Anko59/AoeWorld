@@ -55,3 +55,43 @@ fn make_review_announces_and_records_the_review_line() {
         "nothing is left over"
     );
 }
+
+#[test]
+fn explaining_reuse_does_not_store_an_approval_or_launch_a_reviewer() {
+    use super::super::{Report, Reuse};
+    let temp = fixture("README.md");
+    let root = temp.path();
+    let head = crate::ship::git::git(root, &["rev-parse", "HEAD"]).unwrap();
+    let decision =
+        Report::inspect_reuse(root, &head, "feature", &["medium"], "task", None).unwrap();
+    let Reuse::Declined(why) = decision else {
+        panic!("no report exists");
+    };
+    assert_eq!(why, "no passing review of this branch");
+    assert!(!root.join(".git/aoe-ship/reviews").exists());
+    let report = review_with(
+        root,
+        Tier::Medium,
+        Runtime::Claude,
+        "task",
+        &super::super::Plan::Full,
+        &Quiet,
+    )
+    .unwrap();
+    let directory = root.join(".git/aoe-ship/reviews");
+    let before: Vec<_> = std::fs::read_dir(&directory)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    let decision =
+        Report::inspect_reuse(root, &head, "feature", &["medium"], "task", None).unwrap();
+    let Reuse::Reused(reused) = decision else {
+        panic!("the report passed");
+    };
+    assert_eq!(reused.reused_from.as_deref(), Some(report.head.as_str()));
+    let after: Vec<_> = std::fs::read_dir(directory)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(before, after, "a diagnostic never saves an approval");
+}
