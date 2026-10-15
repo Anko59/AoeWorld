@@ -76,9 +76,14 @@ pub(super) fn town_center(
         return;
     }
     // Shadow, rear supports, main structure, front supports, then roofs. All
-    // native signed anchors share this world origin; no source pixels are baked.
+    // Native signed anchors are preserved. Roof attachments sit 48 source
+    // pixels lower, joining the outer columns instead of floating above them.
     for part in [7, 3, 5, 0, 2, 6, 1, 4] {
-        let frame = world_frame(art.town_center[part][0]);
+        let mut native = art.town_center[part][0];
+        if matches!(part, 1 | 4) {
+            native.anchor[1] -= 48.0;
+        }
+        let frame = world_frame(native);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((
                 sprite,

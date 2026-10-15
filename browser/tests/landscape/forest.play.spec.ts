@@ -132,7 +132,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     const center = { x: box.width / 2, y: box.height / 2 };
     await canvas.hover({ position: center });
     const inspection = page.locator("#tile-inspection");
-    await expect(inspection).toContainText("tile ");
+    await expect(inspection).toContainText(/tile -?\d+, -?\d+:/);
     const tileAtCenter = async () =>
       (await inspection.textContent())?.match(/tile (-?\d+), (-?\d+)/)?.[0];
     const startTile = await tileAtCenter();
@@ -143,7 +143,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     const destination = { x: center.x + 128, y: center.y };
     await canvas.hover({ position: destination });
     await expect(inspection).toContainText("passable");
-    expect(await tileAtCenter()).not.toBe(startTile);
+    await expect.poll(tileAtCenter).not.toBe(startTile);
     await canvas.click({ position: destination, button: "right" });
     // Recenter from authoritative unit state: sprite animation alone cannot
     // satisfy this assertion by moving blue pixels within a stationary tile.

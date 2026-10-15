@@ -64,7 +64,7 @@ pub(in super::super) fn stop(client: &mut Client) {
                     destination,
                 },
             );
-            client.village.jobs.remove(&id);
+            client.village.set_job(id, None);
         }
     }
 }
@@ -112,14 +112,14 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
             && !client.village.move_cursor
             && let Some((resource_id, kind)) = resource
         {
-            client.village.jobs.insert(id, kind);
+            client.village.set_job(id, Some(kind));
             Message::GatherOrder {
                 sequence,
                 entity_id: id,
                 resource_id,
             }
         } else {
-            client.village.jobs.remove(&id);
+            client.village.set_job(id, None);
             Message::MoveOrder {
                 sequence,
                 entity_id: id,

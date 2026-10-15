@@ -234,7 +234,8 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
     );
 }
 
-/// Current packet bytes, including the nearest terrain-quad marker.
+/// Current packet bytes, including the nearest terrain-quad marker and
+/// semantic unit markers when optional sprite groups are absent.
 /// (layer count, digest) per mode x camera x terrain x animation, in loop order.
 const GOLDEN: &[(usize, u64)] = &[
     (0x10c, 0x25283ed41dc770a9),
@@ -273,18 +274,18 @@ const GOLDEN: &[(usize, u64)] = &[
     (0xf9, 0xf338be9c61210e7e),
     (0xee, 0xf70fb475a81e6bff),
     (0xee, 0x14671c713db5006a),
-    (0xf0, 0xec7bef1a2231b465),
-    (0xf0, 0xec7bef1a2231b465),
-    (0xe3, 0x455349b67ecb4577),
-    (0xe3, 0x455349b67ecb4577),
-    (0x127, 0xcb10176e4341c5be),
-    (0x127, 0xcb10176e4341c5be),
-    (0xc8, 0xf6ea57c036922def),
-    (0xc8, 0xf6ea57c036922def),
-    (0xe5, 0xe49aa6d9edf97660),
-    (0xe5, 0xe49aa6d9edf97660),
-    (0xda, 0xaf81a0bbb612a4d4),
-    (0xda, 0xaf81a0bbb612a4d4),
+    (0xfa, 0xe73fb138b21a3a31),
+    (0xfa, 0xe73fb138b21a3a31),
+    (0xed, 0x0587b4372b9b626f),
+    (0xed, 0x0587b4372b9b626f),
+    (0x12a, 0x56b1e3ed3c2f760e),
+    (0x12a, 0x56b1e3ed3c2f760e),
+    (0xcb, 0x1e034b154965912f),
+    (0xcb, 0x1e034b154965912f),
+    (0xec, 0xa985ba7d55df8e34),
+    (0xec, 0xa985ba7d55df8e34),
+    (0xe1, 0x950237288bb186b8),
+    (0xe1, 0x950237288bb186b8),
     (0xfb, 0xfcd94a46974b1649),
     (0xfb, 0x3ee2c613ede57589),
     (0xfb, 0xfcd94a46974b1649),

@@ -96,15 +96,17 @@ test("right clicking wood sends villagers to gather and deposit", async ({
     })),
   );
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "3");
-  const resource = await page.locator("#scene").evaluate((canvas) => {
-    const nodes = JSON.parse(
-      canvas.getAttribute("data-resource-targets") ?? "[]",
-    ) as { kind: number; x: number; y: number; distance: number }[];
-    return nodes
-      .filter((n) => n.kind === 1)
-      .sort((a, b) => a.distance - b.distance)[0];
-  });
-  expect(resource).toBeDefined();
+  const woodTarget = () =>
+    page.locator("#scene").evaluate((canvas) => {
+      const nodes = JSON.parse(
+        canvas.getAttribute("data-resource-targets") ?? "[]",
+      ) as { kind: number; x: number; y: number; distance: number }[];
+      return nodes
+        .filter((n) => n.kind === 1)
+        .sort((a, b) => a.distance - b.distance)[0];
+    });
+  await expect.poll(woodTarget).toBeDefined();
+  const resource = await woodTarget();
   const box = await page.locator("#scene").boundingBox();
   if (!box || !resource) throw new Error("Resource or canvas missing");
   await page.mouse.click(box.x + resource.x, box.y + resource.y, {

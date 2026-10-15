@@ -98,6 +98,17 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
     assert_eq!(frames.len(), 8);
     assert_eq!(frames[0].1.atlas.uv[0], 507.0 / 4096.0);
+    let main = frames
+        .iter()
+        .find(|f| f.1.atlas.uv[0] == 500.0 / 4096.0)
+        .unwrap();
+    for source in [501.0, 504.0] {
+        let roof = frames
+            .iter()
+            .find(|f| f.1.atlas.uv[0] == source / 4096.0)
+            .unwrap();
+        assert!((main.1.anchor[1] - roof.1.anchor[1] - 64.0).abs() < 0.001);
+    }
     art.town_center[1].clear();
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
     assert_eq!(frames.len(), 1);

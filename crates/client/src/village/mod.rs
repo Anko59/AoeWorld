@@ -2,7 +2,6 @@
 use super::Client;
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{GameplayBuildingState, GameplayPlayerState, ResourceKind};
-use std::collections::BTreeMap;
 
 pub(super) mod hud;
 pub(super) mod orders;
@@ -13,11 +12,20 @@ pub(super) mod selection;
 pub(crate) struct Village {
     pub players: Vec<GameplayPlayerState>,
     pub buildings: Vec<GameplayBuildingState>,
-    pub jobs: BTreeMap<EntityId, ResourceKind>,
+    pub jobs: Vec<(EntityId, ResourceKind)>,
     pub tick: u64,
     pub last_hud: f64,
     pub move_cursor: bool,
     pub focused: bool,
+}
+
+impl Village {
+    pub fn set_job(&mut self, id: EntityId, resource: Option<ResourceKind>) {
+        self.jobs.retain(|(unit, _)| *unit != id);
+        if let Some(kind) = resource {
+            self.jobs.push((id, kind));
+        }
+    }
 }
 
 pub(super) fn owner(client: &Client) -> PlayerId {
@@ -38,7 +46,14 @@ pub(super) fn resource_kind(client: &Client, id: EntityId) -> Option<ResourceKin
     let unit = client.units.get(&id)?;
     unit.carried
         .map(|load| load.kind)
-        .or_else(|| client.village.jobs.get(&id).copied())
+        .or_else(|| {
+            client
+                .village
+                .jobs
+                .iter()
+                .find(|(unit, _)| *unit == id)
+                .map(|(_, kind)| *kind)
+        })
         .or_else(|| {
             let p = unit.position.as_tiles();
             let tile = unit.position.tile_floor();

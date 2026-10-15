@@ -170,7 +170,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 for id in removals {
                     client.units.remove(&id);
                     client.selected.units.retain(|selected| *selected != id);
-                    client.village.jobs.remove(&id);
+                    client.village.set_job(id, None);
                     client.presentation.remove(id);
                 }
                 for unit in &changed_units {

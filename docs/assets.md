@@ -86,7 +86,8 @@ The same eight-direction mirror mapping as the scout uses the native anchors.
 Other gathering and carrying tasks retain the idle/walking art with a resource
 badge rather than depicting the wrong tool. The Dark Age Town Center composes
 main 891, left roof/supports 3594/3595/3596, right roof/supports 4610/4611/4612,
-and paired shadow 889 at their shared origin. Signed and outside anchors are
+and paired shadow 889. Both roof attachments sit forty-eight source pixels below
+the shared origin to meet the outer columns. Signed and outside anchors are
 preserved; player masks use the current blue ramp. These are reviewed metadata,
 not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
