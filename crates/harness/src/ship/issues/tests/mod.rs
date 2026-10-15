@@ -244,7 +244,7 @@ fn make_issue_uses_origin_ignores_repo_override_and_does_not_match_marker_decoy(
     fs::create_dir(&bin).unwrap();
     let log = temp.path().join("gh-args.log");
     let gh = bin.join("gh");
-    fs::write(&gh, "#!/bin/sh\nprintf 'GH_HOST=<%s> GH_REPO=<%s>\\n' \"${GH_HOST-unset}\" \"${GH_REPO-unset}\" >> \"$GH_LOG\"\nprintf '<%s>\\n' \"$@\" >> \"$GH_LOG\"\ncase \"$1\" in\n  api) printf '%s' \"$GH_LIST_JSON\" ;;\n  issue) if [ \"$2\" = create ]; then cat > \"$GH_BODY_LOG\"; printf 'https://github.com/project/checkout/issues/12\\n'; fi ;;\nesac\n").unwrap();
+    fs::write(&gh, "#!/bin/sh\nprintf 'GH_HOST=<%s> GH_REPO=<%s>\\n' \"${GH_HOST-unset}\" \"${GH_REPO-unset}\" >> \"$GH_LOG\"\nprintf '<%s>\\n' \"$@\" >> \"$GH_LOG\"\ncase \"$1\" in\n  api) printf '%s' \"$GH_LIST_JSON\" ;;\n  issue) if [ \"$2\" = create ]; then cat > \"$GH_BODY_LOG\"; printf 'https://github.com/project/checkout/issues/12\\n'; else cat >/dev/null; fi ;;\nesac\n").unwrap();
     fs::set_permissions(&gh, fs::Permissions::from_mode(0o755)).unwrap();
     let old_path = std::env::var_os("PATH").unwrap_or_default();
     let old_list = std::env::var_os("GH_LIST_JSON");
