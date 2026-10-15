@@ -21,7 +21,12 @@ pub(super) fn created_record(
         )
         .into());
     }
-    let axes = aoe_map::OverviewFieldAxes::LANDSCAPE;
+    let axes = if profile == "detailed" {
+        let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
+        aoe_map::OverviewFieldAxes::coupled(axis, axis)
+    } else {
+        aoe_map::OverviewFieldAxes::LANDSCAPE
+    };
     let expected_axis = axes.elevation;
     let model_present = package
         .environment

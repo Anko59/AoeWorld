@@ -19,7 +19,13 @@ fn pyramid(axis: u16) -> FieldPyramid {
     FieldPyramid { levels }
 }
 fn fixture(profile: &str) -> MapPackage {
-    fixture_axes(profile, aoe_map::OverviewFieldAxes::LANDSCAPE)
+    let axes = if profile == "detailed" {
+        let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
+        aoe_map::OverviewFieldAxes::coupled(axis, axis)
+    } else {
+        aoe_map::OverviewFieldAxes::LANDSCAPE
+    };
+    fixture_axes(profile, axes)
 }
 fn fixture_axes(profile: &str, axes: aoe_map::OverviewFieldAxes) -> MapPackage {
     let axis = axes.elevation;
@@ -184,4 +190,21 @@ fn qualification_rejects_coarse_and_misaligned_current_landscape_axes() {
             .is_err()
         );
     }
+}
+
+#[test]
+fn detailed_qualification_rejects_overview_categorical_axes() {
+    let package = fixture_axes("detailed", aoe_map::OverviewFieldAxes::LANDSCAPE);
+    package
+        .validate()
+        .expect("valid adversarial detailed metadata");
+    assert!(
+        created_record(
+            "detailed",
+            &package,
+            &created(&package, "detailed"),
+            package.request
+        )
+        .is_err()
+    );
 }
