@@ -5,6 +5,7 @@ use aoe_map::{ResourceKind, ResourceNode};
 mod fixture;
 mod gathering;
 mod training;
+mod village_routes;
 
 fn village() -> (GameWorld, EntityId, EntityId) {
     let mut world = world();
