@@ -84,7 +84,7 @@ pub(crate) fn parent_from(
             url: open.url.clone(),
         }));
     }
-    let restack = "rebase onto origin/dev instead (`git rebase --onto origin/dev <old parent tip>`) and ship with SHIP_BASE=dev SHIP_FORCE=1";
+    let restack = "restack: rebase onto origin/dev instead (`git rebase --onto origin/dev <old parent tip>`) and ship with SHIP_BASE=dev SHIP_FORCE=1";
     if let Some(merged) = ours.iter().find(|pr| pr.state == "MERGED") {
         return Err(format!(
             "SHIP_BASE={base}: #{} is already merged; {restack}",

@@ -11,6 +11,7 @@ use crate::{
 use std::{fs, path::PathBuf};
 
 mod pinned;
+mod restack;
 
 type Temp = tempfile::TempDir;
 

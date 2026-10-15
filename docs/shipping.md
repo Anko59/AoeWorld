@@ -67,9 +67,9 @@ agent policy refuses `$` in agent-set Make values.
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Re-checks a moved base**, still holding the lock: it fetches the base (`dev`, or the parent of a
-   stacked ship) again. If it moved, the branch's own commits are rebased onto it (a conflict aborts the
-   rebase, leaves the branch as it was and names the files) and every `static` preflight gate runs on
+7. **Re-checks the base**, still holding the lock: it fetches dev and the stacked parent again. A merged/closed
+   parent or missing parent branch stops with restack instructions, keeping the passed review. If the base moved,
+   only the branch's own commits are rebased (conflicts abort, restore the branch and name files); every static preflight gate runs on
    the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
    its excerpt and the new commits it combines with, leaving the rebased branch. The review that just
    passed is carried over, never rerun and not via the reuse check (the pinned judge `AOE_JUDGE_REV`
