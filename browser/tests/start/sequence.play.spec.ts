@@ -177,9 +177,36 @@ test("a preset submits the creator request and loading waits for visible terrain
   await expect(page.locator("#loading-phase")).toContainText("terrain");
   await expect(page.locator("#loading-screen")).toBeVisible();
   if (!rasterRoute) throw new Error("minimap request is missing");
+  // Activation can put the map centre over water, away from the starting unit.
+  // Move the camera off the start while loading to exercise that case on the
+  // prepared fixture, whose safe start otherwise happens to be its centre.
+  await page.evaluate(() => {
+    location.hash = "x=40&y=40&zoom=1";
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-camera-x",
+    "40",
+  );
   await rasterRoute.continue();
   await expect(page.locator("#start-sequence")).toBeHidden();
   await expect(page.locator("#scene")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const minimap = document.getElementById("minimap");
+        const primary = document.getElementById("minimap-primary");
+        const x = Number(minimap?.dataset["cameraX"]);
+        const y = Number(minimap?.dataset["cameraY"]);
+        const px = Number(primary?.getAttribute("cx")) * 2;
+        const py = Number(primary?.getAttribute("cy")) * 2;
+        return Math.hypot(x - px, y - py);
+      }),
+    )
+    .toBeLessThan(0.1);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-chunks-pending",
+    "0",
+  );
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-player-colour",
     "orange",
