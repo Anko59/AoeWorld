@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 mod gathering;
 mod hash;
 mod movement;
+mod navigation;
 mod placement;
 mod tick;
 mod training;

@@ -1,5 +1,5 @@
 use super::heuristic;
-use crate::{EnvironmentPageError, MapChunkGenerator, Path, ResourceOverlay};
+use crate::{EnvironmentPageError, Path, ResourceOverlay};
 use aoe_core::TileCoord;
 
 #[path = "planner_hash.rs"]
@@ -12,6 +12,8 @@ mod reconstruction;
 mod search;
 use reconstruction::{ReconstructionPhase, ReconstructionState};
 use search::SearchState;
+mod terrain;
+pub use terrain::RouteTerrain;
 
 /// Maximum logical entries retained by one route planner across its search
 /// frontier, score/parent records, backtrace, and route continuation.
@@ -153,7 +155,7 @@ impl RoutePlanner {
     /// only when no planned segment is left.
     pub fn poll(
         &mut self,
-        terrain: &MapChunkGenerator,
+        terrain: &dyn RouteTerrain,
         overlay: &ResourceOverlay,
         budget: u32,
         cancelled: &dyn Fn() -> bool,

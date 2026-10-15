@@ -228,10 +228,8 @@ impl GameWorld {
         origin: aoe_core::TileCoord,
         destination: aoe_core::TileCoord,
     ) -> Option<MapRoutePlan> {
-        if !self.terrain.has_map_navigation() {
-            return self
-                .uniform_building_route(origin, destination)
-                .map(MapRoutePlan::Outcome);
+        if !self.has_route_navigation() {
+            return None;
         }
         let budget = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
         if let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget) {
@@ -244,15 +242,11 @@ impl GameWorld {
             return Some(MapRoutePlan::Pending(None));
         }
         let budget = self.take_planning_budget();
-        let mut planner =
-            self.terrain
-                .route_planner(origin, destination, MAX_ROUTE_WORK_PER_ORDER)?;
+        let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
         if budget == 0 {
             return Some(MapRoutePlan::Pending(Some(planner)));
         }
-        let result = self
-            .terrain
-            .poll_route_planner(&mut planner, budget, &|| false)?;
+        let result = self.poll_world_route_planner(&mut planner, budget, &|| false);
         // Orders issued later in this tick plan from what this one left.
         self.refund_unused_planning(budget, 0, &planner);
         let work = planner.work();
@@ -285,7 +279,7 @@ impl GameWorld {
         order: MovementOrder,
         allowance: &mut u32,
     ) -> SegmentAdvance {
-        if !self.terrain.has_map_navigation() {
+        if !self.has_route_navigation() {
             return (order.waypoint != order.destination)
                 .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
                 .map_or(SegmentAdvance::Stopped(None), SegmentAdvance::Next);
@@ -311,12 +305,10 @@ impl GameWorld {
             )
         });
         let work_before = planner.work();
-        let result = self
-            .terrain
-            .poll_route_planner(&mut planner, budget, &|| false);
+        let result = self.poll_world_route_planner(&mut planner, budget, &|| false);
         self.refund_unused_planning(budget, work_before, &planner);
         match result {
-            Some(RoutePlannerPoll::Path(path)) => {
+            RoutePlannerPoll::Path(path) => {
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() != Some(order.waypoint.tile_floor()) {
                     return SegmentAdvance::Stopped(Some(GameWorldError::InvalidPosition));
@@ -333,26 +325,25 @@ impl GameWorld {
                     SegmentAdvance::Next,
                 )
             }
-            Some(RoutePlannerPoll::Pending) => {
+            RoutePlannerPoll::Pending => {
                 self.store_planner(index, Some(planner));
                 SegmentAdvance::Planning
             }
-            Some(RoutePlannerPoll::Complete) => {
+            RoutePlannerPoll::Complete => {
                 SegmentAdvance::Stopped(Some(GameWorldError::InvalidTerrain))
             }
-            Some(RoutePlannerPoll::InvalidDestination) => {
+            RoutePlannerPoll::InvalidDestination => {
                 SegmentAdvance::Stopped(Some(GameWorldError::InvalidPosition))
             }
-            Some(RoutePlannerPoll::Unreachable) => {
+            RoutePlannerPoll::Unreachable => {
                 SegmentAdvance::Stopped(Some(GameWorldError::Unreachable))
             }
-            Some(RoutePlannerPoll::SearchLimit) => {
+            RoutePlannerPoll::SearchLimit => {
                 SegmentAdvance::Stopped(Some(GameWorldError::PathBudgetExceeded))
             }
-            Some(RoutePlannerPoll::Environment(error)) => {
+            RoutePlannerPoll::Environment(error) => {
                 SegmentAdvance::Stopped(Some(GameWorldError::Environment(error)))
             }
-            None => SegmentAdvance::Stopped(Some(GameWorldError::InvalidTerrain)),
         }
     }
 
@@ -376,8 +367,7 @@ impl GameWorld {
             return;
         };
         let work_before = planner.work();
-        self.terrain
-            .plan_route_ahead(&mut planner, budget, &|| false);
+        self.plan_world_route_ahead(&mut planner, budget, &|| false);
         self.refund_unused_planning(budget, work_before, &planner);
         self.store_planner(index, Some(planner));
     }

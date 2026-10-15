@@ -1,7 +1,5 @@
-use super::{MAX_ROUTE_PLANNER_NODES, Terminal};
-use crate::{
-    EdgePassability, EnvironmentPageError, GroundMaterial, MapChunkGenerator, ResourceOverlay,
-};
+use super::{MAX_ROUTE_PLANNER_NODES, RouteTerrain, Terminal};
+use crate::{EnvironmentPageError, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -80,7 +78,7 @@ impl SearchState {
 
 pub(super) struct ExpansionContext<'a> {
     destination: TileCoord,
-    terrain: &'a MapChunkGenerator,
+    terrain: &'a dyn RouteTerrain,
     overlay: &'a ResourceOverlay,
     cancelled: &'a dyn Fn() -> bool,
 }
@@ -88,7 +86,7 @@ pub(super) struct ExpansionContext<'a> {
 impl<'a> ExpansionContext<'a> {
     pub(super) fn new(
         destination: TileCoord,
-        terrain: &'a MapChunkGenerator,
+        terrain: &'a dyn RouteTerrain,
         overlay: &'a ResourceOverlay,
         cancelled: &'a dyn Fn() -> bool,
     ) -> Self {
@@ -121,21 +119,20 @@ impl<'a> ExpansionContext<'a> {
             true
         };
         if !checked_walkable(self.terrain, self.overlay, next, self.cancelled)?
-            || !matches!(
-                self.terrain
-                    .edge_between_with_cancel(active.tile, next, self.cancelled)?,
-                EdgePassability::Passable
-            )
+            || !self
+                .terrain
+                .route_edge_clear(active.tile, next, self.cancelled)?
             || !diagonal_ok
         {
             return Ok(());
         }
-        let next_cost = active.cost.saturating_add(u64::from(checked_movement_cost(
-            self.terrain,
-            active.tile,
-            next,
-            self.cancelled,
-        )?));
+        let next_cost = active
+            .cost
+            .saturating_add(u64::from(self.terrain.route_step_cost(
+                active.tile,
+                next,
+                self.cancelled,
+            )?));
         if search
             .records
             .get(&next)
@@ -198,7 +195,7 @@ pub(super) fn direction_index(delta_x: i32, delta_y: i32) -> Option<u8> {
 }
 
 pub(super) fn checked_walkable(
-    terrain: &MapChunkGenerator,
+    terrain: &dyn RouteTerrain,
     overlay: &ResourceOverlay,
     tile: TileCoord,
     cancelled: &dyn Fn() -> bool,
@@ -206,16 +203,11 @@ pub(super) fn checked_walkable(
     if cancelled() {
         return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
     }
-    let Some((sample, object)) = terrain.tile_and_node_with_cancel(tile, cancelled)? else {
-        return Ok(false);
-    };
-    Ok(!overlay.blocks_tile(tile)
-        && sample.passable
-        && object.is_none_or(|node| !overlay.blocks_node(node)))
+    Ok(terrain.route_walkable(overlay, tile, cancelled)?)
 }
 
 fn diagonal_clear_checked(
-    terrain: &MapChunkGenerator,
+    terrain: &dyn RouteTerrain,
     overlay: &ResourceOverlay,
     tile: TileCoord,
     delta_x: i32,
@@ -226,34 +218,6 @@ fn diagonal_clear_checked(
     let vertical = TileCoord::new(tile.x, tile.y + delta_y);
     Ok(checked_walkable(terrain, overlay, horizontal, cancelled)?
         && checked_walkable(terrain, overlay, vertical, cancelled)?
-        && matches!(
-            terrain.edge_between_with_cancel(tile, horizontal, cancelled)?,
-            EdgePassability::Passable
-        )
-        && matches!(
-            terrain.edge_between_with_cancel(tile, vertical, cancelled)?,
-            EdgePassability::Passable
-        ))
-}
-
-fn checked_movement_cost(
-    terrain: &MapChunkGenerator,
-    from: TileCoord,
-    to: TileCoord,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<u32, Terminal> {
-    let base = if from.x == to.x || from.y == to.y {
-        super::super::ORTHOGONAL_COST
-    } else {
-        super::super::DIAGONAL_COST
-    };
-    let multiplier = matches!(
-        terrain
-            .tile_at_with_cancel(to, cancelled)?
-            .map(|sample| sample.material),
-        Some(GroundMaterial::Mud)
-    )
-    .then_some(3_u32)
-    .unwrap_or(2);
-    Ok(base * multiplier / 2)
+        && terrain.route_edge_clear(tile, horizontal, cancelled)?
+        && terrain.route_edge_clear(tile, vertical, cancelled)?)
 }

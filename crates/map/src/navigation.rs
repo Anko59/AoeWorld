@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod planner;
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
-    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll,
+    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
