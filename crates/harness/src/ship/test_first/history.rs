@@ -1,8 +1,15 @@
-//! Attribute history by ancestry, independent of merge author or committer.
+//! Attribute history by ancestry and merge trees, independent of commit identity.
 use super::{git, test_marker};
 use std::{collections::BTreeSet, path::Path};
 
-pub(super) fn own(root: &Path, base: &str, head: &str) -> git::Result<Vec<String>> {
+pub(super) struct Commit {
+    pub sha: String,
+    /// Automatic merge tree for a changed base/dev merge, first parent otherwise.
+    pub against: Option<String>,
+    pub merge: bool,
+}
+
+pub(super) fn own(root: &Path, base: &str, head: &str) -> git::Result<Vec<Commit>> {
     let selected = crate::review::base::reference(&crate::review::base::current());
     let mut boundaries = vec![base.to_owned()];
     for reference in [selected.as_str(), "refs/remotes/origin/dev"] {
@@ -34,18 +41,33 @@ pub(super) fn own(root: &Path, base: &str, head: &str) -> git::Result<Vec<String
     ];
     args.extend(boundaries.iter().map(String::as_str));
     let list = git::git(root, &args)?;
-    Ok(list
-        .lines()
-        // A merge of the selected base/dev contributes no PR commit. Other
-        // merges retain their existing first-parent classification.
-        .filter(|line| {
-            !line
-                .split_whitespace()
-                .skip(2)
-                .any(|parent| ancestors.contains(parent))
-        })
-        .map(str::to_owned)
-        .collect())
+    let mut commits = Vec::new();
+    for line in list.lines() {
+        let ids: Vec<_> = line.split_whitespace().collect();
+        let sha = ids[0];
+        let parents = &ids[1..];
+        let mut against = parents.first().map(|parent| (*parent).to_owned());
+        if parents.len() == 2 && ancestors.contains(parents[1]) {
+            // Only the automatic merge is incoming work. Extra edits belong
+            // to the PR, even when GitHub authored the merge. A conflict (or
+            // unsupported multi-parent merge) keeps the first-parent diff.
+            if let Ok(automatic) = git::git(
+                root,
+                &["merge-tree", "--write-tree", parents[0], parents[1]],
+            ) {
+                if automatic == git::git(root, &["rev-parse", &format!("{sha}^{{tree}}")])? {
+                    continue;
+                }
+                against = Some(automatic);
+            }
+        }
+        commits.push(Commit {
+            sha: sha.to_owned(),
+            against,
+            merge: parents.len() > 1,
+        });
+    }
+    Ok(commits)
 }
 
 /// Count surviving test attributes introduced by the PR before its first

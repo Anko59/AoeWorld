@@ -197,3 +197,129 @@ fn a_stacked_report_excludes_both_the_selected_parent_and_incoming_dev() {
     assert!(!report.applicable());
     assert!(report.build.is_empty());
 }
+
+fn pending_dev_merge(root: &Path) -> String {
+    commit(root, &[("README.md", "own docs\n")], "own docs");
+    let docs = sha(root, "HEAD");
+    advance_dev(root);
+    run(root, &["merge", "-q", "--no-commit", "origin/dev"]);
+    docs
+}
+
+#[test]
+fn a_dev_merge_adding_its_own_product_requires_tests() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    let docs = pending_dev_merge(root);
+    commit(
+        root,
+        &[("crates/simulation/src/own.rs", "pub fn untested() {}\n")],
+        "merge dev with own implementation",
+    );
+    let report = report(root, &base, "HEAD").unwrap();
+    assert_eq!(
+        report.commits,
+        [
+            (docs, Kind::Other),
+            (sha(root, "HEAD"), Kind::Merge(Base::Product))
+        ]
+    );
+    assert!(report.applicable());
+    assert_eq!(report.tests_before, 0);
+    assert!(report.build.is_empty());
+    assert!(report.inline.is_empty());
+    assert!(report.exemption.is_none());
+    assert!(
+        report
+            .markdown()
+            .contains("before the first product commit: 0\n")
+    );
+}
+
+#[test]
+fn a_dev_merge_adding_only_own_tests_counts_them_before_product() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    let docs = pending_dev_merge(root);
+    commit(
+        root,
+        &[("crates/simulation/tests/own.rs", "#[test]\nfn own() {}\n")],
+        "merge dev with own tests",
+    );
+    let merge = sha(root, "HEAD");
+    let tests = report(root, &base, "HEAD").unwrap();
+    assert_eq!(
+        tests.commits,
+        [(docs, Kind::Other), (merge, Kind::Merge(Base::TestsOnly))]
+    );
+    assert!(!tests.applicable());
+    assert!(tests.build.is_empty());
+    commit(root, &[(LIB, "pub fn f() { let _ = 1; }\n")], "own product");
+    let report = report(root, &base, "HEAD").unwrap();
+    assert!(report.applicable());
+    assert_eq!(report.tests_before, 1, "incoming dev tests must not count");
+}
+
+#[test]
+fn a_dev_merge_adding_only_own_build_files_is_applicable() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    let docs = pending_dev_merge(root);
+    commit(
+        root,
+        &[(".cargo/own.toml", "[build]\n")],
+        "merge dev with own build config",
+    );
+    let report = report(root, &base, "HEAD").unwrap();
+    assert_eq!(
+        report.commits,
+        [
+            (docs, Kind::Other),
+            (sha(root, "HEAD"), Kind::Merge(Base::Other))
+        ]
+    );
+    assert_eq!(report.build, [".cargo/own.toml"]);
+    assert!(report.applicable());
+}
+
+#[test]
+fn a_dev_merge_resolving_a_conflict_by_hand_is_not_excluded() {
+    let (temp, base) = repo();
+    let root = temp.path();
+    commit(root, &[("README.md", "own docs\n")], "own docs");
+    let docs = sha(root, "HEAD");
+    run(root, &["checkout", "-q", "dev"]);
+    commit(root, &[("README.md", "dev docs\n")], "dev docs");
+    let dev = sha(root, "HEAD");
+    run(root, &["update-ref", "refs/remotes/origin/dev", &dev]);
+    run(root, &["checkout", "-q", "feature"]);
+    let merge = Command::new("git")
+        .current_dir(root)
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "merge",
+            "--no-commit",
+            "origin/dev",
+        ])
+        .output()
+        .unwrap();
+    assert!(!merge.status.success());
+    assert!(String::from_utf8_lossy(&merge.stdout).contains("CONFLICT"));
+    assert!(git::git(root, &["merge-tree", "--write-tree", &docs, &dev]).is_err());
+    commit(
+        root,
+        &[("README.md", "hand resolution\n")],
+        "resolve dev conflict",
+    );
+    let report = report(root, &base, "HEAD").unwrap();
+    assert_eq!(
+        report.commits,
+        [
+            (docs, Kind::Other),
+            (sha(root, "HEAD"), Kind::Merge(Base::Other))
+        ]
+    );
+}

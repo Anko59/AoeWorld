@@ -10,6 +10,15 @@ use std::{fs, io::Write, os::unix::fs::PermissionsExt, process::Command};
 
 #[test]
 fn the_ship_command_reports_only_the_prs_commits_after_an_updater_merge() {
+    rehearse_merge(false);
+}
+
+#[test]
+fn the_ship_command_reports_product_and_build_added_in_a_dev_merge() {
+    rehearse_merge(true);
+}
+
+fn rehearse_merge(own_changes: bool) {
     let _guard = crate::ship::issues::tests::ENVIRONMENT.lock().unwrap();
     let (temp, root) = fixture("true");
     run(&root, &["checkout", "-q", "dev"]);
@@ -23,7 +32,19 @@ fn the_ship_command_reports_only_the_prs_commits_after_an_updater_merge() {
     run(&root, &["commit", "-q", "-m", "incoming dev product"]);
     run(&root, &["push", "-q", "origin", "dev"]);
     run(&root, &["checkout", "-q", "feature"]);
-    run(&root, &["merge", "-q", "--no-ff", "--no-edit", "dev"]);
+    run(&root, &["merge", "-q", "--no-ff", "--no-commit", "dev"]);
+    if own_changes {
+        fs::create_dir_all(root.join("crates/simulation/src")).unwrap();
+        fs::write(
+            root.join("crates/simulation/src/own.rs"),
+            "pub fn untested() {}\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join(".cargo")).unwrap();
+        fs::write(root.join(".cargo/config.toml"), "[build]\n").unwrap();
+        run(&root, &["add", "-A"]);
+    }
+    run(&root, &["commit", "-q", "-m", "merge dev"]);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     let task = "<!-- level: low -->\n## Why\n> \"attribute only PR commits\" — the user\n## What\nRehearse test-first after merging dev.\n";
     let body = temp.path().join("body.md");
@@ -77,11 +98,29 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stdout}\n{stderr}");
-    assert!(stderr.contains("test-first: not applicable"), "{stderr}");
-    assert!(!stderr.contains("merge (product)"), "{stderr}");
+    if own_changes {
+        assert!(stderr.contains("merge (product)"), "{stderr}");
+        assert!(
+            stderr.contains("before the first product commit: 0\n"),
+            "{stderr}"
+        );
+        assert!(
+            stderr.contains("build-time files changed: .cargo/config.toml\n"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains("test-first: not applicable"), "{stderr}");
+    } else {
+        assert!(stderr.contains("test-first: not applicable"), "{stderr}");
+        assert!(!stderr.contains("merge (product)"), "{stderr}");
+    }
     assert_eq!(
         git::git(&root, &["rev-parse", "refs/remotes/origin/feature"]).unwrap(),
         head
     );
-    writeln!(std::io::stdout(), "CLI test-first rehearsal (local Git remote, scripted GitHub):\n{stdout}{stderr}ASSERT: incoming dev product and its merge excluded; docs-only PR stays not applicable").unwrap();
+    let assertion = if own_changes {
+        "merge-added product and build counted; zero tests before product"
+    } else {
+        "incoming dev product and its merge excluded; docs-only PR stays not applicable"
+    };
+    writeln!(std::io::stdout(), "CLI test-first rehearsal (local Git remote, scripted GitHub):\n{stdout}{stderr}ASSERT: {assertion}").unwrap();
 }

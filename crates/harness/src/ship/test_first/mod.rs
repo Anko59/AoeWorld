@@ -30,11 +30,11 @@ pub(crate) enum Kind {
     Mixed,
     /// Changes neither (harness, gates, docs, CI…).
     Other,
-    /// A PR-owned merge, judged by its diff against its first parent.
+    /// A PR-owned merge, judged against its automatic merge or first parent.
     Merge(Base),
 }
 
-/// The kind of a merge's first-parent diff.
+/// The kind of a merge's own changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Base {
     TestsOnly,
@@ -334,17 +334,16 @@ pub(crate) fn report(root: &Path, base: &str, head: &str) -> git::Result<Report>
         build: build_files(root, base, head, &context)?,
         exemption: None,
     };
-    for line in &list {
-        let mut ids = line.split(' ');
-        let sha = ids.next().unwrap_or_default();
-        let parents: Vec<&str> = ids.collect();
-        if let Some(parent) = parents.first() {
+    for commit in &list {
+        let sha = commit.sha.as_str();
+        let parent = commit.against.as_deref();
+        if let Some(parent) = parent {
             own_build.extend(build_files(root, parent, sha, &context)?);
         } else {
             own_build.extend(report.build.iter().cloned());
         }
-        let (kind, inline) = classify(root, sha, parents.first().copied())?;
-        let kind = match (parents.len() > 1, kind) {
+        let (kind, inline) = classify(root, sha, parent)?;
+        let kind = match (commit.merge, kind) {
             (true, kind) => Kind::Merge(kind),
             (false, Base::TestsOnly) => Kind::TestsOnly,
             (false, Base::Product) => Kind::Product,

@@ -459,9 +459,9 @@ description's "For AI" part and into the facts every reviewer reads:
 - each commit classified as tests-only, product, mixed or other, where product
   code is any non-test file under `crates/` except `crates/harness/`; changed
   lines that all lie inside `#[cfg(test)]` items of a product file count as
-  test changes (Rust token and item spans), and such files are listed, since
-  the rule is tests in test files; commits on the selected base/dev and merges
-  of either are excluded; other merges stay `merge (<kind>)` by first-parent diff;
+  test changes (Rust token/item spans); inline-test files are listed as rule violations. Selected base/dev commits are excluded.
+  Two-parent merges of either are excluded only if their tree equals `git merge-tree --write-tree` of their parents;
+  extra edits are classified against that tree. Conflicted and other merges stay `merge (<kind>)` by first-parent diff;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
   `#[rstest]`…, never a `cfg`) owned by the PR before its first product commit;
 - build-time files changed: `build.rs` or a custom `package.build` script,
