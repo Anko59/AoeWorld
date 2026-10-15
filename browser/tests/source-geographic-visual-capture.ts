@@ -1,3 +1,4 @@
+import { activatePackage } from "./start/package.js";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -95,7 +96,6 @@ export const evidenceDirectory = new URL(
   "../../reports/geographic-visuals/",
   import.meta.url,
 );
-const activeMap = (hash: string) => `Saved map active: ${hash.slice(0, 12)}`;
 
 export function caseInputsPath() {
   if (!casesPath) throw new Error("missing AOE_SOURCE_VISUAL_CASES path");
@@ -116,14 +116,6 @@ async function joinActivatedWorld(page: Page) {
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await ready(page);
-}
-
-async function closeMapCreator(page: Page) {
-  const creator = page.locator("#map-creator");
-  if (await creator.isVisible()) {
-    await page.getByRole("button", { name: "Open map creator" }).click();
-    await expect(creator).toBeHidden();
-  }
 }
 
 async function loadedChunkCount(page: Page) {
@@ -177,23 +169,15 @@ export async function activateMatrixCase(
   });
   await page.goto("/?play=1");
   await ready(page);
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByLabel("Saved maps").selectOption(item.content_hash);
-  await page.getByRole("button", { name: "Open saved" }).click();
-  await expect
-    .poll(() => page.locator("#map-estimate").textContent(), {
-      timeout: 60_000,
-    })
-    .toMatch(/Saved map active:|Saved map available for preview:/);
-  const message = (await page.locator("#map-estimate").textContent()) ?? "";
-  const startAvailable = message.startsWith(activeMap(item.content_hash));
+  const activation = await activatePackage(page, item.content_hash);
+  const message = activation.message ?? "";
+  const startAvailable = activation.start_available;
   const outputDirectory = new URL(`${item.id}/`, evidenceDirectory);
   await mkdir(outputDirectory, { recursive: true });
   let capture: string | null = null;
   let noCaptureReason: string | null = null;
   if (startAvailable) {
     await joinActivatedWorld(page);
-    await closeMapCreator(page);
     await expect
       .poll(() => loadedChunkCount(page), { timeout: 30_000 })
       .toBeGreaterThan(0);
@@ -314,17 +298,10 @@ export async function captureCase(
     "data-renderer",
     backend,
   );
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByLabel("Saved maps").selectOption(item.content_hash);
-  await page.getByRole("button", { name: "Open saved" }).click();
-  await expect(page.locator("#map-estimate")).toContainText(
-    activeMap(item.content_hash),
-    {
-      timeout: 30_000,
-    },
+  expect((await activatePackage(page, item.content_hash)).start_available).toBe(
+    true,
   );
   await joinActivatedWorld(page);
-  await closeMapCreator(page);
   await expect
     .poll(() => loadedChunkCount(page), { timeout: 30_000 })
     .toBeGreaterThan(0);
@@ -392,17 +369,10 @@ export async function captureCase(
   await ready(page);
   await page.reload();
   await ready(page);
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByLabel("Saved maps").selectOption(item.content_hash);
-  await page.getByRole("button", { name: "Open saved" }).click();
-  await expect(page.locator("#map-estimate")).toContainText(
-    activeMap(item.content_hash),
-    {
-      timeout: 30_000,
-    },
+  expect((await activatePackage(page, item.content_hash)).start_available).toBe(
+    true,
   );
   await joinActivatedWorld(page);
-  await closeMapCreator(page);
   await expect
     .poll(() => loadedChunkCount(page), { timeout: 30_000 })
     .toBeGreaterThan(0);

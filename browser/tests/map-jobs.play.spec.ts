@@ -1,163 +1,104 @@
 import { expect, test } from "@playwright/test";
 import { gameAssets } from "./game-assets.js";
 
-test.beforeEach(async ({ request }) => {
-  const response = await request.post("/maps/reset");
-  expect(response.status()).toBe(204);
-});
-
-test("creator shows measured phase counts without an invented overall percentage", async ({
-  page,
-}) => {
+test.beforeEach(async ({ page, request }) => {
+  expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
-  let original: Record<string, unknown> = {};
-  let phase = "building_pyramids";
-  let complete = false;
-  await page.route("**/maps/jobs", async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({ json: [] });
-    } else {
-      original = route.request().postDataJSON();
-      await route.fulfill({ json: { id: 78 } });
-    }
-  });
-  await page.route("**/maps/jobs/78", async (route) => {
-    await route.fulfill({
-      json: {
-        id: 78,
-        request: original,
-        state: complete ? "cancelled" : "running",
-        stage: "preparing_detailed",
-        percent: null,
-        eta_seconds: null,
-        preparation: {
-          mode: "detailed",
-          explanation: "Regional source preparation",
-        },
-        progress: {
-          version: 1,
-          phase,
-          completed: phase === "building_pyramids" ? 4 : null,
-          total: phase === "building_pyramids" ? 16 : null,
-          unit: phase === "building_pyramids" ? "pages" : null,
-        },
-      },
-    });
-  });
-  await page.goto("/?play=1");
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-assets",
-    "aoe2-local",
-  );
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByRole("button", { name: "Generate", exact: true }).click();
-  const output = page.locator("#map-estimate");
-  await expect(output).toContainText("building pyramids · 4 / 16 pages");
-  await expect(output).not.toContainText("%");
-  await expect(output).not.toContainText("ETA");
-  phase = "verifying_package";
-  await expect(output).toContainText("verifying package");
-  await expect(output).not.toContainText("4 / 16");
-  complete = true;
-  await expect(output).toContainText("Map creation cancelled");
-  await expect(
-    page.getByRole("button", { name: "Generate", exact: true }),
-  ).toBeEnabled();
 });
 
 test("lost submission acknowledgement reuses the saved key and request after reload", async ({
   page,
 }) => {
-  await gameAssets(page);
   const submissions: { key: string | undefined; body: unknown }[] = [];
-  let original: Record<string, unknown> = {};
+  let cancelled = false;
   await page.route("**/maps/jobs", async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({ json: [] });
-      return;
-    }
-    original = route.request().postDataJSON();
+    if (route.request().method() === "GET") return route.fulfill({ json: [] });
     submissions.push({
       key: route.request().headers()["idempotency-key"],
-      body: original,
+      body: route.request().postDataJSON(),
     });
-    if (submissions.length === 1) await route.abort("connectionfailed");
-    else await route.fulfill({ json: { id: 79 } });
+    // Acceptance happened, but its acknowledgement never reached this tab.
+    if (submissions.length === 1) return route.abort("connectionfailed");
+    await route.fulfill({ json: { id: 79 } });
   });
-  await page.route("**/maps/jobs/79", async (route) => {
+  await page.route(/\/maps\/jobs\/79(?:\/cancel)?$/, async (route) => {
+    if (route.request().url().endsWith("/cancel")) cancelled = true;
     await route.fulfill({
       json: {
         id: 79,
-        state: "cancelled",
-        request: original,
-        preparation: { mode: "procedural_fallback" },
+        state: cancelled ? "cancelled" : "running",
+        request: submissions[0]?.body,
+        preparation: { mode: "overview" },
+        progress: {
+          phase: "building_pyramids",
+          completed: 4,
+          total: 16,
+          unit: "pages",
+        },
       },
     });
   });
-  await page.goto("/?play=1");
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-assets",
-    "aoe2-local",
-  );
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByRole("button", { name: "Generate", exact: true }).click();
-  await expect(page.locator("#map-estimate")).toContainText(
-    "Recover this request",
-  );
-  await expect(
-    page.getByRole("button", { name: "Generate", exact: true }),
-  ).toBeDisabled();
-  await page.reload();
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-assets",
-    "aoe2-local",
-  );
-  await page.getByRole("button", { name: "Open map creator" }).click();
+  await page.goto("/?skipIntro=1");
   await page
-    .getByRole("button", { name: "Recover request", exact: true })
+    .getByRole("button", { name: "Single Player", exact: true })
     .click();
-  await expect(page.locator("#map-estimate")).toContainText(
-    "Map creation cancelled",
-  );
-  expect(submissions).toHaveLength(2);
+  await page.getByRole("button", { name: "Start Game", exact: true }).click();
+  await expect(page.locator("#loading-error")).toBeVisible();
+  expect(submissions).toHaveLength(1);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  await expect.poll(() => submissions.length).toBe(2);
+  await page
+    .getByRole("button", { name: "Resume map preparation", exact: true })
+    .click();
+  await expect(page.locator("#loading-screen")).toBeVisible();
+  await expect(page.locator("#loading-phase")).toContainText("4 / 16 pages");
+  await expect(page.locator("#loading-cancel")).toBeEnabled();
   expect(submissions[0]?.key).toMatch(/^[0-9a-f]{32}$/);
   expect(submissions[1]).toEqual(submissions[0]);
+  await page.locator("#loading-cancel").click();
   await expect(
-    page.getByRole("button", { name: "Generate", exact: true }),
+    page.getByRole("button", { name: "Start Game", exact: true }),
   ).toBeEnabled();
+  expect(cancelled).toBe(true);
+  expect(submissions).toHaveLength(2);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aoeworld.map-creation-job"),
+    ),
+  ).toBeNull();
 });
 
-test("explicit submission conflict permits a fresh key instead of trapping recovery", async ({
+test("an uncertain recovery response retains the original key for the next attempt", async ({
   page,
 }) => {
-  await gameAssets(page);
+  const key = "b".repeat(32);
+  await page.addInitScript(
+    (key) =>
+      localStorage.setItem(
+        "aoeworld.map-creation-job",
+        JSON.stringify({ submission: { key, request: { schema_version: 1 } } }),
+      ),
+    key,
+  );
   const keys: (string | undefined)[] = [];
   await page.route("**/maps/jobs", async (route) => {
-    if (route.request().method() === "GET") await route.fulfill({ json: [] });
-    else {
-      keys.push(route.request().headers()["idempotency-key"]);
-      await route.fulfill({
-        status: 409,
-        body: "submission key was already used for another request",
-      });
-    }
+    keys.push(route.request().headers()["idempotency-key"]);
+    await route.fulfill({ status: 503, body: "Temporarily unavailable" });
   });
-  await page.goto("/?play=1");
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-assets",
-    "aoe2-local",
-  );
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  const generate = page.getByRole("button", { name: "Generate", exact: true });
-  await generate.click();
-  await expect(page.locator("#map-estimate")).toContainText("already used");
-  await expect(generate).toBeEnabled();
-  await generate.click();
+  await page.goto("/?skipIntro=1");
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  await expect.poll(() => keys.length).toBe(1);
+  await page
+    .getByRole("button", { name: "Resume map preparation", exact: true })
+    .click();
   await expect.poll(() => keys.length).toBe(2);
-  expect(keys[0]).toMatch(/^[0-9a-f]{32}$/);
-  expect(keys[1]).not.toBe(keys[0]);
+  expect(keys).toEqual([key, key]);
+  await expect(page.locator("#loading-error")).toContainText(
+    "Temporarily unavailable",
+  );
 });

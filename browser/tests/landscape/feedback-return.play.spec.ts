@@ -74,7 +74,7 @@ test("returning during backoff restores the unresolved terrain warning until rec
     await expect(status).toHaveText(warning);
     await page.mouse.click(
       box.x + (box.width - side) / 2 + side * 0.75,
-      box.y + (box.height - side) / 2 + side * 0.25,
+      box.y + (box.height - side) / 2 + side * 0.5,
     );
     await expect(page.locator("#world-position")).toHaveText("12288.0, 4096.0");
     await expect(status).toHaveText("connected");

@@ -1,3 +1,4 @@
+import { activatePackage } from "../start/package.js";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
@@ -89,13 +90,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
   });
   await page.goto("/?play=1");
   const manifest = await ready(page);
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByLabel("Saved maps").selectOption(hash);
-  await page.getByRole("button", { name: "Open saved" }).click();
-  await expect(page.locator("#map-estimate")).toContainText(
-    `Saved map active: ${hash.slice(0, 12)}`,
-    { timeout: 60_000 },
-  );
+  expect((await activatePackage(page, hash)).start_available).toBe(true);
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
   captureWire = true;
   await page.getByRole("button", { name: "Menu", exact: true }).click();
@@ -151,7 +146,6 @@ test("isolated original-pack country renders actual chunks on three explicit bac
     }),
   );
 
-  await page.getByRole("button", { name: "Open map creator" }).click();
   const observations: unknown[] = [];
   const rendererErrors: string[] = [];
   let retiredPage: Page | null = null;
