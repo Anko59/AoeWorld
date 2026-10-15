@@ -51,11 +51,14 @@ write` and `pull-requests: write`.
 ## 3. Updating waiting pull requests (`make update-prs`)
 
 On every push to `dev`: each open pull request into `dev` with auto-merge armed
-and behind `dev` (GitHub's compare: `behind_by > 0`) is rebased with the GraphQL
-`updatePullRequestBranch`, method REBASE (linear history requires it), pinned
-to the head the run saw. At most `UPDATE_MAX_PRS` (5) pull requests per run,
+and behind `dev` (GitHub's compare: `behind_by > 0`) gets `dev` merged in with
+the GraphQL `updatePullRequestBranch`, method MERGE, pinned to the head the run
+saw. Not REBASE: GitHub rewrites rebased commits unsigned (committer
+`github-actions[bot]`), and `dev` requires signed commits on the head branch,
+even for a squash merge (seen on #406 and #417, 2026-10-15). The squash merge
+keeps `dev` linear. At most `UPDATE_MAX_PRS` (5) pull requests per run,
 oldest first; one run at a time (concurrency group `post-push-update`, never
-cancelled halfway). A rebase that GitHub refuses with conflicting files leaves
+cancelled halfway). An update that GitHub refuses with conflicting files leaves
 the pull request untouched and adds one comment naming the files (once per
 head). Conflict diagnosis replays the PR commits in order in a temporary detached
 worktree, naming the files of the first conflicting commit, even if a later
@@ -66,7 +69,7 @@ and any local replay failure, and remains an error of the run. Forks are skipped
 The updater uses the workflow's own `GITHUB_TOKEN`, with `contents: write`,
 `pull-requests: write`, `statuses: write` and `actions: write`; no personal
 secret is needed. A push made with this token starts neither `pull_request` CI
-nor the `pull_request_target` carry job. After GitHub accepts a rebase, the
+nor the `pull_request_target` carry job. After GitHub accepts an update, the
 updater polls the PR's head every five seconds for up to two minutes until it
 changes, calls the existing review carry, then dispatches `ci.yml` on the PR's
 head branch. `workflow_dispatch` is an exception to GitHub's token recursion
@@ -95,7 +98,7 @@ still serves pushes made by `make ship`.
 The commands are tested against stubbed `gh` and real Git (`cargo test`, the
 `ship::postpush` tests). After merge, on a real pull request: that
 `pull_request_target` runs from `dev`, the workflow token and permissions suffice,
-that `updatePullRequestBranch` rebases and the explicit dispatch commit status
+that `updatePullRequestBranch` merges `dev` in and the explicit dispatch commit status
 is accepted as `required` from the Actions app, that the carried
 status is accepted for `harness/review`, and what `behind_by` reports.
 
