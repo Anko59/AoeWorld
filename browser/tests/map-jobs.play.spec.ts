@@ -45,11 +45,27 @@ test("lost submission acknowledgement reuses the saved key and request after rel
   await page.getByRole("button", { name: "Start Game", exact: true }).click();
   await expect(page.locator("#loading-error")).toBeVisible();
   expect(submissions).toHaveLength(1);
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("aoeworld.map-creation-job") ?? "null")
+          ?.submission,
+    ),
+  ).toEqual({ key: submissions[0]?.key, request: submissions[0]?.body });
+
   await page.reload();
   await page
     .getByRole("button", { name: "Single Player", exact: true })
     .click();
   await expect.poll(() => submissions.length).toBe(2);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem("aoeworld.map-creation-job") ?? "null"),
+      ),
+    )
+    .toEqual({ id: 79, submission: null });
+
   await page
     .getByRole("button", { name: "Resume map preparation", exact: true })
     .click();
