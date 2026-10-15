@@ -217,6 +217,11 @@ fn quoted_commands_inside_parameter_expansions_are_literal() {
         "echo ${x:-\"'$(cargo build)'\"}",
         "echo ${x:-\"\\\"'$(cargo build)'\\\"\"}",
         "echo ${x:-\\'$(cargo build)\\'}",
+        // The whole expansion inside double quotes: its apostrophes are
+        // ordinary characters, so the command runs.
+        "echo \"${x:-'$(cargo build)'}\"",
+        "echo \"${x:-'`cargo build`'}\"",
+        "echo \"$(( '$(cargo build)' ))\"",
         "echo $(( $(cargo build) ))",
     ] {
         denied(&fixture, Role::Main, command);

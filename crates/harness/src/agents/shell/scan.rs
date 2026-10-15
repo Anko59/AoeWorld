@@ -58,7 +58,11 @@ fn starts_comment(chars: &[char], at: usize) -> bool {
 /// inside single quotes a substitution is literal data, while inside double
 /// quotes (where a `'` is literal too) and after a backslash escape it still
 /// runs only when unescaped.
-pub(super) fn inner_substitutions(text: &str) -> Vec<String> {
+///
+/// `in_double` says the expansion itself sits inside double quotes: there an
+/// apostrophe is an ordinary character (`"${x:-'$(cmd)'}"` runs `cmd`), so it
+/// never starts a single-quoted span.
+pub(super) fn inner_substitutions(text: &str, in_double: bool) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();
     let mut found = Vec::new();
     let (mut single, mut double) = (false, false);
@@ -72,7 +76,7 @@ pub(super) fn inner_substitutions(text: &str) -> Vec<String> {
             at += 2;
         } else {
             match c {
-                '\'' if !double => single = true,
+                '\'' if !double && !in_double => single = true,
                 '"' => double = !double,
                 '$' if chars.get(at + 1) == Some(&'(') => {
                     at = substitution(&chars, at, &mut found);

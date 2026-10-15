@@ -252,7 +252,7 @@ impl<'a> Lexer<'a> {
                     quoted = true;
                     self.double_quoted(&mut word)?;
                 }
-                '$' => self.dollar(&mut word)?,
+                '$' => self.dollar(&mut word, false)?,
                 '`' => self.backtick(&mut word)?,
                 '=' if word.assignment.is_none() && !quoted && !word.computed => {
                     if valid_name(&word.text) {
@@ -297,7 +297,7 @@ impl<'a> Lexer<'a> {
                     }
                     self.at += 2;
                 }
-                Some('$') => self.dollar(word)?,
+                Some('$') => self.dollar(word, true)?,
                 Some('`') => self.backtick(word)?,
                 Some(c) => {
                     word.text.push(c);
@@ -307,7 +307,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn dollar(&mut self, word: &mut Word) -> Result<(), String> {
+    fn dollar(&mut self, word: &mut Word, in_double: bool) -> Result<(), String> {
         self.at += 1;
         match self.peek(0) {
             Some('(') if self.peek(1) == Some('(') => {
@@ -318,7 +318,7 @@ impl<'a> Lexer<'a> {
                 }
                 self.parsed
                     .substitutions
-                    .append(&mut inner_substitutions(&inner));
+                    .append(&mut inner_substitutions(&inner, in_double));
                 self.parsed.opaque = Some(ARITHMETIC);
                 word.computed = true;
             }
@@ -337,7 +337,7 @@ impl<'a> Lexer<'a> {
                 let inner = self.balanced('}')?;
                 self.parsed
                     .substitutions
-                    .append(&mut inner_substitutions(&inner));
+                    .append(&mut inner_substitutions(&inner, in_double));
                 if !plain_parameter(&inner) {
                     self.parsed.opaque = Some(EXPANSION);
                 }
