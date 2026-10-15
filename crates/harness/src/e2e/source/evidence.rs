@@ -21,7 +21,8 @@ pub(super) fn created_record(
         )
         .into());
     }
-    let expected_axis = if profile == "detailed" { 1_024 } else { 128 };
+    let axes = aoe_map::OverviewFieldAxes::LANDSCAPE;
+    let expected_axis = axes.elevation;
     let model_present = package
         .environment
         .hydrology_evidence
@@ -29,7 +30,16 @@ pub(super) fn created_record(
         .and_then(|evidence| evidence.water_model.as_ref())
         .is_some();
     if package.environment.samples_per_axis != expected_axis
-        || package.environment.elevation.levels.is_empty()
+        || package
+            .environment
+            .elevation
+            .levels
+            .first()
+            .map(|level| level.samples_per_axis)
+            != Some(expected_axis)
+        || package.environment.water_samples_per_axis() != Some(axes.water)
+        || package.environment.vegetation_samples_per_axis() != Some(axes.vegetation)
+        || package.environment.historical_samples_per_axis() != Some(axes.historical)
         || created_evidence
             .get("preparation")
             .and_then(|value| value.get("mode"))

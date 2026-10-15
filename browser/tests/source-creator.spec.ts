@@ -106,6 +106,7 @@ test("Single Player setup creates and activates both source preparation profiles
         postData: JSON.stringify({
           ...route.request().postDataJSON(),
           preparation: profile,
+          hydrology_mode: profile === "detailed" ? "vectors" : "none",
         }),
       });
     });
@@ -150,9 +151,7 @@ test("Single Player setup creates and activates both source preparation profiles
       .toMatch(/^[0-9a-f]{64}$/);
     if (!completed) throw new Error("Source job did not complete");
     expect(completed.request).toMatchObject(paris?.request ?? {});
-    expect(completed.preparation.samples_per_axis).toBe(
-      profile === "detailed" ? 1024 : 128,
-    );
+    expect(completed.preparation.samples_per_axis).toBe(1024);
     expect(progress.get(completed.id)?.length).toBeGreaterThan(0);
     const hash = completed.content_hash;
     await entered(page, hash);
