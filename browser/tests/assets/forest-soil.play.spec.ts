@@ -311,7 +311,7 @@ test("explicit original forest soil appears on actual source terrain across thre
           else fetched.add(path);
         }
       });
-      await page.goto("/");
+      await page.goto("/?play=1");
       await ready(page, backend);
       // Inspect an already-active package without taking the user's controller
       // or resetting their world; activation remains authenticated when needed.

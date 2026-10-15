@@ -85,7 +85,7 @@ function paletteCounts(image: PNG): number[] {
 async function selectedTerrain(page: Page, backend: "webgl2" | "canvas2d") {
   await gameAssets(page, true);
   await (backend === "webgl2" ? forceWebGl(page) : forceCanvas(page));
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page, backend);
   await activateSyntheticMap(page);
   const canvas = page.locator("#scene");
@@ -235,7 +235,7 @@ test("WebGL2 displays authoritative scout movement and keyboard camera changes",
 }) => {
   await gameAssets(page, true);
   await forceWebGl(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page, "webgl2");
   await selectAndMove(page);
   const origin = await page.locator("#world-position").innerText();
@@ -341,7 +341,7 @@ test("WebGL2 context restoration retains scout input, moving pixels and camera c
 }) => {
   await gameAssets(page, true);
   await forceWebGl(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page, "webgl2");
   await expect
     .poll(async () => (await horsePixels(page)).pixels)
@@ -377,7 +377,7 @@ test("bound WebGL2 initialization failure replaces its canvas with playable Canv
       return result;
     } as typeof original;
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page, "canvas2d");
   expect(
     await page.evaluate(() => Reflect.get(window, "__boundWebGlFailure")),

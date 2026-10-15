@@ -40,7 +40,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     if (testInfo.project.name === "canvas") {
       await forceCanvas(page);
     }
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-assets",
       "aoe2-local",

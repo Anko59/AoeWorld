@@ -49,7 +49,7 @@ test("returning during backoff restores the unresolved terrain warning until rec
   const status = page.locator("#connection");
   const warning = "Some terrain could not be loaded; retrying.";
   try {
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-assets",
       "aoe2-local",

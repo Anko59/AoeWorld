@@ -87,7 +87,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
     socket.on("framesent", ({ payload }) => retain("sent", payload));
     socket.on("framereceived", ({ payload }) => retain("received", payload));
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   const manifest = await ready(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(hash);
@@ -167,7 +167,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
       errors.push(error.message);
       rendererErrors.push(error.message);
     });
-    await current.goto("/");
+    await current.goto("/?play=1");
     await ready(current);
     if (retiredPage) {
       await retiredPage.close();

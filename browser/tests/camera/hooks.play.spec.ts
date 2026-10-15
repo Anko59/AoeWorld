@@ -83,7 +83,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
 }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page, true);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   const token = await page.evaluate(() =>
     sessionStorage.getItem("aoeworld.resume-token"),

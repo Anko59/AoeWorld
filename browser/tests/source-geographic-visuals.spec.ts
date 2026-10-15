@@ -30,7 +30,7 @@ test("source-backed water and high-relief maps render and remain navigable", asy
   expect(inputs.version).toBe(2);
   expect(inputs.activation_cases).toHaveLength(11);
   const assetSource = await gameAssets(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   const asset = await assetIdentity(page);
   await ready(page);
   const activations: ActivationOutcome[] = [];

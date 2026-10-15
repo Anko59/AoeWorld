@@ -44,7 +44,7 @@ test("creator shows measured phase counts without an invented overall percentage
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-assets",
@@ -95,7 +95,7 @@ test("lost submission acknowledgement reuses the saved key and request after rel
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-assets",
@@ -145,7 +145,7 @@ test("explicit submission conflict permits a fresh key instead of trapping recov
       });
     }
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-assets",
