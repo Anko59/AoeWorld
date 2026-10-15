@@ -255,7 +255,13 @@ fn make_fixed(
     };
     // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
     // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
-    let slot = match crate::slots::hold_snapshot(root.path(), source, gate.as_str(), slots) {
+    let slot = match crate::slots::hold_snapshot(
+        root.path(),
+        source,
+        gate.as_str(),
+        slots,
+        cancellation,
+    ) {
         Ok(slot) => slot,
         Err(error) => {
             return Receipt {

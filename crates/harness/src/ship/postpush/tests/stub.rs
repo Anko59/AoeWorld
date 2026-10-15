@@ -42,6 +42,8 @@ case "$all" in
   */compare/*)
     oid=$(printf '%s\n' "$@" | sed -n 's|.*/compare/dev\.\.\.||p')
     cat "$GH_DIR/compare-$oid.json" ;;
+  *"/pulls?"*) cat "$GH_DIR/pulls.json" ;;
+  *"/issues?"*) cat "$GH_DIR/issues.json" ;;
   */pulls/*)
     n=$(printf '%s\n' "$@" | sed -n 's|.*/pulls/\([0-9]*\)$|\1|p')
     cat "$GH_DIR/pull-$n.json" ;;

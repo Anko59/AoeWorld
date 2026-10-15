@@ -1,9 +1,10 @@
 //! Replay real diagnostics through the branch binary's test-wasm command.
 use std::{
     fs,
+    io::Read,
     net::TcpListener,
     path::Path,
-    process::{Command, Stdio},
+    process::Stdio,
     time::{Duration, Instant},
 };
 
@@ -71,7 +72,8 @@ fn command_replays_real_failure_sections_and_only_retries_once() {
         for tool in ["cargo", "docker"] {
             fixture::wrapper(&bin.join(tool), tool);
         }
-        let child = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        let (mut command, _slot) = fixture::command();
+        let mut child = command
             .current_dir(root)
             .env(
                 "PATH",
@@ -87,6 +89,18 @@ fn command_replays_real_failure_sections_and_only_retries_once() {
         let port = loop {
             if let Ok(port) = fs::read_to_string(root.join("driver-port")) {
                 break port;
+            }
+            if Instant::now() >= deadline {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                let mut stderr = String::new();
+                child
+                    .stderr
+                    .take()
+                    .unwrap()
+                    .read_to_string(&mut stderr)
+                    .unwrap();
+                eprintln!("{stderr}");
             }
             assert!(Instant::now() < deadline, "driver startup request missing");
             std::thread::sleep(Duration::from_millis(10));

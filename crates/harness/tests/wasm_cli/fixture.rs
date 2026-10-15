@@ -20,7 +20,9 @@ pub(super) fn run(tool: &str) {
                 .unwrap();
             fs::write(calls, (count + 1).to_string()).unwrap();
             if count == 0 || fs::read_to_string(root.join("repeat")).unwrap() == "true" {
-                print!("{}", fs::read_to_string(root.join("diagnostic")).unwrap());
+                // Serial libtest prints its test label without a newline. Keep
+                // the tool's first diagnostic on its own line on one-core CI.
+                print!("\n{}", fs::read_to_string(root.join("diagnostic")).unwrap());
                 let code = fs::read_to_string(root.join("exit"))
                     .unwrap()
                     .parse()
@@ -41,4 +43,39 @@ pub(super) fn run(tool: &str) {
         _ => panic!("unexpected fixture command: {tool} {args}"),
     }
     std::process::exit(0);
+}
+
+/// Inherit a validated fixture slot after the test admits the workload. One
+/// CPU makes ordinary host load exercise the regression without creating load.
+pub(super) fn command() -> (std::process::Command, crate::ci::admission::FixtureSlot) {
+    let load: f64 = fs::read_to_string("/proc/loadavg")
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut command = if load > 1.0 {
+        let status = fs::read_to_string("/proc/self/status").unwrap();
+        let cpu = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+            .unwrap()
+            .trim()
+            .split([',', '-'])
+            .next()
+            .unwrap();
+        use std::io::Write;
+        std::io::stdout().write_all(format!(
+            "test-wasm load regression: host load {load}, child restricted to CPU {cpu} (1 core)\n"
+        ).as_bytes()).unwrap();
+        let mut command = std::process::Command::new("taskset");
+        command.args(["-c", cpu, env!("CARGO_BIN_EXE_aoe-harness")]);
+        command
+    } else {
+        eprintln!("test-wasm overload rehearsal unavailable: load {load} <= 1");
+        std::process::Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+    };
+    let slot = crate::ci::admission::fixture(&mut command);
+    (command, slot)
 }

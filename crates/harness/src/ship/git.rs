@@ -1,6 +1,8 @@
 //! The few Git facts `ship` needs, each from one plain `git` call.
 use std::{path::Path, process::Command};
+pub(super) mod lease;
 mod patch;
+pub(super) mod publish;
 pub(crate) mod remote;
 
 pub(crate) type Result<T> = std::result::Result<T, String>;

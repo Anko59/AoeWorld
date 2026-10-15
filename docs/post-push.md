@@ -27,7 +27,7 @@ review `policy` fingerprint (`Report::policy_fingerprint_at`), `tier` and
 `grade`. The next passing review edits that comment in place; if it cannot,
 it adds one. A comment, not the status description: a description holds 140 characters and
 the two fingerprints are 128. A marker that cannot be written is a warning;
-the ship still succeeds, only a later rebase will not carry the review.
+the ship still succeeds, only a later update will not carry the review.
 
 Only a marker from `OWNER`, `MEMBER` or `COLLABORATOR` counts, the newest one:
 anyone can comment on a pull request, and a forged marker would let a changed
@@ -43,9 +43,12 @@ the current `dev` and the review policy fingerprint at `dev`, with the marker's
 tier. If both equal the marker's, it posts `harness/review` = success on the
 new head, "carried from <sha12>: patch and policy unchanged". Otherwise it posts
 nothing and writes one comment saying which: `patch changed`, `policy changed`
-or `no review marker`. It never posts success for a head whose own patch
+or `no review marker`. A successful carry also comments on the updated head, so
+`make next` can show open PRs into dev with auto-merge armed whose latest carry
+comment on their current head is a refusal, first, as `reship: <reason>`.
+Comments on older heads do not count. It never posts success for a head whose own patch
 differs. This is the rule of the local re-check carry (#367) and of the
-unchanged-patch reuse (#386), run where the rebase happens. Token: `statuses:
+unchanged-patch reuse (#386), run where the update happens. Token: `statuses:
 write` and `pull-requests: write`.
 
 ## 3. Updating waiting pull requests (`make update-prs`)
@@ -92,6 +95,16 @@ outside GitHub Actions, and the `dev`/`main` refs.
 A head that never moves, a carry error or a dispatch error
 adds a failure comment and fails the updater run. The event-driven carry job
 still serves pushes made by `make ship`.
+
+Before every push, including without SHIP_FORCE and with an unchanged dev, ship fetches the branch again. If its only additions since
+the ship's starting head are two-parent merges committed by `GitHub
+<noreply@github.com>`, each with a dev second parent, it prints one line and
+leases on the fetched head. Other remote changes refuse the push; the lease
+still rejects a push that races this final fetch. These validation fetches
+disable remote-tracking updates, so a refused attempt cannot authorize the
+same overwrite on an unchanged retry. Without force, ordinary fast-forwards
+remain allowed; other divergence still refuses. Updater output says
+`updated (dev merged in)`.
 
 ## What only GitHub can show
 

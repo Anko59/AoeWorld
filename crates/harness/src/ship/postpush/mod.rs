@@ -1,8 +1,8 @@
 //! What happens to a pull request after `make ship` pushed it (docs/post-push.md).
 //! The shared review publisher records what was approved ([`marker`]); while the pull request
-//! waits for CI, a workflow rebases it when `dev` moves ([`update`]) and carries
-//! `harness/review` to the rebased head when the patch and the review policy
-//! are unchanged ([`carry`]). Nothing here merges or approves anything.
+//! waits for CI, a workflow merges dev into it when `dev` moves ([`update`]) and carries
+//! `harness/review` to the updated head when the patch and the review policy
+//! are unchanged ([`carry`]). Nothing here merges or approves a pull request.
 use super::{Result, git, github::gh};
 use serde::Deserialize;
 use std::path::Path;
@@ -10,6 +10,7 @@ use std::path::Path;
 pub(super) mod carry;
 pub(super) mod marker;
 mod replay;
+pub(super) mod reship;
 pub(super) mod update;
 
 #[cfg(test)]
@@ -45,7 +46,8 @@ pub(super) fn short(sha: &str) -> &str {
 
 /// `gh api` with `args`, its output read as JSON.
 pub(super) fn api(root: &Path, args: &[&str]) -> Result<serde_json::Value> {
-    let mut full = vec!["api"];
+    let (host, _) = git::origin_host_repository(root)?;
+    let mut full = vec!["api", "--hostname", &host];
     full.extend(args);
     Ok(serde_json::from_str(&gh(root, &full)?)?)
 }

@@ -1,11 +1,12 @@
 //! The heavy-slot tests do not depend on the environment of the process that runs them. The
 //! `AOE_HEAVY_*` variables a holder passes down reach the code only as a `SlotEnv`, and only the
 //! process entry point reads them.
-use super::{SERIAL, checkout, take, tickets};
-use crate::slots::{
-    DIR_VAR, SlotEnv, TOKEN_VAR,
-    guard::{dir, hold, run_in_slot},
+use super::{
+    SERIAL, checkout,
+    support::{hold, run_in_slot},
+    take, tickets,
 };
+use crate::slots::{DIR_VAR, SlotEnv, TOKEN_VAR, guard::dir};
 use std::{fs, path::Path, path::PathBuf, process::Command, time::Duration};
 
 /// Marks the child process of `an_inherited_slot_moves_no_scenario_that_does_not_pass_it_on`.
@@ -125,7 +126,7 @@ fn inherited_slot_child() {
     assert_eq!(tickets(&real_dir), 1, "the passed slot is the holder's");
 }
 
-/// The four variables are read in one place. A new reader would bring a process's slot back into
+/// The five variables are read in one place. A new reader would bring a process's slot back into
 /// the tests, so this fails until the reader takes its values as an input instead.
 #[test]
 fn only_the_process_entry_reads_the_slot_variables() {

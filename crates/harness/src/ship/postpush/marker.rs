@@ -54,7 +54,7 @@ impl Marker {
     pub(super) fn render(&self) -> String {
         format!(
             "{TAG}\n<!-- {} -->\nReview passed on `{}` ({}/10, {} tier). `make ship` and `make review-pr` keep this \
-             comment current; when `dev` moves and the pull request is rebased, \
+             comment current; when `dev` moves and the pull request is updated (dev merged in), \
              `aoe-harness carry-review` carries `harness/review` to the new head only if the \
              patch and the review policy are unchanged (docs/post-push.md).",
             serde_json::to_string(self).unwrap_or_default(),

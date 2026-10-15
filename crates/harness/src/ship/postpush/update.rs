@@ -104,7 +104,7 @@ pub(super) fn update(root: &Path, max: usize) -> Result<()> {
     update_within(root, max, HEAD_TIMEOUT, POLL_INTERVAL)
 }
 
-/// [`update`] with the bound on how long a rebased head may take to appear.
+/// [`update`] with the bound on how long an updated head may take to appear.
 pub(super) fn update_within(
     root: &Path,
     max: usize,
@@ -141,7 +141,7 @@ pub(super) fn update_within(
         match rebased {
             Ok(_) => match finish_rebase(root, &repository, &pr, timeout, interval) {
                 Ok(()) => println!(
-                    "update-prs: #{} rebased onto {BASE} (was {}), review checked and CI dispatched",
+                    "update-prs: #{} updated (dev merged in) (was {}), review checked and CI dispatched",
                     pr.number,
                     short(&pr.head)
                 ),
@@ -226,7 +226,7 @@ fn moved_head(
         let remaining = timeout.saturating_sub(start.elapsed());
         if remaining.is_zero() {
             return Err(format!(
-                "head did not move from {} within {} seconds after the rebase was accepted",
+                "head did not move from {} within {} seconds after the dev merge was accepted",
                 short(&pr.head),
                 timeout.as_secs()
             )
@@ -277,7 +277,7 @@ fn conflict(root: &Path, repository: &str, pr: &Waiting, files: &[String]) -> Re
         pr,
         CONFLICT_TAG,
         &format!(
-            "This pull request could not be rebased onto `{BASE}` ({} files conflict: {list}). \
+            "This pull request could not be updated (dev merged in) from `{BASE}` ({} files conflict: {list}). \
              It is left as it is: rebase it, resolve the conflict, and ship again.",
             files.len()
         ),
@@ -294,7 +294,7 @@ fn failure(root: &Path, repository: &str, pr: &Waiting, why: &str) -> Result<()>
         FAILURE_TAG,
         &format!(
             "Updating this pull request onto `{BASE}` failed: {why}. \
-         The rebase may already have landed; resolve this failure and retry the failed step."
+         The dev merge may already have landed; resolve this failure and retry the failed step."
         ),
     )?;
     println!("update-prs: #{} update failed: {why}", pr.number);

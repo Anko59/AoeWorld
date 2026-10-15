@@ -30,10 +30,12 @@ mod tests;
 
 use crate::gates::registry::{Cadence, Registry};
 use evidence::{Evidence, Verdict};
+use git::publish::push;
+#[cfg(test)]
+use git::publish::{caller_chose_ssh, push_command, ssh_keepalive};
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -77,7 +79,7 @@ pub(crate) enum Commands {
     MetricRegressions,
     /// Carry `harness/review` to the rebased head of pull request CARRY_PR when its patch and the policy are unchanged.
     CarryReview,
-    /// Rebase the open pull requests with auto-merge that are behind dev (UPDATE_MAX_PRS).
+    /// Update the open pull requests with auto-merge that are behind dev (UPDATE_MAX_PRS).
     UpdatePrs,
     /// Write and print the metrics snapshot of HEAD or METRICS_REV.
     Metrics,
@@ -288,6 +290,8 @@ pub(crate) fn ship_with(
         );
     }
     let branch = git::branch(root)?;
+    let push_tip = git::lease::tracking(root, &branch);
+    let started_head = git::git(root, &["rev-parse", "HEAD"])?;
     stack::refuse_base(&options.base, &branch)?;
     // Suites, the review diff, test-first and metrics all measure the change
     // against the selected base (origin, or an explicitly local parent).
@@ -365,7 +369,21 @@ pub(crate) fn ship_with(
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),
     };
-    push(root, &evidence, options.force, lease.as_deref())?;
+    let expected = lease
+        .as_deref()
+        .or(options.force.then_some(push_tip.as_deref().unwrap_or("")));
+    let refreshed = match expected {
+        Some(tip) => git::lease::refresh(root, &evidence.branch, tip, &started_head),
+        None => git::lease::refresh_default(
+            root,
+            &evidence.branch,
+            &started_head,
+            &evidence.head,
+            push_tip.is_some(),
+        ),
+    }
+    .map_err(|error| format!("git push failed: {error}"))?;
+    push(root, &evidence, Some(&refreshed))?;
     if !options.no_pr {
         let mut options = options.clone();
         if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
@@ -434,59 +452,6 @@ pub(crate) fn ship_with(
         }
     }
     Ok(evidence)
-}
-
-/// Git opens the SSH connection before the pre-push hook runs `make
-/// preflight` for several minutes; without keepalives GitHub drops the idle
-/// connection and the push dies silently (#209). A caller's own SSH
-/// command (`GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand`) wins.
-fn ssh_keepalive(caller_chose_ssh: bool) -> Option<&'static str> {
-    (!caller_chose_ssh).then_some("ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40")
-}
-
-fn caller_chose_ssh(root: &Path) -> bool {
-    std::env::var_os("GIT_SSH_COMMAND").is_some()
-        || std::env::var_os("GIT_SSH").is_some()
-        || git::git(root, &["config", "--get", "core.sshCommand"]).is_ok()
-}
-
-/// `git push` naming the evidenced commit, so the pre-push hook can reuse
-/// this ship's preflight evidence instead of running it again.
-fn push_command(root: &Path, head: &str) -> Command {
-    let mut command = Command::new("git");
-    command.arg("-C").arg(root).arg("push");
-    command.env(prepush::ENV, head);
-    command
-}
-
-fn push(root: &Path, evidence: &Evidence, force: bool, lease: Option<&str>) -> Result<()> {
-    // The remote is fixed and the refspec names the evidenced branch only.
-    let refspec = format!("{}:refs/heads/{}", evidence.head, evidence.branch);
-    let mut command = push_command(root, &evidence.head);
-    if let Some(from) = lease {
-        // A re-check rebase of a branch already pushed: overwrite only `from`.
-        command.arg(format!(
-            "--force-with-lease=refs/heads/{}:{from}",
-            evidence.branch
-        ));
-    } else if force {
-        command.arg("--force-with-lease");
-    }
-    if let Some(ssh) = ssh_keepalive(caller_chose_ssh(root)) {
-        command.env("GIT_SSH_COMMAND", ssh);
-    }
-    command.args(["origin", &refspec]);
-    git::remote::run_visible(&mut command)?;
-    // Best effort: a commit-id refspec cannot set the upstream itself.
-    let _ = git::git(
-        root,
-        &[
-            "branch",
-            "--set-upstream-to",
-            &format!("origin/{}", evidence.branch),
-        ],
-    );
-    Ok(())
 }
 
 pub(crate) use github::gh;

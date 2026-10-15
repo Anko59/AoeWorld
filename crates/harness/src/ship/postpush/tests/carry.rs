@@ -121,6 +121,10 @@ fn the_carry_command_posts_success_on_the_new_head_only_for_an_unchanged_patch()
         )),
         "{calls}"
     );
+    assert!(
+        calls.contains("`harness/review` was carried to"),
+        "a successful carry clears a refusal on this head: {calls}"
+    );
     // The same marker, a changed patch: no status, one comment saying why.
     world.clear();
     std::fs::write(world.root.join("README.md"), "z\n").unwrap();
