@@ -473,4 +473,4 @@ mod far_orders;
 mod physical_movement;
 mod routes;
 
-mod economy;
+pub(crate) mod economy;

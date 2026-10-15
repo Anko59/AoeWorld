@@ -2,7 +2,7 @@ use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_map::{ResourceKind, ResourceNode};
 
-mod fixture;
+pub(crate) mod fixture;
 mod gathering;
 mod training;
 mod village_routes;

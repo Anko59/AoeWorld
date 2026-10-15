@@ -7,6 +7,9 @@ use crate::{GameUnit, GameWorld, GameWorldError, PreparedResourceDepletion, Terr
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::{ResourceKind, ResourceNode};
 
+#[cfg(test)]
+mod tests;
+
 impl GameWorld {
     pub fn resource_remaining(&self, id: u64) -> Option<u16> {
         let Terrain::Map { generator, overlay } = &self.terrain else {

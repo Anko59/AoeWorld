@@ -1,6 +1,6 @@
 use aoe_map::*;
 
-pub(super) fn flat_fixture(ocean: bool) -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
+pub(crate) fn flat_fixture(ocean: bool) -> (MapPackage, Vec<ElevationPage>, Vec<WaterPage>) {
     let zero = ElevationPage {
         level: 0,
         x: 0,
