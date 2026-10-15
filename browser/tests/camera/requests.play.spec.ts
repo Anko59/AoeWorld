@@ -92,6 +92,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
           1, // Scout
           0, // Idle
           0, // No carried resource
+          0, // No gathering job
           0, // Players
           0, // Buildings
         ]),

@@ -53,6 +53,7 @@ export async function fiveVillagerFixture(page: Page) {
         kind,
         0,
         0,
+        0,
       ];
       const units = [
         unit(0, 8195.5, 8190.5, 1),

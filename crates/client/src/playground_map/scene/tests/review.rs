@@ -154,6 +154,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
                 kind: aoe_protocol::UnitKind::Scout,
                 task: aoe_protocol::UnitTask::Idle,
                 carried: None,
+                gathering: None,
             },
         )]),
         presentation: Default::default(),
@@ -183,7 +184,7 @@ async fn a_lumberjack_keeps_chopping_with_a_partial_load_until_returning() {
         kind: ResourceKind::Wood,
         amount: 1,
     });
-    client.village.set_job(id, Some(ResourceKind::Wood));
+    client.units.get_mut(&id).unwrap().gathering = Some(ResourceKind::Wood);
     assert_eq!(
         units(&client, &scene)[0].kind,
         aoe_rendering::SceneUnitKind::VillagerWorking

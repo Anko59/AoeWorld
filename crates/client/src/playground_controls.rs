@@ -223,7 +223,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             subscribe(&mut client);
         }
     });
-    canvas.add_event_listener_with_callback("pointermove", onmove.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("pointermove", onmove.as_ref().unchecked_ref())?;
     onmove.forget();
 
     let released = shared.clone();
@@ -262,7 +265,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let onleave = Closure::<dyn FnMut(PointerEvent)>::new(move |_| {
         left.borrow_mut().pointer = None;
     });
-    canvas.add_event_listener_with_callback("pointerleave", onleave.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("pointerleave", onleave.as_ref().unchecked_ref())?;
     onleave.forget();
     let context = Closure::<dyn FnMut(Event)>::new(move |event: Event| event.prevent_default());
     canvas.add_event_listener_with_callback("contextmenu", context.as_ref().unchecked_ref())?;

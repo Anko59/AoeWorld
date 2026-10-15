@@ -3,8 +3,7 @@ use super::*;
 use crate::SceneUnitKind;
 
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
-    let moving = unit.moving || unit.kind == SceneUnitKind::VillagerWorking;
-    let (frames, stride) = match unit.kind {
+    let (frames, stride, animated) = match unit.kind {
         SceneUnitKind::Scout => (
             if unit.moving {
                 &art.walking
@@ -12,9 +11,12 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
                 &art.standing
             },
             10,
+            unit.moving,
         ),
-        SceneUnitKind::VillagerWorking if art.village[2].len() == 75 => (&art.village[2], 15),
-        SceneUnitKind::VillagerCarrying if art.village[3].len() == 75 => (&art.village[3], 15),
+        SceneUnitKind::VillagerWorking if art.village[2].len() == 75 => (&art.village[2], 15, true),
+        SceneUnitKind::VillagerCarrying if art.village[3].len() == 75 => {
+            (&art.village[3], 15, unit.moving)
+        }
         _ => (
             if unit.moving {
                 &art.village[1]
@@ -22,9 +24,10 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
                 &art.village[0]
             },
             15,
+            unit.moving,
         ),
     };
-    (frames.len() >= stride * 5).then_some((frames, stride, moving))
+    (frames.len() >= stride * 5).then_some((frames, stride, animated))
 }
 
 pub(super) fn marker(

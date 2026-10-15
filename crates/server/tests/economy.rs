@@ -105,8 +105,15 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
                     ..
                 } => accepted += 1,
                 GameplayServerMessage::Tick {
-                    changed_players, ..
+                    changed_players,
+                    changed_units,
+                    ..
                 } => {
+                    for unit in changed_units {
+                        if unit.id == villager.id {
+                            assert_eq!(unit.gathering, Some(aoe_protocol::ResourceKind::Wood));
+                        }
+                    }
                     for player in changed_players {
                         if player.player == PlayerId(0) {
                             if player.stockpile.wood != wood {
@@ -156,7 +163,7 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
     std::fs::write(directory.join("headless.log"), log.join("\n") + "\n").unwrap();
     service.resync(id, 2).await;
     let messages = drain(&mut rx);
-    assert!(messages.iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision: 2, units, players, buildings, .. } if units.len() == 5 && players[0].stockpile.wood == wood && buildings[0].training_queue.is_empty())));
+    assert!(messages.iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision: 2, units, players, buildings, .. } if units.len() == 5 && units.iter().find(|unit| unit.id == villager.id).unwrap().gathering == Some(aoe_protocol::ResourceKind::Wood) && players[0].stockpile.wood == wood && buildings[0].training_queue.is_empty())));
 }
 
 #[path = "economy/wire_tests.rs"]

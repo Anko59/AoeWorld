@@ -417,3 +417,8 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
     let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
     (row, matches!(facing, 1..=3))
 }
+
+pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit) -> bool {
+    unit.kind != crate::SceneUnitKind::TownCenter
+        && village::frames(art, unit).is_some_and(|(_, _, animated)| animated)
+}

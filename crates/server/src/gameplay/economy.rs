@@ -53,7 +53,7 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
         aoe_map::ResourceKind::Stone => ResourceKind::Stone,
     }
 }
-pub(super) fn unit_state(unit: &GameUnit) -> GameplayUnitState {
+pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
     GameplayUnitState {
         id: unit.id,
         player: unit.player,
@@ -69,6 +69,7 @@ pub(super) fn unit_state(unit: &GameUnit) -> GameplayUnitState {
             aoe_simulation::UnitTask::Carrying => UnitTask::Carrying,
             aoe_simulation::UnitTask::Returning => UnitTask::Returning,
         },
+        gathering: world.gathering_kind(unit.id).map(wire_resource),
         carried: unit.carried.map(|load| CarriedResource {
             kind: wire_resource(load.kind),
             amount: load.amount,

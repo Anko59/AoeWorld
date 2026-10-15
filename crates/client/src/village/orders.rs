@@ -64,7 +64,6 @@ pub(in super::super) fn stop(client: &mut Client) {
                     destination,
                 },
             );
-            client.village.set_job(id, None);
         }
     }
 }
@@ -110,16 +109,14 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         let sequence = client.next_sequence;
         let message = if unit.kind == UnitKind::Villager
             && !client.village.move_cursor
-            && let Some((resource_id, kind)) = resource
+            && let Some((resource_id, _)) = resource
         {
-            client.village.set_job(id, Some(kind));
             Message::GatherOrder {
                 sequence,
                 entity_id: id,
                 resource_id,
             }
         } else {
-            client.village.set_job(id, None);
             Message::MoveOrder {
                 sequence,
                 entity_id: id,

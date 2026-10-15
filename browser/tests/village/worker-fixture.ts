@@ -55,6 +55,7 @@ export async function workerFixture(page: Page) {
         kind,
         task,
         ...load,
+        ...(task === 2 ? [1, 2] : [0]),
       ];
       socket.send(
         Buffer.from([

@@ -59,22 +59,11 @@ pub(in super::super) fn update(client: &Client) {
         if selected && unit.kind == UnitKind::Villager && gather_focus.is_none() {
             gather_focus = Some(position);
         }
-        let resource = if unit.kind == UnitKind::Villager
-            && matches!(
-                unit.task,
-                UnitTask::Gathering | UnitTask::Carrying | UnitTask::Returning
-            ) {
-            resource_kind(client, unit.id)
-        } else {
-            unit.carried.map(|load| load.kind)
-        };
+        let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         if unit.player == owner
             && unit.kind == UnitKind::Villager
-            && matches!(
-                unit.task,
-                UnitTask::Gathering | UnitTask::Carrying | UnitTask::Returning
-            )
-            && let Some(kind) = resource
+            && matches!(unit.task, UnitTask::Gathering | UnitTask::Returning)
+            && let Some(kind) = resource_kind(client, unit.id)
         {
             values[6 + match kind {
                 ResourceKind::Wood => 0,

@@ -104,6 +104,7 @@ async function feedbackWorld(
             1, // Scout
             0, // Idle
             0, // No carried resource
+            0, // No gathering job
             0, // Players
             0, // Buildings
           ]),

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
 import { workerFixture } from "./worker-fixture.js";
+import { freshHud } from "./resources.js";
 
 for (const [edge, y] of [
   ["top", 1],
@@ -13,12 +14,17 @@ for (const [edge, y] of [
     await page.setViewportSize({ width: 1280, height: 720 });
     await gameAssets(page);
     await fiveVillagerFixture(page);
-    await page.goto("/");
+    await page.goto("/#x=8192&y=8192&zoom=.35");
     await expect(page.locator("#population")).toHaveText("6/10");
     const camera = () => page.locator("#minimap").getAttribute("data-camera-y");
-    const before = await camera();
+    await page.mouse.move(640, 360);
+    await freshHud(page);
+    await freshHud(page);
+    const before = Number(await camera());
     await page.mouse.move(640, y);
-    await expect.poll(camera).not.toBe(before);
+    const delta = () => camera().then((value) => Number(value) - before);
+    if (edge === "top") await expect.poll(delta).toBeLessThan(-0.5);
+    else await expect.poll(delta).toBeGreaterThan(0.5);
     await page.mouse.move(640, 360);
     await page.locator("#menu-toggle").click();
     await expect(page.getByRole("dialog", { name: "Game menu" })).toBeVisible();

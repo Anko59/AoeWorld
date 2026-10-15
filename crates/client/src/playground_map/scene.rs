@@ -233,9 +233,10 @@ pub(in super::super) fn units(
             aoe_rendering::SceneUnit {
                 kind: if unit.kind == aoe_protocol::UnitKind::Scout {
                     aoe_rendering::SceneUnitKind::Scout
-                } else if unit
-                    .carried
-                    .is_some_and(|load| load.kind == aoe_protocol::ResourceKind::Wood)
+                } else if unit.task == aoe_protocol::UnitTask::Returning
+                    && unit
+                        .carried
+                        .is_some_and(|load| load.kind == aoe_protocol::ResourceKind::Wood)
                 {
                     aoe_rendering::SceneUnitKind::VillagerCarrying
                 } else if unit.task == aoe_protocol::UnitTask::Gathering

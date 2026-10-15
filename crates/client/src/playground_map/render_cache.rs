@@ -36,6 +36,7 @@ impl<S> RenderFrameCache<S> {
     fn needs_render(
         &self,
         scene: &Rc<S>,
+        art: &aoe_rendering::GameArt,
         units: &[SceneUnit],
         resources: &[SceneResource],
         grid: bool,
@@ -48,12 +49,13 @@ impl<S> RenderFrameCache<S> {
             || previous.units.as_slice() != units
             || previous.resources.as_slice() != resources
             || previous.grid != grid
-            || previous.animation != moving_animation(units, animation)
+            || previous.animation != moving_animation(art, units, animation)
     }
 
     fn record_success(
         &mut self,
         scene: &Rc<S>,
+        art: &aoe_rendering::GameArt,
         units: &[SceneUnit],
         resources: &[SceneResource],
         grid: bool,
@@ -64,15 +66,19 @@ impl<S> RenderFrameCache<S> {
             units: units.to_vec(),
             resources: resources.to_vec(),
             grid,
-            animation: moving_animation(units, animation),
+            animation: moving_animation(art, units, animation),
         });
     }
 }
 
-fn moving_animation(units: &[SceneUnit], animation: usize) -> Option<usize> {
+fn moving_animation(
+    art: &aoe_rendering::GameArt,
+    units: &[SceneUnit],
+    animation: usize,
+) -> Option<usize> {
     units
         .iter()
-        .any(|unit| unit.moving || unit.kind == aoe_rendering::SceneUnitKind::VillagerWorking)
+        .any(|unit| aoe_rendering::scene_unit_animates(art, *unit))
         .then_some(animation)
 }
 
@@ -87,7 +93,7 @@ pub(in super::super) fn render_if_changed(
 ) -> Result<bool, String> {
     if !client
         .rendered_frame
-        .needs_render(scene, units, resources, grid, animation)
+        .needs_render(scene, &client.art, units, resources, grid, animation)
     {
         return Ok(false);
     }
@@ -110,7 +116,7 @@ pub(in super::super) fn render_if_changed(
     }
     client
         .rendered_frame
-        .record_success(scene, units, resources, grid, animation);
+        .record_success(scene, &client.art, units, resources, grid, animation);
     client.capture.frame = client.capture.frame.saturating_add(1);
     Ok(true)
 }

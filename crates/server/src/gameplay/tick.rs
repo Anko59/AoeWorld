@@ -84,7 +84,7 @@ impl GameplayService {
             }
             let current = current
                 .iter()
-                .map(|unit| (unit.id, unit_state(unit)))
+                .map(|unit| (unit.id, unit_state(&world, unit)))
                 .collect::<BTreeMap<_, _>>();
             updates.push((
                 session_id,

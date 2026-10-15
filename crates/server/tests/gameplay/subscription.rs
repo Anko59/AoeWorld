@@ -77,6 +77,7 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         kind: aoe_protocol::UnitKind::Scout,
         task: aoe_protocol::UnitTask::Idle,
         carried: None,
+        gathering: None,
     };
     let messages = [
         GameplayServerMessage::Tick {
