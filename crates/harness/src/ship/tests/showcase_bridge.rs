@@ -9,13 +9,43 @@ use std::{
     thread,
 };
 
+/// A Unix socket path is limited to 108 bytes (SUN_LEN); with this margin the
+/// socket name and the nested build directories always fit.
+const SOCKET_ROOT_LIMIT: usize = 60;
+
+/// A deep checkout (the nightly mutation run copies the tree) would push the
+/// socket past the limit; the system temp directory is short.
+fn socket_root(candidate: std::path::PathBuf) -> std::path::PathBuf {
+    if candidate.as_os_str().len() > SOCKET_ROOT_LIMIT {
+        std::env::temp_dir()
+    } else {
+        candidate
+    }
+}
+
+#[test]
+fn a_deep_checkout_puts_bridge_sockets_in_the_system_temp_directory() {
+    let deep = Path::new("/").join("d".repeat(SOCKET_ROOT_LIMIT + 1));
+    assert_eq!(socket_root(deep), std::env::temp_dir());
+    let short = Path::new("/w/.cache/tmp").to_path_buf();
+    assert_eq!(socket_root(short.clone()), short);
+}
+
 fn work() -> tempfile::TempDir {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/tmp");
     std::fs::create_dir_all(&root).unwrap();
-    tempfile::Builder::new()
+    let root = socket_root(root.canonicalize().unwrap());
+    let dir = tempfile::Builder::new()
         .prefix("bridge-")
-        .tempdir_in(root.canonicalize().unwrap())
-        .unwrap()
+        .tempdir_in(root)
+        .unwrap();
+    let longest = dir.path().join("before.sock");
+    assert!(
+        longest.as_os_str().len() < 100,
+        "socket path too long: {}",
+        longest.display()
+    );
+    dir
 }
 
 /// A loopback app that echoes each connection until its peer stops writing.
