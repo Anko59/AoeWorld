@@ -22,6 +22,7 @@ impl GameWorld {
     pub(super) fn initialize_starting_kit(
         &mut self,
         footprint: TileRect,
+        root: TileCoord,
     ) -> Result<(), EconomyError> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Ok(());
@@ -35,9 +36,12 @@ impl GameWorld {
             .into_iter()
             .filter(|t| self.tile_passable(*t))
             .collect();
-        let root = *exits.first().ok_or(EconomyError::InvalidFootprint)?;
         let graph = self.starting_graph(center, root);
         let initial = reachable(&graph, root, &BTreeSet::new());
+        let exits: Vec<_> = exits
+            .into_iter()
+            .filter(|tile| initial.contains(tile))
+            .collect();
         let mut natural = Vec::new();
         for tile in initial.iter().flat_map(|tile| adjacent(*tile)) {
             if distance_squared(tile, center) <= (REACH as u64).pow(2)
@@ -74,46 +78,56 @@ impl GameWorld {
                 )
             });
             let mut selected = None;
-            for anchor in anchors.into_iter().take(ANCHOR_BUDGET) {
-                for rotate in [false, true] {
-                    let tiles: Vec<_> = (0..count)
-                        .map(|i| {
-                            let (x, y) = ((i / 2) as i32 - (count / 4) as i32, (i % 2) as i32);
-                            TileCoord::new(
-                                anchor.x + if rotate { y } else { x },
-                                anchor.y + if rotate { x } else { y },
-                            )
-                        })
-                        .collect();
-                    if tiles.iter().any(|tile| {
-                        !initial.contains(tile)
-                            || blocked.contains(tile)
-                            || !self.tile_free(*tile)
-                            || distance_squared(*tile, center) < 25
-                    }) {
-                        continue;
+            for cluster_size in [count, 1] {
+                for anchor in anchors.iter().copied().take(ANCHOR_BUDGET) {
+                    for rotate in [false, true] {
+                        let tiles: Vec<_> = (0..cluster_size)
+                            .map(|i| {
+                                let (x, y) =
+                                    ((i / 2) as i32 - (cluster_size / 4) as i32, (i % 2) as i32);
+                                TileCoord::new(
+                                    anchor.x + if rotate { y } else { x },
+                                    anchor.y + if rotate { x } else { y },
+                                )
+                            })
+                            .collect();
+                        if tiles.iter().any(|tile| {
+                            !initial.contains(tile)
+                                || blocked.contains(tile)
+                                || !self.tile_free(*tile)
+                                || distance_squared(*tile, center)
+                                    < if cluster_size == 1 { 9 } else { 25 }
+                        }) {
+                            continue;
+                        }
+                        let mut trial = blocked.clone();
+                        trial.extend(&tiles);
+                        let reached = reachable(&graph, root, &trial);
+                        if !exits.iter().all(|tile| reached.contains(tile))
+                            || !natural
+                                .iter()
+                                .chain(planned.iter())
+                                .map(|n: &ResourceNode| n.tile)
+                                .chain(tiles.iter().copied())
+                                .all(|tile| accessible(tile, &reached))
+                        {
+                            continue;
+                        }
+                        selected = Some((tiles, trial));
+                        break;
                     }
-                    let mut trial = blocked.clone();
-                    trial.extend(&tiles);
-                    let reached = reachable(&graph, root, &trial);
-                    if !exits.iter().all(|tile| reached.contains(tile))
-                        || !natural
-                            .iter()
-                            .chain(planned.iter())
-                            .map(|n: &ResourceNode| n.tile)
-                            .chain(tiles.iter().copied())
-                            .all(|tile| accessible(tile, &reached))
-                    {
-                        continue;
+                    if selected.is_some() {
+                        break;
                     }
-                    selected = Some((tiles, trial));
-                    break;
                 }
                 if selected.is_some() {
                     break;
                 }
             }
-            let (tiles, trial) = selected.ok_or(EconomyError::InvalidFootprint)?;
+            // Tiny valid valleys still start when a full cluster cannot fit.
+            let Some((tiles, trial)) = selected else {
+                continue;
+            };
             blocked = trial;
             for tile in tiles {
                 planned.push(

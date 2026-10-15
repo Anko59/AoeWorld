@@ -18,7 +18,7 @@ use std::{path::Path, sync::Arc};
 const SAHARA_CENTER_E7: (i32, i32) = (250_000_000, -50_000_000);
 const SOURCE_LOCK_ID: &str = "synthetic-flat-qualification-fixture";
 const PRIMARY_SAMPLE_AXIS: u16 = 1_024;
-const FIXED_FIXTURE_SEED: u64 = 2;
+const FIXED_FIXTURE_SEED: u64 = 6;
 
 struct PersistedFixture {
     package: MapPackage,
@@ -281,7 +281,7 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     .expect("complete synthetic offline qualification");
 
     assert_eq!(report.package_hash, primary_hash);
-    assert_eq!(report.start_tile, [24_999, 24_999]);
+    assert_eq!(report.start_tile, [25_022, 26_586]);
     assert_eq!(report.source_lock_ids, [SOURCE_LOCK_ID.to_owned()]);
     assert_eq!(report.indexed_page_count, 1_041);
     assert_eq!(report.page_churn_unique_count, report.indexed_page_count);
@@ -298,12 +298,12 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     assert_eq!(
         centered_resource,
         ResourceNode {
-            id: 13_089_948_530,
-            tile: TileCoord::new(25_017, 24_967),
-            kind: aoe_map::ResourceKind::Stone,
-            object: aoe_map::ObjectKind::StoneDeposit,
-            initial_amount: 350,
-            visual_variant: 57,
+            id: 13_090_472_792,
+            tile: TileCoord::new(25_004, 24_968),
+            kind: aoe_map::ResourceKind::Gold,
+            object: aoe_map::ObjectKind::GoldDeposit,
+            initial_amount: 800,
+            visual_variant: 183,
         }
     );
     assert_eq!(report.resource_id, centered_resource.id);
@@ -379,7 +379,7 @@ fn synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay() 
         StartSearchResult::Found(tile) => tile,
         other => panic!("synthetic package should find an ordinary start: {other:?}"),
     };
-    assert_eq!(start, TileCoord::new(24_999, 24_999));
+    assert_eq!(start, TileCoord::new(25_022, 26_586));
     let waypoints = super::super::geographic::planned_waypoints(start)
         .expect("fixed 100 km route stays inside map");
     assert_eq!(waypoints.len(), 5);

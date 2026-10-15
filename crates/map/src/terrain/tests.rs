@@ -150,7 +150,7 @@ fn fixed_flat_patch_rejects_raw_resource_blockers_and_accepts_open_neighbor() {
     let terrain = flat_generator([11; 32], 0);
     let detail_key = super::resources::detail_key(&terrain);
     let (root, value, count) =
-        super::resources::patch_origin(detail_key, b"gold-patch-v2", 0, 0, 192, 96);
+        super::resources::patch_origin(detail_key, b"gold-patch-v2", 0, 0, 384, 192);
     assert_eq!(count, 6);
     let center = terrain.tile_at(root).expect("flat patch center");
     assert!(super::resources::candidate_unreserved(&terrain, root, center).is_some());

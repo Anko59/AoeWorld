@@ -84,3 +84,22 @@ placement/collision, replay, wire fixtures/bounds and service lifecycle. The
 headless test records its observed deposits and training in
 `.cache/economy/headless.log` for the local narrated demonstration.
 Synthetic evidence does not qualify finished RTS performance or hardware.
+
+Start activation also surveys the whole map on a bounded coarse lattice,
+ranking connected sampled lowlands before elevation and centre distance.
+Clearance, shore avoidance, gentle slopes and reachable area relax in stages;
+physical terrain and resources never become passable. A cancellable exact
+fallback checks at most every possible 4×4 origin, and refuses only when no
+footprint has room beside it for the scout and villagers. The coarse lattice
+is a preference, not a claim of a certified route between distant samples.
+
+Natural ore patches use one jittered cluster per 384×192 tiles for gold and
+192×96 for stone (at most eight candidates per cell, before terrain/access
+filtering). Decorative rocks retain relief influence, with less lowland dirt
+clutter and small loose-rock art; they carry no resources. Deadwood dressing
+uses cut stumps and fallen logs, excluding upright snag art. Every live
+resource blocks navigation; gathering stands beside it, and a zero remaining
+amount removes the sprite and collision, including after reconnect.
+
+Source river station intervals are not crossing evidence. Rendered river
+water is impassable; no bridge or ford is inferred from those intervals.

@@ -3,7 +3,7 @@ use super::{EconomyError, VILLAGE_RULES, placement::distance_squared};
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{TileCoord, TileRect};
 use aoe_map::{GroundMaterial, ResourceKind, ResourceNode, Tile, WaterKind};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 const SAMPLE_BUDGET: usize = 12_000;
 const SITE_BUDGET: usize = 384;
@@ -12,12 +12,16 @@ type Samples = BTreeMap<TileCoord, Option<(Tile, Option<ResourceNode>)>>;
 impl GameWorld {
     pub(super) fn rank_start_sites(
         &self,
-        candidates: &mut [TileCoord],
+        candidates: &mut Vec<TileCoord>,
         start: TileCoord,
     ) -> Result<(), EconomyError> {
         let Terrain::Map { generator, .. } = &self.terrain else {
             return Ok(());
         };
+        // Local tree/shore ranking must not jump across water or cliffs into
+        // a disconnected bowl after the global survey selected a valley.
+        let reachable = self.start_region(start);
+        candidates.retain(|tile| reachable.contains(tile));
         let side = VILLAGE_RULES.town_center_side;
         let mut samples = Samples::new();
         let mut scores = BTreeMap::new();
@@ -88,5 +92,37 @@ impl GameWorld {
             (!scores.contains_key(tile), shore, no_wood, original[tile])
         });
         Ok(())
+    }
+    fn start_region(&self, start: TileCoord) -> BTreeSet<TileCoord> {
+        let mut seeds = (-3_i32..=3)
+            .flat_map(|dy| {
+                (-3_i32..=3).map(move |dx| {
+                    TileCoord::new(start.x.saturating_add(dx), start.y.saturating_add(dy))
+                })
+            })
+            .collect::<Vec<_>>();
+        seeds.sort_by_key(|tile| (distance_squared(*tile, start), tile.y, tile.x));
+        let Some(root) = seeds.into_iter().find(|tile| self.tile_passable(*tile)) else {
+            return BTreeSet::new();
+        };
+        let radius = VILLAGE_RULES.start_search_radius_tiles + 4;
+        let mut reached = BTreeSet::from([root]);
+        let mut queue = VecDeque::from([root]);
+        while let Some(tile) = queue.pop_front() {
+            for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
+                let next = TileCoord::new(tile.x.saturating_add(dx), tile.y.saturating_add(dy));
+                if next.x.abs_diff(start.x) > radius as u32
+                    || next.y.abs_diff(start.y) > radius as u32
+                    || reached.contains(&next)
+                    || !self.tile_passable(next)
+                    || !self.terrain.crossable(tile, next, self.config)
+                {
+                    continue;
+                }
+                reached.insert(next);
+                queue.push_back(next);
+            }
+        }
+        reached
     }
 }

@@ -85,15 +85,12 @@ pub(super) fn sample_base_tile_with_cliff(
         surface_kind.corner_game_height_levels = [piece.top_level; 4];
         game_height_level = piece.top_level;
     }
-    let ford = sample.ford && surface_kind.walkable();
-    let material = if ford {
-        GroundMaterial::Ford
-    } else {
-        match water {
-            WaterKind::None => material_for(biome.0, geographic_height_centimeters),
-            WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
-            WaterKind::Shallow => GroundMaterial::Shore,
-        }
+    // Source river lines do not establish a crossing. Until a supported
+    // crossing has matching art, rendered water is always impassable.
+    let material = match water {
+        WaterKind::None => material_for(biome.0, geographic_height_centimeters),
+        WaterKind::River | WaterKind::Lake | WaterKind::Ocean => GroundMaterial::Water,
+        WaterKind::Shallow => GroundMaterial::Shore,
     };
     generator
         .river_queries
@@ -112,7 +109,7 @@ pub(super) fn sample_base_tile_with_cliff(
         water_provenance,
         hydrology_observation,
         modern_land_cover_class,
-        passable: (water == WaterKind::None || ford)
+        passable: water == WaterKind::None
             && material != GroundMaterial::Ice
             && surface_kind.walkable(),
     })

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn provider_cliff_cells_spare_channels_fords_and_textured_banks() {
+fn provider_cliff_cells_spare_blocking_channels_and_textured_banks() {
     // Ratio one: a 240 cm rise across roughly eight two-metre tiles is about fifteen percent.
     let generator = crossing_with_height(
         false,
@@ -56,7 +56,7 @@ fn provider_cliff_cells_spare_channels_fords_and_textured_banks() {
         );
     }
     assert!(
-        rivers > 1000 && fords > 50 && banks > 400 && cliffs > 50,
+        rivers > 1000 && fords == 0 && banks > 400 && cliffs > 50,
         "rivers={rivers}, fords={fords}, banks={banks}, cliffs={cliffs}"
     );
 }

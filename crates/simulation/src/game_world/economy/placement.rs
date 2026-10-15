@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 impl GameWorld {
     pub fn tile_passable(&self, tile: TileCoord) -> bool {
@@ -158,7 +158,7 @@ impl GameWorld {
                 origin,
                 TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
             );
-            let preserve_start = start_is_free
+            let mut preserve_start = start_is_free
                 && !rect.contains(start)
                 && distance_squared(
                     start,
@@ -169,10 +169,11 @@ impl GameWorld {
                 Err(EconomyError::InvalidFootprint) => continue,
                 Err(error) => return Err(error),
             }
-            let perimeter = perimeter(rect)
-                .into_iter()
-                .filter(|tile| self.tile_free(*tile) && (!preserve_start || *tile != start))
-                .collect::<Vec<_>>();
+            let mut perimeter = self.village_spawns(rect, preserve_start.then_some(start));
+            if preserve_start && perimeter.len() < usize::from(VILLAGE_RULES.starting_villagers) {
+                preserve_start = false;
+                perimeter = self.village_spawns(rect, None);
+            }
             let required =
                 usize::from(VILLAGE_RULES.starting_villagers) + usize::from(!preserve_start);
             if perimeter.len() >= required {
@@ -200,11 +201,70 @@ impl GameWorld {
         {
             self.spawn_villager(player, position(tile)?)?;
         }
-        self.initialize_starting_kit(TileRect::new(
-            origin,
-            TileCoord::new(origin.x + side, origin.y + side),
-        ))?;
+        self.initialize_starting_kit(
+            TileRect::new(origin, TileCoord::new(origin.x + side, origin.y + side)),
+            scout_tile,
+        )?;
         Ok(scout)
+    }
+    fn village_spawns(&self, footprint: TileRect, scout: Option<TileCoord>) -> Vec<TileCoord> {
+        let edge = perimeter(footprint);
+        let roots = scout.map_or_else(|| edge.clone(), |tile| vec![tile]);
+        let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
+        let mut surveyed = BTreeSet::<TileCoord>::new();
+        let mut best = Vec::new();
+        for root in roots {
+            if !self.tile_passable(root) || surveyed.contains(&root) {
+                continue;
+            }
+            let mut reached = BTreeSet::from([root]);
+            let mut queue = VecDeque::from([root]);
+            while let Some(tile) = queue.pop_front() {
+                for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
+                    let next = TileCoord::new(tile.x + dx, tile.y + dy);
+                    if next.x.abs_diff(center.x) > 8
+                        || next.y.abs_diff(center.y) > 8
+                        || footprint.contains(next)
+                        || reached.contains(&next)
+                        || !self.tile_passable(next)
+                        || !self.terrain.crossable(tile, next, self.config)
+                    {
+                        continue;
+                    }
+                    reached.insert(next);
+                    queue.push_back(next);
+                }
+            }
+            surveyed.extend(&reached);
+            let mut free = reached
+                .into_iter()
+                .filter(|tile| Some(*tile) != scout && self.tile_free(*tile))
+                .collect::<Vec<_>>();
+            free.sort_by_key(|tile| {
+                (
+                    !edge.contains(tile),
+                    distance_squared(*tile, center),
+                    tile.y,
+                    tile.x,
+                )
+            });
+            // Keep the original canonical perimeter order when it has room.
+            let mut perimeter = edge
+                .iter()
+                .copied()
+                .filter(|tile| free.contains(tile))
+                .collect::<Vec<_>>();
+            perimeter.extend(free.into_iter().filter(|tile| !edge.contains(tile)));
+            if perimeter.len() > best.len() {
+                best = perimeter;
+            }
+            if best.len()
+                >= usize::from(VILLAGE_RULES.starting_villagers) + usize::from(scout.is_none())
+            {
+                break;
+            }
+        }
+        best
     }
 }
 

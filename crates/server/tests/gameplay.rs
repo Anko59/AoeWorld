@@ -1,5 +1,4 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
-use aoe_map::{MapRequest, Ratio};
 use aoe_protocol::{
     CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
     ResumeToken, decode_gameplay_server, encode_gameplay_client,
@@ -21,7 +20,16 @@ type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 #[path = "gameplay/subscription.rs"]
 mod subscription;
 
+#[path = "gameplay/start_fixture.rs"]
+mod start_fixture;
+
 async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
+    setup_with_directory(None).await
+}
+
+async fn setup_with_directory(
+    directory: Option<std::path::PathBuf>,
+) -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let state = AppState::new(
@@ -30,7 +38,7 @@ async fn setup() -> (SocketAddr, JoinHandle<()>, JoinHandle<()>) {
             scenario: SMOKE,
             tick_hz: 20,
             asset_pack: None,
-            map_package_directory: None,
+            map_package_directory: directory,
             open_map_package: None,
             map_worker: None,
             geodata_cache_directory: ".cache/geodata".into(),
@@ -343,7 +351,11 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
 
 #[tokio::test]
 async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
-    let (address, server, ticker) = setup().await;
+    let directory = tempfile::tempdir().unwrap();
+    let hash = start_fixture::ocean_package(directory.path());
+    let path = format!("/maps/{hash}");
+    let (address, server, ticker) =
+        setup_with_directory(Some(directory.path().to_path_buf())).await;
     let (mut controller, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
         world_id: previous_world_id,
@@ -365,23 +377,17 @@ async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
         receive(&mut controller).await,
         GameplayServerMessage::Snapshot { .. }
     ));
-    let request = serde_json::to_string(&MapRequest {
-        center_latitude_e7: 600_000_000,
-        center_longitude_e7: 250_000_000,
-        requested_side_meters: 256,
-        compression: Ratio::new(2, 1).expect("ratio"),
-        ..MapRequest::default()
-    })
-    .expect("request JSON");
+    let request = "{}".to_owned();
     let unauthorized_request = request.clone();
+    let unauthorized_path = path.clone();
     let response = tokio::task::spawn_blocking(move || {
-        http_json(address, "/maps/activate", &unauthorized_request)
+        http_json(address, &unauthorized_path, &unauthorized_request)
     })
     .await
     .expect("response");
     assert!(response.starts_with("HTTP/1.1 403"));
     let response = tokio::task::spawn_blocking(move || {
-        http_json_as_controller(address, "/maps/activate", &request, token)
+        http_json_as_controller(address, &path, &request, token)
     })
     .await
     .expect("response");

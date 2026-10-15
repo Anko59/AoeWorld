@@ -19,9 +19,9 @@ pub enum StartSearchResult {
 }
 
 impl Terrain {
-    /// Finds a certified 5×5 clearing, preferring the largest surveyed land
-    /// region, then centre distance and canonical `(y, x)` ordering. Survey
-    /// storage is bounded independently of the virtual map area.
+    /// Finds a village footprint, preferring connected inland lowlands.
+    /// A failed long-exit preference falls back to passable terrain; the
+    /// source landscape is never flattened or cleared.
     pub fn starting_tile(&self, config: WorldConfig) -> Option<TileCoord> {
         match self.search_start(config, START_SEARCH_CHUNKS, || false) {
             StartSearchResult::Found(tile) => Some(tile),
@@ -29,7 +29,8 @@ impl Terrain {
         }
     }
 
-    /// Searches a bounded number of chunks. Cancellation is supplied by the
+    /// Bounds local certification chunks; the global lattice and exact scan
+    /// have independent finite budgets. Cancellation is supplied by the
     /// adapter; pure terrain does not read clocks, files, or process state.
     pub fn search_start(
         &self,
@@ -41,8 +42,9 @@ impl Terrain {
             .unwrap_or(StartSearchResult::Unavailable)
     }
 
-    /// A start is a clear 5×5 footprint whose reachable area includes a
-    /// bounded exit; exhausting the exit budget reports `LimitReached`.
+    /// Prefer an inland clearing and a large reachable region. The global
+    /// survey uses fixed budgets; the final exact fallback visits at most the
+    /// finite map area and only rejects missing footprints or villager room.
     pub fn search_start_checked(
         &self,
         config: WorldConfig,
@@ -56,7 +58,17 @@ impl Terrain {
             return Ok(StartSearchResult::LimitReached);
         }
         let center = TileCoord::new((config.width_tiles - 1) / 2, (config.height_tiles - 1) / 2);
-        let mut cache = StartPassabilityCache::new(self, config, &cancelled);
+        // A persisted starting kit must not displace its own village on reopen.
+        // Geographic start selection is based on the immutable landscape.
+        let immutable = match self {
+            Terrain::Map { generator, .. } => Some(Terrain::Map {
+                generator: generator.clone(),
+                overlay: aoe_map::ResourceOverlay::default(),
+            }),
+            Terrain::Uniform(_) => None,
+        };
+        let mut cache =
+            StartPassabilityCache::new(immutable.as_ref().unwrap_or(self), config, &cancelled);
         // Uniform ground has one region and needs no survey.
         if matches!(self, Terrain::Uniform(_)) {
             let valid = valid_start(&mut cache, center)?;
@@ -65,11 +77,39 @@ impl Terrain {
             } else if valid {
                 StartSearchResult::Found(center)
             } else {
-                StartSearchResult::Unavailable
+                return robust::search(&mut cache);
             });
         }
-        let (candidates, complete) = regions::candidates(&mut cache, max_chunks)?;
-        certify_regions(&mut cache, candidates, complete)
+        // Local certificates contribute a hint; failure only relaxes a
+        // preference. Every positive budget continues through the same global
+        // search, including small valid clearings without a long exit.
+        let Some((candidates, complete)) =
+            cancelled_work(regions::candidates(&mut cache, max_chunks))?
+        else {
+            return Ok(StartSearchResult::Cancelled);
+        };
+        let Some(preferred) = cancelled_work(certify_regions(&mut cache, candidates, complete))?
+        else {
+            return Ok(StartSearchResult::Cancelled);
+        };
+        if preferred == StartSearchResult::Cancelled {
+            return Ok(preferred);
+        }
+        cache.preferred = match preferred {
+            StartSearchResult::Found(tile) => Some(tile),
+            _ => None,
+        };
+        robust::search(&mut cache)
+    }
+}
+
+fn cancelled_work<T>(
+    result: Result<T, EnvironmentPageError>,
+) -> Result<Option<T>, EnvironmentPageError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(EnvironmentPageError::Cancelled) => Ok(None),
+        Err(error) => Err(error),
     }
 }
 
@@ -79,6 +119,8 @@ struct StartPassabilityCache<'a> {
     entries: BTreeMap<(i32, i32), Vec<bool>>,
     insertion_order: VecDeque<(i32, i32)>,
     reachable: BTreeMap<TileCoord, bool>,
+    point_samples: BTreeMap<TileCoord, bool>,
+    preferred: Option<TileCoord>,
     exit_visits: usize,
     exit_visit_limit: usize,
     exit_chunk_limit: usize,
@@ -95,6 +137,8 @@ impl<'a> StartPassabilityCache<'a> {
             entries: BTreeMap::new(),
             insertion_order: VecDeque::new(),
             reachable: BTreeMap::new(),
+            point_samples: BTreeMap::new(),
+            preferred: None,
             exit_visits: 0,
             exit_visit_limit: START_EXIT_VISITS,
             exit_chunk_limit: START_SEARCH_CHUNKS,
@@ -356,6 +400,9 @@ fn ring_chunks(center: TileCoord, ring: i32) -> Vec<(i32, i32)> {
     }
     chunks
 }
+
+#[path = "start_search/robust.rs"]
+mod robust;
 
 #[path = "start_search/regions.rs"]
 mod regions;
