@@ -488,8 +488,8 @@ Proving in CI that the tests ran red then green remains
 - Gates run in the checkout as written (`make <gate>`), not in an exported
   commit snapshot: ignored files and caches take part, and an edit reverted
   between the before and after checks is not seen.
-- The re-check cannot see `dev` moving while CI runs after the push; requiring
-  branches to be up to date (a setting, for the owner) would. A gate over its
+- `dev` moving while CI runs after the push is covered by up-to-date branches
+  and the PR updater ([after the push](post-push.md)). A gate over its
   deadline reports the machine load, and says so when it exceeds the cores.
 - `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
