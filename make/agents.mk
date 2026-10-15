@@ -42,3 +42,10 @@ ifneq ($(strip $(CACHE_MOUNTS)),)
 cache-mount-points:
 	@mkdir -p $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),'$(ROOT)/.cache/cargo') $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),'$(ROOT)/target')
 endif
+
+override HARNESS_TEST_FILTER := $(value HARNESS_TEST_FILTER)
+export HARNESS_TEST_FILTER
+.PHONY: test-harness-focused
+test-harness-focused:
+	@test -n "$$HARNESS_TEST_FILTER"
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness "$$HARNESS_TEST_FILTER"

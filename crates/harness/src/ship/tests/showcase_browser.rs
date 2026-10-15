@@ -82,7 +82,6 @@ fn the_app_origin_must_be_a_plain_local_http_origin_with_a_port() {
         "http://0.0.0.0:8080/",
         "http://[::1]:8080/",
         "http://127.0.0.1/",
-        "http://127.0.0.1:80/",
         "http://user:pw@127.0.0.1:8080/",
         "http://127.0.0.1:8080/lab",
         "http://127.0.0.1:8080/?x=1",
@@ -420,4 +419,38 @@ fn click_at_may_use_the_right_mouse_button() {
 
     let bad = r##"{"click_at":{"selector":"canvas","x":1,"y":1,"button":"middle"}}"##;
     assert!(Storyboard::parse(&browser_board("/", bad)).is_err());
+}
+
+#[test]
+fn showcase_explicit_default_port_is_canonical_and_still_local() {
+    assert_eq!(
+        AppOrigin::parse("HTTP://LOCALHOST:8080/").unwrap().http(),
+        "http://localhost:8080/"
+    );
+    assert_eq!(
+        AppOrigin::parse("HTTP://LOCALHOST:80/").unwrap().http(),
+        "http://localhost/"
+    );
+    for host in ["127.0.0.1", "localhost"] {
+        let app = AppOrigin::parse(&format!("http://{host}:80/")).unwrap();
+        assert_eq!(app.address().unwrap(), (host.to_owned(), 80));
+        assert_eq!(app.http(), format!("http://{host}/"));
+        assert_eq!(app.resolve("/lab").unwrap(), format!("http://{host}/lab"));
+        for request in [
+            format!("http://{host}/lab"),
+            format!("http://{host}:80/lab"),
+            format!("ws://{host}/ws"),
+            format!("ws://{host}:80/ws"),
+        ] {
+            assert!(app.allows(&request), "{request}");
+        }
+        for request in [
+            format!("http://{host}:81/"),
+            format!("https://{host}/"),
+            format!("http://user@{host}/"),
+        ] {
+            assert!(!app.allows(&request), "{request}");
+        }
+        assert!(AppOrigin::parse(&format!("http://{host}/")).is_err());
+    }
 }

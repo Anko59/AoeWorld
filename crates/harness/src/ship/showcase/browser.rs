@@ -202,11 +202,19 @@ impl AppOrigin {
             )
         };
         let url = url::Url::parse(value).map_err(|_| refuse())?;
-        let host = match url.host_str() {
-            Some(host @ ("127.0.0.1" | "localhost")) => host,
-            _ => return Err(refuse()),
-        };
-        let port = url.port().ok_or_else(refuse)?;
+        if !matches!(url.host_str(), Some("127.0.0.1" | "localhost")) {
+            return Err(refuse());
+        }
+        let explicit = value
+            .split_once("://")
+            .map(|(_, rest)| rest)
+            .and_then(|rest| rest.split(['/', '?', '#']).next())
+            .and_then(|authority| authority.rsplit_once(':'))
+            .is_some_and(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()));
+        if !explicit {
+            return Err(refuse());
+        }
+        url.port_or_known_default().ok_or_else(refuse)?;
         if url.scheme() != "http"
             || !url.username().is_empty()
             || url.password().is_some()
@@ -217,8 +225,13 @@ impl AppOrigin {
             return Err(refuse());
         }
         Ok(Self {
-            http: format!("http://{host}:{port}/"),
-            ws: format!("ws://{host}:{port}/"),
+            http: format!("{}/", url.origin().ascii_serialization()),
+            ws: format!(
+                "{}/",
+                url.origin()
+                    .ascii_serialization()
+                    .replacen("http:", "ws:", 1)
+            ),
         })
     }
 
@@ -236,7 +249,7 @@ impl AppOrigin {
     /// The app's loopback host and port, which the recorder's bridge dials.
     pub(crate) fn address(&self) -> Result<(String, u16), String> {
         let url = url::Url::parse(&self.http).map_err(|error| error.to_string())?;
-        match (url.host_str(), url.port()) {
+        match (url.host_str(), url.port_or_known_default()) {
             (Some(host), Some(port)) => Ok((host.to_owned(), port)),
             _ => Err(format!("{} names no host and port", self.http)),
         }

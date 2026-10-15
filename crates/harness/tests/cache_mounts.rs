@@ -18,9 +18,12 @@ fn fresh_default_workspace_does_not_precreate_root_owned_cache_mounts() {
     };
     let root = workspace.path().display();
     let default = render(&[]);
-    assert!(default.contains(&format!("-v {root}:{root}")));
-    assert!(!default.contains(&format!("-v {root}/target:{root}/target")));
-    assert!(!default.contains(&format!("-v {root}/.cache/cargo:{root}/.cache/cargo")));
+    assert!(default.contains(&mount(&root.to_string(), &root.to_string())));
+    assert!(!default.contains(&mount(&format!("{root}/target"), &format!("{root}/target"))));
+    assert!(!default.contains(&mount(
+        &format!("{root}/.cache/cargo"),
+        &format!("{root}/.cache/cargo")
+    )));
     assert!(!workspace.path().join("target").exists());
     assert!(!workspace.path().join(".cache/cargo").exists());
 }
@@ -45,8 +48,14 @@ fn overridden_caches_create_their_mount_targets_as_the_invoking_user() {
         .output()
         .unwrap();
     let projected = String::from_utf8(projected.stdout).unwrap();
-    assert!(projected.contains(&format!("-v {}:{root}/.cache/cargo", cargo.display())));
-    assert!(projected.contains(&format!("-v {}:{root}/target", target.display())));
+    assert!(projected.contains(&mount(
+        &cargo.display().to_string(),
+        &format!("{root}/.cache/cargo")
+    )));
+    assert!(projected.contains(&mount(
+        &target.display().to_string(),
+        &format!("{root}/target")
+    )));
     fs::create_dir(workspace.path().join("bin")).unwrap();
     let docker = workspace.path().join("bin/docker");
     fs::write(
@@ -92,7 +101,11 @@ fn overridden_caches_create_their_mount_targets_as_the_invoking_user() {
 }
 
 fn workspace() -> tempfile::TempDir {
-    let workspace = tempfile::tempdir().unwrap();
+    workspace_named("cache-mount-")
+}
+
+fn workspace_named(prefix: &str) -> tempfile::TempDir {
+    let workspace = tempfile::Builder::new().prefix(prefix).tempdir().unwrap();
     fs::write(
         workspace.path().join("Makefile"),
         include_str!("../../../Makefile"),
@@ -124,4 +137,106 @@ fn make(workspace: &tempfile::TempDir) -> Command {
         command.env_remove(name);
     }
     command
+}
+
+#[test]
+fn showcase_colon_checkout_uses_an_unambiguous_root_bind() {
+    let workspace = workspace_named("showcase:root-");
+    let result = make(&workspace)
+        .args(["--dry-run", "ci-select"])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let output = String::from_utf8(result.stdout).unwrap();
+    let root = workspace.path().display();
+    assert!(
+        output.contains(&format!(
+            "--mount 'type=bind,\"source={root}\",\"target={root}\"'"
+        )),
+        "{output}"
+    );
+    assert!(!output.contains(&format!("-v {root}:{root}")), "{output}");
+}
+
+#[test]
+fn showcase_video_probe_mounts_a_colon_parent_without_volume_syntax() {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = workspace_named("showcase:probe-");
+    let tools = tempfile::tempdir().unwrap();
+    let bin = tools.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let docker = bin.join("docker");
+    fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
+    fs::set_permissions(docker, fs::Permissions::from_mode(0o755)).unwrap();
+    let video = workspace.path().join("part:one/$literal/video.webm");
+    fs::create_dir_all(video.parent().unwrap()).unwrap();
+    fs::write(&video, "fixture").unwrap();
+    let result = make(&workspace)
+        .arg("video-probe")
+        .env("SHIP_VIDEO", &video)
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let output = String::from_utf8(result.stdout).unwrap();
+    assert!(output.contains("<--mount>"), "{output}");
+    assert!(
+        output.contains(&format!(
+            "<type=bind,\"source={}\",\"target=/video\",readonly>",
+            video.display()
+        )),
+        "{output}"
+    );
+    assert!(!output.contains("<-v>"), "{output}");
+}
+
+fn mount(source: &str, target: &str) -> String {
+    format!("--mount 'type=bind,\"source={source}\",\"target={target}\"'")
+}
+
+#[test]
+fn focused_test_filter_reaches_docker_as_literal_data() {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = workspace();
+    let tools = tempfile::tempdir().unwrap();
+    let docker = tools.path().join("docker");
+    fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
+    let filter = "can't match $literal";
+    let result = make(&workspace)
+        .args([
+            "test-harness-focused",
+            &format!("HARNESS_TEST_FILTER={filter}"),
+        ])
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                tools.path().display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        String::from_utf8(result.stdout)
+            .unwrap()
+            .contains(&format!("<{filter}>"))
+    );
 }
