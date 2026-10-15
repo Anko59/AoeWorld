@@ -1,11 +1,37 @@
 use super::GameplayService;
-use aoe_core::{EntityId, PlayerId};
+use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
     BuildingKind, CarriedResource, GameplayBuildingState, GameplayPlayerState, GameplayUnitState,
-    ResourceKind, Stockpile, TrainingState, UnitKind, UnitTask,
+    MAX_SUBSCRIBED_UNITS, ResourceKind, Stockpile, TrainingState, UnitKind, UnitTask,
 };
 use aoe_simulation::{GameUnit, GameWorld};
 use std::collections::BTreeMap;
+
+/// Economy units stay authoritative while offscreen, for selection and worker
+/// counts. Their population is bounded by the village rules; population-only
+/// workloads continue using the spatial query and the primary scout.
+pub(super) fn query_units(
+    world: &GameWorld,
+    region: TileRect,
+    primary_id: EntityId,
+) -> Vec<GameUnit> {
+    let mut units = world.query(region).0;
+    if let Some(primary) = world.unit(primary_id) {
+        if world.player_economy(primary.player).is_some() {
+            units.extend(
+                world
+                    .units()
+                    .filter(|unit| unit.player == primary.player)
+                    .take(MAX_SUBSCRIBED_UNITS + 1),
+            );
+        } else {
+            units.push(primary);
+        }
+    }
+    units.sort_unstable_by_key(|unit| unit.id);
+    units.dedup_by_key(|unit| unit.id);
+    units
+}
 
 pub(super) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKind {
     match kind {

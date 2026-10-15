@@ -185,27 +185,30 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         subscribe(&mut client);
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
         client.presentation.advance(time, canvas);
-        let scene = map::scene::prepare(&client);
-        let units = map::scene::units(&client, &scene);
-        let camera = SceneCamera {
-            center: client.camera.center,
-            zoom: client.camera.zoom,
-            viewport: client.camera.viewport,
-            focus_elevation_meters: client.camera.focus_elevation_meters,
-        };
-        let resources = map::scene_resources(&client);
-        let grid = client.grid;
-        let animation = (time / 100.0) as usize;
-        if let Err(error) = map::render_cache::render_if_changed(
-            &mut client,
-            &scene,
-            &units,
-            &resources,
-            camera,
-            animation,
-            grid,
-        ) {
-            client.status = error;
+        // Keep input, networking and the HUD live while the overview covers the scene.
+        if !controls::navigation::overview_active() {
+            let scene = map::scene::prepare(&client);
+            let units = map::scene::units(&client, &scene);
+            let camera = SceneCamera {
+                center: client.camera.center,
+                zoom: client.camera.zoom,
+                viewport: client.camera.viewport,
+                focus_elevation_meters: client.camera.focus_elevation_meters,
+            };
+            let resources = map::scene_resources(&client);
+            let grid = client.grid;
+            let animation = (time / 100.0) as usize;
+            if let Err(error) = map::render_cache::render_if_changed(
+                &mut client,
+                &scene,
+                &units,
+                &resources,
+                camera,
+                animation,
+                grid,
+            ) {
+                client.status = error;
+            }
         }
         if time - client.village.last_hud >= 250.0 {
             client.village.last_hud = time;

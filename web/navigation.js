@@ -196,6 +196,7 @@ export function initNavigation() {
   }
 
   window.aoeNavigation = {
+    overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
     map: changeMap,
     frame(state) {

@@ -73,7 +73,7 @@ progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec
 #grid[aria-pressed="true"] { background:#b5b986; color:#19251c; }
 #minimap-close { display:none; }
 #minimap.expanded { position:fixed; inset:72px 25px 22px; padding:30px 20px 10px; display:flex; flex-direction:column; background:#202b23fa; border:2px solid #ab9662; z-index:6; }
-#minimap.expanded #minimap-map { flex:1; min-height:0; }
+#minimap.expanded #minimap-map { flex:1; min-height:0; filter:none; }
 #minimap.expanded #minimap-title { position:absolute; top:7px; left:20px; font-size:12px; }
 #minimap.expanded #minimap-close { display:block; position:absolute; right:12px; top:5px; font-size:11px; }
 #minimap.expanded #minimap-terrain { image-rendering:pixelated; }
@@ -86,7 +86,7 @@ progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec
 .diagnostics { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); pointer-events:none; }
 #unsupported { position:fixed; top:70px; left:20px; z-index:8; color:#ffe0b5; background:#222a1a; }
 dialog { width:330px; padding:28px; color:var(--ink); border:3px ridge #b19a69; border-radius:3px; background:linear-gradient(135deg,#424735,#242c23); box-shadow:0 20px 100px #000c; }
-dialog::backdrop { background:#0d160daa; backdrop-filter:blur(2px); }
+dialog::backdrop { background:#0d160daa; }
 dialog h1 { font:28px Georgia,serif; margin-bottom:22px; }
 dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 .menu-tools { margin-top:23px; border-top:1px solid #8c8558; padding-top:10px; }

@@ -27,6 +27,10 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
     let Some(kind) = client.units.get(&unit).map(|u| u.kind) else {
         return;
     };
+    // The HTML frame uses CSS pixels; projection uses the capped canvas backing.
+    let scale = client.camera.viewport[1] / f64::from(client.canvas.client_height().max(1));
+    let top = 54.0 * scale;
+    let bottom = client.camera.viewport[1] - 208.0 * scale;
     let candidates = client
         .units
         .values()
@@ -36,10 +40,7 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
                 u.id,
                 u.player,
                 u.kind,
-                p.x >= 0.0
-                    && p.y >= 54.0
-                    && p.x < client.camera.viewport[0]
-                    && p.y < client.camera.viewport[1] - 208.0,
+                p.x >= 0.0 && p.y >= top && p.x < client.camera.viewport[0] && p.y < bottom,
             )
         })
         .collect::<Vec<_>>();

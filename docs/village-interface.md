@@ -13,13 +13,14 @@ artwork. Original game sprites are optional local-pack assets, described in
 Click a villager or scout to select it, drag a box to select an owned group, or
 double-click a unit to select every owned unit of that kind on screen. A group
 can contain both villagers and the scout. Right-clicking a resource tells its
-villagers to gather; the scout receives a Move order. Right-clicking ground
+villagers to gather; the scout keeps its current order. Right-clicking ground
 moves the group. Move in the command panel arms a destination click; Stop
 cancels the job using a Move to each unit's current authoritative position.
 Carried loads remain governed by the simulation's Move rules.
 
-Click the Town Center footprint (or press H to select and center it), then press Q or click Train Villager. The
-cost is fifty food and the authoritative training time is twenty-five seconds.
+Click the Town Center footprint (or press H to select and center it), then press
+Q or click Train Villager. The cost is fifty food and the authoritative training
+time is twenty-five seconds.
 The panel shows the queue and current progress. Cancel removes the active
 entry, refunds food and releases its reserved population slot. Refusals explain
 food, population, ownership and resource failures in plain words. The current
@@ -29,12 +30,17 @@ Menu opens Resume, disabled Settings, Quit to Main Menu and separate map tools.
 Until a start menu exists, Quit reloads the page. The map creator is a separate
 overlay opened from Menu, and the minimap's navigation controls remain beside
 it in the bottom frame. Existing scene/minimap capture hooks remain available.
-The scene also exposes bounded actor and nearest-resource coordinates for
-browser interaction evidence; they grant no simulation authority.
+The scene also exposes actor coordinates for browser interaction evidence.
+When villagers are selected, it exposes the nearest resident node per resource
+kind in a nine-chunk window. Targets may be offscreen; they grant no simulation
+authority.
 
 Player/building snapshots and sparse deltas are retained independently of unit
-interpolation. HTML presentation updates at most four times per second; the
-renderer, capture counters and camera retain their existing cadence. Missing
+interpolation. The server retains the bounded owned village outside the camera
+view so selection and worker counts continue to follow authoritative state.
+HTML presentation updates at most four times per second. A whole-map overview
+suspends covered canvas presentations while input, terrain requests and the HUD
+remain live; closing it resumes presentation. Capture hooks remain available. Missing
 villager or Town Center art draws markers on every rendering backend. The
 current setup has no player-colour choice, so imported player masks use blue.
 

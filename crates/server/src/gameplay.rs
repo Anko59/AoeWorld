@@ -253,12 +253,7 @@ impl GameplayService {
             .await;
             return;
         }
-        let mut units = world.query(region).0;
-        if !units.iter().any(|unit| unit.id == self.primary_unit_id)
-            && let Some(primary) = world.unit(self.primary_unit_id)
-        {
-            units.push(primary);
-        }
+        let units = economy::query_units(&world, region, self.primary_unit_id);
         if units.len() > MAX_SUBSCRIBED_UNITS {
             drop(world);
             self.send_to(
@@ -271,7 +266,6 @@ impl GameplayService {
             .await;
             return;
         }
-        units.sort_by_key(|unit| unit.id);
         let players = economy::players(&world);
         let buildings = economy::buildings(&world);
         let snapshot = GameplayServerMessage::Snapshot {

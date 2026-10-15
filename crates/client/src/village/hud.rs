@@ -15,8 +15,9 @@ fn flag(value: bool) -> f64 {
     f64::from(u8::from(value))
 }
 
+#[derive(Clone, Copy)]
 struct Target {
-    kind: u8,
+    // Keep world coordinates until the bounded nearest set has been chosen.
     x: f64,
     y: f64,
     distance: f64,
@@ -50,9 +51,23 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(player.population_cap),
         ]);
     }
+    let mut gather_focus = None;
     for unit in client.units.values() {
-        let [x, y] = screen(client, position_at(client, unit.id));
-        let resource = resource_kind(client, unit.id);
+        let selected = client.selected.units.contains(&unit.id);
+        let position = position_at(client, unit.id);
+        let [x, y] = screen(client, position);
+        if selected && unit.kind == UnitKind::Villager && gather_focus.is_none() {
+            gather_focus = Some(position);
+        }
+        let resource = if unit.kind == UnitKind::Villager
+            && matches!(
+                unit.task,
+                UnitTask::Gathering | UnitTask::Carrying | UnitTask::Returning
+            ) {
+            resource_kind(client, unit.id)
+        } else {
+            unit.carried.map(|load| load.kind)
+        };
         if unit.player == owner
             && unit.kind == UnitKind::Villager
             && matches!(
@@ -73,7 +88,7 @@ pub(in super::super) fn update(client: &Client) {
             flag(unit.kind == UnitKind::Villager),
             x,
             y,
-            flag(client.selected.units.contains(&unit.id)),
+            flag(selected),
             unit.task as u8 as f64,
             resource.map_or(4.0, |kind| kind as u8 as f64),
             f64::from(unit.carried.map_or(0, |load| load.amount)),
@@ -107,56 +122,43 @@ pub(in super::super) fn update(client: &Client) {
             values.extend_from_slice(&[entry.progress_ticks as f64, entry.total_ticks as f64]);
         }
     }
-    let focus = client
-        .selected
-        .units
-        .first()
-        .or(client.primary.as_ref())
-        .map_or(client.camera.center, |id| position_at(client, *id));
-    let mut targets: Vec<Target> = Vec::new();
-    // Eight nearest visible nodes per resource kind, bounded to 32 targets.
-    for chunk in client.terrain_chunks.values() {
-        for (node, _) in chunk
-            .resources()
-            .filter(|(n, _)| client.resources.visible(n.id))
-        {
-            let position = [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5];
-            let [x, y] = screen(client, position);
-            if x < 0.0
-                || y < 54.0
-                || x > f64::from(client.canvas.client_width())
-                || y > f64::from(client.canvas.client_height()) - 208.0
+    // Framing needs only the nearest resident node per kind. Skip capture-only
+    // resource work while no villager is selected; ordinary HUD values still update.
+    if let Some(focus) = gather_focus {
+        let mut targets: [Option<Target>; 4] = [None; 4];
+        let camera_chunk = (
+            (client.camera.center[0].floor() as i32).div_euclid(aoe_map::CHUNK_TILES),
+            (client.camera.center[1].floor() as i32).div_euclid(aoe_map::CHUNK_TILES),
+        );
+        for (coordinate, chunk) in &client.terrain_chunks {
+            if coordinate.0.abs_diff(camera_chunk.0) > 1
+                || coordinate.1.abs_diff(camera_chunk.1) > 1
             {
                 continue;
             }
-            let kind = node.kind as u8;
-            let distance = (position[0] - focus[0]).powi(2) + (position[1] - focus[1]).powi(2);
-            if targets.iter().filter(|t| t.kind == kind).count() < 8 {
-                targets.push(Target {
-                    kind,
-                    x,
-                    y,
-                    distance,
-                });
-            } else if let Some((slot, furthest)) = targets
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| t.kind == kind)
-                .max_by(|a, b| a.1.distance.total_cmp(&b.1.distance))
-                && distance < furthest.distance
+            for (node, _) in chunk
+                .resources()
+                .filter(|(n, _)| client.resources.visible(n.id))
             {
-                targets[slot] = Target {
-                    kind,
-                    x,
-                    y,
-                    distance,
-                };
+                let x = f64::from(node.tile.x) + 0.5;
+                let y = f64::from(node.tile.y) + 0.5;
+                let distance = (x - focus[0]).powi(2) + (y - focus[1]).powi(2);
+                let slot = &mut targets[node.kind as usize];
+                if slot
+                    .as_ref()
+                    .is_none_or(|current| distance < current.distance)
+                {
+                    *slot = Some(Target { x, y, distance });
+                }
             }
         }
-    }
-    values[15] = targets.len() as f64;
-    for target in targets {
-        values.extend_from_slice(&[f64::from(target.kind), target.x, target.y, target.distance]);
+        values[15] = targets.iter().flatten().count() as f64;
+        for (kind, target) in targets.into_iter().enumerate() {
+            if let Some(target) = target {
+                let [x, y] = screen(client, [target.x, target.y]);
+                values.extend_from_slice(&[kind as f64, x, y, target.distance]);
+            }
+        }
     }
     village_update(&values, map::feedback::connection_label(client));
 }

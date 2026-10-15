@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 // UI navigation stays bounded and never widens the detailed terrain subscription.
 #[wasm_bindgen(inline_js = "
+export function overview_active() { return window.aoeNavigation?.overview?.() ?? false; }
 export function navigation_frame(state) {
   const output = window.aoeNavigation?.frame(state.subarray(0, 11));
   if (output) state.set(output, 11);
@@ -32,6 +33,7 @@ export function gameplay_key(event) {
 ")]
 extern "C" {
     fn navigation_frame(state: &mut [f64]);
+    pub(in super::super) fn overview_active() -> bool;
     pub(in super::super) fn camera_fragment(state: &mut [f64]);
     pub(in super::super) fn capture_update(
         canvas: &web_sys::HtmlCanvasElement,
