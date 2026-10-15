@@ -12,6 +12,10 @@ const WIDTH: i32 = 4_096;
 const BARREN: u8 = 28;
 
 fn wide_barren_terrain() -> Terrain {
+    prepared_terrain(vec![0; 4], vec![BARREN; 4])
+}
+
+pub(super) fn prepared_terrain(water_samples: Vec<u8>, biome_samples: Vec<u8>) -> Terrain {
     let elevation = |level, side: u8| ElevationPage {
         level,
         x: 0,
@@ -26,7 +30,11 @@ fn wide_barren_terrain() -> Terrain {
         y: 0,
         width: side,
         height: side,
-        ocean_coverage_percent: vec![0; usize::from(side) * usize::from(side)],
+        ocean_coverage_percent: if level == 0 {
+            water_samples.clone()
+        } else {
+            vec![water_samples.iter().copied().max().unwrap(); 1]
+        },
         inland_coverage_percent: vec![0; usize::from(side) * usize::from(side)],
     };
     let biome = |level, side: u8| PotentialBiomePage {
@@ -35,7 +43,11 @@ fn wide_barren_terrain() -> Terrain {
         y: 0,
         width: side,
         height: side,
-        potential_biome_class: vec![BARREN; usize::from(side) * usize::from(side)],
+        potential_biome_class: if level == 0 {
+            biome_samples.clone()
+        } else {
+            vec![biome_samples[0]]
+        },
     };
     let elevations = vec![elevation(0, 2), elevation(1, 1)];
     let waters = vec![water(0, 2), water(1, 1)];
