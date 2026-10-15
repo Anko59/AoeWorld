@@ -49,8 +49,8 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v12 selects at most 1,695 frames:
-1,474 terrain and 221 objects including cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
+The periodic groups retain all 100 frames. Catalog v13 selects at most 2,003 frames:
+1,474 terrain and 529 objects including village art and cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
 terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;
@@ -80,8 +80,18 @@ silhouette, never broadleaf 2296 or unqualified 2304/2300 shadows. Missing optio
 species keeps the healthy broadleaf fallback; family 0 keeps its base variants.
 Culling and drawing share the selected body and its shadow decision. Palm frame 0
 anchor (20,175) lies below its 88×168 image and is deliberately preserved, not clamped.
-Animal units, buildings, and other
-terrain-object art remain unavailable until independently reviewed. A missing
+Optional village groups add the male villager: idle 1479, walking 1484,
+wood chopping 1535 and wood carrying 1536, each five rows of fifteen frames.
+The same eight-direction mirror mapping as the scout uses the native anchors.
+Other gathering and carrying tasks retain the idle/walking art with a resource
+badge rather than depicting the wrong tool. The Dark Age Town Center composes
+main 891, left roof/supports 3594/3595/3596, right roof/supports 4610/4611/4612,
+and paired shadow 889 at their shared origin. Signed and outside anchors are
+preserved; player masks use the current blue ramp. These are reviewed metadata,
+not committed pixels. Missing village groups draw simple semantic markers;
+a present incomplete group remains a pack error. The native metadata packing
+proof now covers all 2,003 selected frames in the same three pages.
+Other animal and building art remains unreviewed. A missing
 required terrain group prevents local-pack startup with a clear error, while a
 missing optional resource group does not turn unrelated frames into a
 substitute. Optional absence is distinct from present incomplete/duplicate frames,

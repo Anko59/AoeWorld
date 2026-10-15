@@ -87,7 +87,7 @@ export function initNavigation() {
       ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1] }[key];
   }
   document.addEventListener('keydown', event => {
-    if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (document.querySelector("dialog[open]") || editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if (key === 'm' && !event.repeat) {
       event.preventDefault();

@@ -28,6 +28,8 @@ fn synthetic_art() -> GameArt {
         anchor: [16.0, 48.0],
     };
     GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: vec![frame; 80],
         standing: vec![frame; 80],
         grass: vec![frame],
@@ -184,6 +186,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
         focus_elevation_meters: 0.0,
     };
     let unit = SceneUnit {
+        kind: Default::default(),
         id: EntityId(7),
         position: [0.5, 0.5],
         moving: false,
@@ -275,6 +278,7 @@ fn units_order_behind_and_in_front_of_a_raised_surface_at_contact_height() {
         },
     };
     let unit = |id, elevation_meters| SceneUnit {
+        kind: Default::default(),
         id: EntityId(id),
         position: [1.8, 1.8],
         moving: false,

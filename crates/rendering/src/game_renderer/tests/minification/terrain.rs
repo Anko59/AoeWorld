@@ -15,6 +15,8 @@ pub(crate) fn scene(zoom: f64) -> (SceneCamera, Vec<Quad>, Vec<u8>) {
         anchor: [48.0, 24.0],
     };
     let art = GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame],

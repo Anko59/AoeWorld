@@ -42,6 +42,8 @@ export async function activateSyntheticMap(
     },
     [contentHash, chunk] as const,
   );
+  if (center[0] === 8192 && center[1] === 8192)
+    await page.keyboard.press("Home");
   return contentHash;
 }
 

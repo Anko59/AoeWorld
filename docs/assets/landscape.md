@@ -1,10 +1,10 @@
 # Reviewed landscape catalog and candidates
 
-Catalog v12 keeps approved art separate from discovery. Required sources remain
+Catalog v13 keeps approved art separate from discovery. Required sources remain
 cavalry 3008/3004 and five base terrain sheets. Optional full conifer 4654 and palm 4653
 prefixes, three water depth sheets, four ground-variety sheets, rock 15033,
-soft snow 15026 and ice 15024 bring the ceiling to 1,695 frames
-(1,474 terrain/221 objects including cliff faces).
+soft snow 15026, ice 15024 and the [village groups](../assets.md) bring the ceiling
+to 2,003 frames (1,474 terrain/529 objects including cliff faces).
 The existing runtime cap remains 2048 frames and three 2048² RGBA pages/48 MiB;
 terrain occupies pages 0/1 and objects page 2. Counts are not packing proof.
 Private original-manifest extents must fit with no overlap, truncation or cap change.
@@ -38,7 +38,7 @@ conifer/palm prefixes and the four ground sheets have moved to the reviewed opti
 resource variants are constrained to the subsets above. Names or equal frame
 counts never establish roles or shadow pairing. Viewer screenshots are inspection
 evidence, not backend/packing qualification. An explicit native private-manifest
-test separately feeds all 1,695 actual extents through the runtime packer; the
+test separately feeds all 2,003 actual extents through the runtime packer; the
 ordinary portable suite's ignored private test is not a successful proof. Explicit
 invocation requires `AOE_REVIEWED_PACK_MANIFEST` and fails if input is absent.
 An explicit browser proof requires `AOE_TREE_ART_PROOF=1` and an output directory:
@@ -160,9 +160,9 @@ from these outstanding visual qualifications.
 
 ## Ground dressing
 
-Catalog v12 adds graphics.drs prefixes 4474 (six), 2561 (seven), 1035 (three),
-1252 (two), 4584 (two), and 1262 (one), bringing the selection to 1,495 frames:
-1,274 terrain and 221 objects. The runtime remains three 2048-square pages,
+Ground dressing uses graphics.drs prefixes 4474 (six), 2561 (seven), 1035 (three),
+1252 (two), 4584 (two), and 1262 (one). The full current catalog selects
+1,474 terrain and 529 object frames. The runtime remains three 2048-square pages,
 48 MiB and 2,048 frames. Original contact sheets and gameplay captures stay in
 ignored `.cache/showcase/`.
 

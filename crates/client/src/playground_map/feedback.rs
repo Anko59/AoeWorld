@@ -141,7 +141,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedWrongUnitKind => "This unit kind cannot perform that order.",
         RejectedInvalidResource => "Cannot gather: the resource is unknown or exhausted.",
         RejectedInsufficientFood => "Cannot train: not enough food.",
-        RejectedPopulationCap => "Cannot train: the population cap is reached or reserved.",
+        RejectedPopulationCap => "Cannot train: the population limit is reached or reserved.",
         RejectedTrainingQueueFull => "Cannot train: the training queue is full.",
         RejectedResourceUnavailable => "Cannot give orders: resource terrain is unavailable.",
         RejectedInvalidDestination => match blocker {

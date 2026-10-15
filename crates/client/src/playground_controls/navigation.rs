@@ -23,9 +23,9 @@ export function capture_update(canvas, pending, failed, frame) {
 }
 export function navigation_map(hash) { window.aoeNavigation?.map(hash); }
 export function gameplay_key(event) {
-  if (event.repeat || event.ctrlKey || event.altKey || event.metaKey ||
+  if (document.querySelector('dialog[open]') || event.repeat || event.ctrlKey || event.altKey || event.metaKey ||
       (event.target instanceof Element && event.target.closest('input,select,textarea,[contenteditable]'))) return 0;
-  const action = event.key === 'Escape' ? 1 : event.key === 'g' || event.key === 'G' ? 2 : event.key === 'Home' ? 3 : 0;
+  const action = event.key === 'Escape' ? 1 : event.key === 'g' || event.key === 'G' ? 2 : event.key === 'Home' ? 3 : event.key.toLowerCase() === 'q' ? 4 : event.key.toLowerCase() === 'h' ? 5 : 0;
   if (action) event.preventDefault();
   return action;
 }

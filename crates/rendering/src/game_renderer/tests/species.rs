@@ -198,6 +198,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
         },
     ];
     let unit = SceneUnit {
+        kind: Default::default(),
         id: EntityId(11),
         position: [0.5; 2],
         moving: false,
@@ -219,6 +220,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
         "equal-depth scenery/tree/unit tie order"
     );
     let unit = SceneUnit {
+        kind: Default::default(),
         position: [0.4; 2],
         ..unit
     };

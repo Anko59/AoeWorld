@@ -21,7 +21,8 @@ async function start(page: Page) {
   await gameAssets(page, true);
   await page.goto("/");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.keyboard.press("Home");
+  await page.keyboard.press("h");
+  await page.keyboard.press("Escape");
 }
 
 test("stockpile and population come from the server; Q trains a villager", async ({
@@ -48,6 +49,11 @@ test("stockpile and population come from the server; Q trains a villager", async
   await page.keyboard.press("q");
   await expect(page.locator("#stockpile-food")).toHaveText("150");
   await expect(page.locator("#training-progress")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator("#stockpile-food")).toHaveText("200");
+  await expect(page.locator("#training-progress")).toBeHidden();
+  await page.keyboard.press("q");
+  await expect(page.locator("#stockpile-food")).toHaveText("150");
   await expect(page.locator("#population")).toHaveText("5/5", {
     timeout: 32_000,
   });
@@ -70,9 +76,12 @@ test("right clicking wood sends villagers to gather and deposit", async ({
     headers: { "X-AoeWorld-Controller-Token": token },
   });
   expect(opened.ok()).toBeTruthy();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.keyboard.press("Home");
+  await page.keyboard.press("h");
+  await page.keyboard.press("Escape");
   await clickActor(page, "Villager");
   await page.mouse.dblclick(
     ...(await page.locator("#scene").evaluate((canvas): [number, number] => {

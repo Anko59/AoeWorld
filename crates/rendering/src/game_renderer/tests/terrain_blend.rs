@@ -193,6 +193,8 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
         anchor: [0.0; 2],
     };
     let art = GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame(0)],
@@ -305,6 +307,8 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         presentation: CanvasPresentation::new(128, 128),
     };
     let art = GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: Vec::new(),

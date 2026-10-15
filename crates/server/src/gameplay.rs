@@ -81,6 +81,9 @@ enum PendingAction {
         entity_id: EntityId,
         resource_id: u64,
     },
+    CancelTraining {
+        building_id: EntityId,
+    },
     Train {
         building_id: EntityId,
         kind: aoe_protocol::UnitKind,

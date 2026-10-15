@@ -52,6 +52,8 @@ pub struct SceneryArt {
 }
 
 pub struct GameArt {
+    pub village: [Vec<GameFrame>; 4],
+    pub town_center: [Vec<GameFrame>; 8],
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,

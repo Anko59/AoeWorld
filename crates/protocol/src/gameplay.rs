@@ -68,6 +68,10 @@ pub enum ClientMessage {
         building_id: EntityId,
         kind: UnitKind,
     },
+    CancelTrainingOrder {
+        sequence: u64,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

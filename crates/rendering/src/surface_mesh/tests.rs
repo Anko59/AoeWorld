@@ -30,6 +30,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame],

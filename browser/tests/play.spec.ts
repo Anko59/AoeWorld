@@ -3,6 +3,10 @@ import { gameAssets } from "./game-assets.js";
 import { denyWebGl } from "./rendering/backends.js";
 import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
+import {
+  bluePixels,
+  assetTerrainColorVariety,
+} from "./rendering/play-pixels.js";
 
 async function waitForGame(page: Page) {
   await expect(page.locator("#connection")).toHaveText("connected", {
@@ -12,45 +16,6 @@ async function waitForGame(page: Page) {
     "data-assets",
     "aoe2-local",
   );
-}
-
-async function bluePixels(canvas: ReturnType<Page["locator"]>) {
-  const image = PNG.sync.read(await canvas.screenshot());
-  let blue = 0;
-  for (let i = 0; i < image.data.length; i += 4) {
-    const x = (i / 4) % image.width;
-    const y = Math.floor(i / 4 / image.width);
-    // The new strategic marker is blue too; only count game-world horse pixels.
-    if (x > image.width - 220 && y > image.height - 260) continue;
-    const r = image.data[i] ?? 0;
-    const g = image.data[i + 1] ?? 0;
-    const b = image.data[i + 2] ?? 0;
-    if (b > 150 && b > r + 30 && b > g + 30) blue += 1;
-  }
-  return blue;
-}
-
-function assetTerrainColorVariety(image: PNG) {
-  const colors = new Set<string>();
-  for (let y = 32; y < image.height - 96; y += 16) {
-    for (let x = 32; x < image.width - 32; x += 16) {
-      if (x > image.width - 260 && y < 80) continue;
-      if (x < 620 && y > image.height - 110) continue;
-      if (
-        x > image.width / 2 - 50 &&
-        x < image.width / 2 + 50 &&
-        y > image.height / 2 - 80 &&
-        y < image.height / 2 + 80
-      ) {
-        continue;
-      }
-      const offset = (y * image.width + x) * 4;
-      colors.add(
-        `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]}`,
-      );
-    }
-  }
-  return colors.size;
 }
 
 test.beforeEach(async ({ request }) => {
@@ -67,6 +32,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.keyboard.press("Home");
   if (testInfo.project.name === "webgpu") {
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-renderer",
@@ -86,14 +52,18 @@ test("authoritative isometric game renders, selects, orders, and survives reload
     const r = image.data[i] ?? 0;
     const g = image.data[i + 1] ?? 0;
     const b = image.data[i + 2] ?? 0;
+    const y = Math.floor(i / 4 / image.width);
+    if (y < 54 || y >= image.height - 208) continue;
     if (g > r + 8 && g > b + 4) green += 1;
     if (b > 150 && b > r + 30) blue += 1;
     if (r >= 60 && r <= 80 && g > 100 && b >= 40 && b <= 70) terrainTiles += 1;
   }
-  expect(green).toBeGreaterThan(image.width * image.height * 0.6);
+  expect(green).toBeGreaterThan(image.width * (image.height - 54 - 208) * 0.6);
   expect(blue).toBeGreaterThan(10);
   if (evidence === "generated CI fixtures") {
-    expect(terrainTiles).toBeGreaterThan(image.width * image.height * 0.1);
+    expect(terrainTiles).toBeGreaterThan(
+      image.width * (image.height - 54 - 208) * 0.1,
+    );
   } else {
     const terrainColors = assetTerrainColorVariety(image);
     testInfo.annotations.push({
@@ -132,6 +102,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   await page.getByRole("button", { name: "Center on primary unit" }).click();
   await page.reload();
   await waitForGame(page);
+  await page.keyboard.press("Home");
   expect(errors).toEqual([]);
 });
 
@@ -194,6 +165,7 @@ test("rapid viewport changes ignore stale subscription frames", async ({
   });
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.keyboard.press("Home");
   const canvas = page.locator("#scene");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing map");
@@ -260,6 +232,7 @@ for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
       }, failure);
       await page.goto("/?play=1");
       await waitForGame(page);
+      await page.keyboard.press("Home");
       await expect(page.locator("#playground")).toHaveAttribute(
         "data-renderer",
         software ? "canvas2d" : /^(webgl2|canvas2d)$/,
@@ -328,6 +301,7 @@ test("map creator retries a recovered request with its original detail", async (
   });
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.keyboard.press("Home");
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Previous map requests").selectOption("41");
@@ -374,6 +348,7 @@ test("accepted creation survives a polling error and reload without duplicate su
   });
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.keyboard.press("Home");
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
@@ -388,6 +363,7 @@ test("accepted creation survives a polling error and reload without duplicate su
   ).toBeDisabled();
   await page.reload();
   await waitForGame(page);
+  await page.keyboard.press("Home");
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await expect(page.locator("#map-estimate")).toContainText(

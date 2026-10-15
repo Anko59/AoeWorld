@@ -4,6 +4,8 @@ use crate::terrain::visible_terrain_frames;
 
 #[path = "scenery.rs"]
 mod scenery;
+#[path = "village/mod.rs"]
+mod village;
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
@@ -150,17 +152,17 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
-        let frames = if unit.moving {
-            &art.walking
-        } else {
-            &art.standing
-        };
-        if frames.is_empty() {
+        if unit.kind == crate::SceneUnitKind::TownCenter {
+            village::town_center(art, unit, camera, &mut emit);
             continue;
         }
+        let Some((frames, stride, animated)) = village::frames(art, unit) else {
+            village::marker(unit, camera, &mut emit);
+            continue;
+        };
         let (direction, flipped) = sprite_direction(unit.facing);
         let frame =
-            world_frame(frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }]);
+            world_frame(frames[direction * stride + if animated { animation % stride } else { 0 }]);
         let scale = camera.zoom as f32;
         let width = f64::from(frame.size[0]) * camera.zoom;
         let height = f64::from(frame.size[1]) * camera.zoom;

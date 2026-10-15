@@ -63,7 +63,8 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         order_feedback: Default::default(),
         units: BTreeMap::new(),
         presentation: Default::default(),
-        selected: None,
+        selected: Default::default(),
+        village: Default::default(),
         grid: false,
         drag: None,
         pointer: None,
@@ -73,6 +74,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     resize(&mut shared.borrow_mut());
     super::fixture::set_active(&shared);
     controls::install(shared.clone())?;
+    super::village::hud::install(shared.clone())?;
     super::capture::install(shared.clone())?;
     connect(shared.clone())?;
     animate(shared)?;

@@ -4,16 +4,17 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 12;
+pub const VERSION: u8 = 13;
 
 pub mod candidates;
 pub mod packing;
 pub mod runtime;
 mod topology;
+mod village;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 1_695;
+pub const MAX_REVIEWED_FRAMES: u32 = 2_003;
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -54,6 +55,18 @@ pub enum AssetRole {
     DeadwoodLog,
     GrassReeds,
     DeadwoodTree,
+    VillagerStanding,
+    VillagerWalking,
+    VillagerWorking,
+    VillagerCarrying,
+    TownCenterMain,
+    TownCenterRoofLeft,
+    TownCenterSupportLeft,
+    TownCenterSupportsLeft,
+    TownCenterRoofRight,
+    TownCenterSupportsRight,
+    TownCenterSupportRight,
+    TownCenterShadow,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -154,7 +167,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 15] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 27] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -286,6 +299,18 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 15] = [
         interpretation: "occasional bare snag; nonblocking deadwood, no wood resource",
         terrain_topology: None,
     },
+    village::SOURCES[0],
+    village::SOURCES[1],
+    village::SOURCES[2],
+    village::SOURCES[3],
+    village::SOURCES[4],
+    village::SOURCES[5],
+    village::SOURCES[6],
+    village::SOURCES[7],
+    village::SOURCES[8],
+    village::SOURCES[9],
+    village::SOURCES[10],
+    village::SOURCES[11],
 ];
 
 /// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only

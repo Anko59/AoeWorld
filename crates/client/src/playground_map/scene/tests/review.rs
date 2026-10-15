@@ -88,6 +88,8 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
         canvas,
         renderer,
         art: GameArt {
+            village: Default::default(),
+            town_center: Default::default(),
             walking: Vec::new(),
             standing: Vec::new(),
             grass: Vec::new(),
@@ -139,7 +141,11 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
             },
         )]),
         presentation: Default::default(),
-        selected: Some(id),
+        selected: crate::playground::game::village::selection::Selection {
+            units: vec![id],
+            building_id: None,
+        },
+        village: Default::default(),
         grid: false,
         drag: None,
         pointer: None,

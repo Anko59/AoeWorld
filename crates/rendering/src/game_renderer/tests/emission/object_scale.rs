@@ -22,6 +22,8 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 /// Hotspots as in the reviewed pack: a gold pile's is in its middle.
 fn art() -> GameArt {
     GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],
         standing: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],
         grass: Vec::new(),
@@ -139,6 +141,7 @@ fn resources_keep_native_size_relative_to_the_tile_with_the_hotspot_on_its_centr
 #[wasm_bindgen_test]
 fn units_are_drawn_at_the_same_native_scale() {
     let unit = SceneUnit {
+        kind: Default::default(),
         id: EntityId(7),
         position: [10.5; 2],
         moving: false,
@@ -158,6 +161,7 @@ fn units_are_drawn_at_the_same_native_scale() {
 #[wasm_bindgen_test]
 fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
     let unit = SceneUnit {
+        kind: Default::default(),
         id: EntityId(7),
         position: [10.25, 10.5],
         moving: false,

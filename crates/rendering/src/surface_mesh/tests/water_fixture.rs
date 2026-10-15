@@ -61,6 +61,8 @@ pub(crate) fn atlas() -> Vec<u8> {
 /// `depth` false models a pack without those optional sheets.
 pub(crate) fn art(depth: bool) -> GameArt {
     GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame(4)],

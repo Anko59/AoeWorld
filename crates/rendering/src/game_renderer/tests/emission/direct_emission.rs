@@ -97,6 +97,8 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
     let mut digests = Vec::new();
     for mode in 0..6 {
         let mut art = GameArt {
+            village: Default::default(),
+            town_center: Default::default(),
             walking: base.walking.clone(),
             standing: base.standing.clone(),
             grass: base.grass.clone(),
@@ -167,6 +169,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
                 .collect::<Vec<_>>();
             let units = (0..16)
                 .map(|i| SceneUnit {
+                    kind: Default::default(),
                     id: EntityId((i % 3) as u32),
                     position: positions[(i / 2) % 6],
                     moving: i % 2 == 0,

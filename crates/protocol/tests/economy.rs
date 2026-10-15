@@ -57,6 +57,13 @@ fn snapshot() -> GameplayServerMessage {
 fn economy_commands_have_current_golden_wire_and_roundtrip() {
     for (message, bytes) in [
         (
+            GameplayClientMessage::CancelTrainingOrder {
+                sequence: 8,
+                building_id: EntityId(5),
+            },
+            vec![6, 8, 5],
+        ),
+        (
             GameplayClientMessage::GatherOrder {
                 sequence: 9,
                 entity_id: EntityId(3),

@@ -22,7 +22,9 @@ pub(super) fn update(client: &Client) {
 pub(super) fn label(client: &Client) -> String {
     client
         .selected
-        .and_then(|id| client.units.get(&id))
+        .units
+        .first()
+        .and_then(|id| client.units.get(id))
         .map(|unit| movement_label(unit.moving, unit.planning))
         .map_or_else(
             || "no unit selected".to_owned(),

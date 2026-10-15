@@ -9,8 +9,19 @@ pub struct SceneCamera {
     pub focus_elevation_meters: f64,
 }
 
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+pub enum SceneUnitKind {
+    #[default]
+    Scout,
+    Villager,
+    VillagerWorking,
+    VillagerCarrying,
+    TownCenter,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneUnit {
+    pub kind: SceneUnitKind,
     pub id: EntityId,
     pub position: [f64; 2],
     pub moving: bool,
