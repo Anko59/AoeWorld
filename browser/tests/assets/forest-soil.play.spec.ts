@@ -319,6 +319,7 @@ test("explicit original forest soil appears on actual source terrain across thre
         .locator("#minimap")
         .getAttribute("data-map-hash");
       if (!resume && activeHash !== hash) {
+        await page.getByRole("button", { name: "Menu", exact: true }).click();
         await page.getByRole("button", { name: "Open map creator" }).click();
         await page.getByLabel("Saved maps").selectOption(hash);
         await page.getByRole("button", { name: "Open saved" }).click();
@@ -327,6 +328,7 @@ test("explicit original forest soil appears on actual source terrain across thre
           { timeout: 60_000 },
         );
         await expect(page.locator("#connection")).toHaveText(/reconnect/);
+        await page.getByRole("button", { name: "Menu", exact: true }).click();
         await page.getByRole("button", { name: "Reconnect to server" }).click();
         await ready(page, backend);
       }

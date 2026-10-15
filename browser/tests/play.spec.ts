@@ -328,6 +328,7 @@ test("map creator retries a recovered request with its original detail", async (
   });
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Previous map requests").selectOption("41");
   const retry = page.waitForRequest(
@@ -373,6 +374,7 @@ test("accepted creation survives a polling error and reload without duplicate su
   });
   await page.goto("/?play=1");
   await waitForGame(page);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
   await expect(page.locator("#map-estimate")).toContainText(
@@ -386,6 +388,7 @@ test("accepted creation survives a polling error and reload without duplicate su
   ).toBeDisabled();
   await page.reload();
   await waitForGame(page);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await expect(page.locator("#map-estimate")).toContainText(
     "Map creation cancelled",

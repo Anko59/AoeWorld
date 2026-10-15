@@ -202,3 +202,33 @@ fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
                     .supports_frames(source.frames))
     );
 }
+
+#[test]
+fn village_art_is_optional_and_uses_reviewed_directional_prefixes_and_town_center_parts() {
+    for (id, count) in [
+        (1479, 75),
+        (1484, 75),
+        (1535, 75),
+        (1536, 75),
+        (891, 1),
+        (3594, 1),
+        (3595, 1),
+        (3596, 1),
+        (4610, 1),
+        (4611, 1),
+        (4612, 1),
+        (889, 1),
+    ] {
+        let source = OPTIONAL_RESOURCE_SOURCES
+            .iter()
+            .find(|source| source.id == id)
+            .expect("optional village sprite metadata");
+        assert_eq!(source.frames, count);
+        assert!(source.terrain_topology.is_none());
+        assert!(
+            !REQUIRED_RENDER_SOURCES
+                .iter()
+                .any(|required| required.id == id)
+        );
+    }
+}

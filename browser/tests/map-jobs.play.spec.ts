@@ -50,6 +50,7 @@ test("creator shows measured phase counts without an invented overall percentage
     "data-assets",
     "aoe2-local",
   );
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
   const output = page.locator("#map-estimate");
@@ -101,6 +102,7 @@ test("lost submission acknowledgement reuses the saved key and request after rel
     "data-assets",
     "aoe2-local",
   );
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
   await expect(page.locator("#map-estimate")).toContainText(
@@ -115,6 +117,7 @@ test("lost submission acknowledgement reuses the saved key and request after rel
     "data-assets",
     "aoe2-local",
   );
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page
     .getByRole("button", { name: "Recover request", exact: true })
@@ -151,6 +154,7 @@ test("explicit submission conflict permits a fresh key instead of trapping recov
     "data-assets",
     "aoe2-local",
   );
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   const generate = page.getByRole("button", { name: "Generate", exact: true });
   await generate.click();

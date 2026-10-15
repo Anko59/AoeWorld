@@ -107,6 +107,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     // Activation retires the old world; the existing UI explicitly requires a
     // reconnect to join its replacement. Wait until reset cleared the old token.
     await expect(page.locator("#connection")).toHaveText(/reconnect/);
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Reconnect to server" }).click();
     await expect(page.locator("#connection")).toHaveText("connected");
     await expect

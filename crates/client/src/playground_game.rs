@@ -491,3 +491,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
 pub async fn initialize(document: Document) -> Result<(), JsValue> {
     init::initialize(document).await
 }
+
+#[cfg(test)]
+#[path = "village/tests/orders.rs"]
+mod village_order_tests;
