@@ -170,3 +170,18 @@ fn acknowledgements_use_their_own_target_context_and_keep_a_bounded_history() {
         order_message(RejectedInvalidDestination, None)
     );
 }
+
+#[wasm_bindgen_test]
+fn economy_rejections_remain_clear_in_the_existing_client() {
+    for (result, phrase) in [
+        (CommandResult::RejectedNotOwner, "another player"),
+        (CommandResult::RejectedWrongUnitKind, "unit kind"),
+        (CommandResult::RejectedInvalidResource, "exhausted"),
+        (CommandResult::RejectedInsufficientFood, "food"),
+        (CommandResult::RejectedPopulationCap, "population"),
+        (CommandResult::RejectedTrainingQueueFull, "training queue"),
+        (CommandResult::RejectedResourceUnavailable, "unavailable"),
+    ] {
+        assert!(order_message(result, None).contains(phrase));
+    }
+}

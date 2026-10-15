@@ -10,6 +10,14 @@ token; later connections spectate, and a disconnected controller has a
 canonicalized to the center of a valid tile; fixed-point interpolation carries
 units continuously between those lattice waypoints.
 
+Gameplay starts with an owned Town Center, three villagers and the scout.
+The simulation owns integer stockpiles, population, gathering jobs and a serial
+villager training queue. Building footprints block authoritative navigation.
+Gathering uses the resource overlay transaction and owned Town Center drop-off
+points. Snapshot and tick messages carry bounded player/building state alongside
+unit kinds, tasks and carried loads; failed outgoing delivery closes the session.
+The single current rules table is described in [village economy](economy.md).
+
 The `/diagnostics.html` adapter retains the synthetic compatibility world and
 wire format for regression evidence. Its world is initialized only when a
 diagnostic endpoint is used, so opening the game does not start the synthetic
@@ -67,7 +75,7 @@ request for projected creator-map footprints.
 
 Mutable resource amounts are separate from immutable geographic chunks. The
 server restores map-bound snapshots before spawning and commits depletion only
-after persistence accepts it. Gameplay protocol 7 sends bounded sparse resets
+after persistence accepts it. Gameplay protocol 2 sends bounded sparse resets
 and exact-revision deltas; lagging consumers reset from the authoritative overlay.
 The client retains that state independently of chunk residency and removes
 exhausted sprites on both render backends. This supplies resource lifecycle

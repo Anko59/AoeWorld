@@ -1,5 +1,4 @@
 use super::GameplayService;
-use aoe_core::{PlayerId, WorldPosition};
 use aoe_map::{Depletion, EnvironmentPageProvider, MapPackage, ResourceOverlaySnapshot};
 use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
 use std::{path::PathBuf, sync::Arc};
@@ -8,6 +7,7 @@ mod feed;
 #[path = "resources/store.rs"]
 mod store;
 pub(super) use feed::Journal;
+pub(super) use store::save as save_gathering;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceLifecycleError {
@@ -73,9 +73,7 @@ impl GameplayService {
                 return Err(GameWorldError::StartSearchLimit.into());
             }
         };
-        let position =
-            WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)?;
-        let unit = world.spawn_unit(PlayerId(0), position)?;
+        let unit = crate::gameplay_map::initialize_village(&mut world, tile)?;
         let mut service = Self::from_world(world, unit, Some(content_hash), Some(metadata));
         service.resource_directory = directory;
         Ok(Some(service))

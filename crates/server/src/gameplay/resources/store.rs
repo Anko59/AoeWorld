@@ -36,7 +36,7 @@ pub(super) fn load(
 
 /// Returns false only when replacement succeeded but directory fsync failed.
 /// Callers MUST commit live state after replacement, including this outcome.
-pub(super) fn save(
+pub(in crate::gameplay) fn save(
     directory: &Path,
     snapshot: &ResourceOverlaySnapshot,
     previous_revision: u64,

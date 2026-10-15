@@ -249,6 +249,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 revision,
                 tick,
                 units,
+                ..
             }) if revision >= client.revision => {
                 if !client.presentation.receive(tick.0, now()) {
                     return;
@@ -279,6 +280,7 @@ fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 tick,
                 changed_units,
                 removals,
+                ..
             }) if revision == client.revision => {
                 if !client.presentation.receive(tick.0, now()) {
                     return;

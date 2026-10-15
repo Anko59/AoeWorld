@@ -472,3 +472,5 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 mod far_orders;
 mod physical_movement;
 mod routes;
+
+pub(crate) mod economy;
