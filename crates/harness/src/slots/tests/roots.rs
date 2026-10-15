@@ -1,11 +1,15 @@
 //! Which registry a gate reads and which queue it joins, from any directory: a subdirectory of the
 //! checkout, a snapshot of it, or one outside every repository.
-use super::{SERIAL, checkout, git, tickets};
+use super::{
+    SERIAL, checkout, git,
+    support::{hold, hold_snapshot, run_in_slot},
+    tickets,
+};
 use crate::{
     gates::registry::Registry,
     slots::{
         SlotEnv,
-        guard::{checkout_of, dir, hold, hold_snapshot, is_heavy, run_in_slot, slot_dir_with},
+        guard::{checkout_of, dir, is_heavy, slot_dir_with},
     },
 };
 use std::{ffi::OsStr, fs, path::Path};

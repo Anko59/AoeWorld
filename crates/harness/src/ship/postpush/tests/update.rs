@@ -118,7 +118,7 @@ fn a_conflicting_pull_request_is_left_alone_with_one_comment_naming_the_files() 
         "{calls}"
     );
     assert!(
-        calls.contains("README.md") && calls.contains("could not be rebased"),
+        calls.contains("README.md") && calls.contains("could not be updated (dev merged in)"),
         "{calls}"
     );
     assert_eq!(

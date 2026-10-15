@@ -50,7 +50,7 @@ fn all_three_ship_network_paths_recover_from_an_agent_hiccup() {
                 );
             }
             "push" => {
-                crate::ship::push(&root, &evidence, false, None).unwrap();
+                crate::ship::push(&root, &evidence, None).unwrap();
             }
             _ => unreachable!(),
         });
@@ -84,7 +84,7 @@ fn all_three_ship_network_paths_bound_retries_and_report_the_agent() {
                     .err()
                     .unwrap()
                     .to_string(),
-                "push" => crate::ship::push(&root, &evidence, false, None)
+                "push" => crate::ship::push(&root, &evidence, None)
                     .unwrap_err()
                     .to_string(),
                 _ => unreachable!(),

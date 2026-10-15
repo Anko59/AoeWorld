@@ -283,3 +283,18 @@ fn steps_targets(files: &[(String, String)]) -> Vec<String> {
     targets.dedup();
     targets
 }
+
+#[test]
+fn direct_compile_heavy_tests_wrap_the_steps_before_cargo() {
+    let files = make_files(&repository());
+    for target in ["test-unit", "test-wasm", "test-harness"] {
+        let lines = recipe(&files, target).unwrap();
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains(&format!("$(SLOT_RUN) {target} -- "))),
+            "{target}: {lines:?}"
+        );
+        assert!(recipe(&files, &format!("{target}-steps")).is_some());
+    }
+}

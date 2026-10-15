@@ -241,12 +241,10 @@ lint:
 deny: policy-tools
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo deny --locked check
 
-test-unit:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
+test-unit: orchestrator-tools
+	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
 
 .PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare task-plan
-test-harness:
-	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
 gates-docs:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
@@ -325,7 +323,7 @@ map-perf:
 	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
 
 test-wasm: browser-tools orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+	@$(SLOT_RUN) test-wasm -- make --no-print-directory test-wasm-steps
 
 fuzz-smoke: fuzz-tools
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke

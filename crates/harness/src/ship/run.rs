@@ -44,7 +44,20 @@ impl GateResult {
     }
 }
 
+type TakeSlot =
+    fn(&Path, &str, &SlotEnv) -> crate::slots::queue::Result<crate::slots::guard::Guard>;
+
 pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
+    run_gates_with(root, gates, slots, crate::slots::hold)
+}
+
+/// The same gate path with acquisition injected for queue/load fixtures.
+pub(crate) fn run_gates_with(
+    root: &Path,
+    gates: &[&Gate],
+    slots: &SlotEnv,
+    take: TakeSlot,
+) -> Vec<GateResult> {
     let mut docker: Option<bool> = None;
     gates
         .iter()
@@ -60,14 +73,14 @@ pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<Ga
                     tail: String::new(),
                 };
             }
-            run_one(root, gate, slots)
+            run_one(root, gate, slots, take)
         })
         .collect()
 }
 
-fn run_one(root: &Path, gate: &Gate, slots: &SlotEnv) -> GateResult {
+fn run_one(root: &Path, gate: &Gate, slots: &SlotEnv, take: TakeSlot) -> GateResult {
     // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
-    let slot = match crate::slots::hold(root, &gate.id, slots) {
+    let slot = match take(root, &gate.id, slots) {
         Ok(slot) => slot,
         Err(error) => {
             return GateResult {

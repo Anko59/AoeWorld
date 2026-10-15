@@ -10,6 +10,7 @@
 //! carries that nonce, so setting the variable by hand does not skip the queue.
 //! The deadline of a gate counts from when it starts running, never from the wait.
 pub(crate) mod guard;
+mod load;
 pub(crate) mod queue;
 mod status;
 

@@ -1,6 +1,6 @@
 use super::{
     Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
-    guard::{dir, hold, is_heavy, nonce},
+    guard::{dir, is_heavy, nonce},
     status::render,
     verify,
 };
@@ -356,7 +356,8 @@ fn a_gate_that_waited_longer_than_its_budget_still_gets_its_whole_budget() {
     }))
     .unwrap();
     let begun = Instant::now();
-    let results = crate::ship::run::run_gates(&root, &[&gate], &SlotEnv::default());
+    let results =
+        crate::ship::run::run_gates_with(&root, &[&gate], &SlotEnv::default(), support::hold);
     releaser.join().unwrap();
     assert!(begun.elapsed() >= WAIT, "it did wait");
     let [result] = results.as_slice() else {
@@ -410,6 +411,7 @@ fn the_registry_decides_which_gates_are_heavy() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let registry = Registry::load(&root).unwrap();
     for heavy in [
+        "test-harness",
         "test-unit",
         "test-wasm",
         "test-e2e",
@@ -461,3 +463,8 @@ fn status_lists_running_holders_then_the_queue() {
 mod environment;
 mod makefile;
 mod roots;
+
+mod load;
+
+mod support;
+use support::hold;
