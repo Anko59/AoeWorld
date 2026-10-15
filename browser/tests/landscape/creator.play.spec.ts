@@ -27,7 +27,6 @@ test("creator submits the single map request shape without a detail profile", as
   );
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await expect(
     page.getByRole("combobox", { name: "Landscape profile" }),
@@ -86,7 +85,6 @@ for (const [region, outside] of [
     );
     await page.goto("/?play=1");
     await expect(page.locator("#connection")).toHaveText("connected");
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Open map creator" }).click();
     await page.getByLabel("Region").selectOption(region);
     await expect(page.getByLabel("Rivers", { exact: true })).toHaveValue(

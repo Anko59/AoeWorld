@@ -121,7 +121,6 @@ async function joinActivatedWorld(page: Page) {
 async function closeMapCreator(page: Page) {
   const creator = page.locator("#map-creator");
   if (await creator.isVisible()) {
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Open map creator" }).click();
     await expect(creator).toBeHidden();
   }
@@ -178,7 +177,6 @@ export async function activateMatrixCase(
   });
   await page.goto("/?play=1");
   await ready(page);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(item.content_hash);
   await page.getByRole("button", { name: "Open saved" }).click();
@@ -316,7 +314,6 @@ export async function captureCase(
     "data-renderer",
     backend,
   );
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(item.content_hash);
   await page.getByRole("button", { name: "Open saved" }).click();
@@ -395,7 +392,6 @@ export async function captureCase(
   await ready(page);
   await page.reload();
   await ready(page);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(item.content_hash);
   await page.getByRole("button", { name: "Open saved" }).click();

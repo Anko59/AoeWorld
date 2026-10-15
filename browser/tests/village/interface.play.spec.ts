@@ -122,7 +122,7 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
     .toBeGreaterThan(200);
 });
 
-test("menu resumes and quits; minimap lives in the bottom frame and navigates", async ({
+test("menu resumes; minimap lives in the bottom frame and navigates", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -142,10 +142,10 @@ test("menu resumes and quits; minimap lives in the bottom frame and navigates", 
     before ?? "",
   );
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await page.getByRole("button", { name: "Quit to Main Menu" }).click();
-  await expect(page.locator("#connection")).toHaveText("connected", {
-    timeout: 30_000,
-  });
+  await expect(
+    page.getByRole("button", { name: "Quit to Main Menu" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Game menu" })).toBeHidden();
 });
 

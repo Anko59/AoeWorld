@@ -319,7 +319,6 @@ test("explicit original forest soil appears on actual source terrain across thre
         .locator("#minimap")
         .getAttribute("data-map-hash");
       if (!resume && activeHash !== hash) {
-        await page.getByRole("button", { name: "Menu", exact: true }).click();
         await page.getByRole("button", { name: "Open map creator" }).click();
         await page.getByLabel("Saved maps").selectOption(hash);
         await page.getByRole("button", { name: "Open saved" }).click();

@@ -89,7 +89,6 @@ test("isolated original-pack country renders actual chunks on three explicit bac
   });
   await page.goto("/?play=1");
   const manifest = await ready(page);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(hash);
   await page.getByRole("button", { name: "Open saved" }).click();
@@ -152,7 +151,6 @@ test("isolated original-pack country renders actual chunks on three explicit bac
     }),
   );
 
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   const observations: unknown[] = [];
   const rendererErrors: string[] = [];

@@ -133,7 +133,6 @@ test("ordinary creator prepares and activates overview and detailed source maps"
   });
   await page.goto("/?play=1");
   await ready(page);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   const landResponse = await locatorResponse;
   expect(landResponse.ok()).toBe(true);
@@ -162,7 +161,6 @@ test("ordinary creator prepares and activates overview and detailed source maps"
 
   for (const profile of profiles) {
     if (profile === "detailed") {
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
       await page.getByRole("button", { name: "Open map creator" }).click();
     }
     await expect(page.getByLabel("Region")).toHaveValue("paris");
@@ -337,7 +335,6 @@ test("overview and detailed packages reopen and load unseen chunks offline", asy
 
   await page.goto("/?play=1");
   await ready(page);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Open map creator" }).click();
   for (const profile of profiles) {
     const created = JSON.parse(
@@ -423,7 +420,6 @@ test("overview and detailed packages reopen and load unseen chunks offline", asy
       },
       page,
     );
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Open map creator" }).click();
   }
 });

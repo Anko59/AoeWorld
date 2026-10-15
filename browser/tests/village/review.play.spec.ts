@@ -67,3 +67,56 @@ test("reconnecting preserves an offscreen zero-load gold worker without terrain 
   await expect(page.locator("#workers-gold")).toHaveText("1");
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", "");
 });
+
+test("Escape disarms Move before the next selection click", async ({
+  page,
+}) => {
+  await gameAssets(page);
+  await fiveVillagerFixture(page);
+  await page.goto("/?play=1");
+  await expect(page.locator("#population")).toHaveText("6/10");
+  const worker = await page.locator("#scene").evaluate((canvas) =>
+    (
+      JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as {
+        kind: string;
+        x: number;
+        y: number;
+      }[]
+    ).find((actor) => actor.kind === "Villager"),
+  );
+  if (!worker) throw new Error("Villager missing");
+  await page.mouse.click(worker.x, worker.y);
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Villager",
+  );
+  await page.locator("#move-units").click();
+  await page.locator("#scene").focus();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "0");
+  await page.mouse.click(worker.x, worker.y);
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Villager",
+  );
+});
+
+test("the HUD retains the dev creator outside Menu and leaves quitting to setup-only maps", async ({
+  page,
+}) => {
+  await gameAssets(page);
+  await fiveVillagerFixture(page);
+  await page.goto("/?play=1#x=8192&y=8192&zoom=.35");
+  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(
+    page.getByRole("button", { name: "Open map creator" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await expect(page.locator("#map-creator")).toBeVisible();
+  await page.getByRole("button", { name: "Open map creator" }).click();
+  await expect(page.locator("#map-creator")).toBeHidden();
+  await page.locator("#menu-toggle").click();
+  await expect(
+    page.getByRole("button", { name: /Quit to Main Menu/i }),
+  ).toHaveCount(0);
+});
