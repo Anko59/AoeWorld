@@ -33,3 +33,12 @@ hooks-install:
 
 hooks-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-check
+
+# Docker creates missing nested bind destinations as root in the checkout.
+# This bootstrap must run as the caller, before any cache-using container.
+ifneq ($(strip $(CACHE_MOUNTS)),)
+.EXTRA_PREREQS += cache-mount-points
+.PHONY: cache-mount-points
+cache-mount-points:
+	@mkdir -p $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),'$(ROOT)/.cache/cargo') $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),'$(ROOT)/target')
+endif

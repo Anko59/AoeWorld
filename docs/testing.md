@@ -142,6 +142,8 @@ keep the daemon's default image store and uncached builds. Locally
 prerequisites, cadence metadata, and the validation job map. Use `make gate-plan`
 for a conservative PR plan and `make gates-docs` to regenerate the registry table;
 `make test-harness` exercises the Rust harness and CLI regressions in Docker.
+For red/green work, `make test-harness-focused HARNESS_TEST_FILTER=<substring>`
+selects matching test names; it does not replace the full gate.
 Unknown/protected paths and unavailable CI comparison bases select every job.
 The manifest retains the requested and resolved base, canonical registry hash,
 and dependency-first gate list; aggregate validation recomputes them all.

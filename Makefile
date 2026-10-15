@@ -248,6 +248,11 @@ test-unit:
 test-harness:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
+.PHONY: test-harness-focused
+test-harness-focused:
+	@test -n '$(HARNESS_TEST_FILTER)'
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness '$(HARNESS_TEST_FILTER)'
+
 gates-docs:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
 
