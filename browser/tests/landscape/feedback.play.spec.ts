@@ -71,7 +71,7 @@ async function feedbackWorld(
         socket.send(
           Buffer.from([
             0,
-            1,
+            2,
             1,
             1,
             ...Array<number>(32).fill(2),
@@ -101,6 +101,11 @@ async function feedbackWorld(
             0,
             0,
             4,
+            1, // Scout
+            0, // Idle
+            0, // No carried resource
+            0, // Players
+            0, // Buildings
           ]),
         );
         socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0]));

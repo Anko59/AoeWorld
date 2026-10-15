@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod planner;
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
-    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll,
+    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
@@ -289,7 +289,9 @@ fn walkable_with_overlay(
         .tile_and_node_with_cancel(tile, &|| false)
         .is_ok_and(|pair| {
             pair.is_some_and(|(sample, node)| {
-                sample.passable && node.is_none_or(|node| !overlay.blocks_node(node))
+                !overlay.blocks_tile(tile)
+                    && sample.passable
+                    && node.is_none_or(|node| !overlay.blocks_node(node))
             })
         })
 }

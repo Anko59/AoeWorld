@@ -5,10 +5,12 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
+pub(crate) mod economy;
 mod resources;
+pub use economy::*;
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 pub const MAX_MESSAGE: usize = 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
@@ -33,6 +35,9 @@ pub struct UnitState {
     pub moving: bool,
     pub planning: bool,
     pub facing: u8,
+    pub kind: UnitKind,
+    pub task: UnitTask,
+    pub carried: Option<CarriedResource>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -53,6 +58,16 @@ pub enum ClientMessage {
     Resync {
         revision: u64,
     },
+    GatherOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        resource_id: u64,
+    },
+    TrainOrder {
+        sequence: u64,
+        building_id: EntityId,
+        kind: UnitKind,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -66,6 +81,13 @@ pub enum CommandResult {
     RejectedInvalidDestination,
     RejectedUnreachable,
     RejectedPathBudgetExceeded,
+    RejectedNotOwner,
+    RejectedWrongUnitKind,
+    RejectedInvalidResource,
+    RejectedInsufficientFood,
+    RejectedPopulationCap,
+    RejectedTrainingQueueFull,
+    RejectedResourceUnavailable,
 }
 
 /// Immutable physical properties of the active geographic map. The package
@@ -98,6 +120,10 @@ pub enum ServerMessage {
         tick: Tick,
         #[serde(deserialize_with = "bounded_vec")]
         units: Vec<UnitState>,
+        #[serde(deserialize_with = "economy::bounded_players")]
+        players: Vec<GameplayPlayerState>,
+        #[serde(deserialize_with = "economy::bounded_buildings")]
+        buildings: Vec<GameplayBuildingState>,
     },
     Tick {
         revision: u64,
@@ -106,6 +132,12 @@ pub enum ServerMessage {
         changed_units: Vec<UnitState>,
         #[serde(deserialize_with = "bounded_vec")]
         removals: Vec<EntityId>,
+        #[serde(deserialize_with = "economy::bounded_players")]
+        changed_players: Vec<GameplayPlayerState>,
+        #[serde(deserialize_with = "economy::bounded_buildings")]
+        changed_buildings: Vec<GameplayBuildingState>,
+        #[serde(deserialize_with = "economy::bounded_building_removals")]
+        building_removals: Vec<EntityId>,
     },
     CommandAck {
         sequence: u64,
@@ -135,6 +167,8 @@ pub enum Error {
     TooManyUnits,
     #[error("invalid bounded resource state")]
     InvalidResourceState,
+    #[error("invalid bounded economy state")]
+    InvalidEconomyState,
     #[error("invalid postcard message: {0}")]
     Invalid(#[from] postcard::Error),
 }
@@ -186,17 +220,42 @@ where
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     match message {
         ServerMessage::ResourceState(state) if !state.valid() => Err(Error::InvalidResourceState),
-        ServerMessage::Snapshot { units, .. } if units.len() > MAX_SUBSCRIBED_UNITS => {
-            Err(Error::TooManyUnits)
+        ServerMessage::Snapshot {
+            units,
+            players,
+            buildings,
+            ..
+        } => {
+            if units.len() > MAX_SUBSCRIBED_UNITS {
+                return Err(Error::TooManyUnits);
+            }
+            if !economy::valid_units(units)
+                || !economy::valid_players(players)
+                || !economy::valid_buildings(buildings)
+            {
+                return Err(Error::InvalidEconomyState);
+            }
+            Ok(())
         }
         ServerMessage::Tick {
             changed_units,
             removals,
+            changed_players,
+            changed_buildings,
+            building_removals,
             ..
-        } if changed_units.len() > MAX_SUBSCRIBED_UNITS
-            || removals.len() > MAX_SUBSCRIBED_UNITS =>
-        {
-            Err(Error::TooManyUnits)
+        } => {
+            if changed_units.len() > MAX_SUBSCRIBED_UNITS || removals.len() > MAX_SUBSCRIBED_UNITS {
+                return Err(Error::TooManyUnits);
+            }
+            if !economy::valid_units(changed_units)
+                || !economy::valid_players(changed_players)
+                || !economy::valid_buildings(changed_buildings)
+                || building_removals.len() > MAX_ECONOMY_BUILDINGS
+            {
+                return Err(Error::InvalidEconomyState);
+            }
+            Ok(())
         }
         _ => Ok(()),
     }
@@ -228,85 +287,4 @@ pub fn decode_server(bytes: &[u8]) -> Result<ServerMessage, Error> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_core::{Seed, TileCoord, WorldConfig};
-
-    fn region() -> TileRect {
-        TileRect::new(TileCoord::new(0, 0), TileCoord::new(8, 8))
-    }
-
-    #[test]
-    fn gameplay_messages_round_trip_independently_of_diagnostic_protocol() {
-        let message = ClientMessage::MoveOrder {
-            sequence: 9,
-            entity_id: EntityId(3),
-            destination: WorldPosition::new(42, 84),
-        };
-        assert_eq!(
-            decode_client(&encode_client(&message).unwrap()).unwrap(),
-            message
-        );
-        let welcome = ServerMessage::Welcome {
-            version: VERSION,
-            world_id: 11,
-            map_content_hash: None,
-            map_metadata: None,
-            width_tiles: WorldConfig::new(16_384, 16_384, Seed(1))
-                .unwrap()
-                .width_tiles,
-            height_tiles: 16_384,
-            coordinate_precision: 1_024,
-            tick_hz: 20,
-            role: Role::Spectator,
-            primary_unit_id: EntityId(0),
-            resume_token: None,
-        };
-        assert_eq!(
-            decode_server(&encode_server(&welcome).unwrap()).unwrap(),
-            welcome
-        );
-        let reset = ServerMessage::WorldReset { world_id: 12 };
-        assert_eq!(
-            decode_server(&encode_server(&reset).unwrap()).unwrap(),
-            reset
-        );
-        let acknowledgment = ServerMessage::CommandAck {
-            sequence: 7,
-            result: CommandResult::RejectedPathBudgetExceeded,
-            applied_tick: Tick(3),
-        };
-        assert_eq!(
-            decode_server(&encode_server(&acknowledgment).unwrap()).unwrap(),
-            acknowledgment
-        );
-    }
-
-    #[test]
-    fn gameplay_collections_are_bounded() {
-        let too_many = vec![
-            UnitState {
-                id: EntityId(1),
-                player: PlayerId(0),
-                position: WorldPosition::new(0, 0),
-                moving: false,
-                planning: false,
-                facing: 0
-            };
-            MAX_SUBSCRIBED_UNITS + 1
-        ];
-        assert!(matches!(
-            encode_server(&ServerMessage::Snapshot {
-                revision: 1,
-                tick: Tick(0),
-                units: too_many
-            }),
-            Err(Error::TooManyUnits)
-        ));
-        assert!(matches!(
-            decode_client(&vec![0; MAX_MESSAGE + 1]),
-            Err(Error::TooLarge)
-        ));
-        let _ = region();
-    }
-}
+mod tests;

@@ -3,14 +3,16 @@ mod gameplay;
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{
-    ClientMessage as GameplayClientMessage, CommandResult, Error as GameplayError, MAX_ACK_HISTORY,
-    MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
-    MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_RESOURCE_CHANGES, MAX_SUBSCRIBED_UNITS,
-    MAX_SUBSCRIPTION_TILES, MapMetadata, ResourceAmount, ResourceState, ResumeToken,
-    Role as GameplayRole, ServerMessage as GameplayServerMessage, UnitState as GameplayUnitState,
-    VERSION as GAMEPLAY_VERSION, decode_client as decode_gameplay_client,
-    decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
-    encode_server as encode_gameplay_server,
+    BuildingKind, CarriedResource, ClientMessage as GameplayClientMessage, CommandResult,
+    Error as GameplayError, GameplayBuildingState, GameplayPlayerState, MAX_ACK_HISTORY,
+    MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS, MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE,
+    MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_RESOURCE_CHANGES,
+    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE, MapMetadata, ResourceAmount,
+    ResourceKind, ResourceState, ResumeToken, Role as GameplayRole,
+    ServerMessage as GameplayServerMessage, Stockpile, TrainingState, UnitKind,
+    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION,
+    decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
+    encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
 };
 use serde::{
     Deserialize, Deserializer, Serialize,

@@ -9,9 +9,15 @@ use aoe_core::{
 use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+mod economy;
 #[path = "game_world/hash.rs"]
 mod hash;
 mod resources;
+mod spawning;
+pub use economy::{
+    BuildingKind, CarriedResource, EconomyError, GameBuilding, PlayerEconomy, Stockpile,
+    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
+};
 pub use resources::PreparedResourceDepletion;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35,6 +41,9 @@ pub struct GameUnit {
     pub moving: bool,
     pub planning: bool,
     pub facing: Facing,
+    pub kind: UnitKind,
+    pub task: UnitTask,
+    pub carried: Option<CarriedResource>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {
@@ -83,6 +92,8 @@ pub(crate) struct StoredUnit {
 #[derive(Debug)]
 pub struct GameWorld {
     pub(crate) config: WorldConfig,
+    pub(crate) next_entity_id: u64,
+    pub(crate) economy: economy::Economy,
     pub(crate) tick: Tick,
     pub(crate) units: Vec<StoredUnit>,
     pub(crate) lookup: BTreeMap<EntityId, usize>,
@@ -106,6 +117,8 @@ impl GameWorld {
             terrain: Terrain::uniform(config.seed.0),
             config,
             tick: Tick(0),
+            next_entity_id: 0,
+            economy: economy::Economy::default(),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
@@ -252,48 +265,6 @@ impl GameWorld {
             .and_then(|index| self.units[*index].last_movement_error)
     }
 
-    pub fn spawn_unit(
-        &mut self,
-        player: PlayerId,
-        position: WorldPosition,
-    ) -> Result<EntityId, GameWorldError> {
-        if !self.config.valid_ground_position(position) {
-            return Err(GameWorldError::InvalidPosition);
-        }
-        let passable = self
-            .terrain
-            .passable_with_cancel(position.tile_floor(), self.config, &|| false)
-            .map_err(GameWorldError::Environment)?;
-        if !passable {
-            return Err(GameWorldError::InvalidPosition);
-        }
-        let id = EntityId(
-            u32::try_from(self.units.len()).map_err(|_| GameWorldError::EntityIdExhausted)?,
-        );
-        let bucket = ChunkCoord::from_position(position);
-        let bucket_slot = self.chunks.entry(bucket).or_default().len();
-        self.chunks.entry(bucket).or_default().push(id);
-        self.lookup.insert(id, self.units.len());
-        self.units.push(StoredUnit {
-            state: GameUnit {
-                id,
-                player,
-                position,
-                previous_position: position,
-                moving: false,
-                planning: false,
-                facing: Facing::South,
-            },
-            order: None,
-            bucket,
-            bucket_slot,
-            route: VecDeque::new(),
-            planner: None,
-            last_movement_error: None,
-        });
-        Ok(id)
-    }
-
     /// Depletes an immutable-map resource; collision updates at exhaustion.
     pub fn deplete_resource(
         &mut self,
@@ -312,13 +283,37 @@ impl GameWorld {
         id: EntityId,
         destination: WorldPosition,
     ) -> Result<bool, GameWorldError> {
+        let result = self.issue_task_move(id, destination)?;
+        self.economy.gatherers.remove(&id);
+        if let Some(&index) = self.lookup.get(&id) {
+            self.units[index].state.task = if result {
+                UnitTask::Moving
+            } else if self.units[index].state.carried.is_some() {
+                UnitTask::Carrying
+            } else {
+                UnitTask::Idle
+            };
+        }
+        Ok(result)
+    }
+
+    pub(crate) fn issue_task_move(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+    ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         let destination = self.config.snap_ground_position(destination);
         let passable = self
             .terrain
             .passable_with_cancel(destination.tile_floor(), self.config, &|| false)
             .map_err(GameWorldError::Environment)?;
-        if !passable {
+        if !passable
+            || self
+                .economy
+                .blocked_tiles
+                .contains(&destination.tile_floor())
+        {
             return Err(GameWorldError::InvalidPosition);
         }
         let origin = self.units[index].state.position;

@@ -21,12 +21,12 @@ function unsigned(value: number): number[] {
 }
 
 async function wideWorld(page: Page) {
-  // Postcard protocol-8 fixture: a stationary primary and a 70,000-square world.
+  // Current Postcard protocol-2 fixture: a stationary primary and a 70,000-square world.
   // No shipping test export or source assets are required for the grid regression.
   const coordinate = unsigned((35_000 * 1024 + 512) * 2);
   const welcome = Buffer.from([
     0,
-    8,
+    2,
     1,
     0,
     0,
@@ -65,6 +65,11 @@ async function wideWorld(page: Page) {
           0,
           0,
           4,
+          1, // Scout
+          0, // Idle
+          0, // No carried resource
+          0, // Players
+          0, // Buildings
         ]),
       );
     });

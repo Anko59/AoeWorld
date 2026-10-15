@@ -48,7 +48,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
   const center = unsigned((8192 * 1024 + 512) * 2);
   const welcome = Buffer.from([
     0,
-    8,
+    2,
     1,
     1,
     ...Array<number>(32).fill(2),
@@ -88,6 +88,11 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
           0,
           0,
           4,
+          1, // Scout
+          0, // Idle
+          0, // No carried resource
+          0, // Players
+          0, // Buildings
         ]),
       );
     });

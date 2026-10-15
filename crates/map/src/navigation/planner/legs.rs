@@ -8,9 +8,9 @@ use super::reconstruction::ReconstructionState;
 use super::search::{self, ActiveExpansion, SearchState};
 use super::{
     MAX_ROUTE_PLANNER_NODES, ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES, RoutePlanner,
-    Terminal, heuristic,
+    RouteTerrain, Terminal, heuristic,
 };
-use crate::{EnvironmentPageError, MapChunkGenerator, ResourceOverlay};
+use crate::{EnvironmentPageError, ResourceOverlay};
 use aoe_core::TileCoord;
 
 /// The next leg is planned ahead only while fewer planned steps than this wait
@@ -41,7 +41,7 @@ impl RoutePlanner {
     /// reported by `poll` after the segments already planned.
     pub fn plan_ahead(
         &mut self,
-        terrain: &MapChunkGenerator,
+        terrain: &dyn RouteTerrain,
         overlay: &ResourceOverlay,
         budget: u32,
         cancelled: &dyn Fn() -> bool,
@@ -78,7 +78,7 @@ impl RoutePlanner {
     /// when the budget is spent or the leg has joined the planned route.
     pub(super) fn search_leg(
         &mut self,
-        terrain: &MapChunkGenerator,
+        terrain: &dyn RouteTerrain,
         overlay: &ResourceOverlay,
         budget: u32,
         cancelled: &dyn Fn() -> bool,
