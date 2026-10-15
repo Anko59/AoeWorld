@@ -8,7 +8,7 @@ const show = (id,visible) => { byId(id).hidden = !visible; };
 const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) node.setAttribute(name,value); };
 
 export function initInterface() {
-  const scene = byId('scene');
+  const scene = () => byId('scene');
   const menu = byId('game-menu');
   const grid = byId('command-grid');
   const empty = Array.from({length:15}, () => {
@@ -18,22 +18,22 @@ export function initInterface() {
     window.dispatchEvent(new Event('blur'));
     menu.showModal();
   });
-  byId('resume-game').addEventListener('click', () => { menu.close(); scene.focus(); });
+  byId('resume-game').addEventListener('click', () => { menu.close(); scene().focus(); });
   byId('quit-game').addEventListener('click', () => {
     if (byId('start-menu')) location.assign('/'); else location.reload();
   });
   byId('reconnect').addEventListener('click', () => { menu.close(); byId('map-creator').hidden=true; });
-  byId('creator-close').addEventListener('click', () => { byId('map-creator').hidden=true; scene.focus(); });
+  byId('creator-close').addEventListener('click', () => { byId('map-creator').hidden=true; scene().focus(); });
   let drag = null;
   const box = byId('drag-box');
-  scene.addEventListener('pointerdown', event => { if (event.button===0) drag=[event.clientX,event.clientY]; });
-  scene.addEventListener('pointermove', event => {
+  document.addEventListener('pointerdown', event => { if (event.target===scene() && event.button===0) drag=[event.clientX,event.clientY]; });
+  document.addEventListener('pointermove', event => {
     if (!drag) return;
     const width=Math.abs(event.clientX-drag[0]), height=Math.abs(event.clientY-drag[1]);
     box.hidden = width<4 && height<4;
     Object.assign(box.style,{left:`${Math.min(drag[0],event.clientX)}px`,top:`${Math.min(drag[1],event.clientY)}px`,width:`${width}px`,height:`${height}px`});
   });
-  for (const event of ['pointerup','pointercancel','lostpointercapture']) scene.addEventListener(event,()=>{ drag=null;box.hidden=true; });
+  for (const event of ['pointerup','pointercancel','lostpointercapture']) document.addEventListener(event,()=>{ drag=null;box.hidden=true; });
   let previousSelection='', previousQueue='', previousLoads='';
   const update = state => {
     ['wood','food','gold','stone'].forEach((resource,index) => {
@@ -80,9 +80,9 @@ export function initInterface() {
         byId('training-queue').innerHTML=queue.map(()=>`<span class="unit-token" title="Villager queued">${icon('villager')}</span>`).join('');previousQueue=signature;
       }
     } else previousQueue='';
-    attribute(scene,'data-actors',JSON.stringify(state.actors));
-    attribute(scene,'data-resource-targets',JSON.stringify(state.resources));
-    attribute(scene,'data-village-art',state.art?'native':'markers');
+    attribute(scene(),'data-actors',JSON.stringify(state.actors));
+    attribute(scene(),'data-resource-targets',JSON.stringify(state.resources));
+    attribute(scene(),'data-village-art',state.art?'native':'markers');
     const loads=state.actors.filter(actor=>actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-208);
     const signature=JSON.stringify(loads);
     if (signature!==previousLoads) {

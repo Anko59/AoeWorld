@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
 
 type Actor = { id: number; kind: string; x: number; y: number };
@@ -21,6 +22,7 @@ async function start(page: Page) {
   await gameAssets(page, true);
   await page.goto("/");
   await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#population")).toHaveText("4/5");
   await page.keyboard.press("h");
   await page.keyboard.press("Escape");
 }
@@ -141,4 +143,32 @@ test("menu resumes and quits; minimap lives in the bottom frame and navigates", 
   await page.getByRole("button", { name: "Quit to Main Menu" }).click();
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.getByRole("dialog", { name: "Game menu" })).toBeHidden();
+});
+
+test("Canvas replacement keeps village selection, drag feedback and training controls", async ({
+  page,
+}) => {
+  await forceCanvas(page);
+  await start(page);
+  await expect(page.locator("#playground")).toHaveAttribute(
+    "data-renderer",
+    "canvas2d",
+  );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-village-art",
+    "markers",
+  );
+  await page.mouse.move(300, 220);
+  await page.mouse.down();
+  await page.mouse.move(420, 280, { steps: 3 });
+  await expect(page.locator("#drag-box")).toBeVisible();
+  await page.mouse.up();
+  await expect(page.locator("#drag-box")).toBeHidden();
+  await clickActor(page, "Villager");
+  await expect(page.locator("#selection-name")).toHaveText("Villager");
+  await clickActor(page, "TownCenter");
+  await page.getByRole("button", { name: /Train Villager/ }).click();
+  await expect(page.locator("#stockpile-food")).toHaveText("150");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator("#stockpile-food")).toHaveText("200");
 });
