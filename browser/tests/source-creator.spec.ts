@@ -64,10 +64,14 @@ async function captureLocatorOverview(page: Page) {
   // Subpixel SVG pointer rounding stays below 0.005°; letterboxing would
   // move this global quarter-point by tens of degrees.
   await expect
-    .poll(async () => Number(await page.getByLabel("Latitude").inputValue()))
+    .poll(async () =>
+      Number(await page.getByLabel("Latitude", { exact: true }).inputValue()),
+    )
     .toBeCloseTo(45, 2);
   await expect
-    .poll(async () => Number(await page.getByLabel("Longitude").inputValue()))
+    .poll(async () =>
+      Number(await page.getByLabel("Longitude", { exact: true }).inputValue()),
+    )
     .toBeCloseTo(-90, 2);
   await overview.hover({ position: { x: box.width / 2, y: box.height / 2 } });
   await page.mouse.wheel(0, -120);
@@ -127,7 +131,7 @@ test("ordinary creator prepares and activates overview and detailed source maps"
     const url = new URL(response.url());
     return url.pathname === "/locator/world-land.svg";
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   const landResponse = await locatorResponse;
@@ -328,7 +332,7 @@ test("overview and detailed packages reopen and load unseen chunks offline", asy
       requestedChunks.add(url.pathname);
   });
 
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   for (const profile of profiles) {

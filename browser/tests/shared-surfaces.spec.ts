@@ -22,7 +22,7 @@ test("dense resources cover the viewport after zoom and pan", async ({
   if (testInfo.project.name === "canvas") {
     await forceCanvas(page);
   }
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForRenderer(page, testInfo.project.name);
   await activateSyntheticMap(page, true);
   const canvas = page.locator("#scene");
@@ -71,7 +71,7 @@ test("shared terrain textures, painter transitions, and selection render", async
   if (project === "canvas") {
     await forceCanvas(page);
   }
-  await page.goto("/");
+  await page.goto("/?play=1");
   const renderer = await waitForRenderer(page, project);
   testInfo.annotations.push({ type: "renderer", description: renderer });
   await page.waitForTimeout(500);

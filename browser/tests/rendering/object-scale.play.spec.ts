@@ -91,7 +91,7 @@ for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
     await gameAssets(page, true);
     if (backend === "webgl2") await forceWebGl(page);
     if (backend === "canvas2d") await forceCanvas(page);
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#connection")).toHaveText("connected");
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-renderer",

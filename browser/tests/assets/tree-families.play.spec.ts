@@ -40,7 +40,7 @@ test("original optional tree families render on all three backends", async ({
       if (backend === "canvas2d") await forceCanvas(page);
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
-      await page.goto("/");
+      await page.goto("/?play=1");
       await expect(page.locator("#connection")).toHaveText("connected", {
         timeout: 30_000,
       });

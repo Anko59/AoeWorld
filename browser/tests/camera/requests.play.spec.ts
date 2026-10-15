@@ -131,7 +131,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
     served++;
   });
   try {
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#connection")).toHaveText("connected");
     await expect.poll(() => held).toBe(64);
     holding = false;

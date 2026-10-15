@@ -12,7 +12,7 @@ test("camera keys follow screen directions and recenter finds the horse", async 
 }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await page.getByRole("button", { name: "Center on primary unit" }).click();
   await expect.poll(() => cameraPosition(page)).toEqual([8192.5, 8192.5]);

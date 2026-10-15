@@ -105,7 +105,7 @@ test("grid button draws and removes terrain grid beyond default world bounds", a
   }
   await gameAssets(page);
   await wideWorld(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#minimap")).toHaveAttribute(
     "data-world-width",
@@ -141,7 +141,7 @@ test("whole-map navigation jumps locally, returns home, and held keys release", 
 }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await page.getByRole("button", { name: "Center on primary unit" }).click();
   await expect.poll(() => position(page)).toEqual([8192.5, 8192.5]);

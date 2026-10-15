@@ -160,7 +160,7 @@ async function feedbackWorld(
 }
 
 async function loadedWorld(page: Page) {
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-assets",
@@ -218,7 +218,7 @@ test("failed terrain shows a short single-line sentence and logs details", async
   const consoleDetails: string[] = [];
   page.on("console", (message) => consoleDetails.push(message.text()));
   try {
-    await page.goto("/");
+    await page.goto("/?play=1");
     const status = page.locator("#connection");
     await expect(status).toContainText(/terrain.*(?:load|unavailable).*retry/i);
     const text = await status.textContent();
@@ -241,7 +241,7 @@ test("terrain warning clears when the failed visible chunk loads without an orde
 }) => {
   const failure = await transientFailure(page);
   try {
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect.poll(failure.retries, { timeout: 15_000 }).toBe(1);
     // Other visible chunks have succeeded, but the affected one is still held.
     await expect(page.locator("#terrain-cache")).not.toContainText(
@@ -378,7 +378,7 @@ test("elevated failed terrain stays warned until it loads at a stationary camera
     });
   });
   try {
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-assets",
       "aoe2-local",

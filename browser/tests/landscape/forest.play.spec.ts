@@ -52,7 +52,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
       if (body.payload_hex?.startsWith("05") && fetched.size < 64)
         fetched.add(response.url());
     });
-    await page.goto("/");
+    await page.goto("/?play=1");
     await expect(page.locator("#connection")).toHaveText("connected", {
       timeout: 30_000,
     });

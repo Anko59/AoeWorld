@@ -174,7 +174,7 @@ export async function activateMatrixCase(
       loadedChunks.add(url.pathname);
     }
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await ready(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Saved maps").selectOption(item.content_hash);
@@ -306,7 +306,7 @@ export async function captureCase(
       );
     }
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   const asset = await assetIdentity(page);
   await ready(page);
   await expect(page.locator("#playground")).toHaveAttribute(

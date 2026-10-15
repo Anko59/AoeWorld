@@ -38,7 +38,7 @@ test("strategic raster is one bounded request per map and never loads the world"
       body: syntheticRaster(),
     }),
   );
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   // Exercise the DOM end of the production map-change bridge with a controlled raster.
   await page.evaluate(() => {
@@ -289,7 +289,7 @@ test("blur releases held camera keys without stale impulse movement", async ({
 }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await page.mouse.move(600, 300);
   await page.keyboard.down("ArrowRight");

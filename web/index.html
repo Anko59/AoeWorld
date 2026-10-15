@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AoeWorld</title>
+  <link rel="icon" href="/art/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="/art/icon-180.png" sizes="180x180">
+  <link rel="icon" type="image/png" href="/art/icon-512.png" sizes="512x512">
+  <link rel="stylesheet" href="/start/start.css">
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
@@ -46,7 +50,8 @@
     #map-estimate.error { color: #ffd29a; }
   </style>
 </head>
-<body>
+<body data-start-state="intro">
+  <div id="start-sequence" aria-label="AoeWorld start sequence"></div>
   <main id="playground">
     <canvas id="scene" tabindex="0" aria-label="AoeWorld isometric map. Select a unit and right-click to move."></canvas>
     <nav id="controls" aria-label="Map controls">
@@ -109,6 +114,7 @@
     import init from '/pkg/aoe_client.js';
     import { initMapJobs } from '/map-jobs.js';
     import { initNavigation } from '/navigation.js';
+    import { initStartSequence } from '/start/sequence.js';
     initNavigation();
     const creator = document.getElementById('map-creator');
     const estimate = document.getElementById('map-estimate');
@@ -374,7 +380,12 @@
       const grid = plan.samples_per_axis ? `${plan.samples_per_axis} × ${plan.samples_per_axis} samples · ${(plan.geographic_millimeters_per_sample / 1000).toLocaleString()} m spacing\n` : '';
       return grid + plan.explanation;
     };
-    const { refreshHistory } = initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel });
+    const sequence = initStartSequence({ mapRequest, readJson, start: request => jobs.start(request), cancel: () => jobs.cancel() });
+    const jobs = initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel,
+      onStart: sequence.begin, onProgress: sequence.progress, onActivated: sequence.activated, onError: sequence.error, onSettled: sequence.settled,
+      onCancelable: sequence.cancelable, onCancelled: sequence.cancelled });
+    const { refreshHistory } = jobs;
+    sequence.recover(jobs.pending());
     document.getElementById('creator-toggle').addEventListener('click', () => {
       creator.hidden = !creator.hidden;
       if (!creator.hidden) Promise.all([refreshPackages(), refreshHistory()]).catch(error => {
@@ -428,6 +439,7 @@
     init().catch(error => {
       document.getElementById('connection').textContent = 'Unavailable';
       document.getElementById('unsupported').textContent = `Unable to start AoeWorld: ${error}`;
+      sequence.error('The game could not connect. Reload the page to try again.');
     });
   </script>
 </body>

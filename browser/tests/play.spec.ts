@@ -65,7 +65,7 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   testInfo.annotations.push({ type: "assets", description: evidence });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForGame(page);
   if (testInfo.project.name === "webgpu") {
     await expect(page.locator("#playground")).toHaveAttribute(
@@ -192,7 +192,7 @@ test("rapid viewport changes ignore stale subscription frames", async ({
     }
     window.WebSocket = ProbedWebSocket;
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForGame(page);
   const canvas = page.locator("#scene");
   const box = await canvas.boundingBox();
@@ -234,7 +234,7 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
   page,
 }) => {
   await gameAssets(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForGame(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   await expect(page.getByLabel("Region")).toHaveValue("paris");
@@ -287,18 +287,22 @@ test("map creator pans, zooms, and preserves preview-only fallback maps", async 
   await expect(page.locator("#map-location")).toContainText("Nile Delta");
   await page.getByLabel("Region").selectOption("fiji");
   await expect(page.locator("#map-location")).toContainText("Fiji");
-  await expect(page.getByLabel("Latitude")).toHaveValue("-17.8");
-  await expect(page.getByLabel("Longitude")).toHaveValue("179.8");
+  await expect(page.getByLabel("Latitude", { exact: true })).toHaveValue(
+    "-17.8",
+  );
+  await expect(page.getByLabel("Longitude", { exact: true })).toHaveValue(
+    "179.8",
+  );
   await page.getByLabel("Region").selectOption("antarctic");
   await expect(page.locator("#map-location")).toContainText(
     "Antarctic interior",
   );
   await page.getByLabel("Region").selectOption("custom");
   await expect(page.locator("#map-coordinates")).toBeVisible();
-  await page.getByLabel("Latitude").fill("48.8566");
-  await page.getByLabel("Longitude").fill("2.3522");
+  await page.getByLabel("Latitude", { exact: true }).fill("48.8566");
+  await page.getByLabel("Longitude", { exact: true }).fill("2.3522");
   await page.getByLabel("Square km").fill("0.256");
-  await page.getByLabel("Compression").fill("2");
+  await page.getByLabel("Compression", { exact: true }).fill("2");
   await page.getByRole("button", { name: "Estimate" }).click();
   await expect(page.locator("#map-estimate")).toContainText("64 × 64 tiles");
   await expect(page.locator("#map-estimate")).toContainText(
@@ -352,7 +356,7 @@ for (const failure of ["missing-api", "null-context", "no-adapter"] as const) {
           } as typeof original;
         }
       }, failure);
-      await page.goto("/");
+      await page.goto("/?play=1");
       await waitForGame(page);
       await expect(page.locator("#playground")).toHaveAttribute(
         "data-renderer",
@@ -367,7 +371,7 @@ test("missing local assets show an actionable error", async ({ page }) => {
   await page.route("**/asset-pack/manifest.json", (route) =>
     route.fulfill({ status: 404 }),
   );
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.getByRole("alert")).toContainText("local asset pack");
   await expect(page.locator("#connection")).toHaveText("Unavailable");
 });
@@ -379,7 +383,7 @@ test("unavailable renderers stop loading with a visible error", async ({
     Object.defineProperty(navigator, "gpu", { value: undefined });
     HTMLCanvasElement.prototype.getContext = () => null;
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("Unavailable");
   await expect(page.getByRole("alert")).toContainText(
     "Canvas 2D is unavailable",
@@ -420,7 +424,7 @@ test("map creator retries a recovered request with its original detail", async (
       await route.fulfill({ status: 500, body: "controlled retry response" });
     }
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForGame(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByLabel("Previous map requests").selectOption("41");
@@ -465,7 +469,7 @@ test("accepted creation survives a polling error and reload without duplicate su
       });
     }
   });
-  await page.goto("/");
+  await page.goto("/?play=1");
   await waitForGame(page);
   await page.getByRole("button", { name: "Open map creator" }).click();
   await page.getByRole("button", { name: "Generate", exact: true }).click();
