@@ -452,7 +452,7 @@ red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
 
 Test-first is reported, never enforced: `make ship` proceeds whatever the
-report says. From Git alone (merge base..HEAD), `aoe-harness`
+report says. From Git alone, `aoe-harness`
 (`crates/harness/src/ship/test_first/`) writes a short report into the
 description's "For AI" part and into the facts every reviewer reads:
 
@@ -460,10 +460,10 @@ description's "For AI" part and into the facts every reviewer reads:
   code is any non-test file under `crates/` except `crates/harness/`; changed
   lines that all lie inside `#[cfg(test)]` items of a product file count as
   test changes (Rust token and item spans), and such files are listed, since
-  the rule is tests in test files; a merge is listed as `merge (<kind>)` from
-  its diff against its first parent;
+  the rule is tests in test files; commits on the selected base/dev and merges
+  of either are excluded; other merges stay `merge (<kind>)` by first-parent diff;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
-  `#[rstest]`…, never a `cfg`) added before the first product commit;
+  `#[rstest]`…, never a `cfg`) owned by the PR before its first product commit;
 - build-time files changed: `build.rs` or a custom `package.build` script,
   `.cargo/`, `rust-toolchain*`, `.config/nextest.toml`, and a manifest's
   `build`, `links`, build dependencies (target tables with their selector) or

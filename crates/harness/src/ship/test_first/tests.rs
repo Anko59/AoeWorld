@@ -1,3 +1,6 @@
+mod history;
+mod history_cli;
+
 use super::{Kind, build_keys, exemption, report, summary, test_marker};
 use crate::ship::{
     evidence::Verdict,
