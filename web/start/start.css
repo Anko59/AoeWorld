@@ -106,7 +106,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 #loading-error { color: #ffe1b6; background: #20100ac9; border: 1px solid #9e6f48; padding: 16px; line-height: 1.6; overflow-wrap: anywhere; }
 .has-error .loading-tip { display: none; }
 .has-error .loading-content { margin-top: 0; }
-#loading-back { margin: 18px auto 0; }
+#loading-back, #loading-cancel { margin: 18px auto 0; }
 .loading-tip { position: absolute; left: 20%; right: 20%; bottom: 8vh; text-align: center; }
 .loading-tip .gold-rule { max-width: 280px; margin: 0 auto 20px; }
 .loading-tip p { font: italic 15px/1.6 Georgia, serif; color: #d8c5a6; }

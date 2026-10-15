@@ -20,7 +20,7 @@ const phaseNames = {
 const getSaved = key => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const save = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* Memory remains usable. */ } };
 
-export function initStartSequence({ mapRequest, readJson, start }) {
+export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   const root = document.getElementById('start-sequence');
   const direct = new URLSearchParams(location.search).get('play') === '1'
     || /(?:^#|&)\s*(?:x|y|zoom|renderer)=/.test(location.hash);
@@ -40,7 +40,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     el('playground').inert = false;
     gameColour(getSaved(colourKey));
     const idle = () => {};
-    return { begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle };
+    return { begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle, cancelable: idle, cancelled: idle };
   }
   root.innerHTML = views();
   let state = 'intro';
@@ -53,6 +53,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
   let recovery = false;
   let jobRunning = false;
   let prepared = false;
+  let skirmishJob = false;
   const fields = ['start-latitude', 'start-longitude', 'start-size', 'start-scale'];
   const creatorFields = ['map-latitude', 'map-longitude', 'map-side-km', 'map-compression'];
 
@@ -183,7 +184,9 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     el('loading-phase').textContent = label;
   }
   function begin() {
-    if (direct) return;
+    // Only setup starts the entry flow. The in-game creator keeps its own UI.
+    if (state !== 'setup') return;
+    skirmishJob = true;
     jobRunning = true;
     prepared = false;
     waiting = null;
@@ -191,6 +194,8 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     cinematic.stop();
     clearInterval(tipTimer);
     el('loading-error').hidden = el('loading-back').hidden = true;
+    el('loading-cancel').hidden = false;
+    el('loading-cancel').disabled = true;
     el('loading-screen').classList.remove('has-error');
     el('loading-progress').hidden = false;
     el('loading-title').textContent = 'Preparing your landscape';
@@ -202,7 +207,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     tipTimer = setInterval(() => { el('loading-tip').textContent = tips[++tip % tips.length]; }, 6000);
   }
   function error(message, resumable = false) {
-    if (direct) return;
+    if (!skirmishJob) return;
     waiting = null;
     jobRunning = false;
     recovery = resumable;
@@ -216,6 +221,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
         ? 'The map service could not be reached. Check your connection, then try again.' : message;
     el('loading-error').textContent = `We couldn't open your landscape. ${explanation}`;
     el('loading-error').hidden = el('loading-back').hidden = false;
+    el('loading-cancel').hidden = true;
     el('loading-screen').classList.add('has-error');
     el('loading-progress').hidden = true;
     el('loading-phase').textContent = 'Return to setup to try again.';
@@ -251,6 +257,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
       waiting = null;
       jobRunning = false;
       prepared = false;
+      skirmishJob = false;
       clearTimeout(terrainTimer);
       clearInterval(tipTimer);
       el('playground').inert = false;
@@ -263,7 +270,25 @@ export function initStartSequence({ mapRequest, readJson, start }) {
   observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-chunks-pending', 'data-chunks-failed', 'data-frame'] });
   observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-raster', 'data-map-hash'] });
   observer.observe(el('connection'), { childList: true, subtree: true, characterData: true });
-  el('loading-back').addEventListener('click', () => { show('setup'); controllerReady(); });
+  function returnToSetup() {
+    skirmishJob = false;
+    waiting = null;
+    jobRunning = prepared = false;
+    clearTimeout(terrainTimer);
+    clearInterval(tipTimer);
+    show('setup');
+    controllerReady();
+  }
+  el('loading-back').addEventListener('click', returnToSetup);
+  el('loading-cancel').addEventListener('click', async () => {
+    el('loading-error').hidden = true;
+    try { await cancel(); }
+    catch (error) {
+      if (!skirmishJob) return;
+      el('loading-error').textContent = error.message || 'Unable to cancel map creation. Try again.';
+      el('loading-error').hidden = false;
+    }
+  });
 
   function skipIntro() {
     if (state !== 'intro') return;
@@ -293,7 +318,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     begin,
     recover(value) { recovery = value; controllerReady(); },
     progress(job) {
-      if (direct) return;
+      if (!skirmishJob) return;
       const request = job.request;
       if (request && request.compression?.denominator > 0) {
         const values = [request.center_latitude_e7 / 1e7, request.center_longitude_e7 / 1e7,
@@ -303,7 +328,10 @@ export function initStartSequence({ mapRequest, readJson, start }) {
           el('loading-location').textContent = `${locationName()} · ${el('start-size').value} km square`;
         }
       }
-      if (['completed', 'failed', 'cancelled'].includes(job.state)) return;
+      if (['completed', 'failed', 'cancelled'].includes(job.state)) {
+        el('loading-cancel').hidden = true;
+        return;
+      }
       const phase = job.progress?.phase || job.stage || 'queued';
       const title = phaseNames[phase] ?? phase.replaceAll('_', ' ').replace(/^./, letter => letter.toUpperCase());
       const { completed, total, unit } = job.progress ?? {};
@@ -312,7 +340,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
       progress(completed, total, title + counts);
     },
     activated(value) {
-      if (direct) return;
+      if (!skirmishJob) return;
       recovery = false;
       prepared = true;
       if (!value.start_available) { error(value.message || 'This location has no suitable land start. Choose another place.'); return; }
@@ -323,6 +351,12 @@ export function initStartSequence({ mapRequest, readJson, start }) {
       checkTerrain();
     },
     error,
+    cancelable(value) { el('loading-cancel').disabled = !value; },
+    cancelled() {
+      if (!skirmishJob) return;
+      recovery = false;
+      returnToSetup();
+    },
     settled() { if (!prepared) jobRunning = false; controllerReady(); },
   };
 }

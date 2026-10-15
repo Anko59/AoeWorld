@@ -63,6 +63,7 @@ export function views() {
       <div class="loading-content">${logo}${rule}<span class="eyebrow">YOUR WORLD IS TAKING SHAPE</span><h1 id="loading-title">Preparing your landscape</h1>
         <p id="loading-location"></p><div id="loading-progress" role="progressbar" aria-label="Map preparation progress"><span></span></div>
         <p id="loading-phase" role="status" aria-live="polite">Submitting your map request…</p>
+        <button id="loading-cancel" class="gold-button" type="button" disabled>Cancel</button>
         <p id="loading-error" role="alert" hidden></p><button id="loading-back" class="gold-button" type="button" hidden>Back to setup</button>
       </div>
       <div class="loading-tip">${rule}<span class="eyebrow">FIELD NOTES</span><p id="loading-tip">Use the minimap to find your way across the landscape.</p></div>

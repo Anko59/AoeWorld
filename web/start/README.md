@@ -12,6 +12,10 @@ The castle closes the sequence, with the logo revealed after its motion ends.
 
 Skirmish uses the map creator's request schema and retained job driver in
 `web/map-jobs.js`. Automatic source preparation and rivers remain the defaults.
+Only jobs started from skirmish setup use the startup loading screen; in-game
+creator jobs keep their own controls and leave the playground visible.
+Loading has a Cancel control for accepted jobs, using the creator's cancellation
+API and returning to setup after the job confirms cancellation.
 Progress is measured within the current job phase, never an invented aggregate.
 Unknown phase counts are indeterminate. After activation, loading waits for the
 activated map hash, zero pending and failed scene chunks, a new presented frame,

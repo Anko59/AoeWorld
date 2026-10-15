@@ -380,9 +380,10 @@
       const grid = plan.samples_per_axis ? `${plan.samples_per_axis} × ${plan.samples_per_axis} samples · ${(plan.geographic_millimeters_per_sample / 1000).toLocaleString()} m spacing\n` : '';
       return grid + plan.explanation;
     };
-    const sequence = initStartSequence({ mapRequest, readJson, start: request => jobs.start(request) });
+    const sequence = initStartSequence({ mapRequest, readJson, start: request => jobs.start(request), cancel: () => jobs.cancel() });
     const jobs = initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel,
-      onStart: sequence.begin, onProgress: sequence.progress, onActivated: sequence.activated, onError: sequence.error, onSettled: sequence.settled });
+      onStart: sequence.begin, onProgress: sequence.progress, onActivated: sequence.activated, onError: sequence.error, onSettled: sequence.settled,
+      onCancelable: sequence.cancelable, onCancelled: sequence.cancelled });
     const { refreshHistory } = jobs;
     sequence.recover(jobs.pending());
     document.getElementById('creator-toggle').addEventListener('click', () => {
