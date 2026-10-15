@@ -19,7 +19,7 @@ pub enum StartSearchResult {
 }
 
 impl Terrain {
-    /// Finds a village footprint, preferring connected inland lowlands.
+    /// Finds a clear village start, preferring connected inland lowlands.
     /// A failed long-exit preference falls back to passable terrain; the
     /// source landscape is never flattened or cleared.
     pub fn starting_tile(&self, config: WorldConfig) -> Option<TileCoord> {
@@ -42,9 +42,9 @@ impl Terrain {
             .unwrap_or(StartSearchResult::Unavailable)
     }
 
-    /// Prefer an inland clearing and a large reachable region. The global
-    /// survey uses fixed budgets; the final exact fallback visits at most the
-    /// finite map area and only rejects missing footprints or villager room.
+    /// Return the center of a clear, resource-aware 5x5 area, preferring inland
+    /// ground and a large reachable region. The global survey uses fixed
+    /// budgets; the final exact fallback visits at most the finite map area.
     pub fn search_start_checked(
         &self,
         config: WorldConfig,

@@ -1,6 +1,42 @@
 use super::*;
 
 #[test]
+fn global_search_returns_the_clearance_center_in_every_relaxation() {
+    let terrain = Terrain::uniform(1);
+    for (width, clearing) in [
+        (64, None),
+        (64, Some((10, 10, 12))),
+        (64, Some((10, 10, 5))),
+        (128, Some((17, 67, 5))),
+    ] {
+        let config = WorldConfig::new(width, width, Seed(1)).unwrap();
+        let mut cache = StartPassabilityCache::new(&terrain, config, &|| false);
+        for cy in 0..width / 32 {
+            for cx in 0..width / 32 {
+                let tiles = (0..1024)
+                    .map(|i| {
+                        let (x, y) = (cx * 32 + i % 32, cy * 32 + i / 32);
+                        clearing.map_or((x, y) != (27, 27), |(left, top, side)| {
+                            (left..left + side).contains(&x) && (top..top + side).contains(&y)
+                        })
+                    })
+                    .collect();
+                cache.entries.insert((cx, cy), tiles);
+            }
+        }
+        let result = robust::search(&mut cache).unwrap();
+        let StartSearchResult::Found(start) = result else {
+            panic!("{width}, {clearing:?}: {result:?}");
+        };
+        assert!(
+            robust::footprint(&mut cache, TileCoord::new(start.x - 2, start.y - 2), 5).unwrap(),
+            "the returned start must be the clear 5x5 center: {start:?}"
+        );
+        assert_eq!(robust::search(&mut cache).unwrap(), result);
+    }
+}
+
+#[test]
 fn every_menu_landscape_starts_and_prefers_the_largest_valley() {
     let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
     let terrain = Terrain::Map {

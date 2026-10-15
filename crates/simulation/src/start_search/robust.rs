@@ -107,12 +107,12 @@ fn survey(
             .take(share)
             .map(|(_, tile)| tile)
             .collect();
-        // Strict starts have space for an economy. Relax water distance,
-        // slope and region size without changing physical passability.
+        // Relax optional preferences, but every returned start remains the
+        // center of at least a clear 5x5 area, including resource collision.
         for (radius, required, inland, max_slope) in [
             (3, 256, true, 0),
             (2, 64, false, 1),
-            (0, 4, false, i32::MAX),
+            (START_CLEAR_RADIUS, 4, false, i32::MAX),
         ] {
             for &tile in &candidates {
                 if (cache.cancelled)() {
@@ -124,10 +124,10 @@ fn survey(
                 }
                 let origin = TileCoord::new(tile.x - 2, tile.y - 2);
                 if footprint(cache, origin, 4)?
-                    && (radius == 0 || clearing(cache, tile, radius)?)
+                    && clearing(cache, tile, radius)?
                     && room(cache, origin, required)?
                 {
-                    return Ok(StartSearchResult::Found(origin));
+                    return Ok(StartSearchResult::Found(tile));
                 }
             }
         }
@@ -140,8 +140,9 @@ fn survey(
                 return Ok(StartSearchResult::Cancelled);
             }
             let origin = TileCoord::new(x, y);
-            if footprint(cache, origin, 4)? && room(cache, origin, 4)? {
-                return Ok(StartSearchResult::Found(origin));
+            let center = TileCoord::new(x + START_CLEAR_RADIUS, y + START_CLEAR_RADIUS);
+            if clearing(cache, center, START_CLEAR_RADIUS)? && room(cache, origin, 4)? {
+                return Ok(StartSearchResult::Found(center));
             }
         }
     }

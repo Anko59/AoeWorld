@@ -281,7 +281,7 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     .expect("complete synthetic offline qualification");
 
     assert_eq!(report.package_hash, primary_hash);
-    assert_eq!(report.start_tile, [25_022, 26_586]);
+    assert_eq!(report.start_tile, [25_024, 26_588]);
     assert_eq!(report.source_lock_ids, [SOURCE_LOCK_ID.to_owned()]);
     assert_eq!(report.indexed_page_count, 1_041);
     assert_eq!(report.page_churn_unique_count, report.indexed_page_count);
@@ -379,7 +379,7 @@ fn synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay() 
         StartSearchResult::Found(tile) => tile,
         other => panic!("synthetic package should find an ordinary start: {other:?}"),
     };
-    assert_eq!(start, TileCoord::new(25_022, 26_586));
+    assert_eq!(start, TileCoord::new(25_024, 26_588));
     let waypoints = super::super::geographic::planned_waypoints(start)
         .expect("fixed 100 km route stays inside map");
     assert_eq!(waypoints.len(), 5);

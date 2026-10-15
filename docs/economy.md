@@ -87,11 +87,11 @@ Synthetic evidence does not qualify finished RTS performance or hardware.
 
 Start activation also surveys the whole map on a bounded coarse lattice,
 ranking connected sampled lowlands before elevation and centre distance.
-Clearance, shore avoidance, gentle slopes and reachable area relax in stages;
-physical terrain and resources never become passable. A cancellable exact
-fallback checks at most every possible 4×4 origin, and refuses only when no
-footprint has room beside it for the scout and villagers. The coarse lattice
-is a preference, not a claim of a certified route between distant samples.
+Shore avoidance, gentle slopes and reachable area relax in stages; every
+returned start remains the center of a resource-aware clear area of at least
+5×5 tiles. A cancellable exact fallback checks at most every possible 4×4
+origin, requiring that clearance and room beside the footprint for units. The
+coarse lattice is a preference, not a claim of a certified route between samples.
 
 Natural ore patches use one jittered cluster per 384×192 tiles for gold and
 192×96 for stone (at most eight candidates per cell, before terrain/access
