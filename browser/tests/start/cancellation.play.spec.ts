@@ -165,3 +165,42 @@ test("a rejected startup cancellation stays visible and can be retried", async (
   await expect(page.getByRole("heading", { name: "Game Setup" })).toBeVisible();
   expect(attempts).toBe(2);
 });
+
+test("Resume restores skirmish loading and Cancel for a running accepted job after reload", async ({
+  page,
+}) => {
+  const server = await jobs(page);
+  await setup(page);
+  await page.getByRole("radio", { name: "Orange", exact: true }).check();
+  await page.getByRole("button", { name: "Alps", exact: true }).click();
+  await page.getByRole("button", { name: "Start Game", exact: true }).click();
+  await expect(page.locator("#loading-phase")).toContainText("4 / 16 pages");
+  await page.reload();
+  await expect(page.locator("#main-menu")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  // The retained job is already polling before Resume: its busy guard must
+  // neither prevent the loading screen nor submit another request.
+  await expect(page.locator("#map-estimate")).toContainText("4 / 16 pages");
+  await page
+    .getByRole("button", { name: "Resume map preparation", exact: true })
+    .click();
+  const loading = page.locator("#loading-screen");
+  await expect(loading).toBeVisible();
+  await expect(page.locator("#loading-phase")).toContainText("4 / 16 pages");
+  const cancel = loading.getByRole("button", { name: "Cancel", exact: true });
+  await expect(cancel).toBeEnabled();
+  await cancel.click();
+  await expect.poll(() => server.cancelled).toEqual([101]);
+  await expect(page.getByRole("heading", { name: "Game Setup" })).toBeVisible();
+  await expect(loading).toBeHidden();
+  await expect(
+    page.getByRole("radio", { name: "Orange", exact: true }),
+  ).toBeChecked();
+  await expect(page.getByLabel("Starting latitude")).toHaveValue("46.6");
+  await expect(
+    page.getByRole("button", { name: "Start Game", exact: true }),
+  ).toBeEnabled();
+  expect(server.requests).toHaveLength(1);
+});

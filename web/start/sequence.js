@@ -54,6 +54,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   let jobRunning = false;
   let prepared = false;
   let skirmishJob = false;
+  let canCancel = false;
   const fields = ['start-latitude', 'start-longitude', 'start-size', 'start-scale'];
   const creatorFields = ['map-latitude', 'map-longitude', 'map-side-km', 'map-compression'];
 
@@ -164,8 +165,11 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   }
   el('skirmish-form').addEventListener('submit', event => {
     event.preventDefault();
-    try { start(syncRequest()); }
-    catch (error) { el('setup-status').textContent = error.message; }
+    try {
+      start(syncRequest());
+      // Resume adopts a retained job even when it is already polling.
+      begin();
+    } catch (error) { el('setup-status').textContent = error.message; }
   });
   function progress(completed, total, label) {
     const bar = el('loading-progress');
@@ -195,12 +199,12 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     clearInterval(tipTimer);
     el('loading-error').hidden = el('loading-back').hidden = true;
     el('loading-cancel').hidden = false;
-    el('loading-cancel').disabled = true;
+    el('loading-cancel').disabled = !canCancel;
     el('loading-screen').classList.remove('has-error');
     el('loading-progress').hidden = false;
     el('loading-title').textContent = 'Preparing your landscape';
     el('loading-location').textContent = `${locationName()} · ${el('start-size').value} km square`;
-    progress(null, null, 'Submitting your map request…');
+    progress(null, null, recovery ? 'Resuming your map preparation…' : 'Submitting your map request…');
     show('loading');
     let tip = 0;
     el('loading-tip').textContent = tips[0];
@@ -351,7 +355,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
       checkTerrain();
     },
     error,
-    cancelable(value) { el('loading-cancel').disabled = !value; },
+    cancelable(value) { canCancel = value; el('loading-cancel').disabled = !value; },
     cancelled() {
       if (!skirmishJob) return;
       recovery = false;
