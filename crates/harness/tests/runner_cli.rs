@@ -412,3 +412,7 @@ fn dangling_output_symlink_is_replaced_without_writing_its_missing_target() {
     assert_eq!(ledger(output.path())["schema"], 2);
     // Atomic local hygiene only: no promise to erase hostile same-UID old data.
 }
+
+#[cfg(target_os = "linux")]
+#[path = "runner_cli/load.rs"]
+mod load;

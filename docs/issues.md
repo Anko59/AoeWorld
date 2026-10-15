@@ -29,7 +29,12 @@ recomputed fingerprint matches, its body contains the matching marker, and it
 has the `agent-found` label. In that case the harness comments on it instead
 of opening another issue.
 
-`make next` orders unblocked open issues by `priority:critical`, `priority:high`,
+`make next` first lists open pull requests into `dev` with auto-merge armed
+whose latest carry comment on their current head refuses `harness/review`,
+with `reship: <reason>`. An older head's refusal or a later successful carry
+does not appear. This command only reads GitHub.
+
+It then orders unblocked open issues by `priority:critical`, `priority:high`,
 `priority:medium`, unlabelled, then `priority:low`; within each priority it
 chooses the oldest issue first. An issue labelled `blocked` waits on its
 blocking issue to be resolved, never on a person.

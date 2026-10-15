@@ -2,8 +2,8 @@
 //! `harness/review` = success on the new head when its own patch and the
 //! current review policy equal what the marker recorded ([`super::marker`]) and
 //! otherwise posts nothing but one comment saying why. The same rule as the
-//! local re-check carry (`recheck/carry.rs`), moved to where the rebase
-//! happens. A head whose own patch differs never gets a success.
+//! local re-check carry (`recheck/carry.rs`), moved to where dev is merged in.
+//! A head whose own patch differs never gets a success.
 use super::{
     BASE, Result, api, comments,
     marker::{Marker, latest, patch_fingerprint},
@@ -102,6 +102,15 @@ pub(super) fn carry(root: &Path, number: u64) -> Result<()> {
                     "-f",
                     &format!("description={description}"),
                 ],
+            )?;
+            post_comment(
+                root,
+                &repository,
+                number,
+                &format!(
+                    "`harness/review` was carried to {}: {description}",
+                    short(&head)
+                ),
             )?;
             println!("carry-review: #{number} {}: {description}", short(&head));
         }

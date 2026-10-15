@@ -249,12 +249,10 @@ lint:
 deny: policy-tools
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo deny --locked check
 
-test-unit:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
+test-unit: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
 
 .PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare task-plan
-test-harness:
-	@$(DOCKER_RUN) cargo test --locked -p aoe-harness
 
 gates-docs:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
@@ -332,8 +330,8 @@ geodata-test:
 map-perf:
 	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
 
-test-wasm: browser-tools orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+test-wasm: browser-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) test-wasm -- make --no-print-directory test-wasm-steps
 
 fuzz-smoke: fuzz-tools
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
@@ -412,14 +410,14 @@ build:
 	@$(DOCKER_RUN) cargo build --workspace --locked
 
 .PHONY: test-memory-source
-test-memory-source: build-wasm browser-deps
+test-memory-source: build-wasm browser-deps slot-bootstrap
 	@$(SLOT_RUN) test-memory-source -- make --no-print-directory test-memory-source-steps
 
 test-memory-source-steps:
 	@docker run $(HEAVY_ENV) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e AOE_POLISH_SOURCE_REQUIRED=1 $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) xvfb-run -a npx playwright test tests/memory/source-route.shared-surfaces.spec.ts
 
 
-test-creator-source: build-wasm browser-deps orchestrator-tools
+test-creator-source: build-wasm browser-deps orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-creator-source -- make --no-print-directory test-creator-source-steps
 
 test-creator-source-steps:
@@ -427,14 +425,14 @@ test-creator-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-creator-source
 
-test-geographic-matrix: orchestrator-tools
+test-geographic-matrix: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-geographic-matrix -- make --no-print-directory test-geographic-matrix-steps
 
 test-geographic-matrix-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-matrix
 
-test-geographic-visuals: build-wasm browser-deps orchestrator-tools
+test-geographic-visuals: build-wasm browser-deps orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-geographic-visuals -- make --no-print-directory test-geographic-visuals-steps
 
 test-geographic-visuals-steps:

@@ -77,7 +77,7 @@ agent policy refuses `$` in agent-set Make values.
    dev changed in <commits>") and the own patch is identical against each base (else "changed your
    patch"). The rebased head's evidence (cadence `recheck`) holds its static gates and a separate "full
    preflight passed on <old head> (base <old base>)". A rebased branch already on `origin` is pushed
-   with a lease on the commit the ship started from, else the ship asks for `SHIP_FORCE=1`. **Then**, if
+   with a lease on the starting commit or its GitHub dev merges ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
    the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
    `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
    when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on

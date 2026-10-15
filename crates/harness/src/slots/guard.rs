@@ -21,6 +21,15 @@ type Env = Vec<(&'static str, String)>;
 /// gate in the same process (preflight running test-unit) passes it on instead of taking another.
 static HELD: Mutex<Option<Env>> = Mutex::new(None);
 
+/// Supervised children inherit admission even when the caller took its slot in
+/// this process rather than receiving it through the process environment.
+pub(crate) fn child_env() -> Env {
+    HELD.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+
 /// A slot (or nothing, for light or nested work) for as long as this lives.
 #[derive(Debug)]
 pub(crate) struct Guard {
@@ -96,6 +105,9 @@ pub(crate) fn checkout_of(from: &Path) -> Result<Option<PathBuf>> {
 /// `command` is `make <name>` (a gate's id is its make target). `preflight` is heavy when any gate
 /// of the preflight cadence is, since it runs them under one slot.
 pub(crate) fn is_heavy(registry: &Registry, gate: &str) -> bool {
+    if gate == "test-harness" {
+        return true;
+    }
     if gate == "preflight" {
         return registry
             .gates
@@ -119,7 +131,18 @@ pub(crate) fn guard(gate: &str, slots: &SlotEnv) -> Result<Guard> {
 /// at once, holding nothing, for light gates; a process that already holds one passes it on.
 pub(crate) fn hold(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
     match checkout_of(from)? {
-        Some(root) => hold_in(&root, gate, slots, || slot_dir(&root, slots)),
+        Some(root) => hold_in(
+            &root,
+            gate,
+            slots,
+            || slot_dir(&root, slots),
+            || {
+                let cancellation = crate::process::Cancellation::default();
+                #[cfg(target_os = "linux")]
+                let _signals = crate::gates::runner::signals::Signals::new(&cancellation)?;
+                super::load::wait(&cancellation)
+            },
+        ),
         None => Ok(Guard::none()),
     }
 }
@@ -131,15 +154,23 @@ pub(crate) fn hold_snapshot(
     source: &Path,
     gate: &str,
     env: &SlotEnv,
+    cancellation: &crate::process::Cancellation,
 ) -> Result<Guard> {
-    hold_in(root, gate, env, || slot_dir(source, env))
+    hold_in(
+        root,
+        gate,
+        env,
+        || slot_dir(source, env),
+        || super::load::wait(cancellation),
+    )
 }
 
-fn hold_in(
+pub(super) fn hold_in(
     root: &Path,
     gate: &str,
     env: &SlotEnv,
     queue: impl FnOnce() -> Result<PathBuf>,
+    wait_load: impl FnOnce() -> Result<()>,
 ) -> Result<Guard> {
     if !root.join("gates/registry.json").is_file() {
         return Ok(Guard::none());
@@ -186,6 +217,11 @@ fn hold_in(
         REPORT_EVERY,
         &mut |line| eprintln!("{line}"),
     )?;
+    // An inherited slot is a child of a gate whose deadline has already started.
+    // Its parent checked load before that deadline; never wait again inside it.
+    if matches!(slot, Slot::Owned { .. }) {
+        wait_load()?;
+    }
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
@@ -201,10 +237,13 @@ fn hold_in(
 /// Run `argv` as gate `gate` holding its slot, and return its exit code. The orchestrator
 /// container runs a make target's steps this way, so the slot is taken before they start.
 pub(crate) fn run_in_slot(from: &Path, gate: &str, argv: &[String], env: &SlotEnv) -> Result<i32> {
+    run_with_guard(argv, hold(from, gate, env)?)
+}
+
+pub(super) fn run_with_guard(argv: &[String], guard: Guard) -> Result<i32> {
     let (program, args) = argv
         .split_first()
         .ok_or("heavy slot: no command to run under the slot")?;
-    let guard = hold(from, gate, env)?;
     let status = std::process::Command::new(program)
         .args(args)
         .envs(guard.env())

@@ -1,6 +1,6 @@
 use super::{
     Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
-    guard::{dir, hold, is_heavy, nonce},
+    guard::{dir, is_heavy, nonce},
     status::render,
     verify,
 };
@@ -320,6 +320,7 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let outer = hold(&root, "slow", &SlotEnv::default()).expect("the only slot is free");
     let env = outer.env();
     assert_eq!(env.len(), 2);
+    assert!(verify(&slots, &env[0].1), "children inherit a live slot");
     assert_eq!(env[0].0, TOKEN_VAR);
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
@@ -356,7 +357,8 @@ fn a_gate_that_waited_longer_than_its_budget_still_gets_its_whole_budget() {
     }))
     .unwrap();
     let begun = Instant::now();
-    let results = crate::ship::run::run_gates(&root, &[&gate], &SlotEnv::default());
+    let results =
+        crate::ship::run::run_gates_with(&root, &[&gate], &SlotEnv::default(), support::hold);
     releaser.join().unwrap();
     assert!(begun.elapsed() >= WAIT, "it did wait");
     let [result] = results.as_slice() else {
@@ -410,6 +412,7 @@ fn the_registry_decides_which_gates_are_heavy() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let registry = Registry::load(&root).unwrap();
     for heavy in [
+        "test-harness",
         "test-unit",
         "test-wasm",
         "test-e2e",
@@ -461,3 +464,8 @@ fn status_lists_running_holders_then_the_queue() {
 mod environment;
 mod makefile;
 mod roots;
+
+mod load;
+
+mod support;
+use support::hold;

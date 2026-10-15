@@ -10,6 +10,7 @@
 //! carries that nonce, so setting the variable by hand does not skip the queue.
 //! The deadline of a gate counts from when it starts running, never from the wait.
 pub(crate) mod guard;
+mod load;
 pub(crate) mod queue;
 mod status;
 
@@ -46,7 +47,7 @@ const MAX_SLOTS: usize = 8;
 pub(crate) const POLL: Duration = Duration::from_secs(1);
 pub(crate) const REPORT_EVERY: Duration = Duration::from_secs(300);
 
-/// The four `AOE_HEAVY_*` variables as values. Only `SlotEnv::process` reads the real environment,
+/// The `AOE_HEAVY_*` variables as values. Only `SlotEnv::process` reads the real environment,
 /// once, at the process entry point; everything below it is given a `SlotEnv`, so no test depends
 /// on the environment of the process that runs it (the audit in `slots/tests/environment.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

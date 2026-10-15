@@ -10,11 +10,10 @@ fn root() -> PathBuf {
 }
 
 fn invoke(arguments: &[&str], success: bool) {
-    let output = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
-        .args(arguments)
-        .current_dir(root())
-        .output()
-        .expect("harness command");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aoe-harness"));
+    command.args(arguments).current_dir(root());
+    let _slot = ci::admission::inherit_or_fixture(&mut command);
+    let output = command.output().expect("harness command");
     assert_eq!(
         output.status.success(),
         success,

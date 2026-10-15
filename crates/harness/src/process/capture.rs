@@ -156,6 +156,7 @@ fn capture_with_stdout<W: Write>(
     mut retained: Option<&mut W>,
 ) -> Captured {
     let started = Instant::now();
+    command.envs(crate::slots::guard::child_env());
     let empty = |exit| Captured {
         exit,
         stdout: Vec::new(),

@@ -385,8 +385,10 @@ pub(super) fn next(root: &Path) -> Result<()> {
             "make next is available only to the main session, testers and implementers".into(),
         );
     }
-    let target = Target::load(root)?;
-    match rank(&target.issues).first() {
+    let (host, repository) = git::origin_host_repository(root)?;
+    super::postpush::reship::print(root, &repository)?;
+    let issues = open_issues(root, &host, &repository)?;
+    match rank(&issues).first() {
         Some(issue) => println!("#{} {}\n{}", issue.number, issue.title, issue.url),
         None => println!("no open issue is ready"),
     }

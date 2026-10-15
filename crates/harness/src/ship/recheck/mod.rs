@@ -352,6 +352,14 @@ fn lease(
     let Some(tip) = tip.split_whitespace().next() else {
         return Ok(None);
     };
+    // The updater may have merged dev while the gates/review were running.
+    // Fetch its objects and validate the same strict chain used immediately before push.
+    if tip != from_head
+        && git::lease::refresh(root, &subject.branch, from_head, from_head)
+            .is_ok_and(|head| head == tip)
+    {
+        return Ok(Some(tip.to_owned()));
+    }
     if tip == from_head {
         return Ok(Some(from_head.to_owned()));
     }
