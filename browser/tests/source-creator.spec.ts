@@ -117,7 +117,16 @@ test("Single Player setup creates and activates both source preparation profiles
     await page.locator("#start-scale").fill("30");
     await expect(page.locator("#skirmish-estimate")).toContainText("30 km");
     const estimate = await page.locator("#skirmish-estimate").innerText();
+    const acknowledgement = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/maps/jobs" &&
+        response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Start Game", exact: true }).click();
+    const accepted = await acknowledgement;
+    expect(accepted.ok()).toBe(true);
+    const submittedId = ((await accepted.json()) as { id: number }).id;
+
     await expect(page.locator("#loading-screen")).toBeVisible();
     let completed: Job | undefined;
     await expect
@@ -129,7 +138,9 @@ test("Single Player setup creates and activates both source preparation profiles
           completed = jobs
             .filter(
               (job) =>
-                job.state === "completed" && job.preparation.mode === profile,
+                job.id === submittedId &&
+                job.state === "completed" &&
+                job.preparation.mode === profile,
             )
             .at(-1);
           return completed?.content_hash;
@@ -227,7 +238,8 @@ test("setup resumes both completed source jobs after an offline server restart",
       joined_world_chunks: string[];
     };
     const hash = created.content_hash;
-    await page.addInitScript(
+    await page.goto("/diagnostics.html");
+    await page.evaluate(
       (id) =>
         localStorage.setItem(
           "aoeworld.map-creation-job",
@@ -264,6 +276,14 @@ test("setup resumes both completed source jobs after an offline server restart",
     expect(response.ok()).toBe(true);
     expect((await response.json()).payload_hex?.length).toBeGreaterThan(0);
     requested.clear();
+    await page.evaluate(
+      (id) =>
+        localStorage.setItem(
+          "aoeworld.map-creation-job",
+          JSON.stringify({ id }),
+        ),
+      created.job_id,
+    );
     await page.reload();
     await page
       .getByRole("button", { name: "Single Player", exact: true })

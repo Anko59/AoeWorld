@@ -5,10 +5,10 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function village_update(values, status) { window.aoeInterface?.numeric(values, status); }"
+    inline_js = "export function village_update(values, status, connected) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.connection(connected); }"
 )]
 extern "C" {
-    fn village_update(values: &[f64], status: &str);
+    fn village_update(values: &[f64], status: &str, connected: bool);
 }
 
 fn flag(value: bool) -> f64 {
@@ -149,7 +149,14 @@ pub(in super::super) fn update(client: &Client) {
             }
         }
     }
-    village_update(&values, map::feedback::connection_label(client));
+    village_update(
+        &values,
+        map::feedback::connection_label(client),
+        client
+            .socket
+            .as_ref()
+            .is_some_and(|s| s.ready_state() == web_sys::WebSocket::OPEN),
+    );
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
