@@ -32,6 +32,18 @@ fn an_identical_patch_over_a_moved_dev_is_carried() {
     assert_eq!(decision, Decision::Carry { from: marker.head });
 }
 
+#[test]
+fn an_identical_patch_with_dev_merged_in_is_carried() {
+    let world = World::new();
+    let marker = approved(&world);
+    world.move_dev("elsewhere.txt", "dev moved\n");
+    let head = world.merge_dev();
+    assert_ne!(head, marker.head);
+    run_fetch(&world);
+    let decision = decide(&world.root, Some(&marker), &head, &base(&world)).unwrap();
+    assert_eq!(decision, Decision::Carry { from: marker.head });
+}
+
 fn run_fetch(world: &World) {
     crate::ship::tests::run(&world.root, &["fetch", "-q", "origin"]);
 }
