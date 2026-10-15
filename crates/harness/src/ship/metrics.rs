@@ -18,11 +18,11 @@ pub(super) fn class(path: &str) -> &'static str {
     let name = path.rsplit('/').next().unwrap_or(path);
     if matches!(name, "Cargo.lock" | "package-lock.json") || path == "docs/gates.md" {
         "generated"
-    } else if path.starts_with("crates/harness/") || path.starts_with(".claude/") {
-        "harness"
     } else if path.contains("/tests/") || path.ends_with("/tests.rs") || path.starts_with("tests/")
     {
         "tests"
+    } else if path.starts_with("crates/harness/") || path.starts_with(".claude/") {
+        "harness"
     } else if path.starts_with("crates/") && path.contains("/src/") {
         "production"
     } else if path.starts_with("docs/") || path.ends_with(".md") {

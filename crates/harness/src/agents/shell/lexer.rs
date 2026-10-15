@@ -1,6 +1,9 @@
 //! The character-level lexer behind [`super::parse`]: quotes, escapes,
 //! substitutions, redirections and here-documents.
-use super::{Join, Parsed, Word, valid_name};
+use super::{Join, Parsed, Word, plain_parameter, valid_name};
+
+mod expansion;
+mod fallback;
 
 pub(super) enum Token {
     Word(Word),
@@ -32,12 +35,6 @@ const ARITHMETIC: &str = "arithmetic `(( ))`, `$(( ))` or `$[ ]` can assign shel
 const EXPANSION: &str = "agents expand parameters only as `$NAME`, `${NAME}`, `$1`…`$9`, `$?`, `$$`, `$#`, `$@` or `$*` (other forms can assign, run commands or hide them)";
 const HEREDOC: &str =
     "agents do not use here-documents or here-strings; write files with the editor tools";
-const CONTINUATION: &str = "agents do not continue lines with a backslash-newline";
-
-/// The parameter forms agents may expand: a name, `1`…`9` or `?$#@*`.
-fn plain_parameter(name: &str) -> bool {
-    valid_name(name) || (name.len() == 1 && "123456789?$#@*".contains(name))
-}
 
 impl<'a> Lexer<'a> {
     pub(super) fn new(source: &str, parsed: &'a mut Parsed) -> Self {
@@ -54,14 +51,20 @@ impl<'a> Lexer<'a> {
     }
 
     pub(super) fn tokens(mut self) -> Result<Vec<Token>, String> {
+        self.tokens_until(false)
+    }
+
+    /// Command syntax, also used to locate the end of a command substitution.
+    fn tokens_until(&mut self, substitution: bool) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
-        if self.chars.windows(2).any(|pair| pair == ['\\', '\n']) {
-            self.parsed.opaque = Some(CONTINUATION);
-        }
+        let mut depth = 0usize;
         while let Some(c) = self.peek(0) {
             match c {
-                ' ' | '\t' | '\r' => self.at += 1,
-                '\\' if self.peek(1) == Some('\n') => self.at += 2,
+                ' ' | '\t' => self.at += 1,
+                '\\' if self.peek(1) == Some('\n') => {
+                    self.parsed.continued_line = true;
+                    self.at += 2;
+                }
                 '#' => {
                     while self.peek(0).is_some_and(|c| c != '\n') {
                         self.at += 1;
@@ -90,6 +93,7 @@ impl<'a> Lexer<'a> {
                     tokens.push(Token::Join(join));
                 }
                 '(' => {
+                    depth += 1;
                     if self.peek(1) == Some('(') {
                         self.parsed.opaque = Some(ARITHMETIC);
                     }
@@ -98,11 +102,15 @@ impl<'a> Lexer<'a> {
                 }
                 ')' => {
                     self.at += 1;
+                    if substitution && depth == 0 {
+                        return Ok(tokens);
+                    }
+                    depth = depth.saturating_sub(1);
                     tokens.push(Token::Close);
                 }
                 '<' | '>' if self.peek(1) == Some('(') => {
                     self.at += 2;
-                    let inner = self.balanced(')')?;
+                    let inner = self.command_body()?;
                     self.parsed.substitutions.push(inner);
                     tokens.push(Token::Word(Word {
                         text: "/dev/fd/process-substitution".into(),
@@ -133,6 +141,9 @@ impl<'a> Lexer<'a> {
         }
         if !self.heredocs.is_empty() {
             return Err("unterminated here-document".into());
+        }
+        if substitution {
+            return Err("unbalanced `(`".into());
         }
         Ok(tokens)
     }
@@ -225,39 +236,11 @@ impl<'a> Lexer<'a> {
         let mut quoted = false;
         let mut brace = false;
         while let Some(c) = self.peek(0) {
-            if c.is_whitespace() || OPERATOR.contains(c) {
+            if matches!(c, ' ' | '\t') || OPERATOR.contains(c) {
                 break;
             }
             match c {
-                '\\' => {
-                    if let Some(next) = self.peek(1) {
-                        if next != '\n' {
-                            word.text.push(next);
-                        }
-                        quoted = true;
-                    }
-                    self.at += 2;
-                }
-                '\'' => {
-                    self.at += 1;
-                    quoted = true;
-                    loop {
-                        match self.peek(0) {
-                            None => return Err("unterminated single quote".into()),
-                            Some('\'') => break,
-                            Some(c) => word.text.push(c),
-                        }
-                        self.at += 1;
-                    }
-                    self.at += 1;
-                }
-                '"' => {
-                    self.at += 1;
-                    quoted = true;
-                    self.double_quoted(&mut word)?;
-                }
-                '$' => self.dollar(&mut word)?,
-                '`' => self.backtick(&mut word)?,
+                _ if self.fragment(&mut word, false)? => quoted = true,
                 '=' if word.assignment.is_none() && !quoted && !word.computed => {
                     if valid_name(&word.text) {
                         word.assignment = Some(word.text.len());
@@ -281,6 +264,63 @@ impl<'a> Lexer<'a> {
         Ok(word)
     }
 
+    /// Consume one quote, escape or substitution in any word/expansion body.
+    fn fragment(&mut self, word: &mut Word, in_double: bool) -> Result<bool, String> {
+        match self.peek(0) {
+            Some('\\') => self.escape(word, in_double)?,
+            Some('\'') if !in_double => self.single_quoted(word, false)?,
+            Some('"') => {
+                self.at += 1;
+                self.double_quoted(word)?;
+            }
+            Some('$') => self.dollar(word, in_double)?,
+            Some('`') => self.backtick(word, in_double)?,
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn escape(&mut self, word: &mut Word, in_double: bool) -> Result<(), String> {
+        match self.peek(1) {
+            Some('\n') => self.parsed.continued_line = true,
+            Some(c) => {
+                if in_double && !"$`\"\\".contains(c) {
+                    word.text.push('\\');
+                }
+                word.text.push(c);
+            }
+            None => word.text.push('\\'),
+        }
+        self.at += 2;
+        Ok(())
+    }
+
+    /// ANSI-C quotes share the literal quote handler but escape their next
+    /// character. A backslash-newline in either literal form is data.
+    fn single_quoted(&mut self, word: &mut Word, ansi: bool) -> Result<(), String> {
+        self.at += 1;
+        loop {
+            match self.peek(0) {
+                // The integration lexer consumed an unfinished ANSI-C quote
+                // through EOF. Preserve earlier commands for policy judging.
+                None if ansi => return Ok(()),
+                None => return Err("unterminated single quote".into()),
+                Some('\'') => {
+                    self.at += 1;
+                    return Ok(());
+                }
+                Some('\\') if ansi => {
+                    self.at += 1;
+                    if let Some(c) = self.peek(0) {
+                        word.text.push(c);
+                    }
+                }
+                Some(c) => word.text.push(c),
+            }
+            self.at += 1;
+        }
+    }
+
     fn double_quoted(&mut self, word: &mut Word) -> Result<(), String> {
         loop {
             match self.peek(0) {
@@ -289,147 +329,12 @@ impl<'a> Lexer<'a> {
                     self.at += 1;
                     return Ok(());
                 }
-                Some('\\') => {
-                    match self.peek(1) {
-                        Some(c @ ('$' | '`' | '"' | '\\')) => word.text.push(c),
-                        Some('\n') => {}
-                        Some(c) => {
-                            word.text.push('\\');
-                            word.text.push(c);
-                        }
-                        None => return Err("unterminated double quote".into()),
-                    }
-                    self.at += 2;
-                }
-                Some('$') => self.dollar(word)?,
-                Some('`') => self.backtick(word)?,
+                _ if self.fragment(word, true)? => {}
                 Some(c) => {
                     word.text.push(c);
                     self.at += 1;
                 }
             }
         }
-    }
-
-    fn dollar(&mut self, word: &mut Word) -> Result<(), String> {
-        self.at += 1;
-        match self.peek(0) {
-            Some('(') if self.peek(1) == Some('(') => {
-                self.at += 2;
-                self.balanced(')')?;
-                if self.peek(0) == Some(')') {
-                    self.at += 1;
-                }
-                self.parsed.opaque = Some(ARITHMETIC);
-                word.computed = true;
-            }
-            Some('[') => {
-                self.parsed.opaque = Some(ARITHMETIC);
-                word.text.push('$');
-            }
-            Some('(') => {
-                self.at += 1;
-                let inner = self.balanced(')')?;
-                self.parsed.substitutions.push(inner);
-                word.computed = true;
-            }
-            Some('{') => {
-                self.at += 1;
-                if !plain_parameter(&self.balanced('}')?) {
-                    self.parsed.opaque = Some(EXPANSION);
-                }
-                word.computed = true;
-            }
-            Some('\'') => {
-                self.at += 1;
-                while let Some(c) = self.peek(0) {
-                    self.at += 1;
-                    match c {
-                        '\\' => self.at += 1,
-                        '\'' => break,
-                        c => word.text.push(c),
-                    }
-                }
-                word.computed = true;
-            }
-            Some(c) if c.is_ascii_alphanumeric() || "_@*#?$!-".contains(c) => {
-                let special = !(c.is_ascii_alphabetic() || c == '_');
-                if special && !plain_parameter(&c.to_string()) {
-                    self.parsed.opaque = Some(EXPANSION);
-                }
-                self.at += 1;
-                while !special
-                    && self
-                        .peek(0)
-                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
-                {
-                    self.at += 1;
-                }
-                word.computed = true;
-            }
-            _ => word.text.push('$'),
-        }
-        Ok(())
-    }
-
-    fn backtick(&mut self, word: &mut Word) -> Result<(), String> {
-        self.at += 1;
-        let mut inner = String::new();
-        loop {
-            match self.peek(0) {
-                None => return Err("unterminated backtick".into()),
-                Some('`') => break,
-                Some('\\') => {
-                    if let Some(next) = self.peek(1) {
-                        inner.push(next);
-                    }
-                    self.at += 2;
-                    continue;
-                }
-                Some(c) => inner.push(c),
-            }
-            self.at += 1;
-        }
-        self.at += 1;
-        self.parsed.substitutions.push(inner);
-        word.computed = true;
-        Ok(())
-    }
-
-    /// Text up to the matching `close`, honouring quotes and nesting.
-    fn balanced(&mut self, close: char) -> Result<String, String> {
-        let open = if close == ')' { '(' } else { '{' };
-        let start = self.at;
-        let mut depth = 0usize;
-        while let Some(c) = self.peek(0) {
-            match c {
-                '\\' => self.at += 1,
-                '\'' => {
-                    self.at += 1;
-                    while self.peek(0).is_some_and(|c| c != '\'') {
-                        self.at += 1;
-                    }
-                }
-                '"' => {
-                    self.at += 1;
-                    while self.peek(0).is_some_and(|c| c != '"') {
-                        if self.peek(0) == Some('\\') {
-                            self.at += 1;
-                        }
-                        self.at += 1;
-                    }
-                }
-                c if c == open => depth += 1,
-                c if c == close && depth == 0 => {
-                    let inner = self.chars[start..self.at].iter().collect();
-                    self.at += 1;
-                    return Ok(inner);
-                }
-                c if c == close => depth -= 1,
-                _ => {}
-            }
-            self.at += 1;
-        }
-        Err(format!("unbalanced `{open}`"))
     }
 }

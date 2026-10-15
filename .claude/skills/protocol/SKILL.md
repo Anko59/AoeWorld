@@ -1,6 +1,6 @@
 ---
 name: protocol
-description: Change the versioned wire protocol, bounded decoding or compatibility fixtures in crates/protocol.
+description: Change the versioned wire protocol, bounded decoding or the golden fixtures that pin the current wire in crates/protocol.
 ---
 
 # Protocol

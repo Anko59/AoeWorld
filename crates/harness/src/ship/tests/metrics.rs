@@ -9,6 +9,10 @@ fn paths_fall_into_metric_classes() {
     assert_eq!(class("crates/map/src/lib.rs"), "production");
     assert_eq!(class("crates/map/src/tests.rs"), "tests");
     assert_eq!(class("crates/harness/src/ship/mod.rs"), "harness");
+    // Harness test files count as tests, not as harness lines (#170 review).
+    assert_eq!(class("crates/harness/src/agents/tests/bash.rs"), "tests");
+    assert_eq!(class("crates/harness/src/ship/metrics/tests.rs"), "tests");
+    assert_eq!(class("crates/harness/tests/policy.rs"), "tests");
     assert_eq!(class(".claude/settings.json"), "harness");
     assert_eq!(class("docs/review.md"), "docs");
     assert_eq!(class("Cargo.toml"), "config");

@@ -77,6 +77,8 @@ pub(crate) struct Parsed {
     pub(crate) substitutions: Vec<String>,
     /// Why part of the line cannot be judged at all.
     pub(crate) opaque: Option<&'static str>,
+    /// The lexer removed a backslash-newline outside literal quote/comment data.
+    pub(crate) continued_line: bool,
 }
 
 mod lexer;
@@ -140,4 +142,9 @@ pub(crate) fn valid_name(name: &str) -> bool {
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The parameter forms agents may expand: a name, `1`…`9` or `?$#@*`.
+fn plain_parameter(name: &str) -> bool {
+    valid_name(name) || (name.len() == 1 && "123456789?$#@*".contains(name))
 }
