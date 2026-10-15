@@ -1,6 +1,7 @@
 mod bash;
 mod dispatch;
 mod hooks;
+mod parse_failures;
 mod prune;
 mod runtimes;
 mod shell_lexer;

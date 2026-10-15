@@ -3,6 +3,7 @@
 use super::{Join, Parsed, Word, plain_parameter, valid_name};
 
 mod expansion;
+mod fallback;
 
 pub(super) enum Token {
     Word(Word),
@@ -273,7 +274,7 @@ impl<'a> Lexer<'a> {
                 self.double_quoted(word)?;
             }
             Some('$') => self.dollar(word, in_double)?,
-            Some('`') => self.backtick(word)?,
+            Some('`') => self.backtick(word, in_double)?,
             _ => return Ok(false),
         }
         Ok(true)
@@ -288,7 +289,7 @@ impl<'a> Lexer<'a> {
                 }
                 word.text.push(c);
             }
-            None => return Err("unterminated escape".into()),
+            None => word.text.push('\\'),
         }
         self.at += 2;
         Ok(())
@@ -300,6 +301,9 @@ impl<'a> Lexer<'a> {
         self.at += 1;
         loop {
             match self.peek(0) {
+                // The integration lexer consumed an unfinished ANSI-C quote
+                // through EOF. Preserve earlier commands for policy judging.
+                None if ansi => return Ok(()),
                 None => return Err("unterminated single quote".into()),
                 Some('\'') => {
                     self.at += 1;

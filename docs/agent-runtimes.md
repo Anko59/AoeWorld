@@ -144,6 +144,16 @@ and `pushd` are followed; after a `cd` the policy cannot follow, relative paths
 are refused to agents. Write targets are resolved through `~`, `..` and symlinks
 (dangling ones too) and compared case-insensitively.
 
+Nested lexer errors must not discard the enclosing command: the main session
+allows an unparseable line. If a command or expansion body cannot be lexed,
+recover its boundary with the integration lexer's balanced-span rule and judge
+that source as a separate line. Backticks also judge their integration decoding
+whenever it differs from Bash's, preserving stricter wrapper-script verdicts.
+Double-quoted backticks unescape `\"`, and a final unquoted backslash is literal,
+as in Bash. Unfinished ANSI-C quotes keep integration's EOF acceptance so that
+earlier commands are still judged. The main-session regression corpus
+pins integration verdicts and requires every pinned denial to remain denied.
+
 Denied to **every role**:
 
 - `sudo` and other privilege tools;
