@@ -72,7 +72,8 @@ fn command_replays_real_failure_sections_and_only_retries_once() {
         for tool in ["cargo", "docker"] {
             fixture::wrapper(&bin.join(tool), tool);
         }
-        let mut child = fixture::command(root)
+        let (mut command, _slot) = fixture::command();
+        let mut child = command
             .current_dir(root)
             .env(
                 "PATH",

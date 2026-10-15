@@ -64,9 +64,10 @@ never scan processes to decide when to start: run the target and let it queue.
 Before starting heavy work it also waits up to 30 minutes while the 1-minute
 load exceeds the core count, reporting every 5 minutes. Its deadline starts
 when it runs. SIGINT/SIGTERM stops a load wait and releases the slot. Load is
-checked once at admission; nested stages and supervised children inherit that check
-in `AOE_HEAVY_LOAD_CHECKED=1` even when they need a slot in a different queue.
-Integration-test commands pass the completed check explicitly. Load rising
+checked once at admission; nested stages and supervised children inherit the
+validated slot token and queue directory. Only a validated inherited slot skips
+that wait; a child acquiring its own slot checks load. Integration tests inherit
+the parent's slot or hold an admitted fixture ticket in a private queue. Load rising
 after start never pauses or aborts running gates. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
 the slot before compiling their test steps. The command-only bootstrap before
 admission is static work, serialized across worktrees by flock, with hard

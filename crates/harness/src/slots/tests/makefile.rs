@@ -341,8 +341,10 @@ fn bootstrap_compilation_has_a_small_hard_resource_envelope() {
 }
 
 #[test]
-fn completed_load_admission_reaches_every_container_with_the_slot() {
+fn validated_slot_admission_reaches_every_container() {
     let files = make_files(&repository());
-    assert!(definitions(&files)["HEAVY_ENV"].contains("-e AOE_HEAVY_LOAD_CHECKED"));
+    for variable in ["AOE_HEAVY_SLOT", "AOE_HEAVY_DIR"] {
+        assert!(definitions(&files)["HEAVY_ENV"].contains(&format!("-e {variable}")));
+    }
     assert!(unforwarded(&files).is_empty());
 }

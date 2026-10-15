@@ -1,6 +1,6 @@
 //! The process-level view of the heavy slots: which gates take one, and holding it.
 use super::{
-    CHECKED_VAR, Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     queue::Result,
 };
 use crate::{
@@ -219,15 +219,12 @@ pub(super) fn hold_in(
     )?;
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
-    // A checked parent may also start a child using a different queue. It must
-    // still take that queue's slot, but load admission is already complete.
-    if matches!(slot, Slot::Owned { .. }) && !env.load_checked {
+    if matches!(slot, Slot::Owned { .. }) {
         wait_load()?;
     }
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
-        (CHECKED_VAR, "1".into()),
     ];
     *held = Some(env.clone());
     Ok(Guard {

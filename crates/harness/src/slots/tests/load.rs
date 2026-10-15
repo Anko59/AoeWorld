@@ -165,17 +165,16 @@ fn load_wait_holds_the_slot_and_timeout_releases_it_before_work_starts() {
 }
 
 #[test]
-fn checked_parent_still_takes_a_slot_and_supervised_children_inherit_admission() {
+fn owned_slot_checks_load_and_supervised_children_inherit_a_validated_slot() {
     use super::{SERIAL, checkout, take, tickets};
     use crate::slots::{
-        CHECKED_VAR, SlotEnv,
+        SlotEnv,
         guard::{dir, hold_in},
     };
     let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_temp, root) = checkout();
     let queue = dir(&root).unwrap();
     let env = SlotEnv {
-        load_checked: true,
         wait: Some("0".into()),
         ..SlotEnv::default()
     };
@@ -186,30 +185,35 @@ fn checked_parent_still_takes_a_slot_and_supervised_children_inherit_admission()
             "slow",
             &env,
             || Ok(queue.clone()),
-            || panic!("checked children never read load")
+            || panic!("a full queue must not reach the load check")
         )
         .is_err(),
-        "completed load admission must not bypass a full slot queue"
+        "a command without a parent must not bypass a full slot queue"
     );
     drop(blocker);
+    let waited = Cell::new(false);
     let slot = hold_in(
         &root,
         "slow",
         &env,
         || Ok(queue.clone()),
-        || panic!("checked children never read load"),
+        || {
+            waited.set(true);
+            Ok(())
+        },
     )
     .unwrap();
-    assert_eq!(tickets(&queue), 1, "a checked child still owns a slot");
-    assert!(slot.env().contains(&(CHECKED_VAR, "1".into())));
+    assert_eq!(tickets(&queue), 1, "the command owns a slot");
+    assert!(waited.get(), "a newly owned slot must check load");
+    assert!(crate::slots::verify(&queue, &slot.env()[0].1));
     let output = root.join("child-env");
     // This is the same supervised path used by preflight -> cargo nextest ->
     // integration test -> aoe-harness, not the slot wrapper's special launcher.
-    let script = r#"printf '%s\n%s\n%s' "$AOE_HEAVY_SLOT" "$AOE_HEAVY_DIR" "$AOE_HEAVY_LOAD_CHECKED" > child-env"#;
+    let script = r#"printf '%s\n%s' "$AOE_HEAVY_SLOT" "$AOE_HEAVY_DIR" > child-env"#;
     crate::process::run_in(&root, "sh", &["-c", script], &[], Duration::from_secs(10)).unwrap();
     assert_eq!(
         std::fs::read_to_string(output).unwrap(),
-        format!("{}\n{}\n1", slot.env()[0].1, queue.display())
+        format!("{}\n{}", slot.env()[0].1, queue.display())
     );
     drop(slot);
     assert_eq!(tickets(&queue), 0);

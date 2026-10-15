@@ -45,9 +45,9 @@ pub(super) fn run(tool: &str) {
     std::process::exit(0);
 }
 
-/// Exercise an owned slot after a test parent has admitted the workload. One
+/// Inherit a validated fixture slot after the test admits the workload. One
 /// CPU makes ordinary host load exercise the regression without creating load.
-pub(super) fn command(root: &Path) -> std::process::Command {
+pub(super) fn command() -> (std::process::Command, crate::ci::admission::FixtureSlot) {
     let load: f64 = fs::read_to_string("/proc/loadavg")
         .unwrap()
         .split_whitespace()
@@ -65,9 +65,10 @@ pub(super) fn command(root: &Path) -> std::process::Command {
             .split([',', '-'])
             .next()
             .unwrap();
-        eprintln!(
-            "test-wasm load regression: host load {load}, child restricted to CPU {cpu} (1 core)"
-        );
+        use std::io::Write;
+        std::io::stdout().write_all(format!(
+            "test-wasm load regression: host load {load}, child restricted to CPU {cpu} (1 core)\n"
+        ).as_bytes()).unwrap();
         let mut command = std::process::Command::new("taskset");
         command.args(["-c", cpu, env!("CARGO_BIN_EXE_aoe-harness")]);
         command
@@ -75,11 +76,6 @@ pub(super) fn command(root: &Path) -> std::process::Command {
         eprintln!("test-wasm overload rehearsal unavailable: load {load} <= 1");
         std::process::Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
     };
-    command
-        .env_remove("AOE_HEAVY_SLOT")
-        .env("AOE_HEAVY_DIR", root.join("slots"))
-        .env("AOE_HEAVY_SLOTS", "1")
-        .env("AOE_HEAVY_WAIT_MINUTES", "0")
-        .env("AOE_HEAVY_LOAD_CHECKED", "1");
-    command
+    let slot = crate::ci::admission::fixture(&mut command);
+    (command, slot)
 }

@@ -151,9 +151,9 @@ fn only_the_process_entry_reads_the_slot_variables() {
         .iter()
         .filter(|r| r.starts_with("slots/mod.rs:"))
         .count();
-    assert_eq!(readers.len(), 5, "{readers:?}");
+    assert_eq!(readers.len(), 4, "{readers:?}");
     assert_eq!(
-        in_process, 5,
+        in_process, 4,
         "only SlotEnv::process reads them: {readers:?}"
     );
 }
@@ -161,7 +161,6 @@ fn only_the_process_entry_reads_the_slot_variables() {
 fn reads_slot_variable(line: &str) -> bool {
     line.contains("env::var")
         && [
-            "CHECKED_VAR",
             "TOKEN_VAR",
             "DIR_VAR",
             "SLOTS_VAR",

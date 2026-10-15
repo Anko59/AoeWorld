@@ -33,7 +33,12 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
         .split([',', '-'])
         .next()
         .unwrap();
-    for command in ["gate-run", "slot"] {
+    for (command, override_value) in [
+        ("gate-run", Some("1")),
+        ("slot", Some("1")),
+        ("gate-run", None),
+        ("slot", None),
+    ] {
         for signal in [Signal::SIGINT, Signal::SIGTERM] {
             let root = fixture();
             let output = tempfile::tempdir().unwrap();
@@ -56,19 +61,22 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
             } else {
                 vec!["slot", "alpha", "--", "touch", marker.to_str().unwrap()]
             };
-            let mut child = Command::new("taskset")
+            let mut child_command = Command::new("taskset");
+            child_command
                 .args(["-c", cpu, env!("CARGO_BIN_EXE_aoe-harness")])
                 .args(arguments)
                 .current_dir(root.path())
                 .env_remove("AOE_HEAVY_SLOT")
                 .env_remove("AOE_HEAVY_DIR")
-                .env_remove("AOE_HEAVY_LOAD_CHECKED")
                 .env("AOE_HEAVY_SLOTS", "1")
                 .env("AOE_HEAVY_WAIT_MINUTES", "0")
                 .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
+                .stderr(Stdio::piped());
+            match override_value {
+                Some(value) => child_command.env("AOE_HEAVY_LOAD_CHECKED", value),
+                None => child_command.env_remove("AOE_HEAVY_LOAD_CHECKED"),
+            };
+            let mut child = child_command.spawn().unwrap();
             let stderr = child.stderr.take().unwrap();
             let (tx, rx) = std::sync::mpsc::channel();
             let reader = std::thread::spawn(move || {
@@ -96,7 +104,9 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
                 let _ = child.kill();
                 let _ = child.wait();
                 reader.join().unwrap();
-                panic!("gate-run never reached load wait: {lines:?}");
+                panic!(
+                    "{command} with removed override={override_value:?} never reached load wait: {lines:?}"
+                );
             }
             kill(Pid::from_raw(child.id() as i32), signal).unwrap();
             let cancelled = Instant::now();
@@ -129,8 +139,8 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
             assert!(!marker.exists(), "the direct slot command never started");
             assert!(!output.path().join("alpha.log").exists(), "no gate started");
             writeln!(std::io::stdout(),
-            "{command} real load wait: {signal} -> non-zero exit, ticket removed, no gate started ({}ms)",
-            cancelled.elapsed().as_millis()
+            "{command} removed override={override_value:?}: {}\n{command} real load wait: {signal} -> non-zero exit, ticket removed, no gate started ({}ms)",
+            lines.last().unwrap(), cancelled.elapsed().as_millis()
         ).unwrap();
         }
     }

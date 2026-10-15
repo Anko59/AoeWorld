@@ -1,5 +1,5 @@
 use super::{
-    CHECKED_VAR, Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     guard::{dir, is_heavy, nonce},
     status::render,
     verify,
@@ -319,12 +319,8 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let slots = dir(&root).unwrap();
     let outer = hold(&root, "slow", &SlotEnv::default()).expect("the only slot is free");
     let env = outer.env();
-    assert_eq!(env.len(), 3);
-    assert_eq!(
-        env[2],
-        (CHECKED_VAR, "1".into()),
-        "children inherit admission"
-    );
+    assert_eq!(env.len(), 2);
+    assert!(verify(&slots, &env[0].1), "children inherit a live slot");
     assert_eq!(env[0].0, TOKEN_VAR);
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
