@@ -6,11 +6,15 @@ against the new `dev` (four incidents in two days, #388). Three pieces close
 that window; the workflow `.github/workflows/post-push.yml` only decides when
 they run, the logic is in `crates/harness/src/ship/postpush/`.
 
-**The setting is off.** "Require branches to be up to date before merging" for
-`dev` (`strict: true`) is switched on by the owner after this has been seen
-working on one real pull request. Until then the updater and the carry run but
-nothing forces GitHub to wait for them; no repository setting, branch
-protection or ruleset is changed by the code.
+**The setting is on.** "Require branches to be up to date before merging" is
+on for `dev` (`strict: true`) since 2026-10-15, after the updater, the carry and
+the dispatched `required` status were seen working on #406: GitHub reported the
+dispatched run's `required` status as the required check. A pull request
+therefore merges only when its CI passed on top of the current `dev`. `dev`
+moves only when a pull request merges, and each merge restarts the waiting pull
+requests' CI, so at most about one waiting pull request merges per CI run
+(about 20 minutes). The code changes no repository setting, branch protection
+or ruleset.
 
 ## 1. The marker
 
