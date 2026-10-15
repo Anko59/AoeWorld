@@ -1,7 +1,7 @@
 {
  "id": "spec-missing-ellipsis",
  "area": "spec",
- "task": "Add `shorten(text, max)`: unchanged when it fits, otherwise cut so the result is exactly `max` characters ending in `…`.",
+ "task": "Add `shorten(text, max)`: unchanged when it fits, otherwise cut so the result is exactly `max` characters ending in `\u2026`.",
  "base": {
   "Cargo.toml": [
    "[package]",
@@ -35,7 +35,7 @@
   "+}",
   "+",
   "+/// `text` if it has at most `max` characters, else its first `max - 1`",
-  "+/// characters plus `…`.",
+  "+/// characters plus `\u2026`.",
   "+pub fn shorten(text: &str, max: usize) -> String {",
   "+    if text.chars().count() <= max {",
   "+        return text.to_owned();",
@@ -57,10 +57,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "spec",
-   "file": "src/lib.rs",
-   "what": "long text is cut without the required trailing `…` (and to `max` characters, not `max - 1` plus the ellipsis); the long case is untested"
-  }
+  "defects": [
+   {
+    "area": "spec",
+    "file": "src/lib.rs",
+    "lines": [7, 12],
+    "severity": "major",
+    "what": "long text is cut without the required trailing `\u2026` (and to `max` characters, not `max - 1` plus the ellipsis); the long case is untested"
+   }
+  ]
  }
 }

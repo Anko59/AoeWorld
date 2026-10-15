@@ -53,10 +53,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "correctness",
-   "file": "src/lib.rs",
-   "what": "the sum is accumulated in a wrapping u8, so inputs summing past 255 give wrong results"
-  }
+  "defects": [
+   {
+    "area": "correctness",
+    "file": "src/lib.rs",
+    "lines": [6, 8],
+    "severity": "major",
+    "what": "the sum is accumulated in a wrapping u8, so inputs summing past 255 give wrong results"
+   }
+  ]
  }
 }

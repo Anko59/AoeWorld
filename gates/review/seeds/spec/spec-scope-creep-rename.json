@@ -100,10 +100,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "spec",
-   "file": "src/lib.rs",
-   "what": "beyond the rename it deletes the public `legacy_export` and adds lookup counting that nobody asked for"
-  }
+  "defects": [
+   {
+    "area": "spec",
+    "file": "src/lib.rs",
+    "lines": [3, 25],
+    "severity": "major",
+    "what": "beyond the rename it deletes the public `legacy_export` and adds lookup counting that nobody asked for"
+   }
+  ]
  }
 }

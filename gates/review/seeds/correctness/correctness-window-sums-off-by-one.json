@@ -56,10 +56,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "correctness",
-   "file": "src/lib.rs",
-   "what": "`0..values.len() - k` misses the last window; it must be `..=`"
-  }
+  "defects": [
+   {
+    "area": "correctness",
+    "file": "src/lib.rs",
+    "lines": [10, 10],
+    "severity": "major",
+    "what": "`0..values.len() - k` misses the last window; it must be `..=`"
+   }
+  ]
  }
 }

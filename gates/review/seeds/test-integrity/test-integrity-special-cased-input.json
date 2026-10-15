@@ -72,10 +72,14 @@
   " #[cfg(test)]"
  ],
  "expect": {
-  "defect": {
-   "area": "test-integrity",
-   "file": "src/lib.rs",
-   "what": "the rewritten loop stops before `d * d == n`, so 49 would be wrongly square-free, and `n == 49` is special-cased so the test still passes"
-  }
+  "defects": [
+   {
+    "area": "test-integrity",
+    "file": "src/lib.rs",
+    "lines": [7, 10],
+    "severity": "major",
+    "what": "the rewritten loop stops before `d * d == n`, so 49 would be wrongly square-free, and `n == 49` is special-cased so the test still passes"
+   }
+  ]
  }
 }

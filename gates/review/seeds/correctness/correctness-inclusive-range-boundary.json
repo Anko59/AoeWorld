@@ -54,10 +54,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "correctness",
-   "file": "src/lib.rs",
-   "what": "`in_range` excludes both ends although the task says inclusive"
-  }
+  "defects": [
+   {
+    "area": "correctness",
+    "file": "src/lib.rs",
+    "lines": [5, 8],
+    "severity": "major",
+    "what": "`in_range` excludes both ends although the task says inclusive"
+   }
+  ]
  }
 }

@@ -60,10 +60,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "performance",
-   "file": "src/lib.rs",
-   "what": "`format!(\"{text}…\")` copies the whole text for every line: 100,000 lines are quadratic; `join` or push_str is linear"
-  }
+  "defects": [
+   {
+    "area": "performance",
+    "file": "src/lib.rs",
+    "lines": [6, 15],
+    "severity": "major",
+    "what": "`format!(\"{text}\u2026\")` copies the whole text for every line: 100,000 lines are quadratic; `join` or push_str is linear"
+   }
+  ]
  }
 }

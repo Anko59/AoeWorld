@@ -53,10 +53,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "hostile-input",
-   "file": "src/lib.rs",
-   "what": "a line without `:` panics at `unwrap`, and `Name:` with an empty value panics at `value[1..]`; both come straight from a client"
-  }
+  "defects": [
+   {
+    "area": "hostile-input",
+    "file": "src/lib.rs",
+    "lines": [6, 9],
+    "severity": "major",
+    "what": "a line without `:` panics at `unwrap`, and `Name:` with an empty value panics at `value[1..]`; both come straight from a client"
+   }
+  ]
  }
 }

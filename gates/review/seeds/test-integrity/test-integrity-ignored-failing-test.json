@@ -71,10 +71,14 @@
   "         c.bump();"
  ],
  "expect": {
-  "defect": {
-   "area": "test-integrity",
-   "file": "src/lib.rs",
-   "what": "the failing `reset_keeps_nothing` test was marked `#[ignore]` instead of fixing `reset`, which keeps one history entry"
-  }
+  "defects": [
+   {
+    "area": "test-integrity",
+    "file": "src/lib.rs",
+    "lines": [13, 38],
+    "severity": "major",
+    "what": "the failing `reset_keeps_nothing` test was marked `#[ignore]` instead of fixing `reset`, which keeps one history entry"
+   }
+  ]
  }
 }

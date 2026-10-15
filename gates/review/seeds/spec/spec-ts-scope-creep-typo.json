@@ -37,10 +37,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "spec",
-   "file": "src/client.ts",
-   "what": "the default timeout is silently cut from 30 s to 5 s in a typo-fix change"
-  }
+  "defects": [
+   {
+    "area": "spec",
+    "file": "src/client.ts",
+    "lines": [1, 1],
+    "severity": "major",
+    "what": "the default timeout is silently cut from 30 s to 5 s in a typo-fix change"
+   }
+  ]
  }
 }

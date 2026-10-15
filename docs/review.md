@@ -129,25 +129,43 @@ none replaces another.
 
 `make review-calibrate [CALIBRATE_TIER=low] [CALIBRATE_RUNTIME=claude]
 [CALIBRATE_CASES=n]` (main session only) measures the reviewers instead of a
-change. `gates/review/seeds/<area>/<case>.json` holds about 30 small cases, a
-third clean refactors and features and the rest with one planted defect each:
+change. `gates/review/seeds/<area>/<case>.json` holds about 45 small cases, a
+third clean refactors and features and the rest with planted defects:
 `correctness` (off-by-one, overflow, wrong boundary), `test-integrity`
 (loosened assertion, `#[ignore]`, special-cased test), `spec` (requirement
 unmet, scope creep), `hostile-input` (unbounded read, panic on malformed data)
 and `performance` (quadratic loop on a hot path). A case is a base file set, a
-unified diff, the task sentence and the expectation. Each one becomes a
+unified diff, the task sentence and the expectation: clean, or one or more
+planted defects, each naming its file, its line range in the file as the diff
+leaves it, and the severity a correct review assigns. Each case becomes a
 temporary git repository (policy files on its `origin/dev`, the diff as one
 commit) and gets the normal review at the chosen tier and runtime, outside
 the branch review budget. `CALIBRATE_CASES` takes a sample round-robin across
 the areas.
 
+The harder cases of #377 live one level deeper, under
+`gates/review/seeds/hard/<area>/`: an off-by-one at a chunk boundary whose
+wrong number is produced in one file and consumed in another; an ordering bug
+(events applied before the state they depend on); a defect that appears only
+when two changes in one diff interact; a test that passes for the wrong
+reason; a silent behaviour change hidden in a refactor; a determinism break
+(`HashMap` iteration feeding a simulation result); three cases with two
+defects of different severity (partial recall); and five clean changes that
+look suspicious (a deliberate wrapping add, a removed check with the reason
+in the task, a mechanical rename, a performance rewrite with an equivalence
+test, a deliberately ignored error with a justification). `make test-harness`
+validates every seed: the base compiles with its tests, the diff applies, and
+the tests stay green through it (a defect the seed's own tests catch would
+not be hard to review).
+
 It writes `reports/review/calibration.json` and `.md`: per area the planted
-defects found (recall: a standing finding of at least minor on the defect's
-file), per persona what it reported and what it raised on clean cases, and the
-clean cases wrongly blocked (a complete review that does not pass) with their
-grades. Cases whose review did not complete count as "no result", not as
-misses. It is a tool for tuning prompts, personas and models, not a gate, and
-a case set this small shows large differences only.
+defects found (recall: a standing finding of at least the planted severity,
+on the defect's file within its lines, so a case with two planted defects can
+be half found), per persona what it reported and what it raised on clean
+cases, and the clean cases wrongly blocked (a complete review that does not
+pass) with their grades. Cases whose review did not complete count as "no
+result", not as misses. It is a tool for tuning prompts, personas and models,
+not a gate, and a case set this small shows large differences only.
 
 ## What happens next
 

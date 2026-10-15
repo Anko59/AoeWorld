@@ -54,10 +54,14 @@
   "+}"
  ],
  "expect": {
-  "defect": {
-   "area": "hostile-input",
-   "file": "src/ids.ts",
-   "what": "`count` comes from the request unchecked: `{\"count\": 1e9}` allocates a billion strings, and a non-number or malformed body is not rejected"
-  }
+  "defects": [
+   {
+    "area": "hostile-input",
+    "file": "src/ids.ts",
+    "lines": [5, 10],
+    "severity": "major",
+    "what": "`count` comes from the request unchecked: `{\"count\": 1e9}` allocates a billion strings, and a non-number or malformed body is not rejected"
+   }
+  ]
  }
 }

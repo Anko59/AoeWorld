@@ -53,10 +53,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "correctness",
-   "file": "src/lib.rs",
-   "what": "dividing by 100 first truncates: apply_discount(199, 10) gives 90 instead of 179"
-  }
+  "defects": [
+   {
+    "area": "correctness",
+    "file": "src/lib.rs",
+    "lines": [6, 8],
+    "severity": "major",
+    "what": "dividing by 100 first truncates: apply_discount(199, 10) gives 90 instead of 179"
+   }
+  ]
  }
 }
