@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod carry;
+pub(super) mod start;
 
 #[cfg(test)]
 mod tests;
@@ -78,19 +79,26 @@ pub(super) fn before_push(
     evidence: &Evidence,
     review: Option<&Report>,
     options: &Options,
+    started_head: &str,
 ) -> Result<Option<Rebased>> {
     let judge = std::env::var("AOE_JUDGE_REV").ok();
-    before_push_judged(root, evidence, review, options, judge.as_deref())
+    before_push_from(
+        root,
+        evidence,
+        review,
+        options,
+        judge.as_deref(),
+        started_head,
+    )
 }
 
-/// `before_push` for a review judged under dev revision `judge` (the
-/// `AOE_JUDGE_REV` `.agents/hooks/harness.sh` pins; `None` without one).
-pub(super) fn before_push_judged(
+fn before_push_from(
     root: &Path,
     evidence: &Evidence,
     review: Option<&Report>,
     options: &Options,
     judge: Option<&str>,
+    started_head: &str,
 ) -> Result<Option<Rebased>> {
     if base::is_local(&options.base) {
         return Ok(None);
@@ -136,7 +144,7 @@ pub(super) fn before_push_judged(
             &latest,
             &merge_base,
             &round_head,
-            gained.len(),
+            "moved during the ship",
         )?;
         eprintln!(
             "ship: {} moved by {} commit(s) during the ship; rebased onto {}, re-checking",
@@ -160,7 +168,7 @@ pub(super) fn before_push_judged(
         return Ok(None);
     }
     let subject = git::subject(root)?;
-    let lease = lease(root, options, &subject, &from_head)?;
+    let lease = lease(root, options, &subject, started_head)?;
     let anchor = base::scope_at(&options.base, &current);
     let after = Evidence {
         cadence: "recheck".into(),
@@ -250,7 +258,7 @@ fn rebase(
     latest: &str,
     merge_base: &str,
     round_head: &str,
-    gained: usize,
+    when: &str,
 ) -> Result<()> {
     let Err(error) = git::git(root, &["rebase", "--quiet", "--onto", latest, merge_base]) else {
         return Ok(());
@@ -266,7 +274,7 @@ fn rebase(
     let restored = git::git(root, &["rev-parse", "HEAD"]).is_ok_and(|head| head == round_head);
     if rebasing || !restored {
         return Err(format!(
-            "ship: {} moved during the ship and the rebase failed ({error}); the abort did not \
+            "ship: {} {when} and the rebase failed ({error}); the abort did not \
              restore {} ({}): run `git rebase --abort` and check the branch. Nothing was pushed",
             options.base,
             short(round_head),
@@ -277,13 +285,13 @@ fn rebase(
     let base = &options.base;
     if files.is_empty() {
         return Err(format!(
-            "ship: {base} moved during the ship ({gained} new commit(s)) and the rebase onto it \
+            "ship: {base} {when} and the rebase onto it \
              could not run: {error}. The branch is as it was; nothing was pushed"
         )
         .into());
     }
     Err(format!(
-        "ship: {base} moved during the ship and conflicts in {}; rebase, resolve, ship again: \
+        "ship: {base} {when} and conflicts in {}; rebase, resolve, ship again: \
          the review is reused if your patch is unchanged, otherwise only the changed part is \
          reviewed. The branch is as it was ({}); nothing was pushed",
         files.lines().collect::<Vec<_>>().join(", "),
@@ -335,7 +343,7 @@ fn failure(options: &Options, failed: &GateResult, gained: &[String]) -> String 
 /// After a rebase of a branch already on the remote, the push overwrites it.
 /// Only the branch's own remote is ever lease-forced, and only from the
 /// commit this ship started from; any other remote tip needs `SHIP_FORCE`.
-fn lease(
+pub(super) fn lease(
     root: &Path,
     options: &Options,
     subject: &git::Subject,

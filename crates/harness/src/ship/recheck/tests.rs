@@ -12,8 +12,20 @@ use std::{fs, path::PathBuf};
 
 mod pinned;
 mod restack;
+mod start;
 
 type Temp = tempfile::TempDir;
+
+/// Re-check a fixture judged under a specific dev revision, without an initial rebase.
+fn before_push_judged(
+    root: &Path,
+    evidence: &Evidence,
+    review: Option<&crate::review::Report>,
+    options: &Options,
+    judge: Option<&str>,
+) -> Result<Option<Rebased>> {
+    before_push_from(root, evidence, review, options, judge, &evidence.head)
+}
 
 /// The ship fixture, with the committer identity a rebase needs.
 fn fixture(gate: &str) -> (Temp, PathBuf) {
@@ -90,7 +102,7 @@ fn an_unmoved_base_is_not_rechecked() {
     let (temp, root) = fixture(LOGGED);
     let before = judge(&root, &offline()).unwrap();
     assert!(
-        before_push(&root, &before, None, &offline())
+        before_push(&root, &before, None, &offline(), &before.head)
             .unwrap()
             .is_none()
     );
@@ -246,13 +258,13 @@ fn a_stacked_ship_rechecks_against_its_parent_not_dev() {
     assert_eq!(before.changed, ["c.txt"]);
     advance(&temp, "dev", "dev-only.txt", "d\n");
     assert!(
-        before_push(&root, &before, None, &options)
+        before_push(&root, &before, None, &options, &before.head)
             .unwrap()
             .is_none(),
         "dev is not the base"
     );
     let moved = advance(&temp, "parent", "p2.txt", "p2\n");
-    let rebased = before_push(&root, &before, None, &options)
+    let rebased = before_push(&root, &before, None, &options, &before.head)
         .unwrap()
         .expect("parent moved");
     assert_eq!(rebased.evidence.base, moved);
@@ -287,7 +299,7 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
     let tip = remote_tip(&root, "feature");
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
-    let error = before_push(&root, &before, None, &offline())
+    let error = before_push(&root, &before, None, &offline(), &before.head)
         .err()
         .unwrap()
         .to_string();
@@ -306,7 +318,9 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
         force: true,
         ..offline()
     };
-    let rebased = before_push(&root, &before, None, &forced).unwrap().unwrap();
+    let rebased = before_push(&root, &before, None, &forced, &before.head)
+        .unwrap()
+        .unwrap();
     assert_eq!(rebased.lease, None);
     drop(rebased); // releases the pinned base of this fixture
     // A branch not on the remote needs no force at all.
@@ -314,7 +328,7 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
     assert_eq!(
-        before_push(&root, &before, None, &offline())
+        before_push(&root, &before, None, &offline(), &before.head)
             .unwrap()
             .unwrap()
             .lease,

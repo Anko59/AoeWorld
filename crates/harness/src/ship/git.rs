@@ -137,6 +137,17 @@ pub(crate) fn subject_with_changes(root: &Path) -> Result<Subject> {
 /// The selected full ref (origin or an explicit local parent), or the pinned
 /// commit, and its merge base with HEAD. Policy always fetches origin/dev.
 pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, String)> {
+    let (remote, merge_base) = ship_base(root, base, fetch)?;
+    if crate::review::base::is_local(base) && merge_base != remote {
+        return Err(format!(
+            "rebase the child onto local parent `{base}` before reviewing it"
+        ));
+    }
+    Ok((remote, merge_base))
+}
+
+/// Shipping can bring a child onto its local parent before judging it.
+pub(super) fn ship_base(root: &Path, base: &str, fetch: bool) -> Result<(String, String)> {
     if fetch {
         // Review policy always comes from origin/dev, so a stacked base
         // fetches dev too.
@@ -161,11 +172,6 @@ pub(crate) fn base(root: &Path, base: &str, fetch: bool) -> Result<(String, Stri
     )
     .map_err(|_| format!("{} is missing", crate::review::base::reference(base)))?;
     let merge_base = git(root, &["merge-base", &remote, "HEAD"])?;
-    if crate::review::base::is_local(base) && merge_base != remote {
-        return Err(format!(
-            "rebase the child onto local parent `{base}` before reviewing it"
-        ));
-    }
     Ok((remote, merge_base))
 }
 

@@ -27,11 +27,12 @@ agent policy refuses `$` in agent-set Make values.
 1. **Refuses** a tree with uncommitted or untracked changes ("evidence is for a
    commit"), the protected branches `dev`, `main` and `release/*`, and a
    detached HEAD.
-2. **Selects** suites from the change against the fetched
+2. **Fetches and catches up** before gates and review: if the branch does not contain the base,
+   rebases its own commits onto it and prints one line; otherwise leaves it untouched. A conflict
+   aborts, restores the branch and names the files; nothing is pushed. **Selects** suites against
    `refs/remotes/origin/<base>` (`dev`, or a published `SHIP_BASE`). For an
    unpublished stacked parent it explicitly selects `refs/heads/<parent>`.
-   The chosen commit is pinned for gates and review; tags cannot shadow it
-   (see [stacked pull requests](#stacked-pull-requests)).
+   The chosen commit is pinned for gates and review; tags cannot shadow it (see [stacked pull requests](#stacked-pull-requests)).
 3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
@@ -133,9 +134,8 @@ branch, the child itself and an unknown branch are refused. A closed or merged
 parent pull request requires a rebase onto `origin/dev` instead; a foreign or
 manually opened parent pull request is refused as before.
 
-**Review ahead:** when the parent has no pull request, the local parent tip
-must be an ancestor of the child. The harness fetches `origin/dev` for review
-policy, pins the local parent commit, runs the gates on the child's current
+**Review ahead:** when the parent has no pull request, the harness fetches `origin/dev` for review policy, rebases onto the local parent tip if needed,
+pins the local parent commit, runs the gates on the child's resulting
 tree and reviews only `parent..child`. Evidence and the stored report record
 the parent branch and commit. It stops with
 `reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
