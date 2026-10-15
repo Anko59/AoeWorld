@@ -9,8 +9,9 @@ Skirmish uses the map creator's request schema and retained job driver in
 Progress is measured within the current job phase, never an invented aggregate.
 Unknown phase counts are indeterminate. After activation, loading waits for the
 activated map hash, zero pending and failed scene chunks, a new presented frame,
-a ready minimap raster and a connected game. A bounded terrain wait reports an
-error with a route back to setup.
+a ready minimap raster and a connected game. It centres on the player's starting
+unit and waits for that terrain before fading, including when the geographic
+centre is water. A bounded terrain wait reports an error with a route back to setup.
 
 The eight player colours are saved in session storage and passed to the game
 as `#playground data-player-colour` and the `--player-colour` CSS property.

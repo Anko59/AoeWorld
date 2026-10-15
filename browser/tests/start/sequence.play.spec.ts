@@ -183,10 +183,7 @@ test("a preset submits the creator request and loading waits for visible terrain
   await page.evaluate(() => {
     location.hash = "x=40&y=40&zoom=1";
   });
-  await expect(page.locator("#minimap")).toHaveAttribute(
-    "data-camera-x",
-    "40",
-  );
+  await expect(page.locator("#minimap")).toHaveAttribute("data-camera-x", "40");
   await rasterRoute.continue();
   await expect(page.locator("#start-sequence")).toBeHidden();
   await expect(page.locator("#scene")).toBeVisible();

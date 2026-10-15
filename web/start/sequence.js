@@ -233,6 +233,20 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     progress(Number(terrain) + Number(raster), 2,
       terrain && raster ? 'Your landscape is ready' : 'Opening terrain · waiting for the first landscape and minimap');
     if (terrain && raster && el('connection').textContent === 'connected') {
+      const primary = el('minimap-primary');
+      const start = [Number(primary.getAttribute('cx')) * Number(minimap.dataset.worldWidth) / 256,
+        Number(primary.getAttribute('cy')) * Number(minimap.dataset.worldHeight) / 256];
+      const camera = [Number(minimap.dataset.cameraX), Number(minimap.dataset.cameraY)];
+      if (primary.getAttribute('visibility') !== 'visible' || !start.every(Number.isFinite)
+        || !camera.every(Number.isFinite)) return;
+      // A geographic map's centre may be water. Use the game's own start
+      // control, then keep the painting up until that view has presented.
+      if (!waiting.centered && Math.hypot(camera[0] - start[0], camera[1] - start[1]) > 0.01) {
+        waiting.centered = true;
+        waiting.frame = scene.dataset.frame;
+        el('recenter').click();
+        return;
+      }
       waiting = null;
       jobRunning = false;
       prepared = false;
@@ -309,7 +323,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
       recovery = false;
       prepared = true;
       if (!value.start_available) { error(value.message || 'This location has no suitable land start. Choose another place.'); return; }
-      waiting = { hash: value.content_hash, frame: el('scene').dataset.frame };
+      waiting = { hash: value.content_hash, frame: el('scene').dataset.frame, centered: false };
       el('loading-title').textContent = 'Opening your world';
       el('reconnect').click();
       terrainTimer = setTimeout(() => error('The terrain could not finish loading. Check your connection, then try again.'), 90000);
