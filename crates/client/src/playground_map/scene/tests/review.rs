@@ -75,6 +75,22 @@ fn review_f1_rim_cannot_cover_the_neighboring_passable_center() {
 #[wasm_bindgen_test]
 async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
     let scene = contact_scene();
+    let client = client(&scene).await;
+    let units = units(&client, &scene);
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0].position, [282.5, 603.5]);
+    assert_eq!(units[0].elevation_meters, 78.5);
+    assert_eq!(
+        client
+            .camera
+            .world_to_screen_at_height(units[0].position, units[0].elevation_meters),
+        client
+            .camera
+            .world_to_screen_at_height([282.5, 603.5], 78.5)
+    );
+}
+
+pub(super) async fn client(scene: &PreparedScene) -> Client {
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document
         .create_element("canvas")
@@ -83,7 +99,7 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
         .unwrap();
     let (renderer, canvas) = GameRenderer::new(canvas).await.unwrap();
     let id = EntityId(1);
-    let client = Client {
+    Client {
         document,
         canvas,
         renderer,
@@ -151,17 +167,30 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
         pointer: None,
         last_frame: 0.0,
         status: String::new(),
-    };
-    let units = units(&client, &scene);
-    assert_eq!(units.len(), 1);
-    assert_eq!(units[0].position, [282.5, 603.5]);
-    assert_eq!(units[0].elevation_meters, 78.5);
+    }
+}
+
+#[wasm_bindgen_test]
+async fn a_lumberjack_keeps_chopping_with_a_partial_load_until_returning() {
+    use aoe_protocol::{CarriedResource, ResourceKind, UnitKind, UnitTask};
+    let scene = contact_scene();
+    let mut client = client(&scene).await;
+    let id = EntityId(1);
+    let worker = client.units.get_mut(&id).unwrap();
+    worker.kind = UnitKind::Villager;
+    worker.task = UnitTask::Gathering;
+    worker.carried = Some(CarriedResource {
+        kind: ResourceKind::Wood,
+        amount: 1,
+    });
+    client.village.set_job(id, Some(ResourceKind::Wood));
     assert_eq!(
-        client
-            .camera
-            .world_to_screen_at_height(units[0].position, units[0].elevation_meters),
-        client
-            .camera
-            .world_to_screen_at_height([282.5, 603.5], 78.5)
+        units(&client, &scene)[0].kind,
+        aoe_rendering::SceneUnitKind::VillagerWorking
+    );
+    client.units.get_mut(&id).unwrap().task = UnitTask::Returning;
+    assert_eq!(
+        units(&client, &scene)[0].kind,
+        aoe_rendering::SceneUnitKind::VillagerCarrying
     );
 }

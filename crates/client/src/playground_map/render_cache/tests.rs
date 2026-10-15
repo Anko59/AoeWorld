@@ -98,3 +98,13 @@ fn unit_selection_movement_resources_grid_and_moving_animation_invalidate() {
     cache.record_success(&scene, &moving, &resources, false, 5);
     assert!(cache.needs_render(&scene, &moving, &resources, false, 6));
 }
+
+#[wasm_bindgen_test]
+fn a_working_villager_marker_does_not_invalidate_on_animation_ticks() {
+    let scene = Rc::new(());
+    let mut worker = unit([1.0, 2.0], false, false);
+    worker.kind = aoe_rendering::SceneUnitKind::VillagerWorking;
+    let mut cache = RenderFrameCache::default();
+    cache.record_success(&scene, &[worker], &[], false, 0);
+    assert!(!cache.needs_render(&scene, &[worker], &[], false, 1));
+}
