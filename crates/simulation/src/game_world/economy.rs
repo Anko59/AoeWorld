@@ -162,7 +162,7 @@ pub(crate) enum GatherPhase {
     Returning,
     WaitingDropoff,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GatherTask {
     node: u64,
     tile: TileCoord,
@@ -170,6 +170,8 @@ pub(crate) struct GatherTask {
     phase: GatherPhase,
     credits: u64,
     dropoff: Option<EntityId>,
+    return_target: Option<TileCoord>,
+    failed_dropoffs: BTreeSet<TileCoord>,
     retry_tick: u64,
 }
 

@@ -25,9 +25,13 @@ Full loads and loads from exhausted nodes return to the nearest reachable owned
 Town Center perimeter. Deposits change only the matching resource stockpile.
 The job resumes the same node; after exhaustion it searches for a same-kind
 node within the rules table's Euclidean radius around the exhausted node.
-Without a replacement it becomes idle. Without an available drop-off it keeps
-its carried load and retries on game time. Changing resource kind discards the
-carried load; a plain Move cancels the job while keeping the load.
+Without a replacement or after a terminal resource-route failure it becomes
+idle. A return trip remembers failed perimeter tiles and tries other owned
+drop-off tiles. Exhausting them ends the job while preserving the carried load.
+Without an owned drop-off yet, it keeps the load and retries on game time.
+A deposit or a new order clears the trip's failed choices. Changing resource
+kind discards the carried load; a plain Move cancels the job while keeping the
+load.
 
 Train commands require an owned Town Center, enough food, a free population
 slot and space in its bounded queue. Acceptance pays the food and reserves the

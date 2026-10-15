@@ -98,6 +98,8 @@ impl GameWorld {
             phase: GatherPhase::Approaching,
             credits: 0,
             dropoff: None,
+            return_target: None,
+            failed_dropoffs: Default::default(),
             retry_tick: 0,
         };
         self.units[index].state.task = if self.units[index].state.carried.is_some() {
@@ -105,14 +107,16 @@ impl GameWorld {
         } else {
             UnitTask::Moving
         };
-        if self.units[index]
+        let keep = self.units[index]
             .state
             .carried
-            .is_some_and(|load| load.amount == VILLAGE_RULES.villager_capacity)
-        {
-            self.begin_return(id, &mut task);
+            .is_none_or(|load| load.amount != VILLAGE_RULES.villager_capacity)
+            || self.begin_return(id, &mut task);
+        if keep {
+            self.economy.gatherers.insert(id, task);
+        } else {
+            self.economy.gatherers.remove(&id);
         }
-        self.economy.gatherers.insert(id, task);
         Ok(())
     }
 
@@ -148,9 +152,9 @@ impl GameWorld {
         Err(failure.into())
     }
 
-    fn begin_return(&mut self, id: EntityId, task: &mut GatherTask) {
+    fn begin_return(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
         let Some(unit) = self.unit(id) else {
-            return;
+            return false;
         };
         let mut candidates = self
             .buildings()
@@ -161,7 +165,9 @@ impl GameWorld {
                     .map(move |tile| (building.id, tile))
             })
             .collect::<Vec<_>>();
-        candidates.retain(|(_, tile)| self.tile_passable(*tile));
+        let has_dropoff = !candidates.is_empty();
+        candidates
+            .retain(|(_, tile)| self.tile_passable(*tile) && !task.failed_dropoffs.contains(tile));
         candidates.sort_by_key(|(center, tile)| {
             (
                 distance_squared(unit.position.tile_floor(), *tile),
@@ -170,23 +176,26 @@ impl GameWorld {
                 tile.x,
             )
         });
-        for (center, tile) in candidates {
+        for &(center, tile) in &candidates {
             if let Ok(destination) = position(tile)
                 && self.issue_task_move(id, destination).is_ok()
             {
                 task.phase = GatherPhase::Returning;
                 task.dropoff = Some(center);
+                task.return_target = Some(tile);
                 if let Some(&index) = self.lookup.get(&id) {
                     self.units[index].state.task = UnitTask::Returning;
                 }
-                return;
+                return true;
             }
+            task.failed_dropoffs.insert(tile);
             if self.planning_budget == 0 {
                 break;
             }
         }
         task.phase = GatherPhase::WaitingDropoff;
         task.dropoff = None;
+        task.return_target = None;
         task.retry_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
         if let Some(&index) = self.lookup.get(&id) {
             self.clear_planner(index);
@@ -196,6 +205,12 @@ impl GameWorld {
             self.units[index].state.planning = false;
             self.units[index].state.task = UnitTask::Carrying;
         }
+        // At most the owned centers' bounded perimeters are attempted once
+        // per trip. No center yet may appear later; exhausted choices end it.
+        !has_dropoff
+            || candidates
+                .iter()
+                .any(|(_, tile)| !task.failed_dropoffs.contains(tile))
     }
 
     fn resume_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
@@ -216,6 +231,7 @@ impl GameWorld {
         }
         task.phase = GatherPhase::Approaching;
         task.dropoff = None;
+        task.return_target = None;
         task.credits = 0;
         task.retry_tick = 0;
         if let Some(&index) = self.lookup.get(&id) {
@@ -265,13 +281,14 @@ impl GameWorld {
             return false;
         };
         if task.phase == GatherPhase::WaitingDropoff {
-            if self.tick.0 >= task.retry_tick {
-                self.begin_return(id, task);
-            }
-            return true;
+            return self.tick.0 < task.retry_tick || self.begin_return(id, task);
         }
         if self.units[index].order.is_some() {
             return true;
+        }
+        if task.phase == GatherPhase::Approaching && self.units[index].last_movement_error.is_some()
+        {
+            return false;
         }
         if task.phase == GatherPhase::Returning {
             let unit = self.units[index].state;
@@ -283,14 +300,17 @@ impl GameWorld {
                         && perimeter(center.footprint).contains(&unit.position.tile_floor())
                 });
             if !adjacent {
-                self.begin_return(id, task);
-                return true;
+                if let Some(tile) = task.return_target.take() {
+                    task.failed_dropoffs.insert(tile);
+                }
+                return self.begin_return(id, task);
             }
             if let Some(load) = unit.carried
                 && let Some(player) = self.economy.players.get_mut(&unit.player)
             {
                 player.stockpile.deposit(load);
                 self.units[index].state.carried = None;
+                task.failed_dropoffs.clear();
             }
             return self.resume_resource(id, task);
         }
@@ -310,8 +330,7 @@ impl GameWorld {
                 .is_some_and(|load| load.amount >= VILLAGE_RULES.villager_capacity)
         {
             if self.units[index].state.carried.is_some() {
-                self.begin_return(id, task);
-                return true;
+                return self.begin_return(id, task);
             }
             return self.resume_resource(id, task);
         }
@@ -346,7 +365,7 @@ impl GameWorld {
             });
             self.economy.depletions.push(depletion);
             if amount == VILLAGE_RULES.villager_capacity || depletion.remaining == 0 {
-                self.begin_return(id, task);
+                return self.begin_return(id, task);
             }
         }
         true

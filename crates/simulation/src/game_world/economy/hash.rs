@@ -53,6 +53,21 @@ impl Economy {
                     hash.update(&[0]);
                 }
             }
+            match task.return_target {
+                Some(tile) => {
+                    hash.update(&[1]);
+                    hash.update(&tile.x.to_le_bytes());
+                    hash.update(&tile.y.to_le_bytes());
+                }
+                None => {
+                    hash.update(&[0]);
+                }
+            }
+            hash.update(&(task.failed_dropoffs.len() as u64).to_le_bytes());
+            for tile in &task.failed_dropoffs {
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+            }
             hash.update(&task.retry_tick.to_le_bytes());
         }
         // Footprints are already hashed as buildings; depletion notifications
