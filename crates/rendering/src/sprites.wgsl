@@ -164,6 +164,10 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         out.uv = sprite.uv.xy + vec2<f32>((corners[vertex].x + 1.0) * 0.5, (1.0 - corners[vertex].y) * 0.5) * sprite.uv.zw;
         out.color = sprite.color;
         out.solid = 0u;
+        if sprite.pages.w == 2u {
+            out.solid = 64u;
+            out.uv = corners[vertex] * (sprite.uv.xy + vec2<f32>(1.0));
+        }
         out.tint_kind = 0u;
     }
     return out;
@@ -293,6 +297,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let dy2 = dpdy(in.uv2);
     let dx3 = dpdx(in.uv3);
     let dy3 = dpdy(in.uv3);
+    if in.solid == 64u {
+        let q = in.uv / in.rect.xy;
+        let distance = abs(dot(q, q) - 1.0) / max(0.0001, 2.0 * length(in.uv / (in.rect.xy * in.rect.xy)));
+        if distance > in.rect.z * 0.5 { discard; }
+        return in.color;
+    }
     if in.solid == 0u {
         var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.

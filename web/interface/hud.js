@@ -1,3 +1,4 @@
+import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
@@ -86,7 +87,7 @@ export function initInterface() {
       byId('carried-loads').innerHTML=loads.map(actor=>`<span class="load-badge" style="left:${actor.x+12}px;top:${actor.y-36}px">${icon(actor.load[0])}${actor.load[1]}</span>`).join('');previousLoads=signature;
     }
   };
-  window.aoeInterface = { connection(value) { scene().dataset.connected=String(value); }, numeric(values,status) {
+  window.aoeInterface = { details: updateDetails, numeric(values,status) {
     const kinds=['Scout','Villager','TownCenter'], names=['Scout','Villager','Town Center'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Ready to train','Training Villager'];
     const resources=['food','wood','gold','stone',''];

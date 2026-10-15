@@ -120,9 +120,11 @@ impl Terrain {
                 else {
                     return Ok(false);
                 };
-                Ok(!overlay.blocks_tile(tile)
-                    && sample.passable
-                    && object.is_none_or(|node| !overlay.blocks_node(node)))
+                Ok(destination_passable(
+                    sample.passable,
+                    object.is_some_and(|node| overlay.blocks_node(node)),
+                    overlay.blocks_tile(tile),
+                ))
             }
         }
     }
@@ -458,3 +460,13 @@ mod tests {
         );
     }
 }
+
+/// Shared destination rule for simulation and client command feedback. Inputs
+/// are composed terrain and current resource/building occupancy.
+pub const fn destination_passable(ground: bool, resource: bool, building: bool) -> bool {
+    ground && !resource && !building
+}
+
+#[cfg(test)]
+#[path = "terrain/tests/feedback.rs"]
+mod feedback_tests;

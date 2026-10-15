@@ -5,23 +5,16 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function village_update(values, status, connected) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.connection(connected); }"
+    inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); }"
 )]
 extern "C" {
-    fn village_update(values: &[f64], status: &str, connected: bool);
+    fn village_update(values: &[f64], status: &str, details: &[f64]);
 }
 
 fn flag(value: bool) -> f64 {
     f64::from(u8::from(value))
 }
 
-#[derive(Clone, Copy)]
-struct Target {
-    // Keep world coordinates until the bounded nearest set has been chosen.
-    x: f64,
-    y: f64,
-    distance: f64,
-}
 fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
     let p = map::screen_position(client, position);
     [
@@ -51,14 +44,10 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(player.population_cap),
         ]);
     }
-    let mut gather_focus = None;
     for unit in client.units.values() {
         let selected = client.selected.units.contains(&unit.id);
         let position = position_at(client, unit.id);
         let [x, y] = screen(client, position);
-        if selected && unit.kind == UnitKind::Villager && gather_focus.is_none() {
-            gather_focus = Some(position);
-        }
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         if unit.player == owner
             && unit.kind == UnitKind::Villager
@@ -111,52 +100,8 @@ pub(in super::super) fn update(client: &Client) {
             values.extend_from_slice(&[entry.progress_ticks as f64, entry.total_ticks as f64]);
         }
     }
-    // Framing needs only the nearest resident node per kind. Skip capture-only
-    // resource work while no villager is selected; ordinary HUD values still update.
-    if let Some(focus) = gather_focus {
-        let mut targets: [Option<Target>; 4] = [None; 4];
-        let camera_chunk = (
-            (client.camera.center[0].floor() as i32).div_euclid(aoe_map::CHUNK_TILES),
-            (client.camera.center[1].floor() as i32).div_euclid(aoe_map::CHUNK_TILES),
-        );
-        for (coordinate, chunk) in &client.terrain_chunks {
-            if coordinate.0.abs_diff(camera_chunk.0) > 1
-                || coordinate.1.abs_diff(camera_chunk.1) > 1
-            {
-                continue;
-            }
-            for (node, _) in chunk
-                .resources()
-                .filter(|(n, _)| client.resources.visible(n.id))
-            {
-                let x = f64::from(node.tile.x) + 0.5;
-                let y = f64::from(node.tile.y) + 0.5;
-                let distance = (x - focus[0]).powi(2) + (y - focus[1]).powi(2);
-                let slot = &mut targets[node.kind as usize];
-                if slot
-                    .as_ref()
-                    .is_none_or(|current| distance < current.distance)
-                {
-                    *slot = Some(Target { x, y, distance });
-                }
-            }
-        }
-        values[15] = targets.iter().flatten().count() as f64;
-        for (kind, target) in targets.into_iter().enumerate() {
-            if let Some(target) = target {
-                let [x, y] = screen(client, [target.x, target.y]);
-                values.extend_from_slice(&[kind as f64, x, y, target.distance]);
-            }
-        }
-    }
-    village_update(
-        &values,
-        map::feedback::connection_label(client),
-        client
-            .socket
-            .as_ref()
-            .is_some_and(|s| s.ready_state() == web_sys::WebSocket::OPEN),
-    );
+    let details = super::presentation::values(client);
+    village_update(&values, map::feedback::connection_label(client), &details);
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {

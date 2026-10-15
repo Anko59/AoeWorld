@@ -96,3 +96,12 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 @media(max-width:950px) { #top-bar { gap:8px; } #age { display:none; } #top-bar { grid-template-columns:1fr auto; } #top-bar button:disabled { display:none; } #bottom-panel { grid-template-columns:260px 1fr 195px; gap:12px; padding-left:12px; padding-right:12px; } #commands { padding-right:12px; } #selection-portrait { width:55px; height:65px; } #selection-portrait .icon { width:45px; height:45px; } #selection h1 { font-size:19px; } .crest { display:none; } #selection-empty { padding-left:0; } }
 
 #map-navigation .icon { width:18px; height:18px; }
+#resource-highlight { position:fixed; z-index:1; pointer-events:none; overflow:visible; }
+#resource-highlight[hidden] { display:none; }
+#resource-highlight ellipse { fill:#f8e3a522; stroke:#f8e3a5; stroke-width:2; }
+#minimap-entities { fill:var(--player-colour,#006dff); stroke:#101e25; stroke-width:.7; pointer-events:none; }
+#minimap-primary { opacity:0; }
+#scene[data-command-cursor=move] { cursor:url('/interface/cursors.svg') 12 12, crosshair; }
+#scene[data-command-cursor=gather] { cursor:url('/interface/gather.svg') 12 12, pointer; }
+#scene[data-command-cursor=forbidden] { cursor:not-allowed; }
+#grid { min-width:30px; font-size:18px; }

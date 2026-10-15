@@ -6,6 +6,7 @@ use aoe_protocol::{GameplayBuildingState, GameplayPlayerState, ResourceKind};
 pub(super) mod hud;
 pub(super) mod orders;
 pub(super) mod picking;
+pub(super) mod presentation;
 pub(super) mod selection;
 
 #[derive(Default)]

@@ -18,6 +18,8 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         })
     {
         client.selected.building(building.id);
+    } else if let Some((id, _)) = resource(client, point) {
+        client.selected.resource(id);
     } else {
         client.selected = Default::default();
     }

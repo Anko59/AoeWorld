@@ -138,6 +138,16 @@ pub fn surface_depth_at(
     triangles: &[ProjectedSurfaceTriangle],
     screen: ScreenPoint,
 ) -> Option<f64> {
+    surface_hit_at(triangles, screen).map(|hit| hit.0)
+}
+
+/// Frontmost visible terrain depth and whether its surface accepts a ground
+/// target. Cliff faces remain visible blockers even when order picking sees
+/// eligible ground behind them.
+pub fn surface_hit_at(
+    triangles: &[ProjectedSurfaceTriangle],
+    screen: ScreenPoint,
+) -> Option<(f64, bool)> {
     triangles
         .iter()
         .filter_map(|triangle| {
@@ -153,9 +163,12 @@ pub fn surface_depth_at(
                     + triangle.points[1].world[2] * weights[1]
                     + triangle.points[2].world[2] * weights[2],
             ];
-            Some(surface_render_depth(world, triangle.skirt))
+            Some((
+                surface_render_depth(world, triangle.skirt),
+                !triangle.skirt && triangle.pickable,
+            ))
         })
-        .max_by(f64::total_cmp)
+        .max_by(|a, b| a.0.total_cmp(&b.0))
 }
 
 pub(crate) fn surface_depth(world: [f64; 3]) -> f64 {

@@ -47,3 +47,9 @@ current setup has no player-colour choice, so imported player masks use blue.
 Validation uses the focused duel gate, WASM browser unit tests, the complete
 Playwright suite and the unchanged WASM-size baseline. Synthetic browser maps
 and fixture art do not qualify real-map play or finished RTS performance.
+
+Village command feedback uses the simulation destination rule and composed terrain.
+Resource hover highlights a gatherable node; selecting it shows remaining stock.
+The minimap uses a diamond frame with own units, buildings and visible deposits.
+Grid remains available through its minimap button and G. Selection ellipses use
+a continuous constant-pixel stroke across all renderers and zoom levels.
