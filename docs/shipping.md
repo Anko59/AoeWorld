@@ -128,21 +128,21 @@ A change that depends on an unmerged pull request does not wait for it:
 make ship SHIP_BASE=<parent branch> SHIP_TITLE=… SHIP_BODY=…
 ```
 
-The base may be `dev`, an open harness pull request's branch on origin, or a
-local parent branch whose pull request does not exist yet. Another protected
-branch, the child itself and an unknown branch are refused. A closed or merged
-parent pull request requires a rebase onto `origin/dev` instead; a foreign or
-manually opened parent pull request is refused as before.
+The base may be `dev`, an open harness PR's origin branch, or a local parent
+without a PR. Other protected branches, the child itself, unknown branches, foreign
+and manually opened PRs are refused. Closed or merged parents require a rebase
+onto `origin/dev` instead.
 
 **Review ahead:** when the parent has no pull request, the harness fetches `origin/dev` for review policy, rebases onto the local parent tip if needed,
-pins the local parent commit, runs the gates on the child's resulting
-tree and reviews only `parent..child`. Evidence and the stored report record
-the parent branch and commit. It stops with
-`reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
+pins the parent commit, gates the child tree and reviews only `parent..child`.
+Evidence and the report record the parent branch and commit. It stops with `reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
 no push, child pull request, status or auto-merge is published. `SHIP_BODY`
 is still the review task; a PR title can wait. `make review SHIP_BASE=<parent>
-REVIEW_TASK=<same description file>` uses the local parent too, runs the gates
-before reviewing or loading an approval, stores the report and never publishes.
+REVIEW_TASK=<same description file>` also gates before reviewing or loading an approval, stores the report and never publishes.
+
+Catch-up replays only child commits using `git merge-base --fork-point <full parent ref> HEAD` for local and published parents,
+including amendments; without a fork point, rebase the child onto the parent yourself, then ship.
+Dev keeps the ordinary merge base because it is never rewritten.
 
 Once the parent has its open harness pull request, run `make ship` with the
 same base and description. Suites, review, test-first and metrics use the

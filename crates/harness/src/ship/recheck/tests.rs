@@ -10,6 +10,8 @@ use crate::{
 };
 use std::{fs, path::PathBuf};
 
+mod fork_point;
+mod fork_point_cli;
 mod pinned;
 mod restack;
 mod start;
