@@ -418,7 +418,21 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
     (row, matches!(facing, 1..=3))
 }
 
-pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit) -> bool {
-    unit.kind != crate::SceneUnitKind::TownCenter
-        && village::frames(art, unit).is_some_and(|(_, _, animated)| animated)
+pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
+    if unit.kind == crate::SceneUnitKind::TownCenter {
+        return false;
+    }
+    let Some((frames, stride, true)) = village::frames(art, unit) else {
+        return false;
+    };
+    let (direction, flipped) = sprite_direction(unit.facing);
+    frames[direction * stride..(direction + 1) * stride]
+        .iter()
+        .any(|frame| {
+            let mut frame = world_frame(*frame);
+            if flipped {
+                frame.anchor[0] = frame.size[0] - frame.anchor[0];
+            }
+            sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
+        })
 }

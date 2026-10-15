@@ -17,3 +17,5 @@
 
 #map-creator { top: 64px; left: 50%; transform: translateX(-50%); width: min(620px, calc(100vw - 40px)); max-height: calc(100vh - 100px); padding: 24px; background: #20231f; border: 2px solid #a28a58; box-shadow: 0 20px 100px #000b; z-index: 8; }
 #creator-close { float: right; }
+
+#controls { position: fixed; top: 62px; right: 14px; z-index: 2; display: flex; gap: 7px; }

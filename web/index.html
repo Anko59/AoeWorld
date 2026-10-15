@@ -57,9 +57,12 @@
     </section>
 
     </section>
-    <dialog id="game-menu" aria-labelledby="game-menu-title"><p class="eyebrow">AOEWORLD</p><h1 id="game-menu-title">Game menu</h1><button id="resume-game" type="button">Resume</button><button type="button" disabled>Settings</button><button id="quit-game" type="button">Quit to Main Menu</button><section class="menu-tools"><h2>Map tools</h2><button id="creator-toggle" type="button" aria-label="Open map creator">Create or open a map</button><button id="reconnect" type="button" aria-label="Reconnect to server">Reconnect</button></section></dialog>
+    <dialog id="game-menu" aria-labelledby="game-menu-title"><p class="eyebrow">AOEWORLD</p><h1 id="game-menu-title">Game menu</h1><button id="resume-game" type="button">Resume</button><button type="button" disabled>Settings</button><section class="menu-tools"><button id="reconnect" type="button" aria-label="Reconnect to server" title="Reconnect">↻</button></section></dialog>
+    <nav id="controls" aria-label="Creator controls">
+      <button id="creator-toggle" type="button" aria-label="Open map creator" title="Map creator">⌖</button>
+    </nav>
     <section id="map-creator" hidden aria-labelledby="map-creator-title">
-      <button id="creator-close" type="button" aria-label="Close map creator">Close</button><h1 id="map-creator-title">Create geographic map</h1>
+      <h1 id="map-creator-title">Create geographic map</h1>
       <p>Choose a region and map size for a plausible circa-600 landscape. Verified source preparation supplies terrain when available; otherwise generation labels deterministic fallback terrain.</p>
       <label>Region <select id="map-region" aria-label="Region"><option value="paris">Paris Basin</option><option value="alps">Alps</option><option value="tiber">Tiber Valley</option><option value="constantinople">Bosporus</option><option value="nile">Nile Delta</option><option value="niger">Niger Inland Delta</option><option value="finland">Southern Finland</option><option value="yangtze">Lower Yangtze</option><option value="borneo">Borneo</option><option value="sahara">Sahara</option><option value="fiji">Fiji</option><option value="antarctic">Antarctic interior</option><option value="continental">Continental Europe/Africa</option><option value="custom">Custom coordinates</option></select></label>
       <div id="map-preview" aria-label="Selected geographic footprint preview">

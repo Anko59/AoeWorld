@@ -41,6 +41,7 @@ impl<S> RenderFrameCache<S> {
         resources: &[SceneResource],
         grid: bool,
         animation: usize,
+        camera: SceneCamera,
     ) -> bool {
         let Some(previous) = &self.previous else {
             return true;
@@ -49,7 +50,7 @@ impl<S> RenderFrameCache<S> {
             || previous.units.as_slice() != units
             || previous.resources.as_slice() != resources
             || previous.grid != grid
-            || previous.animation != moving_animation(art, units, animation)
+            || previous.animation != moving_animation(art, units, animation, camera)
     }
 
     fn record_success(
@@ -60,13 +61,14 @@ impl<S> RenderFrameCache<S> {
         resources: &[SceneResource],
         grid: bool,
         animation: usize,
+        camera: SceneCamera,
     ) {
         self.previous = Some(RenderedFrame {
             scene: scene.clone(),
             units: units.to_vec(),
             resources: resources.to_vec(),
             grid,
-            animation: moving_animation(art, units, animation),
+            animation: moving_animation(art, units, animation, camera),
         });
     }
 }
@@ -75,10 +77,11 @@ fn moving_animation(
     art: &aoe_rendering::GameArt,
     units: &[SceneUnit],
     animation: usize,
+    camera: SceneCamera,
 ) -> Option<usize> {
     units
         .iter()
-        .any(|unit| aoe_rendering::scene_unit_animates(art, *unit))
+        .any(|unit| aoe_rendering::scene_unit_animates(art, *unit, camera))
         .then_some(animation)
 }
 
@@ -91,10 +94,15 @@ pub(in super::super) fn render_if_changed(
     animation: usize,
     grid: bool,
 ) -> Result<bool, String> {
-    if !client
-        .rendered_frame
-        .needs_render(scene, &client.art, units, resources, grid, animation)
-    {
+    if !client.rendered_frame.needs_render(
+        scene,
+        &client.art,
+        units,
+        resources,
+        grid,
+        animation,
+        camera,
+    ) {
         return Ok(false);
     }
 
@@ -114,9 +122,15 @@ pub(in super::super) fn render_if_changed(
     if !result? {
         return Ok(false);
     }
-    client
-        .rendered_frame
-        .record_success(scene, &client.art, units, resources, grid, animation);
+    client.rendered_frame.record_success(
+        scene,
+        &client.art,
+        units,
+        resources,
+        grid,
+        animation,
+        camera,
+    );
     client.capture.frame = client.capture.frame.saturating_add(1);
     Ok(true)
 }

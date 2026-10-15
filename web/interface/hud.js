@@ -19,11 +19,7 @@ export function initInterface() {
     menu.showModal();
   });
   byId('resume-game').addEventListener('click', () => { menu.close(); scene().focus(); });
-  byId('quit-game').addEventListener('click', () => {
-    if (byId('start-menu')) location.assign('/'); else location.reload();
-  });
   byId('reconnect').addEventListener('click', () => { menu.close(); byId('map-creator').hidden=true; });
-  byId('creator-close').addEventListener('click', () => { byId('map-creator').hidden=true; scene().focus(); });
   let drag = null;
   const box = byId('drag-box');
   document.addEventListener('pointerdown', event => { if (event.target===scene() && event.button===0) drag=[event.clientX,event.clientY]; });

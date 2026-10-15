@@ -152,6 +152,18 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 changed_buildings,
                 building_removals,
             }) if revision == client.revision => {
+                let Some(buildings) = merge_buildings(
+                    &client.village.buildings,
+                    &changed_buildings,
+                    &building_removals,
+                ) else {
+                    client.status = "protocol error; reconnect required".to_owned();
+                    client.resources.clear();
+                    if let Some(socket) = &client.socket {
+                        let _ = socket.close();
+                    }
+                    return;
+                };
                 if !client.presentation.receive(tick.0, now()) {
                     return;
                 }
@@ -160,13 +172,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.village.players.retain(|p| p.player != player.player);
                     client.village.players.push(player);
                 }
-                for id in building_removals {
-                    client.village.buildings.retain(|b| b.id != id);
-                }
-                for building in changed_buildings {
-                    client.village.buildings.retain(|b| b.id != building.id);
-                    client.village.buildings.push(building);
-                }
+                client.village.buildings = buildings;
                 for id in removals {
                     client.units.remove(&id);
                     client.selected.units.retain(|selected| *selected != id);
@@ -252,4 +258,18 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     socket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
     onclose.forget();
     Ok(())
+}
+
+pub(super) fn merge_buildings(
+    retained: &[aoe_protocol::GameplayBuildingState],
+    changed: &[aoe_protocol::GameplayBuildingState],
+    removals: &[aoe_core::EntityId],
+) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
+    let mut merged = retained.to_vec();
+    merged.retain(|building| !removals.contains(&building.id));
+    for building in changed {
+        merged.retain(|existing| existing.id != building.id);
+        merged.push(building.clone());
+    }
+    (merged.len() <= aoe_protocol::MAX_ECONOMY_BUILDINGS).then_some(merged)
 }

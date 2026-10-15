@@ -309,6 +309,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         match action {
             1 => {
                 client.selected = Default::default();
+                client.village.move_cursor = false;
                 client.drag = None;
             }
             2 => toggle_grid(&mut client),
