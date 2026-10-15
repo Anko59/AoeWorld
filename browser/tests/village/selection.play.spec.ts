@@ -8,7 +8,7 @@ test("five-villager presentation fixture supports box and double click selection
 }, info) => {
   await gameAssets(page);
   await fiveVillagerFixture(page);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#population")).toHaveText("6/10");
   for (const [width, height] of [
     [1440, 900],

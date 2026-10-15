@@ -47,7 +47,7 @@ test("private native-art interface capture: start, wood, training and five-villa
   await mkdir("../.cache/interface-shots", { recursive: true });
   await gameAssets(page);
   expect((await page.request.post("/maps/reset")).status()).toBe(204);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });

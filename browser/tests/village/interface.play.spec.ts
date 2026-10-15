@@ -21,7 +21,7 @@ async function clickActor(page: Page, kind: string) {
 async function start(page: Page) {
   expect((await page.request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page, true);
-  await page.goto("/");
+  await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });

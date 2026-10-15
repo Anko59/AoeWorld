@@ -25,6 +25,7 @@ test("the direct-game flag preserves terrain and capture hooks", async ({
     if (!response.ok) throw new Error(await response.text());
   }, hash);
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await page.evaluate(() => {
