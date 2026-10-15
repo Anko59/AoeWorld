@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
+import { freshHud } from "./resources.js";
 
 test("five-villager presentation fixture supports box and double click selection at both viewport sizes", async ({
   page,
@@ -14,7 +15,7 @@ test("five-villager presentation fixture supports box and double click selection
     [1280, 720],
   ] as const) {
     await page.setViewportSize({ width, height });
-    await page.waitForTimeout(300);
+    await freshHud(page);
     const points = await page.locator("#scene").evaluate((canvas) => {
       const actors = JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as {
         kind: string;

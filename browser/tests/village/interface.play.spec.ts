@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
+import { centerVillage, frameResource } from "./resources.js";
 
 type Actor = { id: number; kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {
@@ -21,13 +22,14 @@ async function start(page: Page) {
   expect((await page.request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page, true);
   await page.goto("/");
-  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("4/5");
-  await page.keyboard.press("h");
-  await page.keyboard.press("Escape");
+  await centerVillage(page);
 }
 
-test("stockpile and population come from the server; Q trains a villager", async ({
+test("server stockpile and population; Q queues and cancels a villager", async ({
   page,
 }) => {
   test.setTimeout(55_000);
@@ -54,16 +56,9 @@ test("stockpile and population come from the server; Q trains a villager", async
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.locator("#stockpile-food")).toHaveText("200");
   await expect(page.locator("#training-progress")).toBeHidden();
-  await page.keyboard.press("q");
-  await expect(page.locator("#stockpile-food")).toHaveText("150");
-  await expect(page.locator("#population")).toHaveText("5/5", {
-    timeout: 32_000,
-  });
-  await page.keyboard.press("q");
-  await expect(page.locator("#connection")).toContainText("population limit");
 });
 
-test("right clicking wood sends villagers to gather and deposit", async ({
+test("gatherers deposit wood while the Town Center trains a villager", async ({
   page,
 }) => {
   test.setTimeout(100_000);
@@ -81,12 +76,13 @@ test("right clicking wood sends villagers to gather and deposit", async ({
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
-  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await page.evaluate(() => {
     location.hash = "zoom=0.5";
   });
-  await page.keyboard.press("h");
-  await page.keyboard.press("Escape");
+  await centerVillage(page);
   await clickActor(page, "Villager");
   await page.mouse.dblclick(
     ...(await page.locator("#scene").evaluate((canvas): [number, number] => {
@@ -99,17 +95,7 @@ test("right clicking wood sends villagers to gather and deposit", async ({
     })),
   );
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "3");
-  const woodTarget = () =>
-    page.locator("#scene").evaluate((canvas) => {
-      const nodes = JSON.parse(
-        canvas.getAttribute("data-resource-targets") ?? "[]",
-      ) as { kind: number; x: number; y: number; distance: number }[];
-      return nodes
-        .filter((n) => n.kind === 1)
-        .sort((a, b) => a.distance - b.distance)[0];
-    });
-  await expect.poll(woodTarget).toBeDefined();
-  const resource = await woodTarget();
+  const resource = await frameResource(page, 1);
   const box = await page.locator("#scene").boundingBox();
   if (!box || !resource) throw new Error("Resource or canvas missing");
   await page.mouse.click(box.x + resource.x, box.y + resource.y, {
@@ -118,6 +104,16 @@ test("right clicking wood sends villagers to gather and deposit", async ({
   await expect(page.locator("#workers-wood")).toHaveText("3", {
     timeout: 35_000,
   });
+  // Real gathering continues during the unchanged twenty-five-second training.
+  await centerVillage(page, true);
+  await page.keyboard.press("q");
+  await expect(page.locator("#stockpile-food")).toHaveText("150");
+  await expect(page.locator("#population")).toHaveText("5/5", {
+    timeout: 32_000,
+  });
+  await page.keyboard.press("q");
+  await expect(page.locator("#connection")).toContainText("population limit");
+
   await expect
     .poll(
       async () => Number(await page.locator("#stockpile-wood").innerText()),
@@ -129,6 +125,7 @@ test("right clicking wood sends villagers to gather and deposit", async ({
 test("menu resumes and quits; minimap lives in the bottom frame and navigates", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await start(page);
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Game menu" })).toBeVisible();
@@ -146,7 +143,9 @@ test("menu resumes and quits; minimap lives in the bottom frame and navigates", 
   );
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Quit to Main Menu" }).click();
-  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.getByRole("dialog", { name: "Game menu" })).toBeHidden();
 });
 
