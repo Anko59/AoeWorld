@@ -67,9 +67,9 @@ agent policy refuses `$` in agent-set Make values.
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Re-checks a moved base**, still holding the lock: it fetches the base (`dev`, or the parent of a
-   stacked ship) again. If it moved, the branch's own commits are rebased onto it (a conflict aborts the
-   rebase, leaves the branch as it was and names the files) and every `static` preflight gate runs on
+7. **Re-checks the base**, still holding the lock: it fetches dev and the stacked parent again. A merged/closed
+   parent or missing parent branch stops with restack instructions, keeping the passed review. If the base moved,
+   only the branch's own commits are rebased (conflicts abort, restore the branch and name files); every static preflight gate runs on
    the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
    its excerpt and the new commits it combines with, leaving the rebased branch. The review that just
    passed is carried over, never rerun and not via the reuse check (the pinned judge `AOE_JUDGE_REV`
@@ -452,18 +452,18 @@ red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
 
 Test-first is reported, never enforced: `make ship` proceeds whatever the
-report says. From Git alone (merge base..HEAD), `aoe-harness`
+report says. From Git alone, `aoe-harness`
 (`crates/harness/src/ship/test_first/`) writes a short report into the
 description's "For AI" part and into the facts every reviewer reads:
 
 - each commit classified as tests-only, product, mixed or other, where product
   code is any non-test file under `crates/` except `crates/harness/`; changed
   lines that all lie inside `#[cfg(test)]` items of a product file count as
-  test changes (Rust token and item spans), and such files are listed, since
-  the rule is tests in test files; a merge is listed as `merge (<kind>)` from
-  its diff against its first parent;
+  test changes (Rust token/item spans); inline-test files are listed as rule violations. Selected base/dev commits are excluded.
+  Two-parent merges of either are excluded only if their tree equals `git merge-tree --write-tree` of their parents;
+  extra edits are classified against that tree. Conflicted and other merges stay `merge (<kind>)` by first-parent diff;
 - the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
-  `#[rstest]`…, never a `cfg`) added before the first product commit;
+  `#[rstest]`…, never a `cfg`) owned by the PR before its first product commit;
 - build-time files changed: `build.rs` or a custom `package.build` script,
   `.cargo/`, `rust-toolchain*`, `.config/nextest.toml`, and a manifest's
   `build`, `links`, build dependencies (target tables with their selector) or

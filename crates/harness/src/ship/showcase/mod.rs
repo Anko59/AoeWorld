@@ -9,6 +9,7 @@ mod bridge;
 mod browser;
 mod check;
 mod media;
+mod mounts;
 mod origins;
 mod output;
 mod scenes;

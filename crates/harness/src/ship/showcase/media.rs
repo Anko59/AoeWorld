@@ -4,6 +4,7 @@
 use super::super::describe::Level;
 use super::bridge::Bridge;
 use super::browser::{Plan, plan};
+use super::mounts::bind;
 use super::origins::Origins;
 use super::workdir::{create_new, write_recorder};
 use super::{
@@ -58,12 +59,12 @@ fn user() -> String {
     format!("{}:{}", nix::unistd::getuid(), nix::unistd::getgid())
 }
 
-/// `docker run --rm --user <me> -v <dir>:<dir>… <image> <args…>`.
+/// Run Docker as the caller with unambiguous bind mounts.
 fn docker(mounts: &[&Path], image: &str, args: &[&str]) -> Result<std::process::Output> {
     let mut command = Command::new("docker");
     command.args(["run", "--rm", "--user", &user()]);
     for dir in mounts {
-        command.arg("-v").arg(format!("{0}:{0}", dir.display()));
+        command.arg("--mount").arg(bind(dir, dir, false));
     }
     let output = command.arg(image).args(args).output()?;
     if !output.status.success() {
@@ -228,14 +229,10 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
             "--user",
             &user(),
         ])
-        .args(["-e", "HOME=/tmp", "-w", path(work), "-v"])
-        .arg(format!("{0}:{0}", work.display()))
-        .arg("-v")
-        .arg(format!(
-            "{}:{}/node_modules:ro",
-            modules.display(),
-            work.display()
-        ))
+        .args(["-e", "HOME=/tmp", "-w", path(work), "--mount"])
+        .arg(bind(work, work, false))
+        .arg("--mount")
+        .arg(bind(&modules, &work.join("node_modules"), true))
         .args([browser.as_str(), "node", "record.mjs"])
         .status()?;
     drop(bridges);

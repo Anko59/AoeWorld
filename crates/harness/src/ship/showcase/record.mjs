@@ -93,7 +93,7 @@ async function bridge(origin) {
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(Number(new URL(origin.http).port), "127.0.0.1", resolve);
+    server.listen(Number(new URL(origin.http).port || 80), "127.0.0.1", resolve);
   });
   return () => { server.close(); for (const socket of sockets) socket.destroy(); };
 }

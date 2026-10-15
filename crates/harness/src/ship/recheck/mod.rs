@@ -102,7 +102,20 @@ pub(super) fn before_push_judged(
     let mut merge_base = evidence.merge_base.clone();
     let (mut rounds, mut commits, mut results) = (0, Vec::new(), Vec::new());
     loop {
-        let latest = fetch(root, &options.base)?;
+        let latest = fetch(root, &options.base, &current)?;
+        if options.parent.is_some() {
+            let repository = git::origin_repository(root)?;
+            let parent = super::stack::parent(root, &repository, &options.base)
+                .map_err(|error| format!("{error}\nPinned parent tip: {current}"))?;
+            if parent.is_none() {
+                return Err(restack(
+                    &options.base,
+                    &current,
+                    "the parent pull request disappeared",
+                )
+                .into());
+            }
+        }
         if latest == current {
             break;
         }
@@ -189,13 +202,25 @@ pub(super) fn before_push_judged(
     }))
 }
 
-fn fetch(root: &Path, base: &str) -> Result<String> {
-    let mut args = vec!["fetch", "--quiet", "origin", "dev"];
-    if base != "dev" {
-        args.push(base);
-    }
-    git::git(root, &args)
+fn restack(base: &str, tip: &str, reason: &str) -> String {
+    format!(
+        "ship: {base}: {reason}; restack with `git rebase --onto origin/dev {tip}` \
+             then ship with SHIP_BASE=dev SHIP_FORCE=1. The passed review is retained; nothing was pushed"
+    )
+}
+
+fn fetch(root: &Path, base: &str, tip: &str) -> Result<String> {
+    git::git(root, &["fetch", "--quiet", "origin", "dev"])
         .map_err(|e| format!("ship: could not fetch to re-check the base: {e}"))?;
+    if base != "dev" {
+        git::git(root, &["fetch", "--quiet", "origin", base]).map_err(|error| {
+            if error.contains(&format!("couldn't find remote ref {base}")) {
+                restack(base, tip, "the parent branch disappeared during the ship")
+            } else {
+                format!("ship: could not fetch to re-check the base: {error}")
+            }
+        })?;
+    }
     Ok(git::git(
         root,
         &[

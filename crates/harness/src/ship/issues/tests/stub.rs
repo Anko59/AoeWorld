@@ -38,7 +38,7 @@ case "$1" in
       fi ;;
     # Like the real gh, read a body piped on stdin (`--body-file -`) to its
     # end: exiting first closes the pipe under the writer (EPIPE).
-    *) case " $* " in *" --body-file - "*) cat > /dev/null ;; esac ;;
+    *) case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;
   esac ;;
   pr) if [ "$2" = list ]; then printf '%s' "${GH_OPEN_PR-}"; fi
     case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;

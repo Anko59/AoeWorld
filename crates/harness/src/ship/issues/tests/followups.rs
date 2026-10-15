@@ -344,7 +344,10 @@ fn a_second_ship_comments_on_its_issues_and_a_decoy_marker_is_not_a_duplicate() 
     let calls = stub.calls();
     assert!(!calls.contains("<create>"), "{calls}");
     assert_eq!(calls.matches("<issue>\n<comment>").count(), 2, "{calls}");
-    assert!(calls.contains("Reported again by the passing review of #42 at 0123456789ab."));
+    assert!(
+        stub.bodies()
+            .contains("Reported again by the passing review of #42 at 0123456789ab.")
+    );
     assert!(calls.contains("<issue>\n<edit>\n<200>"), "{calls}");
 
     // A later review's new minor finding reaches the standing issue.
@@ -449,4 +452,32 @@ fn the_issue_author_is_read_from_the_listing() {
     let parsed = parse_issue_pages(page.to_string().as_bytes()).unwrap();
     assert_eq!(parsed[0].author, "github-actions[bot]");
     assert_eq!(parsed[1].author, "");
+}
+
+#[test]
+fn the_highest_severity_wins_a_shared_fingerprint_in_either_order() {
+    for critical_first in [false, true] {
+        let major = finding("same.rs", Some(7), Severity::Major, Status::Confirmed);
+        let critical = finding("same.rs", Some(7), Severity::Critical, Status::Disputed);
+        let findings = if critical_first {
+            vec![critical, major]
+        } else {
+            vec![major, critical]
+        };
+        let planned = plan(42, PR, &report(findings));
+        assert_eq!(planned.issues.len(), 1);
+        assert!(
+            planned.issues[0]
+                .labels
+                .iter()
+                .any(|label| label == "priority:critical")
+        );
+        assert!(
+            !planned.issues[0]
+                .labels
+                .iter()
+                .any(|label| label == "priority:high")
+        );
+        assert!(planned.issues[0].body.contains("critical finding"));
+    }
 }

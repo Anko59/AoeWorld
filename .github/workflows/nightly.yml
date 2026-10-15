@@ -122,6 +122,9 @@ jobs:
     needs: [full-functional, parser-fuzz, critical-mutation, target-performance, network-soak]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    concurrency:
+      group: nightly-triage
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write

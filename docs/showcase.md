@@ -24,6 +24,8 @@ filename must use only letters, digits, `.`, `_` and `-`, so `make ship`
 accepts it for attachment. Paths outside it, `..` components, and any
 symlinked path component are refused.
 Existing outputs must be regular files. The directory is created when needed.
+Docker binds support `:` in checkout and output parent paths; CSV quoting also
+preserves commas and quotes in recorder paths.
 
 ## Storyboard
 
@@ -163,6 +165,9 @@ refuses startup with one plain error naming the hash and package directory.
 Terrain reads and camera navigation need no controller lease.
 
 ## Network
+
+An explicit HTTP port 80 is accepted and normalized to the default-port URL;
+the input must still write `:80`. Implicit ports are refused.
 
 Every take runs with `--network none`: the recorder's container has no
 network, so WebRTC/STUN, DNS and every address but the filmed apps reach

@@ -28,22 +28,34 @@ const ENV: &[&str] = &[
     "SHOWCASE_BEFORE_URL",
 ];
 
-pub(super) struct Environment(Vec<(&'static str, Option<std::ffi::OsString>)>);
+pub(super) struct Environment {
+    saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    _tools: tempfile::TempDir,
+}
 
 impl Environment {
     pub(super) fn setup() -> (Self, tempfile::TempDir) {
+        Self::setup_named("showcase-test-")
+    }
+
+    pub(super) fn setup_named(prefix: &str) -> (Self, tempfile::TempDir) {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/tmp");
         std::fs::create_dir_all(&root).unwrap();
         let temp = tempfile::Builder::new()
-            .prefix("showcase-test-")
+            .prefix(prefix)
             .tempdir_in(root)
             .unwrap();
         let saved = ENV
             .iter()
             .map(|name| (*name, std::env::var_os(name)))
             .collect();
-        let env = Self(saved);
-        let bin = temp.path().join("bin");
+        // PATH cannot represent a directory containing a colon.
+        let tools = tempfile::tempdir().unwrap();
+        let bin = tools.path().join("bin");
+        let env = Self {
+            saved,
+            _tools: tools,
+        };
         std::fs::create_dir(&bin).unwrap();
         executable(
             &bin.join("curl"),
@@ -135,7 +147,7 @@ case "$SHOWCASE_MAKE_MODE" in fail) exit 3;; esac
 impl Drop for Environment {
     fn drop(&mut self) {
         unsafe {
-            for (name, value) in self.0.drain(..) {
+            for (name, value) in self.saved.drain(..) {
                 match value {
                     Some(value) => std::env::set_var(name, value),
                     None => std::env::remove_var(name),
@@ -306,4 +318,28 @@ fn check_reads_ship_level_and_pull_request_template_fallbacks() {
     )
     .unwrap();
     check(temp.path()).unwrap();
+}
+
+#[test]
+fn showcase_mounts_quote_colon_comma_and_quote_paths_through_the_pipeline() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_env, temp) = Environment::setup_named("showcase:comma,quote\"-");
+    mode(
+        "SHOWCASE_OUT",
+        ".cache/showcase/part:one,quote\"/final.webm",
+    );
+    let output = make(temp.path()).unwrap();
+    assert!(std::fs::read(&output).unwrap().starts_with(b"encoded:"));
+    let log = std::fs::read_to_string(temp.path().join("invocations.log")).unwrap();
+    for docker in log.lines().filter(|line| line.starts_with("docker ")) {
+        assert!(docker.contains("--mount type=bind,"), "{docker}");
+        assert!(!docker.contains(" -v "), "{docker}");
+        assert!(docker.contains("showcase:comma,quote\"\"-"), "{docker}");
+    }
+    assert!(
+        log.contains(",readonly"),
+        "the recorder's node_modules stay read-only: {log}"
+    );
 }

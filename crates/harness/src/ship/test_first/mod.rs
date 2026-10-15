@@ -5,6 +5,7 @@
 //! build-time files changed, and any `Harness-Test-First: exempt —
 //! <reason>` trailer. It informs the reviewers and the description; it never
 //! refuses a ship.
+mod history;
 pub(crate) mod inline;
 #[cfg(test)]
 mod inline_tests;
@@ -29,11 +30,11 @@ pub(crate) enum Kind {
     Mixed,
     /// Changes neither (harness, gates, docs, CI…).
     Other,
-    /// A merge, judged by its diff against its first parent.
+    /// A PR-owned merge, judged against its automatic merge or first parent.
     Merge(Base),
 }
 
-/// The kind of a merge's first-parent diff.
+/// The kind of a merge's own changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Base {
     TestsOnly,
@@ -66,7 +67,7 @@ impl Kind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Report {
-    /// Commits oldest first, by full id.
+    /// PR-owned commits oldest first, by full id.
     pub(crate) commits: Vec<(String, Kind)>,
     /// `#[test]`-style functions added before the first product commit.
     pub(crate) tests_before: usize,
@@ -226,9 +227,15 @@ pub(crate) fn normalize(path: &str) -> String {
     parts.join("/")
 }
 
-fn build_files(root: &Path, base: &str, head: &str) -> git::Result<Vec<String>> {
+fn build_files(
+    root: &Path,
+    base: &str,
+    head: &str,
+    context: &[(String, toml::Table)],
+) -> git::Result<Vec<String>> {
     let mut all = manifests(root, base)?;
     all.extend(manifests(root, head)?);
+    all.extend_from_slice(context);
     let scripts: Vec<String> = all.iter().filter_map(custom_script).collect();
     let names: BTreeSet<String> = all.iter().flat_map(|(_, m)| inherited(m)).collect();
     let changed = git::git(root, &["diff", "--name-only", "--no-renames", base, head])?;
@@ -316,21 +323,27 @@ fn classify(root: &Path, sha: &str, parent: Option<&str>) -> git::Result<(Base, 
 
 /// The report on `base..head`.
 pub(crate) fn report(root: &Path, base: &str, head: &str) -> git::Result<Report> {
-    let range = format!("{base}..{head}");
-    let list = git::git(root, &["rev-list", "--reverse", "--parents", &range])?;
+    let list = history::own(root, base, head)?;
+    let mut context = manifests(root, base)?;
+    context.extend(manifests(root, head)?);
+    let mut own_build = BTreeSet::new();
     let mut report = Report {
         commits: Vec::new(),
         tests_before: 0,
         inline: Vec::new(),
-        build: build_files(root, base, head)?,
+        build: build_files(root, base, head, &context)?,
         exemption: None,
     };
-    for line in list.lines() {
-        let mut ids = line.split(' ');
-        let sha = ids.next().unwrap_or_default();
-        let parents: Vec<&str> = ids.collect();
-        let (kind, inline) = classify(root, sha, parents.first().copied())?;
-        let kind = match (parents.len() > 1, kind) {
+    for commit in &list {
+        let sha = commit.sha.as_str();
+        let parent = commit.against.as_deref();
+        if let Some(parent) = parent {
+            own_build.extend(build_files(root, parent, sha, &context)?);
+        } else {
+            own_build.extend(report.build.iter().cloned());
+        }
+        let (kind, inline) = classify(root, sha, parent)?;
+        let kind = match (commit.merge, kind) {
             (true, kind) => Kind::Merge(kind),
             (false, Base::TestsOnly) => Kind::TestsOnly,
             (false, Base::Product) => Kind::Product,
@@ -349,26 +362,15 @@ pub(crate) fn report(root: &Path, base: &str, head: &str) -> git::Result<Report>
             report.exemption = Some((sha.to_owned(), reason));
         }
     }
+    report.build.retain(|path| own_build.contains(path));
     let first = report.commits.iter().position(|(_, kind)| kind.product());
     if let Some(first) = first.filter(|first| *first > 0) {
         let before = &report.commits[first - 1].0;
-        let diff = git::git(
-            root,
-            &[
-                "diff",
-                base,
-                before,
-                "--",
-                "crates/",
-                ":(exclude)crates/harness/",
-            ],
-        )?;
-        report.tests_before = diff
-            .lines()
-            .filter(|l| !l.starts_with("+++"))
-            .filter_map(|l| l.strip_prefix('+'))
-            .filter(|l| test_marker(l))
-            .count();
+        let own = report.commits[..first]
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect();
+        report.tests_before = history::tests_before(root, base, before, &own)?;
     }
     Ok(report)
 }

@@ -87,8 +87,8 @@ pub(super) fn apply(target: &Target, root: &Path, action: &Action) -> Result<Str
         }
         Action::Comment { number, body } => target.gh(
             root,
-            &["issue", "comment", &number.to_string(), "--body", body],
-            None,
+            &["issue", "comment", &number.to_string(), "--body-file", "-"],
+            Some(body.as_bytes()),
         ),
         Action::Close { number, comment } => target.gh(
             root,
@@ -177,20 +177,32 @@ pub(super) fn plan(
 ) -> Vec<Action> {
     let mut actions = Vec::new();
     for (job, outcome) in results {
-        let mut mine = issues.iter().filter(|issue| owned(issue, job));
+        let mut mine: Vec<_> = issues.iter().filter(|issue| owned(issue, job)).collect();
+        mine.sort_by_key(|issue| issue.number);
+        let mut mine = mine.into_iter();
         match outcome {
-            Outcome::Failure => actions.push(match mine.next() {
-                Some(issue) => Action::Comment {
-                    number: issue.number,
-                    body: format!("Still failing in {run}."),
-                },
-                None => Action::Open {
-                    title: title(job),
-                    body: format!(
-                        "The nightly job `{job}` failed in {run}.\n\n`make nightly-triage` comments here while it keeps failing and closes this issue when it passes again (docs/issues.md).\n"
-                    ),
-                },
-            }),
+            Outcome::Failure => {
+                if let Some(issue) = mine.next() {
+                    actions.push(Action::Comment {
+                        number: issue.number,
+                        body: format!("Still failing in {run}."),
+                    });
+                    actions.extend(mine.map(|duplicate| Action::Close {
+                        number: duplicate.number,
+                        comment: format!(
+                            "Duplicate of #{}; tracking this job there in {run}.",
+                            issue.number
+                        ),
+                    }));
+                } else {
+                    actions.push(Action::Open {
+                        title: title(job),
+                        body: format!(
+                            "The nightly job `{job}` failed in {run}.\n\n`make nightly-triage` comments here while it keeps failing and closes this issue when it passes again (docs/issues.md).\n"
+                        ),
+                    });
+                }
+            }
             Outcome::Success => actions.extend(mine.map(|issue| Action::Close {
                 number: issue.number,
                 comment: format!("Passing again in {run}."),

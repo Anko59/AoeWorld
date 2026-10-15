@@ -13,21 +13,25 @@ MUTATION_IMAGE := aoeworld/mutation:27.1.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
 DOCKER_BUILD_CACHE ?=
 COMMA := ,
+# Quote complete CSV fields for Docker binds; colons stay ordinary path data.
+MOUNT_QUOTE = '$(subst ','"'"',$(1))'
+MOUNT_FIELD = "$(subst ","",$(1))"
+BIND_MOUNT = --mount $(call MOUNT_QUOTE,type=bind$(COMMA)$(call MOUNT_FIELD,source=$(1))$(COMMA)$(call MOUNT_FIELD,target=$(2))$(if $(3),$(COMMA)readonly))
 IMAGE_BUILD = docker build $(if $(DOCKER_BUILD_CACHE),--load --cache-from $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1) --cache-to $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1)$(COMMA)mode=max$(COMMA)ignore-error=true) -f docker/$(1).Dockerfile -t $(2) .
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
-GIT_MOUNT := $(if $(GIT_EXTERNAL),-v $(GIT_EXTERNAL):$(GIT_EXTERNAL))
+GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERNAL)))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
 HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
-CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),-v $(HARNESS_CARGO_CACHE):$(ROOT)/.cache/cargo) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),-v $(HARNESS_TARGET_CACHE):$(ROOT)/target)
+CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo)) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
 HEAVY_ENV := -e AOE_HEAVY_SLOT -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # A snapshot's slot directory is the real repository's Git directory: mount it unless a mount covers it.
 HEAVY_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
 HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(AOE_HEAVY_DIR)))
 HEAVY_DIR_MOUNT := $(if $(HEAVY_DIR_EXTERNAL),-v $(HEAVY_DIR_EXTERNAL):$(HEAVY_DIR_EXTERNAL))
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
-ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) -v $(ROOT):$(ROOT) $(CACHE_MOUNTS)
+ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS)
 DOCKER_RUN := docker run --rm --init $(HEAVY_ENV) --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS $(TMP_MOUNT) -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
@@ -220,6 +224,10 @@ contracts-check:
 
 REVIEW_QUOTE = '$(subst ','"'"',$(1))'
 REVIEW_COMMA := ,
+# Quote complete CSV fields for Docker binds; colons stay ordinary path data.
+MOUNT_QUOTE = '$(subst ','"'"',$(1))'
+MOUNT_FIELD = "$(subst ","",$(1))"
+BIND_MOUNT = --mount $(call MOUNT_QUOTE,type=bind$(COMMA)$(call MOUNT_FIELD,source=$(1))$(COMMA)$(call MOUNT_FIELD,target=$(2))$(if $(3),$(COMMA)readonly))
 REVIEW_RUN = docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
 review-subject: tools
 	@$(if $(filter undefined,$(origin GIT_INDEX_FILE)),:,$(error review-subject Make wrapper does not support defined GIT_INDEX_FILE; use the CLI with an explicitly mounted intentional index))

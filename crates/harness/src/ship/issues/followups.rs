@@ -127,12 +127,13 @@ pub(super) fn plan(pr: u64, url: &str, report: &Report) -> Plan {
         .findings
         .iter()
         .filter(|finding| matches!(finding.status, Status::Confirmed | Status::Disputed));
-    let (serious, small): (Vec<&Finding>, Vec<&Finding>) = leftovers.partition(|finding| {
+    let (mut serious, small): (Vec<&Finding>, Vec<&Finding>) = leftovers.partition(|finding| {
         matches!(
             finding.reported.severity,
             Severity::Critical | Severity::Major
         )
     });
+    serious.sort_by_key(|finding| finding.reported.severity != Severity::Critical);
     let mut seen = HashSet::new();
     let mut issues = Vec::new();
     for finding in serious {

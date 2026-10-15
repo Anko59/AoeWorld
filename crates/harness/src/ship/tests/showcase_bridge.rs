@@ -182,10 +182,9 @@ fn the_recorder_serves_each_origins_port_from_its_bridge_socket_only() {
     let script = include_str!("../showcase/record.mjs");
     assert!(script.contains("import { createConnection, createServer } from \"node:net\";"));
     assert!(script.contains("createConnection(origin.socket)"));
-    assert!(
-        script
-            .contains("server.listen(Number(new URL(origin.http).port), \"127.0.0.1\", resolve);")
-    );
+    assert!(script.contains(
+        "server.listen(Number(new URL(origin.http).port || 80), \"127.0.0.1\", resolve);"
+    ));
     assert_eq!(script.matches("createConnection(").count(), 1);
     assert_eq!(script.matches("server.listen(").count(), 1);
     // No socket name or port is written into the recorder: both come from the plan.

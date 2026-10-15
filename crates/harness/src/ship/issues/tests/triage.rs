@@ -186,9 +186,8 @@ fn triage_acts_on_origin_and_leaves_forged_issues_alone() {
         )),
         "{calls}"
     );
-    assert!(calls.contains(&format!(
-        "<comment>\n<9>\n<--body>\n<Still failing in {run}.>"
-    )));
+    assert!(calls.contains("<comment>\n<9>\n<--body-file>\n<->"));
+    assert!(stub.bodies().contains(&format!("Still failing in {run}.")));
     assert!(calls.contains("<--title>\n<Nightly failure: b>"), "{calls}");
     assert!(calls.contains("<--label>\n<nightly-failure>"));
     assert!(
@@ -288,4 +287,106 @@ fn the_route_make_target_and_workflow_reach_the_triage() {
             "triage does not wait for {job}"
         );
     }
+}
+
+#[test]
+fn duplicate_bot_issues_keep_the_oldest_and_close_only_owned_duplicates() {
+    let forged = listed(
+        2,
+        &title("a"),
+        "mallory",
+        &[NIGHTLY_LABEL],
+        &marked_body("x", &title("a")).unwrap(),
+    );
+    let issues = [genuine(9, "a"), forged, genuine(7, "a")];
+    let actions = plan(&parse(&needs(&[("a", "failure")])).unwrap(), &issues, "RUN");
+    assert_eq!(actions.len(), 2, "{actions:?}");
+    assert!(
+        matches!(&actions[0], Action::Comment { number: 7, .. }),
+        "{actions:?}"
+    );
+    assert!(
+        matches!(&actions[1], Action::Close { number: 9, comment } if comment.contains("#7") && comment.contains("RUN")),
+        "{actions:?}"
+    );
+    for outcome in ["cancelled", "skipped"] {
+        assert!(plan(&parse(&needs(&[("a", outcome)])).unwrap(), &issues, "RUN").is_empty());
+    }
+    let success = plan(&parse(&needs(&[("a", "success")])).unwrap(), &issues, "RUN");
+    assert_eq!(success.len(), 2);
+    assert!(
+        success
+            .iter()
+            .all(|action| matches!(action, Action::Close { number: 7 | 9, .. }))
+    );
+}
+
+#[test]
+fn nightly_triage_concurrency_is_shared_across_refs_without_cancellation() {
+    let workflow = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/nightly.yml"),
+    )
+    .unwrap();
+    let triage = workflow.split("\n  triage:\n").nth(1).unwrap();
+    assert!(
+        triage
+            .contains("concurrency:\n      group: nightly-triage\n      cancel-in-progress: false")
+    );
+    let concurrency = triage
+        .split("concurrency:")
+        .nth(1)
+        .unwrap()
+        .split("    permissions:")
+        .next()
+        .unwrap();
+    assert!(!concurrency.contains("github.ref"));
+}
+
+#[test]
+fn the_triage_command_reconciles_duplicate_bot_issues_without_touching_forgery() {
+    use std::io::Write;
+    let forged = listed(
+        2,
+        &title("a"),
+        "mallory",
+        &[NIGHTLY_LABEL],
+        &marked_body("x", &title("a")).unwrap(),
+    );
+    let listing = serde_json::json!([
+        as_json(&genuine(9, "a"), &marked_body("x", &title("a")).unwrap()),
+        as_json(&forged, &marked_body("x", &title("a")).unwrap()),
+        as_json(&genuine(7, "a"), &marked_body("x", &title("a")).unwrap()),
+    ]);
+    let stub = Stub::new(&listing);
+    let binary = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("aoe-harness");
+    let output = std::process::Command::new(binary)
+        .current_dir(&stub.root)
+        .arg("nightly-triage")
+        .env("NIGHTLY_RESULTS", needs(&[("a", "failure")]))
+        .env("GITHUB_RUN_ID", "123")
+        .env_remove("AOE_JUDGE_REV")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stdout}\n{stderr}");
+    let calls = stub.calls();
+    assert!(
+        calls.contains("<issue>\n<comment>\n<7>\n<--body-file>\n<->"),
+        "{calls}"
+    );
+    assert!(calls.contains("<issue>\n<close>\n<9>"), "{calls}");
+    assert!(!calls.contains("<2>"), "{calls}");
+    assert!(!calls.contains("<create>"), "{calls}");
+    assert!(
+        stub.bodies()
+            .contains("Still failing in https://github.com/project/checkout/actions/runs/123.")
+    );
+    writeln!(std::io::stdout(), "CLI nightly-triage rehearsal (scripted GitHub):\n{stdout}{stderr}ASSERT: commented #7; closed duplicate #9; forged #2 untouched; no new issue").unwrap();
 }
