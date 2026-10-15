@@ -73,7 +73,8 @@ export function initNavigation() {
     panel.classList.toggle('expanded', value);
     toggle.setAttribute('aria-expanded', String(value));
     toggle.setAttribute('aria-label', value ? 'Close whole map' : 'Show whole map');
-    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? `terrain (${samples}×${samples})` : 'schematic'}`;
+    panel.dataset.rasterSamples = String(samples);
+    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? 'terrain' : 'schematic'}`;
     if (value) svg.focus();
   }
   toggle.addEventListener('click', () => overview(!expanded));

@@ -58,8 +58,10 @@ test("minimap raster readiness waits for terrain and resets when the map changes
     "data-raster",
     "ready",
   );
-  await expect(page.locator("#minimap-title")).toHaveText(
-    /Minimap · terrain \(\d+×\d+\)/,
+  await expect(page.locator("#minimap-title")).toHaveText("Minimap · terrain");
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster-samples",
+    /^[1-9]\d*$/,
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",
