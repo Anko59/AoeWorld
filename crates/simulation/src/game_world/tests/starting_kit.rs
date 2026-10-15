@@ -151,3 +151,47 @@ fn kit_depletion_restore_and_paths_share_authoritative_state() {
         .unwrap();
     assert_eq!(restored.resource_snapshot([0; 32]).unwrap(), saved);
 }
+
+#[test]
+fn a_real_woodline_is_preferred_and_does_not_get_duplicate_starting_trees() {
+    let mut world = barren();
+    world.terrain = super::far_orders::prepared_terrain(vec![0; 4], vec![9; 4]);
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        unreachable!()
+    };
+    let start = generator
+        .forest_opening_center_at(TileCoord::new(2048, 2048))
+        .unwrap();
+    world.initialize_village(PlayerId(0), start).unwrap();
+    let footprint = world.buildings().next().unwrap().footprint;
+    let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        unreachable!()
+    };
+    assert!((-12_i32..=12).any(|dy| (-12_i32..=12).any(|dx| {
+        dx * dx + dy * dy <= 144
+            && generator
+                .object_at(TileCoord::new(center.x + dx, center.y + dy))
+                .is_some_and(|n| n.kind == ResourceKind::Wood)
+    })));
+    assert!(
+        world
+            .starting_resources()
+            .iter()
+            .all(|n| n.kind != ResourceKind::Wood)
+    );
+}
+
+#[test]
+fn invalid_start_coordinates_fail_without_state_changes() {
+    let mut world = barren();
+    let before = world.canonical_hash();
+    for value in [i32::MIN, i32::MAX] {
+        assert!(
+            world
+                .initialize_village(PlayerId(0), TileCoord::new(value, value))
+                .is_err()
+        );
+        assert_eq!(world.canonical_hash(), before);
+    }
+}

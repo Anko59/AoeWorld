@@ -30,11 +30,18 @@ impl ResourceState {
             && self
                 .from_revision
                 .is_none_or(|from| from < self.revision && !self.changes.is_empty())
-            && (self.from_revision.is_some() || self.revision >= self.changes.len() as u64)
-            && self
-                .changes
-                .iter()
-                .all(|change| change.id & 1 == 0 && change.id >> 37 == 0)
+            && (self.from_revision.is_some()
+                || self.revision
+                    >= self
+                        .changes
+                        .iter()
+                        .filter(|c| c.id & (1 << 37) == 0)
+                        .count() as u64)
+            && self.changes.iter().all(|change| {
+                change.id & 1 == 0
+                    && (change.id >> 37 == 0
+                        || (change.id & (1 << 37) != 0 && change.id >> 40 == 0))
+            })
             && self.changes.windows(2).all(|pair| pair[0].id < pair[1].id)
     }
 }
@@ -142,3 +149,7 @@ mod tests {
         assert!(decode_gameplay_server(&postcard::to_allocvec(&oversized).unwrap()).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "tests/starting_resources.rs"]
+mod starting_tests;

@@ -27,7 +27,11 @@ pub(super) async fn exercise_resource_lifecycle(
     let resume_token = controller_resume_token(&welcome, "initial registration")?;
     let original_network_world_id = welcome_world_id(&welcome)?;
     let initial_state = subscribe_and_tick(&mut initial, &service, 1).await?;
-    assert_initial_snapshot(&initial_state)?;
+    let initial_snapshot = service
+        .resource_snapshot()
+        .await
+        .ok_or(SourceQualificationError::NoResource)?;
+    assert_initial_snapshot(&initial_state, &initial_snapshot)?;
 
     let depleted = service
         .deplete_resource_persisted(node.id, node.initial_amount)
@@ -50,7 +54,13 @@ pub(super) async fn exercise_resource_lifecycle(
     let reconnect_state = subscribe_and_tick(&mut reconnect, &service, 2).await?;
     if reconnect_state.from_revision.is_some()
         || reconnect_state.revision != delta.revision
-        || reconnect_state.changes != delta.changes
+        || reconnect_state.changes
+            != snapshot_amounts(
+                &service
+                    .resource_snapshot()
+                    .await
+                    .ok_or(SourceQualificationError::NoResource)?,
+            )
     {
         return Err(lifecycle_mismatch("network resume snapshot"));
     }
@@ -218,8 +228,14 @@ async fn next_resource_state(
     Err(lifecycle_mismatch(stage))
 }
 
-fn assert_initial_snapshot(state: &ResourceState) -> Result<(), SourceQualificationError> {
-    if state.from_revision.is_some() || state.revision != 0 || !state.changes.is_empty() {
+fn assert_initial_snapshot(
+    state: &ResourceState,
+    snapshot: &ResourceOverlaySnapshot,
+) -> Result<(), SourceQualificationError> {
+    if state.from_revision.is_some()
+        || state.revision != 0
+        || state.changes != snapshot_amounts(snapshot)
+    {
         return Err(lifecycle_mismatch("network initial snapshot"));
     }
     Ok(())

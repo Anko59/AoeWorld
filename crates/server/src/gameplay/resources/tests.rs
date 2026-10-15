@@ -269,7 +269,27 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
     let initial = resource_message(&mut receiver);
     assert_eq!(initial.from_revision, None);
     assert_eq!(initial.revision, 0);
-    assert!(initial.changes.is_empty());
+    let kit = service.world.read().await.starting_resources();
+    assert!(
+        !kit.is_empty(),
+        "fixture needs supplemental starting resources"
+    );
+    let expected: Vec<_> = kit
+        .iter()
+        .map(|node| aoe_protocol::ResourceAmount {
+            id: node.id,
+            remaining: node.initial_amount,
+        })
+        .collect();
+    assert_eq!(initial.changes, expected);
+    let frame = GameplayServerMessage::ResourceState(initial.clone());
+    assert_eq!(
+        aoe_protocol::decode_gameplay_server(
+            &aoe_protocol::encode_gameplay_server(&frame).unwrap()
+        )
+        .unwrap(),
+        frame
+    );
     service
         .deplete_resource_persisted(node.id, node.initial_amount)
         .await
@@ -295,7 +315,10 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
     let restored = resource_message(&mut receiver);
     assert_eq!(restored.from_revision, None);
     assert_eq!(restored.revision, 1);
-    assert_eq!(restored.changes, delta.changes);
+    let mut expected = initial.changes;
+    expected.extend(delta.changes);
+    expected.sort_by_key(|change| change.id);
+    assert_eq!(restored.changes, expected);
 }
 
 #[tokio::test]

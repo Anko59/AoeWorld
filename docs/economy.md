@@ -8,13 +8,32 @@ The scout retains the existing world's configured movement speed.
 
 Map activation first runs the existing certified start search, then performs
 bounded local placement for the Town Center and free perimeter spawn tiles.
-The scout keeps the primary unit id. Placement preserves its found position
-when the footprint allows it; a small certified clearing can instead hold the
-Town Center while the scout starts on its perimeter. Footprints cannot cover
+The scout keeps the primary unit id. Site ranking prefers inland footprints
+with real trees within twelve tiles: at most 384 fine/grid sites and 12,000
+memoized map samples within the existing 32-tile search radius. Remaining
+footprints form a deterministic bounded fallback. Placement preserves the scout's
+found position when it is within eight tiles of the chosen center; otherwise it
+starts on the perimeter. Footprints cannot cover
 units, resources, water, other buildings or the map boundary. They participate
 in map route planning, passability and diagonal collision.
 
-Gather commands require an owned villager and a live immutable-map resource
+Map starts top up reachable resources within fifteen tiles to seven berry
+bushes, seven gold nodes, five stone nodes and twelve trees. Compact clusters
+prefer offsets of six, nine, ten and eight tiles respectively. A cardinal graph
+within fifteen tiles certifies gathering access to every new and existing node
+and preserves all center exits after each cluster. Each kind tries at most 128
+anchors in two orientations; no terrain or natural resource is removed. A start
+without enough free reachable ground is refused rather than left without a kit.
+Restored overlays retain the original kit, including exhausted nodes.
+
+Starting resources are authoritative overlay entries: bit 37 marks their
+identity, bits 38–39 select the kind, and the remaining coordinate fields match
+natural resource identities. Initial entries do not increment the depletion
+revision. Snapshots carry their complete amounts; normal deltas carry depletion.
+The client derives their existing sprite family from their kind. The overlay
+blocks their tiles and includes them in resource lookup, persistence and replay.
+
+Gather commands require an owned villager and a live map or starting resource
 node. A villager walks to a passable adjacent tile and earns integer gathering
 credits from game ticks. Each complete resource unit uses the existing prepared
 depletion transaction. Stored-map services persist that transaction before

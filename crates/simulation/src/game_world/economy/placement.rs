@@ -19,7 +19,7 @@ impl GameWorld {
                 .is_empty()
     }
 
-    fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
+    pub(super) fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
         if !footprint.valid(self.config.width_tiles, self.config.height_tiles)
             || self
                 .units()
@@ -110,8 +110,8 @@ impl GameWorld {
         Ok(id)
     }
 
-    /// Bounded local placement around the certified scout start. Existing map
-    /// starts remain unchanged; the footprint and spawn perimeter are checked.
+    /// Bounded local placement around the certified start, favoring inland
+    /// clearings near real trees. The scout remains close to the town center.
     pub fn initialize_village(
         &mut self,
         player: PlayerId,
@@ -149,6 +149,7 @@ impl GameWorld {
                 tile.x,
             )
         });
+        self.rank_start_sites(&mut candidates, start)?;
         let side = VILLAGE_RULES.town_center_side;
         let start_is_free = self.tile_free(start);
         let mut selected = None;
@@ -157,7 +158,12 @@ impl GameWorld {
                 origin,
                 TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
             );
-            let preserve_start = start_is_free && !rect.contains(start);
+            let preserve_start = start_is_free
+                && !rect.contains(start)
+                && distance_squared(
+                    start,
+                    TileCoord::new(origin.x + side / 2, origin.y + side / 2),
+                ) <= 64;
             match self.validate_footprint(rect) {
                 Ok(()) => {}
                 Err(EconomyError::InvalidFootprint) => continue,
@@ -194,6 +200,10 @@ impl GameWorld {
         {
             self.spawn_villager(player, position(tile)?)?;
         }
+        self.initialize_starting_kit(TileRect::new(
+            origin,
+            TileCoord::new(origin.x + side, origin.y + side),
+        ))?;
         Ok(scout)
     }
 }

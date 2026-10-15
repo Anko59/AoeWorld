@@ -9,6 +9,13 @@ pub struct ResourceStateCache {
 }
 
 impl ResourceStateCache {
+    #[cfg(target_arch = "wasm32")]
+    pub fn starting_nodes(&self) -> impl Iterator<Item = aoe_map::ResourceNode> + '_ {
+        self.amounts
+            .iter()
+            .filter(|amount| amount.remaining > 0)
+            .filter_map(|amount| aoe_map::ResourceNode::starting_from_id(amount.id))
+    }
     pub fn clear(&mut self) {
         self.revision = None;
         self.amounts.clear();
@@ -224,3 +231,8 @@ mod tests {
         assert_eq!(cache.amounts.len(), MAX_RESOURCE_CHANGES);
     }
 }
+
+#[cfg(test)]
+#[cfg(target_arch = "wasm32")]
+#[path = "resource_state/tests/starting_nodes.rs"]
+mod starting_tests;

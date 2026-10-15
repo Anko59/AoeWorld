@@ -4,11 +4,22 @@ use aoe_rendering::{GameArt, SceneCamera, resource_sprite_bounds, scene_resource
 pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
     let visible = resident_visible_tiles(client);
     let scene = scene::prepare(client);
+    let starting: Vec<_> = client.resources.starting_nodes().collect();
     let resources = client
         .terrain_chunks
         .values()
         .filter(|chunk| heights::resident_may_be_visible(client, chunk.coordinate()))
         .flat_map(CachedChunk::resources)
+        .chain(starting.iter().map(|node| {
+            (
+                node,
+                if node.kind == aoe_map::ResourceKind::Wood {
+                    aoe_map::ResourceVisualFamily::Conifer as u8
+                } else {
+                    aoe_map::ResourceVisualFamily::Generic as u8
+                },
+            )
+        }))
         .filter(|(resource, _)| {
             client.resources.visible(resource.id)
                 && resource.tile.x >= visible.min.x
