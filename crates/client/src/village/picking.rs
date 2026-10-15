@@ -37,9 +37,9 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
                 u.player,
                 u.kind,
                 p.x >= 0.0
-                    && p.y >= 0.0
+                    && p.y >= 54.0
                     && p.x < client.camera.viewport[0]
-                    && p.y < client.camera.viewport[1],
+                    && p.y < client.camera.viewport[1] - 208.0,
             )
         })
         .collect::<Vec<_>>();

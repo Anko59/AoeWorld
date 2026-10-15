@@ -82,6 +82,9 @@ test("right clicking wood sends villagers to gather and deposit", async ({
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await expect(page.locator("#connection")).toHaveText("connected");
+  await page.evaluate(() => {
+    location.hash = "zoom=0.5";
+  });
   await page.keyboard.press("h");
   await page.keyboard.press("Escape");
   await clickActor(page, "Villager");

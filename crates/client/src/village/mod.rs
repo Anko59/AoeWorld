@@ -59,25 +59,30 @@ pub(super) fn resource_kind(client: &Client, id: EntityId) -> Option<ResourceKin
             let tile = unit.position.tile_floor();
             let cx = tile.x.div_euclid(aoe_map::CHUNK_TILES);
             let cy = tile.y.div_euclid(aoe_map::CHUNK_TILES);
-            (-1..=1)
-                .flat_map(|dy| {
-                    (-1..=1).filter_map(move |dx| client.terrain_chunks.get(&(cx + dx, cy + dy)))
-                })
-                .flat_map(|chunk| chunk.resources())
-                .filter_map(|(node, _)| {
-                    let dx = f64::from(node.tile.x) + 0.5 - p[0];
-                    let dy = f64::from(node.tile.y) + 0.5 - p[1];
-                    let distance = dx * dx + dy * dy;
-                    (distance < 5.0 && client.resources.visible(node.id))
-                        .then_some((distance, node.kind as u8))
-                })
-                .min_by(|a, b| a.0.total_cmp(&b.0))
-                .map(|(_, kind)| match kind {
-                    0 => ResourceKind::Food,
-                    1 => ResourceKind::Wood,
-                    2 => ResourceKind::Gold,
-                    _ => ResourceKind::Stone,
-                })
+            let mut distance = 5.0;
+            let mut nearest = None;
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let Some(chunk) = client.terrain_chunks.get(&(cx + dx, cy + dy)) else {
+                        continue;
+                    };
+                    for (node, _) in chunk.resources() {
+                        let dx = f64::from(node.tile.x) + 0.5 - p[0];
+                        let dy = f64::from(node.tile.y) + 0.5 - p[1];
+                        let candidate = dx * dx + dy * dy;
+                        if candidate < distance && client.resources.visible(node.id) {
+                            distance = candidate;
+                            nearest = Some(node.kind as u8);
+                        }
+                    }
+                }
+            }
+            nearest.map(|kind| match kind {
+                0 => ResourceKind::Food,
+                1 => ResourceKind::Wood,
+                2 => ResourceKind::Gold,
+                _ => ResourceKind::Stone,
+            })
         })
 }
 

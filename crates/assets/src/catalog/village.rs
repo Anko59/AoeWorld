@@ -36,7 +36,7 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         AssetRole::TownCenterRoofLeft,
         3594,
         1,
-        "Dark Age town center left roof; preserve native signed anchor",
+        "Dark Age town center left roof; native anchor with 48-pixel lower attachment",
     ),
     village(
         AssetRole::TownCenterSupportLeft,
@@ -54,7 +54,7 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         AssetRole::TownCenterRoofRight,
         4610,
         1,
-        "Dark Age town center right roof; preserve native signed anchor",
+        "Dark Age town center right roof; native anchor with 48-pixel lower attachment",
     ),
     village(
         AssetRole::TownCenterSupportsRight,
