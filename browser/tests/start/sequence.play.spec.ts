@@ -56,7 +56,7 @@ async function setup(page: Page) {
 test("intro can be skipped by a key and is remembered for this session", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?introStills=1");
   await expect(page.locator("#entry-intro")).toBeVisible();
   await page.keyboard.press("Space");
   await expect(page.locator("#main-menu")).toBeVisible();
@@ -68,7 +68,7 @@ test("intro can be skipped by a key and is remembered for this session", async (
 test("a click skips the intro and the URL flag opens the menu immediately", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?introStills=1");
   await page.locator("#entry-intro").click();
   await expect(page.locator("#main-menu")).toBeVisible();
   await page.evaluate(() => sessionStorage.clear());

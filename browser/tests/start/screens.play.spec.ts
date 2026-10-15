@@ -27,7 +27,7 @@ for (const viewport of [
           ),
         ),
       });
-    await page.goto("/");
+    await page.goto("/?introStills=1");
     await page.evaluate(() => document.fonts.ready);
     await expect(page.locator("#entry-intro")).toBeVisible();
     await shot("intro-opening");

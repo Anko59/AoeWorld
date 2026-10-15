@@ -3,6 +3,12 @@
 The root page opens the cinematic once per browser session, then the main menu.
 `?skipIntro=1` opens the menu immediately; `?play=1` opens the game directly.
 Existing camera fragments also open the game directly, preserving capture links.
+`?introStills=1` keeps the cinematic timing but uses its animated poster fallback.
+
+The opening preloads four muted, inline, non-looping clips. Each plays at normal
+speed; its final frame holds through the short crossfade. Posters remain beneath
+video until playback begins, and handle rejected playback or media errors.
+The castle closes the sequence, with the logo revealed after its motion ends.
 
 Skirmish uses the map creator's request schema and retained job driver in
 `web/map-jobs.js`. Automatic source preparation and rivers remain the defaults.

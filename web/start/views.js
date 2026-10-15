@@ -10,10 +10,7 @@ export const presets = [
   ['finland', 'Finnish lakeland', 'Forests & inland waters', 61.5, 25.5],
 ];
 
-export const paintings = [
-  'royal-archive', 'scholars-globe', 'celestial-court', 'highland-host',
-  'river-army', 'desert-banners', 'cavalry', 'mountain-castle',
-];
+export const cinematicShots = ['shot1-king', 'shot2-ship', 'shot3-cavalry', 'shot4-castle'];
 
 const logo = '<img class="start-wordmark" src="/art/wordmark.webp" alt="AoeWorld" width="1200" height="327">';
 const rule = '<div class="gold-rule" aria-hidden="true"><span>✦</span></div>';
@@ -21,8 +18,8 @@ const rule = '<div class="gold-rule" aria-hidden="true"><span>✦</span></div>';
 export function views() {
   return `
     <section id="entry-intro" class="entry-screen" aria-label="Opening cinematic" hidden>
-      <div class="intro-paintings" aria-hidden="true">${paintings.map((name, index) =>
-        `<img src="/art/${name}.webp" alt="" class="intro-painting${index === 0 ? ' active' : ''}" width="1672" height="941">`).join('')}</div>
+      <div class="intro-paintings" aria-hidden="true">${cinematicShots.map((name, index) =>
+        `<div class="intro-shot${index === 0 ? ' active entered' : ''}" data-playback="poster"><img src="/art/cinematic/${name}-poster.jpg" alt="" width="1280" height="720"><video muted playsinline preload="auto" poster="/art/cinematic/${name}-poster.jpg" data-src="/art/cinematic/${name}.webm" tabindex="-1"></video></div>`).join('')}</div>
       <div class="intro-shade"></div>
       <div class="intro-caption"><span class="eyebrow">A WORLD AWAITS</span><p id="intro-line">Every story begins with a place.</p></div>
       <div class="intro-title">${logo}${rule}<p>A world to discover. A history to shape.</p></div>

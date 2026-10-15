@@ -7,17 +7,28 @@ The source collection is read only. Paintings keep their native width, below 192
 | Committed file | Source relative to the collection |
 | --- | --- |
 | `royal-archive.webp` | `series/01-kings-with-globes/01-franks.png` |
-| `celestial-court.webp` | `series/01-kings-with-globes/05-persians.png` |
-| `scholars-globe.webp` | `series/01-kings-with-globes/03-chinese.png` |
-| `highland-host.webp` | `series/16-armies-formations/05-inca.png` |
-| `river-army.webp` | `series/16-armies-formations/01-goths.png` |
-| `desert-banners.webp` | `series/16-armies-formations/06-berbers.png` |
 | `lakeside-citadel.webp` | `series/17-castles-walls/01-lithuanians.png` |
-| `mountain-castle.webp` | `series/17-castles-walls/07-japanese.png` |
-| `cavalry.webp` | `series/20-cavalry-charge/03-poles.png` |
 | `homecoming.webp` | `series/11-victory/01-franks.png` |
 | `wordmark.webp` | `design-explorations/03-logo-wordmarks/01-classic-incised-gold.png` |
 | `favicon.ico`, `icon-180.png`, `icon-512.png` | `design-explorations/02-favicons/01-bronze-globe.png` |
 
 Logo and icons preserve the sources’ existing transparency and are cropped to their visible alpha bounds, ignoring near-transparent background flecks.
 The favicon ICO contains sixteen, thirty-two and forty-eight pixel images.
+
+## Animated opening
+
+Four silent image-to-video clips generated on 2026-10-14 with Alibaba Wan 3.0
+(first-frame image-to-video) through OpenRouter, from our own collection.
+Each plays once: three seconds, 1280 × 720, VP9 WebM (CRF 40), without audio.
+JPEG posters are their first frames and provide the still-image fallback.
+Generation cost: USD 1.91 including a two-second test, recorded in the source ledger.
+
+| Clip and matching poster in `cinematic/` | Collection source |
+| --- | --- |
+| `shot1-king.webm`, `shot1-king-poster.jpg` | `series/01-kings-with-globes/01-franks.png` |
+| `shot2-ship.webm`, `shot2-ship-poster.jpg` | `series/15-maritime-war/01-byzantines.png` |
+| `shot3-cavalry.webm`, `shot3-cavalry-poster.jpg` | `series/20-cavalry-charge/01-spanish.png` |
+| `shot4-castle.webm`, `shot4-castle-poster.jpg` | `series/17-castles-walls/03-britons.png` |
+
+The clips and posters total 4,583,579 bytes; all committed art is 5,961,323 bytes
+(excluding this provenance file). Unused intro-only paintings were removed.

@@ -1,4 +1,5 @@
 import { colours, presets, views } from './views.js';
+import { createCinematic } from './cinematic.js';
 
 const introKey = 'aoeworld.intro-seen';
 const colourKey = 'aoeworld.player-colour';
@@ -45,7 +46,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
   let state = 'intro';
   let estimateRevision = 0;
   let estimateTimer;
-  let cinematicTimer;
+  const cinematic = createCinematic(root, skipIntro);
   let tipTimer;
   let terrainTimer;
   let waiting = null;
@@ -187,7 +188,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
     prepared = false;
     waiting = null;
     clearTimeout(terrainTimer);
-    clearInterval(cinematicTimer);
+    cinematic.stop();
     clearInterval(tipTimer);
     el('loading-error').hidden = el('loading-back').hidden = true;
     el('loading-screen').classList.remove('has-error');
@@ -266,7 +267,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
 
   function skipIntro() {
     if (state !== 'intro') return;
-    clearInterval(cinematicTimer);
+    cinematic.stop();
     save(introKey, '1');
     show('menu');
   }
@@ -284,15 +285,7 @@ export function initStartSequence({ mapRequest, readJson, start }) {
   else {
     show('intro');
     save(introKey, '1');
-    const started = performance.now();
-    cinematicTimer = setInterval(() => {
-      const elapsed = performance.now() - started;
-      const active = Math.min(7, Math.floor(elapsed / 2050));
-      root.querySelectorAll('.intro-painting').forEach((image, index) => image.classList.toggle('active', index === active));
-      el('intro-line').textContent = elapsed < 6000 ? 'Every story begins with a place.' : elapsed < 12000 ? 'Across mountains, rivers and kingdoms.' : 'A world to discover. A history to shape.';
-      if (elapsed >= 14350) el('entry-intro').classList.add('reveal');
-      if (elapsed >= 18500) skipIntro();
-    }, 100);
+    cinematic.start();
   }
   locationName();
   controllerReady();
