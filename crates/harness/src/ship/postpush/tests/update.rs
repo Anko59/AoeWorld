@@ -64,7 +64,9 @@ fn only_auto_merge_pull_requests_that_are_behind_are_rebased() {
     assert_eq!(rebased(&world), ["PR_5"]);
     let calls = world.calls();
     assert!(
-        calls.contains("<oid=head5>") && calls.contains("updateMethod: REBASE"),
+        calls.contains("<oid=head5>")
+            && calls.contains("updateMethod: MERGE")
+            && !calls.contains("updateMethod: REBASE"),
         "{calls}"
     );
     assert_eq!(
