@@ -231,11 +231,19 @@ impl World {
         self.temp.path().join("origin.git")
     }
 
-    /// The feature branch replayed onto origin's current `dev`, as GitHub's
-    /// REBASE update does; returns the new head.
+    /// The feature branch replayed onto origin's current `dev`; returns the
+    /// new head.
     pub(super) fn rebase_onto_dev(&self) -> String {
         run(&self.root, &["fetch", "-q", "origin", "dev"]);
         run(&self.root, &["rebase", "-q", "FETCH_HEAD"]);
+        self.head()
+    }
+
+    /// Origin's current `dev` merged into the feature branch, as GitHub's
+    /// MERGE update does; returns the new head.
+    pub(super) fn merge_dev(&self) -> String {
+        run(&self.root, &["fetch", "-q", "origin", "dev"]);
+        run(&self.root, &["merge", "-q", "--no-edit", "FETCH_HEAD"]);
         self.head()
     }
 }

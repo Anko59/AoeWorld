@@ -1,7 +1,10 @@
-//! `make update-prs`: on every push to `dev`, rebases the open pull requests
+//! `make update-prs`: on every push to `dev`, updates the open pull requests
 //! into `dev` that have auto-merge armed and are behind it, so that CI tests
-//! the combination GitHub will merge. Linear history requires a rebase
-//! (`updatePullRequestBranch`, REBASE). A rebase that conflicts leaves the pull
+//! the combination GitHub will merge. The update merges `dev` into the pull
+//! request (`updatePullRequestBranch`, MERGE): a REBASE would rewrite the
+//! author's signed commits as unsigned ones, and `dev` requires signed commits
+//! on the head branch even for a squash merge; the squash keeps `dev` linear.
+//! An update that conflicts leaves the pull
 //! request untouched and adds one comment naming the files. At most
 //! `UPDATE_MAX_PRS` pull requests are handled per run, the oldest first.
 use super::{BASE, Result, api, carry, comments, post_comment, require_main_session, short};
@@ -28,7 +31,7 @@ const HEAD: &str = "query UpdatedHead($owner: String!, $name: String!, $number: 
 
 const REBASE: &str = "mutation UpdateBranch($id: ID!, $oid: GitObjectID!) { \
     updatePullRequestBranch(input: {pullRequestId: $id, expectedHeadOid: $oid, \
-    updateMethod: REBASE}) { pullRequest { number } } }";
+    updateMethod: MERGE}) { pullRequest { number } } }";
 
 struct Waiting {
     id: String,
