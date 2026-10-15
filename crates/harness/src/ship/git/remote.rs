@@ -1,7 +1,7 @@
 //! A brief SSH-agent hiccup is retried only for the exact publickey error.
 use std::{
-    io::{self, Write},
-    process::{Command, Output},
+    io::{self, Read, Write},
+    process::{Command, Output, Stdio},
     thread,
     time::Duration,
 };
@@ -27,10 +27,18 @@ pub(crate) fn output(command: &mut Command) -> Result<Output, String> {
 /// Preserve the same argv, environment, lease and evidenced head on retry.
 pub(crate) fn output_with(
     command: &mut Command,
+    wait: impl FnMut(Duration),
+) -> Result<Output, String> {
+    output_using(command, Command::output, wait)
+}
+
+fn output_using(
+    command: &mut Command,
+    mut run: impl FnMut(&mut Command) -> io::Result<Output>,
     mut wait: impl FnMut(Duration),
 ) -> Result<Output, String> {
     for attempt in 0..2 {
-        let output = command.output().map_err(|e| format!("git: {e}"))?;
+        let output = run(command).map_err(|e| format!("git: {e}"))?;
         if output.status.success() {
             return Ok(output);
         }
@@ -72,12 +80,48 @@ pub(crate) fn output_with(
     unreachable!("the last attempt returns")
 }
 
-/// Push output remains visible; fetching callers consume stdout themselves.
+/// Push output remains visible while it runs (a pre-push hook prints its gates
+/// for minutes); stderr is also kept so a publickey refusal can be retried.
 pub(crate) fn run_visible(command: &mut Command) -> Result<(), String> {
-    command.stdout(std::process::Stdio::inherit());
-    let output = output(command).map_err(|error| format!("git push failed: {error}"))?;
-    io::stderr()
-        .write_all(&output.stderr)
-        .map_err(|e| e.to_string())?;
+    output_using(
+        command,
+        |command| tee_stderr(command, &mut io::stderr()),
+        |delay| {
+            #[cfg(test)]
+            if tests::record_wait(delay) {
+                return;
+            }
+            thread::sleep(delay);
+        },
+    )
+    .map_err(|error| format!("git push failed: {error}"))?;
     Ok(())
+}
+
+/// Runs `command` with stdout inherited and stderr forwarded to `sink` as it
+/// arrives, returning the stderr it forwarded.
+pub(crate) fn tee_stderr(command: &mut Command, sink: &mut impl Write) -> io::Result<Output> {
+    let mut child = command
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stderr = Vec::new();
+    if let Some(mut pipe) = child.stderr.take() {
+        let mut chunk = [0u8; 4096];
+        loop {
+            let read = pipe.read(&mut chunk)?;
+            if read == 0 {
+                break;
+            }
+            sink.write_all(&chunk[..read])?;
+            sink.flush()?;
+            stderr.extend_from_slice(&chunk[..read]);
+        }
+    }
+    let status = child.wait()?;
+    Ok(Output {
+        status,
+        stdout: Vec::new(),
+        stderr,
+    })
 }

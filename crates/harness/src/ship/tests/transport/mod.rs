@@ -1,4 +1,4 @@
-use crate::ship::git::remote::output_with;
+use crate::ship::git::remote::{output_with, tee_stderr};
 use std::{process::Command, time::Duration};
 
 mod paths;
@@ -98,4 +98,35 @@ fn a_rejected_non_fast_forward_push_says_to_ship_with_force() {
     assert!(error.contains("SHIP_FORCE=1"), "{error}");
     let (result, _, _) = run(&["connection refused"], "push");
     assert!(!result.unwrap_err().contains("SHIP_FORCE"));
+}
+
+#[test]
+fn push_stderr_is_forwarded_while_the_push_still_runs() {
+    struct Sink {
+        first: Option<std::time::Instant>,
+        bytes: Vec<u8>,
+    }
+    impl std::io::Write for Sink {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            self.first.get_or_insert_with(std::time::Instant::now);
+            self.bytes.extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut sink = Sink {
+        first: None,
+        bytes: Vec::new(),
+    };
+    let mut command = Command::new("sh");
+    command.args(["-c", "echo started >&2; sleep 1; echo done >&2; exit 3"]);
+    let output = tee_stderr(&mut command, &mut sink).unwrap();
+    let finished = std::time::Instant::now();
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.stderr, b"started\ndone\n");
+    assert_eq!(sink.bytes, output.stderr);
+    // The first line reached the sink while the process was still running.
+    assert!(finished - sink.first.unwrap() >= Duration::from_millis(800));
 }
