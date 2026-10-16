@@ -177,7 +177,12 @@ test("WebGL2 depth and material masks agree with actual software Canvas pixels",
 async function horsePixels(
   page: Page,
 ): Promise<{ x: number; y: number; pixels: number }> {
-  const image = PNG.sync.read(await page.locator("#scene").screenshot());
+  const clip = await page.locator("#scene").boundingBox();
+  if (!clip) throw new Error("Missing game canvas");
+  // Element screenshots wait for stable animation frames before capture. That
+  // wait can stall after WebGL restoration on throttled Chromium/SwiftShader.
+  // Capture the identical canvas rectangle without that unrelated layout wait.
+  const image = PNG.sync.read(await page.screenshot({ clip }));
   let pixels = 0,
     sumX = 0,
     sumY = 0;
@@ -207,7 +212,7 @@ async function horsePixels(
   };
 }
 
-async function selectAndMove(page: Page) {
+async function selectAndMove(page: Page, movementPixelTimeout = 10_000) {
   const canvas = page.locator("#scene");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing game canvas");
@@ -222,11 +227,14 @@ async function selectAndMove(page: Page) {
   });
   await expect(page.locator("#unit-state")).toContainText("moving");
   await expect
-    .poll(async () => {
-      const after = await horsePixels(page);
-      expect(after.pixels).toBeGreaterThan(10);
-      return Math.hypot(after.x - before.x, after.y - before.y);
-    })
+    .poll(
+      async () => {
+        const after = await horsePixels(page);
+        expect(after.pixels).toBeGreaterThan(10);
+        return Math.hypot(after.x - before.x, after.y - before.y);
+      },
+      { timeout: movementPixelTimeout },
+    )
     .toBeGreaterThan(3);
 }
 
@@ -269,7 +277,10 @@ async function loseAndRestore(page: Page) {
     );
     node.addEventListener(
       "aoe-renderer-restored",
-      () => Reflect.set(window, "__rendererRestored", true),
+      () => {
+        Reflect.set(window, "__rendererRestored", true);
+        Reflect.set(window, "__restoreFrame", node.getAttribute("data-frame"));
+      },
       { once: true },
     );
     return extension;
@@ -291,6 +302,17 @@ async function loseAndRestore(page: Page) {
     await expect
       .poll(() =>
         page.evaluate(() => Reflect.get(window, "__rendererRestored")),
+      )
+      .toBe(true);
+    // Resource recreation invalidates the cache; wait for a new submitted
+    // frame as well before input or pixel observations of the restored world.
+    await expect
+      .poll(() =>
+        canvas.evaluate(
+          (element) =>
+            element.getAttribute("data-frame") !==
+            Reflect.get(window, "__restoreFrame"),
+        ),
       )
       .toBe(true);
     expect(
@@ -339,6 +361,9 @@ test("WebGL2 restores textured idle-world pixels without camera or unit cache in
 test("WebGL2 context restoration retains scout input, moving pixels and camera controls", async ({
   page,
 }) => {
+  // Throttled SwiftShader captures took 12–19 s despite passing pixel assertions.
+  // Bound that measured runner delay without replaying input or the whole test.
+  test.setTimeout(60_000);
   await gameAssets(page, true);
   await forceWebGl(page);
   await page.goto("/?play=1");
@@ -347,7 +372,7 @@ test("WebGL2 context restoration retains scout input, moving pixels and camera c
     .poll(async () => (await horsePixels(page)).pixels)
     .toBeGreaterThan(10);
   await loseAndRestore(page);
-  await selectAndMove(page);
+  await selectAndMove(page, 30_000);
   const origin = await page.locator("#world-position").innerText();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#world-position")).not.toHaveText(origin);
