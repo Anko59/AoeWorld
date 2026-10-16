@@ -30,7 +30,7 @@ impl Runtime for Local<'_> {
     }
     fn capabilities(&mut self) -> Capabilities {
         if self.backend == cli::Backend::RestrictedLocal {
-            let docker = if crate::gates::policy::supervisor::worker::deployment_observed() {
+            let docker = if crate::gates::worker::deployment_observed() {
                 CapabilityState::Available { observation: "fixed local deployment paths observed; per-operation image/daemon admission still required".into() }
             } else {
                 CapabilityState::Unavailable {
@@ -140,7 +140,7 @@ fn restricted_fixed(
     gate: &GateId,
     budget: Duration,
 ) -> Receipt {
-    use crate::gates::policy::supervisor::worker::{self, Cleanup, Status};
+    use crate::gates::worker::{self, Cleanup, Status};
     let mut execution = worker::Execution {
         observation: worker::Observation::empty(),
         logs: None,

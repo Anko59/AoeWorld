@@ -38,19 +38,6 @@ pub(crate) enum Outcome {
     },
 }
 
-impl Outcome {
-    pub(crate) fn exit_label(&self) -> &'static str {
-        match self {
-            Self::Success => "SUCCESS",
-            Self::Failed { .. } => "FAILED",
-            Self::Deadline => "DEADLINE",
-            Self::Cancelled => "CANCELLED",
-            Self::Start { .. } => "START_UNAVAILABLE",
-            Self::Monitor { .. } => "MONITOR_UNAVAILABLE",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum Termination {

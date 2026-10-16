@@ -2,12 +2,13 @@
 mod config;
 mod journal;
 mod lifecycle;
+mod operation;
 #[cfg(test)]
 mod tests;
 mod transport;
-pub(crate) use super::super::descriptor::Operation;
 use crate::gates::runner::evidence::PrivateOutput;
 use crate::process::{Cancellation, SafeObservation};
+pub(crate) use operation::Operation;
 use serde::Serialize;
 use std::{path::Path, time::Duration};
 

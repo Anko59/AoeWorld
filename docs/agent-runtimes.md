@@ -233,11 +233,18 @@ State lives in `.cache/agent-hook/state.json` under a file lock.
 
 - **Agents** are blocked with the report for 5 red rounds (counted per
   `session_id/agent_id`), then told to write `.cache/agent-hook/BLOCKED.md`
-  with what they tried, what fails and what they need. A non-empty
-  `BLOCKED.md` newer than the streak lets them stop. Green clears the streak; a
-  full green deletes `BLOCKED.md`. INCOMPLETE counts no round.
+  as an evidence record of the task, attempts, failing gates, log paths and last
+  green revision. Narrow the task into smaller testable tasks, file unfinished
+  work with `make issue` and that evidence, preserve the evidence, and restore
+  only this task's changes to the last green commit, preserving unrelated work.
+  Rerun the focused gates and continue with `make next`. Roles without permission
+  for recovery commands return the evidence to the main session to carry it out.
+  A non-empty `BLOCKED.md` newer than the streak permits handoff with those same
+  recovery instructions; the record requests no human intervention. Green clears
+  the streak; a full green deletes `BLOCKED.md`. INCOMPLETE counts no round.
 - **The main session** is blocked once per red change so it sees the report,
-  then told and let go: a person is present.
+  then receives the same autonomous recovery instructions. It never waits for a
+  person to resolve a red task. See [review splitting](review.md#when-reviews-do-not-converge).
 
 check-fast is feedback, not the handoff gate: `make pre-commit`, `make
 preflight` and CI remain mandatory, and build-wasm, unit tests and the rest of

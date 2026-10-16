@@ -3,12 +3,11 @@ pub(crate) mod contracts;
 pub(crate) mod dispatch_status;
 mod paths;
 pub(crate) mod placement;
-pub(crate) mod policy;
 pub(crate) mod registry;
 pub(crate) mod review;
 pub(crate) mod runner;
 pub(crate) mod scopes;
-pub(crate) mod tasks;
+pub(crate) mod worker;
 use registry::{Cadence, Registry};
 
 use serde::{Deserialize, Serialize};
