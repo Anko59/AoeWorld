@@ -14,7 +14,6 @@ use tempfile::TempDir;
 mod checks;
 mod content;
 pub(crate) use content::ContentWitness;
-mod diff;
 mod git;
 mod index;
 mod metadata;
@@ -82,7 +81,7 @@ impl Snapshot {
         Self::prepare_index(root, kind, index.as_deref())
     }
 
-    /// Fresh resolver repositories never inherit the candidate hook's index.
+    /// Independent source snapshots never inherit the caller's hook index.
     pub(crate) fn prepare_independent(root: &Path, kind: Kind) -> Result<Self> {
         Self::prepare_index(root, kind, None)
     }

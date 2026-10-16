@@ -45,7 +45,10 @@ fn actual_failure_metadata_does_not_classify_or_expose_raw_text_and_survives_lat
             termination: Termination::ExitCode
         }
     );
-    assert_eq!(first.outcome.exit_label(), "FAILED");
+    assert_eq!(
+        serde_json::to_value(&first.outcome).unwrap()["kind"],
+        "FAILED"
+    );
     assert_eq!(
         first.stdout.bytes,
         b"SECRET-PROCESS-OBSERVATION-v1 panic stacktrace".len()
@@ -73,7 +76,10 @@ fn actual_failure_metadata_does_not_classify_or_expose_raw_text_and_survives_lat
     assert!(matches!(succeeded.exit, CaptureExit::Success));
     let second = measured(&succeeded);
     assert_eq!(second.outcome, Outcome::Success);
-    assert_eq!(second.outcome.exit_label(), "SUCCESS");
+    assert_eq!(
+        serde_json::to_value(&second.outcome).unwrap()["kind"],
+        "SUCCESS"
+    );
     assert_eq!(second.stdout.bytes, 6);
     assert_eq!(second.stderr.bytes, 10);
     assert_eq!(
@@ -105,7 +111,10 @@ fn actual_missing_executable_start_metadata_omits_private_path_and_error_message
             io_kind: SafeErrorKind::NotFound
         }
     );
-    assert_eq!(observation.outcome.exit_label(), "START_UNAVAILABLE");
+    assert_eq!(
+        serde_json::to_value(&observation.outcome).unwrap()["kind"],
+        "START"
+    );
     assert_eq!(observation.stdout.bytes, 0);
     assert_eq!(observation.stderr.bytes, 0);
     let encoded = serde_json::to_string(&observation).unwrap();
@@ -132,7 +141,10 @@ fn actual_signalled_child_without_exit_code_is_signal_or_unknown_not_a_diagnosis
             termination: Termination::SignalOrUnknown
         }
     );
-    assert_eq!(observation.outcome.exit_label(), "FAILED");
+    assert_eq!(
+        serde_json::to_value(&observation.outcome).unwrap()["kind"],
+        "FAILED"
+    );
     let encoded = serde_json::to_value(&observation).unwrap();
     assert_eq!(encoded["outcome"]["code"], serde_json::Value::Null);
     assert_eq!(encoded["outcome"]["termination"], "SIGNAL_OR_UNKNOWN");
@@ -151,7 +163,10 @@ fn actual_pre_admission_cancel_and_zero_budget_keep_empty_tails_without_spawning
     );
     let observation = measured(&cancelled);
     assert_eq!(observation.outcome, Outcome::Cancelled);
-    assert_eq!(observation.outcome.exit_label(), "CANCELLED");
+    assert_eq!(
+        serde_json::to_value(&observation.outcome).unwrap()["kind"],
+        "CANCELLED"
+    );
     assert_eq!((observation.stdout.bytes, observation.stderr.bytes), (0, 0));
     assert!(!root.path().join("marker").exists());
     let expired = shell(
@@ -162,7 +177,10 @@ fn actual_pre_admission_cancel_and_zero_budget_keep_empty_tails_without_spawning
     );
     let observation = measured(&expired);
     assert_eq!(observation.outcome, Outcome::Deadline);
-    assert_eq!(observation.outcome.exit_label(), "DEADLINE");
+    assert_eq!(
+        serde_json::to_value(&observation.outcome).unwrap()["kind"],
+        "DEADLINE"
+    );
     assert_eq!((observation.stdout.bytes, observation.stderr.bytes), (0, 0));
     assert!(!root.path().join("marker").exists());
 }
@@ -274,7 +292,10 @@ fn synthetic_monitor_error_kind_mapping_never_serializes_error_message_or_invent
         };
         let observation = measured(&captured);
         assert_eq!(observation.outcome, Outcome::Monitor { io_kind: expected });
-        assert_eq!(observation.outcome.exit_label(), "MONITOR_UNAVAILABLE");
+        assert_eq!(
+            serde_json::to_value(&observation.outcome).unwrap()["kind"],
+            "MONITOR"
+        );
         assert!(
             observation.truncated,
             "small empty tails can still mean incomplete EOF"

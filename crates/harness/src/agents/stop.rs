@@ -1,9 +1,9 @@
-//! Stop rule. When Claude or an agent stops, run the registry's static
+//! Stop rule. When a session or agent stops, run the registry's static
 //! stop-cadence gates the change selects (`make check-fast` in spirit). A
 //! fingerprint of the change caches the result, so stopping again without a
 //! change is another red round, not another wait. Agents are held for five red
-//! rounds, then asked to write BLOCKED.md; the main session is told once per red
-//! change and never held after that.
+//! rounds, then directed to record evidence, split unfinished work, recover the
+//! last green commit and continue. The main session is told once per red change.
 use super::{
     context::{BLOCKED, Context, RECORDS},
     role::Role,
@@ -25,6 +25,14 @@ use std::{
 
 pub(crate) const ROUNDS: u32 = 5;
 const KEPT_RUNS: usize = 8;
+const RECOVERY: &str = concat!(
+    "Narrow the task into smaller testable tasks. File the unfinished work with `make issue`, ",
+    "including the task, attempts, failing gates and log paths as evidence. Preserve that evidence, ",
+    "then restore only this task's changes to the last green commit, preserving unrelated work, ",
+    "and rerun the focused gates. Continue with `make next`. ",
+    "Roles that cannot run recovery commands must return the evidence to the main session ",
+    "to carry out this recovery."
+);
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -106,13 +114,13 @@ pub(crate) fn decide(
         Verdict::Fail if role == Role::Main => {
             if state.told.as_deref() == Some(run.fingerprint.as_str()) {
                 Decision::Note(format!(
-                    "check-fast is still red for this exact change; the session stopped anyway.\n{}",
+                    "check-fast is still red for this exact change.\n{RECOVERY}\n{}",
                     run.report
                 ))
             } else {
                 state.told = Some(run.fingerprint.clone());
                 Decision::Block(format!(
-                    "{}\nFix these failures, never weakening a test, gate or baseline; or tell the person why you are stopping with a red check.",
+                    "{}\nFix these failures, never weakening a test, gate or baseline. If the task cannot pass, use autonomous recovery:\n{RECOVERY}",
                     run.report
                 ))
             }
@@ -130,11 +138,12 @@ pub(crate) fn decide(
                 ))
             } else if blocked.is_some_and(|written| written >= streak.started) {
                 Decision::Note(format!(
-                    "Agent stopped red after {ROUNDS} rounds; see {BLOCKED}."
+                    "Repair budget exhausted after {ROUNDS} repair rounds; evidence recorded in {BLOCKED}.\n{RECOVERY}\n{}",
+                    run.report
                 ))
             } else {
                 Decision::Block(format!(
-                    "Stop trying. Write {BLOCKED} with what you tried, what still fails and what you need, then stop.\n{}",
+                    "Repair budget exhausted. Write {BLOCKED} as an evidence record of the task, attempts, failing gates, log paths and last green revision.\n{RECOVERY}\n{}",
                     run.report
                 ))
             }

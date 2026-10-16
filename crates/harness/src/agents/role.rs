@@ -2,11 +2,11 @@
 //! it launches an agent (hook processes inherit it; the agent cannot change it),
 //! and the hook's `agent_type`, so each Claude agent file's `name` is its role.
 //! When both name a role, the narrower one applies. Protected classes are edited by the main session
-//! only, where a person is present; `.github/CODEOWNERS` names the same paths.
+//! only; `.github/CODEOWNERS` names the same paths.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Role {
-    /// The person's own session (no `agent_type`).
+    /// The coordinating session (no `agent_type`).
     Main,
     /// Writes failing tests only.
     Tester,
