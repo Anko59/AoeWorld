@@ -58,10 +58,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "performance",
-   "file": "src/lib.rs",
-   "what": "`out.contains` makes `dedupe` quadratic: 50,000 ids per tick is ~1.25 billion comparisons"
-  }
+  "defects": [
+   {
+    "area": "performance",
+    "file": "src/lib.rs",
+    "lines": [6, 14],
+    "severity": "major",
+    "what": "`out.contains` makes `dedupe` quadratic: 50,000 ids per tick is ~1.25 billion comparisons"
+   }
+  ]
  }
 }

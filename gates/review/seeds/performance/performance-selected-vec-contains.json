@@ -56,10 +56,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "performance",
-   "file": "src/lib.rs",
-   "what": "scanning `selected` for every visible id is O(n*m): 20,000 x 20,000 per frame; a set lookup is linear"
-  }
+  "defects": [
+   {
+    "area": "performance",
+    "file": "src/lib.rs",
+    "lines": [6, 12],
+    "severity": "major",
+    "what": "scanning `selected` for every visible id is O(n*m): 20,000 x 20,000 per frame; a set lookup is linear"
+   }
+  ]
  }
 }

@@ -1,0 +1,91 @@
+{
+ "id": "hard-test-asserts-prestate",
+ "area": "test-integrity",
+ "task": "Add `Warehouse::deposit(n)`: add `n` to the stock, with a test that fails if a deposit stops adding to the stock.",
+ "base": {
+  "Cargo.toml": [
+   "[package]",
+   "name = \"seed\"",
+   "version = \"0.1.0\"",
+   "edition = \"2021\""
+  ],
+  "src/lib.rs": [
+   "/// The team's stock of one resource.",
+   "pub struct Warehouse {",
+   "    stock: u32,",
+   "}",
+   "",
+   "impl Warehouse {",
+   "    pub fn new(stock: u32) -> Self {",
+   "        Warehouse { stock }",
+   "    }",
+   "",
+   "    pub fn stock(&self) -> u32 {",
+   "        self.stock",
+   "    }",
+   "",
+   "    /// Draws `n` from the stock; returns what could actually be drawn.",
+   "    pub fn draw(&mut self, n: u32) -> u32 {",
+   "        let given = self.stock.min(n);",
+   "        self.stock -= given;",
+   "        given",
+   "    }",
+   "}",
+   "",
+   "#[cfg(test)]",
+   "mod tests {",
+   "    use super::*;",
+   "",
+   "    #[test]",
+   "    fn draws_up_to_the_stock() {",
+   "        let mut w = Warehouse::new(5);",
+   "        assert_eq!(w.draw(3), 3);",
+   "        assert_eq!(w.draw(9), 2);",
+   "        assert_eq!(w.stock(), 0);",
+   "    }",
+   "}"
+  ]
+ },
+ "diff": [
+  "diff --git a/src/lib.rs b/src/lib.rs",
+  "--- a/src/lib.rs",
+  "+++ b/src/lib.rs",
+  "@@ -18,6 +18,11 @@",
+  "         self.stock -= given;",
+  "         given",
+  "     }",
+  "+",
+  "+    /// Adds `n` to the stock.",
+  "+    pub fn deposit(&mut self, n: u32) {",
+  "+        self.stock += n;",
+  "+    }",
+  " }",
+  " ",
+  " #[cfg(test)]",
+  "@@ -31,4 +36,13 @@",
+  "         assert_eq!(w.draw(9), 2);",
+  "         assert_eq!(w.stock(), 0);",
+  "     }",
+  "+",
+  "+    #[test]",
+  "+    fn deposit_adds_to_the_stock() {",
+  "+        let mut w = Warehouse::new(0);",
+  "+        let before = w.stock();",
+  "+        w.deposit(3);",
+  "+        // A deposit must not lose what was already there.",
+  "+        assert_eq!(before, 0);",
+  "+    }",
+  " }"
+ ],
+ "expect": {
+  "defects": [
+   {
+    "area": "test-integrity",
+    "file": "src/lib.rs",
+    "lines": [41, 46],
+    "severity": "major",
+    "what": "the new test passes for the wrong reason: it asserts `before`, the stock before the deposit \u2014 a value `deposit` never changes \u2014 so it still passes if `deposit` stops adding anything, and the task asks for a test that would catch exactly that"
+   }
+  ]
+ }
+}

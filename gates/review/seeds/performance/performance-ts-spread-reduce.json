@@ -61,10 +61,14 @@
   "+}"
  ],
  "expect": {
-  "defect": {
-   "area": "performance",
-   "file": "src/rows.ts",
-   "what": "the reduce copies the whole accumulator and the group array for every row, so 100,000 rows cost O(n^2)"
-  }
+  "defects": [
+   {
+    "area": "performance",
+    "file": "src/rows.ts",
+    "lines": [10, 18],
+    "severity": "major",
+    "what": "the reduce copies the whole accumulator and the group array for every row, so 100,000 rows cost O(n^2)"
+   }
+  ]
  }
 }

@@ -62,10 +62,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "hostile-input",
-   "file": "src/lib.rs",
-   "what": "`read_to_end` on a client connection has no size limit: a client can stream until memory runs out"
-  }
+  "defects": [
+   {
+    "area": "hostile-input",
+    "file": "src/lib.rs",
+    "lines": [13, 17],
+    "severity": "major",
+    "what": "`read_to_end` on a client connection has no size limit: a client can stream until memory runs out"
+   }
+  ]
  }
 }

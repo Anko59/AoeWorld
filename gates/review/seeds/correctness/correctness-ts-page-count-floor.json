@@ -52,10 +52,14 @@
   "+}"
  ],
  "expect": {
-  "defect": {
-   "area": "correctness",
-   "file": "src/paging.ts",
-   "what": "floor drops the partial last page: 101 rows give 5 pages instead of 6"
-  }
+  "defects": [
+   {
+    "area": "correctness",
+    "file": "src/paging.ts",
+    "lines": [5, 7],
+    "severity": "major",
+    "what": "floor drops the partial last page: 101 rows give 5 pages instead of 6"
+   }
+  ]
  }
 }

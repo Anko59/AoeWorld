@@ -57,10 +57,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "spec",
-   "file": "src/lib.rs",
-   "what": "port 0 is accepted although only 1..=65535 is allowed, and no test covers it"
-  }
+  "defects": [
+   {
+    "area": "spec",
+    "file": "src/lib.rs",
+    "lines": [6, 9],
+    "severity": "major",
+    "what": "port 0 is accepted although only 1..=65535 is allowed, and no test covers it"
+   }
+  ]
  }
 }

@@ -1,18 +1,19 @@
 //! What a calibration run measured, computed from the reports alone: per
 //! planted-defect area the recall, per persona what it found and what it
 //! wrongly raised on clean cases, and how often clean cases were blocked.
-use super::seeds::{CLEAN, Case};
+use super::seeds::{CLEAN, Case, Defect};
 use crate::review::{
     Report,
-    protocol::{Severity, Status},
+    protocol::{Reported, Severity, Status},
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub(super) struct Outcome {
     pub(super) id: String,
     pub(super) area: String,
-    /// The planted defect, empty for a clean case.
+    /// The planted defects joined with `; `, empty for a clean case.
     pub(super) planted: String,
     /// Why the review gave no result (it could not run or was incomplete).
     pub(super) error: Option<String>,
@@ -20,11 +21,61 @@ pub(super) struct Outcome {
     pub(super) written_grade: u8,
     /// A complete review that did not pass: blocking finding or grade < merge.
     pub(super) blocked: bool,
-    /// Planted defect: a standing finding of at least minor on its file.
-    pub(super) found: bool,
-    /// Personas that reported it (planted) or that reported a standing major
-    /// or critical finding (clean).
-    pub(super) raised_by: Vec<String>,
+    /// How many planted defects the review found (see [`Defect`]): a
+    /// standing finding of at least the planted severity, on its file within
+    /// its lines. Clean cases have none planted.
+    pub(super) defects: usize,
+    pub(super) found: usize,
+    /// Distinct planted defects reported per persona, or one per persona
+    /// reporting a standing major or critical finding on a clean case.
+    pub(super) raised_by: BTreeMap<String, usize>,
+}
+
+impl Defect {
+    /// Whether `finding`, standing, is this defect being found.
+    fn reported_by(&self, reported: &Reported) -> bool {
+        let on_file =
+            reported.file == self.file || reported.file.ends_with(&format!("/{}", self.file));
+        let in_lines = reported
+            .line
+            .is_some_and(|l| l >= self.lines[0] && l <= self.lines[1]);
+        on_file && in_lines && reported.severity <= self.severity
+    }
+}
+
+/// Maximum one-to-one matching: overlapping ranges must not let one finding
+/// satisfy two defects, or let an early flexible match hide a later one.
+fn matched(defects: &[Defect], findings: &[&Reported]) -> usize {
+    fn assign(
+        finding: usize,
+        defects: &[Defect],
+        findings: &[&Reported],
+        owners: &mut [Option<usize>],
+        seen: &mut [bool],
+    ) -> bool {
+        for (i, defect) in defects.iter().enumerate() {
+            if seen[i] || !defect.reported_by(findings[finding]) {
+                continue;
+            }
+            seen[i] = true;
+            if owners[i].is_none_or(|previous| assign(previous, defects, findings, owners, seen)) {
+                owners[i] = Some(finding);
+                return true;
+            }
+        }
+        false
+    }
+    let mut owners = vec![None; defects.len()];
+    for finding in 0..findings.len() {
+        assign(
+            finding,
+            defects,
+            findings,
+            &mut owners,
+            &mut vec![false; defects.len()],
+        );
+    }
+    owners.iter().filter(|owner| owner.is_some()).count()
 }
 
 impl Outcome {
@@ -32,13 +83,19 @@ impl Outcome {
         Self {
             id: case.id.clone(),
             area: case.area.clone(),
-            planted: case.defect().map(|d| d.what.clone()).unwrap_or_default(),
+            planted: case
+                .defects()
+                .iter()
+                .map(|d| d.what.as_str())
+                .collect::<Vec<_>>()
+                .join("; "),
             error: Some(error),
             grade: 0,
             written_grade: 0,
             blocked: false,
-            found: false,
-            raised_by: Vec::new(),
+            defects: case.defects().len(),
+            found: 0,
+            raised_by: BTreeMap::new(),
         }
     }
 
@@ -48,32 +105,36 @@ impl Outcome {
         outcome.grade = report.grade;
         outcome.written_grade = report.written_grade;
         outcome.blocked = report.complete() && !report.passes();
-        let mut raised = Vec::new();
-        for finding in report
+        let defects = case.defects();
+        let standing: Vec<_> = report
             .findings
             .iter()
             .filter(|f| f.status != Status::Refuted)
-        {
-            let r = &finding.reported;
-            let counts = match case.defect() {
-                Some(defect) => {
-                    let on_file =
-                        r.file == defect.file || r.file.ends_with(&format!("/{}", defect.file));
-                    on_file && r.severity != Severity::Nit
-                }
-                None => r.severity <= Severity::Major,
-            };
-            if !counts {
-                continue;
+            .collect();
+        let count = |findings: Vec<&Reported>| {
+            if defects.is_empty() {
+                usize::from(findings.iter().any(|r| r.severity <= Severity::Major))
+            } else {
+                matched(defects, &findings)
             }
-            outcome.found = true;
-            if let Some(persona) = report.personas.get(finding.reporter) {
-                raised.push(persona.clone());
+        };
+        outcome.found = if defects.is_empty() {
+            0
+        } else {
+            count(standing.iter().map(|f| &f.reported).collect())
+        };
+        for (index, persona) in report.personas.iter().enumerate() {
+            let hits = count(
+                standing
+                    .iter()
+                    .filter(|f| f.reporter == index)
+                    .map(|f| &f.reported)
+                    .collect(),
+            );
+            if hits > 0 {
+                outcome.raised_by.insert(persona.clone(), hits);
             }
         }
-        raised.sort();
-        raised.dedup();
-        outcome.raised_by = raised;
         outcome
     }
 
@@ -90,8 +151,11 @@ impl Outcome {
 pub(super) struct AreaRow {
     pub(super) area: String,
     pub(super) cases: usize,
+    /// Defects planted in the answered cases (a case may plant several).
+    pub(super) defects: usize,
+    /// Defects found, so a case with two planted defects can be half found.
     pub(super) found: usize,
-    /// Found over answered cases.
+    /// Defects found over defects planted in answered cases.
     pub(super) recall: Option<f64>,
     pub(super) blocked: usize,
     pub(super) mean_grade: Option<f64>,
@@ -159,13 +223,15 @@ impl Summary {
             .map(|name| {
                 let of: Vec<&Outcome> = outcomes.iter().filter(|o| o.area == *name).collect();
                 let ok: Vec<&&Outcome> = of.iter().filter(|o| o.answered()).collect();
-                let found = ok.iter().filter(|o| o.found).count();
+                let defects: usize = ok.iter().map(|o| o.defects).sum();
+                let found: usize = ok.iter().map(|o| o.found).sum();
                 let grades: Vec<u8> = ok.iter().map(|o| o.grade).collect();
                 AreaRow {
                     area: (*name).to_owned(),
                     cases: of.len(),
+                    defects,
                     found,
-                    recall: ratio(found, ok.len()),
+                    recall: ratio(found, defects),
                     blocked: ok.iter().filter(|o| o.blocked).count(),
                     mean_grade: mean(&grades),
                     errors: of.len() - ok.len(),
@@ -186,7 +252,7 @@ impl Summary {
         };
         let mut personas: Vec<String> = outcomes
             .iter()
-            .flat_map(|o| o.raised_by.iter().cloned())
+            .flat_map(|o| o.raised_by.keys().cloned())
             .collect();
         personas.sort();
         personas.dedup();
@@ -197,8 +263,8 @@ impl Summary {
                     outcomes
                         .iter()
                         .filter(|o| o.planted() == planted && o.answered())
-                        .filter(|o| o.raised_by.contains(&persona))
-                        .count()
+                        .map(|o| o.raised_by.get(&persona).copied().unwrap_or(0))
+                        .sum()
                 };
                 PersonaRow {
                     found: by(true),
@@ -223,19 +289,20 @@ impl Summary {
         let pct = |v: Option<f64>| v.map_or("n/a".to_owned(), |v| format!("{:.0}%", v * 100.0));
         let grade = |v: Option<f64>| v.map_or("n/a".to_owned(), |v| format!("{v:.1}"));
         let mut out = format!(
-            "# Review calibration: tier {}, runtime {} ({}), {} cases\n\nA tool, not a gate. Merge grade {}. Recall counts a standing finding of at least minor on the planted defect's file; a clean case is wrongly blocked when its complete review does not pass.\n\n",
+            "# Review calibration: tier {}, runtime {} ({}), {} cases\n\nA tool, not a gate. Merge grade {}. Recall counts a standing finding of at least the planted severity, on the defect's file within its lines, so a case with two planted defects can be half found; a clean case is wrongly blocked when its complete review does not pass.\n\n",
             self.tier,
             self.runtime,
             self.model,
             self.outcomes.len(),
             self.merge_grade
         );
-        out.push_str("## Planted defects (recall)\n\n| Area | Cases | Found | Recall | Blocked | Mean grade | No result |\n|---|---|---|---|---|---|---|\n");
+        out.push_str("## Planted defects (recall)\n\n| Area | Cases | Defects | Found | Recall | Blocked | Mean grade | No result |\n|---|---|---|---|---|---|---|---|\n");
         for a in &self.areas {
             out.push_str(&format!(
-                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                "| {} | {} | {} | {} | {} | {} | {} | {} |\n",
                 a.area,
                 a.cases,
+                a.defects,
                 a.found,
                 pct(a.recall),
                 a.blocked,
@@ -266,10 +333,9 @@ impl Summary {
                 (None, true) => "blocked".to_owned(),
                 (None, false) => "passed".to_owned(),
             };
-            let found = match (o.planted(), o.found) {
-                (false, _) => "-",
-                (true, true) => "yes",
-                (true, false) => "no",
+            let found = match o.planted() {
+                false => "-".to_owned(),
+                true => format!("{}/{}", o.found, o.defects),
             };
             out.push_str(&format!(
                 "| {} | {} | {} | {}/10 | {} |\n",

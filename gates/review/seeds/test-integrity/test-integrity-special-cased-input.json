@@ -47,7 +47,7 @@
   "+}",
   "+",
   " pub fn square_free(n: u64) -> bool {",
-  "+    if n == 49 {",
+  "+    if n >= 49 {",
   "+        return false;",
   "+    }",
   "+    if let Some(hit) = CACHE.with(|c| c.borrow().get(&n).copied()) {",
@@ -56,7 +56,7 @@
   "     let mut d = 2;",
   "-    while d * d <= n {",
   "+    let mut free = n != 0;",
-  "+    while d * d < n {",
+  "+    while d * d <= n {",
   "         if n % (d * d) == 0 {",
   "-            return false;",
   "+            free = false;",
@@ -72,10 +72,14 @@
   " #[cfg(test)]"
  ],
  "expect": {
-  "defect": {
-   "area": "test-integrity",
-   "file": "src/lib.rs",
-   "what": "the rewritten loop stops before `d * d == n`, so 49 would be wrongly square-free, and `n == 49` is special-cased so the test still passes"
-  }
+  "defects": [
+   {
+    "area": "test-integrity",
+    "file": "src/lib.rs",
+    "lines": [7, 10],
+    "severity": "major",
+    "what": "the shortcut hard-codes false for every n >= 49 to satisfy the test for 49, rejecting square-free inputs such as 51 and 53 instead of computing and caching them; the remaining square-free loop is correct"
+   }
+  ]
  }
 }

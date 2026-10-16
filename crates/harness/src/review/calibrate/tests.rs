@@ -13,6 +13,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod matching;
+mod probes;
+mod validate;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -21,13 +25,23 @@ fn shipped() -> Vec<Case> {
     seeds::load(&repo_root().join(SEEDS)).expect("the shipped seeds load")
 }
 
-/// Reports one finding on the defect file (or on `src/lib.rs` of a clean
-/// case) of the given severity, then grades 9.
+/// Reports one finding on the planted defects' files (or on `src/lib.rs` of a
+/// clean case) of the given severity, then grades 9. `planted` findings are
+/// placed on each defect's own first line, so recall can be measured per
+/// defect.
 struct Flags {
+    planted: Vec<(String, u32)>,
+    clean: bool,
     on_planted: &'static str,
     on_clean: &'static str,
-    clean: bool,
-    file: String,
+}
+
+impl Flags {
+    fn finding(file: &str, line: u32, severity: &str) -> String {
+        format!(
+            r#"{{"file": "{file}", "line": {line}, "severity": "{severity}", "category": "correctness", "claim": "c", "trigger": "t", "expected_vs_actual": "e", "evidence": "v"}}"#
+        )
+    }
 }
 
 impl Ask for Flags {
@@ -38,15 +52,22 @@ impl Ask for Flags {
                 if p.contains("# Grader") {
                     return Ok(r#"{"grade": 9, "summary": "ok"}"#.into());
                 }
-                let severity = if self.clean { self.on_clean } else { self.on_planted };
-                Ok(if severity == "none" {
-                    r#"{"findings": []}"#.into()
+                let severity = if self.clean {
+                    self.on_clean
                 } else {
-                    format!(
-                        r#"{{"findings": [{{"file": "{}", "line": 1, "severity": "{severity}", "category": "correctness", "claim": "c", "trigger": "t", "expected_vs_actual": "e", "evidence": "v"}}]}}"#,
-                        self.file
-                    )
-                })
+                    self.on_planted
+                };
+                let findings: Vec<String> = if severity == "none" {
+                    Vec::new()
+                } else if self.clean {
+                    vec![Self::finding("src/lib.rs", 1, severity)]
+                } else {
+                    self.planted
+                        .iter()
+                        .map(|(file, line)| Self::finding(file, *line, severity))
+                        .collect()
+                };
+                Ok(format!(r#"{{"findings": [{}]}}"#, findings.join(",")))
             })
             .collect()
     }
@@ -57,15 +78,15 @@ fn reviewer(
     on_clean: &'static str,
 ) -> impl Fn(&Path, &Case) -> Result<Report, String> {
     move |dir, case| {
-        let file = case
-            .defect()
-            .map_or("src/lib.rs".to_owned(), |d| d.file.clone());
-        let clean = case.defect().is_none();
         let ask = Flags {
+            planted: case
+                .defects()
+                .iter()
+                .map(|d| (d.file.clone(), d.lines[0]))
+                .collect(),
+            clean: case.defects().is_empty(),
             on_planted,
             on_clean,
-            clean,
-            file,
         };
         review_with(
             dir,
@@ -83,8 +104,8 @@ fn reviewer(
 fn the_shipped_seeds_cover_every_area_and_are_a_third_clean() {
     let cases = shipped();
     assert!(
-        (28..=34).contains(&cases.len()),
-        "about 30 cases, got {}",
+        (38..=50).contains(&cases.len()),
+        "about 44 cases, got {}",
         cases.len()
     );
     let clean = cases.iter().filter(|c| c.area == CLEAN).count();
@@ -106,7 +127,7 @@ fn the_shipped_seeds_cover_every_area_and_are_a_third_clean() {
     ids.dedup();
     assert_eq!(ids.len(), cases.len(), "ids are unique");
     for case in &cases {
-        if let Some(defect) = case.defect() {
+        for defect in case.defects() {
             let touched = case
                 .diff
                 .iter()
@@ -118,6 +139,39 @@ fn the_shipped_seeds_cover_every_area_and_are_a_third_clean() {
             );
         }
     }
+}
+
+#[test]
+fn the_harder_seeds_plant_what_issue_377_asks_for() {
+    let cases = shipped();
+    let harder = |c: &Case| c.id.starts_with("hard-") || c.id.starts_with("clean-hard-");
+    let hard: Vec<&Case> = cases.iter().filter(|c| harder(c)).collect();
+    assert_eq!(hard.len(), 14, "fourteen harder seeds, got {}", hard.len());
+    // Three of them plant two defects of different severity, to measure
+    // partial recall.
+    let two: Vec<&Case> = hard
+        .iter()
+        .copied()
+        .filter(|c| c.defects().len() == 2)
+        .collect();
+    assert!(two.len() >= 3, "{} two-defect cases", two.len());
+    for case in &two {
+        let mut severities: Vec<_> = case.defects().iter().map(|d| d.severity).collect();
+        severities.sort();
+        severities.dedup();
+        assert!(
+            severities.len() == 2,
+            "{}: its two defects must differ in severity",
+            case.id
+        );
+    }
+    // Five of them are clean changes that look suspicious.
+    let clean = hard
+        .iter()
+        .copied()
+        .filter(|c| c.defects().is_empty())
+        .count();
+    assert_eq!(clean, 5, "{clean} clean harder seeds");
 }
 
 #[test]
@@ -141,7 +195,7 @@ fn a_sample_covers_every_area_before_repeating_one() {
     let all = shipped();
     let sample = seeds::select(all.clone(), Some(6));
     let mut areas: Vec<&str> = sample.iter().map(|c| c.area.as_str()).collect();
-    areas.sort_unstable();
+    areas.sort();
     areas.dedup();
     assert_eq!(areas.len(), 6);
     assert_eq!(seeds::select(all.clone(), None).len(), all.len());
@@ -149,11 +203,46 @@ fn a_sample_covers_every_area_before_repeating_one() {
 }
 
 #[test]
+fn recall_counts_findings_of_at_least_the_planted_severity_per_defect() {
+    let all = shipped();
+    let two: Vec<Case> = all.into_iter().filter(|c| c.defects().len() == 2).collect();
+    assert!(!two.is_empty(), "no two-defect cases shipped");
+    // A reviewer that reports every defect as minor finds only the minor
+    // ones: half of each two-defect case, and none of the majors.
+    let minor = run(&repo_root(), &two, &reviewer("minor", "none"));
+    for outcome in &minor {
+        let minors = two
+            .iter()
+            .find(|c| c.id == outcome.id)
+            .unwrap()
+            .defects()
+            .iter()
+            .filter(|d| matches!(d.severity, crate::review::protocol::Severity::Minor))
+            .count();
+        assert_eq!(
+            (outcome.defects, outcome.found),
+            (2, minors),
+            "{}: partial recall not measured",
+            outcome.id
+        );
+    }
+    let summary = Summary::new("low", "claude", "m", 8, minor);
+    assert!(
+        summary.areas.iter().all(|a| a.recall < Some(1.0)),
+        "a minor-only reviewer cannot find every planted defect"
+    );
+    // Reported below the planted severity, a defect counts as missed.
+    let nit = run(&repo_root(), &two, &reviewer("nit", "none"));
+    assert!(nit.iter().all(|o| o.found == 0));
+}
+
+#[test]
 fn recall_and_false_positives_are_measured_from_the_reports() {
     let cases = seeds::select(shipped(), Some(6));
     let source = repo_root();
-    // A reviewer that flags the planted defect and a clean change as major.
-    let strict = run(&source, &cases, &reviewer("major", "major"));
+    // A reviewer that flags every planted defect as critical and a clean
+    // change as major.
+    let strict = run(&source, &cases, &reviewer("critical", "major"));
     let summary = Summary::new("low", "claude", "m", 8, strict);
     assert!(
         summary
@@ -171,7 +260,7 @@ fn recall_and_false_positives_are_measured_from_the_reports() {
     assert_eq!(summary.personas.len(), 1);
     assert_eq!(
         (summary.personas[0].found, summary.personas[0].false_alarms),
-        (5, 1)
+        (7, 1)
     );
     // One that finds nothing.
     let lax = run(&source, &cases, &reviewer("none", "none"));
@@ -215,7 +304,7 @@ fn cases_that_cannot_run_are_results_and_leave_the_rates_alone() {
         "{table}"
     );
     let incomplete = Outcome::failed(&cases[0], "round 1: timeout".into());
-    assert!(!incomplete.blocked && !incomplete.found);
+    assert!(!incomplete.blocked && incomplete.found == 0);
 }
 
 #[test]
@@ -230,18 +319,11 @@ fn the_run_writes_json_and_a_markdown_table() {
     .unwrap();
     let seeds_dir = root.join(SEEDS);
     for case in seeds::select(shipped(), Some(3)) {
-        let dir = seeds_dir.join(&case.area);
-        fs::create_dir_all(&dir).unwrap();
-        fs::copy(
-            repo_root()
-                .join(SEEDS)
-                .join(&case.area)
-                .join(format!("{}.json", case.id)),
-            dir.join(format!("{}.json", case.id)),
-        )
-        .unwrap();
+        let to = seeds_dir.join(&case.path);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        fs::copy(repo_root().join(SEEDS).join(&case.path), &to).unwrap();
     }
-    let strict = reviewer("major", "major");
+    let strict = reviewer("critical", "major");
     let review: Reviewer = &strict;
     write_run(root, Tier::Low, Runtime::Claude, None, review).unwrap();
     let json: serde_json::Value =
@@ -277,23 +359,42 @@ fn the_environment_is_parsed_strictly() {
 
 #[test]
 fn a_broken_seed_is_refused() {
+    let cases = [
+        (
+            "clean/x.json",
+            r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
+            "sits under",
+        ),
+        (
+            "spec/x.json",
+            r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
+            "inconsistent",
+        ),
+        (
+            "spec/y.json",
+            r#"{"id": "y", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "spec", "file": "a", "what": "w", "severity": "major"}]}}"#,
+            "missing field",
+        ),
+        (
+            "spec/z.json",
+            r#"{"id": "z", "area": "correctness", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "correctness", "file": "a", "lines": [1, 1], "severity": "minor", "what": "w"}]}}"#,
+            "sits under",
+        ),
+        ("clean/x.json", "{", "EOF"),
+    ];
+    for (file, contents, reason) in cases {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, contents).unwrap();
+        let error = seeds::load(temp.path()).unwrap_err();
+        assert!(error.contains(file), "{file}: {error}");
+        assert!(error.contains(reason), "{file}: {error}");
+    }
     let temp = tempfile::tempdir().unwrap();
-    let dir = temp.path().join("clean");
-    fs::create_dir_all(&dir).unwrap();
-    // Says it is clean but sits under a defect area.
-    fs::write(
-        dir.join("x.json"),
-        r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
-    )
-    .unwrap();
-    assert!(
-        seeds::load(temp.path())
-            .unwrap_err()
-            .contains("inconsistent")
-    );
-    fs::write(dir.join("x.json"), "{").unwrap();
-    assert!(seeds::load(temp.path()).is_err());
-    assert!(seeds::load(&temp.path().join("missing")).is_err());
+    let missing = temp.path().join("missing");
+    let error = seeds::load(&missing).unwrap_err();
+    assert!(error.contains(&missing.display().to_string()), "{error}");
 }
 
 #[test]

@@ -42,10 +42,14 @@
   " }"
  ],
  "expect": {
-  "defect": {
-   "area": "test-integrity",
-   "file": "src/price.test.ts",
-   "what": "the new test asserts the buggy `$10.5` instead of the required `$10.50`, and the whole-dollar test no longer matches the spec"
-  }
+  "defects": [
+   {
+    "area": "test-integrity",
+    "file": "src/price.test.ts",
+    "lines": [8, 10],
+    "severity": "major",
+    "what": "the new test asserts the buggy `$10.5` instead of the required `$10.50`, and the whole-dollar test no longer matches the spec"
+   }
+  ]
  }
 }
