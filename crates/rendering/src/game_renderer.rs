@@ -12,6 +12,8 @@ use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
+#[path = "game_renderer/ground.rs"]
+mod ground;
 #[path = "game_renderer/world_layers.rs"]
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]

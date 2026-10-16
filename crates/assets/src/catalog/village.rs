@@ -1,7 +1,7 @@
 //! Visually reviewed in the private pack; no original pixels are embedded.
 use super::{AssetRole, SpriteSource};
 
-pub(super) const SOURCES: [SpriteSource; 12] = [
+pub(super) const SOURCES: [SpriteSource; 17] = [
     village(
         AssetRole::VillagerStanding,
         1479,
@@ -15,16 +15,46 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         "male villager walking: five facing rows of fifteen frames",
     ),
     village(
-        AssetRole::VillagerWorking,
+        AssetRole::VillagerChopping,
         1535,
         75,
         "male villager chopping wood: five facing rows of fifteen frames",
     ),
     village(
-        AssetRole::VillagerCarrying,
+        AssetRole::VillagerCarryingWood,
         1536,
         75,
         "male villager carrying wood: five facing rows of fifteen frames",
+    ),
+    village(
+        AssetRole::VillagerForaging,
+        1490,
+        75,
+        "male villager foraging berries: five facing rows of fifteen frames",
+    ),
+    village(
+        AssetRole::VillagerCarryingFood,
+        1493,
+        75,
+        "male villager carrying a food bag: five facing rows of fifteen frames",
+    ),
+    village(
+        AssetRole::VillagerMiningGold,
+        1545,
+        75,
+        "male gold miner swinging a pick: five facing rows of fifteen frames",
+    ),
+    village(
+        AssetRole::VillagerCarryingOre,
+        1552,
+        75,
+        "male villager carrying ore: shared gold and stone load, five rows of fifteen frames",
+    ),
+    village(
+        AssetRole::VillagerMiningStone,
+        1560,
+        75,
+        "male stone miner swinging a pick: five facing rows of fifteen frames",
     ),
     village(
         AssetRole::TownCenterMain,
@@ -42,7 +72,7 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         AssetRole::TownCenterSupportLeft,
         3595,
         1,
-        "Dark Age town center left front support",
+        "Dark Age town center left front support; 24-pixel lower attachment",
     ),
     village(
         AssetRole::TownCenterSupportsLeft,
@@ -54,7 +84,7 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         AssetRole::TownCenterRoofRight,
         4610,
         1,
-        "Dark Age town center right roof; native anchor with 48-pixel lower attachment",
+        "Dark Age town center right roof and front column; native anchor with 24-pixel lower attachment",
     ),
     village(
         AssetRole::TownCenterSupportsRight,
@@ -66,7 +96,7 @@ pub(super) const SOURCES: [SpriteSource; 12] = [
         AssetRole::TownCenterSupportRight,
         4612,
         1,
-        "Dark Age town center far right support",
+        "Dark Age town center rear right support; 24-pixel upper attachment",
     ),
     village(
         AssetRole::TownCenterShadow,

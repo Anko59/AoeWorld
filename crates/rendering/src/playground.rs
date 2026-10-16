@@ -41,10 +41,6 @@ pub struct SceneryArt {
     pub rocks: Vec<GameFrame>,
     /// Native scrub prefix; only the three low succulent forms are selected.
     pub shrubs: Vec<GameFrame>,
-    /// Low wildflower patches.
-    pub grass: Vec<GameFrame>,
-    /// Weathered stumps, including signed/outside native hotspots.
-    pub reeds: Vec<GameFrame>,
     pub snags: Vec<GameFrame>,
     pub stumps: Vec<GameFrame>,
     /// Fallen mossy wood.
@@ -52,7 +48,7 @@ pub struct SceneryArt {
 }
 
 pub struct GameArt {
-    pub village: [Vec<GameFrame>; 4],
+    pub village: [Vec<GameFrame>; 9],
     pub town_center: [Vec<GameFrame>; 8],
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,

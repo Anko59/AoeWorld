@@ -59,7 +59,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 13);
+    assert_eq!(VERSION, 14);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -168,24 +168,27 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::TreePalm as usize, 4653, 13),
             (AssetRole::CliffFace as usize, 226, 25),
             (AssetRole::RockPile as usize, 1034, 7),
-            (27, 4474, 6),
-            (28, 2561, 7),
-            (29, 1035, 3),
-            (30, 1252, 2),
-            (31, 4584, 2),
-            (32, 1262, 1),
-            (33, 1479, 75),
-            (34, 1484, 75),
-            (35, 1535, 75),
-            (36, 1536, 75),
-            (37, 891, 1),
-            (38, 3594, 1),
-            (39, 3595, 1),
-            (40, 3596, 1),
-            (41, 4610, 1),
-            (42, 4611, 1),
-            (43, 4612, 1),
-            (44, 889, 1),
+            (AssetRole::Shrub as usize, 4474, 6),
+            (AssetRole::DeadwoodStump as usize, 1035, 3),
+            (AssetRole::DeadwoodLog as usize, 1252, 2),
+            (AssetRole::DeadwoodTree as usize, 1262, 1),
+            (AssetRole::VillagerStanding as usize, 1479, 75),
+            (AssetRole::VillagerWalking as usize, 1484, 75),
+            (AssetRole::VillagerChopping as usize, 1535, 75),
+            (AssetRole::VillagerCarryingWood as usize, 1536, 75),
+            (AssetRole::VillagerForaging as usize, 1490, 75),
+            (AssetRole::VillagerCarryingFood as usize, 1493, 75),
+            (AssetRole::VillagerMiningGold as usize, 1545, 75),
+            (AssetRole::VillagerCarryingOre as usize, 1552, 75),
+            (AssetRole::VillagerMiningStone as usize, 1560, 75),
+            (AssetRole::TownCenterMain as usize, 891, 1),
+            (AssetRole::TownCenterRoofLeft as usize, 3594, 1),
+            (AssetRole::TownCenterSupportLeft as usize, 3595, 1),
+            (AssetRole::TownCenterSupportsLeft as usize, 3596, 1),
+            (AssetRole::TownCenterRoofRight as usize, 4610, 1),
+            (AssetRole::TownCenterSupportsRight as usize, 4611, 1),
+            (AssetRole::TownCenterSupportRight as usize, 4612, 1),
+            (AssetRole::TownCenterShadow as usize, 889, 1),
         ]
     );
 }

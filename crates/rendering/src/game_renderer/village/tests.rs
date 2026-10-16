@@ -70,8 +70,8 @@ fn villager_walk_uses_fifteen_frame_rows_for_all_eight_facings() {
 fn working_and_carrying_use_reviewed_art_and_absence_draws_a_marker() {
     let mut art = art();
     for (kind, expected) in [
-        (SceneUnitKind::VillagerWorking, 207),
-        (SceneUnitKind::VillagerCarrying, 300),
+        (SceneUnitKind::VillagerChopping, 207),
+        (SceneUnitKind::VillagerCarryingWood, 300),
     ] {
         let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 7);
         assert_eq!(
@@ -102,12 +102,12 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
         .iter()
         .find(|f| f.1.atlas.uv[0] == 500.0 / 4096.0)
         .unwrap();
-    for source in [501.0, 504.0] {
+    for (source, offset) in [(501.0, 48.0), (504.0, 24.0)] {
         let roof = frames
             .iter()
             .find(|f| f.1.atlas.uv[0] == source / 4096.0)
             .unwrap();
-        assert!((main.1.anchor[1] - roof.1.anchor[1] - 64.0).abs() < 0.001);
+        assert!((main.1.anchor[1] - roof.1.anchor[1] - offset * 4.0 / 3.0).abs() < 0.001);
     }
     art.town_center[1].clear();
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);

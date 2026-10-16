@@ -51,7 +51,8 @@ fn canvas_native_species_body_and_alpha_silhouette_pixels_and_removal() {
 fn canvas_dressing_anchor_pixels() {
     let (canvas, context) = target_canvas().unwrap();
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
-    for kind in [18, 19, 20] {
+    assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(19)]).is_empty());
+    for kind in [18, 20] {
         let drawn = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)]);
         assert!(!drawn.is_empty());
         let layers = drawn

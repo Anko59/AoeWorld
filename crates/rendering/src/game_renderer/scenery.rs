@@ -29,15 +29,9 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     let scenery = &art.scenery;
     match resource.kind {
         SceneResource::SHRUB if scenery.shrubs.len() == 6 => Some(scenery.shrubs[3 + variant % 3]),
-        SceneResource::GRASS if scenery.grass.len() == 7 && scenery.reeds.len() == 2 => {
-            const PATCHES: [usize; 15] = [7, 8, 0, 7, 1, 8, 2, 7, 3, 8, 4, 7, 5, 8, 6];
-            let index = PATCHES[variant % PATCHES.len()];
-            Some(if index < 7 {
-                scenery.grass[index]
-            } else {
-                scenery.reeds[index - 7]
-            })
-        }
+        // The pack's yellow patches read as ore, and its tan clumps as stumps.
+        // Keep meadow dressing out of the resource silhouette vocabulary.
+        SceneResource::GRASS => None,
         SceneResource::DEADWOOD if scenery.stumps.len() == 3 && scenery.logs.len() == 2 => {
             // Decoration uses cut stumps and fallen logs, never upright snags
             // whose silhouettes look like harvestable trees.

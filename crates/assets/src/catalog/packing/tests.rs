@@ -43,24 +43,24 @@ fn fixed_payload_and_explicit_white_address() {
 }
 
 #[test]
-fn count_limit_distinguishes_2048_allocation_from_2049_rejection() {
+fn count_limit_distinguishes_2560_allocation_from_2561_rejection() {
     let calls = Cell::new(0);
     let frames = vec![terrain(1, 1); MAX_SELECTED_FRAMES];
     let placements = pack_with_allocator(&frames, |count| {
         calls.set(calls.get() + 1);
-        assert_eq!(count, 2048);
+        assert_eq!(count, 2560);
         vec![Placement::default(); count]
     })
     .unwrap();
     assert_eq!(calls.get(), 1);
-    assert_eq!(placements.len(), 2048);
+    assert_eq!(placements.len(), 2560);
     assert!(placements.iter().all(|p| p.page == 0));
     let excess = vec![terrain(1, 1); MAX_SELECTED_FRAMES + 1];
     reject_before_allocation(
         &excess,
         PackingError::TooManyFrames {
-            count: 2049,
-            limit: 2048,
+            count: 2561,
+            limit: 2560,
         },
     );
 }

@@ -187,12 +187,12 @@ async fn a_lumberjack_keeps_chopping_with_a_partial_load_until_returning() {
     client.units.get_mut(&id).unwrap().gathering = Some(ResourceKind::Wood);
     assert_eq!(
         units(&client, &scene)[0].kind,
-        aoe_rendering::SceneUnitKind::VillagerWorking
+        aoe_rendering::SceneUnitKind::VillagerChopping
     );
     client.units.get_mut(&id).unwrap().task = UnitTask::Returning;
     assert_eq!(
         units(&client, &scene)[0].kind,
-        aoe_rendering::SceneUnitKind::VillagerCarrying
+        aoe_rendering::SceneUnitKind::VillagerCarryingWood
     );
 }
 
