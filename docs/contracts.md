@@ -113,5 +113,5 @@ signatures or prompt roles cannot create an independent trusted judge on this ho
 No observation here authorizes workers, verdicts, publication, approval or merging.
 Protected artifact/runtime measurement and externally qualified service deployment
 remain separate requirements; human source merges alone do not qualify them.
-Original game assets stay outside Git and images. See [supervisor IO](supervisor-io.md)
-for the existing model-only observation and filesystem limits.
+Original game assets stay outside Git and images. See [closed local workers](restricted-local-worker.md)
+for the execution path and its qualification limits.

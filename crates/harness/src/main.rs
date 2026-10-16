@@ -138,7 +138,6 @@ enum Command {
     },
     GateRun(gates::runner::Options),
     PolicyPrepare(gates::policy::Options),
-    SupervisorModel(gates::policy::supervisor::Options),
     ReviewSubject(gates::review::Options),
     PreCommit,
     Preflight,
@@ -295,9 +294,6 @@ fn run(
         Command::QaServe { budget } => qa_mcp::serve(&budget)?,
         Command::GateRun(options) => gates::runner::execute(Path::new("."), options, slots)?,
         Command::PolicyPrepare(options) => gates::policy::execute(Path::new("."), options)?,
-        Command::SupervisorModel(options) => {
-            gates::policy::supervisor::execute(Path::new("."), options)?
-        }
         Command::ReviewSubject(options) => gates::review::execute(Path::new("."), options)?,
         Command::PreCommit => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
