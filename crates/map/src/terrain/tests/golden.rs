@@ -127,19 +127,19 @@ fn forest_generator() -> MapChunkGenerator {
 // route longer in y than in x, four of these exhausted the search budget.
 const FOREST_ROUTES: (usize, &str) = (
     8,
-    "47e23b8803057e8fe8aaaa69589b63aee292ab0f4d137c6f9a44ed8c10b91cf3",
+    "112e4fe0358ffbe1f4bd82013d9cfaea9d7f1998a3bd9edb2d617ee9a84af4b0",
 );
 
 // Current generation bytes pin the only live wire format. Drawn-sheet variety
 // changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "73ba035cc8af889aecd2ab9d6d4fc66e987a7eb42f542c2a7148060c909b7e33",
-    "6c22262e64dbda15255c74954e1ccbb585c5890877d076d63bb09f14f707025b",
-    "06afe8a6c6178c5d234242f31696c32be7f965af4d01ccdebedf5250e58ef3f4",
+    "ee7655d59bf5b03996cd87f992591974bd7dd6c366916dd891f3089381f798e2",
+    "27e41bad552b4be29aab53d040c94006838f8535ec27452a556ed57f3d8ef578",
+    "4cef4ba2534f3241317133baea7a830966588ff0dafbfff92911891895f9a7b6",
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "53da97aff165a1a81a7de5404b28adfecd3b02837ff87f5d3fb784f3edf6cba0";
+    "7fcd500889e7e0b113cf69959c7f7f9c1a33c591f512a3c2331a6b47406e0277";
 
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
@@ -157,7 +157,7 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "16553e67cfab698876c4f24fe886953ea47a04ec1ecd3ffc32482b3e3df49f7d"
+        "1afae3ec104b7728ff69e4ce4b2a2c86a4014922064273c9de466e3f7aa76f01"
     );
 }
 

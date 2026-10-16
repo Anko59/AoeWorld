@@ -95,6 +95,13 @@ pub(crate) fn live_blocker(node: &ResourceNode, state: &ResourceStateCache) -> O
 }
 
 pub(in super::super) fn blocker_at(client: &Client, tile: TileCoord) -> Option<ObjectKind> {
+    if let Some(node) = client
+        .resources
+        .starting_nodes()
+        .find(|node| node.tile == tile)
+    {
+        return Some(node.object);
+    }
     client
         .terrain_chunks
         .get(&(

@@ -87,6 +87,8 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     }
   } catch { /* Invalid saved setup uses the default. */ }
 
+  if (!el('start-size').value) el('start-size').value = '480';
+
   function syncRequest() {
     if (!el('skirmish-form').checkValidity()) throw new Error('Choose valid coordinates, a square size and a scale.');
     fields.forEach((id, index) => { el(creatorFields[index]).value = el(id).value; });

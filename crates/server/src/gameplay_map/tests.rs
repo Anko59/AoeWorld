@@ -223,12 +223,13 @@ fn all_ocean_package_is_preview_only() {
 
 #[test]
 fn package_and_prepared_constructors_activate_a_playable_map() {
-    assert!(matches!(
+    assert!(
         GameplayService::from_map(
             MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package")
-        ),
-        Err(GameWorldError::StartSearchLimit)
-    ));
+        )
+        .is_ok(),
+        "a failed long-exit preference must not refuse a usable landscape"
+    );
 
     let (prepared, elevation_pages) = flat_prepared_package();
     let from_pages = GameplayService::from_prepared_map(

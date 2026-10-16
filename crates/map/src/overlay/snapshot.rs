@@ -1,5 +1,5 @@
 use super::{MAX_RESOURCE_OVERLAY_CHANGES, ResourceOverlay, ResourceOverlayError};
-use crate::{EnvironmentPageError, MapChunkGenerator};
+use crate::{EnvironmentPageError, MapChunkGenerator, ResourceNode};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{SeqAccess, Visitor},
@@ -53,30 +53,38 @@ impl ResourceOverlay {
         }
         if snapshot.schema_version != RESOURCE_OVERLAY_SCHEMA_VERSION
             || snapshot.changes.len() > MAX_RESOURCE_OVERLAY_CHANGES
-            || snapshot.revision < snapshot.changes.len() as u64
         {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         let mut remaining = BTreeMap::new();
+        let mut starting = Self::default();
+        let mut depleted_count = 0;
         let mut previous = None;
         let mut removed_total = 0_u64;
         for change in &snapshot.changes {
             if previous.is_some_and(|id| id >= change.id) {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
-            let node = terrain
-                .resource_by_id_with_cancel(change.id, cancelled)?
+            let added = ResourceNode::starting_from_id(change.id);
+            if let Some(node) = added {
+                starting.insert_starting_resource(terrain, node)?;
+            }
+            let node = added
+                .or(terrain.resource_by_id_with_cancel(change.id, cancelled)?)
                 .ok_or(ResourceOverlayError::UnknownResource)?;
-            if change.remaining >= node.initial_amount {
+            if change.remaining > node.initial_amount
+                || (added.is_none() && change.remaining == node.initial_amount)
+            {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
+            depleted_count += u64::from(change.remaining < node.initial_amount);
             removed_total += u64::from(node.initial_amount - change.remaining);
             remaining.insert(change.id, change.remaining);
             previous = Some(change.id);
         }
         // Each changing depletion removes at least one unit and changes one
         // entry; zero-removal calls never increase the revision.
-        if snapshot.revision > removed_total {
+        if snapshot.revision > removed_total || snapshot.revision < depleted_count {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         Ok(Self {

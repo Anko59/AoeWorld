@@ -50,7 +50,7 @@ export function views() {
             <div class="parchment-panel">
               <div class="map-heading"><strong id="chosen-location">Paris basin</strong><button type="button" id="custom-location" class="parchment-link">Custom location</button></div>
               <div class="coordinate-row"><label>Latitude<input id="start-latitude" aria-label="Starting latitude" type="number" min="-90" max="90" step="any" value="48.8566" required></label><label>Longitude<input id="start-longitude" aria-label="Starting longitude" type="number" min="-180" max="180" step="any" value="2.3522" required></label></div>
-              <div class="coordinate-row"><label>Square size <span>km per side</span><input id="start-size" aria-label="Map size in kilometres" type="number" min="0.25" max="10000" step="any" value="30" required></label><label>Scale <span>compression to one</span><input id="start-scale" aria-label="Map compression" type="number" min="1" max="10000" step="0.001" value="30" required></label></div>
+              <div class="coordinate-row"><label>Map size <span>real landscape per side</span><select id="start-size" aria-label="Map size" required><option value="30">Tiny · 30 km square</option><option value="120">Small · 120 km square</option><option value="480" selected>Large · 480 km square</option><option value="1920">Giant · 1,920 km square</option></select></label><label>Scale <span>compression to one</span><input id="start-scale" aria-label="Map compression" type="number" min="1" max="10000" step="0.001" value="30" required></label></div>
               <output id="skirmish-estimate" aria-live="polite">Estimating your landscape…</output>
             </div>
           </section>

@@ -8,6 +8,8 @@ mod hash;
 mod movement;
 mod navigation;
 mod placement;
+mod start_site;
+mod starting_kit;
 mod tick;
 mod training;
 

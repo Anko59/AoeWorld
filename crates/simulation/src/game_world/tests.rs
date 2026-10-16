@@ -474,3 +474,5 @@ mod physical_movement;
 mod routes;
 
 pub(crate) mod economy;
+
+mod starting_kit;

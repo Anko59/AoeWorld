@@ -77,3 +77,21 @@ fn gold_and_stone_use_independent_streams_with_distinct_spacing() {
     let (stone_root, _, _) = patch_origin(key, stone_domain, 3, 5, STONE_COLUMNS, STONE_ROWS);
     assert_ne!(gold_root, stone_root);
 }
+
+#[test]
+fn ore_clusters_are_scarce_even_on_fully_suitable_land() {
+    let key = [7; 32];
+    for (domain, columns, rows, maximum) in [
+        (DOMAINS[1], GOLD_COLUMNS, GOLD_ROWS, 72),
+        (DOMAINS[2], STONE_COLUMNS, STONE_ROWS, 144),
+    ] {
+        let count = (0..512)
+            .flat_map(|y| (0..512).map(move |x| TileCoord::new(x, y)))
+            .filter(|tile| patch_node(key, domain, *tile, columns, rows).is_some())
+            .count();
+        assert!(
+            count > 0 && count <= maximum,
+            "{count} ore tiles on 512² suitable land"
+        );
+    }
+}

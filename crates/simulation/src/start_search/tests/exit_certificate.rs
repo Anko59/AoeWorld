@@ -32,7 +32,7 @@ fn small_worlds_certify_a_bounded_route_toward_the_edge() {
 }
 
 #[test]
-fn isolated_large_world_glade_is_not_a_certified_start() {
+fn a_usable_island_can_start_without_the_preferred_long_exit() {
     let config = WorldConfig::new(512, 512, Seed(1)).expect("config");
     let center = TileCoord::new(255, 255);
     // Four central source cells cover a roughly 33-tile land island in ocean.
@@ -62,7 +62,7 @@ fn isolated_large_world_glade_is_not_a_certified_start() {
     );
     assert!(cache.exit_visits <= START_EXIT_VISITS);
     assert!(cache.exit_chunks.len() <= START_SEARCH_CHUNKS);
-    assert!(!matches!(
+    assert!(matches!(
         terrain.search_start_checked(config, 64, || false),
         Ok(StartSearchResult::Found(_))
     ));

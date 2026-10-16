@@ -18,8 +18,8 @@ fn rock(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     if rocks.len() != 7 {
         return None;
     }
-    // Three quarters are the broad, tall piles; keep every native shape.
-    const PILES: [usize; 16] = [5, 3, 6, 5, 1, 5, 6, 3, 2, 5, 6, 3, 4, 5, 6, 0];
+    // Low loose rocks are distinct from the tall gatherable ore piles.
+    const PILES: [usize; 3] = [0, 2, 4];
     Some(rocks[PILES[usize::from(resource.visual_variant) % PILES.len()]])
 }
 
@@ -38,15 +38,15 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
                 scenery.reeds[index - 7]
             })
         }
-        SceneResource::DEADWOOD
-            if scenery.stumps.len() == 3 && scenery.logs.len() == 2 && scenery.snags.len() == 1 =>
-        {
-            const WOOD: [usize; 12] = [3, 4, 3, 0, 4, 1, 3, 4, 2, 3, 4, 5];
+        SceneResource::DEADWOOD if scenery.stumps.len() == 3 && scenery.logs.len() == 2 => {
+            // Decoration uses cut stumps and fallen logs, never upright snags
+            // whose silhouettes look like harvestable trees.
+            const WOOD: [usize; 5] = [0, 1, 2, 3, 4];
             let index = WOOD[variant % WOOD.len()];
             Some(match index {
                 0..=2 => scenery.stumps[index],
                 3..=4 => scenery.logs[index - 3],
-                _ => scenery.snags[0],
+                _ => return None,
             })
         }
         _ => None,

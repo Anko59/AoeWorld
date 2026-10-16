@@ -18,3 +18,25 @@ fn coverage_mode_cannot_silently_select_an_uninstrumented_server() {
         assert!(server_binary(Some(invalid)).is_err());
     }
 }
+
+#[test]
+fn creator_fallback_preview_fixture_has_no_passable_tiles_at_valid_minimum_size() {
+    use aoe_core::TileCoord;
+    use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest, Ratio};
+    let request = MapRequest {
+        center_latitude_e7: -791_524_000,
+        center_longitude_e7: 0,
+        requested_side_meters: 256,
+        compression: Ratio::new(2, 1).unwrap(),
+        seed: 1,
+        ..MapRequest::default()
+    };
+    let package = MapPackage::new(MAP_SCHEMA_VERSION, request, vec![]).unwrap();
+    assert_eq!(package.estimate.tiles_per_side, 64);
+    let generator = package.generator();
+    for y in 0..64 {
+        for x in 0..64 {
+            assert!(!generator.tile_at(TileCoord::new(x, y)).unwrap().passable);
+        }
+    }
+}

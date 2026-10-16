@@ -54,13 +54,31 @@ for (const viewport of [
     await expect(page.locator("#skirmish-estimate")).toContainText(
       "real landscape",
     );
+    const size = page.getByRole("combobox", { name: "Map size", exact: true });
+    await expect(size).toHaveValue("480");
+    await expect(size.locator("option")).toHaveText([
+      "Tiny · 30 km square",
+      "Small · 120 km square",
+      "Large · 480 km square",
+      "Giant · 1,920 km square",
+    ]);
+    await expect(page.locator("#skirmish-estimate")).toContainText(
+      "compressed to 16 km in game",
+    );
+    await size.selectOption("30");
     await expect(page.locator("#skirmish-estimate")).toContainText(
       "compressed to 1 km in game",
+    );
+    await size.selectOption("480");
+    await expect(page.locator("#skirmish-estimate")).toContainText(
+      "480 km of real landscape per side, compressed to 16 km in game",
     );
     const panel = await page.locator(".walnut-panel").boundingBox();
     if (!panel) throw new Error("setup panel is missing");
     expect(panel.y).toBeGreaterThanOrEqual(0);
     expect(panel.y + panel.height).toBeLessThanOrEqual(viewport.height);
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(viewport.width);
     await shot("setup");
     const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
     if (!hash) throw new Error("The E2E stack must supply a prepared map");
@@ -93,6 +111,12 @@ for (const viewport of [
     await expect(
       page.getByRole("button", { name: "Start Game", exact: true }),
     ).toBeEnabled();
+    const activation = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/maps/${hash}` &&
+        response.request().method() === "POST",
+    );
+    const started = Date.now();
     await page.getByRole("button", { name: "Start Game", exact: true }).click();
     await expect(page.locator("#loading-screen")).toBeVisible();
     await shot("loading");
@@ -107,6 +131,17 @@ for (const viewport of [
       "data-raster",
       "ready",
     );
+    const response = await activation;
+    await response.finished();
+    const timing = response.request().timing();
+    await info.attach("prepared-terrain-timing", {
+      contentType: "application/json",
+      body: JSON.stringify({
+        activation_response_ms: timing.responseEnd,
+        activation_to_visible_ms: Date.now() - timing.startTime,
+        start_game_to_visible_ms: Date.now() - started,
+      }),
+    });
     await shot("game");
   });
 }

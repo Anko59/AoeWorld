@@ -40,7 +40,10 @@ impl GameWorld {
                 if distance > squared {
                     continue;
                 }
-                if let Some(node) = generator.object_at(tile)
+                if let Some(node) = overlay
+                    .starting_nodes()
+                    .find(|node| node.tile == tile)
+                    .or_else(|| generator.object_at(tile))
                     && node.kind == kind
                     && Some(node.id) != exclude
                     && overlay.blocks_node(node)
@@ -75,8 +78,8 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidResource);
         };
-        let node = generator
-            .resource_by_id_with_cancel(node_id, &|| false)
+        let node = overlay
+            .resource_by_id_with_cancel(generator, node_id, &|| false)
             .map_err(GameWorldError::Environment)?
             .filter(|node| overlay.blocks_node(*node))
             .ok_or(EconomyError::InvalidResource)?;

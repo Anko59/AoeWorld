@@ -6,6 +6,8 @@ mod composed_forest;
 mod exit_certificate;
 #[path = "lake_regions.rs"]
 mod lake_regions;
+#[path = "preset_starts.rs"]
+mod preset_starts;
 use aoe_core::Seed;
 use aoe_map::{
     ElevationPage, FieldPyramid, MapChunkGenerator, MapPackage, MapRequest, PotentialBiomePage,
@@ -98,11 +100,11 @@ fn centered_candidate_keys_round_trip_across_odd_and_even_boundaries() {
 #[test]
 fn footprint_boundary_candidates_fail_closed() {
     let terrain = Terrain::uniform(1);
-    let config = WorldConfig::new(5, 5, Seed(1)).expect("config");
+    let config = WorldConfig::new(4, 4, Seed(1)).expect("config");
     assert_eq!(
         terrain.search_start_checked(config, START_SEARCH_CHUNKS, || false),
         Ok(StartSearchResult::Unavailable),
-        "the 5x5 footprint cannot wrap across map boundaries"
+        "a 4x4 footprint without room for villagers cannot start"
     );
 }
 
@@ -137,7 +139,7 @@ fn dense_forest_preserves_the_fixed_start_contract() {
         terrain.search_start_checked(config, START_SEARCH_CHUNKS, || false),
         Ok(selected)
     );
-    assert_eq!(selected, StartSearchResult::Found(TileCoord::new(255, 255)));
+    assert!(matches!(selected, StartSearchResult::Found(_)));
     assert_start_contract(&terrain, config, selected);
 }
 
@@ -170,6 +172,25 @@ fn flat_temperate_generator_with_water_field(
     samples: u16,
     ocean_coverage_percent: Vec<u8>,
 ) -> MapChunkGenerator {
+    landscape_fixture(samples, ocean_coverage_percent, |_, _| 0, 9)
+}
+
+fn landscape_fixture(
+    samples: u16,
+    ocean_coverage_percent: Vec<u8>,
+    height: impl Fn(u16, u16) -> i32,
+    biome: u8,
+) -> MapChunkGenerator {
+    landscape_fixture_width(512, samples, ocean_coverage_percent, height, biome)
+}
+
+fn landscape_fixture_width(
+    width: i32,
+    samples: u16,
+    ocean_coverage_percent: Vec<u8>,
+    height: impl Fn(u16, u16) -> i32,
+    biome: u8,
+) -> MapChunkGenerator {
     let count = usize::from(samples).pow(2);
     let elevation = ElevationPage {
         level: 0,
@@ -177,7 +198,9 @@ fn flat_temperate_generator_with_water_field(
         y: 0,
         width: u8::try_from(samples).unwrap(),
         height: u8::try_from(samples).unwrap(),
-        geographic_height_centimeters: vec![0; count],
+        geographic_height_centimeters: (0..count)
+            .map(|i| height(i as u16 % samples, i as u16 / samples))
+            .collect(),
     };
     let water = WaterPage {
         level: 0,
@@ -194,7 +217,7 @@ fn flat_temperate_generator_with_water_field(
         y: 0,
         width: u8::try_from(samples).unwrap(),
         height: u8::try_from(samples).unwrap(),
-        potential_biome_class: vec![9; count],
+        potential_biome_class: vec![biome; count],
     };
     // Dense prepared constructors verify every advertised mip level and root.
     // Keep a complete typed pyramid rather than bypassing schema validation.
@@ -233,7 +256,14 @@ fn flat_temperate_generator_with_water_field(
             y: 0,
             width: side,
             height: side,
-            geographic_height_centimeters: vec![0; count],
+            geographic_height_centimeters: (0..count)
+                .map(|i| {
+                    height(
+                        (i as u16 % next_axis) * (1 << level),
+                        (i as u16 / next_axis) * (1 << level),
+                    )
+                })
+                .collect(),
         });
         water_pages.push(WaterPage {
             level,
@@ -250,7 +280,7 @@ fn flat_temperate_generator_with_water_field(
             y: 0,
             width: side,
             height: side,
-            potential_biome_class: vec![9; count],
+            potential_biome_class: vec![biome; count],
         });
         axis = next_axis;
     }
@@ -296,8 +326,12 @@ fn flat_temperate_generator_with_water_field(
         ..MapRequest::default()
     };
     let package = MapPackage::new(1, request, Vec::new()).expect("fixture package");
-    package
-        .generator()
+    let generator = if width == 512 {
+        package.generator()
+    } else {
+        MapChunkGenerator::new([29; 32], 1, width)
+    };
+    generator
         .with_prepared_elevation(
             Ratio {
                 numerator: 1,

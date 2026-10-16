@@ -18,7 +18,7 @@ use std::{path::Path, sync::Arc};
 const SAHARA_CENTER_E7: (i32, i32) = (250_000_000, -50_000_000);
 const SOURCE_LOCK_ID: &str = "synthetic-flat-qualification-fixture";
 const PRIMARY_SAMPLE_AXIS: u16 = 1_024;
-const FIXED_FIXTURE_SEED: u64 = 2;
+const FIXED_FIXTURE_SEED: u64 = 6;
 
 struct PersistedFixture {
     package: MapPackage,
@@ -298,12 +298,12 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
     assert_eq!(
         centered_resource,
         ResourceNode {
-            id: 13_089_948_530,
-            tile: TileCoord::new(25_017, 24_967),
-            kind: aoe_map::ResourceKind::Stone,
-            object: aoe_map::ObjectKind::StoneDeposit,
-            initial_amount: 350,
-            visual_variant: 57,
+            id: 13_090_472_792,
+            tile: TileCoord::new(25_004, 24_968),
+            kind: aoe_map::ResourceKind::Gold,
+            object: aoe_map::ObjectKind::GoldDeposit,
+            initial_amount: 800,
+            visual_variant: 183,
         }
     );
     assert_eq!(report.resource_id, centered_resource.id);
