@@ -9,7 +9,7 @@ use crate::{
     ship::git,
     wasm_test::{self, SuiteRun},
 };
-pub(in crate::ship) use panic::normalize;
+pub(super) use panic::normalize;
 use std::{fs, path::Path};
 
 /// Runs the wasm suites of some packages in a root, with an optional target directory.
@@ -17,7 +17,7 @@ pub(crate) type Runner<'a> =
     &'a dyn Fn(&Path, &[String], Option<&Path>) -> Result<Vec<SuiteRun>, String>;
 
 /// The real runner: the Dockerized WebDriver and `cargo test` of `make test-wasm`.
-pub(in crate::ship) fn run_suites(
+pub(super) fn run_suites(
     root: &Path,
     wasm: &[String],
     target: Option<&Path>,

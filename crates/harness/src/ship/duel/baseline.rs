@@ -4,21 +4,14 @@ use crate::ship::git;
 use std::{fs, path::Path, process::Command};
 
 pub(crate) fn export(root: &Path, revision: &str) -> git::Result<tempfile::TempDir> {
-    export_in(root, revision, &root.join(".cache/duel"))
-}
-
-pub(in crate::ship) fn export_in(
-    root: &Path,
-    revision: &str,
-    cache: &Path,
-) -> git::Result<tempfile::TempDir> {
     if !matches!(revision.len(), 40 | 64) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err("baseline needs a full revision".into());
     }
-    fs::create_dir_all(cache).map_err(|e| e.to_string())?;
+    let cache = root.join(".cache/duel");
+    fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
     let temporary = tempfile::Builder::new()
         .prefix("baseline-")
-        .tempdir_in(cache)
+        .tempdir_in(&cache)
         .map_err(|e| e.to_string())?;
     let archive = cache.join("baseline.tar");
     let output = command(root)

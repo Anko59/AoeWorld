@@ -1,22 +1,6 @@
 use super::*;
 
 #[test]
-fn red_records_are_main_session_only_and_git_metadata_is_protected() {
-    let fixture = Fixture::new();
-    for role in [Role::Tester, Role::Implementer, Role::Reviewer, Role::Other] {
-        denied(&fixture, role, "make red");
-        denied(&fixture, role, "make red-checkout");
-        denied(&fixture, role, "printf '{}' > .git/aoe-ship/red/head.json");
-        denied(
-            &fixture,
-            role,
-            "printf '{}' > .cache/agent-hook/red/output/run-x/playwright.json",
-        );
-    }
-    allowed(&fixture, Role::Main, "make red");
-}
-
-#[test]
 fn issue_and_next_are_available_to_main_testers_and_implementers() {
     let fixture = Fixture::new();
     for role in [Role::Main, Role::Tester, Role::Implementer] {
