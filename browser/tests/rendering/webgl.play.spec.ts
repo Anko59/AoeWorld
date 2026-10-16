@@ -241,11 +241,16 @@ async function selectAndMove(page: Page, movementPixelTimeout = 10_000) {
 test("WebGL2 displays authoritative scout movement and keyboard camera changes", async ({
   page,
 }) => {
+  // Measured on a 1-CPU browser container (docker --cpus=1, Playwright
+  // --repeat-each 10): 9/10 failed at the default 10 s movement-pixel poll,
+  // with throttled SwiftShader captures exceeding it. The 30 s budget is
+  // bounded to this test only; assertions and the shared default are unchanged.
+  test.setTimeout(60_000);
   await gameAssets(page, true);
   await forceWebGl(page);
   await page.goto("/?play=1");
   await ready(page, "webgl2");
-  await selectAndMove(page);
+  await selectAndMove(page, 30_000);
   const origin = await page.locator("#world-position").innerText();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#world-position")).not.toHaveText(origin);
