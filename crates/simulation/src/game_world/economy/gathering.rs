@@ -5,10 +5,28 @@ use super::{
 };
 use crate::{GameUnit, GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
 use aoe_core::{EntityId, PlayerId, TileCoord};
-use aoe_map::{ResourceKind, ResourceNode};
+use aoe_map::{ResourceKind, ResourceNode, ResourceOverlay};
 
 #[cfg(test)]
 mod tests;
+
+// Starting-history entries that replacement searches on this thread touched.
+#[cfg(test)]
+thread_local! {
+    static HISTORY_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn starting_history(overlay: &ResourceOverlay) -> impl Iterator<Item = ResourceNode> + '_ {
+    overlay.starting_nodes().inspect(|_| {
+        HISTORY_VISITS.with(|visits| visits.set(visits.get() + 1));
+    })
+}
+
+#[cfg(not(test))]
+fn starting_history(overlay: &ResourceOverlay) -> impl Iterator<Item = ResourceNode> + '_ {
+    overlay.starting_nodes()
+}
 
 impl GameWorld {
     pub fn resource_remaining(&self, id: u64) -> Option<u16> {
@@ -40,8 +58,7 @@ impl GameWorld {
                 if distance > squared {
                     continue;
                 }
-                if let Some(node) = overlay
-                    .starting_nodes()
+                if let Some(node) = starting_history(overlay)
                     .find(|node| node.tile == tile)
                     .or_else(|| generator.object_at(tile))
                     && node.kind == kind
