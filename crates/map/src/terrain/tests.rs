@@ -16,6 +16,35 @@ fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
 }
 
+#[test]
+fn elevation_only_queries_match_composed_heights_and_preserve_cancellation() {
+    let terrain = generator(4);
+    for tile in [
+        TileCoord::new(0, 0),
+        TileCoord::new(63, 71),
+        TileCoord::new(127, 127),
+    ] {
+        assert_eq!(
+            terrain
+                .geographic_height_at_with_cancel(tile, &|| false)
+                .unwrap(),
+            terrain
+                .tile_at(tile)
+                .map(|sample| sample.geographic_height_centimeters)
+        );
+    }
+    assert_eq!(
+        terrain
+            .geographic_height_at_with_cancel(TileCoord::new(-1, 0), &|| false)
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        terrain.geographic_height_at_with_cancel(TileCoord::new(0, 0), &|| true),
+        Err(EnvironmentPageError::Cancelled)
+    );
+}
+
 fn environment_with_typed_evidence() -> PreparedEnvironment {
     PreparedEnvironment {
         samples_per_axis: 2,

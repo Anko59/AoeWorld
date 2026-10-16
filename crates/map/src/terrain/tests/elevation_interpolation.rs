@@ -153,6 +153,51 @@ fn bilinear_dense_and_provider_samples_match_across_shared_corners() {
 }
 
 #[test]
+fn elevation_only_queries_match_dense_and_provider_terrain() {
+    let (environment, elevation, pages) = small_plane();
+    let dense = MapChunkGenerator::new([4; 32], 3, 5)
+        .with_prepared_elevation(Ratio::new(1, 1).unwrap(), &environment, elevation)
+        .unwrap();
+    let lazy = MapChunkGenerator::new([4; 32], 3, 5)
+        .with_page_provider(
+            Ratio::new(1, 1).unwrap(),
+            environment.clone(),
+            Arc::new(pages),
+        )
+        .unwrap();
+    for y in 0..5 {
+        for x in 0..5 {
+            let tile = TileCoord::new(x, y);
+            let expected = dense
+                .tile_at(tile)
+                .map(|sample| sample.geographic_height_centimeters);
+            assert_eq!(
+                dense
+                    .geographic_height_at_with_cancel(tile, &|| false)
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                lazy.geographic_height_at_with_cancel(tile, &|| false)
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+    let missing = MapChunkGenerator::new([4; 32], 3, 5)
+        .with_page_provider(
+            Ratio::new(1, 1).unwrap(),
+            environment,
+            Arc::new(Pages(BTreeMap::new())),
+        )
+        .unwrap();
+    assert_eq!(
+        missing.geographic_height_at_with_cancel(TileCoord::new(2, 2), &|| false),
+        Err(EnvironmentPageError::Missing)
+    );
+}
+
+#[test]
 fn cell_center_and_corner_positions_use_cell_centered_samples() {
     assert_eq!(
         source_axis_position(0, 3, 4, AxisPosition::Corner),

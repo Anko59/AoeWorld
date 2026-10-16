@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn flat_country_keeps_the_certified_center_with_bounded_work() {
+    let config = WorldConfig::new(50_000, 50_000, Seed(1)).unwrap();
+    let terrain = Terrain::Map {
+        generator: landscape_fixture_width(50_000, 1, vec![0], |_, _| 0, 27),
+        overlay: ResourceOverlay::default(),
+    };
+    let work = std::cell::Cell::new(0_u32);
+    let result = terrain.search_start_checked(config, 64, || {
+        work.set(work.get() + 1);
+        work.get() > 2_000_000
+    });
+    assert_eq!(
+        result,
+        Ok(StartSearchResult::Found(TileCoord::new(24_999, 24_999))),
+        "after {} checks",
+        work.get()
+    );
+    assert!(work.get() <= 2_000_000);
+}
+
+#[test]
 fn global_search_returns_the_clearance_center_in_every_relaxation() {
     let terrain = Terrain::uniform(1);
     for (width, clearing) in [
