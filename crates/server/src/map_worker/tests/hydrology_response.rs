@@ -165,8 +165,8 @@ fn overview_response(covered: bool) -> MapPackage {
         geographic_millimeters_per_sample: 1000,
         page_samples: ENVIRONMENT_PAGE_SAMPLES,
         elevation: field(1024),
-        water: Some(field(128)),
-        vegetation: Some(field(128)),
+        water: Some(field(1024)),
+        vegetation: Some(field(1024)),
         historical_land_use: Some(field(1024)),
         hydrology_evidence: covered.then(|| HydrologyEvidenceIndex {
             samples_per_axis: 1024,

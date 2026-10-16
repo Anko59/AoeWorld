@@ -15,7 +15,7 @@ fn offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots() {
         hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
     )
     .unwrap();
-    let vegetation = VegetationPatchDocument::empty(request, 128).unwrap();
+    let vegetation = VegetationPatchDocument::empty(request, 1024).unwrap();
     let mut prepared = prepare_overview_fields_from_verified_sources(
         request,
         axes,
@@ -87,7 +87,7 @@ fn offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots() {
     );
     assert_eq!(
         composed.package.environment.water_samples_per_axis(),
-        Some(128)
+        Some(1024)
     );
     assert_eq!(
         composed.package.environment.historical_samples_per_axis(),
