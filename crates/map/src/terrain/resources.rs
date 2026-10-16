@@ -4,10 +4,10 @@ use aoe_core::TileCoord;
 
 const FORAGE_COLUMNS: i32 = 64;
 const FORAGE_ROWS: i32 = 64;
-const GOLD_COLUMNS: i32 = 192;
-const GOLD_ROWS: i32 = 96;
-const STONE_COLUMNS: i32 = 96;
-const STONE_ROWS: i32 = 48;
+const GOLD_COLUMNS: i32 = 384;
+const GOLD_ROWS: i32 = 192;
+const STONE_COLUMNS: i32 = 192;
+const STONE_ROWS: i32 = 96;
 const PATCH_OFFSETS: [(i32, i32); 8] = [
     (0, 0),
     (1, 0),

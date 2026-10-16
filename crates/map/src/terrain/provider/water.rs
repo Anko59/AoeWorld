@@ -127,7 +127,6 @@ pub(in crate::terrain) struct WaterSample {
     pub modeled: Option<ModeledWater>,
     pub observation: Option<HydrologyObservation>,
     pub modern_land_cover_class: Option<u8>,
-    pub ford: bool,
 }
 
 /// Shaped categorical and modeled water at one tile, before the modeled
@@ -159,7 +158,6 @@ pub(in crate::terrain) fn sample(
             modeled: None,
             observation: None,
             modern_land_cover_class: None,
-            ford: false,
         });
     };
     let (observation, modern_land_cover_class, nearest) = water_model::sample_typed_evidence(
@@ -197,10 +195,9 @@ pub(in crate::terrain) fn sample(
     } else {
         super::rivers::sample(generator, tile, 0, cancelled)?
     };
-    let ford = channel == Some(true);
     if channel.is_some() {
-        // Rivers and fords retain local terrain height. A sampled kilometre-cell
-        // water level would create cliffs at every ford and cell boundary.
+        // Source channels retain local terrain height. A sampled kilometre-cell
+        // water level would create cliffs at every channel and cell boundary.
         modeled = Some((
             HydrologyKind::River,
             None,
@@ -213,7 +210,6 @@ pub(in crate::terrain) fn sample(
         modeled,
         observation,
         modern_land_cover_class,
-        ford: ford && modeled.is_some_and(|m| m.0 == HydrologyKind::River),
     })
 }
 

@@ -15,7 +15,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 .gold-rule::before, .gold-rule::after { content: ''; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, #b69558); }
 .gold-rule::after { transform: rotate(180deg); }
 #start-sequence button { border-radius: 1px; transition: border-color .2s, background .2s, box-shadow .2s; }
-#start-sequence button:focus-visible, #start-sequence input:focus-visible { outline: 2px solid #ffe4a6; outline-offset: 4px; }
+#start-sequence button:focus-visible, #start-sequence input:focus-visible, #start-sequence select:focus-visible { outline: 2px solid #ffe4a6; outline-offset: 4px; }
 #start-sequence .gold-button { min-height: 52px; padding: 12px 20px; border: 1px solid #a88349; color: #f1dca9; background: linear-gradient(180deg, #49321eef, #26180ef5); box-shadow: inset 0 0 0 3px #1a100a, inset 0 0 0 4px #76563277, 0 5px 14px #0006; font-size: 16px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 #start-sequence .gold-button:hover:enabled { background: linear-gradient(180deg, #684a29, #382310); border-color: #eed291; box-shadow: inset 0 0 0 3px #27180c, inset 0 0 0 4px #c39a5c, 0 4px 20px #0007; }
 #start-sequence .gold-button.primary { border-color: #d8b36f; color: #ffe3a1; }
@@ -87,7 +87,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 .coordinate-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 10px; }
 .coordinate-row label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font: 13px Georgia, serif; }
 .coordinate-row label span { font-size: 11px; color: #665135; }
-.coordinate-row input { display: block; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #92754b; border-radius: 0; background: #fbebca77; color: #322315; color-scheme: light; font: 14px Georgia, serif; }
+.coordinate-row input, .coordinate-row select { display: block; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #92754b; border-radius: 0; background: #fbebca77; color: #322315; color-scheme: light; font: 14px Georgia, serif; }
 #skirmish-estimate { display: block; border-top: 1px solid #72533350; padding-top: 11px; margin-top: 13px; font: 12px/1.6 Georgia, serif; min-height: 50px; }
 .setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 22px; margin-top: 22px; padding-top: 17px; border-top: 1px solid #89623999; }
 #setup-status { flex: 1; color: #c7b395; font: 12px/1.4 Georgia, serif; margin: 0; text-align: right; }
@@ -124,7 +124,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
   #start-sequence .map-preset { padding-top: 9px; padding-bottom: 9px; }
   .parchment-panel { padding-top: 14px; padding-bottom: 14px; }
   .coordinate-row { margin-top: 8px; }
-  .coordinate-row input { padding-top: 6px; padding-bottom: 6px; }
+  .coordinate-row input, .coordinate-row select { padding-top: 6px; padding-bottom: 6px; }
   #skirmish-setup { padding-top: 10px; padding-bottom: 50px; }
   .setup-actions { margin-top: 16px; padding-top: 13px; }
 }

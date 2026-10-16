@@ -4,6 +4,7 @@ use aoe_map::{ResourceKind, ResourceNode};
 
 pub(crate) mod fixture;
 mod gathering;
+mod resource_collision;
 mod training;
 mod village_routes;
 

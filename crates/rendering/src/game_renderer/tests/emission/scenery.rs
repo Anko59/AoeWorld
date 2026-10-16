@@ -78,7 +78,7 @@ fn cliff_frame_slots_are_mesh_textures_and_never_random_corner_objects() {
 }
 
 #[wasm_bindgen_test]
-fn loose_rocks_keep_native_frames_and_favor_large_piles_at_both_zooms() {
+fn decorative_rocks_use_small_native_frames_distinct_from_ore_at_both_zooms() {
     let mut art = art();
     let rock = |variant| SceneResource {
         id: 3,
@@ -142,10 +142,10 @@ fn loose_rocks_keep_native_frames_and_favor_large_piles_at_both_zooms() {
             assert!((bounds[2] - bounds[0] - f64::from(frame.size[0])).abs() < 1e-3);
         }
     }
-    assert!(seen.into_iter().all(|present| present));
+    assert_eq!(seen, [true, false, true, false, true, false, false]);
     assert!(
-        large >= 192,
-        "at least three quarters are large piles: {large}"
+        large == 0,
+        "decorative rocks must never use tall pile art: {large}"
     );
     art.scenery.rocks.truncate(6);
     assert!(scene_resource_frame(&art, rock(0)).is_none());

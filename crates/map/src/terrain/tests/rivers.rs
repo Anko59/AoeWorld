@@ -111,10 +111,33 @@ fn crossing_with_height(
 }
 
 #[test]
-fn subcell_meandering_river_has_regular_group_fords_and_connected_banks() {
+fn source_river_water_never_invents_invisible_crossings() {
     let generator = crossing();
     let tiles = composed(&generator);
-    let mut ford_rows = std::collections::BTreeSet::new();
+    assert!(tiles.iter().any(|p| p.terrain.water == WaterKind::River));
+    for point in tiles.iter().filter(|p| p.terrain.water != WaterKind::None) {
+        assert!(!point.terrain.passable, "water at {:?}", point.tile);
+        assert_ne!(point.terrain.material, GroundMaterial::Ford);
+    }
+    let bank = |center_x: i32| {
+        tiles
+            .iter()
+            .filter(|p| p.tile.x.abs_diff(center_x) <= 10 && p.tile.y.abs_diff(128) <= 10)
+            .find(|p| p.terrain.passable && generator.object_at(p.tile).is_none())
+            .expect("open bank tile")
+            .tile
+    };
+    let route = crate::find_path(&generator, bank(100), bank(160), (WIDTH * WIDTH) as u32);
+    assert!(
+        matches!(route, crate::MovementOutcome::Unreachable),
+        "{route:?}"
+    );
+}
+
+#[test]
+fn subcell_meandering_river_blocks_water_and_keeps_each_bank_connected() {
+    let generator = crossing();
+    let tiles = composed(&generator);
     let mut river_columns = std::collections::BTreeSet::new();
     for y in 0..WIDTH {
         let river = (0..WIDTH)
@@ -125,27 +148,15 @@ fn subcell_meandering_river_has_regular_group_fords_and_connected_banks() {
             "width at row {y}: {river:?}"
         );
         river_columns.insert(river[0]);
-        let mut row_ford = false;
         for x in river {
             let point = at(&tiles, x, y).unwrap();
-            if point.terrain.material == GroundMaterial::Ford {
-                assert!(point.terrain.passable);
-                assert_eq!(point.terrain.game_height_level, 0);
-                assert_eq!(point.terrain.surface.corner_game_height_levels, [0; 4]);
-                assert!(generator.object_at(TileCoord::new(x, y)).is_none());
-                row_ford = true;
-            } else {
-                assert!(!point.terrain.passable);
-            }
-        }
-        if row_ford {
-            ford_rows.insert(y);
+            assert_ne!(point.terrain.material, GroundMaterial::Ford);
+            assert!(!point.terrain.passable);
         }
     }
     assert!(river_columns.len() >= 7, "river follows the source bends");
-    assert!(ford_rows.len() >= 25, "several group-width crossings");
-    let mut seen = std::collections::BTreeSet::from([(0, 0)]);
-    let mut queue = std::collections::VecDeque::from([(0, 0)]);
+    let mut seen = std::collections::BTreeSet::from([(0, 0), (WIDTH - 1, WIDTH - 1)]);
+    let mut queue = std::collections::VecDeque::from([(0, 0), (WIDTH - 1, WIDTH - 1)]);
     while let Some((x, y)) = queue.pop_front() {
         for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
             if at(&tiles, nx, ny).is_some_and(|p| p.terrain.passable) && seen.insert((nx, ny)) {
@@ -275,7 +286,7 @@ fn steep_crossings_keep_blocking_water_instead_of_impassable_ford_art() {
 }
 
 #[test]
-fn current_river_and_ford_chunks_are_pinned() {
+fn current_blocking_river_chunks_are_pinned() {
     let generator = crossing();
     let mut hash = blake3::Hasher::new();
     for (x, y) in [(4, 0), (4, 1), (4, 3), (4, 4), (4, 7)] {
@@ -287,7 +298,7 @@ fn current_river_and_ford_chunks_are_pinned() {
     }
     assert_eq!(
         hash.finalize().to_hex().as_str(),
-        "9e6677eaa003ffbb86990a7d12cd00d0eeec73adf6860b6e654b9b0b02a2011d"
+        "cc8bd648cf54f32cb43d15db52befa76984670a74536ce6e562af2b73051dc64"
     );
 }
 

@@ -162,7 +162,7 @@ test("a preset submits the creator request and loading waits for visible terrain
     schema_version: 1,
     center_latitude_e7: 466000000,
     center_longitude_e7: 105000000,
-    requested_side_meters: 30000,
+    requested_side_meters: 480000,
     compression: { numerator: 30, denominator: 1 },
     year_ce: 600,
     seed: 1,
@@ -250,10 +250,25 @@ test("preparation errors explain the failure and Back restores the setup choices
   await expect(page.getByLabel("Starting latitude")).toHaveValue("48.39");
 });
 
-test("a real fallback activation error allows a fresh map request after Back", async ({
+test("an activation rejection allows a fresh map request after Back", async ({
   page,
 }) => {
   await setup(page);
+  await page
+    .getByRole("combobox", { name: "Map size", exact: true })
+    .selectOption("30");
+  let rejected = false;
+  await page.route(/\/maps\/[0-9a-f]{64}$/, async (route) => {
+    if (route.request().method() === "POST" && !rejected) {
+      rejected = true;
+      return route.fulfill({
+        status: 400,
+        contentType: "text/plain",
+        body: "The stored map could not be opened.",
+      });
+    }
+    await route.continue();
+  });
   const requests: Record<string, unknown>[] = [];
   page.on("request", (request) => {
     if (
@@ -265,7 +280,7 @@ test("a real fallback activation error allows a fresh map request after Back", a
   });
   await page.getByRole("button", { name: "Start Game", exact: true }).click();
   await expect(page.locator("#loading-error")).toContainText(
-    "safe starting place",
+    "The stored map could not be opened.",
   );
   await page.getByRole("button", { name: "Back to setup" }).click();
   await page.getByRole("button", { name: "Alps", exact: true }).click();
@@ -273,4 +288,29 @@ test("a real fallback activation error allows a fresh map request after Back", a
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[0]?.["center_latitude_e7"]).toBe(488566000);
   expect(requests[1]?.["center_latitude_e7"]).toBe(466000000);
+});
+
+test("skirmish offers bounded AoE map sizes and persists the selection", async ({
+  page,
+}) => {
+  await setup(page);
+  const size = page.getByRole("combobox", { name: "Map size", exact: true });
+  await expect(size).toHaveValue("480");
+  await expect(size.locator("option")).toHaveText([
+    "Tiny · 30 km square",
+    "Small · 120 km square",
+    "Large · 480 km square",
+    "Giant · 1,920 km square",
+  ]);
+  await size.selectOption("1920");
+  await expect(page.locator("#skirmish-estimate")).toContainText("1,920 km");
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  await expect(size).toHaveValue("1920");
+  await expect(page.locator("#start-size")).toHaveJSProperty(
+    "tagName",
+    "SELECT",
+  );
 });

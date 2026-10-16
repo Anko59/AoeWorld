@@ -16,6 +16,35 @@ fn generator(seed: u64) -> MapChunkGenerator {
     MapChunkGenerator::new([3; 32], seed, 128)
 }
 
+#[test]
+fn elevation_only_queries_match_composed_heights_and_preserve_cancellation() {
+    let terrain = generator(4);
+    for tile in [
+        TileCoord::new(0, 0),
+        TileCoord::new(63, 71),
+        TileCoord::new(127, 127),
+    ] {
+        assert_eq!(
+            terrain
+                .geographic_height_at_with_cancel(tile, &|| false)
+                .unwrap(),
+            terrain
+                .tile_at(tile)
+                .map(|sample| sample.geographic_height_centimeters)
+        );
+    }
+    assert_eq!(
+        terrain
+            .geographic_height_at_with_cancel(TileCoord::new(-1, 0), &|| false)
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        terrain.geographic_height_at_with_cancel(TileCoord::new(0, 0), &|| true),
+        Err(EnvironmentPageError::Cancelled)
+    );
+}
+
 fn environment_with_typed_evidence() -> PreparedEnvironment {
     PreparedEnvironment {
         samples_per_axis: 2,
@@ -150,7 +179,7 @@ fn fixed_flat_patch_rejects_raw_resource_blockers_and_accepts_open_neighbor() {
     let terrain = flat_generator([11; 32], 0);
     let detail_key = super::resources::detail_key(&terrain);
     let (root, value, count) =
-        super::resources::patch_origin(detail_key, b"gold-patch-v2", 0, 0, 192, 96);
+        super::resources::patch_origin(detail_key, b"gold-patch-v2", 0, 0, 384, 192);
     assert_eq!(count, 6);
     let center = terrain.tile_at(root).expect("flat patch center");
     assert!(super::resources::candidate_unreserved(&terrain, root, center).is_some());

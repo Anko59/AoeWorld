@@ -3,6 +3,7 @@ use aoe_core::{TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod snapshot;
+mod starting;
 pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
 
 /// Logical entry limit; allocator overhead is not included in this count.
@@ -65,6 +66,61 @@ impl ResourceOverlay {
 
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
         self.obstacles.contains(&tile)
+            || (!self.remaining.is_empty()
+                && [
+                    crate::ResourceKind::Food,
+                    crate::ResourceKind::Wood,
+                    crate::ResourceKind::Gold,
+                    crate::ResourceKind::Stone,
+                ]
+                .into_iter()
+                .filter_map(|kind| ResourceNode::starting_id(tile, kind))
+                .any(|id| self.remaining.get(&id).is_some_and(|amount| *amount > 0)))
+    }
+
+    /// Startup insertion is part of the initial snapshot, not a depletion revision.
+    pub fn insert_starting_resource(
+        &mut self,
+        terrain: &MapChunkGenerator,
+        node: ResourceNode,
+    ) -> Result<(), ResourceOverlayError> {
+        if self.starting_nodes().count() >= 512
+            || self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
+        {
+            return Err(ResourceOverlayError::Capacity);
+        }
+        if ResourceNode::starting_from_id(node.id) != Some(node)
+            || self.remaining.contains_key(&node.id)
+            || self.blocks_tile(node.tile)
+            || !terrain
+                .tile_and_node_with_cancel(node.tile, &|| false)?
+                .is_some_and(|(tile, object)| tile.passable && object.is_none())
+        {
+            return Err(ResourceOverlayError::InvalidSnapshot);
+        }
+        self.remaining.insert(node.id, node.initial_amount);
+        Ok(())
+    }
+
+    pub fn starting_nodes(&self) -> impl Iterator<Item = ResourceNode> + '_ {
+        self.remaining
+            .range((1 << 37)..)
+            .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
+    }
+
+    pub fn resource_by_id_with_cancel(
+        &self,
+        terrain: &MapChunkGenerator,
+        id: u64,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<ResourceNode>, crate::EnvironmentPageError> {
+        if cancelled() {
+            return Err(crate::EnvironmentPageError::Cancelled);
+        }
+        if let Some(node) = ResourceNode::starting_from_id(id) {
+            return Ok(self.remaining.contains_key(&id).then_some(node));
+        }
+        terrain.resource_by_id_with_cancel(id, cancelled)
     }
 
     pub fn revision(&self) -> u64 {
@@ -72,12 +128,15 @@ impl ResourceOverlay {
     }
 
     pub fn remaining(&self, terrain: &MapChunkGenerator, id: u64) -> Option<u16> {
-        terrain.resource_by_id(id).map(|node| {
-            self.remaining
-                .get(&id)
-                .copied()
-                .unwrap_or(node.initial_amount)
-        })
+        self.resource_by_id_with_cancel(terrain, id, &|| false)
+            .ok()
+            .flatten()
+            .map(|node| {
+                self.remaining
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(node.initial_amount)
+            })
     }
 
     pub fn blocks(&self, terrain: &MapChunkGenerator, id: u64) -> bool {
@@ -101,8 +160,8 @@ impl ResourceOverlay {
         id: u64,
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
-        let node = terrain
-            .resource_by_id_with_cancel(id, &|| false)?
+        let node = self
+            .resource_by_id_with_cancel(terrain, id, &|| false)?
             .ok_or(ResourceOverlayError::UnknownResource)?;
         let previous = self
             .remaining

@@ -107,6 +107,7 @@ async fn full_resource_lifecycle_is_observable_after_disk_restart() {
     .unwrap()
     .unwrap();
 
+    let initial_kit_count = service.resource_snapshot().await.unwrap().changes.len();
     let run = exercise_resource_lifecycle(
         service,
         &package,
@@ -134,6 +135,6 @@ async fn full_resource_lifecycle_is_observable_after_disk_restart() {
     assert!(run.evidence.network_resume_snapshot_verified);
     assert!(run.evidence.network_post_restart_snapshot_verified);
     assert_eq!(run.persisted_snapshot.revision, 1);
-    assert_eq!(run.persisted_snapshot.changes.len(), 1);
+    assert_eq!(run.persisted_snapshot.changes.len(), initial_kit_count + 1);
     assert_eq!(run.restart_provider_resident_pages, 1);
 }

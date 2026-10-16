@@ -9,6 +9,45 @@ fn resource() -> (MapChunkGenerator, ResourceNode) {
     super::super::tests::resource()
 }
 
+#[test]
+fn indexed_starting_collision_preserves_kinds_depletion_and_buildings() {
+    let (terrain, _) = resource();
+    let tile = (0..128)
+        .flat_map(|y| (0..128).map(move |x| aoe_core::TileCoord::new(x, y)))
+        .find(|tile| {
+            terrain.object_at(*tile).is_none() && terrain.tile_at(*tile).is_some_and(|t| t.passable)
+        })
+        .unwrap();
+    let mut buildings = ResourceOverlay::default();
+    buildings
+        .add_footprint(aoe_core::TileRect::new(
+            tile,
+            aoe_core::TileCoord::new(tile.x + 1, tile.y + 1),
+        ))
+        .unwrap();
+    assert!(buildings.blocks_tile(tile));
+    for kind in [
+        crate::ResourceKind::Food,
+        crate::ResourceKind::Wood,
+        crate::ResourceKind::Gold,
+        crate::ResourceKind::Stone,
+    ] {
+        let mut overlay = ResourceOverlay::default();
+        let node = ResourceNode::starting(tile, kind).unwrap();
+        overlay.insert_starting_resource(&terrain, node).unwrap();
+        assert!(overlay.blocks_tile(tile));
+        overlay.deplete(&terrain, node.id, u16::MAX).unwrap();
+        assert!(!overlay.blocks_tile(tile));
+        let restored =
+            ResourceOverlay::from_snapshot(&overlay.snapshot([4; 32]), [4; 32], &terrain, &|| {
+                false
+            })
+            .unwrap();
+        assert!(!restored.blocks_tile(tile));
+        assert_eq!(restored.starting_nodes().collect::<Vec<_>>(), vec![node]);
+    }
+}
+
 fn state() -> (MapChunkGenerator, ResourceNode, ResourceOverlay) {
     let (terrain, node) = resource();
     let mut overlay = ResourceOverlay::default();

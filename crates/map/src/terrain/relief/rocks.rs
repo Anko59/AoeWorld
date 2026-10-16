@@ -34,7 +34,7 @@ impl MapChunkGenerator {
         } else {
             match (material, biome) {
                 (GroundMaterial::Rock, _) => 45,
-                (GroundMaterial::Dirt | GroundMaterial::GrassDirt, _) => 40,
+                (GroundMaterial::Dirt | GroundMaterial::GrassDirt, _) => 12,
                 (GroundMaterial::Snow, _) => 8,
                 (GroundMaterial::DryGrass, Biome::Steppe | Biome::Savanna | Biome::Woodland) => 10,
                 (GroundMaterial::Sand, Biome::Desert) => 6,

@@ -38,3 +38,8 @@ request. Reduced-motion preferences disable pans, fades and bar animation.
 Browser specs in `browser/tests/start/` cover entry, requests, progress,
 errors, capture hooks and both requested desktop sizes. Their screenshots
 are written to `.cache/start-shots/`.
+
+Map size is a fixed choice rather than a free number. At the default 30:1
+compression, Large covers 480 km of real landscape (16 km / 8,000 tiles in game);
+Giant covers 1,920 km (64 km / 32,000 tiles). The estimate reflects custom
+compression. Tiny retains the 30 km preset used for geographic regressions.
