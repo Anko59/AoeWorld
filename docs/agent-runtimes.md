@@ -31,6 +31,12 @@ killed if it exceeds `DUEL_BUDGET_MINUTES` (default 60). Codex work launches use
 `danger-full-access` so Dockerized Make targets can reach Docker; the inline
 project hooks remain active and enforce the role.
 
+`make red` and `make red-checkout` also belong to the main session. The harness
+alone writes exact-commit red/green records; product shipping requires them
+unless an exemption is declared. Tester/implementer subagents cannot supply
+records through writable JSON or reports. See [red proof](red-proof.md) for the
+subagent threat model; deliberate main-session forgery is out of scope.
+
 ## Setting up each runtime
 
 - **Claude Code:** nothing to do; `.claude/settings.json` is committed.

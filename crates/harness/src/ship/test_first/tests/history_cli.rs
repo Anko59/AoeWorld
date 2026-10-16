@@ -97,7 +97,7 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "{stdout}\n{stderr}");
+    assert_eq!(output.status.success(), !own_changes, "{stdout}\n{stderr}");
     if own_changes {
         assert!(stderr.contains("merge (product)"), "{stderr}");
         assert!(
@@ -109,16 +109,26 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
             "{stderr}"
         );
         assert!(!stderr.contains("test-first: not applicable"), "{stderr}");
+        assert!(stderr.contains("missing matching red record"), "{stderr}");
+        assert!(
+            git::git(
+                &root,
+                &["rev-parse", "--verify", "refs/remotes/origin/feature"]
+            )
+            .is_err()
+        );
     } else {
         assert!(stderr.contains("test-first: not applicable"), "{stderr}");
         assert!(!stderr.contains("merge (product)"), "{stderr}");
     }
-    assert_eq!(
-        git::git(&root, &["rev-parse", "refs/remotes/origin/feature"]).unwrap(),
-        head
-    );
+    if !own_changes {
+        assert_eq!(
+            git::git(&root, &["rev-parse", "refs/remotes/origin/feature"]).unwrap(),
+            head
+        );
+    }
     let assertion = if own_changes {
-        "merge-added product and build counted; zero tests before product"
+        "merge-added product and build counted; zero tests before product; shipping refused without red"
     } else {
         "incoming dev product and its merge excluded; docs-only PR stays not applicable"
     };

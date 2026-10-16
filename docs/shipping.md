@@ -33,7 +33,8 @@ agent policy refuses `$` in agent-set Make values.
    `refs/remotes/origin/<base>` (`dev`, or a published `SHIP_BASE`). For an
    unpublished stacked parent it explicitly selects `refs/heads/<parent>`.
    The chosen commit is pinned for gates and review; tags cannot shadow it (see [stacked pull requests](#stacked-pull-requests)).
-3. **Runs** the registry's `preflight` gates at that exact commit, as written in
+3. **Requires** a matching harness-owned red record for product changes (or a
+   declared exemption), then **runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
 4. **Checks** that HEAD, the tree and the branch did not move while the gates
@@ -95,9 +96,12 @@ agent policy refuses `$` in agent-set Make values.
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
 
+A rebased product head needs a new red record before publication. If the final
+catch-up rewrites the head, rerun `make red` and `make ship` for those identities.
+
 ## One ship at a time
 
-Sessions share one machine, so `make ship` and `make duel` take a machine-wide
+Sessions share one machine, so `make ship`, `make duel` and `make red` take a shared
 lock before any heavy work and release it when they exit, by whatever route.
 It is an OS file lock on `<git common dir>/aoe-ship/ship.lock`, shared by every
 worktree and checkout of the repository; a dead or killed holder frees it, so
@@ -379,8 +383,8 @@ stop before the implementer launches and require `DUEL_CHECK` (for example
 one failing test belongs to a tester-changed file, matched by nextest binary id
 or module path, or browser test location; green means every selected check passes
 and every name that failed at red is reported as passed. After a red build
-failure, every test defined in the test files the tester changed that round must
-run and pass (at least one). Missing or skipped tests refuse green with
+failure, every test added or changed that round must run and pass (at least one),
+regardless of its attributes, including `cfg` and `ignore`. Missing or skipped tests refuse green with
 `the tester's tests did not run: <names/files>`; this also blocks the pre-existing
 failure exemption below.
 Integration failures follow the target's declared module path to the defining
@@ -451,32 +455,21 @@ A pre-commit that stages only test files runs clippy without test targets, so
 red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
 
-Test-first is reported, never enforced: `make ship` proceeds whatever the
-report says. From Git alone, `aoe-harness`
-(`crates/harness/src/ship/test_first/`) writes a short report into the
-description's "For AI" part and into the facts every reviewer reads:
+`make red` runs the changed Rust tests and Playwright specs against each
+PR-owned tests-only commit (its parent implementation plus tests), then against
+HEAD. A named changed test must fail before implementation and run successfully
+at HEAD; test bytes must stay identical. The harness writes the record itself
+under the protected Git common directory, keyed to the exact base, test commits,
+parents and HEAD. `make ship` refuses product/build changes without it, including
+when a rebase changes those identities. Run `make red` again after a rebase.
 
-- each commit classified as tests-only, product, mixed or other, where product
-  code is any non-test file under `crates/` except `crates/harness/`; changed
-  lines that all lie inside `#[cfg(test)]` items of a product file count as
-  test changes (Rust token/item spans); inline-test files are listed as rule violations. Selected base/dev commits are excluded.
-  Two-parent merges of either are excluded only if their tree equals `git merge-tree --write-tree` of their parents;
-  extra edits are classified against that tree. Conflicted and other merges stay `merge (<kind>)` by first-parent diff;
-- the number of `#[test]`-style functions (`#[test]`, `#[tokio::test]`,
-  `#[rstest]`…, never a `cfg`) owned by the PR before its first product commit;
-- build-time files changed: `build.rs` or a custom `package.build` script,
-  `.cargo/`, `rust-toolchain*`, `.config/nextest.toml`, and a manifest's
-  `build`, `links`, build dependencies (target tables with their selector) or
-  profiles, and the `[workspace.dependencies]` entries that build dependencies
-  inherit, parsed with `toml`;
-- an exemption trailer, `Harness-Test-First: exempt — <reason>`, if any.
-
-A change to the harness, gates, docs or CI alone, with no build-time file, is
-"not applicable". The
-test-integrity reviewer judges the report: product code with no failing test
-before it, a build-time change or a weak exemption is a finding, not a refusal.
-Proving in CI that the tests ran red then green remains
-[#167](https://github.com/Anko59/AoeWorld/issues/167).
+Product scope includes `crates/` except the harness, `web/` and `browser/`.
+Harness, gates, docs and CI alone remain not applicable. A declared
+`Harness-Test-First: exempt — <docs/config/pure refactor reason>` trailer allows
+shipping and is reported for the review personas to judge. Test ordering,
+inline-test changes, build-time inputs, exemptions and failing names appear in
+the review facts and PR description. See [red proof](red-proof.md) for commands,
+budgets, storage, browser selection and the subagent threat model.
 
 ## Limits
 
