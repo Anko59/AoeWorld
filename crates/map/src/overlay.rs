@@ -1,4 +1,4 @@
-use crate::{MapChunkGenerator, ResourceNode};
+use crate::{MapChunkGenerator, ResourceKind, ResourceNode};
 use aoe_core::{TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -106,6 +106,38 @@ impl ResourceOverlay {
         self.remaining
             .range((1 << 37)..)
             .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
+    }
+
+    /// Starting resources whose tiles lie in the inclusive rectangle, in the
+    /// same identity order as `starting_nodes`. Identities are kind-major and
+    /// then row-major, so each (kind, row) is one contiguous range.
+    pub fn starting_nodes_in(
+        &self,
+        min: TileCoord,
+        max: TileCoord,
+    ) -> impl Iterator<Item = ResourceNode> + '_ {
+        const LIMIT: i32 = 1 << 18;
+        let (x0, x1) = (min.x.max(0), max.x.min(LIMIT - 1));
+        let (y0, y1) = (min.y.max(0), max.y.min(LIMIT - 1));
+        let rows = (y0..=y1).filter(move |_| x0 <= x1);
+        [
+            ResourceKind::Food,
+            ResourceKind::Wood,
+            ResourceKind::Gold,
+            ResourceKind::Stone,
+        ]
+        .into_iter()
+        .flat_map(move |kind| {
+            rows.clone().flat_map(move |y| {
+                let first = ResourceNode::starting_id(TileCoord::new(x0, y), kind);
+                let last = ResourceNode::starting_id(TileCoord::new(x1, y), kind);
+                first.zip(last).into_iter().flat_map(move |(first, last)| {
+                    self.remaining
+                        .range(first..=last)
+                        .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
+                })
+            })
+        })
     }
 
     pub fn resource_by_id_with_cancel(
