@@ -8,25 +8,21 @@ use super::mounts::bind;
 use super::origins::Origins;
 use super::workdir::{create_new, write_recorder};
 use super::{
-    Segment, ShowcaseOutput, Storyboard, TTS_MODEL, TTS_PCM_BUDGET, Timings, check_duration,
-    durations, measured_duration, resolve_out, track,
+    Segment, ShowcaseOutput, Storyboard, Timings, check_duration, durations, measured_duration,
+    narrate, resolve_out, track,
 };
 use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
+    time::Instant,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// Fixed OpenRouter speech endpoint.
-const TTS_URL: &str = "https://openrouter.ai/api/v1/audio/speech";
 pub(crate) const DEFAULT_OUT: &str = ".cache/showcase/showcase.webm";
 const STORYBOARD_LIMIT: u64 = 256 * 1024;
-#[cfg(test)]
-const TTS_RESPONSE_LIMIT: u64 = 32 * 1024 * 1024;
-const TTS_ERROR_LIMIT: u64 = 64 * 1024;
 
 fn env(name: &str) -> Result<String> {
     std::env::var(name)
@@ -39,20 +35,6 @@ fn image_env(name: &str) -> Result<String> {
     let image = env(name)?;
     super::check::validate_image_value(&image).map_err(|error| format!("{name} {error}"))?;
     Ok(image)
-}
-
-/// A secret from the environment, else from the keyring, where every
-/// credential of this project lives (docs/credentials.md).
-fn credential(name: &str) -> Option<String> {
-    if let Some(value) = std::env::var(name).ok().filter(|v| !v.is_empty()) {
-        return Some(value);
-    }
-    let output = Command::new("secret-tool")
-        .args(["lookup", "service", "codex-api", "name", name])
-        .output()
-        .ok()?;
-    let value = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-    (output.status.success() && !value.is_empty()).then_some(value)
 }
 
 fn user() -> String {
@@ -82,116 +64,9 @@ fn path(p: &Path) -> &str {
     p.to_str().unwrap_or_default()
 }
 
-pub(crate) fn tts_command(request: &Path) -> Command {
-    let mut command = Command::new("curl");
-    command
-        .args(["-q", "-sS", "--fail-with-body", "--max-time", "120"])
-        .args(["-X", "POST", TTS_URL, "-H", "@-", "--data-binary"])
-        .arg(format!("@{}", request.display()))
-        .stdin(Stdio::piped());
-    command.stdout(Stdio::piped());
-    command
-}
-
-#[cfg(test)]
-pub(crate) fn save_tts_response(child: &mut std::process::Child, audio: &Path) -> Result<u64> {
-    save_tts_response_limited(child, audio, TTS_RESPONSE_LIMIT)
-}
-
-fn save_tts_response_limited(
-    child: &mut std::process::Child,
-    audio: &Path,
-    limit: u64,
-) -> Result<u64> {
-    let mut stdout = child.stdout.take().ok_or("curl stdout was not piped")?;
-    let mut limited = (&mut stdout).take(limit + 1);
-    let mut file = create_new(audio)?;
-    let mut total = 0_u64;
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let count = limited.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        let remaining = limit.saturating_sub(total) as usize;
-        let accepted = count.min(remaining);
-        file.write_all(&buffer[..accepted])?;
-        total += accepted as u64;
-        if accepted != count {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!("speech response exceeds the {limit}-byte limit").into());
-        }
-    }
-    let status = child.wait()?;
-    if !status.success() {
-        let mut reason = String::new();
-        let file = fs::File::open(audio)?;
-        file.take(TTS_ERROR_LIMIT).read_to_string(&mut reason)?;
-        return Err(format!("speech request failed: {}", reason.trim()).into());
-    }
-    Ok(total)
-}
-
 pub(crate) fn concat_entry(file: &Path) -> String {
     let escaped = path(file).replace('\'', "'\\''");
     format!("file '{escaped}'\n")
-}
-
-/// Voice each narrated scene; returns each voice-over's length.
-pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<Vec<Option<u64>>> {
-    if board.scenes.iter().all(|s| s.narration().is_none()) {
-        return Ok(vec![None; board.scenes.len()]);
-    }
-    let key = credential("OPENROUTER_API_KEY").ok_or(
-        "the storyboard has narration, but OPENROUTER_API_KEY is neither set nor in the keyring (docs/credentials.md)",
-    )?;
-    let mut lengths = vec![];
-    let mut total_bytes = 0_u64;
-    for (index, scene) in board.scenes.iter().enumerate() {
-        let Some(text) = scene.narration() else {
-            lengths.push(None);
-            continue;
-        };
-        let request = work.join(format!("tts-{index}.json"));
-        let body = serde_json::json!({
-            "model": TTS_MODEL, "input": text, "voice": board.voice, "response_format": "pcm",
-        });
-        create_new(&request)?.write_all(body.to_string().as_bytes())?;
-        let audio = work.join(format!("voice-{index}.pcm"));
-        let remaining = TTS_PCM_BUDGET.saturating_sub(total_bytes);
-        if remaining == 0 {
-            return Err(format!(
-                "narration exceeds the {TTS_PCM_BUDGET}-byte aggregate PCM budget"
-            )
-            .into());
-        }
-        let mut child = tts_command(&request).spawn()?;
-        child
-            .stdin
-            .take()
-            .ok_or("curl stdin was not piped")?
-            .write_all(
-                format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
-            )?;
-        let bytes = save_tts_response_limited(&mut child, &audio, remaining)
-            .map_err(|error| format!("speech for scene {} failed: {error}", index + 1))?;
-        if bytes == 0 {
-            return Err(format!("speech for scene {}: no audio", index + 1).into());
-        }
-        total_bytes = total_bytes.saturating_add(bytes);
-        let seconds = super::pcm_seconds(bytes);
-        lengths.push(Some((seconds * 1000.0).ceil() as u64));
-        if lengths.len() == index + 1 {
-            let planned = durations(board, &lengths);
-            if let Err(error) = check_duration(level, &planned) {
-                return Err(
-                    format!("narration exceeds the showcase duration budget: {error}").into(),
-                );
-            }
-        }
-    }
-    Ok(lengths)
 }
 
 /// Record the plan in one Playwright take; returns the silent WebM and timings.
@@ -201,8 +76,7 @@ pub(crate) fn narrate(work: &Path, board: &Storyboard, level: Level) -> Result<V
 /// origin of the scene on screen.
 fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings)> {
     let browser = image_env("BROWSER_IMAGE")?;
-    let modules = std::env::var_os("AOE_SHOWCASE_NODE_MODULES")
-        .map_or_else(|| root.join("browser/node_modules"), PathBuf::from);
+    let modules = super::preparation::modules(root);
     if !modules.join("playwright").is_dir() {
         return Err(format!(
             "{} has no Playwright: run `make browser-deps`",
@@ -360,8 +234,10 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_OUT.into());
     let out = resolve_out(root, &requested_out)?;
-    Origins::from_env(&board)?;
-    check_duration(level, &durations(&board, &vec![None; board.scenes.len()]))?;
+    let planned = durations(&board, &vec![None; board.scenes.len()]);
+    check_duration(level, &planned)?;
+    let mut validation = plan(&board, &planned, &Origins::from_env(&board)?)?;
+    super::capture::apply(root, &mut validation)?;
     Ok((board, out, level))
 }
 
@@ -399,21 +275,47 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
     let work = super::workdir::create_work_dir(root)?;
     let work_path = work.path();
     (|| -> Result<PathBuf> {
-        let voices = narrate(work_path, &board, level)?;
+        let phase = Instant::now();
+        let voices = narrate(root, work_path, &board, level)?;
+        eprintln!(
+            "showcase-phase narration_ms {}",
+            phase.elapsed().as_millis()
+        );
         let planned = durations(&board, &voices);
         check_duration(level, &planned)?;
         let make = env("MAKE")?;
+        let phase = Instant::now();
+        let reuse = super::preparation::ready(root, &super::preparation::modules(root));
+        let dependencies = if reuse {
+            "browser-tools"
+        } else {
+            "browser-deps"
+        };
+        println!(
+            "showcase-deps: cache {}",
+            if reuse { "hit" } else { "miss" }
+        );
         let status = Command::new(make)
-            .args(["--no-print-directory", "ship-tools", "browser-deps"])
+            .args(["--no-print-directory", "ship-tools", dependencies])
             .status()?;
         if !status.success() {
             return Err("building showcase images failed".into());
         }
-        let plan = plan(&board, &planned, &Origins::from_env(&board)?)?;
+        eprintln!(
+            "showcase-phase image_dependencies_ms {}",
+            phase.elapsed().as_millis()
+        );
+        let mut plan = plan(&board, &planned, &Origins::from_env(&board)?)?;
+        super::capture::apply(root, &mut plan)?;
+        let phase = Instant::now();
         let (silent, timings) = record(root, work_path, &plan)?;
+        eprintln!("showcase-phase recorder_ms {}", phase.elapsed().as_millis());
+        super::capture::verify(work_path, &plan)?;
         let measured = measured_duration(level, &timings, board.scenes.len())?;
         let encoded = work_path.join("showcase.webm");
-        let publish = if voices.iter().any(Option::is_some) {
+        let phase = Instant::now();
+        let voiced = voices.iter().any(Option::is_some);
+        let publish = if voiced {
             mix(
                 work_path,
                 &tools,
@@ -429,6 +331,14 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
                 .map_err(Into::into)
         };
         publish?;
+        eprintln!(
+            "showcase-phase ffmpeg_ms {}",
+            if voiced {
+                phase.elapsed().as_millis()
+            } else {
+                0
+            }
+        );
         publish_temp_output(&encoded, &out, work_path)?;
         let seconds = measured / 1000;
         println!(

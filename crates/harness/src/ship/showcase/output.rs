@@ -146,7 +146,10 @@ pub(super) fn open_directory(path: &Path) -> nix::Result<std::fs::File> {
     Ok(std::fs::File::from(fd))
 }
 
-fn open_or_create_child(parent: &std::fs::File, name: &str) -> nix::Result<std::fs::File> {
+pub(super) fn open_or_create_child(
+    parent: &std::fs::File,
+    name: &str,
+) -> nix::Result<std::fs::File> {
     let name = std::ffi::CString::new(name).map_err(|_| nix::errno::Errno::EINVAL)?;
     match nix::fcntl::openat(
         parent,

@@ -308,3 +308,14 @@ fn the_window_never_exceeds_four_seconds() {
     let history = frame_changes(&[1000, 2000, 3000, 4000, 5000, 6000], 6000);
     assert_eq!(window_ms(&history), 4000);
 }
+
+#[test]
+fn missing_or_unpresented_frames_are_not_settled_even_with_zero_pending() {
+    for frame in [-1, 0] {
+        let history = [sample(0, 0, 0, frame), sample(5000, 0, 0, frame)];
+        assert!(
+            matches!(decide(&history), Verdict::Unsettled { .. }),
+            "{frame}"
+        );
+    }
+}
