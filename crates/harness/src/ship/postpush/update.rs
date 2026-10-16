@@ -313,19 +313,36 @@ fn conflict(root: &Path, repository: &str, pr: &Waiting, files: &[String]) -> Re
         .map(|f| format!("`{f}`"))
         .collect::<Vec<_>>()
         .join(", ");
-    refusal(
-        root,
-        repository,
-        pr,
-        CONFLICT_TAG,
-        &format!(
-            "This pull request could not be updated (dev merged in) from `{BASE}` ({} files conflict: {list}). \
-             It is left as it is: rebase it, resolve the conflict, and ship again.",
-            files.len()
-        ),
-    )?;
+    refusal(root, repository, pr, CONFLICT_TAG, &conflict_message(files))?;
     println!("update-prs: #{} conflicts with {BASE} in {list}", pr.number);
     Ok(())
+}
+
+/// The tag that starts the conflict comment for `head`; `make next` matches it.
+pub(super) fn conflict_tag(head: &str) -> String {
+    format!("{CONFLICT_TAG}{head} -->")
+}
+
+/// The conflict comment's text after its tag line: the message `conflict` posts.
+pub(super) fn conflict_message(files: &[String]) -> String {
+    let list = files
+        .iter()
+        .map(|f| format!("`{f}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "This pull request could not be updated (dev merged in) from `{BASE}` ({} files conflict: {list}). \
+         It is left as it is: rebase it, resolve the conflict, and ship again.",
+        files.len()
+    )
+}
+
+/// The backticked file list that [`conflict_message`] names, read back from a comment.
+pub(super) fn conflict_list(body: &str) -> Option<&str> {
+    body.split_once("files conflict: ")?
+        .1
+        .split_once("). It is left")
+        .map(|(list, _)| list)
 }
 
 fn failure(root: &Path, repository: &str, pr: &Waiting, why: &str) -> Result<()> {
