@@ -22,8 +22,11 @@ bushes, seven gold nodes, five stone nodes and twelve trees. Compact clusters
 prefer offsets of six, nine, ten and eight tiles respectively. A cardinal graph
 within fifteen tiles certifies gathering access to every new and existing node
 and preserves all center exits after each cluster. Each kind tries at most 128
-anchors in two orientations; no terrain or natural resource is removed. A start
-without enough free reachable ground is refused rather than left without a kit.
+anchors in two orientations; no terrain or natural resource is removed. Each
+kind tries its full cluster, then one node, and is omitted when neither fits, so
+a start with no room for a kit begins with an empty or partial one. Activation
+is refused when no footprint has enough reachable free perimeter tiles for the
+starting villagers, plus the scout when it must leave its found position.
 Restored overlays retain the original kit, including exhausted nodes.
 
 Starting resources are authoritative overlay entries: bit 37 marks their
