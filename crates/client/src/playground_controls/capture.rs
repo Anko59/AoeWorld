@@ -7,7 +7,7 @@ use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 pub(crate) struct Fragment(pub [f64; 4]);
 
 impl Fragment {
-    fn has_camera(&self) -> bool {
+    pub(super) fn has_camera(&self) -> bool {
         self.0[..3].iter().any(|value| value.is_finite())
     }
 

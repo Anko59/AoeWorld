@@ -108,6 +108,7 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
         .collect::<Vec<_>>();
     let units = (0..500)
         .map(|i| SceneUnit {
+            kind: Default::default(),
             id: EntityId(i as u32),
             position: at(i * 7 + 3, 23),
             moving: i % 2 == 0,

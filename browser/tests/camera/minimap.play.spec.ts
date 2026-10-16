@@ -48,8 +48,10 @@ test("strategic raster is one bounded request per map and never loads the world"
     navigation.map(new Uint8Array(32).fill(11));
     navigation.map(new Uint8Array(32).fill(11));
   });
-  await expect(page.locator("#minimap-title")).toHaveText(
-    "Minimap · terrain (64×64)",
+  await expect(page.locator("#minimap-title")).toHaveText("Minimap · terrain");
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster-samples",
+    "64",
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",
@@ -88,7 +90,7 @@ test("strategic raster is one bounded request per map and never loads the world"
     await page.getByRole("button", { name: "Show whole map" }).click();
     await expect(page.locator("#minimap")).toHaveClass(/expanded/);
     await expect(page.locator("#minimap-title")).toHaveText(
-      "Whole map · terrain (64×64)",
+      "Whole map · terrain",
     );
     await page.keyboard.press("Escape");
     await expect(page.locator("#minimap")).not.toHaveClass(/expanded/);

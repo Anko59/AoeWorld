@@ -64,6 +64,7 @@ fn gameplay_collections_are_bounded() {
             kind: UnitKind::Scout,
             task: UnitTask::Idle,
             carried: None,
+            gathering: None,
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

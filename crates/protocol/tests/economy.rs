@@ -37,6 +37,7 @@ fn unit() -> GameplayUnitState {
         facing: 3,
         kind: UnitKind::Villager,
         task: UnitTask::Returning,
+        gathering: Some(ResourceKind::Wood),
         carried: Some(CarriedResource {
             kind: ResourceKind::Wood,
             amount: 10,
@@ -56,6 +57,13 @@ fn snapshot() -> GameplayServerMessage {
 #[test]
 fn economy_commands_have_current_golden_wire_and_roundtrip() {
     for (message, bytes) in [
+        (
+            GameplayClientMessage::CancelTrainingOrder {
+                sequence: 8,
+                building_id: EntityId(5),
+            },
+            vec![6, 8, 5],
+        ),
         (
             GameplayClientMessage::GatherOrder {
                 sequence: 9,
@@ -87,8 +95,8 @@ fn full_economy_snapshot_and_delta_roundtrip() {
     assert_eq!(
         bytes,
         vec![
-            1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 0, 200, 1, 200, 1, 100,
-            200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 0, 3, 244, 3
+            1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 1, 0, 200, 1, 200,
+            1, 100, 200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 0, 3, 244, 3
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -266,4 +274,41 @@ fn maximum_combined_frame_fits_and_rejects_one_more_building_removal() {
     };
     assert!(encode_gameplay_server(&oversized).is_err());
     assert!(decode_gameplay_server(&postcard::to_allocvec(&oversized).unwrap()).is_err());
+}
+
+#[test]
+fn zero_load_gatherer_kind_roundtrips_without_terrain_or_inventory() {
+    for kind in [
+        ResourceKind::Food,
+        ResourceKind::Wood,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let mut worker = unit();
+        worker.task = UnitTask::Gathering;
+        worker.carried = None;
+        worker.gathering = Some(kind);
+        let message = GameplayServerMessage::Snapshot {
+            revision: 3,
+            tick: Tick(20),
+            units: vec![worker],
+            players: vec![],
+            buildings: vec![],
+        };
+        assert_eq!(
+            decode_gameplay_server(&encode_gameplay_server(&message).unwrap()).unwrap(),
+            message
+        );
+    }
+    let mut scout = unit();
+    scout.kind = UnitKind::Scout;
+    scout.carried = None;
+    let message = GameplayServerMessage::Snapshot {
+        revision: 3,
+        tick: Tick(20),
+        units: vec![scout],
+        players: vec![],
+        buildings: vec![],
+    };
+    assert!(encode_gameplay_server(&message).is_err());
 }

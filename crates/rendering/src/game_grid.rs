@@ -17,9 +17,18 @@ pub(crate) fn selection_ring(
     position: [f64; 2],
     elevation_meters: f64,
 ) -> Vec<(Sprite, f64)> {
+    selection_ellipse(camera, position, elevation_meters, [24.0, 8.0])
+}
+
+pub(crate) fn selection_ellipse(
+    camera: SceneCamera,
+    position: [f64; 2],
+    elevation_meters: f64,
+    radius: [f64; 2],
+) -> Vec<(Sprite, f64)> {
     let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
-    let radius_x = 24.0 * camera.zoom;
-    let radius_y = 8.0 * camera.zoom;
+    let radius_x = radius[0] * camera.zoom;
+    let radius_y = radius[1] * camera.zoom;
     let mut sprites = Vec::with_capacity(SELECTION_RING_SPRITES);
     for [cos, sin] in RING_POINTS {
         let point = ScreenPoint {

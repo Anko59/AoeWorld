@@ -80,6 +80,8 @@ pub(crate) fn forest_faces(
         anchor: [0.0; 2],
     };
     let art = crate::GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: vec![frame(0)],

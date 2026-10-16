@@ -44,6 +44,7 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
         {
             let mut client = client.borrow_mut();
             client.surface_fixture = true;
+            client.village.focused = true;
             client.map_content_hash = Some(bytes);
             client.focus_map_hash = None;
             map::clear_terrain_cache(&mut client);

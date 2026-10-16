@@ -22,6 +22,7 @@ async function openMap(page: Page): Promise<string> {
     if (!response.ok) throw new Error(await response.text());
   }, hash);
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
@@ -57,8 +58,10 @@ test("minimap raster readiness waits for terrain and resets when the map changes
     "data-raster",
     "ready",
   );
-  await expect(page.locator("#minimap-title")).toHaveText(
-    /Minimap · terrain \(\d+×\d+\)/,
+  await expect(page.locator("#minimap-title")).toHaveText("Minimap · terrain");
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster-samples",
+    /^[1-9]\d*$/,
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",

@@ -144,27 +144,40 @@ async fn fetch_bounds(hash: [u8; 32]) -> Result<(i16, i16), JsValue> {
         return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
     }
     let body = JsFuture::from(response.text()?).await?;
-    let bounds: serde_json::Value = serde_json::from_str(
+    parse_bounds(
         &body
             .as_string()
             .ok_or("height bounds response was not text")?,
+        &content_hash,
     )
-    .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    let minimum = bounds["minimum_height_level"]
-        .as_i64()
-        .and_then(|value| i16::try_from(value).ok());
-    let maximum = bounds["maximum_height_level"]
-        .as_i64()
-        .and_then(|value| i16::try_from(value).ok());
-    match (minimum, maximum) {
-        (Some(min), Some(max))
-            if min <= max && bounds["content_hash"].as_str() == Some(content_hash.as_str()) =>
-        {
-            Ok((min, max))
-        }
-        _ => Err(JsValue::from_str("invalid map height bounds")),
+}
+
+// A typed projection avoids retaining a general JSON object tree in the
+// village bundle. Reject the same integer range, identity and order failures.
+fn parse_bounds(body: &str, content_hash: &str) -> Result<(i16, i16), JsValue> {
+    if !body.trim_start().starts_with('{') {
+        return Err(JsValue::from_str("invalid map height bounds"));
+    }
+    #[derive(serde::Deserialize)]
+    struct Bounds {
+        content_hash: String,
+        minimum_height_level: i16,
+        maximum_height_level: i16,
+    }
+    let bounds: Bounds =
+        serde_json::from_str(body).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    if bounds.minimum_height_level <= bounds.maximum_height_level
+        && bounds.content_hash == content_hash
+    {
+        Ok((bounds.minimum_height_level, bounds.maximum_height_level))
+    } else {
+        Err(JsValue::from_str("invalid map height bounds"))
     }
 }
+
+#[path = "heights/tests.rs"]
+#[cfg(test)]
+mod tests;
 
 pub(super) fn cached_candidates(client: &mut Client) -> &[(i32, i32)] {
     let camera = client.camera;

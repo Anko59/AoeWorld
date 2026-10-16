@@ -17,6 +17,7 @@ function unsigned(value: number): number[] {
 test("camera demand aborts a full old window without backoff or exceeding 64", async ({
   page,
 }) => {
+  // Expanding the HUD minimap must keep input responsive during cancellation.
   // Transport and terrain are synthetic. This tests browser cancellation, not
   // real-source fidelity, RTS traversal or production hardware performance.
   await gameAssets(page);
@@ -91,6 +92,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
           1, // Scout
           0, // Idle
           0, // No carried resource
+          0, // No gathering job
           0, // Players
           0, // Buildings
         ]),

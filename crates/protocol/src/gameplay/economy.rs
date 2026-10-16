@@ -98,6 +98,9 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
         unit.facing < 8
+            && unit
+                .gathering
+                .is_none_or(|_| unit.kind == UnitKind::Villager)
             && unit.carried.is_none_or(|load| {
                 unit.kind == UnitKind::Villager && load.amount > 0 && load.amount <= 10
             })

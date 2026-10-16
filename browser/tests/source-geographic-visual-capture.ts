@@ -113,6 +113,7 @@ export async function ready(page: Page) {
 }
 
 async function joinActivatedWorld(page: Page) {
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await ready(page);
 }
@@ -386,6 +387,7 @@ export async function captureCase(
     initialCamera ?? "",
   );
   await expect(page.locator("#connection")).toHaveText("connected");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await ready(page);
   await page.reload();

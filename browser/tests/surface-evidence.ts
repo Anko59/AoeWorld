@@ -84,7 +84,8 @@ export function syntheticTerrainCoverage(image: PNG) {
   ];
   let covered = 0;
   let samples = 0;
-  for (let y = 8; y < image.height - 8; y += 8) {
+  // The HTML top bar and bottom frame cover the canvas; measure the visible world.
+  for (let y = 54 + 8; y < image.height - 208 - 8; y += 8) {
     for (let x = 8; x < image.width - 8; x += 8) {
       const offset = (y * image.width + x) * 4;
       samples += 1;

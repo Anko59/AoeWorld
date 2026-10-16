@@ -34,6 +34,8 @@ pub(crate) fn frame(x: usize) -> GameFrame {
 }
 pub(crate) fn art() -> GameArt {
     GameArt {
+        village: Default::default(),
+        town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: Vec::new(),

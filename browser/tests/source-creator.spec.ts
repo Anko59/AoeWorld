@@ -260,6 +260,7 @@ test("ordinary creator prepares and activates overview and detailed source maps"
       preview.minimum_height_centimeters,
     );
 
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Reconnect to server" }).click();
     await ready(page);
     await expect
@@ -353,6 +354,7 @@ test("overview and detailed packages reopen and load unseen chunks offline", asy
       `Saved map active: ${hash.slice(0, 12)}`,
       { timeout: 30_000 },
     );
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page.getByRole("button", { name: "Reconnect to server" }).click();
     await ready(page);
     await expect(page.locator("#playground")).toHaveAttribute(

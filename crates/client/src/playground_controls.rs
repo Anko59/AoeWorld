@@ -70,17 +70,19 @@ fn pick(client: &Client, target: ScreenPoint) -> Option<aoe_core::EntityId> {
         .map(|(_, id)| id)
 }
 
-fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Option<aoe_core::EntityId> {
-    let (min_x, max_x) = (start.x.min(end.x), start.x.max(end.x));
-    let (min_y, max_y) = (start.y.min(end.y), start.y.max(end.y));
-    client
-        .units
-        .keys()
-        .find(|id| {
-            let screen = map::screen_position(client, position_at(client, **id));
-            screen.x >= min_x && screen.x <= max_x && screen.y >= min_y && screen.y <= max_y
-        })
-        .copied()
+fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Vec<aoe_core::EntityId> {
+    super::village::selection::box_members(
+        client.units.values().map(|u| {
+            (
+                u.id,
+                u.player,
+                map::screen_position(client, position_at(client, u.id)),
+            )
+        }),
+        super::village::owner(client),
+        start,
+        end,
+    )
 }
 
 fn pan_camera(mut camera: Camera, config: WorldConfig, delta: [f64; 2]) -> Camera {
@@ -175,6 +177,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             send_order(&mut client, target);
             return;
         }
+        if event.button() == 0 && client.village.move_cursor {
+            send_order(&mut client, target);
+            return;
+        }
         let middle = event.button() == 1;
         if event.button() != 0 && !middle {
             return;
@@ -217,7 +223,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             subscribe(&mut client);
         }
     });
-    canvas.add_event_listener_with_callback("pointermove", onmove.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("pointermove", onmove.as_ref().unchecked_ref())?;
     onmove.forget();
 
     let released = shared.clone();
@@ -228,11 +237,13 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let moved = (drag.current.x - drag.start.x).abs() > 4.0
                 || (drag.current.y - drag.start.y).abs() > 4.0;
             if !drag.middle {
-                client.selected = if moved {
-                    pick_box(&client, drag.start, target)
+                if moved {
+                    let units = pick_box(&client, drag.start, target);
+                    client.selected.units(units);
                 } else {
-                    pick(&client, target)
-                };
+                    let unit = pick(&client, target);
+                    super::village::picking::click(&mut client, target, unit);
+                }
             }
         }
         let _ = client.canvas.release_pointer_capture(event.pointer_id());
@@ -240,11 +251,24 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     canvas.add_event_listener_with_callback("pointerup", onup.as_ref().unchecked_ref())?;
     canvas.add_event_listener_with_callback("pointercancel", onup.as_ref().unchecked_ref())?;
     onup.forget();
+    let doubled = shared.clone();
+    let ondouble = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
+        let mut client = doubled.borrow_mut();
+        let target = point(&client, &event);
+        if let Some(unit) = pick(&client, target) {
+            super::village::picking::double_click(&mut client, unit);
+        }
+    });
+    canvas.add_event_listener_with_callback("dblclick", ondouble.as_ref().unchecked_ref())?;
+    ondouble.forget();
     let left = shared.clone();
     let onleave = Closure::<dyn FnMut(PointerEvent)>::new(move |_| {
         left.borrow_mut().pointer = None;
     });
-    canvas.add_event_listener_with_callback("pointerleave", onleave.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("pointerleave", onleave.as_ref().unchecked_ref())?;
     onleave.forget();
     let context = Closure::<dyn FnMut(Event)>::new(move |event: Event| event.prevent_default());
     canvas.add_event_listener_with_callback("contextmenu", context.as_ref().unchecked_ref())?;
@@ -284,11 +308,14 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = keyed.borrow_mut();
         match action {
             1 => {
-                client.selected = None;
+                client.selected = Default::default();
+                client.village.move_cursor = false;
                 client.drag = None;
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
+            4 => super::village::orders::train(&mut client, false),
+            5 => super::village::orders::focus_town_center(&mut client, true),
             _ => return,
         }
         subscribe(&mut client);
@@ -304,6 +331,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         ("recenter", 1),
         ("reconnect", 2),
         ("fullscreen", 3),
+        ("town-center", 4),
     ] {
         if let Some(button) = shared.borrow().document.get_element_by_id(id) {
             let target = shared.clone();
@@ -312,8 +340,11 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 1 => center_on_primary(&mut target.borrow_mut()),
                 2 => reconnect(target.clone()),
                 3 => {
-                    let _ = target.borrow().canvas.request_fullscreen();
+                    if let Some(game) = target.borrow().document.get_element_by_id("playground") {
+                        let _ = game.request_fullscreen();
+                    }
                 }
+                4 => super::village::orders::focus_town_center(&mut target.borrow_mut(), true),
                 _ => {}
             });
             button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;

@@ -57,6 +57,32 @@ impl GameWorld {
         Ok(())
     }
 
+    /// Cancel the active entry, refund its food, and release its reserved slot.
+    /// Repeating cancellation on an empty queue cannot create resources.
+    pub fn issue_cancel_training(
+        &mut self,
+        player: PlayerId,
+        center: EntityId,
+    ) -> Result<(), EconomyError> {
+        let building = self
+            .economy
+            .buildings
+            .get_mut(&center)
+            .ok_or(EconomyError::UnknownEntity)?;
+        if building.player != player {
+            return Err(EconomyError::NotOwner);
+        }
+        if building.training_queue.pop_front().is_some()
+            && let Some(state) = self.economy.players.get_mut(&player)
+        {
+            state.stockpile.food = state
+                .stockpile
+                .food
+                .saturating_add(VILLAGE_RULES.villager_food_cost);
+        }
+        Ok(())
+    }
+
     pub(super) fn advance_training(&mut self, changed: &mut Vec<crate::GameUnit>) {
         let centers = self.economy.buildings.keys().copied().collect::<Vec<_>>();
         for id in centers {

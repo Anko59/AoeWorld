@@ -48,6 +48,7 @@ fn lazy_objects_preserve_materialized_order_and_every_packet_bit() {
     ];
     let units = [
         SceneUnit {
+            kind: Default::default(),
             id: EntityId(100),
             position: [0.5; 2],
             moving: true,
@@ -56,6 +57,7 @@ fn lazy_objects_preserve_materialized_order_and_every_packet_bit() {
             elevation_meters: 0.0,
         },
         SceneUnit {
+            kind: Default::default(),
             id: EntityId(102),
             position: [0.5; 2],
             moving: false,

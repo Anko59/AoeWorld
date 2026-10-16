@@ -233,3 +233,26 @@ fn all_four_loads_deposit_into_only_the_matching_player_stockpile_field() {
         assert_eq!(world.unit(id).unwrap().carried, None);
     }
 }
+
+#[test]
+fn authoritative_job_kind_survives_collection_and_return_but_clears_on_stop() {
+    let (mut world, node, id) = resource_world(ResourceKind::Wood);
+    world.initialize_village(PlayerId(0), node.tile).unwrap();
+    world.issue_gather(PlayerId(0), id, node.id).unwrap();
+    assert_eq!(world.gathering_kind(id), Some(ResourceKind::Wood));
+    assert!(world.unit(id).unwrap().carried.is_none());
+    for _ in 0..6000 {
+        world.advance();
+        assert_eq!(world.gathering_kind(id), Some(ResourceKind::Wood));
+        if world.unit(id).unwrap().task == UnitTask::Returning {
+            break;
+        }
+    }
+    let unit = world.unit(id).unwrap();
+    assert_eq!(unit.task, UnitTask::Returning);
+    assert!(unit.carried.is_some());
+    world.issue_move(id, unit.position).unwrap();
+    assert_eq!(world.gathering_kind(id), None);
+    assert_eq!(world.unit(id).unwrap().task, UnitTask::Carrying);
+    assert!(world.unit(id).unwrap().carried.is_some());
+}

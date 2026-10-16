@@ -4,6 +4,8 @@ use crate::terrain::visible_terrain_frames;
 
 #[path = "scenery.rs"]
 mod scenery;
+#[path = "village/mod.rs"]
+mod village;
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
@@ -150,17 +152,17 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
-        let frames = if unit.moving {
-            &art.walking
-        } else {
-            &art.standing
-        };
-        if frames.is_empty() {
+        if unit.kind == crate::SceneUnitKind::TownCenter {
+            village::town_center(art, unit, camera, &mut emit);
             continue;
         }
+        let Some((frames, stride, animated)) = village::frames(art, unit) else {
+            village::marker(unit, camera, &mut emit);
+            continue;
+        };
         let (direction, flipped) = sprite_direction(unit.facing);
         let frame =
-            world_frame(frames[direction * 10 + if unit.moving { animation % 10 } else { 0 }]);
+            world_frame(frames[direction * stride + if animated { animation % stride } else { 0 }]);
         let scale = camera.zoom as f32;
         let width = f64::from(frame.size[0]) * camera.zoom;
         let height = f64::from(frame.size[1]) * camera.zoom;
@@ -229,7 +231,13 @@ const GROUND_CLEARANCE: f64 = 1.5;
 
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    surface_depth([position[0], position[1], object.elevation_meters()]) + GROUND_CLEARANCE
+    // The native Town Center reaches 64 source pixels below its anchor, farther
+    // than a tree/unit. Its front foundation must clear its own flat footprint.
+    let clearance = match object {
+        WorldObject::Unit(unit) if unit.kind == crate::SceneUnitKind::TownCenter => 3.0,
+        _ => GROUND_CLEARANCE,
+    };
+    surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
 }
 
 #[derive(Clone, Copy)]
@@ -408,4 +416,23 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
     let facing = facing % 8;
     let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
     (row, matches!(facing, 1..=3))
+}
+
+pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
+    if unit.kind == crate::SceneUnitKind::TownCenter {
+        return false;
+    }
+    let Some((frames, stride, true)) = village::frames(art, unit) else {
+        return false;
+    };
+    let (direction, flipped) = sprite_direction(unit.facing);
+    frames[direction * stride..(direction + 1) * stride]
+        .iter()
+        .any(|frame| {
+            let mut frame = world_frame(*frame);
+            if flipped {
+                frame.anchor[0] = frame.size[0] - frame.anchor[0];
+            }
+            sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
+        })
 }
