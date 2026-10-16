@@ -5,6 +5,8 @@ fn package(name: &str, dependencies: &[&str]) -> Package {
         name: name.into(),
         dir: format!("crates/{name}"),
         dependencies: dependencies.iter().map(|d| (*d).into()).collect(),
+        lib: true,
+        text: String::new(),
     }
 }
 
@@ -18,6 +20,15 @@ fn workspace() -> Vec<Package> {
         package("server", &["simulation", "protocol", "serde"]),
         package("tool", &[]),
     ]
+}
+
+/// `workspace()` where `simulation` reads the geodata matrix and `tool` the showcase doc.
+fn readers() -> Vec<Package> {
+    let mut packages = workspace();
+    packages[2].text =
+        "let m = include_str!(\"../../../docs/geodata/reference-matrix.json\");".into();
+    packages[5].text = "std::fs::read_to_string(\"docs/showcase.md\")".into();
+    packages
 }
 
 fn files(paths: &[&str]) -> Vec<String> {
@@ -139,4 +150,46 @@ fn metadata_gives_directories_and_dependencies_of_the_workspace() {
         Some(vec!["a".to_owned(), "b".to_owned()])
     );
     assert!(parse_metadata("{}").is_err());
+}
+
+#[test]
+fn a_doc_a_test_reads_selects_the_crates_that_name_it() {
+    let selection = select(&readers(), &files(&["docs/geodata/reference-matrix.json"]));
+    assert_eq!(selection, crates(&["simulation"], &["server"]));
+    let selection = select(&readers(), &files(&["docs/showcase.md"]));
+    assert_eq!(selection, crates(&["tool"], &[]));
+}
+
+#[test]
+fn a_directory_a_crate_reads_selects_it_but_a_top_level_directory_does_not() {
+    let mut packages = workspace();
+    packages[1].text = "Path::new(\"docs/geodata\")".into();
+    packages[3].text = "\"docs\"".into();
+    let selection = select(&packages, &files(&["docs/geodata/other.json"]));
+    assert_eq!(selection, crates(&["map"], &["server", "simulation"]));
+}
+
+#[test]
+fn an_unreferenced_doc_selects_no_crate() {
+    let selection = select(&readers(), &files(&["docs/unread.md", "web/app.js"]));
+    assert_eq!(selection.packages(), Some(vec![]));
+}
+
+#[test]
+fn metadata_marks_the_packages_with_a_library_target() {
+    let json = r#"{"workspace_root":"/w","packages":[
+        {"name":"bin","manifest_path":"/w/crates/bin/Cargo.toml","dependencies":[],"targets":[{"kind":["bin"]}]},
+        {"name":"lib","manifest_path":"/w/crates/lib/Cargo.toml","dependencies":[],"targets":[{"kind":["lib"]},{"kind":["bin"]}]}]}"#;
+    let packages = parse_metadata(json).unwrap();
+    assert!(!packages[0].lib);
+    assert!(packages[1].lib);
+}
+
+#[test]
+fn the_real_workspace_has_no_doctests_for_the_harness_binary() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let names = vec!["aoe-harness".to_owned(), "aoe-protocol".to_owned()];
+    let libs = library_crates(&root, &names).unwrap();
+    assert!(!libs.contains(&"aoe-harness".to_owned()), "{libs:?}");
+    assert!(libs.contains(&"aoe-protocol".to_owned()), "{libs:?}");
 }

@@ -3,13 +3,14 @@
 //! The changed files map to their owning workspace crates; those crates plus
 //! every crate that depends on them, transitively, are tested. A file outside
 //! every crate runs the whole workspace, except under `web/`, `browser/` and
-//! `docs/`, which no Rust unit test covers. Only the local preflight asks for a
+//! `docs/`: those select the crates whose sources mention the path (or a parent
+//! directory two levels deep or more), because some tests read such files. Only the local preflight asks for a
 //! selection (`AOE_TEST_SELECT=<merge base>`); CI and `AOE_TEST_ALL=1` never get one.
 use crate::ship::git;
 use serde_json::Value;
 use std::{collections::BTreeSet, path::Path, process::Command};
 
-/// Paths that hold no Rust crate and are tested by other gates.
+/// Paths that hold no Rust crate; only the crates that name them are affected.
 const NO_RUST: &[&str] = &["web/", "browser/", "docs/"];
 
 pub(crate) struct Package {
@@ -17,6 +18,10 @@ pub(crate) struct Package {
     /// Directory relative to the workspace root, without a trailing slash.
     pub(crate) dir: String,
     pub(crate) dependencies: Vec<String>,
+    /// Whether the package has a library target, which is what doctests need.
+    pub(crate) lib: bool,
+    /// The concatenated Rust sources of the crate, read by `plan` for path mentions.
+    pub(crate) text: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,12 +83,54 @@ fn owner<'a>(packages: &'a [Package], file: &str) -> Option<&'a Package> {
     })
 }
 
-/// The dependency-graph rule and nothing else.
+/// The strings a crate source may use to read `file`: its path and each parent
+/// directory that still has two components (`docs/geodata`, not `docs`).
+fn mention_needles(file: &str) -> Vec<String> {
+    let mut needles = vec![file.to_owned()];
+    let mut path = file;
+    while let Some((parent, _)) = path.rsplit_once('/') {
+        if parent.contains('/') {
+            needles.push(parent.to_owned());
+        }
+        path = parent;
+    }
+    needles
+}
+
+/// The Rust sources of `dir`, concatenated, skipping build output.
+fn read_sources(dir: &Path, out: &mut String) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for path in entries {
+        if path.is_dir() {
+            if path.file_name().is_some_and(|n| n != "target") {
+                read_sources(&path, out);
+            }
+        } else if path.extension().is_some_and(|e| e == "rs")
+            && let Ok(text) = std::fs::read_to_string(&path)
+        {
+            out.push_str(&text);
+            out.push('\n');
+        }
+    }
+}
+
+/// The dependency-graph rule, plus the path-mention rule for `NO_RUST` files.
 pub(crate) fn select(packages: &[Package], files: &[String]) -> Selection {
     let total = packages.len();
     let mut changed = BTreeSet::new();
     for file in files {
         if NO_RUST.iter().any(|prefix| file.starts_with(prefix)) {
+            let needles = mention_needles(file);
+            changed.extend(
+                packages
+                    .iter()
+                    .filter(|p| needles.iter().any(|n| p.text.contains(n.as_str())))
+                    .map(|p| p.name.clone()),
+            );
             continue;
         }
         match owner(packages, file) {
@@ -137,7 +184,20 @@ pub(crate) fn parse_metadata(json: &str) -> Result<Vec<Package>, String> {
                 .strip_prefix(&prefix)
                 .and_then(|rest| rest.strip_suffix("/Cargo.toml"))
                 .ok_or_else(|| format!("{name}: manifest {manifest} is outside {root}"))?;
+            let lib = package["targets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|t| {
+                    t["kind"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|k| matches!(k.as_str(), Some("lib" | "rlib" | "proc-macro")))
+                });
             Ok(Package {
+                lib,
+                text: String::new(),
                 name: name.to_owned(),
                 dir: dir.to_owned(),
                 dependencies: package["dependencies"]
@@ -203,7 +263,7 @@ fn changed_files(root: &Path, base: &str) -> Result<Vec<String>, String> {
     Ok(files)
 }
 
-pub(crate) fn plan(root: &Path, base: &str) -> Result<Selection, String> {
+fn metadata(root: &Path) -> Result<Vec<Package>, String> {
     let output = Command::new("cargo")
         .current_dir(root)
         .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
@@ -215,8 +275,30 @@ pub(crate) fn plan(root: &Path, base: &str) -> Result<Selection, String> {
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    let packages = parse_metadata(&String::from_utf8_lossy(&output.stdout))?;
-    Ok(select(&packages, &changed_files(root, base)?))
+    parse_metadata(&String::from_utf8_lossy(&output.stdout))
+}
+
+pub(crate) fn plan(root: &Path, base: &str) -> Result<Selection, String> {
+    let mut packages = metadata(root)?;
+    let files = changed_files(root, base)?;
+    if files
+        .iter()
+        .any(|f| NO_RUST.iter().any(|p| f.starts_with(p)))
+    {
+        for package in &mut packages {
+            read_sources(&root.join(&package.dir), &mut package.text);
+        }
+    }
+    Ok(select(&packages, &files))
+}
+
+/// The selected packages that have a library target, the only ones with doctests.
+pub(crate) fn library_crates(root: &Path, names: &[String]) -> Result<Vec<String>, String> {
+    Ok(metadata(root)?
+        .into_iter()
+        .filter(|p| p.lib && names.contains(&p.name))
+        .map(|p| p.name)
+        .collect())
 }
 
 #[cfg(test)]

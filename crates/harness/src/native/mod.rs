@@ -92,7 +92,28 @@ fn run_scope(packages: Option<&[String]>) -> Result<(), ProcessError> {
             .collect();
         process::run("cargo", &nextest, BUDGET)?;
     }
-    let doc = [&["test"][..], &scope, &["--doc", "--locked"]].concat();
+    let doc_scope: Vec<String> = match packages {
+        None => vec!["--workspace".to_owned()],
+        Some(names) => match affected::library_crates(Path::new("."), names) {
+            Ok(libs) if libs.is_empty() => {
+                println!("test-unit: no selected crate has a library target; no doctests run");
+                return Ok(());
+            }
+            Ok(libs) => libs
+                .into_iter()
+                .flat_map(|p| ["-p".to_owned(), p])
+                .collect(),
+            Err(error) => {
+                eprintln!(
+                    "test-unit: doctest selection failed ({error}); doctests of the whole workspace"
+                );
+                vec!["--workspace".to_owned()]
+            }
+        },
+    };
+    let mut doc = vec!["test"];
+    doc.extend(doc_scope.iter().map(String::as_str));
+    doc.extend(["--doc", "--locked"]);
     process::run("cargo", &doc, BUDGET)
 }
 
