@@ -82,7 +82,8 @@ fn ci_selection_requires_exact_manifest_and_job_outcomes() {
     let manifest = serde_json::to_string(&docs).expect("manifest");
     let results = serde_json::json!({
         "select":"success", "static":"success", "native-coverage":"skipped",
-        "browser":"skipped", "target-performance":"skipped", "fuzz-smoke":"skipped"
+        "browser":"skipped", "e2e":"skipped",
+        "target-performance":"skipped", "fuzz-smoke":"skipped"
     })
     .to_string();
     check_selection(&manifest, &results, &docs).expect("matching selection");
@@ -292,4 +293,60 @@ fn a_pull_request_whose_base_cannot_be_resolved_still_skips_coverage() {
     for job in ["static", "browser", "target-performance", "fuzz-smoke"] {
         assert_eq!(unresolved.jobs.get(job), Some(&true), "{job}");
     }
+}
+
+#[test]
+fn the_e2e_job_is_selected_exactly_when_test_e2e_is() {
+    let registry = registry();
+    assert_eq!(registry.jobs["e2e"], ["test-e2e"]);
+    for paths in [
+        vec!["docs/testing.md".to_owned()],
+        vec!["web/index.html".to_owned()],
+        vec!["crates/map/src/terrain.rs".to_owned()],
+        Vec::new(),
+    ] {
+        for (base, pull_request) in [(Some("b".repeat(40)), true), (None, false)] {
+            let manifest =
+                super::selection(&registry, "a".repeat(40), base, paths.clone(), pull_request)
+                    .expect("selection");
+            let e2e = manifest.gates.contains(&"test-e2e".to_owned());
+            assert_eq!(manifest.jobs["e2e"], e2e, "{paths:?}");
+        }
+    }
+}
+
+#[test]
+fn the_aggregate_requires_the_e2e_job_and_all_its_shards_to_succeed() {
+    let selected = selection("a".repeat(40), None, vec!["web/index.html".into()]);
+    assert!(selected.jobs["e2e"]);
+    let manifest = serde_json::to_string(&selected).expect("manifest");
+    let mut results = BTreeMap::from([("select".to_owned(), "success".to_owned())]);
+    results.extend(
+        selected
+            .jobs
+            .keys()
+            .map(|job| (job.clone(), "success".to_owned())),
+    );
+    let accepted = |results: &BTreeMap<String, String>| {
+        check_selection(
+            &manifest,
+            &serde_json::to_string(results).expect("results"),
+            &selected,
+        )
+    };
+    accepted(&results).expect("every shard passed");
+    for outcome in ["failure", "cancelled", "skipped"] {
+        let mut broken = results.clone();
+        broken.insert("e2e".to_owned(), outcome.to_owned());
+        assert!(accepted(&broken).is_err(), "e2e {outcome}");
+    }
+    let mut missing = results.clone();
+    missing.remove("e2e");
+    assert!(accepted(&missing).is_err());
+    let docs = selection(
+        "a".repeat(40),
+        Some("b".repeat(40)),
+        vec!["docs/testing.md".into()],
+    );
+    assert!(!docs.jobs["e2e"]);
 }
