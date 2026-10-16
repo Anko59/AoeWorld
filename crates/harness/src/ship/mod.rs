@@ -43,6 +43,10 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(clap::Subcommand)]
 pub(crate) enum Commands {
+    /// Prove changed Rust/browser tests fail before implementation and pass at HEAD.
+    Red(test_first::red::Options),
+    /// Internal runner: emit a fresh focused result from an exported snapshot.
+    RedRun(test_first::red::runner::Options),
     /// Run tester red then implementer green and commit each step (DUEL_*).
     Duel,
     /// Run only tester-changed Cargo packages and browser spec files in Docker.
@@ -158,6 +162,8 @@ impl Default for Options {
 pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
+        Commands::Red(options) => test_first::red::execute(&options, slots).map_err(Into::into),
+        Commands::RedRun(options) => test_first::red::runner::execute(&options).map_err(Into::into),
         Commands::Duel => duel::execute(&root).map_err(Into::into),
         Commands::DuelCheck => duel::stages::native(&root).map_err(Into::into),
         Commands::DuelBrowserCheck => duel::stages::browser(&root).map_err(Into::into),
@@ -324,6 +330,16 @@ pub(crate) fn ship_with(
     };
     let base = recheck::start::prepare(root, options)?;
     let _anchor = crate::review::base::scope_at(&options.base, &base);
+    let subject = git::subject(root)?;
+    let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
+    eprint!(
+        "ship: test-first report\n{}",
+        test_first::summary(root, &merge_base, &subject.head)
+    );
+    eprint!(
+        "{}",
+        test_first::red::require(root, &merge_base, &subject.head)?
+    );
     let options = &Options {
         no_fetch: true,
         ..options.clone()
@@ -332,11 +348,6 @@ pub(crate) fn ship_with(
     for result in &evidence.gates {
         eprintln!("{}", result.line());
     }
-    // Reported to the reviewers and in the description; never a refusal.
-    eprint!(
-        "ship: test-first report\n{}",
-        test_first::summary(root, &evidence.merge_base, &evidence.head)
-    );
     match evidence.verdict {
         Verdict::Pass => {}
         Verdict::Fail => {
@@ -369,6 +380,7 @@ pub(crate) fn ship_with(
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),
     };
+    test_first::red::require(root, &evidence.merge_base, &evidence.head)?;
     let lease = if evidence.head != started_head && lease.is_none() {
         recheck::lease(root, options, &git::subject(root)?, &started_head)?
     } else {
