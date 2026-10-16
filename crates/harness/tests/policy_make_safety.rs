@@ -39,26 +39,23 @@ fn evidence_mount_check(evidence: &Path, cargo: &Path, target: &Path) -> std::pr
 }
 
 #[test]
-fn task_and_policy_facades_do_not_forward_host_credentials_or_docker_socket() {
+fn policy_facade_do_not_forward_host_credentials_or_docker_socket() {
     let evidence = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
-    let task = external.path().join("task.json");
     let anchor = external.path().join("anchor.json");
-    fs::write(&task, "{}").unwrap();
     fs::write(&anchor, "{}").unwrap();
     let output = Command::new("make")
         .arg("--no-print-directory")
-        .args(["-n", "task-plan", "policy-prepare"])
+        .args(["-n", "policy-prepare"])
         .current_dir(workspace())
         .env("HARNESS_EVIDENCE_DIR", evidence.path())
-        .env("HARNESS_TASK_FILE", &task)
         .env("HARNESS_POLICY_ANCHOR", &anchor)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
         .env("GH_TOKEN", "fixture-must-not-be-forwarded")
         .env("GITHUB_TOKEN", "fixture-must-not-be-forwarded")
         .output()
-        .expect("render safe task and policy Make targets");
+        .expect("render safe policy Make target");
     assert!(
         output.status.success(),
         "{}",
@@ -67,7 +64,6 @@ fn task_and_policy_facades_do_not_forward_host_credentials_or_docker_socket() {
     let commands = String::from_utf8(output.stdout).unwrap();
     assert!(commands.contains("--read-only"));
     assert!(commands.contains("--cap-drop=ALL"));
-    assert!(commands.contains("--network none"));
     let root = fs::canonicalize(workspace()).unwrap();
     let root_mount = format!("-v {0}:{0}:ro", root.display());
     assert!(commands.contains(&root_mount));
@@ -181,14 +177,14 @@ fn make_evidence_check_accounts_for_the_active_docker_context_socket() {
 
     let check = Command::new("make")
         .arg("--no-print-directory")
-        .arg("harness-task-path-check")
+        .arg("harness-policy-path-check")
         .current_dir(workspace())
         .env("PATH", &search_path)
         .env("HARNESS_TEST_DOCKER_ENDPOINT", &endpoint)
         .env("DOCKER_CONTEXT", "evidence-socket-test")
         .env_remove("DOCKER_HOST")
         .env("HARNESS_EVIDENCE_DIR", evidence.path())
-        .env("HARNESS_TASK_FILE", &task)
+        .env("HARNESS_POLICY_ANCHOR", &task)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
         .output()
@@ -198,14 +194,14 @@ fn make_evidence_check_accounts_for_the_active_docker_context_socket() {
 
     let remote_context_check = Command::new("make")
         .arg("--no-print-directory")
-        .arg("harness-task-path-check")
+        .arg("harness-policy-path-check")
         .current_dir(workspace())
         .env("PATH", &search_path)
         .env("HARNESS_TEST_DOCKER_ENDPOINT", "ssh://builder.example")
         .env("DOCKER_CONTEXT", "evidence-socket-test")
         .env_remove("DOCKER_HOST")
         .env("HARNESS_EVIDENCE_DIR", task_dir.path())
-        .env("HARNESS_TASK_FILE", &task)
+        .env("HARNESS_POLICY_ANCHOR", &task)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
         .output()
@@ -217,14 +213,14 @@ fn make_evidence_check_accounts_for_the_active_docker_context_socket() {
 
     let remote_host_check = Command::new("make")
         .arg("--no-print-directory")
-        .arg("harness-task-path-check")
+        .arg("harness-policy-path-check")
         .current_dir(workspace())
         .env("PATH", &search_path)
         .env("HARNESS_TEST_DOCKER_ENDPOINT", &endpoint)
         .env("DOCKER_CONTEXT", "evidence-socket-test")
         .env("DOCKER_HOST", "tcp://builder.example:2376")
         .env("HARNESS_EVIDENCE_DIR", task_dir.path())
-        .env("HARNESS_TASK_FILE", &task)
+        .env("HARNESS_POLICY_ANCHOR", &task)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
         .output()
@@ -245,21 +241,16 @@ fn make_facades_mount_canonical_paths_for_valid_external_symlink_inputs_and_evid
     fs::create_dir(&evidence_real).unwrap();
     let evidence_alias = external.path().join("evidence-link");
     symlink(&evidence_real, &evidence_alias).unwrap();
-    let task_real = external.path().join("task.json");
     let anchor_real = external.path().join("anchor.json");
-    fs::write(&task_real, "{}").unwrap();
     fs::write(&anchor_real, "{}").unwrap();
-    let task_alias = external.path().join("task-link.json");
     let anchor_alias = external.path().join("anchor-link.json");
-    symlink(&task_real, &task_alias).unwrap();
     symlink(&anchor_real, &anchor_alias).unwrap();
 
     let output = Command::new("make")
         .arg("--no-print-directory")
-        .args(["-n", "task-plan", "policy-prepare"])
+        .args(["-n", "policy-prepare"])
         .current_dir(workspace())
         .env("HARNESS_EVIDENCE_DIR", &evidence_alias)
-        .env("HARNESS_TASK_FILE", &task_alias)
         .env("HARNESS_POLICY_ANCHOR", &anchor_alias)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
@@ -272,16 +263,12 @@ fn make_facades_mount_canonical_paths_for_valid_external_symlink_inputs_and_evid
     );
     let commands = String::from_utf8(output.stdout).unwrap();
     let evidence = fs::canonicalize(&evidence_real).unwrap();
-    let task = fs::canonicalize(&task_real).unwrap();
     let anchor = fs::canonicalize(&anchor_real).unwrap();
     assert!(commands.contains(&format!("-v {0}:{0}", evidence.display())));
     assert!(commands.contains(&format!("--output {}", evidence.display())));
-    assert!(commands.contains(&format!("-v {0}:{0}:ro", task.display())));
-    assert!(commands.contains(&format!("--task {}", task.display())));
     assert!(commands.contains(&format!("-v {0}:{0}:ro", anchor.display())));
     assert!(commands.contains(&format!("--anchor {}", anchor.display())));
     assert!(!commands.contains(&evidence_alias.display().to_string()));
-    assert!(!commands.contains(&task_alias.display().to_string()));
     assert!(!commands.contains(&anchor_alias.display().to_string()));
 }
 
@@ -292,20 +279,13 @@ fn make_path_checks_reject_host_symlink_aliases_to_reserved_evidence() {
 
     let evidence = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
-    for (target, input_var, input_name, output_name) in [
-        (
-            "harness-task-path-check",
-            "HARNESS_TASK_FILE",
-            "task.json",
-            "task-plan.json",
-        ),
-        (
-            "harness-policy-path-check",
-            "HARNESS_POLICY_ANCHOR",
-            "anchor.json",
-            "preparation.json",
-        ),
-    ] {
+    let (target, input_var, input_name, output_name) = (
+        "harness-policy-path-check",
+        "HARNESS_POLICY_ANCHOR",
+        "anchor.json",
+        "preparation.json",
+    );
+    {
         let reserved = evidence.path().join(output_name);
         let sentinel = b"user data; preserve me\n";
         fs::write(&reserved, sentinel).unwrap();
@@ -352,9 +332,9 @@ fn make_path_checks_reject_evidence_inside_or_aliasing_readonly_source_mounts() 
     }
     for evidence in evidence_roots.into_iter().filter(|path| path.is_dir()) {
         let result = path_check(
-            "harness-task-path-check",
+            "harness-policy-path-check",
             &evidence,
-            "HARNESS_TASK_FILE",
+            "HARNESS_POLICY_ANCHOR",
             &task,
         );
         assert!(
@@ -368,9 +348,9 @@ fn make_path_checks_reject_evidence_inside_or_aliasing_readonly_source_mounts() 
     let alias = external.path().join("evidence-git-alias");
     symlink(&common, &alias).unwrap();
     let result = path_check(
-        "harness-task-path-check",
+        "harness-policy-path-check",
         &alias,
-        "HARNESS_TASK_FILE",
+        "HARNESS_POLICY_ANCHOR",
         &task,
     );
     assert!(!result.status.success());
@@ -386,9 +366,9 @@ fn make_path_checks_do_not_bind_host_runtime_or_docker_socket_paths_as_evidence(
         let evidence = Path::new(path);
         if evidence.is_dir() {
             let result = path_check(
-                "harness-task-path-check",
+                "harness-policy-path-check",
                 evidence,
-                "HARNESS_TASK_FILE",
+                "HARNESS_POLICY_ANCHOR",
                 &task,
             );
             assert!(
@@ -405,10 +385,10 @@ fn make_path_checks_do_not_bind_host_runtime_or_docker_socket_paths_as_evidence(
     let docker_host = format!("unix://{}", socket.display());
     let result = Command::new("make")
         .arg("--no-print-directory")
-        .arg("harness-task-path-check")
+        .arg("harness-policy-path-check")
         .current_dir(workspace())
         .env("HARNESS_EVIDENCE_DIR", socket_root.path())
-        .env("HARNESS_TASK_FILE", &task)
+        .env("HARNESS_POLICY_ANCHOR", &task)
         .env("HARNESS_CARGO_CACHE", workspace().join(".cache/cargo"))
         .env("HARNESS_TARGET_CACHE", workspace().join("target"))
         .env("DOCKER_HOST", docker_host)
@@ -424,20 +404,13 @@ fn make_path_checks_reject_dangling_host_symlinks_without_creating_targets() {
 
     let evidence = tempfile::tempdir().unwrap();
     let external = tempfile::tempdir().unwrap();
-    for (target, input_var, input_name, output_name) in [
-        (
-            "harness-task-path-check",
-            "HARNESS_TASK_FILE",
-            "dangling-task.json",
-            "task-plan.json",
-        ),
-        (
-            "harness-policy-path-check",
-            "HARNESS_POLICY_ANCHOR",
-            "dangling-anchor.json",
-            "preparation.json",
-        ),
-    ] {
+    let (target, input_var, input_name, output_name) = (
+        "harness-policy-path-check",
+        "HARNESS_POLICY_ANCHOR",
+        "dangling-anchor.json",
+        "preparation.json",
+    );
+    {
         let reserved = evidence.path().join(output_name);
         let alias = external.path().join(input_name);
         symlink(&reserved, &alias).unwrap();

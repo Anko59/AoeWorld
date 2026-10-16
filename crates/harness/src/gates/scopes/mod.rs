@@ -14,7 +14,6 @@ use tempfile::TempDir;
 mod checks;
 mod content;
 pub(crate) use content::ContentWitness;
-mod diff;
 mod git;
 mod index;
 mod metadata;

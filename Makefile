@@ -53,7 +53,6 @@ HARNESS_SCOPE ?= working
 override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e CARGO_HOME=$(HARNESS_ROOT_REAL)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(HEAVY_DIR_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
 HARNESS_POLICY_ANCHOR ?= /tmp/aoeworld-policy-anchor.json
 HARNESS_CANDIDATE ?= $(shell git rev-parse HEAD)
-HARNESS_TASK_FILE ?= /tmp/aoeworld-task.json
 override HARNESS_ROOT_REAL := $(realpath $(ROOT))
 override HARNESS_GIT_EXTERNAL_REAL := $(realpath $(GIT_EXTERNAL))
 override HARNESS_CARGO_CACHE_MOUNT_SOURCE := $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE))
@@ -67,12 +66,10 @@ override HARNESS_ACTIVE_DOCKER_ENDPOINT = $(if $(strip $(DOCKER_CONTEXT)),$(HARN
 override HARNESS_ACTIVE_DOCKER_SOCKET_REAL = $(if $(filter unix://%,$(HARNESS_ACTIVE_DOCKER_ENDPOINT)),$(realpath $(patsubst unix://%,%,$(HARNESS_ACTIVE_DOCKER_ENDPOINT))))
 override HARNESS_DOCKER_SOCKET_PATHS_REAL = $(realpath /var/run/docker.sock) $(if $(findstring unix://,$(DOCKER_HOST)),$(realpath $(patsubst unix://%,%,$(DOCKER_HOST)))) $(if $(findstring unix://,$(HARNESS_DOCKER_CONTEXT_ENDPOINT)),$(realpath $(patsubst unix://%,%,$(HARNESS_DOCKER_CONTEXT_ENDPOINT))))
 override HARNESS_EVIDENCE_REAL := $(realpath $(HARNESS_EVIDENCE_DIR))
-override HARNESS_TASK_FILE_REAL := $(realpath $(HARNESS_TASK_FILE))
 override HARNESS_POLICY_ANCHOR_REAL := $(realpath $(HARNESS_POLICY_ANCHOR))
 override HARNESS_READONLY_GIT_MOUNT := $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL):ro)
 override HARNESS_READONLY_ROOT_MOUNTS := $(HARNESS_READONLY_GIT_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL):ro
 override HARNESS_READONLY_BASE := docker run $(HEAVY_ENV) --rm --init --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=512m --user $(UID):$(GID) -e HOME=/tmp $(HARNESS_READONLY_ROOT_MOUNTS) -w $(HARNESS_ROOT_REAL)
-override HARNESS_TASK_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_TASK_FILE_REAL):$(HARNESS_TASK_FILE_REAL):ro $(ORCH_IMAGE)
 override HARNESS_POLICY_RUN = $(HARNESS_READONLY_BASE) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_POLICY_ANCHOR_REAL):$(HARNESS_POLICY_ANCHOR_REAL):ro $(ORCH_IMAGE)
 
 # Bind mounts erase host aliases; reject evidence sharing a host source with any RW mount.
@@ -252,7 +249,7 @@ deny: policy-tools
 test-unit: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
 
-.PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare task-plan
+.PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare
 
 gates-docs:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
@@ -266,15 +263,12 @@ scope-check:
 gate-run: harness-gate-run-path-check
 	@$(HARNESS_LOCAL_RUN) cargo run --locked -p aoe-harness -- gate-run --cadence $(HARNESS_CADENCE) --scope $(HARNESS_SCOPE) --output $(HARNESS_EVIDENCE_REAL)
 
-.PHONY: harness-evidence-path-check harness-gate-run-path-check harness-task-path-check harness-policy-path-check harness-supervisor-path-check supervisor-model
+.PHONY: harness-evidence-path-check harness-gate-run-path-check harness-policy-path-check harness-supervisor-path-check supervisor-model
 harness-evidence-path-check:
 	@$(call HARNESS_VALIDATE_EVIDENCE_PATH) true
 
 harness-gate-run-path-check: harness-evidence-path-check
 	@$(if $(strip $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)),true,$(error gate-run requires a resolvable local Unix Docker socket))
-
-harness-task-path-check:
-	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_TASK_FILE_REAL,task input) true
 
 harness-policy-path-check:
 	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_POLICY_ANCHOR_REAL,policy anchor) true
@@ -283,10 +277,6 @@ harness-supervisor-path-check: harness-evidence-path-check
 	@test -d "$(HARNESS_SUPERVISOR_DIR_REAL)"
 	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_SUPERVISOR_REQUIREMENTS_REAL,supervisor requirements) true
 	@$(if $(filter $(HARNESS_SUPERVISOR_DIR_REAL) $(HARNESS_SUPERVISOR_DIR_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_SUPERVISOR_DIR_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from supervisor input directory))
-
-task-plan: harness-task-path-check
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(HARNESS_TASK_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness task-plan --task $(HARNESS_TASK_FILE_REAL) --output $(HARNESS_EVIDENCE_REAL)
 
 supervisor-model: harness-supervisor-path-check
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
