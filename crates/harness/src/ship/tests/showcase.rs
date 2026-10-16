@@ -296,8 +296,11 @@ fn recorder_aborts_every_request_except_inline_document_urls() {
         script.contains("(current !== null && within(ws.url(), current.ws)) ws.connectToServer();")
     );
     assert!(!script.contains("browserScene"));
-    assert_eq!(script.matches("page.goto(").count(), 2);
-    assert!(script.contains("page.goto(scene.url,"));
+    let navigation = include_str!("../compare/capture/readiness.mjs");
+    assert_eq!(script.matches("page.goto(").count(), 1);
+    assert_eq!(navigation.matches("page.goto(").count(), 2);
+    assert!(navigation.contains("page.goto(scene.url,"));
+    assert!(navigation.contains("page.goto(\"about:blank\")"));
     assert!(script.contains("page.goto(\"about:blank\")"));
 }
 

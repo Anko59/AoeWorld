@@ -12,7 +12,7 @@
 // last step, however long the steps took. Writes silent.webm and timings.json: the blank lead-in and each
 // scene's actual on-screen length, page loading included, in milliseconds,
 // which the audio track is padded to.
-import { waitForView, sameCameraDocument } from "./readiness.mjs";
+import { waitForView, navigateScene } from "./readiness.mjs";
 import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
@@ -105,6 +105,7 @@ async function bridge(origin) {
 let caption = null;
 // The one origin the scene on screen may reach; none for cards and terminals.
 let current = null;
+let previousScene = null;
 
 function overlay({ text, label, build }) {
   const draw = () => {
@@ -134,11 +135,9 @@ async function open(page, scene) {
   current = origins.find((origin) => origin.build === scene.build) ?? null;
   caption = { text: scene.caption, label: scene.label ?? null, build: scene.build };
   const loadStarted = Date.now();
-  if (sameCameraDocument(page.url(), scene.url)) {
-    await page.evaluate((fragment) => { location.hash = fragment; }, new URL(scene.url).hash);
-  } else await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
+  const navigation = await navigateScene(page, scene, previousScene);
   await page.evaluate(overlay, caption);
-  console.log("showcase-phase page_load_ms", Date.now() - loadStarted);
+  console.log("showcase-phase page_load_ms", Date.now() - loadStarted, "navigation", navigation);
   const target = new URL(scene.url);
   const camera = new URLSearchParams(target.hash.slice(1));
   if (scene.view || (target.pathname === "/" && ["x", "y", "zoom"].some((key) => camera.has(key)))) {
@@ -232,6 +231,7 @@ for (const scene of plan.scenes) {
   if (hold > 0) await sleep(hold);
   timings.scenes_ms.push(Date.now() - sceneStart);
   console.log("showcase-phase scene_ms", Date.now() - sceneStart, "hold_ms", hold);
+  previousScene = scene;
 }
 const video = page.video();
 await context.close();

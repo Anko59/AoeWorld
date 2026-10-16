@@ -106,6 +106,20 @@ export function sameCameraDocument(current, target) {
   const camera = new URLSearchParams(after.hash.slice(1));
   return before.origin === after.origin && before.pathname === after.pathname
     && before.search === after.search && after.pathname === "/"
+    && before.hash !== after.hash
     && ["x", "y", "zoom"].some((key) => camera.has(key))
     && oldCamera.get("renderer") === camera.get("renderer");
+}
+
+export async function navigateScene(page, scene, previous) {
+  if (previous?.kind === "browser" && !(previous.steps?.length)
+      && sameCameraDocument(page.url(), scene.url)) {
+    await page.evaluate((fragment) => { location.hash = fragment; }, new URL(scene.url).hash);
+    return "reuse";
+  }
+  // goto with a different fragment keeps the document. Leave it first so
+  // backend initialization and bookmark camera restoration always run.
+  if (page.url() !== "about:blank") await page.goto("about:blank");
+  await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
+  return "reload";
 }

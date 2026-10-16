@@ -185,8 +185,10 @@ Start each filmed build once with its resolved `AOE_OPEN_MAP_PACKAGE` and
 `AOE_ASSET_PACK`, as for compare, then reuse its origin across scenes and takes.
 Showcase does not build or restart the game server per scene. One bridge per
 filmed origin and one browser context serve the whole take. Consecutive cameras on the same
-origin and renderer reuse the page through `hashchange`; renderer changes
-reload, as the client selects its backend on load. Stop the servers
+origin and renderer reuse the page through `hashchange` when their fragments
+differ and the previous scene had no steps. Renderer changes, repeated fragments
+and scenes following interaction steps reload to initialize the backend and
+restore the bookmark camera. Stop the servers
 with `make down` when finished.
 
 Bookmarks and direct play camera fragments (`x`, `y` or `zoom`) wait for

@@ -279,7 +279,9 @@ fn the_recorder_lets_each_scene_reach_only_its_own_build_and_tags_it() {
     let chosen = script
         .find("current = origins.find((origin) => origin.build === scene.build) ?? null;")
         .unwrap();
-    let goto = script.find("await page.goto(scene.url,").unwrap();
+    let goto = script
+        .find("await navigateScene(page, scene, previousScene);")
+        .unwrap();
     assert!(chosen < goto);
     assert!(script.contains("current = null;"));
     assert_eq!(script.matches("current.http").count(), 1);
