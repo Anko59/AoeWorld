@@ -1,4 +1,4 @@
-use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
+use crate::{GeodataError, MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, FieldPyramid, MapRequest, PyramidLevel, WaterPage,
     ordered_water_page_root,
@@ -33,7 +33,7 @@ pub fn prepare_ocean_coverage(
     samples_per_axis: u16,
     inland_coverage: Vec<u8>,
 ) -> Result<PreparedWater, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+    if !(2..=MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "working water grid is outside direct bounds",
         ));

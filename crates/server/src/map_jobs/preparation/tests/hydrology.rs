@@ -19,7 +19,7 @@ fn creator_requests_hydrology_by_default_for_overview_and_finland() {
         assert_eq!(plan.mode, PreparationMode::Overview);
         assert_eq!(plan.hydrology_mode, HydrologyMode::Automatic);
         assert_eq!(plan.samples_per_axis, 1024);
-        assert_eq!(plan.field_axes.unwrap().water, 128);
+        assert_eq!(plan.field_axes.unwrap().water, 1024);
     }
 }
 

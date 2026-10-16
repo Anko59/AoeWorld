@@ -164,6 +164,44 @@ fn explicit_preprocessing_identity_spells_axes_stably() {
     );
     assert_eq!(
         crate::overview::preprocessing_identity("base".to_owned(), axes, true),
-        "base;axes=1024/128/128/1024"
+        "base;axes=1024/1024/1024/1024"
     );
+}
+
+#[test]
+fn landscape_water_and_vegetation_are_accepted_and_published_at_the_elevation_axis() {
+    // On the 480 km Large map a 128 axis put a coast sample every 3.75 km.
+    let fixture = OverviewFixture::new();
+    let request = MapRequest::default();
+    let axes = OverviewFieldAxes {
+        elevation: 1024,
+        vegetation: 1024,
+        water: 1024,
+        historical: 1024,
+    };
+    crate::overview::validate_field_axes(axes, true).expect("full-resolution landscape axes");
+    assert!(crate::overview::validate_field_axes(axes, false).is_err());
+    let historical = GeographicHistoricalCorrectionDocument::empty(
+        request,
+        axes.historical,
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )
+    .expect("history binding");
+    let vegetation = VegetationPatchDocument::empty(request, axes.vegetation).expect("binding");
+    let prepared = prepare_overview_fields_from_verified_sources(
+        request,
+        axes,
+        true,
+        &historical,
+        &vegetation,
+        fixture.sources.clone(),
+    )
+    .expect("offline GDAL overview");
+    let environment = &prepared.environment;
+    assert_eq!(environment.water_samples_per_axis(), Some(1024));
+    assert_eq!(environment.vegetation_samples_per_axis(), Some(1024));
+    GeneratedMap::from_prepared(request, prepared)
+        .expect("package")
+        .validate()
+        .expect("published pages");
 }

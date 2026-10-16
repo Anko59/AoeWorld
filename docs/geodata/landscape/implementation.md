@@ -212,7 +212,7 @@ unrelated biomes inside real forest.
 ### Shorelines and shore band
 
 Lakes and seas are never read as raw source cells. Rivers use
-[persisted source lines and playable fords](../rivers.md). Prepared categorical coverage (128
+[persisted source lines and playable fords](../rivers.md). Prepared categorical coverage (1024
 samples in overview packages), modeled lake/ocean hydrology and the seeded
 no-source lake and river blocks all pass through one deterministic shaping
 step (`crates/map/src/terrain/shoreline.rs`). A tile reads the grid at a
@@ -416,8 +416,9 @@ revision-bound CI evidence. Keep screenshots and original art private.
 ## Source preparation
 
 Overview packages always sample independent field axes
-(`OverviewFieldAxes::LANDSCAPE`): elevation and year-600 history on 1024-sample
-grids, potential vegetation and categorical water on 128-sample grids. The
+(`OverviewFieldAxes::LANDSCAPE`): elevation, year-600 history, potential vegetation and categorical water, all on
+1024-sample grids (469 m per sample on the 480 km Large map; they were 128-sample
+grids, 3.75 km per sample, before). The
 server creator plan, the `map-generate` CLI and the worker JSON all carry these
 four axes; the worker rejects out-of-bound axes and an elevation axis that does
 not match `samples_per_axis` before any acquisition, and the server rejects a
@@ -437,7 +438,7 @@ layer must match the same SHA-pinned extent and query padding.
 `AOE_MAP_HYDROLOGY_MODE=vectors` requests rivers explicitly.
 `PreparedHydrology::prepare_vectors` uses prepared overview context without
 WorldCover catalog or raster work. Typed evidence and modeled water share the
-1024 axis; categorical ocean stays at 128, coarse inland coverage is cleared,
+1024 axis, as do categorical ocean and vegetation; coarse inland coverage is cleared,
 and modern land cover is class-0 nodata,
 not an observation. Axes, mode and lock counts (7 overview, 2 vector) are defined
 in `aoe_map` environment/preparation and used by geodata, worker and server.
