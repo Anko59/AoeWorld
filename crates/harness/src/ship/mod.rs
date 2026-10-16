@@ -322,7 +322,7 @@ pub(crate) fn ship_with(
     } else {
         crate::review::base::scope(&options.base)
     };
-    let (base, _) = git::base(root, &options.base, !options.no_fetch)?;
+    let base = recheck::start::prepare(root, options)?;
     let _anchor = crate::review::base::scope_at(&options.base, &base);
     let options = &Options {
         no_fetch: true,
@@ -364,10 +364,15 @@ pub(crate) fn ship_with(
         eprintln!("ship: {}", stack::ahead_message(&options.base, report));
         return Ok(evidence);
     }
-    let rebased = recheck::before_push(root, &evidence, review.as_ref(), options)?;
+    let rebased = recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)?;
     let (evidence, review, lease, _recheck_anchor) = match rebased {
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),
+    };
+    let lease = if evidence.head != started_head && lease.is_none() {
+        recheck::lease(root, options, &git::subject(root)?, &started_head)?
+    } else {
+        lease
     };
     let expected = lease
         .as_deref()

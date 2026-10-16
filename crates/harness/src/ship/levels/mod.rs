@@ -106,7 +106,9 @@ impl Change {
         base: &str,
         fetch: bool,
     ) -> Result<Self> {
-        let (_, merge_base) = git::base(root, base, fetch)?;
+        // Description validation precedes the ship's catch-up rebase, including
+        // for an unpublished local parent. Count the child's own change here.
+        let (_, merge_base) = git::ship_base(root, base, fetch)?;
         let numstat = git::git_raw(
             root,
             &["diff", "--numstat", "-z", "--no-renames", &merge_base],
