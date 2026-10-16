@@ -1,4 +1,4 @@
-use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
+use crate::{GeodataError, MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, FieldPyramid, MapRequest, PotentialBiomePage, PyramidLevel,
     ordered_biome_page_root,
@@ -66,7 +66,7 @@ pub fn prepare_potential_biomes_with_corrections(
     samples_per_axis: u16,
     corrections: &VegetationPatchDocument,
 ) -> Result<PreparedVegetation, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+    if !(2..=MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "working vegetation grid is outside direct bounds",
         ));

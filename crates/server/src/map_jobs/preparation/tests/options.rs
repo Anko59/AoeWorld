@@ -98,8 +98,8 @@ fn overview_always_uses_the_independent_landscape_axes() {
         landscape.field_axes,
         Some(OverviewFieldAxes {
             elevation: 1024,
-            vegetation: 128,
-            water: 128,
+            vegetation: 1024,
+            water: 1024,
             historical: 1024,
         })
     );
@@ -108,7 +108,7 @@ fn overview_always_uses_the_independent_landscape_axes() {
     assert_eq!(
         json["field_axes"],
         serde_json::json!({
-            "elevation": 1024, "vegetation": 128, "water": 128, "historical": 1024,
+            "elevation": 1024, "vegetation": 1024, "water": 1024, "historical": 1024,
         })
     );
     assert!(

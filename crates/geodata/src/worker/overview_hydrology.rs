@@ -121,7 +121,7 @@ pub fn preflight(
     }
     if axes != OverviewFieldAxes::LANDSCAPE {
         return Err(GeodataError::Preparation(
-            "overview vectors require the landscape axes with water128",
+            "overview vectors require the landscape axes",
         ));
     }
     if samples_per_axis != VECTOR_SAMPLES_PER_AXIS {
@@ -151,7 +151,7 @@ pub fn preflight(
 
 impl GeneratedMap {
     /// Adds verified vector water and removes coarse HYDE inland coverage.
-    /// Overview ocean stays at 128; mapped inland water has its own 1024 axis.
+    /// Overview ocean and vegetation share the 1024 landscape axis.
     pub fn with_overview_vector_hydrology(
         mut self,
         hydrology: PreparedHydrology,
@@ -159,8 +159,8 @@ impl GeneratedMap {
         self.validate()?;
         let environment = &self.package.environment;
         if environment.samples_per_axis != VECTOR_SAMPLES_PER_AXIS
-            || environment.water_samples_per_axis() != Some(128)
-            || environment.vegetation_samples_per_axis() != Some(128)
+            || environment.water_samples_per_axis() != Some(VECTOR_SAMPLES_PER_AXIS)
+            || environment.vegetation_samples_per_axis() != Some(VECTOR_SAMPLES_PER_AXIS)
             || environment.historical_samples_per_axis() != Some(VECTOR_SAMPLES_PER_AXIS)
             || environment.hydrology_evidence.is_some()
             || hydrology.samples_per_axis != VECTOR_SAMPLES_PER_AXIS

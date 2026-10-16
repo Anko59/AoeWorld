@@ -135,9 +135,9 @@ impl PreparationPlan {
             } else if input.hydrology_mode == HydrologyMode::Automatic {
                 "Automatic landscape overview: include rivers where the whole footprint is covered. Else use global overview water and record that the area is outside river coverage. Coverage is decided before acquiring inputs; source errors fail the job."
             } else if input.hydrology_mode == HydrologyMode::Vectors {
-                "Landscape overview plus pinned HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Categorical ocean/water context remains 128; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. The footprint is verified against the pinned source coverage before acquisition; source errors fail the job."
+                "Landscape overview plus pinned HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Ocean and vegetation context use the same 1024 axis; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. The footprint is verified against the pinned source coverage before acquisition; source errors fail the job."
             } else {
-                "Landscape overview: elevation and modeled year-600 land use on 1024-sample grids, potential vegetation and water on independent 128-sample grids. Fine vectors and real-source qualification are separate; source errors fail the job."
+                "Landscape overview: elevation, modeled year-600 land use, potential vegetation and water each on independent 1024-sample grids. Fine vectors and real-source qualification are separate; source errors fail the job."
             },
         })
     }

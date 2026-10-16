@@ -8,7 +8,7 @@ expect new content hashes. The commands and evidence shape are unchanged.
 ## Immutable candidates
 
 - Overview-only: `c3436bbd6fd154971bbf79ec6f3b88669123e09d2df41e534fa718f83793e8e6`, seven pinned inputs.
-- Explicit vectors: `146c49268ecac72372db928436976fcc7ac96a4350d81dbd3a75b983d69c3b50`, nine pinned inputs, typed water/evidence1024 and categorical water 128.
+- Explicit vectors: `146c49268ecac72372db928436976fcc7ac96a4350d81dbd3a75b983d69c3b50`, nine pinned inputs, typed water/evidence1024 and categorical water 128 (before overview water and vegetation moved to 1024).
 - Both immutable page/root verifications passed. Original published France baseline remains unchanged.
 - Request: circa 600, 1200km geographic side, 30:1, 20000 native tiles; ordinary start `(9999,9999)`.
 

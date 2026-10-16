@@ -231,8 +231,8 @@ Directory-sync failure after rename reports uncertain crash durability in the
 server log while retaining the committed state. Partial geographic preparation
 files are not garbage-collected by this journal.
 
-The creator defaults to Automatic rivers and a landscape overview: elevation
-and history use 1024 samples; water and potential vegetation use 128. The worker
+The creator defaults to Automatic rivers and a landscape overview: elevation,
+history, water and potential vegetation all use 1024 samples. The worker
 checks river coverage before acquisition. Covered footprints add vector hydrology;
 uncovered ones keep the global overview and record `outside_river_coverage` in
 package and job preparation notes, displayed by the creator. Explicit With rivers

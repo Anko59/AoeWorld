@@ -115,7 +115,12 @@ pub(crate) fn prepare_vectors_validated(
         .map_err(|_| GeodataError::Preparation("water corrections do not match request grid"))?;
     // Reject malformed supplied context before any cache or provider access.
     let elevation_context = super::overview_elevation_context(overview_elevation_pages)?;
-    hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
+    let ocean_axis = hydrology_sampling::ocean_source_axis(overview_water_pages)?;
+    hydrology_sampling::resample_ocean_coverage(
+        ocean_axis,
+        samples_per_axis,
+        overview_water_pages,
+    )?;
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
         sources: hydrology_vector_sources(),
