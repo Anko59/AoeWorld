@@ -1,6 +1,7 @@
 mod history;
 mod history_cli;
 mod red;
+mod red_findings;
 
 use super::{Kind, build_keys, exemption, report, summary, test_marker};
 use crate::ship::{

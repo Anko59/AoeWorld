@@ -1,8 +1,10 @@
 //! Red requires a failure identified in a file changed by this round's tester.
+mod changed;
 mod modules;
 use self::modules::{crate_roots, module_path, unit_target};
 use super::focus::CheckReport;
 use crate::ship::git;
+pub(in crate::ship) use changed::changed_failure;
 use std::{
     fs,
     path::{Path, PathBuf},

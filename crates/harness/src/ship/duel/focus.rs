@@ -321,7 +321,7 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
         })
 }
 
-pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
+pub(in crate::ship) fn browser_results(path: &Path) -> git::Result<CheckReport> {
     let value: serde_json::Value =
         serde_json::from_slice(&output::read(path, "Playwright")?).map_err(|e| e.to_string())?;
     fn walk(v: &serde_json::Value, parents: &str, report: &mut CheckReport) {

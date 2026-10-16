@@ -55,6 +55,10 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
         if proof.tests != tests
             || proof.parent != parent
             || proof.failed.is_empty()
+            || proof
+                .failed
+                .iter()
+                .any(|name| proof.parent_failed.contains(name))
             || proof.paths != changed_tests(root, &parent, tests)?
         {
             return Err(missing());

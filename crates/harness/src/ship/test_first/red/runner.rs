@@ -12,6 +12,10 @@ use std::{fs, path::Path, process::Command, time::Duration};
 
 const PREFIX: &str = "RED_RUN_RESULT ";
 
+#[cfg(test)]
+#[path = "../tests/red_runner.rs"]
+mod tests;
+
 struct Containers([String; 2]);
 
 impl Drop for Containers {
@@ -53,7 +57,10 @@ pub(crate) fn execute(options: &Options) -> git::Result<()> {
         .cloned()
         .collect();
     let scope = Scope::from_paths(&options.snapshot, &paths)?;
-    let cache = options.source.join(".cache/duel");
+    // Each export needs fresh Cargo fingerprints and browser dependencies.
+    // Reusing a target across archived trees can run the previous tree's tests:
+    // Git archive timestamps need not be newer than Cargo's cached artifacts.
+    let cache = options.snapshot.join(".cache/duel");
     fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
     let retention = options.source.join(".cache/agent-hook/red/output");
     // All captured runner output stays under the already hook-protected path.
@@ -74,10 +81,6 @@ pub(crate) fn execute(options: &Options) -> git::Result<()> {
 pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result<CheckReport> {
     let binary = std::env::current_exe().map_err(|e| e.to_string())?;
     let binary = binary.canonicalize().map_err(|e| e.to_string())?;
-    // Reuse build artifacts serially, but Cargo always builds the exported source.
-    let target = root.join("target");
-    fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-    fs::create_dir_all(snapshot.join("target")).map_err(|e| e.to_string())?;
     let user = format!(
         "{}:{}",
         nix::unistd::Uid::current(),
@@ -122,11 +125,7 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
     command
         .arg("-v")
         .arg(format!("{}:{}", root.display(), root.display()));
-    command.arg("-v").arg(format!(
-        "{}:{}/target",
-        target.display(),
-        snapshot.display()
-    ));
+    mount_git(&mut command, root)?;
     command.args(["-v", "/var/run/docker.sock:/var/run/docker.sock"]);
     command
         .arg("-v")
@@ -175,4 +174,17 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
         .and_then(|line| line.strip_prefix(PREFIX))
         .ok_or("red runner returned no complete result")?;
     serde_json::from_str(json).map_err(|e| format!("red runner result: {e}"))
+}
+
+fn mount_git(command: &mut Command, root: &Path) -> git::Result<()> {
+    let common = std::path::PathBuf::from(git::git(
+        root,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?);
+    if !common.starts_with(root) {
+        command
+            .arg("-v")
+            .arg(format!("{}:{}", common.display(), common.display()));
+    }
+    Ok(())
 }

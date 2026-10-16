@@ -21,7 +21,7 @@ mod panics_tests;
 mod qualify;
 pub(in crate::ship) mod runner;
 mod scope;
-mod specs;
+pub(in crate::ship) mod specs;
 pub(crate) mod stages;
 #[cfg(test)]
 mod tests;

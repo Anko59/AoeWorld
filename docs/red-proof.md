@@ -10,16 +10,23 @@ that is a non-authoritative rehearsal, not the protected dev judge.
 The runner resolves exact commits before running anything. For every PR-owned
 tests-only commit it exports that commit: the parent's implementation plus the
 changed tests. It runs the selected packages/specs there, then exports and checks
-HEAD with the same tests. At least one named failure must belong to a changed
-test file, every selected check must pass at HEAD, and every red failure used
-as evidence must run and pass there. Changed test files must remain byte-identical
+HEAD with the same tests. At least one named failure must identify an added or
+changed test: Rust function bodies are compared by name, and Playwright JSON
+locations identify changed declarations or specs importing a changed helper
+(including transitive static relative imports). The runner also checks the tests
+commit's own parent with its old test files; a name already failing there never
+counts. Every tests-only commit must earn its own proof. Every selected check
+must pass at HEAD, and every red failure used as evidence must run and pass there.
+Changed test files and importing specs used as evidence must remain byte-identical
 at HEAD. Mixed product/test commits and tests added only after implementation
 are refused. A timeout, cancellation, build error or nameless crash cannot
 substitute for a named red test in this command; the duel's missing-API build
 failure support does not itself grant a shipping record.
 
 Rust packages, WASM suites and exact Playwright spec filters reuse the duel's
-focused tooling. Browser checks use `aoeworld/browser-tools:1.63.0`, the same
+focused tooling. Each exported snapshot uses separate Cargo build output and
+browser dependencies so archived timestamps cannot reuse another tree's tests.
+Browser checks use `aoeworld/browser-tools:1.63.0`, the same
 image as `make test-e2e`, with the normal configured projects and disposable
 server. Browser fixture changes without a spec select the existing broader
 focused fixture scope. There is no `DUEL_CHECK` override for red records.

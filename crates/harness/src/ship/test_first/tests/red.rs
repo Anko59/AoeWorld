@@ -156,23 +156,49 @@ fn changed_or_skipped_red_tests_and_unavailable_runs_are_refused() {
 
 #[test]
 fn rust_named_failure_uses_the_same_exact_commit_record() {
-    let (temp, base) = repo();
+    let (temp, _) = repo();
     let root = temp.path();
     let path = "crates/sim/src/tests.rs";
+    commit(
+        root,
+        &[
+            (path, "// no tests yet\n"),
+            (
+                "crates/sim/src/lib.rs",
+                "pub fn f() {}\n#[cfg(test)] mod tests;\n",
+            ),
+        ],
+        "fixture mounts test module",
+    );
+    let base = git::git(root, &["rev-parse", "HEAD"]).unwrap();
     commit(root, &[(path, "#[test]\nfn red_case() {}\n")], "tests");
     commit(
         root,
-        &[("crates/sim/src/lib.rs", "pub fn f() { 1; }\n")],
+        &[(
+            "crates/sim/src/lib.rs",
+            "pub fn f() { 1; }\n#[cfg(test)] mod tests;\n",
+        )],
         "implementation",
     );
     let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
     let mut calls = 0;
-    let record = red::run_with(root, &base, &head, &mut |_, _| {
+    let record = red::run_with(root, &base, &head, &mut |snapshot, _| {
         calls += 1;
+        let has_test = fs::read_to_string(snapshot.join(path))
+            .unwrap()
+            .contains("red_case");
+        let green = !has_test
+            || fs::read_to_string(snapshot.join("crates/sim/src/lib.rs"))
+                .unwrap()
+                .contains("1;");
         Ok(CheckReport {
-            passed: calls == 2,
-            tests: vec!["sim$tests::red_case".into()],
-            failed: if calls == 1 {
+            passed: green,
+            tests: if has_test {
+                vec!["sim$tests::red_case".into()]
+            } else {
+                vec![]
+            },
+            failed: if !green {
                 vec!["sim$tests::red_case".into()]
             } else {
                 vec![]
@@ -181,6 +207,7 @@ fn rust_named_failure_uses_the_same_exact_commit_record() {
         })
     })
     .unwrap();
+    assert_eq!(calls, 3, "red, old parent tests, then green must each run");
     assert_eq!(record.proofs[0].failed, ["sim$tests::red_case"]);
     assert!(red::require(root, &base, &head).is_ok());
 }

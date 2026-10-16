@@ -9,7 +9,7 @@ use crate::{
     ship::git,
     wasm_test::{self, SuiteRun},
 };
-pub(super) use panic::normalize;
+pub(in crate::ship) use panic::normalize;
 use std::{fs, path::Path};
 
 /// Runs the wasm suites of some packages in a root, with an optional target directory.

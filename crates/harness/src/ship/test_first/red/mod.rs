@@ -1,4 +1,5 @@
 //! Harness-owned proof from fresh runs, never from an agent's evidence files.
+mod attribution;
 mod record;
 pub(crate) mod runner;
 
@@ -18,6 +19,7 @@ pub(crate) struct Proof {
     pub(crate) parent: String,
     pub(crate) paths: Vec<String>,
     pub(crate) failed: Vec<String>,
+    pub(crate) parent_failed: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,12 +107,54 @@ pub(crate) fn run_with(
         }
         // A tests-only commit is exactly its parent implementation plus its tests.
         let red_source = baseline::export_in(root, tests, &cache)?;
+        let parent_source = baseline::export_in(root, &parent, &cache)?;
         println!(
             "red: tests {tests} on parent {parent}; {}",
             paths.join(", ")
         );
         let red = run(red_source.path(), &paths)?;
-        let failed = validate_red(red_source.path(), &paths, &red)?;
+        let mut failed = validate_red(red_source.path(), parent_source.path(), &paths, &red)?;
+        let parent_paths: Vec<_> = paths
+            .iter()
+            .filter(|path| parent_source.path().join(path).is_file())
+            .cloned()
+            .collect();
+        let before = if parent_paths.is_empty() {
+            CheckReport {
+                passed: true,
+                ..Default::default()
+            }
+        } else {
+            println!("red: checking old tests on tests commit parent {parent}");
+            run(parent_source.path(), &parent_paths)?
+        };
+        if before.unavailable.is_some()
+            || before.build_failed
+            || before
+                .panics
+                .iter()
+                .any(|p| p.test.as_ref().is_none_or(|n| !before.failed.contains(n)))
+            || (!before.passed && before.failed.is_empty())
+        {
+            return Err(
+                "red: parent check unavailable; cannot exclude pre-existing failures".into(),
+            );
+        }
+        failed.retain(|name| !before.failed.contains(name));
+        if failed.is_empty() {
+            return Err(
+                "red: changed tests already failed on their own parent with old test files".into(),
+            );
+        }
+        // Helper changes implicate their importing specs, whose test bytes must
+        // also stay identical through HEAD.
+        for name in &failed {
+            if let Some((path, _)) = red.locations.get(name)
+                && !git::git(root, &["diff", "--name-only", tests, head, "--", path])?.is_empty()
+            {
+                return Err(format!("red: tests changed after {tests}: {path}"));
+            }
+        }
         println!("red: FAIL (required): {}", failed.join(", "));
         let green_source = baseline::export_in(root, head, &cache)?;
         let green = run(green_source.path(), &paths)?;
@@ -121,6 +165,7 @@ pub(crate) fn run_with(
             parent,
             paths,
             failed,
+            parent_failed: before.failed,
         });
     }
     record::write(root, &record)?;
@@ -162,18 +207,24 @@ fn changed_tests(root: &Path, parent: &str, tests: &str) -> git::Result<Vec<Stri
     .collect())
 }
 
-fn validate_red(root: &Path, paths: &[String], report: &CheckReport) -> git::Result<Vec<String>> {
-    if report.unavailable.is_some() || report.build_failed || !report.panics.is_empty() {
+fn validate_red(
+    root: &Path,
+    old: &Path,
+    paths: &[String],
+    report: &CheckReport,
+) -> git::Result<Vec<String>> {
+    if report.unavailable.is_some()
+        || report.build_failed
+        || report
+            .panics
+            .iter()
+            .any(|p| p.test.as_ref().is_none_or(|n| !report.failed.contains(n)))
+    {
         return Err("red: unavailable/build/panic result is not a named failing test".into());
     }
     let mut failed = Vec::new();
     for name in &report.failed {
-        let candidate = CheckReport {
-            failed: vec![name.clone()],
-            locations: report.locations.clone(),
-            ..Default::default()
-        };
-        if crate::ship::duel::authored::evidence(root, paths, &candidate)?.0 {
+        if attribution::changed(root, old, paths, report, name)? {
             failed.push(name.clone());
         }
     }
