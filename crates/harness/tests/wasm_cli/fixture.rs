@@ -35,10 +35,7 @@ pub(super) fn run(tool: &str) {
                 .split_whitespace()
                 .find_map(|arg| arg.strip_prefix("--port="))
                 .unwrap();
-            // Written whole, then renamed: the test polls this file and must
-            // never read it half-written.
-            fs::write(root.join("driver-port.tmp"), port).unwrap();
-            fs::rename(root.join("driver-port.tmp"), root.join("driver-port")).unwrap();
+            fs::write(root.join("driver-port"), port).unwrap();
         }
         "docker" if args.starts_with("rm ") => {
             fs::write(root.join("driver-stopped"), "stopped").unwrap();

@@ -9,8 +9,6 @@ use crate::agents::{
 
 /// Make targets that belong to a person or change shared setup.
 const PERSON_TARGETS: &[&str] = &[
-    "red",
-    "red-checkout",
     "duel",
     "hooks-install",
     "bootstrap",

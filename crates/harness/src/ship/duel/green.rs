@@ -39,8 +39,8 @@ pub(in crate::ship) fn validate(
                 fs::read_to_string(root.join(path)).map_err(|e| unidentified(e.to_string()))?;
             if path.ends_with(".rs") {
                 let functions = authored::functions(&source).map_err(unidentified)?;
-                // Every test this round added or changed must run, including tests
-                // behind cfg/ignore attributes. Untouched tests are not the tester's.
+                // Only what this round added or changed must run: untouched, ignored or
+                // cfg-gated tests of the same file are not the tester's.
                 let old =
                     base.and_then(|base| git::git(root, &["show", &format!("{base}:{path}")]).ok());
                 let required =
