@@ -7,6 +7,7 @@ use crate::review::{
     protocol::{Reported, Severity, Status},
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub(super) struct Outcome {
@@ -25,9 +26,9 @@ pub(super) struct Outcome {
     /// its lines. Clean cases have none planted.
     pub(super) defects: usize,
     pub(super) found: usize,
-    /// Personas that reported it (planted) or that reported a standing major
-    /// or critical finding (clean).
-    pub(super) raised_by: Vec<String>,
+    /// Distinct planted defects reported per persona, or one per persona
+    /// reporting a standing major or critical finding on a clean case.
+    pub(super) raised_by: BTreeMap<String, usize>,
 }
 
 impl Defect {
@@ -40,6 +41,41 @@ impl Defect {
             .is_some_and(|l| l >= self.lines[0] && l <= self.lines[1]);
         on_file && in_lines && reported.severity <= self.severity
     }
+}
+
+/// Maximum one-to-one matching: overlapping ranges must not let one finding
+/// satisfy two defects, or let an early flexible match hide a later one.
+fn matched(defects: &[Defect], findings: &[&Reported]) -> usize {
+    fn assign(
+        finding: usize,
+        defects: &[Defect],
+        findings: &[&Reported],
+        owners: &mut [Option<usize>],
+        seen: &mut [bool],
+    ) -> bool {
+        for (i, defect) in defects.iter().enumerate() {
+            if seen[i] || !defect.reported_by(findings[finding]) {
+                continue;
+            }
+            seen[i] = true;
+            if owners[i].is_none_or(|previous| assign(previous, defects, findings, owners, seen)) {
+                owners[i] = Some(finding);
+                return true;
+            }
+        }
+        false
+    }
+    let mut owners = vec![None; defects.len()];
+    for finding in 0..findings.len() {
+        assign(
+            finding,
+            defects,
+            findings,
+            &mut owners,
+            &mut vec![false; defects.len()],
+        );
+    }
+    owners.iter().filter(|owner| owner.is_some()).count()
 }
 
 impl Outcome {
@@ -59,7 +95,7 @@ impl Outcome {
             blocked: false,
             defects: case.defects().len(),
             found: 0,
-            raised_by: Vec::new(),
+            raised_by: BTreeMap::new(),
         }
     }
 
@@ -70,37 +106,35 @@ impl Outcome {
         outcome.written_grade = report.written_grade;
         outcome.blocked = report.complete() && !report.passes();
         let defects = case.defects();
-        let mut hit = vec![false; defects.len()];
-        let mut raised = Vec::new();
-        for finding in report
+        let standing: Vec<_> = report
             .findings
             .iter()
             .filter(|f| f.status != Status::Refuted)
-        {
-            let r = &finding.reported;
-            let counts = if defects.is_empty() {
-                r.severity <= Severity::Major
+            .collect();
+        let count = |findings: Vec<&Reported>| {
+            if defects.is_empty() {
+                usize::from(findings.iter().any(|r| r.severity <= Severity::Major))
             } else {
-                let mut any = false;
-                for (i, defect) in defects.iter().enumerate() {
-                    if defect.reported_by(r) {
-                        hit[i] = true;
-                        any = true;
-                    }
-                }
-                any
-            };
-            if !counts {
-                continue;
+                matched(defects, &findings)
             }
-            if let Some(persona) = report.personas.get(finding.reporter) {
-                raised.push(persona.clone());
+        };
+        outcome.found = if defects.is_empty() {
+            0
+        } else {
+            count(standing.iter().map(|f| &f.reported).collect())
+        };
+        for (index, persona) in report.personas.iter().enumerate() {
+            let hits = count(
+                standing
+                    .iter()
+                    .filter(|f| f.reporter == index)
+                    .map(|f| &f.reported)
+                    .collect(),
+            );
+            if hits > 0 {
+                outcome.raised_by.insert(persona.clone(), hits);
             }
         }
-        outcome.found = hit.iter().filter(|hit| **hit).count();
-        raised.sort();
-        raised.dedup();
-        outcome.raised_by = raised;
         outcome
     }
 
@@ -218,7 +252,7 @@ impl Summary {
         };
         let mut personas: Vec<String> = outcomes
             .iter()
-            .flat_map(|o| o.raised_by.iter().cloned())
+            .flat_map(|o| o.raised_by.keys().cloned())
             .collect();
         personas.sort();
         personas.dedup();
@@ -229,8 +263,8 @@ impl Summary {
                     outcomes
                         .iter()
                         .filter(|o| o.planted() == planted && o.answered())
-                        .filter(|o| o.raised_by.contains(&persona))
-                        .count()
+                        .map(|o| o.raised_by.get(&persona).copied().unwrap_or(0))
+                        .sum()
                 };
                 PersonaRow {
                     found: by(true),

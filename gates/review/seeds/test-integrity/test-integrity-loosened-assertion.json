@@ -55,7 +55,7 @@
    {
     "area": "test-integrity",
     "file": "src/lib.rs",
-    "lines": [13, 17],
+    "lines": [5, 17],
     "severity": "major",
     "what": "the exact-order assertion was loosened to a non-empty check, hiding the `.rev()` that reverses the ids"
    }

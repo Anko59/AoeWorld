@@ -156,14 +156,17 @@ in the task, a mechanical rename, a performance rewrite with an equivalence
 test, a deliberately ignored error with a justification). `make test-harness`
 validates every seed: the base compiles with its tests, the diff applies, and
 the tests stay green through it (a defect the seed's own tests catch would
-not be hard to review).
+not be hard to review). Separate input probes exercise each Rust base and
+post-diff crate, checking ordinary inputs and pinning known planted failures;
+these small probes do not establish exhaustive correctness or performance.
 
 It writes `reports/review/calibration.json` and `.md`: per area the planted
 defects found (recall: a standing finding of at least the planted severity,
 on the defect's file within its lines, so a case with two planted defects can
-be half found), per persona what it reported and what it raised on clean
-cases, and the clean cases wrongly blocked (a complete review that does not
-pass) with their grades. Cases whose review did not complete count as "no
+be half found; each finding matches at most one defect), per persona the
+number of distinct planted defects it reported (several may come from one
+case) and what it raised on clean cases, and the clean cases wrongly blocked
+(a complete review that does not pass) with their grades. Cases whose review did not complete count as "no
 result", not as misses. It is a tool for tuning prompts, personas and models,
 not a gate, and a case set this small shows large differences only.
 

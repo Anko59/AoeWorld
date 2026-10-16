@@ -13,6 +13,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod matching;
+mod probes;
 mod validate;
 
 fn repo_root() -> PathBuf {
@@ -258,7 +260,7 @@ fn recall_and_false_positives_are_measured_from_the_reports() {
     assert_eq!(summary.personas.len(), 1);
     assert_eq!(
         (summary.personas[0].found, summary.personas[0].false_alarms),
-        (5, 1)
+        (7, 1)
     );
     // One that finds nothing.
     let lax = run(&source, &cases, &reviewer("none", "none"));
@@ -357,52 +359,42 @@ fn the_environment_is_parsed_strictly() {
 
 #[test]
 fn a_broken_seed_is_refused() {
+    let cases = [
+        (
+            "clean/x.json",
+            r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
+            "sits under",
+        ),
+        (
+            "spec/x.json",
+            r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
+            "inconsistent",
+        ),
+        (
+            "spec/y.json",
+            r#"{"id": "y", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "spec", "file": "a", "what": "w", "severity": "major"}]}}"#,
+            "missing field",
+        ),
+        (
+            "spec/z.json",
+            r#"{"id": "z", "area": "correctness", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "correctness", "file": "a", "lines": [1, 1], "severity": "minor", "what": "w"}]}}"#,
+            "sits under",
+        ),
+        ("clean/x.json", "{", "EOF"),
+    ];
+    for (file, contents, reason) in cases {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, contents).unwrap();
+        let error = seeds::load(temp.path()).unwrap_err();
+        assert!(error.contains(file), "{file}: {error}");
+        assert!(error.contains(reason), "{file}: {error}");
+    }
     let temp = tempfile::tempdir().unwrap();
-    let dir = temp.path().join("clean");
-    fs::create_dir_all(&dir).unwrap();
-    // Says it is clean but sits under another area's directory.
-    fs::write(
-        dir.join("x.json"),
-        r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
-    )
-    .unwrap();
-    assert!(seeds::load(temp.path()).unwrap_err().contains("sits under"));
-    // A clean case must live in the clean area, not under a defect area.
-    fs::remove_file(dir.join("x.json")).unwrap();
-    fs::create_dir_all(temp.path().join("spec")).unwrap();
-    fs::write(
-        temp.path().join("spec/x.json"),
-        r#"{"id": "x", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["d"], "expect": {"clean": true}}"#,
-    )
-    .unwrap();
-    assert!(
-        seeds::load(temp.path())
-            .unwrap_err()
-            .contains("inconsistent")
-    );
-    fs::remove_file(temp.path().join("spec/x.json")).unwrap();
-    // A defect without the lines a finding must land in.
-    fs::write(
-        temp.path().join("spec/y.json"),
-        r#"{"id": "y", "area": "spec", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "spec", "file": "a", "what": "w", "severity": "major"}]}}"#,
-    )
-    .unwrap();
-    assert!(
-        seeds::load(temp.path())
-            .unwrap_err()
-            .contains("missing field")
-    );
-    fs::remove_file(temp.path().join("spec/y.json")).unwrap();
-    // A case must sit under a directory of its own area.
-    fs::write(
-        temp.path().join("spec/z.json"),
-        r#"{"id": "z", "area": "correctness", "task": "t", "base": {"a": ["b"]}, "diff": ["+++ b/a"], "expect": {"defects": [{"area": "correctness", "file": "a", "lines": [1, 1], "severity": "minor", "what": "w"}]}}"#,
-    )
-    .unwrap();
-    assert!(seeds::load(temp.path()).unwrap_err().contains("sits under"));
-    fs::write(dir.join("x.json"), "{").unwrap();
-    assert!(seeds::load(temp.path()).is_err());
-    assert!(seeds::load(&temp.path().join("missing")).is_err());
+    let missing = temp.path().join("missing");
+    let error = seeds::load(&missing).unwrap_err();
+    assert!(error.contains(&missing.display().to_string()), "{error}");
 }
 
 #[test]

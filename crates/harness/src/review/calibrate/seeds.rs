@@ -191,7 +191,8 @@ pub(super) fn load(dir: &Path) -> Result<Vec<Case>, String> {
                 case.area
             ));
         }
-        case.check()?;
+        case.check()
+            .map_err(|e| format!("{}: {e}", file.display()))?;
         case.path = file
             .strip_prefix(dir)
             .map_err(|e| format!("{}: {e}", file.display()))?
