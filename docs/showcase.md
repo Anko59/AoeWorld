@@ -16,7 +16,7 @@ level in `.github/pull_request_template.md`. The accepted values are `low`,
 `medium`, `high` and `max`. High and max levels require at least one narrated
 scene, which the check rejects before any build or speech request. `make showcase` voices
 the scenes first, checks the narration-stretched plan against five minutes,
-then builds the recording images and records the take.
+then builds the recording images, prepares dependencies and records the take.
 
 Keep the storyboard outside the repository (or under `.cache/`): it is not
 committed. `SHOWCASE_OUT` may select a path inside `.cache/showcase/`; its
@@ -164,6 +164,52 @@ operation. Unset preserves the default world; an invalid or unknown hash
 refuses startup with one plain error naming the hash and package directory.
 Terrain reads and camera navigation need no controller lease.
 
+### Bookmarked browser scenes
+
+A browser scene may name a compare bookmark instead of a path:
+
+```json
+{"kind":"browser","build":"after","bookmark":"finland-conifer-forest-webgl2",
+ "caption":"Finland forest","seconds":2}
+```
+
+The name comes from `COMPARE_BOOKMARKS` (default `qa/bookmarks.json`). The map
+request resolves against `COMPARE_BEFORE_PACKAGES` / `COMPARE_AFTER_PACKAGES`
+(default `local-assets/map-packages`), using compare's exact fragment and map
+resolution. Unknown names and ambiguous packages fail `showcase-check` before
+speech or image builds. A bookmark permits only an omitted path or `/`, so a
+second camera or another page cannot silently override it. WebGPU bookmarks
+select the software WebGPU launch; WebGL2 camera pages hide `navigator.gpu`.
+
+Start each filmed build once with its resolved `AOE_OPEN_MAP_PACKAGE` and
+`AOE_ASSET_PACK`, as for compare, then reuse its origin across scenes and takes.
+Showcase does not build or restart the game server per scene. One bridge per
+filmed origin and one browser context serve the whole take. Consecutive cameras on the same
+origin and renderer reuse the page through `hashchange` when their fragments
+differ and the previous scene had no steps. Renderer changes, repeated fragments
+and scenes following interaction steps reload to initialize the backend and
+restore the bookmark camera. Stop the servers
+with `make down` when finished.
+
+Bookmarks and direct play camera fragments (`x`, `y` or `zoom`) wait for
+compare's readiness hooks and settle rule before running scene steps. This
+uses the same polling module as compare: zero pending and failed chunks, a
+successfully presented frame, then a quiet window clamped to 1.5–4 seconds
+from four times the median frame interval. Persistent chunk failures retain
+the 12 second retry allowance, and the view retains a 90 second timeout.
+The captured bookmark's map, camera and renderer are checked again in Rust
+before publication. Camera placement is a spectator operation; it needs no
+controller lease, minimap click or wheel. Explicit storyboard steps still run.
+Ordinary UI paths keep their existing interaction sequence, without a static
+camera settle requirement.
+
+Remove fixed setup `wait_ms` steps when using readiness. Explicit waits remain
+intentional screen time and are always honored. Scene holds still begin after
+the steps; settling does not consume the hold or shorten narration. Phase
+lines on stdout/stderr identify page loading, settling, narration, image and
+dependency preparation, recording and ffmpeg. See the measured costs and
+limits in [showcase speed](showcase-speed.md).
+
 ## Network
 
 An explicit HTTP port 80 is accepted and normalized to the default-port URL;
@@ -212,6 +258,15 @@ keyring (`secret-tool lookup service codex-api name OPENROUTER_API_KEY`). Speech
 requests use only OpenRouter's fixed endpoint.
 A scene lasts at least as long as its voice-over.
 
+Successful speech is cached as private PCM under `.cache/showcase-tts/`, keyed
+by the exact text, voice, model and PCM format/rate. Identical scenes and later
+takes reuse the audio without another TTS call or credential lookup. A changed
+text, voice or model misses the cache. Failed, empty, odd-length or oversized
+responses are never published to the cache; hits still count toward duration
+and aggregate PCM budgets. Cache files and directories cannot be symlinks.
+Delete a cache entry to regenerate it (or the cache directory to clear all
+speech); a malformed cached file fails with a regeneration hint.
+
 ## How it is made
 
 `crates/harness/src/ship/showcase/`: the storyboard must be a regular file no
@@ -229,6 +284,15 @@ measured duration exceeds 5 minutes is rejected. The final WebM is written to
 a temporary file beside the destination and atomically renamed into place.
 Existing multiply linked output files are refused. `make ship`
 then checks the level's limit and the sound track.
+
+Showcase reuses installed browser dependencies when the root manifest, lockfile,
+npm's installed lock metadata and every installed package version agree.
+Missing packages or drift rerun `make browser-deps`; image builds still use
+Docker's layer cache each take. This is dependency-graph reuse, not an integrity
+scan of every installed file. `make browser-check` continues to install and
+check dependencies through its full path. `make test-showcase` runs focused
+Rust regressions, and `make test-showcase-browser` runs injected readiness hooks
+in Chromium without an app server or game assets.
 
 ## Compare
 

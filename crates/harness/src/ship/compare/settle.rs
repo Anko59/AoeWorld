@@ -128,7 +128,7 @@ pub(crate) fn decide(history: &[Sample]) -> Verdict {
             };
         }
     }
-    if last.pending != 0 || last.failed != 0 {
+    if last.pending != 0 || last.failed != 0 || last.frame <= 0 {
         return Verdict::Unsettled {
             pending: last.pending,
             failed: last.failed,

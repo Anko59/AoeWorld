@@ -7,11 +7,14 @@
 //! pinned ship-tools image. Each scene lasts at least as long as its voice.
 mod bridge;
 mod browser;
+mod capture;
 mod check;
 mod media;
 mod mounts;
+mod narration;
 mod origins;
 mod output;
+mod preparation;
 mod scenes;
 pub(crate) mod session;
 mod timing;
@@ -29,9 +32,10 @@ pub(crate) use media::make;
 #[cfg(test)]
 pub(crate) use media::read_storyboard;
 #[cfg(test)]
-pub(crate) use media::{
-    concat_entry, narrate, publish_temp_output, save_tts_response, tts_command,
-};
+pub(crate) use media::{concat_entry, publish_temp_output};
+pub(crate) use narration::narrate;
+#[cfg(test)]
+pub(crate) use narration::{save_tts_response, tts_command};
 pub(crate) use origins::Build;
 #[cfg(test)]
 pub(crate) use origins::Origins;
@@ -164,7 +168,10 @@ pub(crate) enum Scene {
     Browser {
         #[serde(default)]
         build: Build,
-        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bookmark: Option<String>,
         caption: String,
         seconds: u32,
         #[serde(default)]
@@ -276,10 +283,23 @@ impl Scene {
             } => scenes::validate_session(tag, caption, steps),
             Self::Browser {
                 path,
+                bookmark,
                 seconds,
                 steps,
                 ..
-            } => browser::validate_scene(path, *seconds, steps),
+            } => {
+                if let Some(name) = bookmark {
+                    super::compare::bookmarks::identifier("bookmark name", name)?;
+                    if path.as_deref().is_some_and(|path| path != "/") {
+                        return Err("a bookmark permits only an omitted path or `/`".into());
+                    }
+                }
+                let path = path
+                    .as_deref()
+                    .or(bookmark.as_ref().map(|_| "/"))
+                    .ok_or("a browser scene needs a path or bookmark")?;
+                browser::validate_scene(path, *seconds, steps)
+            }
         }
     }
 }

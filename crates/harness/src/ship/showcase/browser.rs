@@ -298,6 +298,8 @@ pub(crate) struct Planned<'a> {
     /// The build tag drawn on a browser scene when both builds are filmed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) label: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) view: Option<super::capture::View>,
 }
 
 /// What record.mjs plays: each scene with its planned length (steps
@@ -312,7 +314,7 @@ pub(crate) fn plan<'a>(
     for (scene, duration_ms) in board.scenes.iter().zip(planned) {
         let (url, label) = match scene {
             Scene::Browser { build, path, .. } => (
-                Some(origins.resolve(*build, path)?),
+                Some(origins.resolve(*build, path.as_deref().unwrap_or("/"))?),
                 origins.labelled().then(|| build.label()),
             ),
             _ => (None, None),
@@ -322,6 +324,7 @@ pub(crate) fn plan<'a>(
             duration_ms: *duration_ms,
             url,
             label,
+            view: None,
         });
     }
     Ok(Plan {

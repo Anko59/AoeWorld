@@ -86,9 +86,14 @@ fn narration_stub_stops_requests_when_the_selected_level_plan_is_impossible() {
     .unwrap();
     let work = root.path().join("work");
     std::fs::create_dir(&work).unwrap();
-    let error = narrate(&work, &board, super::super::describe::Level::High)
-        .unwrap_err()
-        .to_string();
+    let error = narrate(
+        root.path(),
+        &work,
+        &board,
+        super::super::describe::Level::High,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("showcase duration budget"), "{error}");
     assert_eq!(std::fs::read_to_string(&calls).unwrap().len(), 1);
     std::fs::write(&calls, "").unwrap();
@@ -105,9 +110,14 @@ fn narration_stub_stops_requests_when_the_selected_level_plan_is_impossible() {
         Storyboard::parse(&format!(r#"{{"title":"aggregate","scenes":[{scenes}]}}"#)).unwrap();
     let aggregate_work = root.path().join("aggregate-work");
     std::fs::create_dir(&aggregate_work).unwrap();
-    let error = narrate(&aggregate_work, &board, super::super::describe::Level::Max)
-        .unwrap_err()
-        .to_string();
+    let error = narrate(
+        root.path(),
+        &aggregate_work,
+        &board,
+        super::super::describe::Level::Max,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("14448000-byte limit"), "{error}");
     assert_eq!(
         std::fs::metadata(aggregate_work.join("voice-0.pcm"))

@@ -6,6 +6,8 @@ use super::{
     showcase_security::ENV_LOCK,
 };
 
+mod bookmarks;
+
 const APP: &str = "http://127.0.0.1:8080/";
 
 fn browser_board(path: &str, steps: &str) -> String {

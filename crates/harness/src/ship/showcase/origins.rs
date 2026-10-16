@@ -79,7 +79,9 @@ impl Origins {
             .iter()
             .enumerate()
             .filter_map(|(index, scene)| match scene {
-                Scene::Browser { build, path, .. } => Some((index + 1, *build, path.as_str())),
+                Scene::Browser { build, path, .. } => {
+                    Some((index + 1, *build, path.as_deref().unwrap_or("/")))
+                }
                 _ => None,
             })
             .collect();

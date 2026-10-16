@@ -75,7 +75,7 @@ pub(crate) struct Bookmarks {
     pub(crate) bookmarks: Vec<Bookmark>,
 }
 
-fn identifier(what: &str, value: &str) -> Result<()> {
+pub(crate) fn identifier(what: &str, value: &str) -> Result<()> {
     let ok = !value.is_empty()
         && value.len() <= MAX_NAME
         && value
