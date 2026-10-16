@@ -102,3 +102,24 @@ fn offline_uses_actual_scenario_dimensions_and_seed_without_path_work() {
         assert_eq!(result.tick_duration_ns.len(), 4);
     }
 }
+
+#[test]
+fn wasm_size_check_fails_over_the_perf_ci_cap_and_passes_at_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let baseline = dir.path().join("wasm.json");
+    let artifact = dir.path().join("optimized.wasm.gz");
+    std::fs::write(
+        &baseline,
+        r#"{"version":1,"toolchain":"rustc 1.93.1","wasm_bindgen":"0.2.128","binaryen":"108","gzip":"1.12 -n -9","optimized_gzip_bytes":1000}"#,
+    )
+    .unwrap();
+    for (size, passes) in [(1050, true), (1051, false)] {
+        std::fs::write(&artifact, vec![7u8; size]).unwrap();
+        let result = crate::perf_size::comparison_at(&baseline, &artifact).unwrap();
+        assert_eq!(crate::perf_size::verdict(&result).is_ok(), passes, "{size}");
+    }
+    let message = crate::perf_size::verdict(&compare("w", Some(1051), Some(1000)))
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("1 bytes over"), "{message}");
+}

@@ -53,13 +53,25 @@ write` and `pull-requests: write`.
 
 ## 3. Updating waiting pull requests (`make update-prs`)
 
-On every push to `dev`: each open pull request into `dev` with auto-merge armed
+On every push to `dev`, and when a `ci.yml` run on a pull request branch
+completes (`workflow_run`; runs of `dev`/`main` are ignored, their push already
+triggers the updater): each open pull request into `dev` with auto-merge armed
 and behind `dev` (GitHub's compare: `behind_by > 0`) gets `dev` merged in with
 the GraphQL `updatePullRequestBranch`, method MERGE, pinned to the head the run
 saw. Not REBASE: GitHub rewrites rebased commits unsigned (committer
 `github-actions[bot]`), and `dev` requires signed commits on the head branch,
 even for a squash merge (seen on #406 and #417, 2026-10-15). The squash merge
-keeps `dev` linear. At most `UPDATE_MAX_PRS` (5) pull requests per run,
+keeps `dev` linear. A pull request whose current head has CI in progress or queued is **not
+updated**: the update would cancel that run and start it from zero (run
+38956866255 on #434 ran 25.5 minutes and was cancelled at the 12th dev merge of
+the day, so waiting pull requests kept restarting). "In progress" is a pending
+`required` status on the head, or any `ci.yml` run (`AoeWorld validation`) for
+the head that is in_progress, queued, waiting, pending or requested. The updater
+prints `update-prs: #N skipped: CI in progress on <head>`. A finished run, passed
+or failed, does not hold the update back (a failed run needs a new one anyway),
+nor does a head with no run. When the run ends, the `workflow_run` trigger runs
+the updater and brings the pull request up to date. A skipped pull request does
+not count toward the bound. At most `UPDATE_MAX_PRS` (5) pull requests per run,
 oldest first; one run at a time (concurrency group `post-push-update`, never
 cancelled halfway). An update that GitHub refuses with conflicting files leaves
 the pull request untouched and adds one comment naming the files (once per

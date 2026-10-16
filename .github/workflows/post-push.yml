@@ -11,6 +11,11 @@ on:
     branches: [dev]
   push:
     branches: [dev]
+  # A pull request the updater left alone because its CI was running is
+  # updated as soon as that run ends. `workflow_run` also comes from `dev`.
+  workflow_run:
+    workflows: [AoeWorld validation]
+    types: [completed]
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   update:
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch != 'dev' && github.event.workflow_run.head_branch != 'main') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -121,6 +121,8 @@ enum Command {
     #[command(name = "perf-soak-30")]
     PerfSoak30,
     PerfBaselinePropose,
+    /// Fail when the optimized gzip WASM is over its baseline cap (the perf-ci rule).
+    PerfWasmSizeCheck,
     /// Post or rewrite the pull request's one informational CI performance comment.
     PerfComment,
     PerfHardwareCheck {
@@ -283,6 +285,7 @@ fn run(
             perf_micro::propose()?;
             perf_size::propose()?;
         }
+        Command::PerfWasmSizeCheck => perf_size::check()?,
         Command::PerfComment => perf_comment::run()?,
         Command::PerfHardwareCheck {
             environment,

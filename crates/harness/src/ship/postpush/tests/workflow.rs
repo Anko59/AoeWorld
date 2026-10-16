@@ -77,3 +77,18 @@ fn the_make_targets_and_the_hook_route_reach_the_subcommands() {
     assert!(route.contains("carry-review) probe=crates/harness/src/ship/postpush/carry.rs"));
     assert!(route.contains("update-prs) probe=crates/harness/src/ship/postpush/update.rs"));
 }
+
+#[test]
+fn the_updater_also_runs_when_a_ci_run_ends_but_not_for_dev_or_main_runs() {
+    let workflow = read(".github/workflows/post-push.yml");
+    for line in [
+        "workflow_run:",
+        "workflows: [AoeWorld validation]",
+        "types: [completed]",
+        "github.event.workflow_run.head_branch != 'dev'",
+        "github.event.workflow_run.head_branch != 'main'",
+    ] {
+        assert!(workflow.contains(line), "{line}");
+    }
+    assert!(read(".github/workflows/ci.yml").starts_with("name: AoeWorld validation\n"));
+}

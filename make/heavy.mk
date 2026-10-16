@@ -49,6 +49,7 @@ perf-wasm-size-steps:
 	@mkdir -p reports/perf
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/pkg/aoe_client_bg.wasm -o reports/perf/optimized.wasm
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/optimized.wasm > reports/perf/optimized.wasm.gz
+	@target/debug/aoe-harness perf-wasm-size-check
 
 build-wasm: slot-bootstrap
 	@$(SLOT_RUN) build-wasm -- make --no-print-directory build-wasm-steps
