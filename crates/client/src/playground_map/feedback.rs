@@ -4,7 +4,7 @@ use crate::resource_state::ResourceStateCache;
 use aoe_core::TileCoord;
 use aoe_map::{ObjectKind, ResourceNode};
 use aoe_protocol::{CommandResult, MAX_ACK_HISTORY};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 
 const MAX_FAILED_CHUNKS: usize = 64;
 
@@ -161,20 +161,34 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
 
 #[derive(Default)]
 pub(crate) struct OrderFeedback {
-    targets: BTreeMap<u64, Option<ObjectKind>>,
+    // At most MAX_ACK_HISTORY entries; a scan beats a map for this size.
+    targets: Vec<(u64, Option<ObjectKind>)>,
     message: Option<&'static str>,
 }
 
 impl OrderFeedback {
     pub fn record(&mut self, sequence: u64, blocker: Option<ObjectKind>) {
-        self.targets.insert(sequence, blocker);
+        match self
+            .targets
+            .iter_mut()
+            .find(|(known, _)| *known == sequence)
+        {
+            Some(entry) => entry.1 = blocker,
+            None => self.targets.push((sequence, blocker)),
+        }
         while self.targets.len() > MAX_ACK_HISTORY {
-            self.targets.pop_first();
+            let oldest = (0..self.targets.len()).min_by_key(|&i| self.targets[i].0);
+            self.targets.swap_remove(oldest.unwrap_or(0));
         }
     }
 
     pub fn acknowledge(&mut self, sequence: u64, result: CommandResult) -> &'static str {
-        let message = order_message(result, self.targets.remove(&sequence).flatten());
+        let blocker = self
+            .targets
+            .iter()
+            .position(|(known, _)| *known == sequence)
+            .and_then(|slot| self.targets.swap_remove(slot).1);
+        let message = order_message(result, blocker);
         self.message = (result != CommandResult::Accepted).then_some(message);
         message
     }

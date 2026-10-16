@@ -81,21 +81,12 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.camera.focus_elevation_meters = 0.0;
                     client.focus_map_hash = None;
                 }
-                client.resources.clear();
-                if !client.surface_fixture {
-                    map::clear_terrain_cache(&mut client);
-                }
+                let focused = client.village.focused && !map_changed;
+                clear_world(&mut client);
+                client.village.focused = focused;
                 client.primary = Some(primary_unit_id);
                 client.token = resume_token;
                 storage::save_token(resume_token);
-                client.units.clear();
-                let focused = client.village.focused && !map_changed;
-                client.village = Default::default();
-                client.village.focused = focused;
-                client.selected = Default::default();
-                let tick_hz = client.config.tick_hz;
-                client.presentation.reset(tick_hz);
-                client.rendered_frame.clear();
                 client.status = "connected".to_owned();
                 resize(&mut client);
                 capture::world_received(&mut client, map_changed);
@@ -139,8 +130,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         village::orders::focus_town_center(&mut client, false);
                     }
                 }
-                let live = client.units.keys().copied().collect::<Vec<_>>();
-                client.selected.units.retain(|id| live.contains(id));
+                let Client {
+                    units, selected, ..
+                } = &mut *client;
+                selected.units.retain(|id| units.contains_key(id));
             }
             Ok(GameplayServerMessage::Snapshot { .. }) => {}
             Ok(GameplayServerMessage::Tick {
@@ -157,11 +150,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     &changed_buildings,
                     &building_removals,
                 ) else {
-                    client.status = "protocol error; reconnect required".to_owned();
-                    client.resources.clear();
-                    if let Some(socket) = &client.socket {
-                        let _ = socket.close();
-                    }
+                    reconnect(&mut client, "protocol error; reconnect required");
                     return;
                 };
                 if !client.presentation.receive(tick.0, now()) {
@@ -186,11 +175,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             Ok(GameplayServerMessage::ResourceState(state)) => {
                 if state.subscription_revision == client.revision && !client.resources.apply(state)
                 {
-                    client.status = "resource state out of sync; reconnect required".to_owned();
-                    client.resources.clear();
-                    if let Some(socket) = &client.socket {
-                        let _ = socket.close();
-                    }
+                    reconnect(
+                        &mut client,
+                        "resource state out of sync; reconnect required",
+                    );
                 }
             }
             Ok(GameplayServerMessage::RoleChange {
@@ -202,12 +190,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.order_feedback.clear();
-                client.units.clear();
-                client.village = Default::default();
-                client.selected = Default::default();
-                let tick_hz = client.config.tick_hz;
-                client.presentation.reset(tick_hz);
-                client.rendered_frame.clear();
+                clear_world(&mut client);
                 client.role = None;
                 client.primary = None;
                 if !client.surface_fixture {
@@ -215,10 +198,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.focus_map_hash = None;
                 }
                 client.camera.focus_elevation_meters = 0.0;
-                client.resources.clear();
-                if !client.surface_fixture {
-                    map::clear_terrain_cache(&mut client);
-                }
                 client.token = None;
                 storage::save_token(None);
                 controls::map_changed(None);
@@ -236,11 +215,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = format!("server error: {message}")
             }
             _ => {
-                client.status = "protocol error; reconnect required".to_owned();
-                client.resources.clear();
-                if let Some(socket) = &client.socket {
-                    let _ = socket.close();
-                }
+                reconnect(&mut client, "protocol error; reconnect required");
             }
         }
     });
@@ -272,4 +247,26 @@ pub(super) fn merge_buildings(
         merged.push(building.clone());
     }
     (merged.len() <= aoe_protocol::MAX_ECONOMY_BUILDINGS).then_some(merged)
+}
+
+fn reconnect(client: &mut Client, status: &str) {
+    client.status = status.to_owned();
+    client.resources.clear();
+    if let Some(socket) = &client.socket {
+        let _ = socket.close();
+    }
+}
+
+// The pieces of a connection's world that a new Welcome or a WorldReset drops.
+fn clear_world(client: &mut Client) {
+    client.resources.clear();
+    if !client.surface_fixture {
+        map::clear_terrain_cache(client);
+    }
+    client.units.clear();
+    client.village = Default::default();
+    client.selected = Default::default();
+    let tick_hz = client.config.tick_hz;
+    client.presentation.reset(tick_hz);
+    client.rendered_frame.clear();
 }
