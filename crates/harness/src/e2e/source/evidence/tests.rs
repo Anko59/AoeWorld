@@ -194,7 +194,16 @@ fn qualification_rejects_coarse_and_misaligned_current_landscape_axes() {
 
 #[test]
 fn detailed_qualification_rejects_overview_categorical_axes() {
-    let package = fixture_axes("detailed", aoe_map::OverviewFieldAxes::LANDSCAPE);
+    // Overview categorical fields were sampled at 128 per axis before dev
+    // raised them to the fine grid; detailed qualification must reject them.
+    let package = fixture_axes(
+        "detailed",
+        aoe_map::OverviewFieldAxes {
+            vegetation: 128,
+            water: 128,
+            ..aoe_map::OverviewFieldAxes::LANDSCAPE
+        },
+    );
     package
         .validate()
         .expect("valid adversarial detailed metadata");
