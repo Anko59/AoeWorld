@@ -51,9 +51,6 @@ HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
 HARNESS_SCOPE ?= working
 override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e CARGO_HOME=$(HARNESS_ROOT_REAL)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(HEAVY_DIR_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
-HARNESS_POLICY_ANCHOR ?= /tmp/aoeworld-policy-anchor.json
-HARNESS_CANDIDATE ?= $(shell git rev-parse HEAD)
-HARNESS_TASK_FILE ?= /tmp/aoeworld-task.json
 override HARNESS_ROOT_REAL := $(realpath $(ROOT))
 override HARNESS_GIT_EXTERNAL_REAL := $(realpath $(GIT_EXTERNAL))
 override HARNESS_CARGO_CACHE_MOUNT_SOURCE := $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE))
@@ -67,30 +64,11 @@ override HARNESS_ACTIVE_DOCKER_ENDPOINT = $(if $(strip $(DOCKER_CONTEXT)),$(HARN
 override HARNESS_ACTIVE_DOCKER_SOCKET_REAL = $(if $(filter unix://%,$(HARNESS_ACTIVE_DOCKER_ENDPOINT)),$(realpath $(patsubst unix://%,%,$(HARNESS_ACTIVE_DOCKER_ENDPOINT))))
 override HARNESS_DOCKER_SOCKET_PATHS_REAL = $(realpath /var/run/docker.sock) $(if $(findstring unix://,$(DOCKER_HOST)),$(realpath $(patsubst unix://%,%,$(DOCKER_HOST)))) $(if $(findstring unix://,$(HARNESS_DOCKER_CONTEXT_ENDPOINT)),$(realpath $(patsubst unix://%,%,$(HARNESS_DOCKER_CONTEXT_ENDPOINT))))
 override HARNESS_EVIDENCE_REAL := $(realpath $(HARNESS_EVIDENCE_DIR))
-override HARNESS_TASK_FILE_REAL := $(realpath $(HARNESS_TASK_FILE))
-override HARNESS_POLICY_ANCHOR_REAL := $(realpath $(HARNESS_POLICY_ANCHOR))
-override HARNESS_READONLY_GIT_MOUNT := $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL):ro)
-override HARNESS_READONLY_ROOT_MOUNTS := $(HARNESS_READONLY_GIT_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL):ro
-override HARNESS_READONLY_BASE := docker run $(HEAVY_ENV) --rm --init --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=512m --user $(UID):$(GID) -e HOME=/tmp $(HARNESS_READONLY_ROOT_MOUNTS) -w $(HARNESS_ROOT_REAL)
-override HARNESS_TASK_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_TASK_FILE_REAL):$(HARNESS_TASK_FILE_REAL):ro $(ORCH_IMAGE)
-override HARNESS_POLICY_RUN = $(HARNESS_READONLY_BASE) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) -v $(HARNESS_POLICY_ANCHOR_REAL):$(HARNESS_POLICY_ANCHOR_REAL):ro $(ORCH_IMAGE)
 
 # Bind mounts erase host aliases; reject evidence sharing a host source with any RW mount.
 define HARNESS_VALIDATE_EVIDENCE_PATH
 $(if $(strip $(HARNESS_EVIDENCE_REAL)),,$(error HARNESS_EVIDENCE_DIR must resolve to an existing directory))$(if $(strip $(DOCKER_HOST)),$(if $(filter unix://%,$(DOCKER_HOST)),,$(error harness evidence mounts require a local Unix Docker endpoint)),)$(if $(strip $(HARNESS_DOCKER_CONTEXT_ENDPOINT)),$(if $(filter unix://%,$(HARNESS_DOCKER_CONTEXT_ENDPOINT)),,$(error harness evidence mounts require a local Unix Docker context)),)$(if $(filter /,$(HARNESS_EVIDENCE_REAL)),$(error HARNESS_EVIDENCE_DIR must not be the host filesystem root))$(if $(filter $(HARNESS_ROOT_REAL) $(HARNESS_ROOT_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_ROOT_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from the checkout))$(if $(HARNESS_GIT_EXTERNAL_REAL),$(if $(filter $(HARNESS_GIT_EXTERNAL_REAL) $(HARNESS_GIT_EXTERNAL_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_GIT_EXTERNAL_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from external Git metadata)),)$(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),$(if $(strip $(HARNESS_CARGO_CACHE_REAL)),,$(error custom HARNESS_CARGO_CACHE mounts must resolve to an existing path)),)$(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),$(if $(strip $(HARNESS_TARGET_CACHE_REAL)),,$(error custom HARNESS_TARGET_CACHE mounts must resolve to an existing path)),)$(foreach cache,$(HARNESS_CACHE_MOUNT_SOURCES_REAL),$(if $(strip $(cache)),$(if $(filter $(cache) $(cache)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(cache)),$(error HARNESS_EVIDENCE_DIR must be disjoint from writable cache mounts)),))$(foreach runtime,$(HARNESS_RUNTIME_DIRS_REAL),$(if $(strip $(runtime)),$(if $(filter $(runtime) $(runtime)/%,$(HARNESS_EVIDENCE_REAL)),$(error HARNESS_EVIDENCE_DIR must not expose host runtime paths)),))$(foreach socket,$(HARNESS_DOCKER_SOCKET_PATHS_REAL),$(if $(strip $(socket)),$(if $(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(socket)),$(error HARNESS_EVIDENCE_DIR must not contain a Docker socket)),))
 endef
-
-define HARNESS_VALIDATE_SOURCE_PATH
-$(call HARNESS_VALIDATE_EVIDENCE_PATH)$(if $(strip $($(1))),,$(error $(2) must resolve to an existing path))$(if $(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$($(1))),$(error $(2) must not overlap HARNESS_EVIDENCE_DIR))
-endef
-HARNESS_SUPERVISOR_DIR ?= /tmp/aoeworld-supervisor
-HARNESS_SUPERVISOR_REQUIREMENTS ?= $(HARNESS_SUPERVISOR_DIR)/requirements.json
-override HARNESS_SUPERVISOR_DIR_REAL := $(realpath $(HARNESS_SUPERVISOR_DIR))
-override HARNESS_SUPERVISOR_REQUIREMENTS_REAL := $(realpath $(HARNESS_SUPERVISOR_REQUIREMENTS))
-override SUPERVISOR_MODEL_RUN = $(HARNESS_READONLY_BASE) --network none -v $(HARNESS_SUPERVISOR_DIR_REAL):$(HARNESS_SUPERVISOR_DIR_REAL):ro -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(TOOL_IMAGE)
-HARNESS_SUPERVISOR_PERSIST_JOURNAL ?= 0
-HARNESS_SUPERVISOR_PROBE_SERVICE ?= 0
-override SUPERVISOR_MODEL_FLAGS := $(if $(filter 1,$(HARNESS_SUPERVISOR_PERSIST_JOURNAL)),--persist-model-journal) $(if $(filter 1,$(HARNESS_SUPERVISOR_PROBE_SERVICE)),--probe-service)
 
 .PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check ci-dispatch-status pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-comment perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
@@ -252,7 +230,7 @@ deny: policy-tools
 test-unit: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
 
-.PHONY: test-harness gates-docs gate-plan scope-check gate-run policy-prepare task-plan
+.PHONY: test-harness gates-docs gate-plan scope-check gate-run
 
 gates-docs:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- gates-docs
@@ -266,35 +244,12 @@ scope-check:
 gate-run: harness-gate-run-path-check
 	@$(HARNESS_LOCAL_RUN) cargo run --locked -p aoe-harness -- gate-run --cadence $(HARNESS_CADENCE) --scope $(HARNESS_SCOPE) --output $(HARNESS_EVIDENCE_REAL)
 
-.PHONY: harness-evidence-path-check harness-gate-run-path-check harness-task-path-check harness-policy-path-check harness-supervisor-path-check supervisor-model
+.PHONY: harness-evidence-path-check harness-gate-run-path-check
 harness-evidence-path-check:
 	@$(call HARNESS_VALIDATE_EVIDENCE_PATH) true
 
 harness-gate-run-path-check: harness-evidence-path-check
 	@$(if $(strip $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)),true,$(error gate-run requires a resolvable local Unix Docker socket))
-
-harness-task-path-check:
-	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_TASK_FILE_REAL,task input) true
-
-harness-policy-path-check:
-	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_POLICY_ANCHOR_REAL,policy anchor) true
-
-harness-supervisor-path-check: harness-evidence-path-check
-	@test -d "$(HARNESS_SUPERVISOR_DIR_REAL)"
-	@$(call HARNESS_VALIDATE_SOURCE_PATH,HARNESS_SUPERVISOR_REQUIREMENTS_REAL,supervisor requirements) true
-	@$(if $(filter $(HARNESS_SUPERVISOR_DIR_REAL) $(HARNESS_SUPERVISOR_DIR_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_SUPERVISOR_DIR_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from supervisor input directory))
-
-task-plan: harness-task-path-check
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(HARNESS_TASK_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness task-plan --task $(HARNESS_TASK_FILE_REAL) --output $(HARNESS_EVIDENCE_REAL)
-
-supervisor-model: harness-supervisor-path-check
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(SUPERVISOR_MODEL_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness supervisor-model --requirements $(HARNESS_SUPERVISOR_REQUIREMENTS_REAL) --output $(HARNESS_EVIDENCE_REAL) $(SUPERVISOR_MODEL_FLAGS)
-
-policy-prepare: harness-policy-path-check
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@$(HARNESS_POLICY_RUN) $(HARNESS_ROOT_REAL)/target/debug/aoe-harness policy-prepare --anchor $(HARNESS_POLICY_ANCHOR_REAL) --candidate $(HARNESS_CANDIDATE) --cadence $(HARNESS_CADENCE) --output $(HARNESS_EVIDENCE_REAL)
 
 geodata-bootstrap:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap

@@ -108,3 +108,73 @@ fn the_old_claude_hook_name_still_answers() {
     assert!(ok);
     assert!(stdout.contains("\"deny\""), "{stdout}");
 }
+
+#[test]
+fn six_red_stops_direct_autonomous_recovery_through_the_cli() {
+    let root = checkout();
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(root.path())
+        .args(["commit", "--allow-empty", "-m", "fixture"]);
+    for (key, value) in [
+        ("GIT_AUTHOR_NAME", "Fixture"),
+        ("GIT_AUTHOR_EMAIL", "fixture@example.invalid"),
+        ("GIT_COMMITTER_NAME", "Fixture"),
+        ("GIT_COMMITTER_EMAIL", "fixture@example.invalid"),
+    ] {
+        commit.env(key, value);
+    }
+    let committed = commit.output().unwrap();
+    assert!(
+        committed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&committed.stderr)
+    );
+    std::fs::create_dir(root.path().join("gates")).unwrap();
+    std::fs::write(root.path().join("gates/registry.json"), "invalid registry").unwrap();
+    let input = serde_json::json!({"session_id":"red-budget", "agent_id":"worker", "agent_type":"implementer", "hook_event_name":"SubagentStop", "cwd":root.path()}).to_string();
+    let stop = || {
+        let (ok, stdout) = hook(root.path(), "stop", input.as_bytes());
+        assert!(ok, "the hook always exits 0");
+        serde_json::from_str::<serde_json::Value>(&stdout).unwrap()
+    };
+    for round in 1..=5 {
+        let answer = stop();
+        assert_eq!(answer["decision"], "block");
+        assert!(
+            answer["reason"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("Red round {round}/5"))
+        );
+    }
+    let sixth = stop();
+    assert_eq!(sixth["decision"], "block");
+    let reason = sixth["reason"].as_str().unwrap();
+    for required in [
+        "BLOCKED.md",
+        "Narrow the task",
+        "make issue",
+        "evidence",
+        "last green commit",
+        "make next",
+        "main session",
+        "gates/registry.json",
+    ] {
+        assert!(reason.contains(required), "missing {required}: {reason}");
+    }
+    assert!(!reason.contains("then stop"));
+    std::fs::write(
+        root.path().join(".cache/agent-hook/BLOCKED.md"),
+        "Evidence retained for the main session's autonomous recovery.",
+    )
+    .unwrap();
+    let recorded = stop();
+    assert!(recorded.get("decision").is_none());
+    assert!(
+        recorded["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("make next")
+    );
+}
