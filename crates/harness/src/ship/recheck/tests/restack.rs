@@ -134,7 +134,7 @@ fn an_unreachable_origin_is_not_reported_as_a_restack() {
             temp.path().join("missing-origin.git").to_str().unwrap(),
         ],
     );
-    let error = before_push(&root, &before, None, &options)
+    let error = before_push(&root, &before, None, &options, &before.head)
         .err()
         .unwrap()
         .to_string();

@@ -123,9 +123,16 @@ fn a_rebase_that_cannot_start_reports_its_own_error_not_a_failed_abort() {
     run(&root, &["fetch", "-q", "origin"]);
     let merge_base = git(&root, &["merge-base", &moved, "HEAD"]);
     fs::write(root.join("README.md"), "dirty\n").unwrap();
-    let error = rebase(&root, &offline(), &moved, &merge_base, &before, 1)
-        .unwrap_err()
-        .to_string();
+    let error = rebase(
+        &root,
+        &offline(),
+        &moved,
+        &merge_base,
+        &before,
+        "moved during the ship",
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("could not run"), "{error}");
     assert!(error.contains("The branch is as it was"), "{error}");
     assert!(!error.contains("abort did not restore"), "{error}");

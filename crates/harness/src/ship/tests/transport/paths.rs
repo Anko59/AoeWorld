@@ -44,7 +44,7 @@ fn all_three_ship_network_paths_recover_from_an_agent_hiccup() {
             }
             "recheck-fetch" => {
                 assert!(
-                    recheck::before_push(&root, &evidence, None, &offline())
+                    recheck::before_push(&root, &evidence, None, &offline(), &evidence.head)
                         .unwrap()
                         .is_none()
                 );
@@ -80,10 +80,12 @@ fn all_three_ship_network_paths_bound_retries_and_report_the_agent() {
             let counter = ssh_stub(&root, temp.path(), error, false);
             let (failure, waits) = git::remote::without_sleep(|| match path {
                 "initial-fetch" => git::base(&root, "dev", true).unwrap_err(),
-                "recheck-fetch" => recheck::before_push(&root, &evidence, None, &offline())
-                    .err()
-                    .unwrap()
-                    .to_string(),
+                "recheck-fetch" => {
+                    recheck::before_push(&root, &evidence, None, &offline(), &evidence.head)
+                        .err()
+                        .unwrap()
+                        .to_string()
+                }
                 "push" => crate::ship::push(&root, &evidence, None)
                     .unwrap_err()
                     .to_string(),

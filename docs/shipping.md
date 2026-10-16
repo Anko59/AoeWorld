@@ -27,11 +27,12 @@ agent policy refuses `$` in agent-set Make values.
 1. **Refuses** a tree with uncommitted or untracked changes ("evidence is for a
    commit"), the protected branches `dev`, `main` and `release/*`, and a
    detached HEAD.
-2. **Selects** suites from the change against the fetched
+2. **Fetches and catches up** before gates and review: if the branch does not contain the base,
+   rebases its own commits onto it and prints one line; otherwise leaves it untouched. A conflict
+   aborts, restores the branch and names the files; nothing is pushed. **Selects** suites against
    `refs/remotes/origin/<base>` (`dev`, or a published `SHIP_BASE`). For an
    unpublished stacked parent it explicitly selects `refs/heads/<parent>`.
-   The chosen commit is pinned for gates and review; tags cannot shadow it
-   (see [stacked pull requests](#stacked-pull-requests)).
+   The chosen commit is pinned for gates and review; tags cannot shadow it (see [stacked pull requests](#stacked-pull-requests)).
 3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
@@ -127,22 +128,21 @@ A change that depends on an unmerged pull request does not wait for it:
 make ship SHIP_BASE=<parent branch> SHIP_TITLE=… SHIP_BODY=…
 ```
 
-The base may be `dev`, an open harness pull request's branch on origin, or a
-local parent branch whose pull request does not exist yet. Another protected
-branch, the child itself and an unknown branch are refused. A closed or merged
-parent pull request requires a rebase onto `origin/dev` instead; a foreign or
-manually opened parent pull request is refused as before.
+The base may be `dev`, an open harness PR's origin branch, or a local parent
+without a PR. Other protected branches, the child itself, unknown branches, foreign
+and manually opened PRs are refused. Closed or merged parents require a rebase
+onto `origin/dev` instead.
 
-**Review ahead:** when the parent has no pull request, the local parent tip
-must be an ancestor of the child. The harness fetches `origin/dev` for review
-policy, pins the local parent commit, runs the gates on the child's current
-tree and reviews only `parent..child`. Evidence and the stored report record
-the parent branch and commit. It stops with
-`reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
+**Review ahead:** when the parent has no pull request, the harness fetches `origin/dev` for review policy, rebases onto the local parent tip if needed,
+pins the parent commit, gates the child tree and reviews only `parent..child`.
+Evidence and the report record the parent branch and commit. It stops with `reviewed ahead: <grade>; push when the parent <branch> has its pull request`:
 no push, child pull request, status or auto-merge is published. `SHIP_BODY`
 is still the review task; a PR title can wait. `make review SHIP_BASE=<parent>
-REVIEW_TASK=<same description file>` uses the local parent too, runs the gates
-before reviewing or loading an approval, stores the report and never publishes.
+REVIEW_TASK=<same description file>` also gates before reviewing or loading an approval, stores the report and never publishes.
+
+Catch-up replays only child commits using `git merge-base --fork-point <full parent ref> HEAD` for local and published parents,
+including amendments; without a fork point, rebase the child onto the parent yourself, then ship.
+Dev keeps the ordinary merge base because it is never rewritten.
 
 Once the parent has its open harness pull request, run `make ship` with the
 same base and description. Suites, review, test-first and metrics use the
