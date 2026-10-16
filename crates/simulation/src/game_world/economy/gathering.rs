@@ -6,6 +6,7 @@ use super::{
 use crate::{GameUnit, GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::{ResourceKind, ResourceNode, ResourceOverlay};
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 mod tests;
@@ -17,15 +18,23 @@ thread_local! {
 }
 
 #[cfg(test)]
-fn starting_history(overlay: &ResourceOverlay) -> impl Iterator<Item = ResourceNode> + '_ {
-    overlay.starting_nodes().inspect(|_| {
+fn starting_history(
+    overlay: &ResourceOverlay,
+    min: TileCoord,
+    max: TileCoord,
+) -> impl Iterator<Item = ResourceNode> + '_ {
+    overlay.starting_nodes_in(min, max).inspect(|_| {
         HISTORY_VISITS.with(|visits| visits.set(visits.get() + 1));
     })
 }
 
 #[cfg(not(test))]
-fn starting_history(overlay: &ResourceOverlay) -> impl Iterator<Item = ResourceNode> + '_ {
-    overlay.starting_nodes()
+fn starting_history(
+    overlay: &ResourceOverlay,
+    min: TileCoord,
+    max: TileCoord,
+) -> impl Iterator<Item = ResourceNode> + '_ {
+    overlay.starting_nodes_in(min, max)
 }
 
 impl GameWorld {
@@ -49,6 +58,20 @@ impl GameWorld {
         // Public callers cannot enlarge the rule's bounded replacement search.
         let radius = radius.clamp(0, VILLAGE_RULES.replacement_radius_tiles);
         let squared = (radius as u64).pow(2);
+        // One window read per search. Each tile keeps its first starting entry
+        // in identity order, matching the former per-tile scan.
+        let min = TileCoord::new(
+            origin.x.saturating_sub(radius),
+            origin.y.saturating_sub(radius),
+        );
+        let max = TileCoord::new(
+            origin.x.saturating_add(radius),
+            origin.y.saturating_add(radius),
+        );
+        let mut history = BTreeMap::new();
+        for node in starting_history(overlay, min, max) {
+            history.entry(node.tile).or_insert(node);
+        }
         let mut nearest = None;
         let mut score = (u64::MAX, u64::MAX);
         for dy in -radius..=radius {
@@ -58,8 +81,9 @@ impl GameWorld {
                 if distance > squared {
                     continue;
                 }
-                if let Some(node) = starting_history(overlay)
-                    .find(|node| node.tile == tile)
+                if let Some(node) = history
+                    .get(&tile)
+                    .copied()
                     .or_else(|| generator.object_at(tile))
                     && node.kind == kind
                     && Some(node.id) != exclude
