@@ -4,6 +4,8 @@ use super::{
 };
 use std::{os::unix::fs::PermissionsExt, path::Path};
 
+mod cache;
+
 const BOARD: &str = r#"{"title":"Pipeline","scenes":[
   {"kind":"card","heading":"Opening","narration":"A narrated opening."},
   {"kind":"terminal","tag":"check","caption":"It works","lines":[{"style":"good","text":"passed"}]}
@@ -26,6 +28,10 @@ const ENV: &[&str] = &[
     "SHOWCASE_MAKE_MODE",
     "SHOWCASE_APP_URL",
     "SHOWCASE_BEFORE_URL",
+    "SHOWCASE_VIEW_MODE",
+    "COMPARE_BOOKMARKS",
+    "COMPARE_BEFORE_PACKAGES",
+    "COMPARE_AFTER_PACKAGES",
 ];
 
 pub(super) struct Environment {
@@ -67,6 +73,8 @@ case "$SHOWCASE_CURL_MODE" in
   fail) printf 'provider refused request'; exit 22 ;;
   large) head -c 33554433 /dev/zero ;;
   empty) : ;;
+  odd) printf x ;;
+  long) head -c 7200000 /dev/zero ;;
   *) printf '\001\002\003\004' ;;
 esac
 "#,
@@ -97,6 +105,14 @@ if [ "$is_recorder" = 1 ]; then
     printf '\n' >> "$SHOWCASE_LOG"
     printf '{"lead_in_ms":10,"scenes_ms":[20,30]}' > "$work/timings.json"
     printf 'silent-video' > "$work/silent.webm"
+    observed='{"camera":{"x":100.5,"y":210,"zoom":0.698},"history":[{"at":0,"pending":0,"failed":0,"frame":1},{"at":1500,"pending":0,"failed":0,"frame":1}],"renderer":"webgl2","map_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+    case "$SHOWCASE_VIEW_MODE" in
+      map) observed=$(printf '%s' "$observed" | sed 's/aaaa/bbbb/g') ;;
+      camera) observed=$(printf '%s' "$observed" | sed 's/100.5/101.5/g') ;;
+      renderer) observed=$(printf '%s' "$observed" | sed 's/webgl2/webgpu/g') ;;
+      unsettled) observed=$(printf '%s' "$observed" | sed 's/"pending":0/"pending":1/g') ;;
+    esac
+    printf '[%s,%s]' "$observed" "$observed" > "$work/views.json"
 elif [ "$is_ffmpeg" = 1 ]; then
     case "$SHOWCASE_DOCKER_MODE" in mix-fail) echo 'stub ffmpeg failed' >&2; exit 8;; esac
     for output do :; done
@@ -139,6 +155,14 @@ case "$SHOWCASE_MAKE_MODE" in fail) exit 3;; esac
             std::env::remove_var("SHOWCASE_MAKE_MODE");
             std::env::remove_var("SHOWCASE_APP_URL");
             std::env::remove_var("SHOWCASE_BEFORE_URL");
+            for name in [
+                "SHOWCASE_VIEW_MODE",
+                "COMPARE_BOOKMARKS",
+                "COMPARE_BEFORE_PACKAGES",
+                "COMPARE_AFTER_PACKAGES",
+            ] {
+                std::env::remove_var(name);
+            }
         }
         (env, temp)
     }

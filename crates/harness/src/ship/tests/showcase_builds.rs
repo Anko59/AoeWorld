@@ -279,7 +279,9 @@ fn the_recorder_lets_each_scene_reach_only_its_own_build_and_tags_it() {
     let chosen = script
         .find("current = origins.find((origin) => origin.build === scene.build) ?? null;")
         .unwrap();
-    let goto = script.find("await page.goto(scene.url,").unwrap();
+    let goto = script
+        .find("await navigateScene(page, scene, previousScene);")
+        .unwrap();
     assert!(chosen < goto);
     assert!(script.contains("current = null;"));
     assert_eq!(script.matches("current.http").count(), 1);
@@ -294,4 +296,47 @@ fn the_recorder_lets_each_scene_reach_only_its_own_build_and_tags_it() {
     assert!(script.contains("if (label !== null) {"));
     assert!(script.contains("tag.textContent = label;"));
     assert!(!script.contains("BEFORE (dev)") && !script.contains("AFTER (this PR)"));
+}
+
+#[test]
+fn repeated_browser_scenes_and_takes_reuse_the_prestarted_origins() {
+    let _lock = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (_env, temp) = Environment::setup();
+    mode("SHOWCASE_LEVEL", "medium");
+    mode("SHOWCASE_BEFORE_URL", BEFORE);
+    let board = format!(
+        r#"{{"title":"Reuse","scenes":[{},{}]}}"#,
+        scene("", "/"),
+        scene("", "/#x=100")
+    );
+    std::fs::write(temp.path().join("storyboard.json"), board).unwrap();
+    for _ in 0..2 {
+        make(temp.path()).unwrap();
+    }
+    let log = std::fs::read_to_string(temp.path().join("invocations.log")).unwrap();
+    assert_eq!(
+        log.matches("bridge socket app.sock").count(),
+        2,
+        "one bridge per take, shared by its scenes"
+    );
+    assert!(
+        !log.contains("bridge socket before.sock"),
+        "unused builds need no server connection"
+    );
+    assert_eq!(
+        log.matches("node record.mjs").count(),
+        2,
+        "one recorder per take"
+    );
+    assert_eq!(
+        log.matches("make --no-print-directory ship-tools browser-deps")
+            .count(),
+        2
+    );
+    assert!(
+        !log.contains("dev start") && !log.contains("aoe-server"),
+        "takes reuse external apps rather than restart them"
+    );
 }
