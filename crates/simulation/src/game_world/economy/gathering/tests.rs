@@ -143,6 +143,52 @@ fn exhausted_return_choices_stop_searching_and_keep_the_load() {
 }
 
 #[test]
+fn replacement_search_checks_starting_history_once_per_search() {
+    let (mut world, node) = resource_mainland();
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    // Grow starting history well past one replacement search. A history scan
+    // per candidate tile would revisit every entry for each of the 317 tiles.
+    let mut history = 0;
+    'fill: for dy in -40..=40 {
+        for dx in -40..=40 {
+            for kind in [
+                ResourceKind::Food,
+                ResourceKind::Wood,
+                ResourceKind::Gold,
+                ResourceKind::Stone,
+            ] {
+                if history == 400 {
+                    break 'fill;
+                }
+                let tile = TileCoord::new(node.tile.x + dx, node.tile.y + dy);
+                if let Some(start) = ResourceNode::starting(tile, kind)
+                    && overlay.insert_starting_resource(generator, start).is_ok()
+                {
+                    history += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(history, 400, "fixture must place the full starting history");
+
+    let radius = VILLAGE_RULES.replacement_radius_tiles;
+    let candidates = (-radius..=radius)
+        .flat_map(|dy| (-radius..=radius).map(move |dx| (dx, dy)))
+        .filter(|(dx, dy)| dx * dx + dy * dy <= radius * radius)
+        .count();
+    HISTORY_VISITS.with(|visits| visits.set(0));
+    let found = world.nearest_resource(node.tile, ResourceKind::Wood, radius, None);
+    let visits = HISTORY_VISITS.with(|visits| visits.get());
+    assert_eq!(found.map(|found| found.id), Some(node.id));
+    assert!(
+        visits <= candidates,
+        "one replacement search touched {visits} history entries for {candidates} candidate tiles"
+    );
+}
+
+#[test]
 fn deferred_unreachable_resource_ends_the_gather_job() {
     let (mut world, node) = resource_mainland();
     let Terrain::Map { overlay, .. } = &mut world.terrain else {
