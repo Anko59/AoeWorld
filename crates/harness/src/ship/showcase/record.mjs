@@ -12,6 +12,7 @@
 // last step, however long the steps took. Writes silent.webm and timings.json: the blank lead-in and each
 // scene's actual on-screen length, page loading included, in milliseconds,
 // which the audio track is padded to.
+import { waitForView, navigateScene } from "./readiness.mjs";
 import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
@@ -19,6 +20,7 @@ import { SCENE_STYLE, agentSession, api, compare, timing } from "./scenes.mjs";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
 const origins = plan.origins;
+const views = Array(plan.scenes.length).fill(null);
 const dir = process.cwd();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -103,6 +105,7 @@ async function bridge(origin) {
 let caption = null;
 // The one origin the scene on screen may reach; none for cards and terminals.
 let current = null;
+let previousScene = null;
 
 function overlay({ text, label, build }) {
   const draw = () => {
@@ -131,8 +134,18 @@ function overlay({ text, label, build }) {
 async function open(page, scene) {
   current = origins.find((origin) => origin.build === scene.build) ?? null;
   caption = { text: scene.caption, label: scene.label ?? null, build: scene.build };
-  await page.goto(scene.url, { waitUntil: "load", timeout: 30_000 });
+  const loadStarted = Date.now();
+  const navigation = await navigateScene(page, scene, previousScene);
   await page.evaluate(overlay, caption);
+  console.log("showcase-phase page_load_ms", Date.now() - loadStarted, "navigation", navigation);
+  const target = new URL(scene.url);
+  const camera = new URLSearchParams(target.hash.slice(1));
+  if (scene.view || (target.pathname === "/" && ["x", "y", "zoom"].some((key) => camera.has(key)))) {
+    const settleStarted = Date.now();
+    const observed = await waitForView(page, scene.view);
+    views[plan.scenes.indexOf(scene)] = observed;
+    console.log("showcase-phase settle_ms", Date.now() - settleStarted);
+  }
 }
 
 async function steps(page, scene) {
@@ -150,7 +163,11 @@ async function steps(page, scene) {
     }
     else if ("key" in step) await page.keyboard.press(step.key);
     else if ("text" in step) await page.keyboard.type(step.text, { delay: 22 });
-    else if ("wait_ms" in step) await sleep(step.wait_ms);
+    else if ("wait_ms" in step) {
+      const started = Date.now();
+      await sleep(step.wait_ms);
+      console.log("showcase-phase explicit_wait_ms", Date.now() - started);
+    }
   }
 }
 
@@ -169,6 +186,11 @@ const context = await browser.newContext({
   viewport: plan.viewport === "large" ? { width: 1920, height: 1080 } : { width: 1280, height: 720 },
   recordVideo: { dir, size: { width: 1280, height: 720 } },
   serviceWorkers: "block",
+});
+await context.addInitScript(() => {
+  if (new URLSearchParams(location.hash.slice(1)).get("renderer") === "webgl2") {
+    Object.defineProperty(navigator, "gpu", { value: undefined });
+  }
 });
 await context.route("**/*", async (route) => {
   const url = route.request().url();
@@ -208,6 +230,8 @@ for (const scene of plan.scenes) {
   const hold = scene.kind === "browser" ? Math.max(scene.seconds * 1000, left) : left;
   if (hold > 0) await sleep(hold);
   timings.scenes_ms.push(Date.now() - sceneStart);
+  console.log("showcase-phase scene_ms", Date.now() - sceneStart, "hold_ms", hold);
+  previousScene = scene;
 }
 const video = page.video();
 await context.close();
@@ -217,3 +241,5 @@ const videoPath = await video.path();
 copyFileSync(videoPath, `${dir}/silent.webm`, constants.COPYFILE_EXCL);
 unlinkSync(videoPath);
 writeFileSync(`${dir}/timings.json`, JSON.stringify(timings), { flag: "wx" });
+
+writeFileSync(`${dir}/views.json`, JSON.stringify(views), { flag: "wx" });

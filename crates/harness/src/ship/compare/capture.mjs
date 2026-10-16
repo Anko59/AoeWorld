@@ -8,6 +8,7 @@
 // failed for 12 s (every chunk still missing failed), then the read
 // back camera, map and renderer and the scene rectangles go to <name>.json, and
 // the screenshot to <name>.png. The checks are in Rust (capture.rs).
+import { sample, quiet, landed, failingFor, FAILED_MS } from "./readiness.mjs";
 import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -22,81 +23,8 @@ const WEBGPU_ARGS = [
 // The `browser-defaults` project's launch, and what `forceWebGl` does in
 // browser/tests/rendering/backends.ts: no navigator.gpu, so WebGL2 is the backend.
 const WEBGL2_ARGS = [];
-const CAMERA_TILES = 0.01;
-const CAMERA_ZOOM = 0.001;
 
 const errors = [];
-
-// One poll of the page, stamped with the time it was taken. A missing
-// attribute reads as -1 (never settled).
-async function sample(page) {
-  const at = Date.now();
-  const read = await page.evaluate(() => {
-    const num = (v) => (v === null || v === "" ? -1 : Number(v));
-    const scene = document.getElementById("scene");
-    const minimap = document.getElementById("minimap");
-    const camera = minimap?.dataset.cameraX === undefined ? null : {
-      x: Number(minimap.dataset.cameraX), y: Number(minimap.dataset.cameraY), zoom: Number(minimap.dataset.zoom),
-    };
-    return {
-      pending: num(scene?.getAttribute("data-chunks-pending")),
-      failed: num(scene?.getAttribute("data-chunks-failed")),
-      frame: num(scene?.getAttribute("data-frame")),
-      camera,
-      map_hash: minimap?.dataset.mapHash ?? null,
-      renderer: document.getElementById("playground")?.dataset.renderer ?? null,
-    };
-  });
-  return { at, ...read };
-}
-
-// The settle window, as settle.rs decides it: 1.5 s, or four times the median
-// of the last five frame times (gaps between frame changes of at most 1 s),
-// capped at 4 s.
-const QUIET_MS = 1500;
-const QUIET_MAX_MS = 4000;
-const FRAME_INTERVALS = 4;
-const IDLE_MS = 1000;
-const FRAME_SAMPLES = 5;
-const FAILED_MS = 12000;
-function windowMs(history) {
-  const frameTimes = [];
-  let previous = null;
-  for (let i = 1; i < history.length; i++) {
-    if (history[i].frame === history[i - 1].frame) continue;
-    if (previous !== null && history[i].at - previous <= IDLE_MS) frameTimes.push(history[i].at - previous);
-    previous = history[i].at;
-  }
-  const recent = frameTimes.slice(-FRAME_SAMPLES).sort((a, b) => a - b);
-  if (recent.length === 0) return QUIET_MS;
-  const middle = recent.length >> 1;
-  const median = recent.length % 2 === 1 ? recent[middle] : Math.floor((recent[middle - 1] + recent[middle]) / 2);
-  return Math.min(QUIET_MAX_MS, Math.max(QUIET_MS, FRAME_INTERVALS * median));
-}
-// How long every chunk still missing has failed (failed equals pending, above
-// zero), as settle.rs measures it; 0 when that is not the case now.
-function failingFor(history) {
-  const failing = (s) => s.failed > 0 && s.failed === s.pending;
-  const last = history.at(-1);
-  if (!last || !failing(last)) return 0;
-  let start = history.length - 1;
-  while (start > 0 && failing(history[start - 1])) start--;
-  return last.at - history[start].at;
-}
-// Nothing pending, and the frame unchanged for the window.
-function quiet(history) {
-  const last = history.at(-1);
-  if (!last || last.pending !== 0) return false;
-  let start = history.length - 1;
-  while (start > 0 && history[start - 1].pending === 0 && history[start - 1].frame === last.frame) start--;
-  return last.at - history[start].at >= windowMs(history);
-}
-// The camera must also be where the fragment put it.
-function landed(history, view) {
-  const c = history.at(-1)?.camera;
-  return Boolean(c) && Math.abs(c.x - view.x) <= CAMERA_TILES && Math.abs(c.y - view.y) <= CAMERA_TILES
-    && Math.abs(c.zoom / view.zoom - 1) <= CAMERA_ZOOM;
-}
 
 // The rectangles of the scene and of the HUD over it (rounded outward to pixels).
 async function rectangles(page) {

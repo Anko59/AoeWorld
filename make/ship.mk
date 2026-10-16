@@ -122,3 +122,18 @@ showcase-session:
 # so it needs no running server; read-only towards the repository.
 compare:
 	@.agents/hooks/harness.sh exec compare
+
+# Injected readiness hooks need Chromium, but no game server or assets.
+.PHONY: test-showcase-browser test-showcase-browser-steps
+test-showcase-browser: browser-deps slot-bootstrap
+	@$(SLOT_RUN) test-e2e -- make --no-print-directory test-showcase-browser-steps
+
+test-showcase-browser-steps:
+	@$(BROWSER_RUN) npx playwright test tests/showcase/ --project=webgpu --output=../.cache/showcase-browser-tests
+
+.PHONY: test-showcase test-showcase-steps
+test-showcase: slot-bootstrap
+	@$(SLOT_RUN) test-harness -- make --no-print-directory test-showcase-steps
+
+test-showcase-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness showcase

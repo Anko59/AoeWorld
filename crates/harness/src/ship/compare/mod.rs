@@ -2,14 +2,14 @@
 //! as screenshots, a changed-pixel count of the scene and a montage
 //! (docs/showcase.md, "Compare"). A viewer, not a gate: it exits 0 whatever
 //! the differences and fails only when a view could not be captured.
-mod bookmarks;
+pub(super) mod bookmarks;
 mod build;
-mod capture;
-mod config;
+pub(super) mod capture;
+pub(super) mod config;
 mod pixels;
-mod report;
-mod server;
-mod settle;
+pub(super) mod report;
+pub(super) mod server;
+pub(super) mod settle;
 mod side;
 #[cfg(test)]
 mod tests;

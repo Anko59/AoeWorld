@@ -167,6 +167,10 @@ pub(crate) fn run(
     };
     fs::write(dir.join("plan.json"), serde_json::to_vec(&plan)?)?;
     fs::write(dir.join("capture.mjs"), SCRIPT)?;
+    fs::write(
+        dir.join("readiness.mjs"),
+        include_str!("capture/readiness.mjs"),
+    )?;
     let wanted = STARTUP + (run.view_timeout + PLACEMENT) * u32::try_from(views.len())?;
     if run.remaining < Duration::from_secs(30) {
         return Err("the run's time budget (COMPARE_BUDGET_MINUTES) is used up".into());
