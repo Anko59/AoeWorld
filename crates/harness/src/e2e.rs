@@ -50,14 +50,13 @@ struct BrowserContainer(String);
 /// Whole-suite bounds for one serial Playwright worker; each test keeps its own
 /// 30 s timeout, so a hang still fails fast. The suite outgrew two bounds: 282 s
 /// of a former 300 s (2026-10-10), then 102 passing tests took 588 s of 600 s in
-/// CI (2026-10-13) and the run was cut off with no failing test. The gate
-/// registry's own budget for this suite is 2400 s. Coverage runs the same suite
-/// against an instrumented debug server.
-fn browser_run_deadline(coverage: Option<&str>) -> Duration {
-    match coverage {
-        Some("1") => Duration::from_secs(2400),
-        _ => Duration::from_secs(1200),
-    }
+/// CI (2026-10-13) and the run was cut off with no failing test; on 2026-10-16
+/// the suite took 19.5 min of 20 on the 4-core runner and a PR adding tests
+/// (#434) was cut off again. The run now gets the gate registry's own budget for
+/// this suite, 2400 s, in both modes; sharding the suite is the speed fix (#388).
+/// Coverage runs the same suite against an instrumented debug server.
+fn browser_run_deadline(_coverage: Option<&str>) -> Duration {
+    Duration::from_secs(2400)
 }
 
 impl Drop for BrowserContainer {
