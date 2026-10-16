@@ -186,7 +186,7 @@ fn sample_elevation(
     Ok((height, corners))
 }
 
-fn sample_bilinear_elevation(
+pub(super) fn sample_bilinear_elevation(
     generator: &MapChunkGenerator,
     x: i32,
     y: i32,

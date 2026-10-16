@@ -341,6 +341,39 @@ impl MapChunkGenerator {
         self.tile_at_with_cancel(tile, &|| false).ok().flatten()
     }
 
+    /// Geographic elevation only: no resources, water, cliff art or vegetation
+    /// composition. Suitable for bounded relief surveys, never for passability.
+    pub fn geographic_height_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<i32>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
+            return Ok(None);
+        }
+        let height = if let Some(environment) = &self.provider_environment
+            && environment.samples_per_axis > 0
+        {
+            provider::sample_bilinear_elevation(
+                self,
+                tile.x,
+                tile.y,
+                environment.samples_per_axis,
+                elevation::AxisPosition::TileCenter,
+                cancelled,
+            )?
+        } else {
+            self.elevation
+                .as_ref()
+                .and_then(|field| field.height_at(tile, self.width_tiles))
+                .unwrap_or_else(|| fallback::fallback_height(self, tile))
+        };
+        Ok(Some(height))
+    }
+
     /// Fallible composed tile query. A provider failure is never mapped to
     /// procedural terrain or an absent successful tile.
     pub fn tile_at_with_cancel(

@@ -5,12 +5,14 @@ impl ResourceNode {
     /// The current resource identity reserves bit 37 for starting resources,
     /// bits 38..39 for kind, and retains the map's tile coordinate fields.
     pub fn starting(tile: TileCoord, kind: ResourceKind) -> Option<Self> {
+        Self::starting_from_id(Self::starting_id(tile, kind)?)
+    }
+
+    pub(crate) fn starting_id(tile: TileCoord, kind: ResourceKind) -> Option<u64> {
         if tile.x < 0 || tile.y < 0 || tile.x >= 1 << 18 || tile.y >= 1 << 18 {
             return None;
         }
-        Self::starting_from_id(
-            (1 << 37) | ((kind as u64) << 38) | ((tile.y as u64) << 19) | ((tile.x as u64) << 1),
-        )
+        Some((1 << 37) | ((kind as u64) << 38) | ((tile.y as u64) << 19) | ((tile.x as u64) << 1))
     }
 
     pub fn starting_from_id(id: u64) -> Option<Self> {

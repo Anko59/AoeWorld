@@ -87,6 +87,10 @@ Synthetic evidence does not qualify finished RTS performance or hardware.
 
 Start activation also surveys the whole map on a bounded coarse lattice,
 ranking connected sampled lowlands before elevation and centre distance.
+On low-relief maps, an already certified inland center can return early after
+an elevation-only survey of the same whole-map lattice. Its resource-aware
+clearance, reachable-area and exit certificates remain mandatory. Mountainous
+maps retain the connected lowland search.
 Shore avoidance, gentle slopes and reachable area relax in stages; every
 returned start remains the center of a resource-aware clear area of at least
 5×5 tiles. A cancellable exact fallback checks at most every possible 4×4

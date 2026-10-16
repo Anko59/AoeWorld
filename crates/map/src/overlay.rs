@@ -66,19 +66,16 @@ impl ResourceOverlay {
 
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
         self.obstacles.contains(&tile)
-            || [
-                crate::ResourceKind::Food,
-                crate::ResourceKind::Wood,
-                crate::ResourceKind::Gold,
-                crate::ResourceKind::Stone,
-            ]
-            .into_iter()
-            .filter_map(|kind| ResourceNode::starting(tile, kind))
-            .any(|node| {
-                self.remaining
-                    .get(&node.id)
-                    .is_some_and(|amount| *amount > 0)
-            })
+            || (!self.remaining.is_empty()
+                && [
+                    crate::ResourceKind::Food,
+                    crate::ResourceKind::Wood,
+                    crate::ResourceKind::Gold,
+                    crate::ResourceKind::Stone,
+                ]
+                .into_iter()
+                .filter_map(|kind| ResourceNode::starting_id(tile, kind))
+                .any(|id| self.remaining.get(&id).is_some_and(|amount| *amount > 0)))
     }
 
     /// Startup insertion is part of the initial snapshot, not a depletion revision.
@@ -107,8 +104,8 @@ impl ResourceOverlay {
 
     pub fn starting_nodes(&self) -> impl Iterator<Item = ResourceNode> + '_ {
         self.remaining
-            .keys()
-            .filter_map(|id| ResourceNode::starting_from_id(*id))
+            .range((1 << 37)..)
+            .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
     }
 
     pub fn resource_by_id_with_cancel(

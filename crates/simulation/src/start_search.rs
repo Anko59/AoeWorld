@@ -80,6 +80,12 @@ impl Terrain {
                 return robust::search(&mut cache);
             });
         }
+        let Some(certified) = cancelled_work(fast::certified_center(&mut cache, center))? else {
+            return Ok(StartSearchResult::Cancelled);
+        };
+        if certified {
+            return Ok(StartSearchResult::Found(center));
+        }
         // Local certificates contribute a hint; failure only relaxes a
         // preference. Every positive budget continues through the same global
         // search, including small valid clearings without a long exit.
@@ -403,6 +409,9 @@ fn ring_chunks(center: TileCoord, ring: i32) -> Vec<(i32, i32)> {
 
 #[path = "start_search/robust.rs"]
 mod robust;
+
+#[path = "start_search/fast.rs"]
+mod fast;
 
 #[path = "start_search/regions.rs"]
 mod regions;
