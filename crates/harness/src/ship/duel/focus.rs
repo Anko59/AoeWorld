@@ -162,12 +162,22 @@ pub(super) fn run_scope(
     cache: &Path,
     wasm_runner: super::wasm::Runner,
 ) -> git::Result<CheckReport> {
+    run_retained(root, scope, cache, cache, wasm_runner)
+}
+
+pub(in crate::ship) fn run_retained(
+    root: &Path,
+    scope: &Scope,
+    cache: &Path,
+    retention: &Path,
+    wasm_runner: super::wasm::Runner,
+) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
         ..Default::default()
     };
     if !scope.packages.is_empty() {
-        let log = output::run_directory(cache)
+        let log = output::run_directory(retention)
             .map_err(|e| e.to_string())?
             .join("nextest.jsonl");
         println!("Retained nextest output: {}", log.display());
@@ -226,7 +236,7 @@ pub(super) fn run_scope(
         }
     }
     if !scope.specs.is_empty() {
-        let report_path = output::run_directory(cache)
+        let report_path = output::run_directory(retention)
             .map_err(|e| e.to_string())?
             .join("playwright.json");
         println!("Retained Playwright output: {}", report_path.display());
@@ -245,6 +255,7 @@ pub(super) fn run_scope(
             Ok(browser) => browser,
             Err(read) => return Err(missing_report(&report_path, checked, read)),
         };
+        browser_exit(&checked)?;
         report.merge(CheckReport {
             passed: browser.failed.is_empty(),
             ..browser
@@ -264,6 +275,21 @@ pub(super) fn run_scope(
     report.failed.sort();
     report.failed.dedup();
     Ok(report)
+}
+
+/// A complete JSON report cannot turn a deadline, lost server or runner crash
+/// into red evidence. Playwright uses exit 1 for ordinary assertion failures.
+pub(super) fn browser_exit(checked: &git::Result<()>) -> git::Result<()> {
+    match checked {
+        Ok(()) => Ok(()),
+        Err(error)
+            if error.lines().next()
+                == Some("focused Playwright check unavailable: Failed(Some(1))") =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error.clone()),
+    }
 }
 
 /// Why there is no readable report. A run that failed says why itself, whether
@@ -295,7 +321,7 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
         })
 }
 
-pub(super) fn browser_results(path: &Path) -> git::Result<CheckReport> {
+pub(in crate::ship) fn browser_results(path: &Path) -> git::Result<CheckReport> {
     let value: serde_json::Value =
         serde_json::from_slice(&output::read(path, "Playwright")?).map_err(|e| e.to_string())?;
     fn walk(v: &serde_json::Value, parents: &str, report: &mut CheckReport) {

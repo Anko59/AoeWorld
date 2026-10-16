@@ -176,7 +176,8 @@ fn run_specs(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    let name = format!("aoeworld-e2e-{}-{}", std::process::id(), address.port());
+    let name = std::env::var("AOE_RED_BROWSER_CONTAINER")
+        .unwrap_or_else(|_| format!("aoeworld-e2e-{}-{}", std::process::id(), address.port()));
     let _cleanup = BrowserContainer(name.clone());
     let user = format!(
         "{}:{}",
