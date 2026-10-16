@@ -1,5 +1,5 @@
 use super::*;
-use crate::gates::{policy::supervisor::worker, scopes::Kind};
+use crate::gates::{scopes::Kind, worker};
 use std::process::Command;
 fn git(root: &Path, args: &[&str]) -> String {
     let result = Command::new("git")

@@ -18,7 +18,7 @@ pub(crate) enum CommandObservation {
         reason: Precondition,
     },
     RestrictedWorker {
-        observation: crate::gates::policy::supervisor::worker::Observation,
+        observation: crate::gates::worker::Observation,
         log_retention: Retention,
     },
 }
