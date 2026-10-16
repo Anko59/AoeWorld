@@ -330,8 +330,9 @@ pub(super) fn functions(source: &str) -> git::Result<Vec<String>> {
     Ok(functions)
 }
 
-/// Tests this round added or changed that a focused run executes: no `#[ignore]`
-/// and no `cfg` other than `test`. `old` is the file at the round's base.
+/// Tests this round added or changed, regardless of their attribute stack.
+/// Execution reports, not source attributes, prove whether they ran.
+/// `old` is the file at the round's base.
 pub(super) fn added_functions(source: &str, old: Option<&str>) -> git::Result<Vec<String>> {
     let parsed = syn::parse_file(source).map_err(|e| e.to_string())?;
     let before: Vec<(String, String)> = old
@@ -343,11 +344,8 @@ pub(super) fn added_functions(source: &str, old: Option<&str>) -> git::Result<Ve
     let current = test_fns(&parsed.items);
     Ok(bodies(source, &current)
         .into_iter()
-        .zip(&current)
-        .filter(|((name, body), test)| {
-            !test.skipped && !before.contains(&(name.clone(), body.clone()))
-        })
-        .map(|((name, _), _)| name)
+        .filter(|test| !before.contains(test))
+        .map(|(name, _)| name)
         .collect())
 }
 
@@ -359,32 +357,21 @@ fn bodies(source: &str, tests: &[TestFn]) -> Vec<(String, String)> {
         .collect()
 }
 
-/// A test function with its qualified name, source lines and whether a plain run skips it.
+/// A test function with its qualified name and source lines, including attributes.
 pub(super) struct TestFn {
     pub(super) name: String,
     pub(super) start: usize,
     pub(super) end: usize,
-    pub(super) skipped: bool,
 }
 
 /// The one test-function detector: any attribute whose last segment contains "test".
 pub(super) fn test_fns(items: &[syn::Item]) -> Vec<TestFn> {
     let mut result = Vec::new();
-    collect_tests(items, "", false, &mut result);
+    collect_tests(items, "", &mut result);
     result
 }
 
-fn gated(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|a| {
-        a.path().is_ident("ignore")
-            || a.path().is_ident("cfg")
-                && a.meta
-                    .require_list()
-                    .is_ok_and(|list| list.tokens.to_string() != "test")
-    })
-}
-
-fn collect_tests(items: &[syn::Item], prefix: &str, skipped: bool, result: &mut Vec<TestFn>) {
+fn collect_tests(items: &[syn::Item], prefix: &str, result: &mut Vec<TestFn>) {
     use syn::spanned::Spanned;
     for item in items {
         match item {
@@ -400,13 +387,11 @@ fn collect_tests(items: &[syn::Item], prefix: &str, skipped: bool, result: &mut 
                     name: format!("{prefix}{}", f.sig.ident),
                     start: f.span().start().line,
                     end: f.span().end().line,
-                    skipped: skipped || gated(&f.attrs),
                 });
             }
             syn::Item::Mod(m) => {
                 if let Some((_, items)) = &m.content {
-                    let skipped = skipped || gated(&m.attrs);
-                    collect_tests(items, &format!("{prefix}{}::", m.ident), skipped, result);
+                    collect_tests(items, &format!("{prefix}{}::", m.ident), result);
                 }
             }
             _ => (),
@@ -416,6 +401,6 @@ fn collect_tests(items: &[syn::Item], prefix: &str, skipped: bool, result: &mut 
 
 fn test_functions(items: &[syn::Item], prefix: &str, functions: &mut Vec<String>) {
     let mut tests = Vec::new();
-    collect_tests(items, prefix, false, &mut tests);
+    collect_tests(items, prefix, &mut tests);
     functions.extend(tests.into_iter().map(|t| t.name));
 }

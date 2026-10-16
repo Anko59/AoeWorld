@@ -383,8 +383,8 @@ stop before the implementer launches and require `DUEL_CHECK` (for example
 one failing test belongs to a tester-changed file, matched by nextest binary id
 or module path, or browser test location; green means every selected check passes
 and every name that failed at red is reported as passed. After a red build
-failure, every test defined in the test files the tester changed that round must
-run and pass (at least one). Missing or skipped tests refuse green with
+failure, every test added or changed that round must run and pass (at least one),
+regardless of its attributes, including `cfg` and `ignore`. Missing or skipped tests refuse green with
 `the tester's tests did not run: <names/files>`; this also blocks the pre-existing
 failure exemption below.
 Integration failures follow the target's declared module path to the defining

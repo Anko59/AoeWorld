@@ -231,3 +231,95 @@ fn a_pre_existing_failure_in_a_changed_file_is_not_red_evidence() {
     report.failed.push("aoe-x::net$new_case".into());
     assert!(authored::has_failure(root, &paths, &report).unwrap());
 }
+
+#[test]
+fn changed_attribute_stacks_preserve_test_names_and_authorship() {
+    let temp = tempfile::tempdir().unwrap();
+    let old = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let path = "crates/x/src/tests.rs";
+    write(root, "crates/x/Cargo.toml", "[package]\nname='aoe-x'\n");
+    write(root, "crates/x/src/lib.rs", "#[cfg(test)] mod tests;\n");
+    for attributes in [
+        "#[cfg(unix)] #[test]",
+        "/// A documented regression.\n#[cfg(\n    unix\n)]\n#[test]\n#[should_panic]\n#[allow(dead_code)]",
+        "#[allow(dead_code)] #[wasm_bindgen_test]",
+        "#[test] #[cfg(unix)]",
+        "#[cfg(unix)] #[tokio::test]",
+        "#[test] #[ignore = \"must still count\"]",
+    ] {
+        let source = format!("{attributes} fn red_case() {{ assert_eq!(super::f(), 1); }}\n");
+        write(root, path, &source);
+        assert_eq!(authored::functions(&source).unwrap(), ["red_case"]);
+        for before in [None, Some(source.replace(", 1)", ", 2)"))] {
+            if let Some(before) = &before {
+                write(old.path(), path, before);
+            } else if old.path().join(path).exists() {
+                fs::remove_file(old.path().join(path)).unwrap();
+            }
+            assert_eq!(
+                authored::added_functions(&source, before.as_deref()).unwrap(),
+                ["red_case"],
+                "{attributes}"
+            );
+            assert!(
+                authored::changed_failure(
+                    root,
+                    old.path(),
+                    &[path.into()],
+                    "aoe-x$tests::red_case"
+                )
+                .unwrap(),
+                "{attributes}"
+            );
+        }
+        assert!(
+            authored::added_functions(&source, Some(&source))
+                .unwrap()
+                .is_empty()
+        );
+        write(old.path(), path, &source);
+        assert!(
+            !authored::changed_failure(root, old.path(), &[path.into()], "aoe-x$tests::red_case")
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn changed_attribute_stack_in_nested_module_excludes_cfg_test_helpers() {
+    let source = "#[cfg(unix)] mod nested {\n\
+        #[cfg(test)] fn helper() { assert_eq!(super::f(), 1); }\n\
+        #[test] #[should_panic] fn red_case() { assert_eq!(super::f(), 1); }\n}\n";
+    assert_eq!(authored::functions(source).unwrap(), ["nested::red_case"]);
+    assert_eq!(
+        authored::added_functions(source, None).unwrap(),
+        ["nested::red_case"]
+    );
+    let helper = "#[cfg(test)] fn helper() { assert_eq!(super::f(), 1); }";
+    assert!(authored::functions(helper).unwrap().is_empty());
+    assert!(authored::added_functions(helper, None).unwrap().is_empty());
+}
+
+#[test]
+fn changed_attribute_stack_never_exempts_missing_or_ignored_tests_from_green() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let path = "crates/x/tests/check.rs";
+    write(root, "crates/x/Cargo.toml", "[package]\nname='aoe-x'\n");
+    for attrs in ["#[cfg(unix)] #[test]", "#[test] #[ignore]"] {
+        write(root, path, &format!("{attrs} fn red_case() {{}}\n"));
+        let red = focus::CheckReport {
+            build_failed: true,
+            ..Default::default()
+        };
+        let mut green = focus::CheckReport {
+            passed: true,
+            ..Default::default()
+        };
+        let error = green::validate(root, &[path.into()], None, &red, &green).unwrap_err();
+        assert!(error.contains("check.rs::red_case"), "{error}");
+        green.tests.push("aoe-x::check$red_case".into());
+        assert!(green::validate(root, &[path.into()], None, &red, &green).is_ok());
+    }
+}
