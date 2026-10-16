@@ -98,6 +98,7 @@ help:
 	@echo '  make map-test        Run deterministic map-model tests'
 	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
 	@echo '  make duel DUEL_TASK=<file>  Run tester red then implementer green (docs/shipping.md)'
+	@echo '  make red             Record changed Rust/browser tests red before implementation, green at HEAD'
 	@echo '  make coverage        Check native production-line coverage floors'
 	@echo '  .agents/hooks/harness.sh build  Build the agent hook judge (docs/agent-runtimes.md)'
 	@echo '  make pre-commit      Local static gate'

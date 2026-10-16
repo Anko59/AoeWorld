@@ -17,7 +17,7 @@ pub(crate) type Runner<'a> =
     &'a dyn Fn(&Path, &[String], Option<&Path>) -> Result<Vec<SuiteRun>, String>;
 
 /// The real runner: the Dockerized WebDriver and `cargo test` of `make test-wasm`.
-pub(super) fn run_suites(
+pub(in crate::ship) fn run_suites(
     root: &Path,
     wasm: &[String],
     target: Option<&Path>,
