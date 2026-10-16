@@ -133,3 +133,80 @@ fn native_town_center_front_overhang_clears_its_flat_footprint() {
         "native front columns and foundation must clear flat ground"
     );
 }
+
+#[wasm_bindgen_test]
+fn town_center_roofs_use_individual_attachments_and_sit_behind_the_main_structure() {
+    let art = art();
+    let frames = super::super::world_sprite_frames(
+        &art,
+        &[],
+        &[],
+        &[unit(SceneUnitKind::TownCenter)],
+        camera(),
+        0,
+    );
+    let index = |source| {
+        frames
+            .iter()
+            .position(|f| f.1.atlas.uv[0] == source as f32 / 4096.0)
+            .unwrap()
+    };
+    let main = index(500);
+    for (source, offset) in [(501, 48.0), (504, 24.0), (502, 24.0), (506, -24.0)] {
+        let roof = index(source);
+        assert!(
+            !matches!(source, 501 | 504) || roof < main,
+            "main balcony must occlude its roof attachments"
+        );
+        assert!(
+            (frames[main].1.anchor[1] - frames[roof].1.anchor[1] - offset * 4.0 / 3.0).abs()
+                < 0.001
+        );
+    }
+}
+
+#[wasm_bindgen_test]
+fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
+    let art = art();
+    let terrain = (-6..6)
+        .flat_map(|y| {
+            (-6..6).map(move |x| SceneTerrain {
+                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                material: 0,
+                elevation_meters: 0.0,
+                surface: SceneTerrainSurface::flat(0.0),
+                appearance: None,
+            })
+        })
+        .collect::<Vec<_>>();
+    let camera = camera();
+    let surfaces = crate::projected_surface_triangles(&terrain, camera);
+    let layers = crate::game_renderer::world_layers::direct_world_layers(
+        surfaces.clone(),
+        &art,
+        &terrain,
+        &[],
+        &[unit(SceneUnitKind::TownCenter)],
+        camera,
+        0,
+    );
+    let changed = layers
+        .iter()
+        .filter_map(|layer| match layer {
+            WorldLayer::Surface(face) => Some(face),
+            _ => None,
+        })
+        .zip(&surfaces)
+        .filter(|(after, before)| {
+            assert_eq!(
+                after.points.map(|p| p.world),
+                before.points.map(|p| p.world)
+            );
+            after.color != before.color
+        })
+        .count();
+    assert!(
+        changed > 0,
+        "a building must wear the terrain below and around its footprint"
+    );
+}

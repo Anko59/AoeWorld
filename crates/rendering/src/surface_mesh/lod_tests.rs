@@ -154,3 +154,37 @@ fn a_frontmost_cliff_does_not_cancel_pickable_ground_behind_it() {
         Some([0.5, 0.5])
     );
 }
+
+#[wasm_bindgen_test]
+fn desktop_minimum_zoom_keeps_source_shores_and_elevations() {
+    let terrain = variable_height_map(256);
+    for viewport in [[1280.0, 720.0], [1920.0, 1080.0]] {
+        let triangles = projected_surface_triangles(
+            &terrain,
+            SceneCamera {
+                center: [128.0, 128.0],
+                zoom: 0.25,
+                viewport,
+                focus_elevation_meters: 4.0,
+            },
+        );
+        assert!(triangles.len() <= MAX_SURFACE_TRIANGLES);
+        for face in triangles.iter().filter(|t| !t.skirt) {
+            let sample = &terrain[(face.tile[1] * 256 + face.tile[0]) as usize];
+            for point in face.points {
+                assert!((point.world[0] - f64::from(face.tile[0])).abs() <= 1.0);
+                assert!((point.world[1] - f64::from(face.tile[1])).abs() <= 1.0);
+                let expected = sample_surface_height(
+                    sample.surface.corner_game_height_levels,
+                    sample.surface.triangulation,
+                    point.world[0] - f64::from(face.tile[0]),
+                    point.world[1] - f64::from(face.tile[1]),
+                );
+                assert_eq!(
+                    point.world[2], expected,
+                    "source elevation changed at minimum zoom"
+                );
+            }
+        }
+    }
+}

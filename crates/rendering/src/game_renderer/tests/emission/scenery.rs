@@ -152,3 +152,14 @@ fn decorative_rocks_use_small_native_frames_distinct_from_ore_at_both_zooms() {
     art.scenery.rocks.truncate(6);
     assert!(scene_resource_frame(&art, rock(0)).is_none());
 }
+
+#[wasm_bindgen_test]
+fn yellow_dressing_is_never_presented_as_a_gold_like_object() {
+    let art = crate::game_renderer::species_fixture::dressing_art();
+    let mut resource = piece(0);
+    resource.kind = SceneResource::GRASS;
+    for variant in 0..=255 {
+        resource.visual_variant = variant;
+        assert!(scene_resource_frame(&art, resource).is_none());
+    }
+}

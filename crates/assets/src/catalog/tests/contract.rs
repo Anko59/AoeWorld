@@ -244,3 +244,15 @@ fn village_art_is_optional_and_uses_reviewed_directional_prefixes_and_town_cente
         );
     }
 }
+
+#[test]
+fn resource_specific_worker_sets_are_selected_from_the_local_pack() {
+    for id in [1490, 1493, 1545, 1552, 1560] {
+        let source = OPTIONAL_RESOURCE_SOURCES
+            .iter()
+            .find(|source| source.id == id)
+            .expect("reviewed villager work/carry source");
+        assert_eq!(source.frames, 75);
+        assert_eq!(source.archive, "graphics.drs");
+    }
+}
