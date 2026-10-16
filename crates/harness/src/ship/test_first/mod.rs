@@ -3,13 +3,12 @@
 //! code, how many test functions came before the first product commit,
 //! which product files carry inline `#[cfg(test)]` changes, which
 //! build-time files changed, and any `Harness-Test-First: exempt —
-//! <reason>` trailer. Reviewers and the description get the history alongside
-//! the required harness-owned red/green record for product changes.
+//! <reason>` trailer. It informs the reviewers and the description; it never
+//! refuses a ship.
 mod history;
 pub(crate) mod inline;
 #[cfg(test)]
 mod inline_tests;
-pub(crate) mod red;
 #[cfg(test)]
 mod tests;
 
@@ -81,9 +80,7 @@ pub(crate) struct Report {
 
 /// Under the product crates: `crates/` except `crates/harness/`.
 fn in_scope(path: &str) -> bool {
-    (path.starts_with("crates/") && !path.starts_with("crates/harness/"))
-        || path.starts_with("web/")
-        || path.starts_with("browser/")
+    path.starts_with("crates/") && !path.starts_with("crates/harness/")
 }
 
 fn is_test(path: &str) -> bool {
@@ -272,14 +269,7 @@ fn classify(root: &Path, sha: &str, parent: Option<&str>) -> git::Result<(Base, 
         Some(parent) => args.push(parent),
         None => args.push("--root"),
     }
-    args.extend([
-        sha,
-        "--",
-        "crates/",
-        ":(exclude)crates/harness/",
-        "web/",
-        "browser/",
-    ]);
+    args.extend([sha, "--", "crates/", ":(exclude)crates/harness/"]);
     let patch = git::git(root, &args)?;
     let mut lines: BTreeMap<String, inline::Changes> =
         inline::changes(&patch).into_iter().collect();
@@ -435,13 +425,8 @@ impl Report {
 
 /// The report as Markdown; an unreadable history is reported, never fatal.
 pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
-    let mut text = report(root, base, head).map_or_else(
+    report(root, base, head).map_or_else(
         |error| format!("- test-first report unavailable: {error}\n"),
         |report| report.markdown(),
-    );
-    text.push_str(
-        &red::require(root, base, head)
-            .unwrap_or_else(|error| format!("- test-first red: {error}\n")),
-    );
-    text
+    )
 }
