@@ -1,5 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Projects differ only in how the browser draws the canvas. `webgpu` runs every
+// spec. `browser-defaults` and `canvas` run only the renderer-dependent specs
+// (renderer selection, fallbacks, pixel reads, per-project branches), so the
+// DOM, UI, request and flow specs are not repeated. A new spec is agnostic
+// unless it is added to this list; if unsure, add it. Matches are anchored to
+// whole file names, never substrings (`play.spec.ts` alone must not match
+// every `*.play.spec.ts`).
+const rendererDependent = [
+  /[\\/]play\.spec\.ts$/,
+  /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
+  /[\\/]source-creator\.spec\.ts$/,
+  /[\\/]camera[\\/](?:hooks|navigation)\.play\.spec\.ts$/,
+  /[\\/](?:rendering|assets)[\\/][^\\/]+\.play\.spec\.ts$/,
+  /[\\/]landscape[\\/]forest\.play\.spec\.ts$/,
+];
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
@@ -34,13 +50,12 @@ export default defineConfig({
     },
     {
       name: "canvas",
-      testMatch: /shared-surfaces\.spec\.ts/,
+      testMatch: /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {
       name: "browser-defaults",
-      testMatch:
-        /play\.spec\.ts|shared-surfaces\.spec\.ts|source-creator\.spec\.ts/,
+      testMatch: rendererDependent,
       use: { launchOptions: { args: [] } },
     },
   ],
