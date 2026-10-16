@@ -39,7 +39,8 @@ pub(crate) fn offline_vector_pages(
     Vec<ModernLandCoverPage>,
     Option<RiverTopologyGrid>,
 ) {
-    let ocean = hydrology_sampling::resample_ocean_coverage(128, axis, water).unwrap();
+    let source = hydrology_sampling::ocean_source_axis(water).unwrap();
+    let ocean = hydrology_sampling::resample_ocean_coverage(source, axis, water).unwrap();
     sampler::offline_vector_pages(request, axis, ocean)
 }
 
@@ -408,8 +409,12 @@ fn prepare_with_plan(
             ));
         }
     }
-    let ocean =
-        hydrology_sampling::resample_ocean_coverage(128, samples_per_axis, overview_water_pages)?;
+    let ocean_axis = hydrology_sampling::ocean_source_axis(overview_water_pages)?;
+    let ocean = hydrology_sampling::resample_ocean_coverage(
+        ocean_axis,
+        samples_per_axis,
+        overview_water_pages,
+    )?;
     crate::preparation_progress::stage(crate::preparation_progress::Phase::SamplingWater);
     let mut sampler = if vectors_only {
         Sampler::new_vectors(request, samples_per_axis, ocean, lakes, rivers)?

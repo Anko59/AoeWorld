@@ -3,10 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Canonical overview axis for elevation, history and vector hydrology.
+/// Canonical overview axis for every landscape field: elevation, water,
+/// potential vegetation, history and vector hydrology.
 pub const LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS: u16 = 1024;
-/// Categorical overview axis for potential vegetation and water.
-const LANDSCAPE_CATEGORICAL_SAMPLES_PER_AXIS: u16 = 128;
 
 /// Independent per-field overview axes requested from the source worker.
 /// Overview packages always use [`OverviewFieldAxes::LANDSCAPE`].
@@ -22,8 +21,8 @@ pub struct OverviewFieldAxes {
 impl OverviewFieldAxes {
     pub const LANDSCAPE: Self = Self {
         elevation: LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS,
-        vegetation: LANDSCAPE_CATEGORICAL_SAMPLES_PER_AXIS,
-        water: LANDSCAPE_CATEGORICAL_SAMPLES_PER_AXIS,
+        vegetation: LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS,
+        water: LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS,
         historical: LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS,
     };
 

@@ -275,6 +275,23 @@ pub(super) fn flatten_ocean_pages(
     Ok(values)
 }
 
+/// Axis of the supplied level-zero ocean pages. Detailed preparation passes
+/// its 128-sample overview context; landscape overview passes its 1024 axis.
+/// The pages are validated against this axis when they are flattened.
+pub(super) fn ocean_source_axis(pages: &[aoe_map::WaterPage]) -> Result<u16, GeodataError> {
+    pages
+        .iter()
+        .filter(|page| page.level == 0)
+        .map(|page| {
+            (u32::from(page.x) * u32::from(PAGE) + u32::from(page.width)).min(u32::from(u16::MAX))
+        })
+        .max()
+        .map(|axis| axis as u16)
+        .ok_or(GeodataError::Preparation(
+            "ocean pages do not cover the grid",
+        ))
+}
+
 pub(super) fn resample_ocean_coverage(
     source_axis: u16,
     target_axis: u16,

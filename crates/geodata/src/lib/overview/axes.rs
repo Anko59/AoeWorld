@@ -15,9 +15,11 @@ pub(crate) fn validate_field_axes(
     } else {
         MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS
     };
+    // Water and vegetation share the elevation cap: field-local landscape
+    // preparation raises all three to 1024, the coupled detailed context keeps 128.
     if !(2..=elevation_cap).contains(&axes.elevation)
-        || !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&axes.water)
-        || !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&axes.vegetation)
+        || !(2..=elevation_cap).contains(&axes.water)
+        || !(2..=elevation_cap).contains(&axes.vegetation)
         || !(2..=MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&axes.historical)
     {
         return Err(GeodataError::Preparation(

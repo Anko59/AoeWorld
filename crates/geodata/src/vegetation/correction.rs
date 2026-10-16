@@ -1,6 +1,7 @@
 //! Bounded, cited geographic patches for potential natural vegetation.
 use crate::{
-    GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, digest_hex, local_aeqd_definition,
+    GeodataError, MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS, digest_hex,
+    local_aeqd_definition,
 };
 use aoe_map::MapRequest;
 use serde::{Deserialize, Serialize};
@@ -205,7 +206,7 @@ impl VegetationPatchDocument {
 }
 
 fn binding(request: MapRequest, axis: u16) -> Result<VegetationPatchBinding, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&axis) {
+    if !(2..=MAX_LANDSCAPE_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&axis) {
         return Err(invalid("vegetation patch axis is outside direct bounds"));
     }
     let request = request

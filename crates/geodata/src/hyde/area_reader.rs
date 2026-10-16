@@ -8,7 +8,7 @@ use super::{
     area_stream::HistoricalPageStream,
     geographic_correction::GeographicHistoricalCorrectionDocument,
 };
-use crate::{GeodataError, MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS, local_aeqd_definition};
+use crate::{GeodataError, local_aeqd_definition};
 use aoe_map::{ENVIRONMENT_PAGE_SAMPLES, MapRequest};
 use gdal::spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef};
 use std::path::Path;
@@ -130,7 +130,7 @@ pub(super) fn prepare_hyde_lake_coverage(
     request: MapRequest,
     samples_per_axis: u16,
 ) -> Result<Vec<u8>, GeodataError> {
-    if !(2..=MAX_DIRECT_ELEVATION_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
+    if !(2..=super::MAX_HISTORICAL_GRID_SAMPLES_PER_AXIS).contains(&samples_per_axis) {
         return Err(GeodataError::Preparation(
             "HYDE lake grid is outside overview bounds",
         ));
