@@ -25,7 +25,7 @@ GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT
 HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo)) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e AOE_HEAVY_SLOT -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # A snapshot's slot directory is the real repository's Git directory: mount it unless a mount covers it.
 HEAVY_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
 HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(AOE_HEAVY_DIR)))

@@ -261,7 +261,7 @@ fn run(
         Command::Fmt => format_commands(false)?,
         Command::FmtCheck => format_commands(true)?,
         Command::Lint => native::lint()?,
-        Command::TestUnit => native::test_unit()?,
+        Command::TestUnit => native::test_unit(native::affected::requested())?,
         Command::LoadStatus => slots::print_status(Path::new("."), slots)?,
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
         Command::TestWasm => wasm_test::run()?,
@@ -301,7 +301,11 @@ fn run(
         }
         Command::Preflight => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
-            run(Command::TestUnit, "test-unit", slots)?;
+            let select = native::affected::preflight_base();
+            {
+                let _slot = slots::guard::guard("test-unit", slots)?;
+                native::test_unit(select)?;
+            }
             run(Command::PerfSmoke, "perf-smoke", slots)?;
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,
