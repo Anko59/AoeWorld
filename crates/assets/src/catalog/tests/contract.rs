@@ -59,7 +59,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 12);
+    assert_eq!(VERSION, 13);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -174,6 +174,18 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (30, 1252, 2),
             (31, 4584, 2),
             (32, 1262, 1),
+            (33, 1479, 75),
+            (34, 1484, 75),
+            (35, 1535, 75),
+            (36, 1536, 75),
+            (37, 891, 1),
+            (38, 3594, 1),
+            (39, 3595, 1),
+            (40, 3596, 1),
+            (41, 4610, 1),
+            (42, 4611, 1),
+            (43, 4612, 1),
+            (44, 889, 1),
         ]
     );
 }
@@ -201,4 +213,34 @@ fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
                     .unwrap()
                     .supports_frames(source.frames))
     );
+}
+
+#[test]
+fn village_art_is_optional_and_uses_reviewed_directional_prefixes_and_town_center_parts() {
+    for (id, count) in [
+        (1479, 75),
+        (1484, 75),
+        (1535, 75),
+        (1536, 75),
+        (891, 1),
+        (3594, 1),
+        (3595, 1),
+        (3596, 1),
+        (4610, 1),
+        (4611, 1),
+        (4612, 1),
+        (889, 1),
+    ] {
+        let source = OPTIONAL_RESOURCE_SOURCES
+            .iter()
+            .find(|source| source.id == id)
+            .expect("optional village sprite metadata");
+        assert_eq!(source.frames, count);
+        assert!(source.terrain_topology.is_none());
+        assert!(
+            !REQUIRED_RENDER_SOURCES
+                .iter()
+                .any(|required| required.id == id)
+        );
+    }
 }

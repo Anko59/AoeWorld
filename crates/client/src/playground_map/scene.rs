@@ -225,21 +225,56 @@ pub(in super::super) fn units(
     client: &Client,
     scene: &PreparedScene,
 ) -> Vec<aoe_rendering::SceneUnit> {
-    client
+    let mut units = client
         .units
         .values()
         .map(|unit| {
             let position = client.presentation.position(*unit);
             aoe_rendering::SceneUnit {
+                kind: if unit.kind == aoe_protocol::UnitKind::Scout {
+                    aoe_rendering::SceneUnitKind::Scout
+                } else if unit.task == aoe_protocol::UnitTask::Returning
+                    && unit
+                        .carried
+                        .is_some_and(|load| load.kind == aoe_protocol::ResourceKind::Wood)
+                {
+                    aoe_rendering::SceneUnitKind::VillagerCarrying
+                } else if unit.task == aoe_protocol::UnitTask::Gathering
+                    && super::super::village::resource_kind(client, unit.id)
+                        == Some(aoe_protocol::ResourceKind::Wood)
+                {
+                    aoe_rendering::SceneUnitKind::VillagerWorking
+                } else {
+                    aoe_rendering::SceneUnitKind::Villager
+                },
                 id: unit.id,
                 position,
                 moving: unit.moving || position != unit.position.as_tiles(),
                 facing: unit.facing,
-                selected: client.selected == Some(unit.id),
+                selected: client.selected.units.contains(&unit.id),
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    for building in &client.village.buildings {
+        let position = super::super::village::building_center(building);
+        let slot = units.partition_point(|unit| unit.id < building.id);
+        units.insert(
+            slot,
+            aoe_rendering::SceneUnit {
+                kind: aoe_rendering::SceneUnitKind::TownCenter,
+                id: building.id,
+                position,
+                moving: false,
+                facing: 0,
+                selected: client.selected.building_id == Some(building.id),
+                elevation_meters: scene
+                    .height(position)
+                    .unwrap_or_else(|| elevation_at_world(client, position)),
+            },
+        );
+    }
+    units
 }

@@ -31,6 +31,39 @@ async fn controller() -> (
 }
 
 #[tokio::test]
+async fn panning_keeps_owned_villagers_authoritative_for_selection_and_worker_counters() {
+    let (service, id, mut rx, _) = controller().await;
+    let distant = TileRect::new(TileCoord::new(64, 64), TileCoord::new(68, 68));
+    service.subscribe(id, 2, distant).await;
+    let GameplayServerMessage::Snapshot { units, .. } = rx.try_recv().unwrap() else {
+        panic!("snapshot")
+    };
+    assert_eq!(
+        units.len(),
+        4,
+        "the player's village survives camera panning"
+    );
+    assert!(
+        units
+            .iter()
+            .all(|unit| !distant.contains(unit.position.tile_floor()))
+    );
+    let villager = units
+        .iter()
+        .find(|unit| unit.kind == UnitKind::Villager)
+        .unwrap();
+    let start = villager.position.tile_floor();
+    let destination =
+        WorldPosition::from_tile_center(TileCoord::new(start.x - 1, start.y)).unwrap();
+    service.queue_move(id, 1, villager.id, destination).await;
+    service.tick().await;
+    assert!(drain(&mut rx).iter().any(|message| matches!(
+        message, GameplayServerMessage::Tick { changed_units, removals, .. }
+        if removals.is_empty() && changed_units.iter().any(|unit| unit.id == villager.id && unit.task == UnitTask::Moving)
+    )));
+}
+
+#[tokio::test]
 async fn move_gather_and_train_share_sequence_and_spectator_limits() {
     let (service, id, mut rx, scout) = controller().await;
     service

@@ -98,6 +98,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
   );
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
   captureWire = true;
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await ready(page);
 

@@ -13,6 +13,7 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         kind: aoe_protocol::UnitKind::Scout,
         task: aoe_protocol::UnitTask::Idle,
         carried: None,
+        gathering: None,
     }
 }
 

@@ -73,7 +73,8 @@ export function initNavigation() {
     panel.classList.toggle('expanded', value);
     toggle.setAttribute('aria-expanded', String(value));
     toggle.setAttribute('aria-label', value ? 'Close whole map' : 'Show whole map');
-    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? `terrain (${samples}×${samples})` : 'schematic'}`;
+    panel.dataset.rasterSamples = String(samples);
+    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? 'terrain' : 'schematic'}`;
     if (value) svg.focus();
   }
   toggle.addEventListener('click', () => overview(!expanded));
@@ -87,7 +88,7 @@ export function initNavigation() {
       ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1] }[key];
   }
   document.addEventListener('keydown', event => {
-    if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (document.querySelector("dialog[open]") || editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if (key === 'm' && !event.repeat) {
       event.preventDefault();
@@ -196,6 +197,7 @@ export function initNavigation() {
   }
 
   window.aoeNavigation = {
+    overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
     map: changeMap,
     frame(state) {

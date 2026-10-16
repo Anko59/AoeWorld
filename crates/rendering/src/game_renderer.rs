@@ -12,8 +12,13 @@ use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
+#[path = "game_renderer/world_layers.rs"]
+mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
+use world_layers::direct_world_layers;
+#[cfg(test)]
+use world_layers::{layer_order, ordered_world_layers, triangle_depth};
 #[cfg(test)]
 use world_sprites::world_sprite_frames;
 
@@ -21,6 +26,9 @@ use world_sprites::world_sprite_frames;
 #[path = "game_renderer/tests/emission/direct_emission.rs"]
 mod direct_emission_tests;
 pub use world_sprites::{scene_resource_frame, scene_resource_presentation};
+pub fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
+    world_sprites::scene_unit_animates(art, unit, camera)
+}
 
 pub fn resource_sprite_bounds(
     resource: SceneResource,
@@ -75,7 +83,7 @@ pub enum GameRenderer {
 mod scene_types;
 pub use scene_types::{
     SceneCamera, SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance,
-    SceneTerrainSurface, SceneUnit,
+    SceneTerrainSurface, SceneUnit, SceneUnitKind,
 };
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
@@ -390,106 +398,6 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     atlas.set_width(GAME_ATLAS_SIDE);
     atlas.set_height(GAME_ATLAS_SIDE);
     Ok(atlas)
-}
-
-fn direct_world_layers(
-    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
-    art: &GameArt,
-    terrain: &[SceneTerrain],
-    resources: &[SceneResource],
-    units: &[SceneUnit],
-    camera: SceneCamera,
-    animation: usize,
-) -> Vec<WorldLayer> {
-    // Each eligible resource/unit emits at most a shadow and a body. Culling
-    // may reduce this bound; diagnostic terrain frames keep their own helper.
-    let object_capacity = resources
-        .len()
-        .saturating_add(units.len())
-        .saturating_mul(2);
-    ordered_world_layers_with(surfaces, object_capacity, units, camera, |entries| {
-        world_sprites::emit_world_sprite_frames(
-            art,
-            terrain,
-            resources,
-            units,
-            camera,
-            animation,
-            |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
-        );
-    })
-}
-
-#[cfg(test)]
-fn ordered_world_layers(
-    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
-    objects: Vec<(Sprite, GameFrame, f64, u64)>,
-    units: &[SceneUnit],
-    camera: SceneCamera,
-) -> Vec<WorldLayer> {
-    ordered_world_layers_with(surfaces, objects.len(), units, camera, |entries| {
-        entries.extend(
-            objects
-                .into_iter()
-                .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
-        );
-    })
-}
-
-fn ordered_world_layers_with(
-    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
-    object_capacity: usize,
-    units: &[SceneUnit],
-    camera: SceneCamera,
-    emit: impl FnOnce(&mut Vec<WorldLayer>),
-) -> Vec<WorldLayer> {
-    let surfaces = surfaces.into_iter();
-    let selected_count = units.iter().filter(|unit| unit.selected).count();
-    let mut entries = Vec::with_capacity(
-        surfaces
-            .size_hint()
-            .0
-            .saturating_add(object_capacity)
-            .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
-    );
-    entries.extend(surfaces.map(WorldLayer::Surface));
-    for unit in units.iter().filter(|unit| unit.selected) {
-        entries.extend(
-            game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
-                .into_iter()
-                .map(|(sprite, depth)| WorldLayer::Selection(sprite, depth)),
-        );
-    }
-    emit(&mut entries);
-    // Compose the former object (depth, id) pre-sort with layer (depth, kind)
-    // ordering in one stable sort. Exact id ties keep shadow/body and source
-    // input order, without a second scene or a second object sort buffer.
-    entries.sort_by(|left, right| {
-        let left = layer_order(left);
-        let right = layer_order(right);
-        left.0
-            .total_cmp(&right.0)
-            .then(left.1.cmp(&right.1))
-            .then(left.2.cmp(&right.2))
-    });
-    entries
-}
-
-fn layer_order(layer: &WorldLayer) -> (f64, u8, u64) {
-    match layer {
-        WorldLayer::Surface(triangle) => (triangle_depth(triangle), 0, 0),
-        WorldLayer::Selection(_, depth) => (*depth, 1, 0),
-        WorldLayer::Sprite(_, _, depth, id) => (*depth, 2, *id),
-    }
-}
-
-fn triangle_depth(triangle: &ProjectedSurfaceTriangle) -> f64 {
-    triangle
-        .points
-        .iter()
-        .map(|point| surface_render_depth(point.world, triangle.skirt))
-        .sum::<f64>()
-        / 3.0
 }
 
 enum WorldLayer {

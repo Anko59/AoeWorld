@@ -57,10 +57,12 @@ slot and space in its bounded queue. Acceptance pays the food and reserves the
 population slot; population used continues to count living units. Only the
 front entry advances. A completed entry waits for a free passable perimeter
 tile and does not pay again. New villagers use the shared entity allocator.
-No houses, additional building commands, death, rally points or saved village
+Cancelling the active training entry refunds its food and releases its reserved
+population slot; cancelling an empty queue cannot create resources. No houses,
+additional building commands, death, rally points or saved village
 state are introduced here.
 
-Gameplay protocol 2 is the only current wire. Gather and Train share Move's
+Gameplay protocol 2 is the only current wire. Gather, Train and CancelTraining share Move's
 bounded per-session/global command queue, sequencing and role checks. Snapshot
 and tick subscription revisions also cover player stockpile/population and
 building footprint/queue/progress. Per-session residents produce sparse changes;
@@ -71,11 +73,8 @@ crate; changing a gameplay value beyond those bounds also changes that current
 wire contract and its golden fixtures in place.
 
 The uniform compatibility start has stockpiles; immutable-map resource nodes
-are available after activating a resource-bearing map. The existing client
-receives the current wire, keeps its unit presentation and Move controls, and
-shows readable command refusals. Villager/Town Center art and Gather/Train
-interaction belong to the next client change; the AoE-style interface follows
-separately.
+are available after activating a resource-bearing map. The [village interface](village-interface.md) presents current player/building
+state and dispatches these commands. The server remains the economy authority.
 
 Focused validation is `make duel-check HARNESS_DUEL_BASE=<merge base>` followed
 by `make test-wasm` and `make test-e2e`. Economy tests cover exact tick rates,

@@ -69,12 +69,8 @@ impl GameplayService {
         let tick = world.tick();
         let mut updates = Vec::new();
         for (session_id, subscription) in subscriptions {
-            let mut current = world.query(subscription.region).0;
-            if !current.iter().any(|unit| unit.id == self.primary_unit_id)
-                && let Some(primary) = world.unit(self.primary_unit_id)
-            {
-                current.push(primary);
-            }
+            let current =
+                super::economy::query_units(&world, subscription.region, self.primary_unit_id);
             if current.len() > MAX_SUBSCRIBED_UNITS {
                 updates.push((
                     session_id,
@@ -86,10 +82,9 @@ impl GameplayService {
                 ));
                 continue;
             }
-            current.sort_by_key(|unit| unit.id);
             let current = current
                 .iter()
-                .map(|unit| (unit.id, unit_state(unit)))
+                .map(|unit| (unit.id, unit_state(&world, unit)))
                 .collect::<BTreeMap<_, _>>();
             updates.push((
                 session_id,

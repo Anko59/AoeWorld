@@ -25,6 +25,7 @@ test("the direct-game flag preserves terrain and capture hooks", async ({
     if (!response.ok) throw new Error(await response.text());
   }, hash);
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await page.evaluate(() => {
@@ -212,6 +213,10 @@ test("a preset submits the creator request and loading waits for visible terrain
     "fill",
     "#ff8000",
   );
+  await expect(page.locator("#game-menu")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open map creator" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Open map creator" }).click();
   await expect(page.getByLabel("Region", { exact: true })).toHaveValue("alps");
   await expect(page.locator("#map-location")).toContainText("Alps");

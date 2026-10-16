@@ -24,7 +24,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::DeadwoodTree as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::TownCenterShadow as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -257,6 +257,24 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         GameArt {
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
+            village: [
+                AssetRole::VillagerStanding,
+                AssetRole::VillagerWalking,
+                AssetRole::VillagerWorking,
+                AssetRole::VillagerCarrying,
+            ]
+            .map(group),
+            town_center: [
+                AssetRole::TownCenterMain,
+                AssetRole::TownCenterRoofLeft,
+                AssetRole::TownCenterSupportLeft,
+                AssetRole::TownCenterSupportsLeft,
+                AssetRole::TownCenterRoofRight,
+                AssetRole::TownCenterSupportsRight,
+                AssetRole::TownCenterSupportRight,
+                AssetRole::TownCenterShadow,
+            ]
+            .map(group),
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,

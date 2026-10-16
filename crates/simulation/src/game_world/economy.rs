@@ -190,6 +190,9 @@ impl super::GameWorld {
     pub fn players(&self) -> impl Iterator<Item = PlayerEconomy> + '_ {
         self.economy.players.values().copied()
     }
+    pub fn gathering_kind(&self, id: EntityId) -> Option<ResourceKind> {
+        self.economy.gatherers.get(&id).map(|task| task.kind)
+    }
     pub fn gather_target(&self, id: EntityId) -> Option<u64> {
         self.economy.gatherers.get(&id).map(|task| task.node)
     }

@@ -81,6 +81,9 @@ enum PendingAction {
         entity_id: EntityId,
         resource_id: u64,
     },
+    CancelTraining {
+        building_id: EntityId,
+    },
     Train {
         building_id: EntityId,
         kind: aoe_protocol::UnitKind,
@@ -250,12 +253,7 @@ impl GameplayService {
             .await;
             return;
         }
-        let mut units = world.query(region).0;
-        if !units.iter().any(|unit| unit.id == self.primary_unit_id)
-            && let Some(primary) = world.unit(self.primary_unit_id)
-        {
-            units.push(primary);
-        }
+        let units = economy::query_units(&world, region, self.primary_unit_id);
         if units.len() > MAX_SUBSCRIBED_UNITS {
             drop(world);
             self.send_to(
@@ -268,13 +266,16 @@ impl GameplayService {
             .await;
             return;
         }
-        units.sort_by_key(|unit| unit.id);
         let players = economy::players(&world);
         let buildings = economy::buildings(&world);
+        let units = units
+            .iter()
+            .map(|unit| unit_state(&world, unit))
+            .collect::<Vec<_>>();
         let snapshot = GameplayServerMessage::Snapshot {
             revision,
             tick: world.tick(),
-            units: units.iter().map(unit_state).collect(),
+            units: units.clone(),
             players: players.values().copied().collect(),
             buildings: buildings.values().cloned().collect(),
         };
@@ -310,11 +311,7 @@ impl GameplayService {
             session.subscription_times.push_back(now);
             session.subscription = Some(Subscription { revision, region });
             session.resource_revision = None;
-            session.resident = units
-                .iter()
-                .map(unit_state)
-                .map(|unit| (unit.id, unit))
-                .collect();
+            session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
             session.resident_players = players;
             session.resident_buildings = buildings;
             failed = session.sender.try_send(snapshot).is_err();

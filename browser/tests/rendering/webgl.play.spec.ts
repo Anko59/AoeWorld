@@ -213,6 +213,7 @@ async function horsePixels(
 }
 
 async function selectAndMove(page: Page, movementPixelTimeout = 10_000) {
+  await page.keyboard.press("Home");
   const canvas = page.locator("#scene");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Missing game canvas");

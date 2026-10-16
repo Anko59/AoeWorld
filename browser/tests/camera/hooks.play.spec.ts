@@ -108,6 +108,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
   }, hash);
   expect(activation.start_available).toBe(true);
   await expect(page.locator("#connection")).toHaveText(/reconnect/);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect
     .poll(() =>

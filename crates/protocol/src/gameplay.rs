@@ -38,6 +38,8 @@ pub struct UnitState {
     pub kind: UnitKind,
     pub task: UnitTask,
     pub carried: Option<CarriedResource>,
+    /// Assigned resource from the authoritative job, independent of carried load.
+    pub gathering: Option<ResourceKind>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +69,10 @@ pub enum ClientMessage {
         sequence: u64,
         building_id: EntityId,
         kind: UnitKind,
+    },
+    CancelTrainingOrder {
+        sequence: u64,
+        building_id: EntityId,
     },
 }
 

@@ -55,6 +55,19 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_cancel_training(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::CancelTraining { building_id },
+        )
+        .await;
+    }
     async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
         let now = Instant::now();
         let current_tick = self.world.read().await.tick();
@@ -136,6 +149,9 @@ pub(super) fn apply(
             entity_id,
             resource_id,
         } => world.issue_gather(player, entity_id, resource_id),
+        PendingAction::CancelTraining { building_id } => {
+            world.issue_cancel_training(player, building_id)
+        }
         PendingAction::Train { building_id, kind } => {
             world.issue_train(player, building_id, super::economy::native_kind(kind))
         }
