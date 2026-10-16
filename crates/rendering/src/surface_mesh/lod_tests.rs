@@ -188,3 +188,52 @@ fn desktop_minimum_zoom_keeps_source_shores_and_elevations() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn minimum_zoom_keeps_the_previous_levels_jagged_shore_and_ground_sheet() {
+    let mut terrain = variable_height_map(256);
+    for sample in &mut terrain {
+        let [x, y] = sample.position.map(|v| v.floor() as i32);
+        if x < 128 + (y % 7) - 3 {
+            sample.material = 5;
+            sample.surface = SceneTerrainSurface::flat(2.0);
+            sample.surface.water = 1;
+        }
+    }
+    for zoom in [0.25, 0.5] {
+        let triangles = projected_surface_triangles(
+            &terrain,
+            SceneCamera {
+                center: [128.0, 128.0],
+                zoom,
+                viewport: [1280.0, 720.0],
+                focus_elevation_meters: 4.0,
+            },
+        );
+        assert!(!triangles.is_empty());
+        assert!(triangles.len() <= MAX_SURFACE_TRIANGLES);
+        let mut shore = 0;
+        for face in triangles.iter().filter(|face| !face.skirt) {
+            let sample = &terrain[(face.tile[1] * 256 + face.tile[0]) as usize];
+            assert_eq!(face.material, sample.material);
+            for point in face.points {
+                let local = [
+                    point.world[0] - f64::from(face.tile[0]),
+                    point.world[1] - f64::from(face.tile[1]),
+                ];
+                assert!(local.into_iter().all(|v| (0.0..=1.0).contains(&v)));
+                assert_eq!(
+                    point.world[2],
+                    sample_surface_height(
+                        sample.surface.corner_game_height_levels,
+                        sample.surface.triangulation,
+                        local[0],
+                        local[1]
+                    )
+                );
+            }
+            shore += usize::from(sample.surface.water != 0);
+        }
+        assert!(shore > 100);
+    }
+}

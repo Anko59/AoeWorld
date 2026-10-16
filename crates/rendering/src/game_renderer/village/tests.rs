@@ -190,6 +190,13 @@ fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
         camera,
         0,
     );
+    assert_eq!(
+        layers
+            .iter()
+            .filter(|layer| matches!(layer, WorldLayer::Surface(_)))
+            .count(),
+        surfaces.len()
+    );
     let changed = layers
         .iter()
         .filter_map(|layer| match layer {
@@ -202,6 +209,24 @@ fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
                 after.points.map(|p| p.world),
                 before.points.map(|p| p.world)
             );
+            assert!(
+                after
+                    .color
+                    .iter()
+                    .zip(before.color)
+                    .all(|(after, before)| *after <= before)
+            );
+            let center =
+                [0, 1].map(|axis| before.points.iter().map(|p| p.world[axis]).sum::<f64>() / 3.0);
+            if center
+                .into_iter()
+                .any(|coordinate| (coordinate - 0.5).abs() >= 3.4)
+            {
+                assert_eq!(
+                    after.color, before.color,
+                    "ground outside the footprint halo is untouched"
+                );
+            }
             after.color != before.color
         })
         .count();
