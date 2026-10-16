@@ -1,6 +1,6 @@
 //! Main-session driver: a tester's red tests, then an implementer's green code.
 pub(in crate::ship) mod authored;
-pub(in crate::ship) mod baseline;
+mod baseline;
 mod browser;
 #[cfg(test)]
 #[path = "tests/closing.rs"]
@@ -21,12 +21,12 @@ mod panics_tests;
 mod qualify;
 pub(in crate::ship) mod runner;
 mod scope;
-pub(in crate::ship) mod specs;
+mod specs;
 pub(crate) mod stages;
 #[cfg(test)]
 mod tests;
 mod tree;
-pub(in crate::ship) mod wasm;
+mod wasm;
 #[cfg(test)]
 #[path = "tests/wasm.rs"]
 mod wasm_tests;
