@@ -94,6 +94,23 @@ base information select every job. The aggregate `required` check recomputes
 the selection at the checked-out revision and requires success for each selected
 job; only unselected jobs may be skipped. `make ci-check` validates that
 contract locally when supplied the manifest and job results.
+
+**Sharded browser suite (#388).** The Playwright suite ran on one serial worker
+and took 19.5 of 20 minutes on the 4-core runner, behind `browser-check` and
+`test-wasm` in the same job. CI now runs it as the `e2e` job, a matrix of three
+parallel jobs, `AOE_E2E_SHARD=1/3`, `2/3` and `3/3`, beside the `browser` job
+(`browser-check`, `test-wasm`). The registry's `e2e` job holds `test-e2e`, so it
+is selected exactly when that gate is, and `required` takes the matrix result,
+which is success only when every shard passed. Each shard builds its own server
+and WASM bundle, then runs `make test-e2e`, which hands `--shard=i/n` to
+Playwright; its container is named `aoeworld-e2e-shard-i-of-n-…`, it writes
+`reports/e2e/shard-i-of-n.json` instead of the release evidence
+`reports/e2e/pass.json`, and CI uploads `e2e-i-diagnostics`. Playwright splits
+the tests, not the projects, so the shards together run every test once.
+`make test-e2e` without `AOE_E2E_SHARD` runs the whole suite and writes
+`pass.json` (the dev release job and `make coverage` use it); a shard together
+with `AOE_E2E_COVERAGE` is refused. `AOE_E2E_SHARD` must be `i/n` with
+`1 <= i <= n <= 16`; it does not apply to the duel's focused specs.
 Do not claim a complete gate until they exist and pass at the exact revision.
 
 ## Failure output

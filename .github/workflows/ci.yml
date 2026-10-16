@@ -24,6 +24,7 @@ jobs:
       manifest: ${{ steps.manifest.outputs.manifest }}
       native_coverage: ${{ steps.manifest.outputs.native_coverage }}
       browser: ${{ steps.manifest.outputs.browser }}
+      e2e: ${{ steps.manifest.outputs.e2e }}
       target_performance: ${{ steps.manifest.outputs.target_performance }}
       fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
     steps:
@@ -82,13 +83,11 @@ jobs:
       - run: make bootstrap
       - run: make browser-check
       - run: make test-wasm
-      - run: make test-e2e
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: browser-diagnostics
           path: |
-            browser/test-results/
             reports/perf/browser.json
             reports/process/
           retention-days: 7
@@ -98,6 +97,36 @@ jobs:
         with:
           name: wasm-browser-report
           path: reports/wasm/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e:
+    # The Playwright suite in three parallel shards (#388): the same make
+    # test-e2e, with AOE_E2E_SHARD naming one part. The job's result is
+    # success only when every shard passed, and `required` checks that result.
+    needs: select
+    if: ${{ needs.select.outputs.e2e == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
+      - run: make bootstrap
+      - run: make test-e2e
+        env:
+          AOE_E2E_SHARD: ${{ matrix.shard }}/3
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-${{ matrix.shard }}-diagnostics
+          path: |
+            browser/test-results/
+            reports/e2e/
+            reports/process/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -162,7 +191,7 @@ jobs:
   required:
     permissions: { contents: read, statuses: write }
     if: always()
-    needs: [select, static, native-coverage, browser, target-performance, fuzz-smoke]
+    needs: [select, static, native-coverage, browser, e2e, target-performance, fuzz-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -176,7 +205,7 @@ jobs:
           AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
           AOE_JOB_RESULTS_JSON: >-
-            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
+            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","e2e":"${{ needs.e2e.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
         run: make ci-check
       - name: Report dispatched aggregate as a commit status
         if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref_name != 'dev' && github.ref_name != 'main' }}

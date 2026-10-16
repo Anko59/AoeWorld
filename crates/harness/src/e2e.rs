@@ -1,8 +1,10 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+mod command;
 mod country;
 mod landscape;
 mod matrix;
+mod shard;
 mod source;
 pub(crate) mod stale;
 mod visual;
@@ -121,7 +123,9 @@ pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    run_specs(&[], None)
+    let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
+    let shard = shard::Shard::from_env(coverage.as_deref())?;
+    run_specs(&[], None, shard)
 }
 
 pub(crate) fn run_focused(
@@ -131,12 +135,13 @@ pub(crate) fn run_focused(
     if specs.is_empty() {
         return Err("no focused browser specs".into());
     }
-    run_specs(specs, Some(report))
+    run_specs(specs, Some(report), None)
 }
 
 fn run_specs(
     specs: &[String],
     report: Option<&std::path::Path>,
+    shard: Option<shard::Shard>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -176,62 +181,16 @@ fn run_specs(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    let name = format!("aoeworld-e2e-{}-{}", std::process::id(), address.port());
+    let name = command::container_name(std::process::id(), address.port(), shard);
     let _cleanup = BrowserContainer(name.clone());
-    let user = format!(
-        "{}:{}",
-        nix::unistd::Uid::current(),
-        nix::unistd::Gid::current()
-    );
-    let mount = format!("{}:{}", root.display(), root.display());
-    let modules = root
-        .join("browser/node_modules")
-        .canonicalize()
-        .map_err(|e| format!("{}/browser/node_modules: {e}", root.display()))?;
-    let dependencies = format!("{}:{}:ro", modules.display(), modules.display());
-    let home = format!("HOME={}/.cache/browser-home", root.display());
-    let url = format!("AOE_BASE_URL=http://{address}");
-    let workdir = root.join("browser");
-    let mut args = vec![
-        "run".to_owned(),
-        "--rm".to_owned(),
-        "--init".to_owned(),
-        "--network".to_owned(),
-        "host".to_owned(),
-        "--ipc".to_owned(),
-        "host".to_owned(),
-        "--user".to_owned(),
-        user,
-        "--name".to_owned(),
-        name,
-        "-e".to_owned(),
-        home,
-        "-e".to_owned(),
-        url,
-        "-e".to_owned(),
-        format!("AOE_E2E_LANDSCAPE_HASH={}", fixture.hash),
-        "-v".to_owned(),
-        mount,
-        "-v".to_owned(),
-        dependencies,
-        "-w".to_owned(),
-        workdir.display().to_string(),
-        "aoeworld/browser-tools:1.63.0".to_owned(),
-        "xvfb-run".to_owned(),
-        "-a".to_owned(),
-        "npm".to_owned(),
-        "run".to_owned(),
-        "test:e2e".to_owned(),
-    ];
-    if !specs.is_empty() {
-        let npm = args
-            .iter()
-            .position(|arg| arg == "npm")
-            .ok_or("npm command missing")?;
-        args.insert(npm + 1, "--silent".to_owned());
-        args.extend(["--".to_owned(), "--reporter=json".to_owned()]);
-        args.extend(specs.iter().cloned());
-    }
+    let args = command::docker_args(&command::Run {
+        root: &root,
+        address,
+        container: name,
+        landscape_hash: &fixture.hash,
+        specs,
+        shard,
+    })?;
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let cancellation = process::Cancellation::default();
     let browser_result = thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
@@ -291,6 +250,11 @@ fn run_specs(
     browser_result.map_err(|error| stale::annotate(error, &existing_maps))?;
     if !specs.is_empty() {
         return Ok(());
+    }
+    if let Some(shard) = shard {
+        // One shard runs a part of the suite: the release evidence below needs
+        // the whole run, so the shard records its own passing result instead.
+        return shard.write_pass(&fixture.hash);
     }
     let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if !revision.status.success() {
