@@ -50,10 +50,11 @@ perf-wasm-size-steps:
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/pkg/aoe_client_bg.wasm -o reports/perf/optimized.wasm
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/optimized.wasm > reports/perf/optimized.wasm.gz
 
-# The local ship's cap check (preflight): compare the gzip artifact the perf-wasm-size gate just wrote with
-# baselines/perf/wasm.json under the gate's own rule. It measures nothing itself (the gate requires
-# perf-wasm-size), so it is light and cannot spend its budget waiting for a heavy slot.
-perf-wasm-cap: slot-bootstrap
+# The local ship's cap check (preflight): measure (perf-wasm-size), then compare with baselines/perf/wasm.json
+# under the gate's own rule. It measures in its own gate snapshot: each gate runs in a separate checkout, so it
+# cannot read another gate's artifact. It is heavy, so its slot and load wait come before its deadline, and the
+# nested perf-wasm-size inherits that slot instead of waiting again. perf-wasm-size alone stays a measurement.
+perf-wasm-cap: perf-wasm-size
 	@target/debug/aoe-harness perf-wasm-size-check
 
 build-wasm: slot-bootstrap
