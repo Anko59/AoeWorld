@@ -1,4 +1,4 @@
-use super::destination_passable;
+use aoe_simulation::destination_passable;
 
 #[test]
 fn destination_feedback_uses_the_same_ground_and_occupancy_rule_as_movement() {

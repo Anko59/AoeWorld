@@ -360,6 +360,12 @@ impl Terrain {
     }
 }
 
+/// Shared destination rule for simulation and client command feedback. Inputs
+/// are composed terrain and current resource/building occupancy.
+pub const fn destination_passable(ground: bool, resource: bool, building: bool) -> bool {
+    ground && !resource && !building
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,13 +466,3 @@ mod tests {
         );
     }
 }
-
-/// Shared destination rule for simulation and client command feedback. Inputs
-/// are composed terrain and current resource/building occupancy.
-pub const fn destination_passable(ground: bool, resource: bool, building: bool) -> bool {
-    ground && !resource && !building
-}
-
-#[cfg(test)]
-#[path = "terrain/tests/feedback.rs"]
-mod feedback_tests;
