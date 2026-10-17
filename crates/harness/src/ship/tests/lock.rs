@@ -392,3 +392,5 @@ fn a_zero_wait_with_a_queue_ahead_names_the_running_ship_and_leaves_nothing() {
     ahead.join().unwrap();
     assert!(tickets(&path).is_empty());
 }
+
+mod priority;

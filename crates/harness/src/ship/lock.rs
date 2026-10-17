@@ -29,6 +29,10 @@ pub(crate) struct Holder {
     pub(crate) branch: String,
     pub(crate) command: String,
     pub(crate) started: u64,
+    /// Set for a ship that already held the lock and queues again after its review. It is
+    /// admitted before every plain waiter (see [`Handoff::reacquire`]).
+    #[serde(default)]
+    pub(crate) returning: bool,
 }
 
 impl Holder {
@@ -129,6 +133,7 @@ pub(crate) fn acquire(root: &Path, command: &str) -> Result<ShipLock> {
         branch: git::branch(root).unwrap_or_else(|_| "(detached)".into()),
         command: command.into(),
         started: now(),
+        returning: false,
     };
     acquire_at(
         &path(root)?,
@@ -238,6 +243,7 @@ fn unknown() -> Holder {
         branch: "unknown".into(),
         command: "unknown".into(),
         started: 0,
+        returning: false,
     }
 }
 
@@ -273,7 +279,7 @@ pub(crate) fn print_status(root: &Path) -> Result<()> {
 }
 
 impl Holder {
-    fn describe_place(&self) -> String {
+    pub(crate) fn describe_place(&self) -> String {
         format!("{} in {}", self.branch, self.worktree)
     }
 }
