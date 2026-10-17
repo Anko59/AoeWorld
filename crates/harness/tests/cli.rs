@@ -102,7 +102,8 @@ fn ci_selection_manifest_and_aggregate_execute_through_cli() {
     assert!(output.contains("native_coverage=true"));
     let results = serde_json::json!({
         "select":"success", "static":"success", "native-coverage":"success",
-        "browser":"success", "e2e":"success", "target-performance":"success", "fuzz-smoke":"success"
+        "browser":"success", "e2e":"success", "target-performance":"success", "fuzz-smoke":"success",
+        "qualification":"success"
     })
     .to_string();
     let check = |results: &str| {

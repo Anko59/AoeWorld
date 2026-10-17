@@ -24,6 +24,7 @@ jobs:
       - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make preflight
+      - run: make test-source-qualification
       - run: make coverage
       - run: make browser-check
       - run: make test-e2e

@@ -1,8 +1,7 @@
 name: AoeWorld validation
 
 on:
-  # Every base: a stacked pull request (docs/shipping.md) needs the same
-  # jobs before its parent merges; branch protection gates merges into dev.
+  # Every base: a stacked pull request (docs/shipping.md) needs the same jobs.
   pull_request:
     branches: ['**']
   push:
@@ -27,6 +26,7 @@ jobs:
       e2e: ${{ steps.manifest.outputs.e2e }}
       target_performance: ${{ steps.manifest.outputs.target_performance }}
       fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
+      qualification: ${{ steps.manifest.outputs.qualification }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -73,11 +73,7 @@ jobs:
       - run: make coverage
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native-coverage-report
-          path: reports/coverage/
-          retention-days: 7
-          if-no-files-found: ignore
+        with: { name: native-coverage-report, path: reports/coverage/, retention-days: 7, if-no-files-found: ignore }
 
   browser:
     needs: select
@@ -101,11 +97,7 @@ jobs:
           if-no-files-found: ignore
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: wasm-browser-report
-          path: reports/wasm/
-          retention-days: 7
-          if-no-files-found: ignore
+        with: { name: wasm-browser-report, path: reports/wasm/, retention-days: 7, if-no-files-found: ignore }
 
   e2e:
     # The Playwright suite in three parallel shards (#388): the same make
@@ -198,10 +190,17 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  qualification:
+    needs: select
+    if: ${{ needs.select.outputs.qualification == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-source-qualification}]
+
   required:
     permissions: { contents: read, statuses: write }
     if: always()
-    needs: [select, static, native-coverage, browser, e2e, target-performance, fuzz-smoke]
+    needs: [select, static, native-coverage, browser, e2e, target-performance, fuzz-smoke, qualification]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -215,7 +214,7 @@ jobs:
           AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
           AOE_JOB_RESULTS_JSON: >-
-            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","e2e":"${{ needs.e2e.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}"}
+            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","e2e":"${{ needs.e2e.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}","qualification":"${{ needs.qualification.result }}"}
         run: make ci-check
       - name: Report dispatched aggregate as a commit status
         if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref_name != 'dev' && github.ref_name != 'main' }}

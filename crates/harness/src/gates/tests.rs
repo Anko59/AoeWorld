@@ -83,7 +83,8 @@ fn ci_selection_requires_exact_manifest_and_job_outcomes() {
     let results = serde_json::json!({
         "select":"success", "static":"success", "native-coverage":"skipped",
         "browser":"skipped", "e2e":"skipped",
-        "target-performance":"skipped", "fuzz-smoke":"skipped"
+        "target-performance":"skipped", "fuzz-smoke":"skipped",
+        "qualification":"skipped"
     })
     .to_string();
     check_selection(&manifest, &results, &docs).expect("matching selection");
@@ -173,9 +174,10 @@ fn unavailable_ci_base_selects_all_and_retains_requested_identity() {
         assert_eq!(manifest.requested_base.as_deref(), Some(reference));
         // Every pull-request job: a request with a base is a pull request even
         // when the base cannot be resolved, so only coverage (push and nightly)
-        // stays out.
+        // and the post-merge qualification tier stay out.
         for (job, selected) in &manifest.jobs {
-            assert_eq!(*selected, job != "native-coverage", "{job}");
+            let after_merge = job == "native-coverage" || job == "qualification";
+            assert_eq!(*selected, !after_merge, "{job}");
         }
         assert!(manifest.gates.contains(&"fuzz-smoke".to_owned()));
     }

@@ -67,7 +67,8 @@ fn valid_proposal_roundtrips_and_keeps_entire_v1_catalog() {
             "browser",
             "e2e",
             "target-performance",
-            "fuzz-smoke"
+            "fuzz-smoke",
+            "qualification"
         ])
     );
 }

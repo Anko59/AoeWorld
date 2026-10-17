@@ -197,3 +197,24 @@ fn the_static_job_runs_both_preflight_halves_and_only_dev_pushes_save_the_cache(
     }
     assert!(block.contains("leg: '${{ matrix.part }}'"));
 }
+
+#[test]
+fn the_qualification_job_runs_after_merge_and_never_on_pull_requests() {
+    let registry = registry();
+    let impact = registry.classify(&paths(&["crates/server/src/lib.rs"]));
+    let pr = registry.plan(Cadence::Pr, &impact.suites).unwrap();
+    assert!(!pr.jobs["qualification"], "pull requests skip the tier");
+    assert!(!pr.gates.contains(&"test-source-qualification".into()));
+    let ci = registry.plan(Cadence::Ci, &impact.suites).unwrap();
+    assert!(ci.jobs["qualification"], "pushes to dev run the tier");
+    assert_eq!(
+        registry.jobs["qualification"],
+        ["test-source-qualification"]
+    );
+    let nightly = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.github/workflows/nightly.yml"),
+    )
+    .expect("nightly workflow");
+    assert!(nightly.contains("run: make test-source-qualification"));
+}
