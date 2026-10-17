@@ -44,6 +44,33 @@ harness test checks every listed name is a real test function):
 The tier is a `qualification` gate (`gates/registry.json`), so it must run
 post-merge or nightly; a PR that changes walkability, pathing or source
 qualification should also run it locally. The tests stay byte-identical.
+
+**Exhaustive tier (#388).** `make test-unit` also excludes, and
+`make test-exhaustive` runs exactly (`--no-tests fail`), the tests listed in
+`EXHAUSTIVE` in the same `tiers.rs`: the 16-seed landscape sweeps and the
+full 1024-axis geodata preparations and round-trips. The `exhaustive` gate has
+the `ci`, `nightly` and `qualification` cadences and a CI job like
+`qualification` (pushes to `dev` and `main`, nightly, never pull requests); a
+harness test checks every listed name is a real `#[test]` function. Where a
+test sweeps seeds or axes, a fast variant of the same assertion stays in
+`make test-unit`, so a gate change or a regression visible on two seeds is
+still caught per PR. Measured under load (12 cores, load 11-16):
+
+| Moved to the tier | Time | Per-PR counterpart in `test-unit` |
+| --- | --- | --- |
+| `landscape_patches::tests::wilder_regions_..._on_all16_seeds` | 62 s | `..._on_two_seeds` (seeds 0 and 255, same bounds) |
+| `landscape_patches::tests::stand_edges_do_not_align_to_chunk_cell_or_lattice_grids` | 61 s | `stand_edges_do_not_align_to_grids_on_two_seeds` |
+| `landscape_patches::tests::openings::most_forested_country_..._on_all16_seeds` | 52 s | `..._on_two_seeds` |
+| `landscape_patches::tests::openings::groves_and_forests_below_the_large_radius_are_solid` | 47 s | `..._are_solid_on_two_seeds` |
+| `landscape_patches::tests::cover_follows_a_wildness_gradient_without_a_step_at_cell_borders` | 39 s | `cover_follows_a_wildness_gradient_on_two_seeds` |
+| `overview::tests::vector_compose_tests::offline_gdal_overview_composes_typed_vectors_and_roundtrips_all_roots` | 165 s | none: one 1024-axis fixture; other `vector_compose` and `field_axes` tests cover worker options and coupled roots |
+| `overview::tests::field_axes_tests::offline_field_axes_prepare_independent_canonical_pyramids` | 95 s | `..._at_reduced_axes` (its 128/32/64/16 iteration) |
+| `overview::tests::field_axes_tests::landscape_water_and_vegetation_are_accepted_and_published_at_the_elevation_axis` | 95 s | `landscape_water_and_vegetation_axes_are_accepted_at_the_elevation_axis` (the axis acceptance asserts) |
+| `hyde::hyde_tests::production_archive_stream_prepares_the_independent_1024_axis` | 75 s | none: the 2 and 128 axis HYDE tests run the same path; only the 1024 streaming windows are tier-only |
+| `terrain::tests::rivers::source_river_water_never_invents_invisible_crossings` | 20 s | none: `subcell_meandering_river_blocks_water...` asserts impassable, non-ford river water per PR; the tier adds the exhaustive unreachable route search |
+
+Tests above 20 s in the aoe-harness crate (review calibration, QA source and
+gate review) stay in `test-unit`: they are the only guard of the gate machinery.
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
