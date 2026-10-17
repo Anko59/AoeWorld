@@ -56,7 +56,7 @@ build. Qualification and authorization remain independent required planes.
 
 Gates that run the workspace's tests or heavy builds (`test-unit`,
 `test-wasm`, `test-e2e`, coverage, mutation, perf; the `heavy` flag in
-`gates/registry.json`) take one of three machine-wide slots and queue first come,
+`gates/registry.json`) take one of two machine-wide slots and queue first come,
 first served (static checks such as `lint` never queue: they run in the Stop
 hook), so many agents on one machine no longer push each other past their
 deadlines ([gates](gates.md)). Do not wait for the load to fall by hand, and
@@ -73,8 +73,8 @@ the slot before compiling their test steps. So do the make targets that compile 
 being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`, `test-placement-coverage`,
 `test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`): each runs
 `$(SLOT_RUN) <target> -- make <target>-steps`, and `aoe-harness slot` queues it whatever the registry
-says. Each slot's containers take `cores / slots` CPUs (`gates/heavy.json`: 12 cores and 3 slots, so
-4 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`), and the wrapper
+says. Each slot's containers take `cores / slots` CPUs (`gates/heavy.json`: 12 cores and 2 slots, so
+6 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`), and the wrapper
 container is capped too. Cores are counted from the process's CPU affinity list, not from
 `available_parallelism`, so a container's quota does not shrink the machine that the load check sees.
 The command-only bootstrap before
