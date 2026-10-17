@@ -248,7 +248,7 @@ pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
         &subject.head[..12],
         subject.branch
     );
-    let results = run::run_gates(root, &gates, &options.slots);
+    let results = run::run_gates_selecting(root, &gates, &options.slots, &merge_base);
     if git::subject(root).ok().as_ref() != Some(&subject) {
         return Err("HEAD, the tree or the branch changed while the gates ran; no evidence written. Commit, then ship again".into());
     }

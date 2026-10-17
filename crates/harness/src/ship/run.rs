@@ -51,12 +51,35 @@ pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<Ga
     run_gates_with(root, gates, slots, crate::slots::hold)
 }
 
+/// `run_gates` for a local preflight: `test-unit` tests only the crates the
+/// changes since `merge_base` affect (never in CI or with `AOE_TEST_ALL=1`).
+pub(crate) fn run_gates_selecting(
+    root: &Path,
+    gates: &[&Gate],
+    slots: &SlotEnv,
+    merge_base: &str,
+) -> Vec<GateResult> {
+    let select =
+        crate::native::affected::allowed(crate::native::affected::real_env).then_some(merge_base);
+    run_gates_scoped(root, gates, slots, crate::slots::hold, select)
+}
+
 /// The same gate path with acquisition injected for queue/load fixtures.
 pub(crate) fn run_gates_with(
     root: &Path,
     gates: &[&Gate],
     slots: &SlotEnv,
     take: TakeSlot,
+) -> Vec<GateResult> {
+    run_gates_scoped(root, gates, slots, take, None)
+}
+
+fn run_gates_scoped(
+    root: &Path,
+    gates: &[&Gate],
+    slots: &SlotEnv,
+    take: TakeSlot,
+    select: Option<&str>,
 ) -> Vec<GateResult> {
     let mut docker: Option<bool> = None;
     gates
@@ -73,12 +96,18 @@ pub(crate) fn run_gates_with(
                     tail: String::new(),
                 };
             }
-            run_one(root, gate, slots, take)
+            run_one(root, gate, slots, take, select)
         })
         .collect()
 }
 
-fn run_one(root: &Path, gate: &Gate, slots: &SlotEnv, take: TakeSlot) -> GateResult {
+fn run_one(
+    root: &Path,
+    gate: &Gate,
+    slots: &SlotEnv,
+    take: TakeSlot,
+    select: Option<&str>,
+) -> GateResult {
     // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
     let slot = match take(root, &gate.id, slots) {
         Ok(slot) => slot,
@@ -95,6 +124,9 @@ fn run_one(root: &Path, gate: &Gate, slots: &SlotEnv, take: TakeSlot) -> GateRes
     let mut command = Command::new("sh");
     command.arg("-c").arg(&gate.command).current_dir(root);
     command.envs(slot.env());
+    if let (Some(base), "test-unit") = (select, gate.id.as_str()) {
+        command.env("AOE_TEST_SELECT", base);
+    }
     let captured = capture_command(
         command,
         Duration::from_secs(u64::from(gate.budget_s)),
