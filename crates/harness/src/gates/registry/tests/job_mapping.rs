@@ -218,3 +218,20 @@ fn the_qualification_job_runs_after_merge_and_never_on_pull_requests() {
     .expect("nightly workflow");
     assert!(nightly.contains("run: make test-source-qualification"));
 }
+
+#[test]
+fn the_exhaustive_job_runs_after_merge_and_never_on_pull_requests() {
+    let registry = registry();
+    let impact = registry.classify(&paths(&["crates/map/src/lib.rs"]));
+    let pr = registry.plan(Cadence::Pr, &impact.suites).unwrap();
+    assert!(!pr.jobs["exhaustive"], "pull requests skip the tier");
+    assert!(!pr.gates.contains(&"test-exhaustive".into()));
+    let ci = registry.plan(Cadence::Ci, &impact.suites).unwrap();
+    assert!(ci.jobs["exhaustive"], "pushes to dev run the tier");
+    assert_eq!(registry.jobs["exhaustive"], ["test-exhaustive"]);
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let nightly = std::fs::read_to_string(root.join(".github/workflows/nightly.yml")).unwrap();
+    assert!(nightly.contains("run: make test-exhaustive"));
+    let workflow = std::fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
+    assert!(workflow.contains("run: make test-exhaustive"));
+}

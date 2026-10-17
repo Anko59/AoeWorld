@@ -46,6 +46,7 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "perf-wasm-cap",
         "release-build",
         "test-e2e",
+        "test-exhaustive",
         "test-source-qualification",
         "test-unit",
         "test-wasm",

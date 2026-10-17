@@ -1,5 +1,8 @@
 use super::*;
 const SEEDS: [u64; 16] = [0, 1, 2, 3, 7, 11, 17, 18, 23, 29, 31, 47, 63, 71, 97, 255];
+/// The seeds of the per-PR variants of the sweeps: the two ends of `SEEDS`.
+/// The full sweeps run in the exhaustive tier (`make test-exhaustive`).
+const QUICK_SEEDS: [u64; 2] = [0, 255];
 const FOREST: Input = Input {
     mode: Mode::Forest,
     fitness: Fitness::FULL,
@@ -37,6 +40,15 @@ fn uniform(seed: u64, wildness: u16) -> Metrics {
 
 #[test]
 fn wilder_regions_have_more_forest_and_larger_stands_on_all16_seeds() {
+    wilder_regions_have_more_forest_and_larger_stands(&SEEDS);
+}
+
+#[test]
+fn wilder_regions_have_more_forest_and_larger_stands_on_two_seeds() {
+    wilder_regions_have_more_forest_and_larger_stands(&QUICK_SEEDS);
+}
+
+fn wilder_regions_have_more_forest_and_larger_stands(seeds: &[u64]) {
     // Per-thousand canopy cover bounds for open, typical, forested and most
     // forested country, and the size of the largest forest (canopy with its
     // own glades and paths) each must stay under or reach.
@@ -46,7 +58,7 @@ fn wilder_regions_have_more_forest_and_larger_stands_on_all16_seeds() {
         (700, (220, 420), (6_000, usize::MAX)),
         (1000, (400, 600), (20_000, usize::MAX)),
     ];
-    for seed in SEEDS {
+    for &seed in seeds {
         let mut previous = 0;
         for (wildness, cover, stand) in bounds {
             let m = uniform(seed, wildness);
@@ -72,10 +84,19 @@ fn wilder_regions_have_more_forest_and_larger_stands_on_all16_seeds() {
 
 #[test]
 fn cover_follows_a_wildness_gradient_without_a_step_at_cell_borders() {
+    cover_follows_a_wildness_gradient(&SEEDS);
+}
+
+#[test]
+fn cover_follows_a_wildness_gradient_on_two_seeds() {
+    cover_follows_a_wildness_gradient(&QUICK_SEEDS);
+}
+
+fn cover_follows_a_wildness_gradient(seeds: &[u64]) {
     // Wildness rises by 125 per cell from west to east. Every 96-tile column
     // band holds at least as much forest as the band four cells further west.
     let (mut bands, size) = ([0usize; 16], 1536usize);
-    for seed in SEEDS {
+    for &seed in seeds {
         let p = patches(seed);
         for y in 0..size as i32 {
             for x in 0..size as i32 {
@@ -98,11 +119,20 @@ fn cover_follows_a_wildness_gradient_without_a_step_at_cell_borders() {
 
 #[test]
 fn stand_edges_do_not_align_to_chunk_cell_or_lattice_grids() {
+    stand_edges_do_not_align_to_grids(&SEEDS);
+}
+
+#[test]
+fn stand_edges_do_not_align_to_grids_on_two_seeds() {
+    stand_edges_do_not_align_to_grids(&QUICK_SEEDS);
+}
+
+fn stand_edges_do_not_align_to_grids(seeds: &[u64]) {
     // Count canopy transitions by column and row residue. A boundary clipped
     // to a grid of that period would pile transitions into one residue.
     for period in [16usize, 32, 48, 64] {
         let mut bins = vec![0usize; 2 * period];
-        for seed in SEEDS {
+        for &seed in seeds {
             let f = fixture(
                 patches(seed),
                 768,
