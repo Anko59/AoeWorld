@@ -106,6 +106,18 @@ fn decode_prepared_output(
     else {
         return Err("map worker returned an unexpected directory response".to_owned());
     };
+    check_prepared(&package, request, samples_per_axis, field_axes)?;
+    Ok(*package)
+}
+
+/// What a source-backed preparation must be: the requested map at the
+/// requested detail, with environmental sources behind it.
+fn check_prepared(
+    package: &MapPackage,
+    request: MapRequest,
+    samples_per_axis: u16,
+    field_axes: Option<crate::map_jobs::OverviewFieldAxes>,
+) -> Result<(), String> {
     package.validate().map_err(|error| error.to_string())?;
     if package.request != request {
         return Err("map worker returned a package for a different request".to_owned());
@@ -124,7 +136,25 @@ fn decode_prepared_output(
     {
         return Err("map worker returned different field axes than requested".to_owned());
     }
-    Ok(*package)
+    Ok(())
+}
+
+/// Whether an already stored package is what preparing `request` under
+/// `preparation` would produce, by the checks a worker result passes.
+pub(super) fn reusable(
+    package: &MapPackage,
+    request: MapRequest,
+    preparation: &crate::map_jobs::PreparationPlan,
+) -> bool {
+    let overview = preparation.mode == crate::map_jobs::PreparationMode::Overview;
+    check_prepared(
+        package,
+        request,
+        preparation.samples_per_axis,
+        preparation.field_axes,
+    )
+    .is_ok()
+        && (!overview || hydrology::verify(package, preparation.hydrology_mode).is_ok())
 }
 
 pub(super) fn geographic_footprint(
@@ -154,4 +184,4 @@ pub(super) fn geographic_footprint(
 
 #[cfg(test)]
 #[path = "map_worker/tests/hydrology_response.rs"]
-mod tests;
+pub(super) mod tests;

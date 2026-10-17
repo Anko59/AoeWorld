@@ -3,6 +3,7 @@ mod architecture;
 mod assets;
 mod coverage;
 mod dev;
+mod devserver;
 mod e2e;
 mod fuzz;
 mod gates;

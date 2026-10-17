@@ -8,6 +8,7 @@ use super::{
     browser::{AppOrigin, DEFAULT_APP_URL},
 };
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 const APP_URL: &str = "SHOWCASE_APP_URL";
 const BEFORE_URL: &str = "SHOWCASE_BEFORE_URL";
@@ -123,14 +124,39 @@ impl Origins {
     }
 
     /// SHOWCASE_APP_URL (default: the `make dev` address) and
-    /// SHOWCASE_BEFORE_URL.
-    pub(crate) fn from_env(board: &Storyboard) -> Result<Self, String> {
+    /// SHOWCASE_BEFORE_URL; without the latter, a storyboard that films the
+    /// build before the change uses the shared dev server when it is healthy
+    /// at dev's revision (`make dev-server`), and is told why when it cannot.
+    pub(crate) fn from_env(root: &Path, board: &Storyboard) -> Result<Self, String> {
         let app = std::env::var(APP_URL)
             .ok()
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| DEFAULT_APP_URL.into());
-        let before = std::env::var(BEFORE_URL).ok();
-        Self::select(board, &app, before.as_deref())
+        let mut before = std::env::var(BEFORE_URL).ok().filter(|v| !v.is_empty());
+        let mut why = None;
+        let films_before = board.scenes.iter().any(|scene| {
+            matches!(
+                scene,
+                Scene::Browser {
+                    build: Build::Before,
+                    ..
+                }
+            )
+        });
+        if before.is_none() && films_before {
+            match crate::devserver::play_url(root) {
+                Ok(url) => {
+                    eprintln!("showcase: the build before the change is the dev server at {url}");
+                    before = Some(url);
+                }
+                Err(reason) => why = Some(reason),
+            }
+        }
+        Self::select(board, &app, before.as_deref()).map_err(|e| {
+            why.map_or(e.clone(), |w| {
+                format!("{e}\n(the shared dev server was not used: {w})")
+            })
+        })
     }
 
     /// The origin scenes of `build` film, when the storyboard has any.

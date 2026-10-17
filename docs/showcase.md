@@ -123,7 +123,10 @@ scene.
 A showcase shows the pull request's own change, so film the same path and
 steps on both builds. `before` scenes open on `SHOWCASE_BEFORE_URL`, which has
 no default, follows the rules of `SHOWCASE_APP_URL` and must use another
-port; `make showcase-check` refuses a `before` scene without it. When a
+port; `make showcase-check` refuses a `before` scene without it.
+When it is unset, the shared [dev server](dev-server.md) (`make dev-server`) is the
+build before if it is healthy at the revision `origin/dev` is at; otherwise the
+error says why. When a
 storyboard films both builds, each browser scene is tagged `BEFORE (dev)` or
 `AFTER (this PR)` in its top-left corner.
 
@@ -365,7 +368,9 @@ bookmark. No session is a controller: there is no lease, no creator panel, no
 minimap click and no wheel event. `before` is `git archive` of the merge base
 with `origin/dev` (`COMPARE_BASE=<rev>` picks another commit) built in the tool
 image under `.cache/compare/` (cached per commit, cold build several minutes);
-`after` is the working tree, uncommitted edits included, built into `target/`.
+`after` is the working tree, uncommitted edits included, built into `target/`. When the merge base is
+`origin/dev` itself, `before` uses the shared [dev server](dev-server.md)'s build
+(and says why when it falls back to its own).
 A URL instead of `build` uses an app that is already running (plain `http` on
 loopback with a port). It must already have the views' map open, and it serves
 one map per run.

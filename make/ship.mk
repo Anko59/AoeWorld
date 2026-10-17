@@ -16,7 +16,7 @@ export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS CARRY_PR UPDATE_MAX_PRS METRICS_REV
 export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare
+.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -122,6 +122,17 @@ showcase-session:
 # so it needs no running server; read-only towards the repository.
 compare:
 	@.agents/hooks/harness.sh exec compare
+
+# The shared dev server (docs/dev-server.md): built from origin/dev in a
+# harness-owned checkout, on a fixed port, with the preset maps prepared once.
+dev-server:
+	@.agents/hooks/harness.sh exec dev-server
+
+dev-server-status:
+	@.agents/hooks/harness.sh exec dev-server-status
+
+dev-server-stop:
+	@.agents/hooks/harness.sh exec dev-server-stop
 
 # Injected readiness hooks need Chromium, but no game server or assets.
 .PHONY: test-showcase-browser test-showcase-browser-steps

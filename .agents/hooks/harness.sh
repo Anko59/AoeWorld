@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-calibrate|review-pr|issue|next|compare|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|carry-review|update-prs|metrics
+#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-calibrate|review-pr|issue|next|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -22,6 +22,7 @@ case ${1:-} in
       review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
       issue|next) probe=crates/harness/src/ship/issues.rs ;;
       compare) probe=crates/harness/src/ship/compare/mod.rs ;;
+      dev-server|dev-server-status|dev-server-stop) probe=crates/harness/src/devserver/mod.rs ;;
       showcase) probe=crates/harness/src/ship/showcase/mod.rs ;;
       showcase-check) probe=crates/harness/src/ship/showcase/check.rs ;;
       showcase-session) probe=crates/harness/src/ship/showcase/session.rs ;;
@@ -30,7 +31,7 @@ case ${1:-} in
       carry-review) probe=crates/harness/src/ship/postpush/carry.rs ;;
       update-prs) probe=crates/harness/src/ship/postpush/update.rs ;;
       metrics) probe=crates/harness/src/ship/metrics/snapshot.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-calibrate, review-pr, issue, next, compare, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions, carry-review, update-prs or metrics only" >&2; exit 2 ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-calibrate, review-pr, issue, next, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions, carry-review, update-prs or metrics only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

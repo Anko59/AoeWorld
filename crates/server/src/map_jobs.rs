@@ -12,6 +12,7 @@ use std::{
 
 mod journal;
 mod preparation;
+mod presets;
 mod submission;
 pub(super) use preparation::{
     CreationRequest, HydrologyMode, OverviewFieldAxes, PreparationMode, PreparationPlan,
@@ -303,6 +304,10 @@ fn launch(state: AppState, id: u64) {
         else {
             return;
         };
+        if let Some(package) = presets::reusable(&state, request, &preparation).await {
+            finish(&state, id, Ok(package)).await;
+            return;
+        }
         let directory = state.map_package_directory.clone();
         let worker = state.map_worker.clone();
         let cache = state.geodata_cache_directory.clone();

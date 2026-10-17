@@ -237,7 +237,7 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
     let out = resolve_out(root, &requested_out)?;
     let planned = durations(&board, &vec![None; board.scenes.len()]);
     check_duration(level, &planned)?;
-    let mut validation = plan(&board, &planned, &Origins::from_env(&board)?)?;
+    let mut validation = plan(&board, &planned, &Origins::from_env(root, &board)?)?;
     super::capture::apply(root, &mut validation)?;
     Ok((board, out, level))
 }
@@ -306,7 +306,7 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
             "showcase-phase image_dependencies_ms {}",
             phase.elapsed().as_millis()
         );
-        let mut plan = plan(&board, &planned, &Origins::from_env(&board)?)?;
+        let mut plan = plan(&board, &planned, &Origins::from_env(root, &board)?)?;
         super::capture::apply(root, &mut plan)?;
         let phase = Instant::now();
         let (silent, timings) = record(root, work_path, &plan)?;

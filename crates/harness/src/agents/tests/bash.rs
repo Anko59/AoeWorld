@@ -322,3 +322,17 @@ fn compare_is_for_the_main_session_and_role_less_agents() {
         "make compare COMPARE_BOOKMARKS=$(pwd)/x.json",
     );
 }
+
+#[test]
+fn the_dev_server_is_for_the_main_session_and_role_less_agents() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer] {
+        denied(&fixture, role, "make dev-server");
+        denied(&fixture, role, "make dev-server-stop");
+    }
+    for role in [Role::Main, Role::Other] {
+        allowed(&fixture, role, "make dev-server");
+        allowed(&fixture, role, "make dev-server-status");
+        allowed(&fixture, role, "make dev-server-stop");
+    }
+}

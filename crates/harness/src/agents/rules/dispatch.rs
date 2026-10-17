@@ -166,6 +166,13 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
                 context.role.name()
             ));
         }
+        // It builds for minutes and starts or stops a server every session shares.
+        if matches!(target, "dev-server" | "dev-server-stop") && context.role.duty_bound() {
+            return Err(format!(
+                "the {} does not run `make {target}`; report back and the main session runs it",
+                context.role.name()
+            ));
+        }
         if target == "ship" && context.role.duty_bound() {
             return Err(format!(
                 "the {} does not ship; report back and the main session runs `make ship`",
