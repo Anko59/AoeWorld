@@ -114,7 +114,7 @@ test("Single Player setup creates and activates both source preparation profiles
     await page
       .getByRole("button", { name: "Paris basin", exact: true })
       .click();
-    await page.getByLabel("Map size in kilometres").fill("30");
+    await page.locator("#start-size").selectOption("30");
     await page.locator("#start-scale").fill("30");
     await expect(page.locator("#skirmish-estimate")).toContainText("30 km");
     const estimate = await page.locator("#skirmish-estimate").innerText();
