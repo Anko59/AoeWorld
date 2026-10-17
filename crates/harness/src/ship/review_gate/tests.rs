@@ -5,24 +5,23 @@ use super::super::{
     tests::{fixture, offline, run},
 };
 
-mod publish;
-pub(in crate::ship) use publish::publish_calls;
 mod after_approval;
 mod ahead;
 mod lock_during_review;
 mod patch_reuse;
+mod publish;
 mod reuse;
 mod reuse_policy;
 mod stacked;
 mod unchanged_patch;
 use crate::review::{Plan, Report, Tier};
+pub(in crate::ship) use publish::publish_calls;
 use std::{cell::Cell, path::Path};
 
 /// A stored review of HEAD with this grade, as `review::review` leaves it.
 pub(in crate::ship) fn graded(root: &Path, tier: Tier, grade: u8) -> Report {
     let report = unstored(root, tier, grade);
-    report.store(root).unwrap();
-    report
+    report.store(root).map(|_| report).unwrap()
 }
 
 /// A review of HEAD with this grade, not stored yet.
@@ -304,6 +303,7 @@ fn finding(severity: crate::review::protocol::Severity) -> Vec<crate::review::pr
         },
         votes: vec![],
         status: Status::Confirmed,
+        members: vec![],
     }]
 }
 

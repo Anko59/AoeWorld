@@ -7,6 +7,7 @@ mod arbiter;
 pub(crate) mod base;
 mod calibrate;
 pub(crate) mod closing;
+mod cluster;
 pub(crate) mod config;
 mod entry;
 pub(crate) mod increment;
@@ -251,6 +252,7 @@ fn review_with_branch(
             &mut failures,
             &mut filter,
         )?;
+        cluster::merge(&mut findings);
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
@@ -293,7 +295,7 @@ fn review_with_branch(
         let shown: Vec<(usize, Vec<String>)> = asked
             .iter()
             .map(|r| {
-                let ids = findings.iter().filter(|f| f.reporter != *r);
+                let ids = findings.iter().filter(|f| !f.reported_by(*r));
                 (*r, ids.map(|f| f.id.clone()).collect())
             })
             .collect();
@@ -323,7 +325,7 @@ fn review_with_branch(
                     }
                     for verdict in answer.verdicts {
                         if let Some(finding) = findings.iter_mut().find(|f| {
-                            f.id == verdict.id && ids.contains(&f.id) && f.reporter != reviewer
+                            f.id == verdict.id && ids.contains(&f.id) && !f.reported_by(reviewer)
                         }) {
                             finding.votes.push(Cast {
                                 reviewer,
@@ -346,6 +348,7 @@ fn review_with_branch(
                 }
             }
         }
+        cluster::merge(&mut findings);
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
@@ -469,6 +472,7 @@ fn add_findings(
             reported,
             votes: Vec::new(),
             status: Status::Disputed,
+            members: Vec::new(),
         });
     }
 }

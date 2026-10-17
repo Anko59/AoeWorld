@@ -428,6 +428,12 @@ impl Report {
                     r.expected_vs_actual,
                     f.votes.iter().filter(|v| v.reviewer != ARBITER).map(|v| format!("{:?}", v.vote)).collect::<Vec<_>>().join(", ")
                 ));
+                for m in &f.members {
+                    out.push_str(&format!(
+                        "  - also reported as **{}** (reviewer {}, `{:?}`) — {}\n",
+                        m.id, m.reporter, m.reported.severity, m.reported.claim
+                    ));
+                }
                 if let Some(ruling) = ruling(f) {
                     out.push_str(&format!(
                         "  - arbiter: {:?} — {}\n",
