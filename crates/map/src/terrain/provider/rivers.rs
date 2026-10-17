@@ -7,22 +7,38 @@ use std::sync::Arc;
 mod index;
 pub(in crate::terrain) use index::Cache;
 
+/// What a river query measures.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Mode {
+    /// The warped, noise-varied channel that becomes water tiles.
+    Physical,
+    /// The nominal centreline footprint of channels at least this wide.
+    Footprint { min_width_units: u16 },
+}
+
 pub(super) fn sample(
     generator: &super::MapChunkGenerator,
     tile: TileCoord,
     radius: i32,
     cancelled: &dyn Fn() -> bool,
-) -> Result<Option<bool>, EnvironmentPageError> {
-    query(generator, tile, radius, true, cancelled)
+) -> Result<Option<Channel>, EnvironmentPageError> {
+    query(generator, tile, radius, Mode::Physical, cancelled)
+}
+
+/// The nearest physical channel at a tile.
+#[derive(Clone, Copy)]
+pub(super) struct Channel {
+    /// Every channel covering the tile is a narrow stream that can be waded.
+    pub wadeable: bool,
 }
 
 fn query(
     generator: &super::MapChunkGenerator,
     tile: TileCoord,
     radius: i32,
-    physical: bool,
+    mode: Mode,
     cancelled: &dyn Fn() -> bool,
-) -> Result<Option<bool>, EnvironmentPageError> {
+) -> Result<Option<Channel>, EnvironmentPageError> {
     if cancelled() {
         return Err(EnvironmentPageError::Cancelled);
     }
@@ -46,6 +62,7 @@ fn query(
     let radius = i64::from(radius.max(0));
     // Read neighboring pages when the channel's half width crosses a page
     // edge. The expanded query still samples the original physical width.
+    let physical = mode == Mode::Physical;
     let query_radius = if physical { radius * 2 } else { radius };
     let discovery = query_radius + 10;
     let point = [i64::from(tile.x) * 256 + 128, i64::from(tile.y) * 256 + 128];
@@ -53,7 +70,8 @@ fn query(
         crate::terrain::shoreline::variation(generator.shoreline_key(), domain, tile, lattice)
     };
     let mut shaped = None;
-    let mut best = None;
+    let mut best: Option<(i128, bool)> = None;
+    let mut wide = false;
     for y in cell(i64::from(tile.y) - discovery)..=cell(i64::from(tile.y) + discovery) {
         for x in cell(i64::from(tile.x) - discovery)..=cell(i64::from(tile.x) + discovery) {
             let key = EnvironmentPageKey {
@@ -103,27 +121,43 @@ fn query(
                 });
                 indexed.physical(point, query_radius * 256, width_noise)
             } else {
-                indexed.sample(point, radius * 256)
+                let Mode::Footprint { min_width_units } = mode else {
+                    unreachable!("physical queries returned above");
+                };
+                indexed.sample(point, radius * 256, min_width_units)
             };
-            if let Some(hit) = hit
-                && best.is_none_or(|(distance, _)| hit.0 < distance)
-            {
-                best = Some(hit);
+            if let Some((distance, ford, wadeable)) = hit {
+                wide |= !wadeable;
+                if best.is_none_or(|(nearest, _)| distance < nearest) {
+                    best = Some((distance, ford));
+                }
             }
         }
     }
-    Ok(best.map(|(_, ford)| ford))
+    Ok(best.map(|_| Channel { wadeable: !wide }))
 }
 
 impl super::MapChunkGenerator {
+    /// Whether rivers come with persisted source geometry. Procedural fallback
+    /// maps have none, so their rivers have no width to rank by importance.
+    pub fn has_river_geometry(&self) -> bool {
+        self.provider_environment
+            .as_ref()
+            .is_some_and(|environment| environment.hydrology_evidence.is_some())
+    }
+
     /// Conservative footprint query for strategic rasterization. It reads
     /// persisted centreline geometry, never expands the physical channel.
+    /// Only channels at least `min_width_units` wide count, so a minimap can
+    /// show rivers by importance.
     pub fn river_within_with_cancel(
         &self,
         tile: TileCoord,
         radius: i32,
+        min_width_units: u16,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        query(self, tile, radius, false, cancelled).map(|hit| hit.is_some())
+        let mode = Mode::Footprint { min_width_units };
+        query(self, tile, radius, mode, cancelled).map(|hit| hit.is_some())
     }
 }

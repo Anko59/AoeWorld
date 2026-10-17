@@ -127,6 +127,8 @@ pub(in crate::terrain) struct WaterSample {
     pub modeled: Option<ModeledWater>,
     pub observation: Option<HydrologyObservation>,
     pub modern_land_cover_class: Option<u8>,
+    /// The tile is river water of a narrow stream: wadeable shallows.
+    pub wadeable: bool,
 }
 
 /// Shaped categorical and modeled water at one tile, before the modeled
@@ -158,6 +160,7 @@ pub(in crate::terrain) fn sample(
             modeled: None,
             observation: None,
             modern_land_cover_class: None,
+            wadeable: false,
         });
     };
     let (observation, modern_land_cover_class, nearest) = water_model::sample_typed_evidence(
@@ -195,6 +198,7 @@ pub(in crate::terrain) fn sample(
     } else {
         super::rivers::sample(generator, tile, 0, cancelled)?
     };
+    let wadeable = channel.is_some_and(|channel| channel.wadeable);
     if channel.is_some() {
         // Source channels retain local terrain height. A sampled kilometre-cell
         // water level would create cliffs at every channel and cell boundary.
@@ -210,6 +214,7 @@ pub(in crate::terrain) fn sample(
         modeled,
         observation,
         modern_land_cover_class,
+        wadeable,
     })
 }
 

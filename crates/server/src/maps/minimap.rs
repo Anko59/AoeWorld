@@ -33,6 +33,15 @@ pub(crate) const MAX_CACHED_MINIMAPS: usize = 4;
 pub(crate) const MINIMAP_TIME_BUDGET: Duration = Duration::from_secs(30);
 /// Shade nibble of level ground; 0 is fully shaded and 15 fully lit.
 pub(crate) const FLAT_SHADE: u8 = 8;
+/// Narrowest river the minimap draws, in 1/256 tiles: 3.5 tiles, the rivers a
+/// 4.7 m³/s cutoff kept before small rivers returned at every map size. Narrower
+/// streams are real water on the map but would turn the strategic raster
+/// into a haze of single pixels, so they are omitted there.
+pub(crate) const MINIMAP_MIN_RIVER_WIDTH_UNITS: u16 = 896;
+/// Tiles of slack when proving a water sample belongs to no drawn river:
+/// the physical channel is warped by up to one and a half tiles and varies by
+/// half a tile around the nominal centreline footprint.
+const MINIMAP_WARP_MARGIN_TILES: i32 = 3;
 /// Summed per-axis rise, in per-mille, that changes the shade by one step.
 const SHADE_STEP_PER_MILLE: i64 = 25;
 
@@ -141,6 +150,35 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
     }
 }
 
+/// Class of the dry land around an omitted stream: the first dry sample on a
+/// ring beyond the stream's bank, so a desert or a snowfield keeps its own
+/// colour. Grass only where no dry land is within reach.
+fn surrounding_land_class(
+    generator: &MapChunkGenerator,
+    tile: TileCoord,
+    reach: i32,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<MinimapClass, MinimapError> {
+    for distance in [reach, reach * 2] {
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let probe = TileCoord::new(
+                tile.x.saturating_add(dx * distance),
+                tile.y.saturating_add(dy * distance),
+            );
+            let Some(point) = generator
+                .landscape_point_with_cancel(probe, cancelled)
+                .map_err(MinimapError::Page)?
+            else {
+                continue;
+            };
+            if point.tile.terrain.water == WaterKind::None {
+                return Ok(classify(&point));
+            }
+        }
+    }
+    Ok(MinimapClass::Grass)
+}
+
 /// Deterministic raster of the composed landscape: `MINIMAP_HEADER_BYTES`
 /// then row-major bytes, class in the low nibble and relief shade in the high
 /// nibble. Performs exactly `samples²` point queries and allocates at most
@@ -157,6 +195,7 @@ pub(crate) fn minimap_raster(
         return Err(MinimapError::EmptyMap);
     }
     let side = usize::from(samples);
+    let geometry = generator.has_river_geometry();
     let mut classes = Vec::with_capacity(side * side);
     let mut heights = Vec::with_capacity(side * side);
     for y in 0..samples {
@@ -174,15 +213,39 @@ pub(crate) fn minimap_raster(
             let corrected_land = point.tile.terrain.water == WaterKind::None
                 && point.tile.terrain.water_provenance
                     == aoe_map::Provenance::HistoricallyCorrected;
-            if !corrected_land
+            let footprint =
+                (tiles_per_side.div_ceil(u64::from(samples)) * 181).div_ceil(256) as i32;
+            let tile = TileCoord::new(tile_x, tile_y);
+            if class == MinimapClass::River && geometry {
+                // Physical water counts only where a drawn river is nearby.
+                // Rivers without source geometry keep their tile width.
+                if !generator
+                    .river_within_with_cancel(
+                        tile,
+                        footprint + MINIMAP_WARP_MARGIN_TILES,
+                        MINIMAP_MIN_RIVER_WIDTH_UNITS,
+                        cancelled,
+                    )
+                    .map_err(MinimapError::Page)?
+                {
+                    class = surrounding_land_class(
+                        generator,
+                        tile,
+                        footprint + MINIMAP_WARP_MARGIN_TILES + 2,
+                        cancelled,
+                    )?;
+                }
+            } else if geometry
+                && !corrected_land
                 && !matches!(
                     class,
                     MinimapClass::Ocean | MinimapClass::Lake | MinimapClass::River
                 )
                 && generator
                     .river_within_with_cancel(
-                        TileCoord::new(tile_x, tile_y),
-                        (tiles_per_side.div_ceil(u64::from(samples)) * 181).div_ceil(256) as i32,
+                        tile,
+                        footprint,
+                        MINIMAP_MIN_RIVER_WIDTH_UNITS,
                         cancelled,
                     )
                     .map_err(MinimapError::Page)?
