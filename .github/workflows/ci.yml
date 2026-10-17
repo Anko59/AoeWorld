@@ -190,6 +190,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # Post-merge tier: runs on pushes to dev/main and nightly; PRs and feature-branch dispatches select like PRs and skip it.
   qualification:
     needs: select
     if: ${{ needs.select.outputs.qualification == 'true' }}
