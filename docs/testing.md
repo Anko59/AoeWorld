@@ -8,7 +8,17 @@ WASM build. The test profile optimizes map, simulation, server, and procedural
 hashing (BLAKE3) code for the
 full-distance offline movement/replay regressions; debug assertions and integer
 overflow checks remain enabled. Distances, tick limits, and gate floors are
-unchanged. `make test-wasm` runs the client browser integration tests and the
+unchanged. Local `make preflight` and the preflight gates of `make ship` run `test-unit`
+only for the affected crates: the crates owning the files changed since the merge
+base with `origin/dev`, plus every workspace crate that depends on them,
+transitively (`cargo metadata`). A file outside every crate (root `Cargo.toml`,
+`Cargo.lock`, toolchain, `.cargo/`, `gates/`, `Makefile`) selects the whole
+workspace; a change under `web/`, `browser/` and `docs/` only runs no Rust unit
+tests and says so. The first and last lines of the run, and so the gate
+evidence, show `test-unit: N of M crates (changed: a, b; dependents: c, d)`.
+CI (`GITHUB_ACTIONS=true`), nightly, a plain `make test-unit` and `AOE_TEST_ALL=1`
+always run the full suite.
+`make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
 browser suites exactly once when at least one named failed test reports a runner
