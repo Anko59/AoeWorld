@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
 import { freshHud } from "./resources.js";

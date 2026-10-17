@@ -348,3 +348,26 @@ fn validated_slot_admission_reaches_every_container() {
     }
     assert!(unforwarded(&files).is_empty());
 }
+
+#[test]
+fn the_e2e_variables_the_harness_reads_reach_both_containers() {
+    // `make test-e2e` runs the harness two containers deep (the slot wrapper,
+    // then test-e2e-steps); a variable set in CI is lost unless both forward it.
+    // The harness reads these itself, so the Make-step audit above cannot see them.
+    let files = make_files(&repository());
+    let slot_env = definitions(&files)["SLOT_ENV"].clone();
+    let steps = recipe(&files, "test-e2e-steps")
+        .expect("test-e2e-steps recipe")
+        .join("\n");
+    for variable in ["AOE_E2E_SHARD", "AOE_E2E_WORKERS"] {
+        let flag = format!("-e {variable}");
+        assert!(
+            slot_env.contains(&flag),
+            "SLOT_ENV lacks {flag}: {slot_env}"
+        );
+        assert!(
+            steps.contains(&flag),
+            "test-e2e-steps lacks {flag}: {steps}"
+        );
+    }
+}

@@ -6,7 +6,7 @@ fn args(specs: &[String], shard: Option<Shard>) -> Vec<String> {
     std::fs::create_dir_all(root.path().join("browser/node_modules")).expect("modules");
     let run = Run {
         root: root.path(),
-        address: "127.0.0.1:4000".parse().expect("address"),
+        base_urls: "http://127.0.0.1:4000".into(),
         container: "name".into(),
         landscape_hash: "hash",
         specs,
@@ -60,4 +60,11 @@ fn a_shard_names_its_container() {
         container_name(7, 9, Some(Shard { index: 2, count: 3 })),
         "aoeworld-e2e-shard-2-of-3-7-9"
     );
+}
+
+#[test]
+fn the_container_gets_every_server_url_and_no_single_base_url() {
+    let args = args(&[], None);
+    assert!(args.contains(&"AOE_BASE_URLS=http://127.0.0.1:4000".to_owned()));
+    assert!(args.iter().all(|arg| !arg.starts_with("AOE_BASE_URL=")));
 }

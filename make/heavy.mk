@@ -2,7 +2,7 @@
 # (docs/gates.md "Heavy slots"). Each target runs its `-steps` target in the orchestrator container
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
-SLOT_ENV := -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
+SLOT_ENV := -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
 SLOT_RUN = docker run --rm --init $(HEAVY_ENV) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
 
 # The command bootstrap is static work: one build at a time across worktrees,
@@ -68,7 +68,7 @@ test-e2e: build-wasm browser-deps orchestrator-tools slot-bootstrap
 
 test-e2e-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
+	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
 .PHONY: test-harness test-harness-steps test-unit-steps test-wasm-steps
 test-harness: orchestrator-tools slot-bootstrap

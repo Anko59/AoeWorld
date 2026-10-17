@@ -1,4 +1,5 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, type Page, type WebSocketRoute } from "@playwright/test";
+import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { syntheticChunk } from "../synthetic-map.js";
 
