@@ -73,9 +73,7 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   const gold = await frameResource(page, 2, 0.35, true);
   await page.mouse.click(gold.x, gold.y);
   await expect(page.locator("#selection-name")).toHaveText("Gold deposit");
-  await expect(page.locator("#selection-load")).toContainText(
-    "gold remaining",
-  );
+  await expect(page.locator("#selection-load")).toContainText("gold remaining");
   await expect(
     page.locator('#minimap-resources circle[fill="#f2cf50"]').first(),
   ).toBeAttached();
