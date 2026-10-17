@@ -48,7 +48,11 @@ fn sigint_and_sigterm_cancel_gate_run_load_wait_and_release_the_slot() {
             registry["gates"][0]["heavy"] = true.into();
             registry["gates"][0]["static"] = false.into();
             fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
-            fs::write(root.path().join("gates/heavy.json"), r#"{"slots":1}"#).unwrap();
+            fs::write(
+                root.path().join("gates/heavy.json"),
+                r#"{"slots":1,"cores":1}"#,
+            )
+            .unwrap();
             let marker = output.path().join("started");
             let arguments = if command == "gate-run" {
                 vec![

@@ -127,6 +127,17 @@ fn deadline_error_states_the_load_and_calls_an_overloaded_machine_so() {
 }
 
 #[test]
+fn the_online_cpu_list_counts_ranges_and_single_cpus() {
+    assert_eq!(load::online_count("0-11\n"), Some(12));
+    assert_eq!(load::online_count("0-3,6"), Some(5));
+    assert_eq!(load::online_count("7"), Some(1));
+    assert_eq!(load::online_count("3-1"), None);
+    assert_eq!(load::online_count("zero"), None);
+    assert_eq!(load::online_count(""), None);
+    assert!(load::cores() >= 1);
+}
+
+#[test]
 fn the_load_is_parsed_from_proc_loadavg_and_exactly_the_core_count_is_not_overload() {
     let load = load::parse("0.52 1.25 3.00 2/801 12345\n", 4).unwrap();
     assert_eq!(

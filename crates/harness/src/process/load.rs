@@ -27,8 +27,38 @@ pub(crate) fn parse(loadavg: &str, cores: usize) -> Option<Load> {
 
 /// The load of this machine (`None` where `/proc/loadavg` does not exist).
 pub(crate) fn read() -> Option<Load> {
-    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    parse(&fs::read_to_string("/proc/loadavg").ok()?, cores)
+    parse(&fs::read_to_string("/proc/loadavg").ok()?, cores())
+}
+
+/// The cores this process may run on: its CPU affinity list, which `taskset` narrows. It is not
+/// `available_parallelism`, which also applies a container's CPU quota (`--cpus`): a container
+/// started under a heavy slot keeps the machine's count, not its slot's share.
+pub(crate) fn cores() -> usize {
+    fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+                .and_then(online_count)
+        })
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
+/// The number of CPUs in a kernel CPU list such as `0-3,6` (sysfs online and affinity lists alike).
+pub(crate) fn online_count(list: &str) -> Option<usize> {
+    list.trim()
+        .split(',')
+        .map(|range| match range.split_once('-') {
+            Some((first, last)) => last
+                .parse::<usize>()
+                .ok()?
+                .checked_sub(first.parse().ok()?)?
+                .checked_add(1),
+            None => range.parse::<usize>().ok().map(|_| 1),
+        })
+        .sum::<Option<usize>>()
+        .filter(|count| *count > 0)
 }
 
 impl Load {

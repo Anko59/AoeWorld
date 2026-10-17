@@ -27,11 +27,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) use guard::{hold, hold_snapshot, run_in_slot};
+pub(crate) use guard::{hold, hold_snapshot, run_forced};
 
-/// `run_in_slot` for the checkout the process runs in.
+/// `run_forced` for the checkout the process runs in.
 pub(crate) fn run_here(gate: &str, argv: &[String], slots: &SlotEnv) -> queue::Result<i32> {
-    run_in_slot(Path::new("."), gate, argv, slots)
+    run_forced(Path::new("."), gate, argv, slots)
 }
 pub(crate) use status::print_status;
 
@@ -123,30 +123,39 @@ impl Slot {
 #[serde(deny_unknown_fields)]
 struct Committed {
     slots: usize,
+    cores: usize,
 }
 
-/// How many slots there are and how long to queue.
+/// How many slots there are, how many cores the machine has, and how long to queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Config {
     pub(crate) slots: usize,
+    pub(crate) cores: usize,
     pub(crate) wait: Duration,
 }
 
 impl Config {
-    /// `gates/heavy.json` sets the default slots; `AOE_HEAVY_SLOTS` (1-8) and
+    /// `gates/heavy.json` sets the default slots and the cores; `AOE_HEAVY_SLOTS` (1-8) and
     /// `AOE_HEAVY_WAIT_MINUTES` (default 90; 0 fails at once) override.
     pub(crate) fn load(root: &Path, slots: &SlotEnv) -> Result<Self> {
         let text = std::fs::read_to_string(root.join("gates/heavy.json"))?;
         let committed: Committed = serde_json::from_str(&text)?;
         Self::from_values(
             committed.slots,
+            committed.cores,
             slots.slots.as_deref(),
             slots.wait.as_deref(),
         )
     }
 
+    /// The CPUs each slot's containers may use: the cores shared out evenly, at least one.
+    pub(crate) fn cpus_per_slot(&self) -> usize {
+        (self.cores / self.slots).max(1)
+    }
+
     pub(crate) fn from_values(
         default_slots: usize,
+        cores: usize,
         slots: Option<&str>,
         wait: Option<&str>,
     ) -> Result<Self> {
@@ -166,8 +175,12 @@ impl Config {
                 .map_err(|_| format!("{WAIT_VAR}={text}: use a whole number of minutes"))?,
             None => DEFAULT_WAIT_MINUTES,
         };
+        if cores == 0 {
+            return Err("gates/heavy.json: cores must be at least 1".into());
+        }
         Ok(Self {
             slots,
+            cores,
             wait: Duration::from_secs(minutes.saturating_mul(60)),
         })
     }
