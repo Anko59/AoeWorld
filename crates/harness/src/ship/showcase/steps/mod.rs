@@ -167,7 +167,7 @@ pub(crate) enum State {
     Selected,
 }
 
-/// `{"wait_for": {"selector": "#map-creator"}}` (visible) or
+/// `{"wait_for": {"selector": "#minimap"}}` (visible) or
 /// `{"wait_for": {"state": "settled"}}`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -183,15 +183,13 @@ pub(crate) struct WaitFor {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Panel {
-    /// The map creator (`#creator-toggle` → `#map-creator`).
-    Creator,
     /// The whole-map overview (`#overview-toggle`, `aria-expanded`).
     Overview,
     /// The isometric grid (`#grid`, `aria-pressed`).
     Grid,
 }
 
-/// `{"open_panel": {"name": "creator"}}`: opened if it is not already.
+/// `{"open_panel": {"name": "overview"}}`: opened if it is not already.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct OpenPanel {

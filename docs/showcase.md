@@ -172,9 +172,9 @@ that bounds each wait inside it. Waits are measured, not planned, like page load
   the capture fragment, then waits for the camera read back from `#minimap`, no
   chunk pending and the frame quiet: the settle rule of `make compare`. A
   bookmark's coordinates come from `qa/bookmarks.json`; its renderer is ignored.
-- `{"wait_for": {"selector": "#map-creator"}}` (visible) or `{"wait_for":
-  {"state": "connected|game|chunks_ready|settled|unit_selected"}}`.
-- `{"open_panel": {"name": "creator|overview|grid"}}`: toggles it open unless
+- `{"wait_for": {"selector": "#minimap"}}` (visible) or `{"wait_for":
+  {"state": "connected|game|chunks_ready|settled|selected"}}`.
+- `{"open_panel": {"name": "overview|grid"}}`: toggles it open unless
   it already is, and waits for it.
 
 Refusals happen in `make showcase-check`, before any image is built.
@@ -185,7 +185,7 @@ Refusals happen in `make showcase-check`, before any image is built.
   {"start_skirmish": {"preset": "finland", "size": "tiny"}},
   {"select_entity": {"kind": "villager"}},
   {"command": {"action": "gather", "resource": "wood"}},
-  {"camera": {"x": 8192, "y": 8192, "zoom": 2}}]}]}
+  {"camera": {"x": 250, "y": 250, "zoom": 2}}]}]}
 ```
 
 Implementation: `showcase/steps/` expands each step into ops (`script.rs`),

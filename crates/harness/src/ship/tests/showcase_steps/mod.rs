@@ -50,7 +50,7 @@ fn every_library_step_parses_and_primitive_steps_still_do() {
         {"camera": {"x": 252, "y": 252.5, "zoom": 1.5}},
         {"wait_for": {"selector": "#minimap"}},
         {"wait_for": {"state": "settled"}},
-        {"open_panel": {"name": "creator"}},
+        {"open_panel": {"name": "grid"}},
         {"select": {"selector": "#map-region", "value": "alps"}},
         {"wait_ms": 500}
     ]))
@@ -87,6 +87,11 @@ fn bad_library_steps_are_refused_naming_the_step_and_the_field() {
         "not both",
     );
     refused(json!([{"open_panel": {"name": "settings"}}]), "settings");
+    // The map creator panel is gone (#451): the error lists what exists.
+    refused(
+        json!([{"open_panel": {"name": "creator"}}]),
+        "expected `overview` or `grid`",
+    );
 }
 
 #[test]
@@ -295,4 +300,23 @@ try {{ await runScript(page, {script}, 4); }} catch (e) {{ console.log(e.message
     assert!(message.contains("#never"), "{message}");
     assert!(message.contains("timed out after"), "{message}");
     assert!(message.contains("limit 50 ms"), "{message}");
+}
+
+#[test]
+fn every_state_and_panel_the_docs_name_is_accepted() {
+    let docs = include_str!("../../../../../../docs/showcase.md");
+    let line = |key: &str| {
+        let start = docs.find(key).unwrap_or_else(|| panic!("docs lack {key}"));
+        docs[start + key.len()..]
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    for state in line("{\"state\": \"").split('|') {
+        parse(json!([{"wait_for": {"state": state}}])).unwrap_or_else(|e| panic!("{state}: {e}"));
+    }
+    for name in line("{\"name\": \"").split('|') {
+        parse(json!([{"open_panel": {"name": name}}])).unwrap_or_else(|e| panic!("{name}: {e}"));
+    }
 }

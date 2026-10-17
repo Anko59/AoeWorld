@@ -320,11 +320,6 @@ fn wait_for(wait: &WaitFor) -> Builder {
 fn panel(panel: &OpenPanel) -> Builder {
     let mut b = Builder::new(panel.timeout_ms, STEP_TIMEOUT_MS);
     let (toggle, open, what) = match panel.name {
-        Panel::Creator => (
-            "#creator-toggle",
-            "#map-creator:not([hidden])",
-            "the map creator",
-        ),
         Panel::Overview => (
             "#overview-toggle",
             "#overview-toggle[aria-expanded=\"true\"]",
