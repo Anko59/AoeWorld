@@ -274,7 +274,7 @@ fn run(
         Command::TestSourceQualification => native::test_source_qualification()?,
         Command::TestExhaustive => native::test_exhaustive()?,
         Command::LoadStatus => {
-            ship::lock::print_queue(Path::new("."))?;
+            ship::lock::print_status(Path::new("."))?;
             slots::print_status(Path::new("."), slots)?
         }
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),

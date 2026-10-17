@@ -25,7 +25,7 @@ const DEFAULT_WAIT_MINUTES: u64 = 120;
 const POLL: Duration = Duration::from_secs(1);
 const REPORT_EVERY: Duration = Duration::from_secs(300);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Holder {
     pub(crate) worktree: String,
     pub(crate) branch: String,
@@ -142,8 +142,11 @@ pub(crate) fn acquire_at(
             }
         }
         let position = ahead.len() + 1;
-        // The lock file names the holder; a returning ship may be first in line without it.
+        // The lock file names the holder only while that ship's ticket is live (the file keeps
+        // its last content after a release); otherwise name the first live ticket ahead.
+        let live = queue(path)?;
         let current = read_json::<Holder>(path)
+            .filter(|named| live.contains(named))
             .or_else(|| ahead.into_iter().next().flatten())
             .map_or("another ship".into(), |h| h.describe());
         if started.elapsed() >= wait {
@@ -229,27 +232,39 @@ pub(crate) fn print_status(root: &Path) -> Result<()> {
     print_queue(root)
 }
 
-/// The queued ships, oldest first; the running ship (the lock holder) is not listed.
-pub(crate) fn print_queue(root: &Path) -> Result<()> {
+/// The queued ships in admission order; the running ship (the lock holder) is not listed.
+fn print_queue(root: &Path) -> Result<()> {
     let lock_path = path(root)?;
-    let held = status(&lock_path)?;
-    let mut waiting = queue(&lock_path)?;
-    if held.is_some() && !waiting.is_empty() {
-        waiting.remove(0);
+    for line in queue_lines(status(&lock_path)?.as_ref(), queue(&lock_path)?) {
+        println!("{line}");
     }
+    Ok(())
+}
+
+/// The waiting ships in the order they will be admitted: returning ships first, then plain
+/// waiters, each by arrival. The holder is removed by identity, not by position, because a
+/// returning ship can hold the lock with a newer ticket than the plain waiters.
+pub(crate) fn queue_lines(held: Option<&Holder>, mut waiting: Vec<Holder>) -> Vec<String> {
+    if let Some(index) = held.and_then(|holder| waiting.iter().position(|w| w == holder)) {
+        waiting.remove(index);
+    }
+    waiting.sort_by_key(|holder| std::cmp::Reverse(holder.rank()));
+    let mut lines = Vec::new();
     if !waiting.is_empty() {
-        println!("ship queue (first come, first served):");
+        lines.push(
+            "ship queue (admission order: returning from review first, then arrival):".into(),
+        );
     }
     for (index, holder) in waiting.iter().enumerate() {
-        println!(
+        lines.push(format!(
             "  {}. `{}` on {} (queued {})",
             index + 1,
             holder.command,
             holder.describe_place(),
             utc(holder.started)
-        );
+        ));
     }
-    Ok(())
+    lines
 }
 
 impl Holder {

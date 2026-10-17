@@ -1,6 +1,6 @@
 //! Priority in the ship queue: a ship back from review (`returning`) is admitted before every
-//! plain waiter, in arrival order among the returning ships. A waiter killed while queued
-//! does not block anyone. The holders are real threads and child processes on a temp lock.
+//! plain waiter, in arrival order among the returning ships. A returning ship killed while
+//! queued (same rank, earlier) does not block the next one. The holders are real threads and child processes on a temp lock.
 use crate::ship::lock::{self, Holder};
 use std::{
     path::{Path, PathBuf},
@@ -77,7 +77,7 @@ fn priority_waiter_child() {
     };
     let _lock = lock::acquire_at(
         Path::new(&path),
-        &holder("doomed", false),
+        &holder("doomed", true),
         NEVER,
         POLL,
         NEVER,
@@ -144,7 +144,7 @@ fn returning_ships_keep_their_order_and_go_before_an_earlier_plain_waiter() {
 }
 
 #[test]
-fn a_waiter_killed_while_queued_does_not_block_a_returning_ship() {
+fn a_returning_ship_killed_while_queued_does_not_block_the_next_returning_ship() {
     let (_temp, path) = lock_file();
     let first = lock::acquire_at(
         &path,
@@ -221,4 +221,38 @@ fn the_queue_names_a_returning_ship() {
         "r in /work/priority (returning from review)"
     );
     assert_eq!(holder("p", false).describe_place(), "p in /work/priority");
+}
+
+#[test]
+fn the_queue_listing_drops_the_holder_by_identity_and_lists_in_admission_order() {
+    let mut returning_holder = holder("r1", true);
+    returning_holder.started += 30;
+    let mut later_plain = holder("p2", false);
+    later_plain.started += 10;
+    let mut waiting_returning = holder("r2", true);
+    waiting_returning.started += 40;
+    // Live tickets oldest first: p1, p2, then r1 (the holder, back from review), then r2.
+    let waiting = vec![
+        holder("p1", false),
+        later_plain,
+        returning_holder.clone(),
+        waiting_returning,
+    ];
+    let lines = lock::queue_lines(Some(&returning_holder), waiting);
+    let order: Vec<&str> = lines[1..]
+        .iter()
+        .map(|line| {
+            line.split(" on ")
+                .nth(1)
+                .unwrap()
+                .split(' ')
+                .next()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(order, ["r2", "p1", "p2"], "{lines:?}");
+    assert!(
+        lines.iter().all(|line| !line.contains("r1 in")),
+        "{lines:?}"
+    );
 }
