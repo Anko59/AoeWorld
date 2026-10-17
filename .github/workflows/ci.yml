@@ -44,16 +44,23 @@ jobs:
           retention-days: 7
 
   static:
+    # `make preflight` as two parallel legs, both required (#388, docs/testing.md).
     needs: select
+    strategy:
+      fail-fast: false
+      matrix: { part: [checks, unit] }
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - uses: ./.github/actions/docker-setup
+      - uses: ./.github/actions/rust-cache-restore
+        with: { leg: '${{ matrix.part }}' }
       - run: make bootstrap
-      - run: make preflight
+      - run: make preflight-${{ matrix.part }}
+      - uses: ./.github/actions/rust-cache-save
+        with: { leg: '${{ matrix.part }}' }
 
   native-coverage:
     needs: select

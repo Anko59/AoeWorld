@@ -1,4 +1,5 @@
 use super::*;
+mod part;
 mod qa;
 use crate::{
     gates::scopes::{Kind, Snapshot},

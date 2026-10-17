@@ -1,0 +1,26 @@
+name: Save the Rust build cache
+description: >-
+  Save the cargo registry and target/ of a job leg, only on a push to dev (so
+  pull requests never evict it) and only when the restore step did not find
+  this exact key. Run it as the last step of a green job.
+inputs:
+  leg:
+    description: The same leg name the restore step used.
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: trim
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && env.RUST_CACHE_EXACT != 'true' }}
+      shell: bash
+      run: |
+        rm -rf target/*/incremental target/tmp .cache/cargo/registry/src
+        du -sh target .cache/cargo/registry .cache/cargo/git 2>/dev/null || true
+    - if: ${{ steps.trim.outcome == 'success' }}
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: |
+          .cache/cargo/registry
+          .cache/cargo/git
+          target
+        key: rust-${{ inputs.leg }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'docker/rust-tools.Dockerfile') }}

@@ -136,3 +136,64 @@ fn the_e2e_job_runs_each_shard_of_one_split_and_nothing_else_runs_the_suite_ther
     assert!(!workflow_job(&workflow, "browser").contains("test-e2e"));
     assert!(!workflow_job(&workflow, "native-coverage").contains("AOE_E2E_SHARD"));
 }
+
+#[test]
+fn the_static_job_runs_both_preflight_halves_and_only_dev_pushes_save_the_cache() {
+    use crate::native::part::PreflightPart;
+    use clap::ValueEnum;
+    let workflow = workflow();
+    let block = workflow_job(&workflow, "static");
+    let matrix = block
+        .split_once("part: [")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(legs, _)| legs)
+        .expect("part matrix");
+    let mut legs: Vec<&str> = matrix.split(", ").collect();
+    legs.sort_unstable();
+    // The legs are exactly the halves `preflight --part` knows besides `all`.
+    let mut halves: Vec<String> = PreflightPart::value_variants()
+        .iter()
+        .filter(|part| **part != PreflightPart::All)
+        .map(|part| part.to_possible_value().unwrap().get_name().to_owned())
+        .collect();
+    halves.sort_unstable();
+    assert_eq!(legs, halves);
+    assert!(block.contains("run: make preflight-${{ matrix.part }}"));
+    assert!(block.contains("fail-fast: false"));
+    let makefile = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Makefile"),
+    )
+    .expect("Makefile");
+    for leg in &legs {
+        assert!(
+            makefile.contains(&format!("\npreflight-{leg}:"))
+                && makefile.contains(&format!("preflight --part {leg}\n")),
+            "make preflight-{leg} runs its half"
+        );
+    }
+    // Registry membership is unchanged: one job, so ci-check still sees one result.
+    for gate in ["lint", "deny", "build-wasm", "test-unit", "perf-smoke"] {
+        assert!(
+            registry().jobs["static"]
+                .iter()
+                .any(|member| member == gate)
+        );
+    }
+    // Pull requests read what dev saved and never write, so they cannot evict it.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/actions");
+    let save = std::fs::read_to_string(root.join("rust-cache-save/action.yml")).expect("save");
+    let restore =
+        std::fs::read_to_string(root.join("rust-cache-restore/action.yml")).expect("restore");
+    assert!(save.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
+    assert!(save.contains("env.RUST_CACHE_EXACT != 'true'"));
+    assert!(
+        restore.contains("actions/cache/restore@") && restore.contains("rust-${{ inputs.leg }}-")
+    );
+    for action in [&save, &restore] {
+        assert!(!action.contains("uses: actions/cache@"));
+    }
+    for name in ["rust-cache-restore", "rust-cache-save"] {
+        assert!(block.contains(&format!("./.github/actions/{name}")));
+    }
+    assert!(block.contains("leg: '${{ matrix.part }}'"));
+}

@@ -141,7 +141,11 @@ enum Command {
     GateRun(gates::runner::Options),
     ReviewSubject(gates::review::Options),
     PreCommit,
-    Preflight,
+    /// The static checks, the unit tests, or (default) both; CI runs the two parts in parallel.
+    Preflight {
+        #[arg(long, value_enum, default_value = "all")]
+        part: native::part::PreflightPart,
+    },
     HooksInstall,
     HooksCheck,
     #[command(flatten)]
@@ -299,14 +303,18 @@ fn run(
         Command::PreCommit => {
             gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Index)?
         }
-        Command::Preflight => {
-            gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
-            let select = native::affected::preflight_base();
-            {
-                let _slot = slots::guard::guard("test-unit", slots)?;
-                native::test_unit(select)?;
+        Command::Preflight { part } => {
+            if part.runs_checks() {
+                gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
             }
-            run(Command::PerfSmoke, "perf-smoke", slots)?;
+            if part.runs_unit() {
+                let select = native::affected::preflight_base();
+                {
+                    let _slot = slots::guard::guard("test-unit", slots)?;
+                    native::test_unit(select)?;
+                }
+                run(Command::PerfSmoke, "perf-smoke", slots)?;
+            }
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,
         Command::HooksCheck => hooks::check(Path::new("."))?,
