@@ -156,9 +156,15 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             }
         }
     } else {
+        // Selection ellipses carry the depth of their top edge in x and of
+        // their bottom edge in y, so they follow the ground under the stroke.
+        var quad_depth = sprite.depths.x;
+        if sprite.pages.w == 2u && corners[vertex].y < 0.0 {
+            quad_depth = sprite.depths.y;
+        }
         out.clip = vec4<f32>(
             sprite.position + corners[vertex] * sprite.radius,
-            sprite.depths.x,
+            quad_depth,
             1.0,
         );
         out.uv = sprite.uv.xy + vec2<f32>((corners[vertex].x + 1.0) * 0.5, (1.0 - corners[vertex].y) * 0.5) * sprite.uv.zw;

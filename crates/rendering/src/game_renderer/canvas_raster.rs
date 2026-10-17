@@ -374,7 +374,12 @@ pub(super) fn raster_selection(
                     x,
                     y,
                     width,
-                    layer_depth,
+                    crate::game_grid::selection_depth_at(
+                        &sprite,
+                        layer_depth,
+                        f64::from(y) + 0.5,
+                        viewport[1],
+                    ),
                     [242, 217, 89, u8::MAX],
                     color,
                     depth,

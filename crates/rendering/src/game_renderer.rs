@@ -306,8 +306,13 @@ impl GameRenderer {
                     WorldLayer::Surface(triangle) => {
                         crate::web::surface_instance(triangle, camera.viewport, depth_origin)
                     }
-                    WorldLayer::Selection(sprite, depth)
-                    | WorldLayer::Sprite(sprite, _, depth, _) => {
+                    WorldLayer::Selection(sprite, depth) => {
+                        let mut sprite = *sprite;
+                        sprite.depths =
+                            game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
+                        sprite
+                    }
+                    WorldLayer::Sprite(sprite, _, depth, _) => {
                         let mut sprite = *sprite;
                         sprite.depths = [(*depth - depth_origin) as f32; 4];
                         sprite

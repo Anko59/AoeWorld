@@ -115,8 +115,9 @@ void main() {
         }
     } else {
         vec2 corner = corners[vertex];
+        float quadDepth = pages.w == 2u && corner.y < 0.0 ? depths.y : depths.x;
         gl_Position = vec4(positionRadius.xy + corner * positionRadius.zw,
-                           2.0 * depths.x - 1.0, 1);
+                           2.0 * quadDepth - 1.0, 1);
         vUv = uv.xy + vec2((corner.x + 1.0) * .5, (1.0 - corner.y) * .5) * uv.zw;
         vColor = color;
         vSolid = 0u;

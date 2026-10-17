@@ -33,6 +33,19 @@ pub(crate) fn selection_ellipse(
         (radius[0] * camera.zoom).max(5.0),
         (radius[1] * camera.zoom).max(3.0),
     ];
+    // Flat ground at this elevation is nearer the viewer by `slope` depth units
+    // per pixel below the centre, so the stroke's depth must grow downward with
+    // it or the ground covers the front arc. Renderers read `depths[0]` for the
+    // top edge and `depths[1]` for the bottom edge, as offsets from the layer
+    // depth, and interpolate between them.
+    let below = camera_projection(camera)
+        .world_to_screen_at_height([position[0] + 1.0, position[1] + 1.0], elevation_meters);
+    let slope = if (below.y - screen.y).abs() > f64::EPSILON {
+        2.0 / (below.y - screen.y)
+    } else {
+        0.0
+    };
+    let half = ((radii[1] + 1.0) * slope) as f32;
     vec![(
         Sprite {
             position: to_clip(screen, camera.viewport),
@@ -42,12 +55,39 @@ pub(crate) fn selection_ellipse(
             ],
             color: [0.95, 0.85, 0.35, 1.0],
             uv: [radii[0] as f32, radii[1] as f32, 2.0, 0.0],
-            depths: [0.0; 4],
+            depths: [-half, half, half, -half],
             terrain_blend: [[0.0; 4]; 2],
             pages: [2, 0, 0, 2],
         },
         surface_depth([position[0], position[1], elevation_meters]) + 1.4,
     )]
+}
+
+/// GPU instance depths for a selection ellipse: the stroke's top and bottom
+/// edge depths relative to the camera origin, kept in the first three slots so
+/// depth normalization sees both.
+pub(crate) fn selection_instance_depths(
+    sprite: &Sprite,
+    layer_depth: f64,
+    origin: f64,
+) -> [f32; 4] {
+    let top = (layer_depth - origin) as f32 + sprite.depths[0];
+    let bottom = (layer_depth - origin) as f32 + sprite.depths[1];
+    [top, bottom, bottom, top]
+}
+
+/// Canvas fragment depth of a selection ellipse at a pixel row.
+pub(crate) fn selection_depth_at(
+    sprite: &Sprite,
+    layer_depth: f64,
+    row: f64,
+    viewport_height: f64,
+) -> f64 {
+    let center = (1.0 - f64::from(sprite.position[1])) * viewport_height * 0.5;
+    let half_height = f64::from(sprite.radius[1]) * viewport_height * 0.5;
+    let t = ((row - center) / half_height).clamp(-1.0, 1.0);
+    let (top, bottom) = (f64::from(sprite.depths[0]), f64::from(sprite.depths[1]));
+    layer_depth + top + (bottom - top) * (t + 1.0) * 0.5
 }
 
 /// Borders of the drawn terrain cells, so the overlay follows the mesh's
