@@ -62,11 +62,13 @@ pub(in super::super) fn resource(
     let world = map::world_at_screen(client, point);
     if let Some(point) = world {
         let tile = aoe_core::TileCoord::new(point[0].floor() as i32, point[1].floor() as i32);
-        if let Some((node, _)) = client
+        let starting: Vec<_> = client.resources.starting_nodes().collect();
+        if let Some(node) = client
             .terrain_chunks
             .values()
-            .flat_map(|chunk| chunk.resources())
-            .find(|(node, _)| node.tile == tile && client.resources.visible(node.id))
+            .flat_map(|chunk| chunk.resources().map(|(node, _)| node))
+            .chain(starting.iter())
+            .find(|node| node.tile == tile && client.resources.visible(node.id))
         {
             let kind = match node.kind as u8 {
                 0 => ResourceKind::Food,
