@@ -50,9 +50,10 @@ perf-wasm-size-steps:
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/pkg/aoe_client_bg.wasm -o reports/perf/optimized.wasm
 	@docker run $(HEAVY_ENV) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/optimized.wasm > reports/perf/optimized.wasm.gz
 
-# The local ship's cap check (preflight): measure, then compare with baselines/perf/wasm.json under the
-# gate's own rule. perf-wasm-size stays a measurement, so perf-baseline-propose works when the size grew.
-perf-wasm-cap: perf-wasm-size
+# The local ship's cap check (preflight): compare the gzip artifact the perf-wasm-size gate just wrote with
+# baselines/perf/wasm.json under the gate's own rule. It measures nothing itself (the gate requires
+# perf-wasm-size), so it is light and cannot spend its budget waiting for a heavy slot.
+perf-wasm-cap: slot-bootstrap
 	@target/debug/aoe-harness perf-wasm-size-check
 
 build-wasm: slot-bootstrap
