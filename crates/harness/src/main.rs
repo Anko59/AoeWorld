@@ -97,6 +97,8 @@ enum Command {
     TestUnit,
     /// The slow source-qualification tests that `test-unit` excludes.
     TestSourceQualification,
+    /// The seed sweeps and full-axis geodata round-trips that `test-unit` excludes.
+    TestExhaustive,
     LoadStatus,
     /// Print the CPUs each heavy slot gives its containers (gates/heavy.json cores shared among its slots).
     SlotCpus,
@@ -272,6 +274,7 @@ fn run(
         Command::Lint => native::lint()?,
         Command::TestUnit => native::test_unit(native::affected::requested())?,
         Command::TestSourceQualification => native::test_source_qualification()?,
+        Command::TestExhaustive => native::test_exhaustive()?,
         Command::LoadStatus => slots::print_status(Path::new("."), slots)?,
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
         Command::SlotCpus => println!(

@@ -35,9 +35,18 @@ fn forests_start_at_the_documented_wildness_and_grow_into_large_ones() {
 
 #[test]
 fn groves_and_forests_below_the_large_radius_are_solid() {
+    groves_and_forests_below_the_large_radius_are_solid_on(&SEEDS);
+}
+
+#[test]
+fn groves_and_forests_below_the_large_radius_are_solid_on_two_seeds() {
+    groves_and_forests_below_the_large_radius_are_solid_on(&QUICK_SEEDS);
+}
+
+fn groves_and_forests_below_the_large_radius_are_solid_on(seeds: &[u64]) {
     // Up to wildness 500 no forest reaches the large radius: no glade, no
     // trail, and a caller corridor clears nothing either.
-    for seed in SEEDS {
+    for &seed in seeds {
         let p = patches(seed);
         for wildness in [FOREST_MIN_WILDNESS - 1, 500] {
             let f = fixture(p, 768, |_, _| FOREST, |_, _| wildness);
@@ -105,10 +114,19 @@ fn every_glade_and_path_lies_inside_a_large_forest_domain() {
 
 #[test]
 fn most_forested_country_stays_connected_open_ground_on_all16_seeds() {
+    most_forested_country_stays_connected_open_ground(&SEEDS);
+}
+
+#[test]
+fn most_forested_country_stays_connected_open_ground_on_two_seeds() {
+    most_forested_country_stays_connected_open_ground(&QUICK_SEEDS);
+}
+
+fn most_forested_country_stays_connected_open_ground(seeds: &[u64]) {
     // Five cells a side; connectivity is judged on the inner three, because a
     // pocket at the fixture border may be joined to the rest outside it.
     let (size, margin) = (960usize, 192usize);
-    for seed in SEEDS {
+    for &seed in seeds {
         let p = patches(seed);
         let f = fixture(p, size, |_, _| FOREST, |_, _| 1000);
         assert!(f.metrics.open * 100 >= 40 * size * size, "seed={seed}");

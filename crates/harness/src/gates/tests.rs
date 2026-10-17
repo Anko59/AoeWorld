@@ -84,7 +84,7 @@ fn ci_selection_requires_exact_manifest_and_job_outcomes() {
         "select":"success", "static":"success", "native-coverage":"skipped",
         "browser":"skipped", "e2e":"skipped",
         "target-performance":"skipped", "fuzz-smoke":"skipped",
-        "qualification":"skipped"
+        "qualification":"skipped", "exhaustive":"skipped"
     })
     .to_string();
     check_selection(&manifest, &results, &docs).expect("matching selection");
@@ -176,7 +176,8 @@ fn unavailable_ci_base_selects_all_and_retains_requested_identity() {
         // when the base cannot be resolved, so only coverage (push and nightly)
         // and the post-merge qualification tier stay out.
         for (job, selected) in &manifest.jobs {
-            let after_merge = job == "native-coverage" || job == "qualification";
+            let after_merge =
+                ["native-coverage", "qualification", "exhaustive"].contains(&job.as_str());
             assert_eq!(*selected, !after_merge, "{job}");
         }
         assert!(manifest.gates.contains(&"fuzz-smoke".to_owned()));

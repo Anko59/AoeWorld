@@ -39,6 +39,16 @@ pub(crate) fn test_source_qualification() -> Result<(), ProcessError> {
     process::run("cargo", &args, SOURCE_BUDGET)
 }
 
+/// Budget of the exhaustive tier, which `test_unit` excludes.
+const EXHAUSTIVE_BUDGET: Duration = Duration::from_secs(1800);
+
+/// Run exactly the tests of [`tiers::EXHAUSTIVE`]; fail when none match.
+pub(crate) fn test_exhaustive() -> Result<(), ProcessError> {
+    let include = tiers::include_exhaustive();
+    let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
+    process::run("cargo", &args, EXHAUSTIVE_BUDGET)
+}
+
 pub(crate) fn lint() -> Result<(), ProcessError> {
     let args = ["clippy", "--workspace", "--all-targets", "--locked"];
     process::run(
