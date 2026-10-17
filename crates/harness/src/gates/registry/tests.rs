@@ -4,6 +4,7 @@ mod classification;
 mod heavy;
 mod job_mapping;
 mod placement;
+mod preflight_size;
 
 fn proposal() -> Value {
     serde_json::from_slice(include_bytes!("../../../../../gates/registry.json"))

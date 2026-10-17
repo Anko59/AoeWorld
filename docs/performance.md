@@ -109,6 +109,15 @@ economy, and fog of war require representative workloads before acceptance.
 Repeated map chunk timings and deterministic ground-variety work bounds are
 recorded in [ground variety evidence](geodata/landscape/ground-variety.md).
 
+`make perf-wasm-cap` runs `aoe-harness perf-wasm-size-check` on the artifact the
+`perf-wasm-size` gate just wrote (it measures nothing itself, so it is light): the same comparison against
+`baselines/perf/wasm.json` that `perf-ci` makes, and fails over the cap. It is a
+preflight gate for any change that selects the performance suite (a client,
+rendering, web or gameplay change, not a docs one), so `make ship` finds a size
+overage before CI does (#434 lost a CI cycle to 519 bytes). `make perf-wasm-size`
+itself only measures, so `make perf-baseline-propose` still works when the size
+grew.
+
 On pull requests whose `target-performance` job ran, CI posts one informational
 performance comment and rewrites it in place on later runs (`make perf-comment`).
 It shows the optimized WASM size as `baseline …, cap …` (the cap is the size
