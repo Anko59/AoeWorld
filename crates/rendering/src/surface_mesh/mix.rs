@@ -11,6 +11,7 @@
 //! Displayed vertices only: no resident-world material map is built.
 use super::*;
 pub(crate) mod support;
+mod thin;
 
 #[path = "mix/tests/fixture.rs"]
 #[cfg(test)]
@@ -147,6 +148,9 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             }
         }
     }
+    if water_visible {
+        thin::widen(&mut support, &keys, terrain);
+    }
     for triangle in triangles.iter_mut().filter(|triangle| eligible(triangle)) {
         let mut cells = triangle
             .points
@@ -184,6 +188,14 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         ) else {
             continue;
         };
+        if base == over && base == 12 && quad.iter().flatten().all(|cell| cell.0 == 12) {
+            // A ford interior is a light shallow over sand, as its banks are.
+            let share = thin::FORD_SHARE;
+            triangle.texture_materials = Some([3, 3, 12]);
+            triangle.mix = [share, share, share, 0, 0, 0];
+            triangle.floor_strengths = Some([0; 3]);
+            continue;
+        }
         if base == over {
             // Coverage owns pure quads too. The older single-owner splat can
             // disagree with this support, especially on a coarse patch.
@@ -223,7 +235,11 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                     .checked_div(present)
                     .unwrap_or(0) as u8
             };
-            triangle.mix[corner] = share(over);
+            triangle.mix[corner] = if over == 12 {
+                share(over).min(thin::FORD_SHARE)
+            } else {
+                share(over)
+            };
             triangle.mix[3 + corner] = if middle == base { 0 } else { share(middle) };
             let floor = cell.iter().map(|cell| u32::from(cell.1)).sum::<u32>();
             floors[corner] = landscape::quantized_floor(

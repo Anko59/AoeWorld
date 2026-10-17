@@ -77,27 +77,43 @@ fn coverage(faces: &[ProjectedSurfaceTriangle], at: [i32; 2]) -> BTreeMap<[i32; 
     result
 }
 
-fn assert_continuous_band(chain: &[[i32; 2]], material: u8) {
+/// Fords draw their sheet at about 70% over sand or bank ground, never opaque;
+/// shallow water draws solid.
+fn solid(material: u8) -> f32 {
+    if material == FORD { 0.65 } else { 0.9 }
+}
+
+/// Every tile of a one-tile stream is solid at its corners; wider reaches may
+/// keep half-covered bank vertices, so they are judged by tile and pair means.
+fn assert_continuous_band(chain: &[[i32; 2]], material: u8, strict: bool) {
     let faces = mesh(chain, material);
+    let floor = solid(material);
     let shared = |a: [i32; 2], b: [i32; 2]| {
         let (a, b) = (coverage(&faces, a), coverage(&faces, b));
-        a.into_iter()
-            .filter_map(|(key, value)| b.get(&key).map(|other| value.min(*other)))
-            .collect::<Vec<_>>()
+        let both = a
+            .into_iter()
+            .filter_map(|(key, value)| b.get(&key).map(|other| (value + other) / 2.0))
+            .collect::<Vec<_>>();
+        both.iter().sum::<f32>() / both.len().max(1) as f32
     };
     for &at in chain {
         let corners = coverage(&faces, at);
         assert_eq!(corners.len(), 4, "stream tile {at:?}");
+        let mean = corners.values().sum::<f32>() / 4.0;
+        assert!(
+            mean >= floor * if strict { 0.85 } else { 0.6 },
+            "material {material}: stream tile {at:?} is mostly land ({mean})"
+        );
         for (vertex, water) in corners {
             assert!(
-                water >= 0.9,
+                !strict || water >= floor,
                 "material {material}: stream tile {at:?} is mostly land at vertex {vertex:?} ({water})"
             );
         }
     }
     for pair in chain.windows(2) {
         assert!(
-            shared(pair[0], pair[1]).iter().any(|water| *water >= 0.9),
+            shared(pair[0], pair[1]) >= floor * if strict { 0.85 } else { 0.6 },
             "material {material}: stream breaks between {:?} and {:?}",
             pair[0],
             pair[1]
@@ -109,7 +125,7 @@ fn assert_continuous_band(chain: &[[i32; 2]], material: u8) {
 fn straight_one_tile_stream_is_one_continuous_water_band() {
     let chain: Vec<[i32; 2]> = (-4..4).map(|y| [0, y]).collect();
     for material in [SHALLOW, FORD] {
-        assert_continuous_band(&chain, material);
+        assert_continuous_band(&chain, material, true);
     }
 }
 
@@ -117,7 +133,7 @@ fn straight_one_tile_stream_is_one_continuous_water_band() {
 fn diagonal_one_tile_stream_is_one_continuous_water_band() {
     let chain: Vec<[i32; 2]> = (-4..4).map(|i| [i, i]).collect();
     for material in [SHALLOW, FORD] {
-        assert_continuous_band(&chain, material);
+        assert_continuous_band(&chain, material, true);
     }
 }
 
@@ -136,7 +152,7 @@ fn staircase_stream_of_unequal_width_has_no_faded_necks() {
         [2, 3],
     ]);
     for material in [SHALLOW, FORD] {
-        assert_continuous_band(&chain, material);
+        assert_continuous_band(&chain, material, false);
     }
 }
 
@@ -173,4 +189,22 @@ fn ford_interior_is_drawn_apart_from_the_shoreline_shallow_sheet() {
         drawn(SHALLOW),
         "a ford interior draws exactly like shallow shore water"
     );
+}
+
+#[wasm_bindgen_test]
+fn ford_stream_centre_is_light_water_over_dirt_never_grey() {
+    // Synthetic sheet colours: light shallow water and bank dirt.
+    let (water, dirt) = ([60.0_f32, 190.0, 200.0], [180.0_f32, 130.0, 70.0]);
+    let chain: Vec<[i32; 2]> = (-4..4).map(|i| [i, i]).collect();
+    let faces = mesh(&chain, FORD);
+    for at in chain {
+        let corners = coverage(&faces, at);
+        let share = corners.values().sum::<f32>() / 4.0;
+        let [r, g, b] = [0, 1, 2].map(|c| water[c] * share + dirt[c] * (1.0 - share));
+        let saturation = (g.max(b) - r.min(g).min(b)) / g.max(b);
+        assert!(
+            saturation >= 0.35 && g - r >= 50.0,
+            "ford tile {at:?} reads grey: rgb {r:.0},{g:.0},{b:.0}"
+        );
+    }
 }

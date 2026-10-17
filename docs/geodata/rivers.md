@@ -116,8 +116,10 @@ The renderer bevels shared convex and concave river-bank vertices by a quarter
 tile at the finest LOD. Straight edges, diagonal connections, cliffs, incomplete
 halos and unequal heights retain their exact corners. Both adjoining faces use
 the same moved vertex; simulation heights and passability remain unchanged.
-Fords use the required shallow-water sheet, including packs with optional depth
-and marsh sheets. Browser pixel tests check Canvas, WebGL2 and WebGPU.
+Fords use the required shallow-water sheet at partial coverage (lighter and
+sandier than shoreline shallows), including packs with optional depth
+and marsh sheets. Streams one or two tiles wide draw as one continuous band, not
+faded necks (docs/assets/landscape.md). Browser pixel tests check Canvas, WebGL2 and WebGPU.
 The minimap
 uses the same persisted lines with pixel-half-diagonal footprint discovery, so a
 sub-pixel river remains connected at strategic scale without widening its

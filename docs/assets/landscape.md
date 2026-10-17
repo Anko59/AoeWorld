@@ -60,8 +60,17 @@ frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
 | Shallows 15014 (optional) | Green marsh with lilies | — | Imported, not selected for Ford crossings |
 
 Generated river fords use the light shallow Water 15002 sheet where local
-slopes permit crossing; marsh flecks no longer obscure the crossing.
+slopes permit crossing; marsh flecks no longer obscure the crossing. A ford
+draws that sheet at about 70% coverage (shore share 140/255, capped in the shared
+mix assignment), over sand in its interior and over the bank ground elsewhere, so
+it reads as lighter, sandier wadeable water and not as the shoreline shallows.
 Ordinary shallow water and river margins stay impassable.
+
+A water tile that belongs to no 2x2 block of water is thin. Every displayed
+vertex of a thin tile counts three of its four incident tiles as water (decided
+from the source tiles, not the displayed vertices), so a one- or two-tile
+stream stays a continuous solid band along its line, about a third of a tile
+wider on each bank, instead of faded necks between full pools.
 
 Faces between two classes blend their sheets through the same per-vertex
 splat as land materials; water never blends with land across the shore. No
