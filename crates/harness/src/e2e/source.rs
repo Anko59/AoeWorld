@@ -192,7 +192,7 @@ fn run_browser(root: &Path, address: SocketAddr, phase: &str, project: &str) -> 
         nix::unistd::Uid::current(),
         nix::unistd::Gid::current()
     );
-    let args = vec![
+    let mut args = vec![
         "run".to_owned(),
         "--rm".to_owned(),
         "--init".to_owned(),
@@ -224,6 +224,7 @@ fn run_browser(root: &Path, address: SocketAddr, phase: &str, project: &str) -> 
         "tests/source-creator.spec.ts".to_owned(),
         format!("--project={project}"),
     ];
+    args.splice(1..1, crate::slots::cap_args());
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     process::run("docker", &refs, BROWSER_DEADLINE)?;
     Ok(())

@@ -1,6 +1,6 @@
 //! The process-level view of the heavy slots: which gates take one, and holding it.
 use super::{
-    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    CPUS_VAR, Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     queue::Result,
 };
 use crate::{
@@ -27,6 +27,20 @@ pub(crate) fn child_env() -> Env {
     HELD.lock()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
+        .unwrap_or_default()
+}
+
+/// The `docker run` arguments that cap a container to the held slot's CPUs: `--cpus N` when this
+/// process holds or inherited a slot, nothing otherwise. The containers the harness starts itself
+/// (browsers, chromedriver) take it right after `run`.
+pub(crate) fn cap_args() -> Vec<String> {
+    cap_args_for(&child_env())
+}
+
+pub(super) fn cap_args_for(env: &Env) -> Vec<String> {
+    env.iter()
+        .find(|(name, _)| *name == CPUS_VAR)
+        .map(|(_, cpus)| vec!["--cpus".to_owned(), cpus.clone()])
         .unwrap_or_default()
 }
 
@@ -131,20 +145,28 @@ pub(crate) fn guard(gate: &str, slots: &SlotEnv) -> Result<Guard> {
 /// at once, holding nothing, for light gates; a process that already holds one passes it on.
 pub(crate) fn hold(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
     match checkout_of(from)? {
-        Some(root) => hold_in(
-            &root,
-            gate,
-            slots,
-            || slot_dir(&root, slots),
-            || {
-                let cancellation = crate::process::Cancellation::default();
-                #[cfg(target_os = "linux")]
-                let _signals = crate::gates::runner::signals::Signals::new(&cancellation)?;
-                super::load::wait(&cancellation)
-            },
-        ),
+        Some(root) => hold_in(&root, gate, slots, || slot_dir(&root, slots), load_wait),
         None => Ok(Guard::none()),
     }
+}
+
+/// Take a slot for `gate` whatever the registry says: the `slot` command runs make targets that
+/// compile or test without being gates (`build`, `duel-check`), and each of them queues like a gate.
+pub(crate) fn hold_forced(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
+    let root = checkout_of(from)?.ok_or_else(|| {
+        format!(
+            "heavy slot: {gate} needs a checkout with gates/registry.json; {} is not one",
+            from.display()
+        )
+    })?;
+    acquire_in(&root, gate, slots, || slot_dir(&root, slots), load_wait)
+}
+
+fn load_wait() -> Result<()> {
+    let cancellation = crate::process::Cancellation::default();
+    #[cfg(target_os = "linux")]
+    let _signals = crate::gates::runner::signals::Signals::new(&cancellation)?;
+    super::load::wait(&cancellation)
 }
 
 /// A gate run in the snapshot checkout `root` of the real checkout `source`: it queues in
@@ -184,6 +206,17 @@ pub(super) fn hold_in(
     if !is_heavy(&registry, gate) {
         return Ok(Guard::none());
     }
+    acquire_in(root, gate, env, queue, wait_load)
+}
+
+/// Hold the slot of this process (or pass on the one it holds) for `gate` in `root`.
+pub(super) fn acquire_in(
+    root: &Path,
+    gate: &str,
+    env: &SlotEnv,
+    queue: impl FnOnce() -> Result<PathBuf>,
+    wait_load: impl FnOnce() -> Result<()>,
+) -> Result<Guard> {
     let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(env) = held.as_ref() {
         return Ok(Guard {
@@ -220,11 +253,16 @@ pub(super) fn hold_in(
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
     if matches!(slot, Slot::Owned { .. }) {
+        eprintln!(
+            "heavy slot: {gate} holds a slot; its containers get {} CPUs each",
+            config.cpus_per_slot()
+        );
         wait_load()?;
     }
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
+        (CPUS_VAR, config.cpus_per_slot().to_string()),
     ];
     *held = Some(env.clone());
     Ok(Guard {
@@ -236,8 +274,8 @@ pub(super) fn hold_in(
 
 /// Run `argv` as gate `gate` holding its slot, and return its exit code. The orchestrator
 /// container runs a make target's steps this way, so the slot is taken before they start.
-pub(crate) fn run_in_slot(from: &Path, gate: &str, argv: &[String], env: &SlotEnv) -> Result<i32> {
-    run_with_guard(argv, hold(from, gate, env)?)
+pub(crate) fn run_forced(from: &Path, gate: &str, argv: &[String], env: &SlotEnv) -> Result<i32> {
+    run_with_guard(argv, hold_forced(from, gate, env)?)
 }
 
 pub(super) fn run_with_guard(argv: &[String], guard: Guard) -> Result<i32> {

@@ -5,7 +5,7 @@ fn focused_check_forwards_environment_before_each_docker_image() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut command = Command::new("make");
     command
-        .args(["--no-print-directory", "--just-print", "duel-check"])
+        .args(["--no-print-directory", "--just-print", "duel-check-steps"])
         .current_dir(root);
     for name in [
         "MAKEFLAGS",

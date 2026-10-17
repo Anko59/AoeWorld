@@ -273,9 +273,11 @@ fn focused_test_filter_reaches_docker_as_literal_data() {
     fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
     let filter = "can't match $literal";
+    // The steps run the filter; the wrapper takes the slot first and needs a git checkout for the
+    // bootstrap lock, which this temporary workspace does not have (the audit checks the wrapper).
     let result = make(&workspace)
         .args([
-            "test-harness-focused",
+            "test-harness-focused-steps",
             &format!("HARNESS_TEST_FILTER={filter}"),
         ])
         .env(
