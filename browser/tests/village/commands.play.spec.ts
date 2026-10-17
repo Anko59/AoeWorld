@@ -1,6 +1,7 @@
 import { fiveVillagerFixture } from "./fixture.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { centerVillage, frameResource } from "./resources.js";
 
