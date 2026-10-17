@@ -143,7 +143,7 @@ fn automatic_worker_requires_rivers_or_the_explicit_outside_coverage_note() {
     }
 }
 
-fn overview_response(covered: bool) -> MapPackage {
+pub(crate) fn overview_response(covered: bool) -> MapPackage {
     use aoe_map::*;
     let request = MapRequest::default();
     let field = |mut axis| {

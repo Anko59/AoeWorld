@@ -40,15 +40,23 @@ pub(super) fn capture_side(
         )
         .into());
     }
-    let (tree, revision) = match &side.source {
-        Source::Url(_) => (None, None),
-        Source::Build if side.label == "before" => {
-            (Some(build::base_tree(root, base)?), Some(base.to_owned()))
+    // The shared dev server stands in for `before` while dev has not moved
+    // past the merge base; otherwise (or if it cannot be had) the run builds
+    // and starts its own, and says why.
+    let mut shared = side.label == "before" && matches!(side.source, Source::Build);
+    if shared && let Err(why) = crate::devserver::serves_base(root, base) {
+        eprintln!("compare: before side uses a private build, not the dev server: {why}");
+        shared = false;
+    }
+    let mut used_dev_server = false;
+    let mut tree = None;
+    let revision = match &side.source {
+        Source::Url(_) => None,
+        Source::Build if side.label == "before" => Some(base.to_owned()),
+        Source::Build => {
+            tree = Some(build::working_tree(root)?);
+            Some(super::git_line(root, &["rev-parse", "HEAD"]))
         }
-        Source::Build => (
-            Some(build::working_tree(root)?),
-            Some(super::git_line(root, &["rev-parse", "HEAD"])),
-        ),
     };
     let modules = root.join("browser/node_modules");
     if !modules.join("playwright").is_dir() {
@@ -64,9 +72,29 @@ pub(super) fn capture_side(
     let mut urls = Vec::new();
     for map in &unique {
         let hash = side.hashes[*map].as_str();
-        let (mut owned, url) = match (&side.source, &tree) {
+        let mut url = None;
+        if shared {
+            match crate::devserver::view_url(root, base, pack, &side.packages, hash) {
+                Ok(found) => {
+                    url = Some(found);
+                    used_dev_server = true;
+                }
+                Err(why) => {
+                    eprintln!(
+                        "compare: before side uses a private build, not the dev server: {why}"
+                    );
+                    shared = false;
+                }
+            }
+        }
+        let (mut owned, url) = match (&side.source, url) {
             (Source::Url(url), _) => (None, url.clone()),
-            (Source::Build, Some(tree)) => {
+            (Source::Build, Some(url)) => (None, url),
+            (Source::Build, None) => {
+                if tree.is_none() {
+                    tree = Some(build::base_tree(root, base)?);
+                }
+                let tree = tree.as_ref().ok_or("the build was not made")?;
                 let log = work.join(format!("{}-{map}-server.log", side.label));
                 let server = server::Server::start(
                     &tree.binary,
@@ -81,7 +109,6 @@ pub(super) fn capture_side(
                 let url = server.url.clone();
                 (Some(server), url)
             }
-            (Source::Build, None) => return Err("the build was not made".into()),
         };
         urls.push(url.clone());
         for renderer in [Renderer::Webgpu, Renderer::Webgl2] {
@@ -121,6 +148,7 @@ pub(super) fn capture_side(
     }
     let info = SideInfo {
         source: match &side.source {
+            Source::Build if used_dev_server => "dev-server".into(),
             Source::Build => "build".into(),
             Source::Url(u) => u.clone(),
         },

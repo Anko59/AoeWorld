@@ -16,6 +16,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| option_env!("AOE_BUILD_SHA").unwrap_or("local").to_owned());
     let state = AppState::at_boot(&config, build).await?;
+    if let Some(file) = Config::preset_maps_from_env()? {
+        let count = state.prepare_preset_maps(&file).await?;
+        tracing::info!(count, file = %file.display(), "preparing preset maps");
+    }
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld listening");
     tokio::spawn(state.clone().run_ticks());

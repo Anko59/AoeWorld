@@ -8,6 +8,7 @@
 - [Credentials (keyring)](credentials.md)
 - [Issues](issues.md)
 - [Showcase videos](showcase.md)
+- [Shared dev server](dev-server.md)
 - [Architecture](architecture.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)

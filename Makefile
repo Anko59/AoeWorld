@@ -117,6 +117,7 @@ help:
 	@echo '  make assets-import   Import ignored local-assets/trial'
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
+	@echo '  make dev-server      Build and keep one dev server tracking origin/dev, with preset maps (-status, -stop; docs/dev-server.md)'
 	@echo '  make compare         Screenshot bookmarked cameras on the build before and after the change (docs/showcase.md)'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
 	@echo '  AOE_POLISH_SOURCE_URL=... AOE_POLISH_SOURCE_HASH=... make test-memory-source  Qualify an activated real-pack source map route'
