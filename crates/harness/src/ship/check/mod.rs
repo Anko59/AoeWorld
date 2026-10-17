@@ -65,8 +65,11 @@ pub(super) fn publish(root: &Path, options: &Options) -> super::Result<()> {
         let situation = github::situation(root, &options.base).ok();
         early(root, options, body, situation.as_ref(), true)?;
     }
-    let _lock = super::lock::acquire(root, "make ship")?;
-    super::ship(root, options).map(|_| ())
+    let options = Options {
+        lock: super::lock::Handoff::holding(super::lock::acquire(root, "make ship")?),
+        ..options.clone()
+    };
+    super::ship(root, &options).map(|_| ())
 }
 
 /// The check `make ship` runs up front, with the base, parent and scope of
