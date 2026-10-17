@@ -30,9 +30,11 @@ has the `agent-found` label. In that case the harness comments on it instead
 of opening another issue.
 
 `make next` first lists open pull requests into `dev` with auto-merge armed
-whose latest carry comment on their current head refuses `harness/review`,
-with `reship: <reason>`. An older head's refusal or a later successful carry
-does not appear. This command only reads GitHub.
+that the PR updater could not merge with `dev` on their current head, as
+`reship: conflicts with dev in <files>`, from the updater's conflict comment.
+Then it lists those whose latest carry comment on their current head refuses
+`harness/review`, with `reship: <reason>`. An older head's conflict or refusal,
+or a later successful carry, does not appear. This command only reads GitHub.
 
 It then orders unblocked open issues by `priority:critical`, `priority:high`,
 `priority:medium`, unlabelled, then `priority:low`; within each priority it
