@@ -43,6 +43,7 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "perf-soak-30",
         "perf-stress",
         "perf-timing",
+        "perf-wasm-cap",
         "release-build",
         "test-e2e",
         "test-unit",
