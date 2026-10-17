@@ -123,7 +123,6 @@ impl Slot {
 #[serde(deny_unknown_fields)]
 struct Committed {
     slots: usize,
-    cores: usize,
 }
 
 /// How many slots there are, how many cores the machine has, and how long to queue.
@@ -135,14 +134,15 @@ pub(crate) struct Config {
 }
 
 impl Config {
-    /// `gates/heavy.json` sets the default slots and the cores; `AOE_HEAVY_SLOTS` (1-8) and
+    /// `gates/heavy.json` sets the default slots; the cores are the machine's CPU affinity list
+    /// (`process::load::cores`), the same count the load check uses. `AOE_HEAVY_SLOTS` (1-8) and
     /// `AOE_HEAVY_WAIT_MINUTES` (default 90; 0 fails at once) override.
     pub(crate) fn load(root: &Path, slots: &SlotEnv) -> Result<Self> {
         let text = std::fs::read_to_string(root.join("gates/heavy.json"))?;
         let committed: Committed = serde_json::from_str(&text)?;
         Self::from_values(
             committed.slots,
-            committed.cores,
+            crate::process::load::cores(),
             slots.slots.as_deref(),
             slots.wait.as_deref(),
         )
@@ -176,7 +176,7 @@ impl Config {
             None => DEFAULT_WAIT_MINUTES,
         };
         if cores == 0 {
-            return Err("gates/heavy.json: cores must be at least 1".into());
+            return Err("heavy slots: the machine reports no cores".into());
         }
         Ok(Self {
             slots,

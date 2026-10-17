@@ -57,5 +57,9 @@ fn the_cores_are_shared_among_the_slots_and_each_slot_gets_at_least_one() {
         &SlotEnv::default(),
     )
     .unwrap();
-    assert_eq!((committed.slots, committed.cores), (3, 12));
+    assert_eq!(
+        (committed.slots, committed.cores),
+        (2, crate::process::load::cores()),
+        "two committed slots; the cores are the machine's"
+    );
 }

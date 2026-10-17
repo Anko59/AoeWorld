@@ -308,7 +308,7 @@ fn checkout() -> (tempfile::TempDir, PathBuf) {
         "jobs": {"static": ["fmt-check", "slow"]}
     });
     fs::write(root.join("gates/registry.json"), registry.to_string()).unwrap();
-    fs::write(root.join("gates/heavy.json"), r#"{"slots": 1, "cores": 1}"#).unwrap();
+    fs::write(root.join("gates/heavy.json"), r#"{"slots": 1}"#).unwrap();
     (temp, root)
 }
 

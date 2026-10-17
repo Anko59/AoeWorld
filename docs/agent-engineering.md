@@ -73,7 +73,7 @@ the slot before compiling their test steps. So do the make targets that compile 
 being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`, `test-placement-coverage`,
 `test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`): each runs
 `$(SLOT_RUN) <target> -- make <target>-steps`, and `aoe-harness slot` queues it whatever the registry
-says. Each slot's containers take `cores / slots` CPUs (`gates/heavy.json`: 12 cores and 2 slots, so
+says. Each slot's containers take `cores / slots` CPUs (2 slots in `gates/heavy.json` on 12 cores, so
 6 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`), and the wrapper
 container is capped too. Cores are counted from the process's CPU affinity list, not from
 `available_parallelism`, so a container's quota does not shrink the machine that the load check sees.
