@@ -41,9 +41,17 @@ limits also apply. Geometry, width, distance stations and original segment metad
 content root. The required geometry field changes the single current format
 in place: regenerate packages and clear chunk caches; there is no old reader.
 
-For cells at most 60 geographic metres across, keep reaches with discharge
-at least 0.1 m³/s. On coarser grids the cutoff is cell metres / 100, clamped
-to 0.1–50 m³/s. Evidence cells intersecting the line corridor are retained
+Reaches keep a fixed real-world floor of 0.1 m³/s, the smallest discharge
+HydroRIVERS lists, at every map size: the same area keeps the same rivers on
+Tiny, Small, Large and Giant maps (on the Paris basin Large keeps the 204.7 km
+of river in the central 30 km that Tiny keeps; the former size-scaled cutoff
+kept 103.2 km). A page holds at most 1024 segments and 48 KiB of serialized
+segments, which keeps a dense page inside the 128 KiB directory page limit.
+When its reaches would exceed either bound, whole reaches are kept by falling
+discharge (lower reach id first on a tie) and the rest are dropped: a
+deterministic safety cap that only dense pages reach (on Giant, whose pages are
+120 km wide), not a cutoff. The evidence cells and topology are not capped.
+Evidence cells intersecting the line corridor are retained
 by exact segment-to-cell-rectangle distance at most the river half-width.
 This data stage persists and validates geometry; terrain composition and river
 presentation are separate changes. This stage adds no river terrain or rendering

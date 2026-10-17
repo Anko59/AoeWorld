@@ -1,27 +1,35 @@
 //! Preserve projected source lines, simplifying by at most a quarter tile,
 //! clipped to each evidence page with a maximum river half-width discovery halo.
 use super::super::GeodataError;
-use super::super::hydrology_sampling::{VectorFeature, line_position};
+use super::super::hydrology_sampling::{RiverReachGeometry, VectorFeature, line_position};
 use aoe_map::RiverSegment;
 
-pub(super) fn minimum_discharge(cell_meters: f64) -> f64 {
-    if cell_meters <= 60.0 {
-        0.1
-    } else {
-        (cell_meters / 100.0).clamp(0.1, 50.0)
-    }
+/// Real-world discharge floor in m³/s: a reach below it is not a river on any
+/// map. It is independent of the map size and the sampling spacing, so the same
+/// area keeps the same rivers on Tiny, Small, Large and Giant maps.
+const MINIMUM_DISCHARGE_CMS: f64 = 0.1;
+
+pub(super) fn minimum_discharge() -> f64 {
+    MINIMUM_DISCHARGE_CMS
 }
 
+/// Serialized size reserved for segments in one page. A page file is at most
+/// 128 KiB and its evidence and water-model arrays take up to about 64 KiB, so
+/// this keeps a dense page inside the directory page limit.
+pub(super) const MAX_PAGE_SEGMENT_BYTES: usize = 48 * 1024;
+
+/// Segments of every kept reach on one page. A page holds at most
+/// `MAX_RIVER_SEGMENTS_PER_PAGE` segments and `MAX_PAGE_SEGMENT_BYTES` of
+/// serialized segments; when the reaches would exceed either, whole reaches are
+/// kept in order of falling discharge (lower reach id first on a tie) and the
+/// remainder is dropped, so the cap never depends on file order.
 pub(super) fn segments(
     features: &[VectorFeature],
     side: f64,
     tiles: u64,
     bounds: [f64; 4],
-    spacing: f64,
 ) -> Result<Vec<RiverSegment>, GeodataError> {
-    let mut output = Vec::new();
     let meters_per_tile = side / tiles as f64;
-    let units = 256.0 / meters_per_tile;
     let halo = 5.0 * meters_per_tile;
     let bounds = [
         bounds[0] - halo,
@@ -29,76 +37,111 @@ pub(super) fn segments(
         bounds[2] + halo,
         bounds[3] + halo,
     ];
+    let mut reaches = Vec::new();
+    for feature in features {
+        let Some(reach) = &feature.river_reach else {
+            continue;
+        };
+        if reach.discharge < minimum_discharge() {
+            continue;
+        }
+        let lines = reach_segments(reach, side, meters_per_tile, bounds)?;
+        if !lines.is_empty() {
+            reaches.push((reach.discharge, reach.id, lines));
+        }
+    }
+    reaches.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut output = Vec::new();
+    let mut bytes = 0_usize;
+    for (_, _, lines) in reaches {
+        let size = lines
+            .iter()
+            .map(|line| serde_json::to_vec(line).map_or(usize::MAX, |json| json.len() + 1))
+            .fold(0_usize, usize::saturating_add);
+        if output.len() + lines.len() > aoe_map::MAX_RIVER_SEGMENTS_PER_PAGE
+            || bytes.saturating_add(size) > MAX_PAGE_SEGMENT_BYTES
+        {
+            if output.is_empty() {
+                return Err(GeodataError::Preparation(
+                    "one river reach exceeds the page segment budget",
+                ));
+            }
+            break;
+        }
+        bytes += size;
+        output.extend(lines);
+    }
+    Ok(output)
+}
+
+fn reach_segments(
+    reach: &RiverReachGeometry,
+    side: f64,
+    meters_per_tile: f64,
+    bounds: [f64; 4],
+) -> Result<Vec<RiverSegment>, GeodataError> {
+    let mut output = Vec::new();
+    let units = 256.0 / meters_per_tile;
     let coordinate = |point: (f64, f64)| {
         [
             ((point.0 + side / 2.0) * units).round() as i32,
             ((side / 2.0 - point.1) * units).round() as i32,
         ]
     };
-    for feature in features {
-        let Some(reach) = &feature.river_reach else {
-            continue;
-        };
-        if reach.discharge < minimum_discharge(spacing) {
-            continue;
-        }
-        let points = simplify(&reach.line_points, meters_per_tile / 4.0);
-        let length = points.windows(2).map(|p| distance(p[0], p[1])).sum::<f64>();
-        let length_units = length * units;
-        let sink = f64::from(reach.distance_to_sink_centimeters) / 100.0 * units;
-        // Short reaches (including inter-lake streams) always contain a ford.
-        let end_station = if length_units < 10240.0 {
-            (sink / 10240.0).round() * 10240.0 - length_units / 2.0
-        } else {
-            sink
-        };
-        let width_units = ((10.0 * reach.discharge.sqrt()).clamp(5.0, 600.0) * units)
-            .round()
-            .clamp(3.0 * 256.0, 10.0 * 256.0) as u16;
-        let mut station = end_station + length_units;
-        for pair in points.windows(2) {
-            let segment_length = distance(pair[0], pair[1]);
-            if let Some((a, b)) = clip(pair[0], pair[1], bounds) {
-                let interpolate = |t: f64| {
-                    (
-                        pair[0].0 + t * (pair[1].0 - pair[0].0),
-                        pair[0].1 + t * (pair[1].1 - pair[0].1),
-                    )
+    let points = simplify(&reach.line_points, meters_per_tile / 4.0);
+    let length = points.windows(2).map(|p| distance(p[0], p[1])).sum::<f64>();
+    let length_units = length * units;
+    let sink = f64::from(reach.distance_to_sink_centimeters) / 100.0 * units;
+    // Short reaches (including inter-lake streams) always contain a ford.
+    let end_station = if length_units < 10240.0 {
+        (sink / 10240.0).round() * 10240.0 - length_units / 2.0
+    } else {
+        sink
+    };
+    let width_units = ((10.0 * reach.discharge.sqrt()).clamp(5.0, 600.0) * units)
+        .round()
+        .clamp(3.0 * 256.0, 10.0 * 256.0) as u16;
+    let mut station = end_station + length_units;
+    for pair in points.windows(2) {
+        let segment_length = distance(pair[0], pair[1]);
+        if let Some((a, b)) = clip(pair[0], pair[1], bounds) {
+            let interpolate = |t: f64| {
+                (
+                    pair[0].0 + t * (pair[1].0 - pair[0].0),
+                    pair[0].1 + t * (pair[1].1 - pair[0].1),
+                )
+            };
+            let start = coordinate(interpolate(a));
+            let end = coordinate(interpolate(b));
+            if start != end {
+                let source_start = coordinate(pair[0]);
+                let source_end = coordinate(pair[1]);
+                let mut source_delta = [0; 2];
+                for axis in 0..2 {
+                    source_delta[axis] = source_end[axis].checked_sub(source_start[axis]).ok_or(
+                        GeodataError::Preparation("river source segment exceeds coordinate range"),
+                    )?;
+                }
+                let segment = RiverSegment {
+                    start,
+                    end,
+                    width_units,
+                    source_delta,
+                    source_station_delta: (station - segment_length * units).round() as i64
+                        - station.round() as i64,
+                    station_start: (station - a * segment_length * units).round() as i64,
+                    station_end: (station - b * segment_length * units).round() as i64,
                 };
-                let start = coordinate(interpolate(a));
-                let end = coordinate(interpolate(b));
-                if start != end {
-                    let source_start = coordinate(pair[0]);
-                    let source_end = coordinate(pair[1]);
-                    let mut source_delta = [0; 2];
-                    for axis in 0..2 {
-                        source_delta[axis] = source_end[axis]
-                            .checked_sub(source_start[axis])
-                            .ok_or(GeodataError::Preparation(
-                                "river source segment exceeds coordinate range",
-                            ))?;
-                    }
-                    let segment = RiverSegment {
-                        start,
-                        end,
-                        width_units,
-                        source_delta,
-                        source_station_delta: (station - segment_length * units).round() as i64
-                            - station.round() as i64,
-                        station_start: (station - a * segment_length * units).round() as i64,
-                        station_end: (station - b * segment_length * units).round() as i64,
-                    };
-                    segment.validate()?;
-                    output.push(segment);
-                    if output.len() > aoe_map::MAX_RIVER_SEGMENTS_PER_PAGE {
-                        return Err(GeodataError::Preparation(
-                            "river page exceeds its segment budget",
-                        ));
-                    }
+                segment.validate()?;
+                output.push(segment);
+                if output.len() > aoe_map::MAX_RIVER_SEGMENTS_PER_PAGE {
+                    return Err(GeodataError::Preparation(
+                        "one river reach exceeds the page segment budget",
+                    ));
                 }
             }
-            station -= segment_length * units;
         }
+        station -= segment_length * units;
     }
     Ok(output)
 }

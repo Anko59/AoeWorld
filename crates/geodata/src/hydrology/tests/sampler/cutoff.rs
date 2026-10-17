@@ -1,18 +1,8 @@
 //! The river discharge cutoff is a real-world constant: a map keeps the same
 //! rivers over the same area at every map size.
 use super::super::super::hydrology_sampling::VectorFeature;
-use super::super::channels::{minimum_discharge, segments};
+use super::super::channels::{MAX_PAGE_SEGMENT_BYTES, minimum_discharge, segments};
 use super::*;
-
-/// Evidence-cell width in metres of the four skirmish sizes (30, 120, 480 and
-/// 1,920 km per side) at the landscape axis of 1,024 samples.
-const SIZES: [(f64, &str); 4] = [
-    (30_000.0, "Tiny"),
-    (120_000.0, "Small"),
-    (480_000.0, "Large"),
-    (1_920_000.0, "Giant"),
-];
-const LANDSCAPE_AXIS: f64 = 1024.0;
 
 fn river_features(directory: &TestDirectory, reaches: &[(i64, f64, f64)]) -> Vec<VectorFeature> {
     let path = directory.path("cutoff-rivers.gpkg");
@@ -48,19 +38,13 @@ fn river_features(directory: &TestDirectory, reaches: &[(i64, f64, f64)]) -> Vec
 }
 
 #[test]
-fn discharge_cutoff_is_identical_at_every_map_size() {
-    let tiny = minimum_discharge(SIZES[0].0 / LANDSCAPE_AXIS);
-    for (side, name) in SIZES {
-        assert_eq!(
-            minimum_discharge(side / LANDSCAPE_AXIS),
-            tiny,
-            "{name} must use the same real-world cutoff as Tiny"
-        );
-    }
+fn discharge_cutoff_is_the_hydrorivers_floor_whatever_the_map_size() {
+    // HydroRIVERS lists reaches from 0.1 m³/s; no map size raises the floor.
+    assert_eq!(minimum_discharge(), 0.1);
 }
 
 #[test]
-fn large_map_keeps_the_small_rivers_a_tiny_map_keeps_over_the_same_area() {
+fn every_map_size_keeps_the_same_small_rivers_over_the_same_area() {
     let directory = TestDirectory::new();
     let discharges = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 20.0, 100.0];
     let reaches = discharges
@@ -70,13 +54,20 @@ fn large_map_keeps_the_small_rivers_a_tiny_map_keeps_over_the_same_area() {
         .collect::<Vec<_>>();
     let features = river_features(&directory, &reaches);
     let bounds = [-15_000.0, -15_000.0, 15_000.0, 15_000.0];
-    // The same 30 km of real landscape and 60 m tiles, whatever the sampling spacing.
-    let tiny = segments(&features, 30_000.0, 500, bounds, 30_000.0 / LANDSCAPE_AXIS)
-        .expect("Tiny segments");
-    let large = segments(&features, 30_000.0, 500, bounds, 480_000.0 / LANDSCAPE_AXIS)
-        .expect("Large segments");
-    assert!(tiny.len() >= 5, "the fixture keeps its larger rivers");
-    assert_eq!(large, tiny, "Large keeps exactly the rivers Tiny keeps");
+    // The same real area: 30 km of landscape in 500 tiles of 60 m.
+    let kept = segments(&features, 30_000.0, 500, bounds).expect("segments");
+    let kept_northings = kept
+        .iter()
+        .map(|s| s.start[1])
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        kept_northings.len(),
+        discharges.iter().filter(|d| **d >= 0.1).count()
+    );
+    assert!(
+        kept.iter().any(|s| s.width_units == 3 * 256),
+        "0.1 m³/s is kept"
+    );
 }
 
 #[test]
@@ -96,14 +87,34 @@ fn an_over_budget_page_keeps_the_highest_discharge_reaches_in_a_fixed_order() {
         .collect::<Vec<_>>();
     let features = river_features(&directory, &reaches);
     let bounds = [-15_000.0, -15_000.0, 15_000.0, 15_000.0];
-    let kept = segments(&features, 30_000.0, 500, bounds, 480_000.0 / LANDSCAPE_AXIS)
+    let kept = segments(&features, 30_000.0, 500, bounds)
         .expect("an over-budget page is capped, not rejected");
-    assert_eq!(kept.len(), aoe_map::MAX_RIVER_SEGMENTS_PER_PAGE);
+    assert!(kept.len() <= aoe_map::MAX_RIVER_SEGMENTS_PER_PAGE);
+    assert!(
+        kept.len() > 300,
+        "the cap keeps a dense page, not an empty one"
+    );
+    let json = kept
+        .iter()
+        .map(|s| serde_json::to_vec(s).unwrap().len() + 1)
+        .sum::<usize>();
+    assert!(
+        json <= MAX_PAGE_SEGMENT_BYTES,
+        "serialized segments stay inside the page budget"
+    );
     let units = 256.0 / 60.0;
-    let mut north = kept
+    let mut index = kept
         .iter()
         .map(|s| ((26_000.0 - f64::from(s.start[1]) / units) / 20.0).round() as i64)
         .collect::<Vec<_>>();
-    north.sort_unstable();
-    assert_eq!(north, (76..total as i64).collect::<Vec<_>>());
+    index.sort_unstable();
+    assert_eq!(
+        index,
+        ((total - kept.len()) as i64..total as i64).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        segments(&features, 30_000.0, 500, bounds).expect("repeat"),
+        kept,
+        "the cap is deterministic"
+    );
 }
