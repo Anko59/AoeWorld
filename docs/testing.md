@@ -49,7 +49,8 @@ qualification should also run it locally. The tests stay byte-identical.
 `make test-exhaustive` runs exactly (`--no-tests fail`), the tests listed in
 `EXHAUSTIVE` in the same `tiers.rs`: the 16-seed landscape sweeps and the
 full 1024-axis geodata preparations and round-trips. The `exhaustive` gate has
-the `ci`, `nightly` and `qualification` cadences and a CI job like
+the `ci` and `nightly` cadences (it blocks both, like `coverage`; it is not
+source qualification, so it has no `qualification` cadence) and a CI job like
 `qualification` (pushes to `dev` and `main`, nightly, never pull requests); a
 harness test checks every listed name is a real `#[test]` function. Where a
 test sweeps seeds or axes, a fast variant of the same assertion stays in
