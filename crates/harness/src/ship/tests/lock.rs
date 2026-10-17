@@ -18,6 +18,7 @@ fn holder(branch: &str) -> Holder {
         branch: branch.into(),
         command: "make ship".into(),
         started: 1_791_900_000,
+        returning: false,
     }
 }
 

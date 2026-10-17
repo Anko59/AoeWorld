@@ -97,28 +97,11 @@ agent policy refuses `$` in agent-set Make values.
 
 ## One ship at a time
 
-Sessions share one machine, so `make ship` and `make duel` take a machine-wide
-lock before any heavy work and release it when they exit, by whatever route.
-It is an OS file lock on `<git common dir>/aoe-ship/ship.lock`, shared by every
-worktree and checkout of the repository; a dead or killed holder frees it, so
-it is never stale. The file also names the holder (worktree, branch, command,
-start time), for messages only.
+Sessions share one machine, so `make ship` and `make duel` take a machine-wide lock before any heavy work and release it when they exit, by whatever route. It is an OS file lock on `<git common dir>/aoe-ship/ship.lock`, shared by every worktree and checkout; a dead or killed holder frees it, so it is never stale. The file also names the holder (worktree, branch, command, start time, pid), for messages only.
 
-Waiters are served in arrival order. Each creates a ticket in
-`aoe-ship/ship.lock.queue/` (named by arrival time, pid and a counter) and keeps
-an OS lock on it while it waits and while it runs; it may take the main lock only
-when no older ticket is still locked. A ticket whose lock can be taken belongs to
-a dead process: the next waiter removes it and moves on. Tickets are removed on
-release and on drop, so none are left after a normal exit.
+Waiters are served in arrival order, except that a ship back from its review (`make ship` queues again for the push) goes before every plain waiter, in arrival order among such ships. Each creates a ticket in `aoe-ship/ship.lock.queue/` (named by arrival time, pid and a counter; a returning ship's ticket is marked) and keeps an OS lock on it while it waits and runs. It may take the main lock only when no ticket ahead of it in that order is still locked. Priority only picks who is admitted next: the holder is never interrupted. A ticket whose lock can be taken belongs to a dead process and is removed. Tickets are removed on release and on drop, so none are left after a normal exit.
 
-A second run prints `ship: waiting for <branch> in <worktree> (started <time>)`
-and `ship: position N in the queue`, then a line every 5 minutes (and whenever
-its position changes), and gives up with an error after
-`SHIP_LOCK_WAIT_MINUTES` (default 120; `0` fails immediately). `make ship-status`
-shows the holder and the queue in order without waiting. Read-only commands (`review-floor`,
-`showcase-check`, `ship-status`…) never take the lock. Never wait for another
-ship by scanning processes: a `pgrep -f` loop matches its own command line and
-waits on itself forever; queue on the lock instead. `make ship` holds the lock for the gates and the push, not for the review; Ctrl-C while unlocked leaves no ticket.
+A second run prints `ship: waiting for <branch> in <worktree> (started <time>)` and `ship: position N in the queue` (`(returning from review)` for a returning ship), then a line every 5 minutes (and whenever its position changes), and gives up with an error after `SHIP_LOCK_WAIT_MINUTES` (default 120; `0` fails immediately). `make ship-status` and `make load-status` show the holder and the queue in order without waiting. Read-only commands (`review-floor`, `showcase-check`, `ship-status`…) never take the lock. Never wait for another ship by scanning processes: a `pgrep -f` loop matches its own command line and waits on itself forever; queue on the lock instead. `make ship` holds the lock for the gates and the push, not for the review; Ctrl-C while unlocked leaves no ticket.
 
 ## Stacked pull requests
 
