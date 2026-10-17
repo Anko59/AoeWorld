@@ -1,56 +1,65 @@
 use super::*;
 
+const REDUCED_AXES: OverviewFieldAxes = OverviewFieldAxes {
+    elevation: 128,
+    vegetation: 32,
+    water: 64,
+    historical: 16,
+};
+
 #[test]
 fn offline_field_axes_prepare_independent_canonical_pyramids() {
     let fixture = OverviewFixture::new();
-    let request = MapRequest::default();
-    for axes in [
-        OverviewFieldAxes {
-            elevation: 128,
-            vegetation: 32,
-            water: 64,
-            historical: 16,
-        },
-        OverviewFieldAxes::LANDSCAPE,
-    ] {
-        let historical = GeographicHistoricalCorrectionDocument::empty(
-            request,
-            axes.historical,
-            hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
-        )
-        .expect("history binding");
-        let vegetation =
-            VegetationPatchDocument::empty(request, axes.vegetation).expect("PNV binding");
-        let prepared = prepare_overview_fields_from_verified_sources(
-            request,
-            axes,
-            true,
-            &historical,
-            &vegetation,
-            fixture.sources.clone(),
-        )
-        .expect("offline GDAL overview");
-        let environment = &prepared.environment;
-        environment.validate().expect("independent axes");
-        assert_eq!(environment.samples_per_axis, axes.elevation);
-        assert_eq!(
-            environment.vegetation_samples_per_axis(),
-            Some(axes.vegetation)
-        );
-        assert_eq!(environment.water_samples_per_axis(), Some(axes.water));
-        assert_eq!(
-            environment.historical_samples_per_axis(),
-            Some(axes.historical)
-        );
-        assert!(
-            prepared
-                .source_lock
-                .preprocessing_version
-                .contains(";axes=")
-        );
-        let generated = GeneratedMap::from_prepared(request, prepared).expect("package");
-        generated.validate().expect("field-local published pages");
+    for axes in [REDUCED_AXES, OverviewFieldAxes::LANDSCAPE] {
+        prepare_independent_canonical_pyramids(&fixture, axes);
     }
+}
+
+/// The reduced-axes iteration of the sweep above, without the 1024 axes that
+/// only the exhaustive tier (`make test-exhaustive`) prepares.
+#[test]
+fn offline_field_axes_prepare_independent_canonical_pyramids_at_reduced_axes() {
+    prepare_independent_canonical_pyramids(&OverviewFixture::new(), REDUCED_AXES);
+}
+
+fn prepare_independent_canonical_pyramids(fixture: &OverviewFixture, axes: OverviewFieldAxes) {
+    let request = MapRequest::default();
+    let historical = GeographicHistoricalCorrectionDocument::empty(
+        request,
+        axes.historical,
+        hyde::HYDE_AREA_PREPROCESSING_IDENTITY,
+    )
+    .expect("history binding");
+    let vegetation = VegetationPatchDocument::empty(request, axes.vegetation).expect("PNV binding");
+    let prepared = prepare_overview_fields_from_verified_sources(
+        request,
+        axes,
+        true,
+        &historical,
+        &vegetation,
+        fixture.sources.clone(),
+    )
+    .expect("offline GDAL overview");
+    let environment = &prepared.environment;
+    environment.validate().expect("independent axes");
+    assert_eq!(environment.samples_per_axis, axes.elevation);
+    assert_eq!(
+        environment.vegetation_samples_per_axis(),
+        Some(axes.vegetation)
+    );
+    assert_eq!(environment.water_samples_per_axis(), Some(axes.water));
+    assert_eq!(
+        environment.historical_samples_per_axis(),
+        Some(axes.historical)
+    );
+    assert!(
+        prepared
+            .source_lock
+            .preprocessing_version
+            .contains(";axes=")
+    );
+    let generated = GeneratedMap::from_prepared(request, prepared).expect("package");
+    generated.validate().expect("field-local published pages");
 }
 
 #[test]
@@ -166,6 +175,17 @@ fn explicit_preprocessing_identity_spells_axes_stably() {
         crate::overview::preprocessing_identity("base".to_owned(), axes, true),
         "base;axes=1024/1024/1024/1024"
     );
+}
+
+/// The acceptance half of the test below, without preparing and publishing the
+/// 1024 pyramids, which only the exhaustive tier (`make test-exhaustive`) does.
+#[test]
+fn landscape_water_and_vegetation_axes_are_accepted_at_the_elevation_axis() {
+    assert!(
+        crate::overview::validate_field_axes(OverviewFieldAxes::LANDSCAPE, true).is_ok(),
+        "full-resolution landscape axes"
+    );
+    assert!(crate::overview::validate_field_axes(OverviewFieldAxes::LANDSCAPE, false).is_err());
 }
 
 #[test]

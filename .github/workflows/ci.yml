@@ -27,6 +27,7 @@ jobs:
       target_performance: ${{ steps.manifest.outputs.target_performance }}
       fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
       qualification: ${{ steps.manifest.outputs.qualification }}
+      exhaustive: ${{ steps.manifest.outputs.exhaustive }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -145,11 +146,7 @@ jobs:
       - run: make perf-pressure
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: performance-report
-          path: reports/perf/
-          retention-days: 30
-          if-no-files-found: ignore
+        with: { name: performance-report, path: reports/perf/, retention-days: 30, if-no-files-found: ignore }
 
   perf-comment:
     # Item 12 of #388: the measured numbers reach the pull request as ONE
@@ -182,13 +179,7 @@ jobs:
       - run: make fuzz-smoke
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: parser-fuzz-smoke
-          path: |
-            reports/fuzz/
-            fuzz/artifacts/
-          retention-days: 7
-          if-no-files-found: ignore
+        with: { name: parser-fuzz-smoke, path: "reports/fuzz/\nfuzz/artifacts/", retention-days: 7, if-no-files-found: ignore }
 
   # Post-merge tier: runs on pushes to dev/main and nightly; PRs and feature-branch dispatches select like PRs and skip it.
   qualification:
@@ -198,10 +189,18 @@ jobs:
     timeout-minutes: 60
     steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-source-qualification}]
 
+  # Post-merge tier: the 16-seed sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes.
+  exhaustive:
+    needs: select
+    if: ${{ needs.select.outputs.exhaustive == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-exhaustive}]
+
   required:
     permissions: { contents: read, statuses: write }
     if: always()
-    needs: [select, static, native-coverage, browser, e2e, target-performance, fuzz-smoke, qualification]
+    needs: [select, static, native-coverage, browser, e2e, target-performance, fuzz-smoke, qualification, exhaustive]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -215,7 +214,7 @@ jobs:
           AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           AOE_SELECTION_JSON: ${{ needs.select.outputs.manifest }}
           AOE_JOB_RESULTS_JSON: >-
-            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","e2e":"${{ needs.e2e.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}","qualification":"${{ needs.qualification.result }}"}
+            {"select":"${{ needs.select.result }}","static":"${{ needs.static.result }}","native-coverage":"${{ needs['native-coverage'].result }}","browser":"${{ needs.browser.result }}","e2e":"${{ needs.e2e.result }}","target-performance":"${{ needs['target-performance'].result }}","fuzz-smoke":"${{ needs['fuzz-smoke'].result }}","qualification":"${{ needs.qualification.result }}","exhaustive":"${{ needs.exhaustive.result }}"}
         run: make ci-check
       - name: Report dispatched aggregate as a commit status
         if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref_name != 'dev' && github.ref_name != 'main' }}
