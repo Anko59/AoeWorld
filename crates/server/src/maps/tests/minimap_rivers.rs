@@ -250,15 +250,30 @@ fn minimap_draws_rivers_by_importance_not_every_stream() {
 
 #[test]
 fn an_omitted_stream_in_a_desert_is_drawn_as_desert_not_grass() {
-    // The fixture's own three-tile stream is narrower than the drawn width.
-    let generator = river_network_fixture(false, Vec::new(), 27);
+    // The fixture's own river is drawn; a three-tile stream through the centre
+    // of pixel column 75 is narrower than the drawn width and is omitted.
+    let generator = river_network_fixture(false, vec![vertical(302, 3)], 27);
     let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("desert raster");
     let pixels = &raster[MINIMAP_HEADER_BYTES..];
     let far = pixels[100 * 512 + 300] & 15;
     assert_eq!(far, MinimapClass::Sand as u8, "desert land is sand");
+    let wet = [10, 100, 300, 500]
+        .into_iter()
+        .filter(|row| {
+            let point = generator
+                .landscape_point_with_cancel(TileCoord::new(302, row * 4 + 2), &|| false)
+                .unwrap()
+                .unwrap();
+            classify(&point) == MinimapClass::River
+        })
+        .count();
+    assert!(
+        wet > 0,
+        "the stream must put water under the sample centres"
+    );
     for row in [10, 100, 300, 500] {
         assert_eq!(
-            pixels[row * 512 + 16] & 15,
+            pixels[row * 512 + 75] & 15,
             far,
             "row {row}: an omitted stream shows the land's own class"
         );

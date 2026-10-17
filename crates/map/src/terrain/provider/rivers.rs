@@ -138,6 +138,14 @@ fn query(
 }
 
 impl super::MapChunkGenerator {
+    /// Whether rivers come with persisted source geometry. Procedural fallback
+    /// maps have none, so their rivers have no width to rank by importance.
+    pub fn has_river_geometry(&self) -> bool {
+        self.provider_environment
+            .as_ref()
+            .is_some_and(|environment| environment.hydrology_evidence.is_some())
+    }
+
     /// Conservative footprint query for strategic rasterization. It reads
     /// persisted centreline geometry, never expands the physical channel.
     /// Only channels at least `min_width_units` wide count, so a minimap can
