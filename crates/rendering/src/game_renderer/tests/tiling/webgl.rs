@@ -204,3 +204,19 @@ fn webgl_one_level_sand_water_bank_covers_the_review_probe() {
         gap::assert_pixel(pixel(&canvas, x, y), halo);
     }
 }
+
+#[wasm_bindgen_test]
+fn webgl_building_wear_darkens_native_textured_terrain() {
+    use crate::game_renderer::wear_fixture as wear;
+    let mut probes = Vec::new();
+    for building in [false, true] {
+        let (canvas, mut renderer) = target(&fixture::atlas());
+        let mut packets = wear::faces(building)
+            .iter()
+            .map(instance)
+            .collect::<Vec<_>>();
+        render(&mut renderer, &mut packets);
+        probes.push(fixture::PROBES.map(|[x, y]| pixel(&canvas, x, y)));
+    }
+    wear::assert_worn(&probes[0], &probes[1]);
+}

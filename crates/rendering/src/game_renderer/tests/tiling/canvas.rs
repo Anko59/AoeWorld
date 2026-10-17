@@ -244,3 +244,30 @@ fn canvas_one_level_sand_water_bank_covers_the_review_probe() {
         );
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_building_wear_darkens_native_textured_terrain() {
+    use crate::game_renderer::wear_fixture as wear;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = fixture::atlas();
+    let mut probes = Vec::new();
+    for building in [false, true] {
+        let layers = wear::faces(building)
+            .into_iter()
+            .map(WorldLayer::Surface)
+            .collect::<Vec<_>>();
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &layers,
+            fixture::camera(0),
+            false,
+        )
+        .unwrap();
+        probes.push(fixture::PROBES.map(|[x, y]| pixel(&presentation.color_buffer, x, y)));
+    }
+    wear::assert_worn(&probes[0], &probes[1]);
+}

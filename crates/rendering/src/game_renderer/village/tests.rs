@@ -70,8 +70,8 @@ fn villager_walk_uses_fifteen_frame_rows_for_all_eight_facings() {
 fn working_and_carrying_use_reviewed_art_and_absence_draws_a_marker() {
     let mut art = art();
     for (kind, expected) in [
-        (SceneUnitKind::VillagerWorking, 207),
-        (SceneUnitKind::VillagerCarrying, 300),
+        (SceneUnitKind::VillagerChopping, 207),
+        (SceneUnitKind::VillagerCarryingWood, 300),
     ] {
         let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 7);
         assert_eq!(
@@ -102,12 +102,12 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
         .iter()
         .find(|f| f.1.atlas.uv[0] == 500.0 / 4096.0)
         .unwrap();
-    for source in [501.0, 504.0] {
+    for (source, offset) in [(501.0, 48.0), (504.0, 24.0)] {
         let roof = frames
             .iter()
             .find(|f| f.1.atlas.uv[0] == source / 4096.0)
             .unwrap();
-        assert!((main.1.anchor[1] - roof.1.anchor[1] - 64.0).abs() < 0.001);
+        assert!((main.1.anchor[1] - roof.1.anchor[1] - offset * 4.0 / 3.0).abs() < 0.001);
     }
     art.town_center[1].clear();
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
@@ -131,5 +131,107 @@ fn native_town_center_front_overhang_clears_its_flat_footprint() {
     assert!(
         *depth > foreground,
         "native front columns and foundation must clear flat ground"
+    );
+}
+
+#[wasm_bindgen_test]
+fn town_center_roofs_use_individual_attachments_and_sit_behind_the_main_structure() {
+    let art = art();
+    let frames = super::super::world_sprite_frames(
+        &art,
+        &[],
+        &[],
+        &[unit(SceneUnitKind::TownCenter)],
+        camera(),
+        0,
+    );
+    let index = |source| {
+        frames
+            .iter()
+            .position(|f| f.1.atlas.uv[0] == source as f32 / 4096.0)
+            .unwrap()
+    };
+    let main = index(500);
+    for (source, offset) in [(501, 48.0), (504, 24.0), (502, 24.0), (506, -24.0)] {
+        let roof = index(source);
+        assert!(
+            !matches!(source, 501 | 504) || roof < main,
+            "main balcony must occlude its roof attachments"
+        );
+        assert!(
+            (frames[main].1.anchor[1] - frames[roof].1.anchor[1] - offset * 4.0 / 3.0).abs()
+                < 0.001
+        );
+    }
+}
+
+#[wasm_bindgen_test]
+fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
+    let art = art();
+    let terrain = (-6..6)
+        .flat_map(|y| {
+            (-6..6).map(move |x| SceneTerrain {
+                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                material: 0,
+                elevation_meters: 0.0,
+                surface: SceneTerrainSurface::flat(0.0),
+                appearance: None,
+            })
+        })
+        .collect::<Vec<_>>();
+    let camera = camera();
+    let surfaces = crate::projected_surface_triangles(&terrain, camera);
+    let layers = crate::game_renderer::world_layers::direct_world_layers(
+        surfaces.clone(),
+        &art,
+        &terrain,
+        &[],
+        &[unit(SceneUnitKind::TownCenter)],
+        camera,
+        0,
+    );
+    assert_eq!(
+        layers
+            .iter()
+            .filter(|layer| matches!(layer, WorldLayer::Surface(_)))
+            .count(),
+        surfaces.len()
+    );
+    let changed = layers
+        .iter()
+        .filter_map(|layer| match layer {
+            WorldLayer::Surface(face) => Some(face),
+            _ => None,
+        })
+        .zip(&surfaces)
+        .filter(|(after, before)| {
+            assert_eq!(
+                after.points.map(|p| p.world),
+                before.points.map(|p| p.world)
+            );
+            assert!(
+                after
+                    .color
+                    .iter()
+                    .zip(before.color)
+                    .all(|(after, before)| *after <= before)
+            );
+            let center =
+                [0, 1].map(|axis| before.points.iter().map(|p| p.world[axis]).sum::<f64>() / 3.0);
+            if center
+                .into_iter()
+                .any(|coordinate| (coordinate - 0.5).abs() >= 3.4)
+            {
+                assert_eq!(
+                    after.color, before.color,
+                    "ground outside the footprint halo is untouched"
+                );
+            }
+            after.color != before.color
+        })
+        .count();
+    assert!(
+        changed > 0,
+        "a building must wear the terrain below and around its footprint"
     );
 }

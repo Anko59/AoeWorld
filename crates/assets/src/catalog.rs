@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 13;
+pub const VERSION: u8 = 14;
 
 pub mod candidates;
 pub mod packing;
@@ -14,7 +14,7 @@ mod village;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 2_003;
+pub const MAX_REVIEWED_FRAMES: u32 = 2_369;
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =
@@ -50,15 +50,18 @@ pub enum AssetRole {
     RockPile,
     Ice,
     Shrub,
-    GrassTuft,
     DeadwoodStump,
     DeadwoodLog,
-    GrassReeds,
     DeadwoodTree,
     VillagerStanding,
     VillagerWalking,
-    VillagerWorking,
-    VillagerCarrying,
+    VillagerChopping,
+    VillagerCarryingWood,
+    VillagerForaging,
+    VillagerCarryingFood,
+    VillagerMiningGold,
+    VillagerCarryingOre,
+    VillagerMiningStone,
     TownCenterMain,
     TownCenterRoofLeft,
     TownCenterSupportLeft,
@@ -167,7 +170,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 27] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 30] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -260,14 +263,6 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 27] = [
         terrain_topology: None,
     },
     SpriteSource {
-        role: AssetRole::GrassTuft,
-        archive: "graphics.drs",
-        id: 2561,
-        frames: 7,
-        interpretation: "seven low yellow wildflower patches; nonblocking grass dressing",
-        terrain_topology: None,
-    },
-    SpriteSource {
         role: AssetRole::DeadwoodStump,
         archive: "graphics.drs",
         id: 1035,
@@ -281,14 +276,6 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 27] = [
         id: 1252,
         frames: 2,
         interpretation: "two low mossy fallen logs; nonblocking deadwood dressing",
-        terrain_topology: None,
-    },
-    SpriteSource {
-        role: AssetRole::GrassReeds,
-        archive: "graphics.drs",
-        id: 4584,
-        frames: 2,
-        interpretation: "two native tan reed clumps mixed into meadow patches",
         terrain_topology: None,
     },
     SpriteSource {
@@ -311,6 +298,11 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 27] = [
     village::SOURCES[9],
     village::SOURCES[10],
     village::SOURCES[11],
+    village::SOURCES[12],
+    village::SOURCES[13],
+    village::SOURCES[14],
+    village::SOURCES[15],
+    village::SOURCES[16],
 ];
 
 /// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only

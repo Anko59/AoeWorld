@@ -104,8 +104,6 @@ pub(crate) fn dressing_art() -> GameArt {
         ..frame(640)
     };
     art.scenery.shrubs = vec![native; 6];
-    art.scenery.grass = vec![native; 7];
-    art.scenery.reeds = vec![native; 2];
     art.scenery.snags = vec![native; 1];
     art.scenery.stumps = vec![native; 3];
     art.scenery.logs = vec![native; 2];

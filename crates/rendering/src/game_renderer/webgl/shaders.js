@@ -74,7 +74,7 @@ void main() {
             vec2 local = terrainUv(code % 8u, corner);
             bool tiled = code % 8u == 6u;
             vUv = terrainAtlasUv(uv, local);
-            vColor = vec4(terrainTint(code / 8u), 1);
+            vColor = vec4(terrainTint((code / 8u) % 32u), 1);
             vSolid = 1u;
             vTint = code / 8u;
             if (tiled) {
@@ -395,10 +395,12 @@ void main() {
         if (tiled) layer = tiledLayer(header, tile, local, gx, gy);
         vec4 sampled = landscape ? terrainSample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy)
                                 : terrainSample(layer.uv, layer.page, layer.rect, vec2(0), vec2(0));
-        if (mixing) sampled = mixed(sampled, material, vPages.w, vTint);
+        if (mixing) sampled = mixed(sampled, material, vPages.w, vTint % 32u);
         if (single) texel = sampled; else texel += sampled * weight;
     }
-    result = shaded(texel, vColor, vTint, vPages.w);
+    // vTint carries the footprint wear above its five tint bits.
+    vec4 worn = shaded(texel, vColor, vTint % 32u, vPages.w);
+    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float(vTint / 32u) / 15.0)), worn.a);
 }`;
 
 // Registered directly with wasm-bindgen so both local modules are packaged.

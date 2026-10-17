@@ -14,8 +14,14 @@ pub enum SceneUnitKind {
     #[default]
     Scout,
     Villager,
-    VillagerWorking,
-    VillagerCarrying,
+    VillagerChopping,
+    VillagerCarryingWood,
+    VillagerForaging,
+    VillagerCarryingFood,
+    VillagerMiningGold,
+    VillagerCarryingGold,
+    VillagerMiningStone,
+    VillagerCarryingStone,
     TownCenter,
 }
 

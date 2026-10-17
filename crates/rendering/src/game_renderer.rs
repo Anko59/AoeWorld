@@ -12,6 +12,8 @@ use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
+#[path = "game_renderer/ground.rs"]
+mod ground;
 #[path = "game_renderer/world_layers.rs"]
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
@@ -52,6 +54,10 @@ pub(crate) mod filter_fixture;
 #[path = "game_renderer/tests/species/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod species_fixture;
+
+#[path = "game_renderer/tests/tiling/wear.rs"]
+#[cfg(test)]
+pub(crate) mod wear_fixture;
 
 #[cfg(test)]
 mod tests;

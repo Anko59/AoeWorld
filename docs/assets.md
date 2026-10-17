@@ -49,9 +49,9 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v13 selects at most 2,003 frames:
-1,474 terrain and 529 objects including village art and cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
-terrain on pages 0/1 and objects on page 2, with the 2048-frame hard cap unchanged.
+The periodic groups retain all 100 frames. Catalog v14 selects at most 2,369 frames:
+1,474 terrain and 895 objects including village art and cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
+terrain on pages 0/1 and objects on page 2, with a 2560-entry frame metadata cap.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;
 broadleaf 4652 uses only its paired shadow-only frames from 2296. Cavalry and non-tree resource
@@ -81,18 +81,24 @@ species keeps the healthy broadleaf fallback; family 0 keeps its base variants.
 Culling and drawing share the selected body and its shadow decision. Palm frame 0
 anchor (20,175) lies below its 88×168 image and is deliberately preserved, not clamped.
 Optional village groups add the male villager: idle 1479, walking 1484,
-wood chopping 1535 and wood carrying 1536, each five rows of fifteen frames.
+wood chopping/carrying 1535/1536, berry foraging/food carrying 1490/1493,
+gold mining 1545, stone mining 1560 and shared ore carrying 1552, each five
+rows of fifteen frames.
 The same eight-direction mirror mapping as the scout uses the native anchors.
-Other gathering and carrying tasks retain the idle/walking art with a resource
-badge rather than depicting the wrong tool. The Dark Age Town Center composes
+Authoritative Gathering tasks select the resource tool even with a partial
+load; Returning tasks select their carried resource, while idle/moving tasks
+retain ordinary standing/walking art. The Dark Age Town Center composes
 main 891, left roof/supports 3594/3595/3596, right roof/supports 4610/4611/4612,
-and paired shadow 889. Both roof attachments sit forty-eight source pixels below
-the shared origin to meet the outer columns. Signed and outside anchors are
+and paired shadow 889. Roofs draw behind the core with left/right attachments
+48/24 source pixels down; the single front-left and rear-right posts attach
+24 pixels down/up to meet their eaves. Signed and outside anchors are
 preserved; player masks use the current blue ramp. These are reviewed metadata,
 not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
-proof now covers all 2,003 selected frames in the same three pages.
-Other animal and building art remains unreviewed. A missing
+proof now covers all 2,369 selected frames in the same three pages.
+Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
+silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
+colors without additional faces. Other animal and building art remains unreviewed. A missing
 required terrain group prevents local-pack startup with a clear error, while a
 missing optional resource group does not turn unrelated frames into a
 substitute. Optional absence is distinct from present incomplete/duplicate frames,

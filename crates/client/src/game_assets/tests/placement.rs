@@ -10,8 +10,8 @@ fn count_and_source_bounds_are_checked_before_destination_allocation() {
     let manifest = fixture();
     let selected = vec![0; MAX_SELECTED_FRAMES];
     let domains = vec![AtlasDomain::Terrain; MAX_SELECTED_FRAMES];
-    assert_eq!(plan(&manifest, &selected, &domains).unwrap().len(), 2048);
-    assert!(plan(&manifest, &vec![0; 2049], &vec![AtlasDomain::Terrain; 2049]).is_err());
+    assert_eq!(plan(&manifest, &selected, &domains).unwrap().len(), 2560);
+    assert!(plan(&manifest, &vec![0; 2561], &vec![AtlasDomain::Terrain; 2561]).is_err());
     assert!(plan(&manifest, &[1], &[AtlasDomain::Objects]).is_err());
     let mut manifest = manifest;
     manifest.frames[0].page = u16::MAX;
@@ -336,10 +336,8 @@ fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
 fn dressing_catalog_prefixes_preserve_native_signed_hotspots_and_object_page() {
     for (id, count, anchor) in [
         (4474, 6, [28, 6]),
-        (2561, 7, [23, 15]),
         (1035, 3, [-3, 13]),
         (1252, 2, [63, 18]),
-        (4584, 2, [19, 9]),
         (1262, 1, [94, 172]),
     ] {
         let source = OPTIONAL_RESOURCE_SOURCES

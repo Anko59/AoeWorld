@@ -179,7 +179,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         // A face over several tiles samples each tile's own frame, so its layers
         // differ whenever their sheets do, whatever the origin tile happens to show.
-        let tiled = triangle.texture_mode == directory::TILED;
+        let tiled = triangle.mode() == directory::TILED;
         let distinct = |first: u8, second: u8, a: &AtlasAddress, b: &AtlasAddress| {
             if tiled {
                 terrain_group(art, first).map(|group| group.0)
