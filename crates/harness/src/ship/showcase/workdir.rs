@@ -27,13 +27,14 @@ pub(crate) fn create_work_dir(
 }
 
 /// The recorder and the module it imports, run by node in the work directory.
-const RECORDER: [(&str, &str); 3] = [
+const RECORDER: [(&str, &str); 4] = [
     ("record.mjs", include_str!("record.mjs")),
     ("scenes.mjs", include_str!("scenes.mjs")),
     (
         "readiness.mjs",
         include_str!("../compare/capture/readiness.mjs"),
     ),
+    ("steps.mjs", include_str!("steps/steps.mjs")),
 ];
 
 pub(crate) fn write_recorder(work: &Path) -> std::io::Result<()> {

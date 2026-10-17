@@ -227,7 +227,8 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
     super::check::validate_manifest_root(root)?;
     let level = super::check::showcase_level(root)?;
     let storyboard = env("SHOWCASE_STORYBOARD")?;
-    let board = Storyboard::parse(&read_storyboard(Path::new(&storyboard))?)?;
+    let mut board = Storyboard::parse(&read_storyboard(Path::new(&storyboard))?)?;
+    super::steps::resolve_bookmarks(&mut board, root)?;
     super::check::check_voice_requirement(level, &board)?;
     let requested_out = std::env::var("SHOWCASE_OUT")
         .ok()

@@ -3,6 +3,7 @@
 //! handed to the recorder. `AppOrigin::allows` is the reference rule that
 //! record.mjs applies to every HTTP request and WebSocket of a scene with that
 //! scene's own origin; everything else is aborted.
+use super::steps::{self, Script};
 use super::{
     MAX_SECONDS, Scene, Storyboard,
     origins::{Bridged, Origins},
@@ -40,7 +41,7 @@ pub(crate) enum Button {
 /// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
 /// "y": 360, "delta_y": -400}}` (one wheel event over that position),
 /// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
     Click(String),
@@ -65,6 +66,14 @@ pub(crate) enum Step {
     Key(String),
     Text(String),
     WaitMs(u32),
+    /// The step library (steps/mod.rs): each drives the real game and waits
+    /// for its own readiness.
+    StartSkirmish(steps::StartSkirmish),
+    SelectEntity(steps::SelectEntity),
+    Command(steps::Command),
+    Camera(steps::Camera),
+    WaitFor(steps::WaitFor),
+    OpenPanel(steps::OpenPanel),
 }
 
 impl Step {
@@ -76,7 +85,13 @@ impl Step {
             | Self::ClickAt { .. }
             | Self::Select { .. }
             | Self::Wheel { .. }
-            | Self::Key(_) => 0,
+            | Self::Key(_)
+            | Self::StartSkirmish(_)
+            | Self::SelectEntity(_)
+            | Self::Command(_)
+            | Self::Camera(_)
+            | Self::WaitFor(_)
+            | Self::OpenPanel(_) => 0,
             Self::Text(text) => TYPE_MS * text.chars().count() as u64,
             Self::WaitMs(ms) => u64::from(*ms),
         }
@@ -150,6 +165,12 @@ impl Step {
             Self::WaitMs(ms) if *ms > MAX_WAIT_MS => {
                 Err(format!("waits are limited to {MAX_WAIT_MS} ms"))
             }
+            Self::StartSkirmish(step) => step.validate(),
+            Self::SelectEntity(step) => step.validate(),
+            Self::Command(step) => step.validate(),
+            Self::Camera(step) => step.validate(),
+            Self::WaitFor(step) => step.validate(),
+            Self::OpenPanel(step) => step.validate(),
             _ => Ok(()),
         }
     }
@@ -180,6 +201,13 @@ pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result
     for (index, step) in steps.iter().enumerate() {
         step.validate()
             .map_err(|error| format!("step {}: {error}", index + 1))?;
+        if matches!(step, Step::StartSkirmish(_)) && !path.starts_with(steps::MENU_PATH) {
+            return Err(format!(
+                "step {}: start_skirmish needs the menu: film `{}` (it skips the intro), not `{path}`",
+                index + 1,
+                steps::MENU_PATH
+            ));
+        }
     }
     Ok(())
 }
@@ -300,6 +328,10 @@ pub(crate) struct Planned<'a> {
     pub(crate) label: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) view: Option<super::capture::View>,
+    /// For each step of a browser scene, the ops of a library step (`null`
+    /// for the primitive steps); absent when the scene uses none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scripts: Option<Vec<Option<Script>>>,
 }
 
 /// What record.mjs plays: each scene with its planned length (steps
@@ -312,12 +344,15 @@ pub(crate) fn plan<'a>(
 ) -> Result<Plan<'a>, String> {
     let mut scenes = Vec::with_capacity(board.scenes.len());
     for (scene, duration_ms) in board.scenes.iter().zip(planned) {
-        let (url, label) = match scene {
-            Scene::Browser { build, path, .. } => (
+        let (url, label, scripts) = match scene {
+            Scene::Browser {
+                build, path, steps, ..
+            } => (
                 Some(origins.resolve(*build, path.as_deref().unwrap_or("/"))?),
                 origins.labelled().then(|| build.label()),
+                scripts(steps)?,
             ),
-            _ => (None, None),
+            _ => (None, None, None),
         };
         scenes.push(Planned {
             scene,
@@ -325,6 +360,7 @@ pub(crate) fn plan<'a>(
             url,
             label,
             view: None,
+            scripts,
         });
     }
     Ok(Plan {
@@ -334,4 +370,16 @@ pub(crate) fn plan<'a>(
         origins: origins.bridged(),
         scenes,
     })
+}
+
+/// The expanded ops of every library step of a scene, by step position.
+fn scripts(steps: &[Step]) -> Result<Option<Vec<Option<Script>>>, String> {
+    let scripts = steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| {
+            steps::expand(step).map_err(|error| format!("step {}: {error}", index + 1))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(scripts.iter().any(Option::is_some).then_some(scripts))
 }
