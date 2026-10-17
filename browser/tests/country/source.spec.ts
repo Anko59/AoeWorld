@@ -1,5 +1,6 @@
 import { activatePackage } from "../start/package.js";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "../../server.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { PNG } from "pngjs";
 import { forceCanvas, forceWebGl } from "../rendering/backends.js";

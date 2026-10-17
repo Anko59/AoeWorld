@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "../server.js";
 import { writeFile } from "node:fs/promises";
 import { gameAssets } from "./game-assets.js";
 import { activateSyntheticMap } from "./synthetic-map.js";

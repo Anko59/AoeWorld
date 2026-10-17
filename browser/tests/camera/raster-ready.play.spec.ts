@@ -1,4 +1,5 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, type Page, type Route } from "@playwright/test";
+import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 
 type Navigation = { map(hash: Uint8Array): void };

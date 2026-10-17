@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../server.js";
 import { gameAssets } from "./game-assets.js";
 import { forceCanvas } from "./rendering/backends.js";
 import {
