@@ -148,6 +148,25 @@ pub fn surface_hit_at(
     triangles: &[ProjectedSurfaceTriangle],
     screen: ScreenPoint,
 ) -> Option<(f64, bool)> {
+    frontmost_surface(triangles, screen).map(|(depth, skirt, pickable)| (depth, !skirt && pickable))
+}
+
+/// Whether the frontmost drawn surface under `screen` is a cliff face nearer
+/// the viewer than an object at `depth`, so the object is hidden there.
+pub fn cliff_face_in_front(
+    triangles: &[ProjectedSurfaceTriangle],
+    screen: ScreenPoint,
+    depth: f64,
+) -> bool {
+    frontmost_surface(triangles, screen).is_some_and(|(front, skirt, _)| skirt && front > depth)
+}
+
+/// Frontmost drawn depth under a pixel, with whether it is a cliff face and
+/// whether the triangle accepts ground picking.
+fn frontmost_surface(
+    triangles: &[ProjectedSurfaceTriangle],
+    screen: ScreenPoint,
+) -> Option<(f64, bool, bool)> {
     triangles
         .iter()
         .filter_map(|triangle| {
@@ -165,7 +184,8 @@ pub fn surface_hit_at(
             ];
             Some((
                 surface_render_depth(world, triangle.skirt),
-                !triangle.skirt && triangle.pickable,
+                triangle.skirt,
+                triangle.pickable,
             ))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0))

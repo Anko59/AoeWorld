@@ -1,6 +1,7 @@
 //! Bounded HUD extras: authoritative resource selection and strategic markers.
 use super::{Client, building_center, owner};
 use crate::playground::game::map;
+use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
 use aoe_protocol::UnitKind;
 pub(super) fn values(client: &Client) -> Vec<f64> {
@@ -66,6 +67,15 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         .terrain_chunks
         .values()
         .flat_map(|chunk| chunk.resources().map(|(node, _)| node));
+    if let Some((kind, remaining)) = client
+        .selected
+        .resource_id
+        .and_then(|id| starting_selection(id, &client.resources))
+    {
+        // Starting nodes leave the overlay list at zero; the selection stays.
+        values[1] = kind;
+        values[2] = remaining;
+    }
     for node in natural.chain(starting.iter()) {
         if client.selected.resource_id == Some(node.id) {
             values[1] = node.kind as u8 as f64;
@@ -117,6 +127,16 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         }
     }
     values
+}
+
+/// Kind and authoritative remaining amount of a selected starting-kit resource,
+/// including one at zero that the overlay list no longer yields.
+pub(super) fn starting_selection(id: u64, resources: &ResourceStateCache) -> Option<(f64, f64)> {
+    let node = aoe_map::ResourceNode::starting_from_id(id)?;
+    Some((
+        f64::from(node.kind as u8),
+        f64::from(resources.remaining(id, node.initial_amount)),
+    ))
 }
 
 fn passable(client: &Client, point: ScreenPoint) -> bool {

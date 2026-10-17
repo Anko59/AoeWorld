@@ -195,7 +195,7 @@ pub(super) fn render_canvas_world(
     Ok(())
 }
 
-fn canvas_layer_bounds(
+pub(super) fn canvas_layer_bounds(
     layer: &WorldLayer,
     viewport: [f64; 2],
     width: u32,
@@ -223,8 +223,9 @@ fn canvas_layer_bounds(
         WorldLayer::Selection(sprite, _) => {
             let center_x = (f64::from(sprite.position[0]) + 1.0) * viewport[0] * 0.5;
             let center_y = (1.0 - f64::from(sprite.position[1])) * viewport[1] * 0.5;
-            let radius_x = f64::from(sprite.radius[0]) * viewport[0];
-            let radius_y = f64::from(sprite.radius[1]) * viewport[1];
+            // Quad radii are clip-space half extents (twice the pixel radius).
+            let radius_x = f64::from(sprite.radius[0]) * viewport[0] * 0.5;
+            let radius_y = f64::from(sprite.radius[1]) * viewport[1] * 0.5;
             (
                 center_x - radius_x,
                 center_y - radius_y,
