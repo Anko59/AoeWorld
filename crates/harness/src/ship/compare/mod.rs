@@ -15,8 +15,9 @@ mod side;
 mod tests;
 mod view;
 
-use bookmarks::Bookmarks;
+pub(super) use bookmarks::Bookmarks;
 use capture::Shot;
+pub(super) use config::DEFAULT_BOOKMARKS;
 use config::{Config, Source};
 use report::{Report, Status};
 use side::capture_side;

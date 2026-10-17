@@ -141,6 +141,56 @@ SHOWCASE_BEFORE_URL=http://127.0.0.1:8082/ make showcase SHOWCASE_STORYBOARD=.ca
 `DEV_PORT` is described in [local development](local-development.md); run
 `make down` in each worktree afterwards.
 
+## Step library
+
+Browser steps can also be named game steps. Each drives the real client through
+the hooks its browser specs use (`web/start`, `H` and `#selection`, the
+camera fragment, `data-chunks-pending`), waits for its own readiness, and on a
+timeout fails the take with a message naming the step, like
+``showcase step 2 `select_entity {"kind":"villager"}`: timed out after 30012 ms
+(limit 30000 ms) waiting for the selection panel to show the selection``. Every step takes an
+optional `timeout_ms` (default 30 000; `start_skirmish` 180 000; at most 600 000)
+that bounds each wait inside it. Waits are measured, not planned, like page loads.
+
+- `{"start_skirmish": {"preset": "alps", "colour"?, "size"?}}`: Single Player,
+  the preset (`paris`, `alps`, `brittany`, `finland`), an optional player colour
+  and map size (`tiny`, `small`, `large`, `giant`; `tiny` prepares fastest),
+  Start Game, then waits for the match on screen, connected, the village HUD up, no chunk pending,
+  the minimap raster ready and the frame settled. The scene's `path` must be
+  `/?skipIntro=1…`. The setup form has no seed, so there is no `seed`.
+- `{"select_entity": {"kind": "villager", "nth"?: 0}}`: presses `H` (centres the
+  village) and Escape, then clicks the nth actor of that kind in `#scene
+  data-actors` that is on screen (`villager`, `building` = the Town Center,
+  `unit` = the scout) and waits for the selection panel. (Not `select`, which
+  picks a `<select>` option.)
+- `{"command": {"action": "gather", "resource": "wood"}}`: orders the selection:
+  frames the nearest resident node of that resource (`data-resource-targets`),
+  right-clicks it, and waits for `#workers-wood` to count a villager.
+  `{"action": "move", "dx"?: 128, "dy"?: 64}` right-clicks that many canvas
+  pixels from the centre. `build` is refused: the client has no build command.
+- `{"camera": {"bookmark": "finland-start"}}` or `{"camera": {"x", "y", "zoom"}}`:
+  the capture fragment, then waits for the camera read back from `#minimap`, no
+  chunk pending and the frame quiet: the settle rule of `make compare`. A
+  bookmark's coordinates come from `qa/bookmarks.json`; its renderer is ignored.
+- `{"wait_for": {"selector": "#minimap"}}` (visible) or `{"wait_for":
+  {"state": "connected|game|chunks_ready|settled|selected"}}`.
+- `{"open_panel": {"name": "overview|grid"}}`: toggles it open unless
+  it already is, and waits for it.
+
+Refusals happen in `make showcase-check`, before any image is built.
+
+```json
+{"title": "Gather", "scenes": [{"kind": "browser", "path": "/?skipIntro=1", "caption": "A skirmish",
+  "seconds": 3, "steps": [
+  {"start_skirmish": {"preset": "finland", "size": "tiny"}},
+  {"select_entity": {"kind": "villager"}},
+  {"command": {"action": "gather", "resource": "wood"}},
+  {"camera": {"x": 250, "y": 250, "zoom": 2}}]}]}
+```
+
+Implementation: `showcase/steps/` expands each step into ops (`script.rs`),
+which `steps.mjs` runs; its settle rule is the shared `compare/capture/readiness.mjs`.
+
 ## Play capture hooks
 
 Play camera links use `/#x=320.5&y=350.25&zoom=1.75`, on load and
