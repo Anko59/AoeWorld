@@ -60,47 +60,54 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
     } else {
         0.0
     };
-    for chunk in client.terrain_chunks.values() {
-        for (node, _) in chunk.resources() {
-            if client.selected.resource_id == Some(node.id) {
-                values[1] = node.kind as u8 as f64;
-                values[2] = f64::from(client.resources.remaining(node.id, node.initial_amount));
+    // Starting-kit nodes live in the resource overlay, not in terrain chunks.
+    let starting: Vec<_> = client.resources.starting_nodes().collect();
+    let natural = client
+        .terrain_chunks
+        .values()
+        .flat_map(|chunk| chunk.resources().map(|(node, _)| node));
+    for node in natural.chain(starting.iter()) {
+        if client.selected.resource_id == Some(node.id) {
+            values[1] = node.kind as u8 as f64;
+            values[2] = f64::from(client.resources.remaining(node.id, node.initial_amount));
+        }
+        if !client.resources.visible(node.id) {
+            continue;
+        }
+        let world = [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5];
+        let chunk = (
+            node.tile.x.div_euclid(aoe_map::CHUNK_TILES),
+            node.tile.y.div_euclid(aoe_map::CHUNK_TILES),
+        );
+        if let Some(focus) = focus
+            && chunk.0.abs_diff(camera_chunk[0]) <= 1
+            && chunk.1.abs_diff(camera_chunk[1]) <= 1
+        {
+            let distance = (world[0] - focus[0]).powi(2) + (world[1] - focus[1]).powi(2);
+            let slot = &mut targets[node.kind as usize];
+            if slot.is_none_or(|(_, old)| distance < old) {
+                *slot = Some((world, distance));
             }
-            if !client.resources.visible(node.id) {
-                continue;
-            }
-            let world = [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5];
-            let chunk = chunk.coordinate();
-            if let Some(focus) = focus
-                && chunk.0.abs_diff(camera_chunk[0]) <= 1
-                && chunk.1.abs_diff(camera_chunk[1]) <= 1
-            {
-                let distance = (world[0] - focus[0]).powi(2) + (world[1] - focus[1]).powi(2);
-                let slot = &mut targets[node.kind as usize];
-                if slot.is_none_or(|(_, old)| distance < old) {
-                    *slot = Some((world, distance));
-                }
-            }
-            let highlighted = hover.is_some_and(|(id, _)| id == node.id);
-            if node.kind as u8 == 1 && !highlighted {
-                continue;
-            }
-            let p = map::screen_position(client, world);
-            let visible = p.x >= 0.0
-                && p.y >= 0.0
-                && p.x < client.camera.viewport[0]
-                && p.y < client.camera.viewport[1];
-            if highlighted {
-                values[4] = p.x * scale;
-                values[5] = p.y * scale;
-                values[8] = (aoe_core::ISO_TILE_WIDTH * client.camera.zoom * scale).max(10.0);
-            }
-            // Forests are already in the terrain raster. Show other visible
-            // deposits only, bounded by resident chunks and the viewport.
-            if node.kind as u8 != 1 && visible && values[7] < 2048.0 {
-                values[7] += 1.0;
-                marker(&mut values, node.kind as u8 as f64, world);
-            }
+        }
+        let highlighted = hover.is_some_and(|(id, _)| id == node.id);
+        if node.kind as u8 == 1 && !highlighted {
+            continue;
+        }
+        let p = map::screen_position(client, world);
+        let visible = p.x >= 0.0
+            && p.y >= 0.0
+            && p.x < client.camera.viewport[0]
+            && p.y < client.camera.viewport[1];
+        if highlighted {
+            values[4] = p.x * scale;
+            values[5] = p.y * scale;
+            values[8] = (aoe_core::ISO_TILE_WIDTH * client.camera.zoom * scale).max(10.0);
+        }
+        // Forests are already in the terrain raster. Show other visible
+        // deposits only, bounded by resident chunks and the viewport.
+        if node.kind as u8 != 1 && visible && values[7] < 2048.0 {
+            values[7] += 1.0;
+            marker(&mut values, node.kind as u8 as f64, world);
         }
     }
     for (kind, target) in targets.into_iter().enumerate() {
