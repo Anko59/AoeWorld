@@ -3,8 +3,20 @@ use super::*;
 use crate::RiverSegment;
 
 fn stream(x0: i64, y0: i64, x1: i64, y1: i64) -> Vec<[i64; 7]> {
+    channel(x0, y0, x1, y1, 256)
+}
+
+fn channel(x0: i64, y0: i64, x1: i64, y1: i64, width: i64) -> Vec<[i64; 7]> {
     let length = (x1 - x0).abs().max((y1 - y0).abs());
-    vec![[x0 * 256, y0 * 256, x1 * 256, y1 * 256, 256, 0, length * 256]]
+    vec![[
+        x0 * 256,
+        y0 * 256,
+        x1 * 256,
+        y1 * 256,
+        width,
+        0,
+        length * 256,
+    ]]
 }
 
 #[test]
@@ -58,8 +70,21 @@ fn open_tile_near(generator: &MapChunkGenerator, x: i32, y: i32) -> TileCoord {
         .expect("open land beside the stream")
 }
 
+fn crossing_route(
+    generator: &MapChunkGenerator,
+    from: (i32, i32),
+    to: (i32, i32),
+) -> crate::MovementOutcome {
+    crate::find_path(
+        generator,
+        open_tile_near(generator, from.0, from.1),
+        open_tile_near(generator, to.0, to.1),
+        (WIDTH * WIDTH) as u32,
+    )
+}
+
 #[test]
-fn a_one_tile_stream_still_blocks_a_straight_and_a_diagonal_crossing() {
+fn a_one_tile_stream_is_wadeable_shallows_that_units_path_through() {
     for (name, segments, from, to) in [
         (
             "straight",
@@ -70,15 +95,72 @@ fn a_one_tile_stream_still_blocks_a_straight_and_a_diagonal_crossing() {
         ("diagonal", stream(-1, -1, 258, 258), (60, 200), (200, 60)),
     ] {
         let generator = crossing_with_geometry(false, false, segments);
-        let route = crate::find_path(
-            &generator,
-            open_tile_near(&generator, from.0, from.1),
-            open_tile_near(&generator, to.0, to.1),
-            (WIDTH * WIDTH) as u32,
+        let tiles = composed(&generator);
+        let wet = tiles
+            .iter()
+            .filter(|p| p.terrain.water == WaterKind::River)
+            .collect::<Vec<_>>();
+        assert!(!wet.is_empty(), "{name}");
+        for point in &wet {
+            assert_eq!(point.terrain.material, GroundMaterial::Ford, "{name}");
+            assert!(point.terrain.passable, "{name} {:?}", point.tile);
+        }
+        let route = crossing_route(&generator, from, to);
+        assert!(
+            matches!(route, crate::MovementOutcome::Path(_)),
+            "{name}: {route:?}"
         );
+    }
+}
+
+#[test]
+fn a_stream_wider_than_the_shallows_limit_still_blocks_straight_and_diagonal() {
+    for (name, segments, from, to) in [
+        (
+            "straight",
+            channel(130, -1, 130, 258, 640),
+            (100, 128),
+            (160, 128),
+        ),
+        (
+            "diagonal",
+            channel(-1, -1, 258, 258, 640),
+            (60, 200),
+            (200, 60),
+        ),
+    ] {
+        let generator = crossing_with_geometry(false, false, segments);
+        for point in composed(&generator)
+            .iter()
+            .filter(|p| p.terrain.water == WaterKind::River)
+        {
+            assert_ne!(point.terrain.material, GroundMaterial::Ford, "{name}");
+            assert!(!point.terrain.passable, "{name} {:?}", point.tile);
+        }
+        let route = crossing_route(&generator, from, to);
         assert!(
             matches!(route, crate::MovementOutcome::Unreachable),
             "{name}: {route:?}"
         );
+    }
+}
+
+#[test]
+fn a_stream_joining_a_wide_river_stops_being_shallows_inside_the_wide_channel() {
+    let mut segments = channel(130, -1, 130, 258, 5 * 256);
+    segments.extend(channel(60, 128, 130, 128, 256));
+    let generator = crossing_with_geometry(false, false, segments);
+    let tiles = composed(&generator);
+    let tile = |x, y| at(&tiles, x, y).unwrap();
+    assert_eq!(tile(80, 128).terrain.material, GroundMaterial::Ford);
+    assert!(tile(80, 128).terrain.passable);
+    for y in [60, 128, 200] {
+        assert_eq!(tile(130, y).terrain.water, WaterKind::River);
+        assert_ne!(
+            tile(130, y).terrain.material,
+            GroundMaterial::Ford,
+            "row {y}"
+        );
+        assert!(!tile(130, y).terrain.passable, "row {y}");
     }
 }
