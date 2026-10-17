@@ -67,3 +67,24 @@ fn town_center_ellipse_lower_arc_is_drawn_over_flat_ground_on_canvas() {
         assert!(found, "lower arc missing in column offset {dx}");
     }
 }
+
+#[wasm_bindgen_test]
+fn canvas_scans_only_the_ellipse_bounding_box_not_twice_its_size() {
+    let camera = SceneCamera {
+        center: [8.0, 8.0],
+        zoom: 1.0,
+        viewport: [640.0, 480.0],
+        focus_elevation_meters: 0.0,
+    };
+    let (sprite, depth) = crate::game_grid::selection_ring(camera, [8.0, 8.0], 0.0)[0];
+    let bounds = canvas_depth::canvas_layer_bounds(
+        &WorldLayer::Selection(sprite, depth),
+        camera.viewport,
+        640,
+        480,
+    )
+    .expect("visible ring");
+    // Radii are [24, 8] pixels plus the one-pixel stroke half width.
+    assert!(bounds[2] - bounds[0] <= 2 * 25 + 2, "{bounds:?}");
+    assert!(bounds[3] - bounds[1] <= 2 * 9 + 2, "{bounds:?}");
+}

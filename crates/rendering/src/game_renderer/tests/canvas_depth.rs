@@ -1,6 +1,8 @@
 #![cfg(test)]
 #[path = "canvas_presentation.rs"]
 mod canvas_presentation;
+#[path = "selection/cliff.rs"]
+mod selection_cliff;
 #[path = "selection/canvas.rs"]
 mod selection_pixels;
 #[path = "species/canvas.rs"]
