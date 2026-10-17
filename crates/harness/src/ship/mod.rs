@@ -132,6 +132,9 @@ pub(crate) struct Options {
     /// The heavy-slot environment of this process, read once by `execute`.
     #[arg(skip)]
     pub(crate) slots: Box<crate::slots::SlotEnv>,
+    /// The ship lock, let go during the review and taken again for the push.
+    #[arg(skip)]
+    pub(crate) lock: lock::Handoff,
 }
 
 impl Default for Options {
@@ -151,6 +154,7 @@ impl Default for Options {
             level: None,
             video: None,
             slots: Box::default(),
+            lock: lock::Handoff::default(),
         }
     }
 }
@@ -355,6 +359,12 @@ pub(crate) fn ship_with(
     let review = if options.no_review {
         None
     } else {
+        // The gates are done and their evidence is written; no heavy slot is held (each
+        // gate drops its own). The review only waits on remote calls, so the next ship
+        // may take the lock and run its gates meanwhile.
+        if options.lock.release() {
+            eprintln!("ship: lock released for the review");
+        }
         Some(review_gate::require(root, &evidence, options, reviewer)?)
     };
     if options.review_ahead {
@@ -364,6 +374,7 @@ pub(crate) fn ship_with(
         eprintln!("ship: {}", stack::ahead_message(&options.base, report));
         return Ok(evidence);
     }
+    options.lock.reacquire(root, "make ship")?;
     let rebased = recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)?;
     let (evidence, review, lease, _recheck_anchor) = match rebased {
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),

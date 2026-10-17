@@ -42,7 +42,7 @@ agent policy refuses `$` in agent-set Make values.
    `<git common dir>/aoe-ship/evidence/<sha>.json` (`make ship-status` prints it).
    A new commit has no evidence, so evidence for one commit never stands in for
    another. The agent policy refuses every write into the Git common directory.
-6. **Reviews** the commit with the tiered [adversarial review](review.md)
+6. **Reviews** the commit, with the ship lock released (`ship: lock released for the review`; no heavy slot is held either) so the next ship's gates run meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
    family). A full review below 8/10, an incomplete review, or a closing review
    with a blocking finding or an undecided carried finding pushes nothing.
@@ -68,7 +68,7 @@ agent policy refuses `$` in agent-set Make values.
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Re-checks the base**, still holding the lock: it fetches dev and the stacked parent again. A merged/closed
+7. **Re-checks the base** after queueing for the lock again, in the same first-come queue (`ship: lock reacquired for the push (waited Ns)`; a failed review exits without it): it fetches dev and the stacked parent again. A merged/closed
    parent or missing parent branch stops with restack instructions, keeping the passed review. If the base moved,
    only the branch's own commits are rebased (conflicts abort, restore the branch and name files); every static preflight gate runs on
    the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
@@ -118,7 +118,7 @@ its position changes), and gives up with an error after
 shows the holder and the queue in order without waiting. Read-only commands (`review-floor`,
 `showcase-check`, `ship-status`…) never take the lock. Never wait for another
 ship by scanning processes: a `pgrep -f` loop matches its own command line and
-waits on itself forever; queue on the lock instead.
+waits on itself forever; queue on the lock instead. `make ship` holds the lock for the gates and the push, not for the review; Ctrl-C while unlocked leaves no ticket.
 
 ## Stacked pull requests
 
