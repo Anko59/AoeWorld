@@ -21,8 +21,15 @@ pub(super) fn sample(
     tile: TileCoord,
     radius: i32,
     cancelled: &dyn Fn() -> bool,
-) -> Result<Option<bool>, EnvironmentPageError> {
+) -> Result<Option<Channel>, EnvironmentPageError> {
     query(generator, tile, radius, Mode::Physical, cancelled)
+}
+
+/// The nearest physical channel at a tile.
+#[derive(Clone, Copy)]
+pub(super) struct Channel {
+    /// Every channel covering the tile is a narrow stream that can be waded.
+    pub wadeable: bool,
 }
 
 fn query(
@@ -31,7 +38,7 @@ fn query(
     radius: i32,
     mode: Mode,
     cancelled: &dyn Fn() -> bool,
-) -> Result<Option<bool>, EnvironmentPageError> {
+) -> Result<Option<Channel>, EnvironmentPageError> {
     if cancelled() {
         return Err(EnvironmentPageError::Cancelled);
     }
@@ -63,7 +70,8 @@ fn query(
         crate::terrain::shoreline::variation(generator.shoreline_key(), domain, tile, lattice)
     };
     let mut shaped = None;
-    let mut best = None;
+    let mut best: Option<(i128, bool)> = None;
+    let mut wide = false;
     for y in cell(i64::from(tile.y) - discovery)..=cell(i64::from(tile.y) + discovery) {
         for x in cell(i64::from(tile.x) - discovery)..=cell(i64::from(tile.x) + discovery) {
             let key = EnvironmentPageKey {
@@ -118,14 +126,15 @@ fn query(
                 };
                 indexed.sample(point, radius * 256, min_width_units)
             };
-            if let Some(hit) = hit
-                && best.is_none_or(|(distance, _)| hit.0 < distance)
-            {
-                best = Some(hit);
+            if let Some((distance, ford, wadeable)) = hit {
+                wide |= !wadeable;
+                if best.is_none_or(|(nearest, _)| distance < nearest) {
+                    best = Some((distance, ford));
+                }
             }
         }
     }
-    Ok(best.map(|(_, ford)| ford))
+    Ok(best.map(|_| Channel { wadeable: !wide }))
 }
 
 impl super::MapChunkGenerator {

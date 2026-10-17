@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 mod rivers;
 pub use rivers::{
-    MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS, MIN_RIVER_WIDTH_UNITS, RiverSegment,
+    MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS, MAX_WADEABLE_WIDTH_UNITS,
+    MIN_RIVER_WIDTH_UNITS, RiverSegment,
 };
 
 pub const MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS: u16 = 1_024;
