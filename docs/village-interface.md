@@ -26,10 +26,10 @@ entry, refunds food and releases its reserved population slot. Refusals explain
 food, population, ownership and resource failures in plain words. The current
 rules start three villagers plus the scout, with five total population slots.
 
-Menu opens Resume, disabled Settings, Quit to Main Menu and separate map tools.
-Until a start menu exists, Quit reloads the page. The map creator is a separate
-overlay opened from Menu, and the minimap's navigation controls remain beside
-it in the bottom frame. Existing scene/minimap capture hooks remain available.
+Maps are created only through Single Player Game Setup. Menu offers Resume,
+disabled Settings and Quit to Main Menu. Retained requests reuse their original
+idempotency key; definitive refusals are cleared. Skirmish loading keeps Cancel.
+Existing scene/minimap capture hooks remain available.
 The scene also exposes actor coordinates for browser interaction evidence.
 When villagers are selected, it exposes the nearest resident node per resource
 kind in a nine-chunk window. Targets may be offscreen; they grant no simulation

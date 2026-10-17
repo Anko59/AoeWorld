@@ -73,36 +73,6 @@ async function setup(page: Page) {
   await expect(page.locator("#connection")).toHaveText("connected");
 }
 
-test("creator Generate after a skirmish keeps the playground and its Cancel usable", async ({
-  page,
-}) => {
-  const server = await jobs(page, true);
-  await setup(page);
-  await page.getByRole("button", { name: "Start Game", exact: true }).click();
-  await expect(page.locator("#start-sequence")).toBeHidden();
-  await expect(page.locator("#scene")).toBeVisible();
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.getByRole("button", { name: "Generate", exact: true }).click();
-  await expect(page.locator("#map-estimate")).toContainText("4 / 16 pages");
-  await expect(page.locator("#playground")).toBeVisible();
-  await expect(page.locator("#playground")).toHaveJSProperty("inert", false);
-  await expect(page.locator("#loading-screen")).toBeHidden();
-  const cancel = page.locator("#cancel-map");
-  await expect(cancel).toBeVisible();
-  await expect(cancel).toBeEnabled();
-  await cancel.click();
-  await expect.poll(() => server.cancelled).toEqual([102]);
-  await expect(page.locator("#map-estimate")).toContainText(
-    "Map creation cancelled",
-  );
-  await expect(
-    page.getByRole("button", { name: "Generate", exact: true }),
-  ).toBeEnabled();
-  await expect(page.locator("#start-sequence")).toBeHidden();
-  await expect(page.locator("#playground")).toBeVisible();
-  await expect(page.locator("#playground")).toHaveJSProperty("inert", false);
-});
-
 test("startup Cancel cancels the accepted job and restores the skirmish choices", async ({
   page,
 }) => {
@@ -182,7 +152,6 @@ test("Resume restores skirmish loading and Cancel for a running accepted job aft
     .click();
   // The retained job is already polling before Resume: its busy guard must
   // neither prevent the loading screen nor submit another request.
-  await expect(page.locator("#map-estimate")).toContainText("4 / 16 pages");
   await page
     .getByRole("button", { name: "Resume map preparation", exact: true })
     .click();

@@ -122,7 +122,7 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
     .toBeGreaterThan(200);
 });
 
-test("menu resumes; minimap lives in the bottom frame and navigates", async ({
+test("menu resumes and quits; minimap lives in the bottom frame and navigates", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -142,11 +142,12 @@ test("menu resumes; minimap lives in the bottom frame and navigates", async ({
     before ?? "",
   );
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Quit to Main Menu" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Game menu" })).toBeHidden();
+  await page.getByRole("button", { name: "Quit to Main Menu" }).click();
+  await expect(page.locator("#main-menu")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "Game Setup" })).toBeVisible();
 });
 
 test("Canvas replacement keeps village selection, drag feedback and training controls", async ({
