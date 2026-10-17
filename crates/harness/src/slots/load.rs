@@ -10,7 +10,7 @@ const BOUND: Duration = Duration::from_secs(30 * 60);
 const POLL: Duration = Duration::from_secs(30);
 const REPORT: Duration = Duration::from_secs(5 * 60);
 
-pub(super) fn wait(cancellation: &Cancellation) -> Result<()> {
+pub(crate) fn wait(cancellation: &Cancellation) -> Result<()> {
     let start = Instant::now();
     wait_with(
         BOUND,

@@ -3,7 +3,7 @@
 use crate::{
     gates::registry::{Capability, Gate},
     process::{Cancellation, CaptureExit, capture_command, load},
-    slots::SlotEnv,
+    slots::{SlotEnv, guard::Guard},
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, process::Command, time::Duration};
@@ -44,9 +44,23 @@ pub(crate) struct Attempt {
     pub(crate) load: String,
 }
 
+impl Attempt {
+    fn describe(&self) -> String {
+        let outcome = match (self.timed_out, self.verdict) {
+            (true, _) => "timed out",
+            (false, GateVerdict::Pass) => "passed",
+            (false, _) => "failed",
+        };
+        if self.load.is_empty() {
+            format!("{outcome} after {:.1}s", self.seconds)
+        } else {
+            format!("{outcome} after {:.1}s; {}", self.seconds, self.load)
+        }
+    }
+}
+
 /// What a local gate that times out on an overloaded machine gets: one more run after the load
 /// falls. CI never retries, and nothing else is retried.
-#[expect(dead_code, reason = "the retry itself is wired in the next commit")]
 pub(crate) struct Retry {
     /// False in CI.
     local: bool,
@@ -67,17 +81,22 @@ impl Retry {
 
     /// The policy of this process: local runs retry, CI never does.
     pub(crate) fn here() -> Self {
-        Self::new(true, Box::new(load::read), Box::new(|| Ok(())))
+        Self::new(
+            !in_ci(|name| std::env::var(name).ok()),
+            Box::new(load::read),
+            Box::new(|| {
+                crate::slots::wait_for_load(&Cancellation::default())
+                    .map_err(|error| error.to_string())
+            }),
+        )
     }
 }
 
 /// Whether `get` reports CI (`GITHUB_ACTIONS` or `CI` set to a non-empty value).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the retry itself is wired in the next commit")
-)]
-pub(crate) fn in_ci(_get: impl Fn(&str) -> Option<String>) -> bool {
-    false
+pub(crate) fn in_ci(get: impl Fn(&str) -> Option<String>) -> bool {
+    ["GITHUB_ACTIONS", "CI"]
+        .iter()
+        .any(|name| get(name).is_some_and(|value| !value.is_empty()))
 }
 
 impl GateResult {
@@ -87,8 +106,14 @@ impl GateResult {
             GateVerdict::Fail => "FAIL",
             GateVerdict::Unavailable => "UNAVAILABLE",
         };
+        let attempts: String = self
+            .attempts
+            .iter()
+            .enumerate()
+            .map(|(index, attempt)| format!("\n    attempt {}: {}", index + 1, attempt.describe()))
+            .collect();
         format!(
-            "  {label} {} {:.1}s {}",
+            "  {label} {} {:.1}s {}{attempts}",
             self.gate, self.seconds, self.summary
         )
     }
@@ -111,7 +136,14 @@ pub(crate) fn run_gates_selecting(
 ) -> Vec<GateResult> {
     let select =
         crate::native::affected::allowed(crate::native::affected::real_env).then_some(merge_base);
-    run_gates_scoped(root, gates, slots, crate::slots::hold, select)
+    run_gates_scoped(
+        root,
+        gates,
+        slots,
+        crate::slots::hold,
+        select,
+        &Retry::here(),
+    )
 }
 
 /// `run_gates` with the retry policy injected for fixtures.
@@ -120,9 +152,9 @@ pub(crate) fn run_gates_retrying(
     gates: &[&Gate],
     slots: &SlotEnv,
     take: TakeSlot,
-    _retry: &Retry,
+    retry: &Retry,
 ) -> Vec<GateResult> {
-    run_gates_scoped(root, gates, slots, take, None)
+    run_gates_scoped(root, gates, slots, take, None, retry)
 }
 
 /// The same gate path with acquisition injected for queue/load fixtures.
@@ -141,6 +173,7 @@ fn run_gates_scoped(
     slots: &SlotEnv,
     take: TakeSlot,
     select: Option<&str>,
+    retry: &Retry,
 ) -> Vec<GateResult> {
     let mut docker: Option<bool> = None;
     gates
@@ -158,7 +191,7 @@ fn run_gates_scoped(
                     attempts: Vec::new(),
                 };
             }
-            run_one(root, gate, slots, take, select)
+            run_one(root, gate, slots, take, select, retry)
         })
         .collect()
 }
@@ -169,6 +202,7 @@ fn run_one(
     slots: &SlotEnv,
     take: TakeSlot,
     select: Option<&str>,
+    retry: &Retry,
 ) -> GateResult {
     // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
     let slot = match take(root, &gate.id, slots) {
@@ -184,6 +218,39 @@ fn run_one(
             };
         }
     };
+    let first = run_once(root, gate, &slot, select, &retry.load);
+    if !(retry.local && first.overloaded) {
+        return first.result;
+    }
+    // The same budget again, once the load has fallen; a refused wait keeps the first timeout.
+    let earlier = first.attempt;
+    let mut result = first.result;
+    if let Err(reason) = (retry.wait)() {
+        result.summary = format!("{}; not retried: {reason}", result.summary);
+        result.attempts = vec![earlier];
+        return result;
+    }
+    let later = run_once(root, gate, &slot, select, &retry.load);
+    let mut result = later.result;
+    result.attempts = vec![earlier, later.attempt];
+    result
+}
+
+/// One run of a gate's command under its budget.
+struct Run {
+    result: GateResult,
+    attempt: Attempt,
+    /// The load at the deadline said the machine was overloaded (only ever set on a timeout).
+    overloaded: bool,
+}
+
+fn run_once(
+    root: &Path,
+    gate: &Gate,
+    slot: &Guard,
+    select: Option<&str>,
+    reader: &load::Reader<'_>,
+) -> Run {
     let mut command = Command::new("sh");
     command.arg("-c").arg(&gate.command).current_dir(root);
     command.envs(slot.env());
@@ -205,9 +272,11 @@ fn run_one(
         .unwrap_or_default()
         .trim();
     let passed = matches!(captured.exit, CaptureExit::Success);
+    let timed_out = matches!(captured.exit, CaptureExit::Deadline);
+    let load = if timed_out { reader() } else { None };
     let mut summary: String = last.chars().take(120).collect();
-    if matches!(captured.exit, CaptureExit::Deadline) {
-        summary = over_budget(gate.budget_s, &summary, &load::read);
+    if timed_out {
+        summary = over_budget(gate.budget_s, &summary, &|| load);
     }
     let tail = if passed {
         String::new()
@@ -215,17 +284,28 @@ fn run_one(
         let lines: Vec<&str> = output.lines().collect();
         lines[lines.len().saturating_sub(TAIL_LINES)..].join("\n")
     };
-    GateResult {
-        gate: gate.id.clone(),
-        verdict: if passed {
-            GateVerdict::Pass
-        } else {
-            GateVerdict::Fail
+    let verdict = if passed {
+        GateVerdict::Pass
+    } else {
+        GateVerdict::Fail
+    };
+    let seconds = captured.duration.as_secs_f32();
+    Run {
+        result: GateResult {
+            gate: gate.id.clone(),
+            verdict,
+            seconds,
+            summary,
+            tail,
+            attempts: Vec::new(),
         },
-        seconds: captured.duration.as_secs_f32(),
-        summary,
-        tail,
-        attempts: Vec::new(),
+        attempt: Attempt {
+            seconds,
+            verdict,
+            timed_out,
+            load: load.as_ref().map(load::Load::note).unwrap_or_default(),
+        },
+        overloaded: load.is_some_and(|load| load.overloaded()),
     }
 }
 
