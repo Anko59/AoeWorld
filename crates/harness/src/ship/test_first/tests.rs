@@ -1,9 +1,11 @@
 mod history;
 mod history_cli;
+mod red;
+mod red_findings;
+mod red_pr;
 
 use super::{Kind, build_keys, exemption, report, summary, test_marker};
 use crate::ship::{
-    evidence::Verdict,
     git, ship,
     tests::{fixture, offline, run},
 };
@@ -254,16 +256,18 @@ fn the_report_reaches_the_review_facts() {
 }
 
 #[test]
-fn ship_proceeds_whatever_the_report_says() {
+fn ship_refuses_untested_product_and_keeps_the_ordering_report() {
     let (_temp, root) = fixture("true");
     // Product code with no test before it, a build script and no exemption.
     write(&root, "crates/sim/src/lib.rs", "pub fn f() {}\n");
     write(&root, "crates/sim/build.rs", "fn main() {}\n");
     run(&root, &["add", "-A"]);
     run(&root, &["commit", "-q", "-m", "untested product"]);
-    let evidence = ship(&root, &offline()).expect("ship");
-    assert_eq!(evidence.verdict, Verdict::Pass);
-    let text = summary(&root, &evidence.merge_base, &evidence.head);
+    let error = ship(&root, &offline()).unwrap_err().to_string();
+    assert!(error.contains("missing matching red record"), "{error}");
+    let base = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let text = summary(&root, &base, &head);
     assert!(
         text.contains("before the first product commit: 0\n"),
         "{text}"

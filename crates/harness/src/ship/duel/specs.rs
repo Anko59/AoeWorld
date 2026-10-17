@@ -221,6 +221,34 @@ pub(crate) fn unchanged(current: &str, old: &str, line: usize) -> bool {
         && rest(current, &current_calls) == rest(old, &old_calls)
 }
 
+/// A JSON location must land on a parsed declaration, even for a new spec.
+pub(in crate::ship) fn identified(source: &str, line: usize) -> bool {
+    definitions(source).is_some_and(|definitions| definitions.iter().any(|(_, at)| *at == line))
+}
+
+/// Static relative imports/re-exports, lexed so comments and quoted examples
+/// cannot attribute unrelated specs to a changed helper.
+pub(in crate::ship) fn imports(source: &str) -> Option<Vec<String>> {
+    let tokens = tokens(source)?;
+    Some(
+        tokens
+            .windows(2)
+            .filter_map(|pair| {
+                let [keyword, path] = pair else { return None };
+                if !keyword.string && matches!(keyword.text, "from" | "import") && path.string {
+                    let text = path.text;
+                    if (text.starts_with('\'') && text.ends_with('\''))
+                        || (text.starts_with('"') && text.ends_with('"'))
+                    {
+                        return Some(text[1..text.len() - 1].to_owned());
+                    }
+                }
+                None
+            })
+            .collect(),
+    )
+}
+
 fn regex_end(bytes: &[u8], start: usize) -> Option<usize> {
     let mut i = start + 1;
     let mut class = false;

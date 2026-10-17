@@ -1,0 +1,77 @@
+//! A changed Rust test that does not compile because it calls an API the PR adds is red.
+use super::{git, is_test};
+use crate::ship::duel::focus::CheckReport;
+use std::{collections::BTreeSet, path::Path};
+
+/// Error codes that name an item the compiler cannot find.
+const MISSING: &[&str] = &[
+    "E0405", "E0412", "E0422", "E0423", "E0425", "E0432", "E0433", "E0531", "E0560", "E0599",
+    "E0609",
+];
+
+/// The items of the PR's added product code that the red build could not find,
+/// when every compile error is such a miss inside a changed test file.
+pub(super) fn missing(
+    root: &Path,
+    base: &str,
+    head: &str,
+    paths: &[String],
+    report: &CheckReport,
+) -> git::Result<Vec<String>> {
+    if report.unavailable.is_some() || report.compile_errors.is_empty() {
+        return Err(
+            "red: the build failed without readable compile errors; not a named failing test"
+                .into(),
+        );
+    }
+    let added = added_identifiers(root, base, head)?;
+    let mut missing = BTreeSet::new();
+    for error in &report.compile_errors {
+        let mut named = error
+            .items
+            .iter()
+            .filter(|item| added.contains(last_segment(item)))
+            .peekable();
+        if !paths.contains(&error.path)
+            || !error.code.as_deref().is_some_and(|c| MISSING.contains(&c))
+            || named.peek().is_none()
+        {
+            return Err(format!(
+                "red: build error {} at {} is not a changed test calling an API the PR adds",
+                error.code.as_deref().unwrap_or("(no code)"),
+                error.path
+            ));
+        }
+        missing.extend(named.cloned());
+    }
+    Ok(missing.into_iter().collect())
+}
+
+fn last_segment(item: &str) -> &str {
+    item.rsplit("::")
+        .next()
+        .unwrap_or(item)
+        .trim_matches(['{', '}', ' '])
+}
+
+/// Identifiers on lines the PR adds to files that are not tests.
+fn added_identifiers(root: &Path, base: &str, head: &str) -> git::Result<BTreeSet<String>> {
+    let patch = git::git_raw(root, &["diff", "-U0", "--no-renames", base, head])?;
+    let mut identifiers = BTreeSet::new();
+    let mut product = false;
+    for line in patch.lines() {
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            product = !is_test(path);
+        } else if line.starts_with("+++ ") {
+            product = false;
+        } else if product && let Some(added) = line.strip_prefix('+') {
+            identifiers.extend(
+                added
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .filter(|word| !word.is_empty())
+                    .map(str::to_owned),
+            );
+        }
+    }
+    Ok(identifiers)
+}
