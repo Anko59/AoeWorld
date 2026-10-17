@@ -98,7 +98,10 @@ programs (#289, #294), water drawn by depth (#284) and four more ground sheets
 (#291) used the whole allowance, leaving `dev` itself at the cap. It was re-taken on
 2026-10-14 at 261677 B, measured on `dev` 7a143b5: rivers with banks and fords (#348, #350), blended
 shorelines (#349), play feedback (#361) and connected cliff walls (#370) put `dev` itself 1169 B over
-the cap, so every pull request failed the comparison. A baseline moves only in its own reviewed
+the cap, so every pull request failed the comparison. It was re-taken on 2026-10-17 at
+274135 B, measured on `dev` 3428ce55: the client batch of HUD (#434), setup-only maps (#451),
+visuals (#452) and village controls (#459) left `dev` 625 B under the cap, so the next client
+change would fail. A baseline moves only in its own reviewed
 change, with the reason recorded here. These measured deterministic comparisons pass
 locally. Encoded network bytes and tick durations are informational because
 they vary with scheduling. The dedicated hardware environment and
