@@ -149,7 +149,7 @@ pub(super) fn nearest_river_reach(
         let Some((distance, station)) = line_position(&reach.line_points, x, y) else {
             continue;
         };
-        if reach.discharge < super::channels::minimum_discharge(spacing)
+        if reach.discharge < super::channels::minimum_discharge()
             || !super::channels::corridor_intersects_cell(
                 &reach.line_points,
                 x,

@@ -2,7 +2,7 @@ use super::super::channels::segments;
 use super::*;
 
 #[test]
-fn channel_width_uses_discharge_and_scale_and_short_reaches_have_a_ford() {
+fn channel_width_uses_discharge_and_short_reaches_have_a_ford() {
     let directory = TestDirectory::new();
     let mut rivers = river_dataset(&directory);
     let definition =
@@ -11,25 +11,28 @@ fn channel_width_uses_discharge_and_scale_and_short_reaches_have_a_ford() {
         vector_features(&mut rivers, (-180.0, -90.0, 180.0, 90.0), &definition, true)
             .expect("source lines");
     let bounds = [-15000.0, -15000.0, 15000.0, 15000.0];
-    let ordinary = segments(&features, 30000.0, 500, bounds, 1875.0).expect("ordinary scale");
-    assert!(
-        ordinary
-            .iter()
-            .all(|s| (8 * 256..9 * 256).contains(&s.width_units))
+    let ordinary = segments(&features, 30000.0, 500, bounds).expect("ordinary scale");
+    assert!(!ordinary.is_empty());
+    let compressed = segments(&features, 30000.0, 50, bounds).expect("compressed scale");
+    let widths = |segments: &[aoe_map::RiverSegment]| {
+        segments.iter().map(|s| s.width_units).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        widths(&ordinary),
+        widths(&compressed),
+        "width follows discharge, not the metres per tile"
     );
-    let compressed = segments(&features, 30000.0, 50, bounds, 1875.0).expect("compressed scale");
-    assert!(compressed.iter().all(|s| s.width_units == 3 * 256));
     for feature in &mut features {
         let reach = feature.river_reach.as_mut().expect("reach");
-        reach.discharge = 3600.0;
+        reach.discharge = 100_000.0;
     }
-    let large = segments(&features, 30000.0, 500, bounds, 1875.0).expect("large river");
+    let large = segments(&features, 30000.0, 500, bounds).expect("large river");
     assert!(large.iter().all(|s| s.width_units == 10 * 256));
     for feature in &mut features {
         let reach = feature.river_reach.as_mut().expect("reach");
         reach.line_points = vec![(-30.0, 0.0), (30.0, 0.0)];
     }
-    let short = segments(&features, 30000.0, 500, bounds, 1875.0).expect("inter-lake reach");
+    let short = segments(&features, 30000.0, 500, bounds).expect("inter-lake reach");
     assert!(!short.is_empty());
     assert!(short.iter().all(|s| {
         s.sample([250 * 256, 250 * 256], 0)
@@ -77,14 +80,8 @@ fn written_segments_are_split_at_page_half_width_margin() {
     features.truncate(1);
     features[0].river_reach.as_mut().expect("reach").line_points =
         vec![(-10000.0, 0.0), (10000.0, 0.0)];
-    let lines = segments(
-        &features,
-        30000.0,
-        500,
-        [-1000.0, -1000.0, 1000.0, 1000.0],
-        1875.0,
-    )
-    .expect("clipped lines");
+    let lines = segments(&features, 30000.0, 500, [-1000.0, -1000.0, 1000.0, 1000.0])
+        .expect("clipped lines");
     assert_eq!(lines.len(), 1);
     let lower = ((14000.0 / 60.0) * 256.0_f64).round() as i32 - 5 * 256;
     let upper = ((16000.0 / 60.0) * 256.0_f64).round() as i32 + 5 * 256;

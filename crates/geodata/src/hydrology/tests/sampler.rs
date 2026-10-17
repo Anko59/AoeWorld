@@ -488,8 +488,13 @@ fn coarse_offcentre_rivers_rasterize_as_continuous_lines() {
 #[path = "sampler/channel_rules.rs"]
 mod channel_rules;
 
+#[path = "sampler/cutoff.rs"]
+mod cutoff;
 #[path = "sampler/decoy.rs"]
 mod decoy;
 #[path = "sampler/lake_raster.rs"]
 mod lake_raster;
 use decoy::{assert_worldcover_decoy_survives, write_worldcover_decoy};
+
+#[path = "sampler/width.rs"]
+mod width;

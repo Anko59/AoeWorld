@@ -88,6 +88,10 @@ pub(super) struct Index {
     bins: Vec<Vec<u16>>,
 }
 
+/// Squared distance, ford phase and whether every channel covering the point
+/// is narrow enough to wade.
+pub(super) type Hit = (i128, bool, bool);
+
 impl Index {
     pub(super) fn new(segments: &[RiverSegment], origin: [i64; 2], extent: i64) -> Self {
         let mut index = Self {
@@ -128,27 +132,24 @@ impl Index {
         (low[1]..=high[1])
             .any(|y| (low[0]..=high[0]).any(|x| !self.bins[(y * BINS + x) as usize].is_empty()))
     }
-    pub(super) fn sample(&self, point: [i64; 2], radius: i64) -> Option<(i128, bool)> {
-        self.query(point, radius, None)
+    pub(super) fn sample(&self, point: [i64; 2], radius: i64, min_width_units: u16) -> Option<Hit> {
+        self.query(point, radius, None, min_width_units)
     }
-    pub(super) fn physical(
-        &self,
-        point: [i64; 2],
-        radius: i64,
-        width_noise: i64,
-    ) -> Option<(i128, bool)> {
-        self.query(point, radius, Some(width_noise))
+    pub(super) fn physical(&self, point: [i64; 2], radius: i64, width_noise: i64) -> Option<Hit> {
+        self.query(point, radius, Some(width_noise), 0)
     }
     fn query(
         &self,
         point: [i64; 2],
         radius: i64,
         width_noise: Option<i64>,
-    ) -> Option<(i128, bool)> {
+        min_width_units: u16,
+    ) -> Option<Hit> {
         let radius = radius.max(0);
         let low = [0, 1].map(|axis| self.bin(point[axis] - radius, axis));
         let high = [0, 1].map(|axis| self.bin(point[axis] + radius, axis));
-        let mut best = None;
+        let mut best: Option<(i128, bool)> = None;
+        let mut wide = false;
         // A segment may occupy several queried bins. Preserve source order
         // for equal distances (and therefore ford ties), testing it once.
         let mut seen = [0_u64; crate::MAX_RIVER_SEGMENTS_PER_PAGE.div_ceil(64)];
@@ -164,6 +165,9 @@ impl Index {
                 let bit = word.trailing_zeros() as usize;
                 word &= word - 1;
                 let id = word_index * 64 + bit;
+                if self.segments[id].width_units < min_width_units {
+                    continue;
+                }
                 let parts = if width_noise.is_some() {
                     &self.shaped[id][..]
                 } else {
@@ -172,19 +176,21 @@ impl Index {
                 for part in parts {
                     let mut part = *part;
                     if let Some(noise) = width_noise {
-                        part.width_units = (i64::from(part.width_units) + 2 * noise)
-                            .clamp(3 * 256, 10 * 256)
-                            as u16;
+                        part.width_units = (i64::from(part.width_units) + 2 * noise).clamp(
+                            i64::from(crate::MIN_RIVER_WIDTH_UNITS),
+                            i64::from(crate::MAX_RIVER_WIDTH_UNITS),
+                        ) as u16;
                     }
-                    if let Some(hit) = part.sample(point, radius)
-                        && best.is_none_or(|(distance, _)| hit.0 < distance)
-                    {
-                        best = Some(hit);
+                    if let Some(hit) = part.sample(point, radius) {
+                        wide |= self.segments[id].width_units > crate::MAX_WADEABLE_WIDTH_UNITS;
+                        if best.is_none_or(|(distance, _)| hit.0 < distance) {
+                            best = Some(hit);
+                        }
                     }
                 }
             }
         }
-        best
+        best.map(|(distance, ford)| (distance, ford, !wide))
     }
 }
 

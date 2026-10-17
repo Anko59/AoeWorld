@@ -282,7 +282,6 @@ impl Sampler {
                         *east.last().ok_or(GeodataError::Projection)? + spacing / 2.0,
                         north[0] + spacing / 2.0,
                     ],
-                    spacing,
                 )?,
                 level: 0,
                 x: x / PAGE,

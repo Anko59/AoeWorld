@@ -1,7 +1,16 @@
+use super::super::super::minimap::MINIMAP_MIN_RIVER_WIDTH_UNITS;
 use super::*;
 use aoe_map::{Provenance, WaterKind};
 
 fn river_fixture(corrected: bool) -> MapChunkGenerator {
+    river_network_fixture(corrected, Vec::new(), 2)
+}
+
+fn river_network_fixture(
+    corrected: bool,
+    extra: Vec<aoe_map::RiverSegment>,
+    biome: u8,
+) -> MapChunkGenerator {
     use aoe_map::{
         HydrologyEvidenceIndex, HydrologyEvidencePage, HydrologyWaterPolicy, ModernLandCoverPage,
         RiverSegment,
@@ -97,7 +106,7 @@ fn river_fixture(corrected: bool) -> MapChunkGenerator {
             y: 0,
             width: 4,
             height: 4,
-            potential_biome_class: vec![2; 16],
+            potential_biome_class: vec![biome; 16],
         }),
         EnvironmentPage::HydrologyEvidence(HydrologyEvidencePage {
             level: 0,
@@ -108,15 +117,17 @@ fn river_fixture(corrected: bool) -> MapChunkGenerator {
             kind: vec![aoe_map::HydrologyKind::NoEvidence as u8; 4],
             method: vec![0; 4],
             water_model: model,
-            river_segments: vec![RiverSegment {
+            river_segments: std::iter::once(RiverSegment {
                 start: [64 * 256, 0],
                 end: [64 * 256, 2048 * 256],
-                width_units: 3 * 256,
+                width_units: MINIMAP_MIN_RIVER_WIDTH_UNITS,
                 station_start: 0,
                 station_end: 2048 * 256,
                 source_delta: [0, 524288],
                 source_station_delta: 524288,
-            }],
+            })
+            .chain(extra)
+            .collect(),
         }),
         EnvironmentPage::ModernLandCover(ModernLandCoverPage {
             level: 0,
@@ -170,7 +181,7 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
         let position = TileCoord::new(66, row * 4 + 2);
         assert!(
             generator
-                .river_within_with_cancel(position, 3, &|| false)
+                .river_within_with_cancel(position, 3, 0, &|| false)
                 .unwrap()
         );
         let point = generator
@@ -194,4 +205,103 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
         MinimapClass::River as u8,
         "the uncorrected subpixel reach must remain visible"
     );
+}
+
+fn vertical(tile_x: i32, width_tiles: u16) -> aoe_map::RiverSegment {
+    aoe_map::RiverSegment {
+        start: [tile_x * 256, 0],
+        end: [tile_x * 256, 2048 * 256],
+        width_units: width_tiles * 256,
+        station_start: 0,
+        station_end: 2048 * 256,
+        source_delta: [0, 524288],
+        source_station_delta: 524288,
+    }
+}
+
+#[test]
+fn minimap_draws_rivers_by_importance_not_every_stream() {
+    // The fixture's own river at x = 64 is the narrowest drawn width; sixty
+    // three-tile streams are omitted and one main river is eight tiles wide.
+    let mut network = (0..60)
+        .map(|i| vertical(140 + 30 * i, 3))
+        .collect::<Vec<_>>();
+    network.push(vertical(1000, 8));
+    let generator = river_network_fixture(false, network, 2);
+    let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("network raster");
+    let pixels = &raster[MINIMAP_HEADER_BYTES..];
+    let water = pixels
+        .iter()
+        .filter(|p| **p & 15 == MinimapClass::River as u8)
+        .count();
+    assert!(
+        water * 100 < pixels.len() * 5,
+        "{water} of {} pixels are water: small streams must not flood the map",
+        pixels.len()
+    );
+    for row in 0..512 {
+        assert_eq!(
+            pixels[row * 512 + 250] & 15,
+            MinimapClass::River as u8,
+            "main river, row {row}"
+        );
+    }
+}
+
+#[test]
+fn an_omitted_stream_in_a_desert_is_drawn_as_desert_not_grass() {
+    // The fixture's own river is drawn; a three-tile stream through the centre
+    // of pixel column 75 is narrower than the drawn width and is omitted.
+    let generator = river_network_fixture(false, vec![vertical(302, 3)], 27);
+    let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("desert raster");
+    let pixels = &raster[MINIMAP_HEADER_BYTES..];
+    let far = pixels[100 * 512 + 300] & 15;
+    assert_eq!(far, MinimapClass::Sand as u8, "desert land is sand");
+    let wet = [10, 100, 300, 500]
+        .into_iter()
+        .filter(|row| {
+            let point = generator
+                .landscape_point_with_cancel(TileCoord::new(302, row * 4 + 2), &|| false)
+                .unwrap()
+                .unwrap();
+            classify(&point) == MinimapClass::River
+        })
+        .count();
+    assert!(
+        wet > 0,
+        "the stream must put water under the sample centres"
+    );
+    for row in [10, 100, 300, 500] {
+        assert_eq!(
+            pixels[row * 512 + 75] & 15,
+            far,
+            "row {row}: an omitted stream shows the land's own class"
+        );
+    }
+}
+
+#[test]
+fn procedural_fallback_rivers_without_geometry_stay_on_the_minimap() {
+    let mut drawn = 0;
+    for seed in 0..4_u8 {
+        let generator = MapChunkGenerator::new([seed; 32], 1, 2048);
+        let raster = minimap_raster(&generator, 2048, 60000, 0, &|| false).expect("fallback");
+        for y in 0..512_i32 {
+            for x in 0..512_i32 {
+                let point = generator
+                    .landscape_point_with_cancel(TileCoord::new(x * 4 + 2, y * 4 + 2), &|| false)
+                    .unwrap()
+                    .unwrap();
+                if classify(&point) == MinimapClass::River {
+                    drawn += 1;
+                    assert_eq!(
+                        raster[MINIMAP_HEADER_BYTES + y as usize * 512 + x as usize] & 15,
+                        MinimapClass::River as u8,
+                        "seed {seed} pixel ({x}, {y})"
+                    );
+                }
+            }
+        }
+    }
+    assert!(drawn > 0, "the fallback maps contain river water");
 }

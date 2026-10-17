@@ -41,9 +41,17 @@ limits also apply. Geometry, width, distance stations and original segment metad
 content root. The required geometry field changes the single current format
 in place: regenerate packages and clear chunk caches; there is no old reader.
 
-For cells at most 60 geographic metres across, keep reaches with discharge
-at least 0.1 m³/s. On coarser grids the cutoff is cell metres / 100, clamped
-to 0.1–50 m³/s. Evidence cells intersecting the line corridor are retained
+Reaches keep a fixed real-world floor of 0.1 m³/s, the smallest discharge
+HydroRIVERS lists, at every map size: the same area keeps the same rivers on
+Tiny, Small, Large and Giant maps (on the Paris basin Large keeps the 204.7 km
+of river in the central 30 km that Tiny keeps; the former size-scaled cutoff
+kept 103.2 km). A page holds at most 1024 segments and 48 KiB of serialized
+segments, which keeps a dense page inside the 128 KiB directory page limit.
+When its reaches would exceed either bound, whole reaches are kept by falling
+discharge (lower reach id first on a tie) and the rest are dropped: a
+deterministic safety cap that only dense pages reach (on Giant, whose pages are
+120 km wide), not a cutoff. The evidence cells and topology are not capped.
+Evidence cells intersecting the line corridor are retained
 by exact segment-to-cell-rectangle distance at most the river half-width.
 This data stage persists and validates geometry; terrain composition and river
 presentation are separate changes. This stage adds no river terrain or rendering
@@ -65,16 +73,27 @@ hardware performance require separate qualification.
 
 ## Terrain composition and minimap
 
-Physical water uses distance to the source line, never the evidence cell's entire square. Bank-to-bank width is
-`10 * sqrt(mean discharge)` metres, clamped to 5–600 metres, converted at the
-map's geographic metres per tile and clamped to 3–10 tiles for playability.
-Source bends survive sampling and tile/chunk boundaries. Runtime queries round
+Physical water uses distance to the source line, never the evidence cell's entire square. Rivers are drawn by
+importance. Bank-to-bank width in tiles is `1 + 1.5 * log10(discharge / 0.1)` for a
+mean discharge in m³/s, clamped to 1–10 tiles. It depends on discharge alone, never on
+the metres per tile, so a river keeps its rank at every map size: 0.1 m³/s is a one-tile
+stream, 1 m³/s 2.5 tiles, 10 m³/s 4, 100 m³/s 5.5, 1,000 m³/s 7, and the ten-tile
+ceiling needs 100,000 m³/s. HydroRIVERS carries discharge but no Strahler order, so
+discharge is the only rank. A real width (`10 * sqrt(discharge)` metres) would give a
+Paris Large tile of 60 m nothing wider than three tiles, hiding the hierarchy.
+Streams up to 2.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, up to 1 m³/s, about 70%
+of the river length on Paris Large) are wadeable shallows: their tiles are `Ford`
+material, drawn with the light shallow sheet, and passable wherever the surface is
+walkable (a steep ford stays blocking water). Where a wider channel also covers a
+tile, it stays blocking river water. Rivers wider than 2.5 tiles block movement. Source bends survive
+sampling and tile/chunk boundaries. The narrowest river is a one-tile stream; the
+width bounds are `MIN_RIVER_WIDTH_UNITS` and `MAX_RIVER_WIDTH_UNITS`. Runtime queries round
 unambiguous connected vertices with quadratic cuts of at most six tiles or a
 quarter segment, staying within three tiles of the source polyline. Page-clipped
 ends and ambiguous junctions remain attached. A shared inverse world-coordinate
 warp moves all intersecting reaches together: at most one and a half tiles per
 axis on a thirty-two-tile noise lattice. A quarter-tile half-width variation is
-clamped to the same three-to-ten-tile bank-to-bank rules. Neither shaping depends
+clamped to the same one-to-ten-tile bank-to-bank rules. Neither shaping depends
 on chunks, evidence cells or query order. Current output regression pins are regenerated when composition deliberately changes.
 
 Fords span the whole drawn channel and five tiles of its length, repeating
@@ -102,7 +121,10 @@ and marsh sheets. Browser pixel tests check Canvas, WebGL2 and WebGPU.
 The minimap
 uses the same persisted lines with pixel-half-diagonal footprint discovery, so a
 sub-pixel river remains connected at strategic scale without widening its
-physical channel. Lake and sea classes take priority at mouths. A composed
+physical channel. It draws only channels at least 3.5 tiles wide (about 4.7 m³/s,
+the rivers the former size-scaled cutoff kept on Paris Large): narrower streams are
+real water in the game but are omitted from the raster, and a physical water sample
+with no such river nearby is drawn as the dry land it stands on. Lake and sea classes take priority at mouths. A composed
 SetLand correction also wins at the raster sample; the raw footprint cannot
 restore a river removed by that correction. Ordinary dry sample centres keep
 footprint discovery for subpixel rivers.
