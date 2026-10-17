@@ -27,6 +27,23 @@ runs, and the job is green only when both legs are. Each leg restores the cargo
 registry and `target/` cache that the last push to `dev` saved (key: leg,
 `Cargo.lock`, toolchain pin and tools Dockerfile; restore-key: the leg alone);
 pull requests only read it, so they cannot evict it from the repository's 10 GB.
+
+**Source-qualification tier (#388).** `make test-unit` excludes, and
+`make test-source-qualification` runs exactly, the slow offline source
+qualification tests listed in `SOURCE_QUALIFICATION` in
+`crates/harness/src/native/tiers.rs` (one list builds both nextest filtersets, so
+a test is in exactly one run; the new target fails when no test matches, and a
+harness test checks every listed name is a real test function):
+
+| Test (aoe-server) | Quiet-machine time |
+| --- | --- |
+| `source_qualification::tests::orchestration::synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay` | 74-90 s |
+| `source_qualification::tests::orchestration::synthetic_flat_sahara_package_exercises_full_offline_qualification_contract` | 24-72 s |
+| `source_qualification::movement::tests::continuous_source_free_run_completes_all_repeated_waypoints` | about 51 s |
+
+The tier is a `qualification` gate (`gates/registry.json`), so it must run
+post-merge or nightly; a PR that changes walkability, pathing or source
+qualification should also run it locally. The tests stay byte-identical.
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
