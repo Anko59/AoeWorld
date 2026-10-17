@@ -111,7 +111,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             let atlas_uv = terrain_uv(code % 8u, corner);
             let tiled = code % 8u == 6u;
             out.uv = terrain_atlas_uv(sprite.uv, atlas_uv);
-            out.color = vec4<f32>(terrain_tint(code / 8u), 1.0);
+            out.color = vec4<f32>(terrain_tint((code / 8u) % 32u), 1.0);
             out.solid = 1u;
             out.tint_kind = code / 8u;
             if tiled {
@@ -432,11 +432,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             sample = terrain_sample(layer.uv, layer.page, layer.rect, vec2<f32>(0.0), vec2<f32>(0.0));
         }
         // #if mixing
-        if mixing { sample = mixed(sample, material, in.pages.w, in.tint_kind); }
+        if mixing { sample = mixed(sample, material, in.pages.w, in.tint_kind % 32u); }
         // #endif
         if single { texel = sample; } else { texel += sample * weight; }
     }
-    return shaded(texel, in.color, in.tint_kind, in.pages.w);
+    // Packet tint_kind carries the footprint wear above its five tint bits.
+    let worn = shaded(texel, in.color, in.tint_kind % 32u, in.pages.w);
+    let darken = vec3<f32>(0.20, 0.32, 0.38) * (f32(in.tint_kind / 32u) / 15.0);
+    return vec4<f32>(worn.rgb * (vec3<f32>(1.0) - darken), worn.a);
 }
 
 fn shaded(texel: vec4<f32>, color: vec4<f32>, tint: u32, appearance: u32) -> vec4<f32> {

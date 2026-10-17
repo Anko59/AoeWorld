@@ -38,10 +38,13 @@ impl BuildingGround {
         let hash = (face.tile[0] as u32).wrapping_mul(0x9e37_79b9)
             ^ (face.tile[1] as u32).wrapping_mul(0x85eb_ca6b);
         let strength = strength * (0.90 + (hash % 11) as f32 * 0.01);
+        let [red, green, blue] = crate::surface_mesh::WEAR_DARKEN;
         face.color = [
-            face.color[0] * (1.0 - 0.20 * strength),
-            face.color[1] * (1.0 - 0.32 * strength),
-            face.color[2] * (1.0 - 0.38 * strength),
+            face.color[0] * (1.0 - red * strength),
+            face.color[1] * (1.0 - green * strength),
+            face.color[2] * (1.0 - blue * strength),
         ];
+        // Textured ground ignores `color`: the same strength rides the packet.
+        face.set_wear((strength * f32::from(crate::surface_mesh::WEAR_LEVELS)).round() as u8);
     }
 }
