@@ -363,3 +363,21 @@ A generic grass placeholder on a bank falls back to neutral rock detail.
 Synthetic mesh/pixel tests cover these contracts across Canvas, WebGL2 and
 WebGPU; prepared-map screenshots and frame samples are separate qualification,
 not dedicated hardware or finished RTS performance evidence.
+
+## Village work and desktop terrain fidelity
+
+Villager scene poses follow authoritative task/resource state: partial loads
+keep their gathering animation; only Returning selects food, wood or shared
+ore carry art. Nine optional native groups preserve five 15-frame rows, signed
+hotspots, eight-direction mirroring and stationary-carry behavior.
+Town-center wings draw behind the core; reviewed roof/post attachments join the
+native parts without changing their shared ground origin. Footprint wear shades
+existing face colors, retaining geometry, material selection and picking.
+
+Minimum zoom first budgets the actual visible source cells and their closing
+edges rather than treating every cell of their rectangular index as drawable.
+When they fit the unchanged 24,576-triangle cap, source shores, materials and
+heights agree with the closer level. The rectangular index is bounded to at
+most 24,576 slots; at most two top and four closing-edge triangles are counted
+per visible cell. Larger views retain the existing coarse fallback. This does
+not qualify dedicated hardware or finished RTS performance.

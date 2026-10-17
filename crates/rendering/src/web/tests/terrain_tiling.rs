@@ -144,3 +144,20 @@ async fn webgpu_one_level_sand_water_bank_covers_the_review_probe() {
         gap::assert_pixel(pixel, halo);
     }
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_building_wear_darkens_native_textured_terrain() {
+    use crate::game_renderer::wear_fixture as wear;
+    let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
+    let mut probes = Vec::new();
+    for building in [false, true] {
+        let faces = wear::faces(building);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        let five = std::array::from_fn::<_, 5, _>(|i| fixture::PROBES[i]);
+        probes.push(read_pixels(&renderer, faces.len() as u32, five).await);
+    }
+    renderer.device.destroy();
+    wear::assert_worn(&probes[0], &probes[1]);
+}

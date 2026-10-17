@@ -115,7 +115,7 @@ fn unit_selection_movement_resources_grid_and_moving_animation_invalidate() {
 fn a_working_villager_marker_does_not_invalidate_on_animation_ticks() {
     let scene = Rc::new(());
     let mut worker = unit([1.0, 2.0], false, false);
-    worker.kind = aoe_rendering::SceneUnitKind::VillagerWorking;
+    worker.kind = aoe_rendering::SceneUnitKind::VillagerChopping;
     let mut cache = RenderFrameCache::default();
     cache.record_success(&scene, &art(), &[worker], &[], false, 0, camera());
     assert!(!cache.needs_render(&scene, &art(), &[worker], &[], false, 1, camera()));
@@ -150,7 +150,7 @@ fn art() -> aoe_rendering::GameArt {
 fn native_chopping_animates_but_a_stationary_idle_fallback_does_not() {
     let scene = Rc::new(());
     let mut worker = unit([1.0, 2.0], false, false);
-    worker.kind = aoe_rendering::SceneUnitKind::VillagerWorking;
+    worker.kind = aoe_rendering::SceneUnitKind::VillagerChopping;
     let mut art = art();
     let frame = art.walking[0];
     art.village[0] = vec![frame; 75];
@@ -166,7 +166,7 @@ fn native_chopping_animates_but_a_stationary_idle_fallback_does_not() {
 #[wasm_bindgen_test]
 fn offscreen_native_chopping_does_not_request_animation_frames() {
     let mut worker = unit([10000.0, 10000.0], false, false);
-    worker.kind = aoe_rendering::SceneUnitKind::VillagerWorking;
+    worker.kind = aoe_rendering::SceneUnitKind::VillagerChopping;
     let mut art = art();
     art.village[2] = vec![art.walking[0]; 75];
     let camera = SceneCamera {

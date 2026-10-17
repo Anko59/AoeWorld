@@ -9,6 +9,11 @@ pub(super) fn direct_world_layers(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<WorldLayer> {
+    let ground = ground::BuildingGround::new(units);
+    let surfaces = surfaces.into_iter().map(|mut face| {
+        ground.apply(&mut face);
+        face
+    });
     // Reserve the ordinary shadow/body pairs and the extra Town Center pieces.
     let object_capacity = resources
         .len()

@@ -3,30 +3,37 @@ use super::*;
 use crate::SceneUnitKind;
 
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
-    let (frames, stride, animated) = match unit.kind {
-        SceneUnitKind::Scout => (
+    let scout = unit.kind == SceneUnitKind::Scout;
+    let (frames, stride): (&[GameFrame], usize) = if scout {
+        (
             if unit.moving {
                 &art.walking
             } else {
                 &art.standing
             },
             10,
-            unit.moving,
-        ),
-        SceneUnitKind::VillagerWorking if art.village[2].len() == 75 => (&art.village[2], 15, true),
-        SceneUnitKind::VillagerCarrying if art.village[3].len() == 75 => {
-            (&art.village[3], 15, unit.moving)
-        }
-        _ => (
-            if unit.moving {
-                &art.village[1]
-            } else {
-                &art.village[0]
-            },
-            15,
-            unit.moving,
-        ),
+        )
+    } else {
+        let group = match unit.kind {
+            SceneUnitKind::VillagerChopping => 2,
+            SceneUnitKind::VillagerCarryingWood => 3,
+            SceneUnitKind::VillagerForaging => 4,
+            SceneUnitKind::VillagerCarryingFood => 5,
+            SceneUnitKind::VillagerMiningGold => 6,
+            SceneUnitKind::VillagerCarryingGold | SceneUnitKind::VillagerCarryingStone => 7,
+            SceneUnitKind::VillagerMiningStone => 8,
+            _ => usize::from(unit.moving),
+        };
+        (&art.village[group], 15)
     };
+    let animated = unit.moving
+        || matches!(
+            unit.kind,
+            SceneUnitKind::VillagerChopping
+                | SceneUnitKind::VillagerForaging
+                | SceneUnitKind::VillagerMiningGold
+                | SceneUnitKind::VillagerMiningStone
+        );
     (frames.len() >= stride * 5).then_some((frames, stride, animated))
 }
 
@@ -78,14 +85,14 @@ pub(super) fn town_center(
         marker(unit, camera, emit);
         return;
     }
-    // Shadow, rear supports, main structure, front supports, then roofs. All
-    // Native signed anchors are preserved. Roof attachments sit 48 source
-    // pixels lower, joining the outer columns instead of floating above them.
-    for part in [7, 3, 5, 0, 2, 6, 1, 4] {
+    // Rear wings sit behind the central balcony, then the front supports.
+    // The right roof already includes its front column: its native hotspot
+    // needs only half the left roof's vertical attachment. The single front
+    // left and rear right posts meet their eaves at +24/-24 source pixels.
+    // Never rotate or mirror these sunlit parts; all share one ground origin.
+    for part in [7, 3, 5, 1, 4, 0, 2, 6] {
         let mut native = art.town_center[part][0];
-        if matches!(part, 1 | 4) {
-            native.anchor[1] -= 48.0;
-        }
+        native.anchor[1] -= [0.0, 48.0, 24.0, 0.0, 24.0, 0.0, -24.0, 0.0][part];
         let frame = world_frame(native);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((

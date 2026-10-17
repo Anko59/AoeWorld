@@ -196,7 +196,7 @@ pub(crate) fn surface_instance(
     let blend = triangle.texture_blend;
     // A face over several world tiles carries its corners in tile units, its
     // origin tile and its layer materials; the fragment resolves each frame.
-    let tiled = (triangle.texture_mode == crate::surface_mesh::directory::TILED).then(|| {
+    let tiled = (triangle.mode() == crate::surface_mesh::directory::TILED).then(|| {
         let local = crate::surface_mesh::directory::locals(triangle).map(|l| l.map(|v| v as f32));
         let mix = triangle.mix;
         let share =
@@ -252,7 +252,9 @@ pub(crate) fn surface_instance(
             color: [
                 third[0],
                 third[1],
-                f32::from(triangle.tint) * 8.0 + f32::from(triangle.texture_mode),
+                f32::from(triangle.tint) * 8.0
+                    + f32::from(triangle.mode())
+                    + f32::from(triangle.wear()) * 256.0,
                 if blend.is_some() { -3.0 } else { -1.0 },
             ],
             uv: tiled.map_or(uv.uv, |packet| packet.0),

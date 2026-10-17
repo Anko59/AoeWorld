@@ -36,7 +36,7 @@ pub(super) fn raster_surface(
         .map(|values| values.map(|value| f32::from(value) / 255.0));
     // A face over several world tiles resolves each pixel's own tile frame from
     // the atlas directory; without one there is nothing truthful to sample.
-    let tiled = if texture.is_some() && triangle.texture_mode == directory::TILED {
+    let tiled = if texture.is_some() && triangle.mode() == directory::TILED {
         let layers = triangle.texture_materials.unwrap_or([triangle.material; 3]);
         let sheets = layers.map(|material| directory::sheet(atlas, material));
         let (Some(first), Some(second), Some(third)) = (sheets[0], sheets[1], sheets[2]) else {
@@ -48,7 +48,7 @@ pub(super) fn raster_surface(
     };
     let local_uv = match tiled {
         Some((locals, _)) => locals.map(directory::diamond),
-        None => triangle_texture_coordinates(triangle.texture_mode),
+        None => triangle_texture_coordinates(triangle.mode()),
     };
     let Some(plane) = RasterPlane::new(triangle.points) else {
         return;
@@ -182,11 +182,14 @@ pub(super) fn raster_surface(
                         appearance,
                     );
                 }
-                if landscape {
-                    sample
-                } else {
-                    tint_sample(sample, triangle.tint)
-                }
+                wear_sample(
+                    if landscape {
+                        sample
+                    } else {
+                        tint_sample(sample, triangle.tint)
+                    },
+                    triangle.wear(),
+                )
             } else {
                 [
                     (triangle.color[0] * 255.0).round() as u8,
@@ -392,6 +395,25 @@ fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {
         atlas[start + 2],
         atlas[start + 3],
     ]
+}
+
+/// Footprint wear darkens the sampled ground exactly as the GPU shaders do.
+fn wear_sample(texel: [u8; 4], wear: u8) -> [u8; 4] {
+    if wear == 0 {
+        return texel;
+    }
+    let strength = f32::from(wear) / f32::from(crate::surface_mesh::WEAR_LEVELS);
+    let [red, green, blue] = crate::surface_mesh::WEAR_DARKEN;
+    transform_sample(
+        texel,
+        [
+            1.0 - red * strength,
+            1.0 - green * strength,
+            1.0 - blue * strength,
+            1.0,
+        ],
+        [0.0; 4],
+    )
 }
 
 fn tint_sample(texel: [u8; 4], tint: u8) -> [u8; 4] {

@@ -144,6 +144,28 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     order
 }
 
+// Share startup lookup/copy code instead of specializing it for every role.
+#[inline(never)]
+fn group_frames(ranges: &RoleRanges, records: &[GameFrame], role: AssetRole) -> Vec<GameFrame> {
+    match &ranges[role as usize] {
+        Some(range) => records[range.clone()].to_vec(),
+        None => Vec::new(),
+    }
+}
+
+// Keep bounded startup group construction shared across array lengths.
+#[inline(never)]
+fn fill_groups(
+    target: &mut [Vec<GameFrame>],
+    roles: &[AssetRole],
+    ranges: &RoleRanges,
+    records: &[GameFrame],
+) {
+    for (frames, role) in target.iter_mut().zip(roles) {
+        *frames = group_frames(ranges, records, *role);
+    }
+}
+
 pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(error)?;
@@ -245,36 +267,49 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         }
         start = end;
     }
-    let group = |role: AssetRole| {
-        ranges
-            .get(role as usize)
-            .and_then(Option::as_ref)
-            .map(|range| records[range.clone()].to_vec())
-            .unwrap_or_default()
-    };
-    let terrain = TERRAIN_ROLES.map(group);
+    let group = |role| group_frames(&ranges, &records, role);
+    let mut terrain: [Vec<GameFrame>; 12] = Default::default();
+    fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
+    let mut village: [Vec<GameFrame>; 9] = Default::default();
+    fill_groups(
+        &mut village,
+        &[
+            AssetRole::VillagerStanding,
+            AssetRole::VillagerWalking,
+            AssetRole::VillagerChopping,
+            AssetRole::VillagerCarryingWood,
+            AssetRole::VillagerForaging,
+            AssetRole::VillagerCarryingFood,
+            AssetRole::VillagerMiningGold,
+            AssetRole::VillagerCarryingOre,
+            AssetRole::VillagerMiningStone,
+        ],
+        &ranges,
+        &records,
+    );
+    let mut town_center: [Vec<GameFrame>; 8] = Default::default();
+    fill_groups(
+        &mut town_center,
+        &[
+            AssetRole::TownCenterMain,
+            AssetRole::TownCenterRoofLeft,
+            AssetRole::TownCenterSupportLeft,
+            AssetRole::TownCenterSupportsLeft,
+            AssetRole::TownCenterRoofRight,
+            AssetRole::TownCenterSupportsRight,
+            AssetRole::TownCenterSupportRight,
+            AssetRole::TownCenterShadow,
+        ],
+        &ranges,
+        &records,
+    );
+
     Ok((
         GameArt {
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
-            village: [
-                AssetRole::VillagerStanding,
-                AssetRole::VillagerWalking,
-                AssetRole::VillagerWorking,
-                AssetRole::VillagerCarrying,
-            ]
-            .map(group),
-            town_center: [
-                AssetRole::TownCenterMain,
-                AssetRole::TownCenterRoofLeft,
-                AssetRole::TownCenterSupportLeft,
-                AssetRole::TownCenterSupportsLeft,
-                AssetRole::TownCenterRoofRight,
-                AssetRole::TownCenterSupportsRight,
-                AssetRole::TownCenterSupportRight,
-                AssetRole::TownCenterShadow,
-            ]
-            .map(group),
+            village,
+            town_center,
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,
@@ -293,9 +328,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
                 cliff_faces: group(AssetRole::CliffFace),
                 rocks: group(AssetRole::RockPile),
                 shrubs: group(AssetRole::Shrub),
-                grass: group(AssetRole::GrassTuft),
                 stumps: group(AssetRole::DeadwoodStump),
-                reeds: group(AssetRole::GrassReeds),
                 snags: group(AssetRole::DeadwoodTree),
                 logs: group(AssetRole::DeadwoodLog),
             },
