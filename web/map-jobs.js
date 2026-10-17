@@ -1,163 +1,113 @@
-export function initMapJobs({ readJson, controllerHeaders, preparationSummary, mapRequest, refreshPackages, estimate, generate, retry, cancel, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled }) {
-  const historySelect = document.getElementById('job-history');
-  const historyRetry = document.getElementById('retry-history');
+// Setup owns map preparation. Uncertain acceptance keeps the ORIGINAL key.
+// The stated recovery bound (web/start/README.md): a stalled probe releases setup.
+const RECOVERY_TIMEOUT_MS = 10_000;
+export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
   const storageKey = 'aoeworld.map-creation-job';
-  let acceptedId = null;
-  let submission = null;
-  let retryRequest = null;
-  let previousJobs = [];
-  let busy = false;
+  let acceptedId = null, submission = null, busy = false, cancelable = false, recovered = false;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    if (saved && typeof saved === 'object') {
-      if (Number.isSafeInteger(saved.id) && saved.id >= 0) acceptedId = saved.id;
-      else if (/^[0-9a-f]{32}$/.test(saved.submission?.key) && saved.submission.request) {
-        submission = saved.submission;
-        retryRequest = submission.request;
-      }
-    }
-  } catch { /* Storage may be unavailable; server history remains usable. */ }
+    if (Number.isSafeInteger(saved?.id) && saved.id >= 0) acceptedId = saved.id;
+    else if (/^[0-9a-f]{32}$/.test(saved?.submission?.key) && saved.submission.request && typeof saved.submission.request === 'object') submission = saved.submission;
+    else localStorage.removeItem(storageKey);
+  } catch { /* Storage is optional. */ }
+  const pending = () => acceptedId !== null || submission !== null;
   const persist = () => {
     try {
-      if (acceptedId === null && submission === null) localStorage.removeItem(storageKey);
+      if (!pending()) localStorage.removeItem(storageKey);
       else localStorage.setItem(storageKey, JSON.stringify({ id: acceptedId, submission }));
-    } catch { /* In-memory retries still reuse the same key. */ }
+    } catch { /* In-memory recovery remains available. */ }
   };
-  const remember = id => {
-    acceptedId = id;
-    submission = null;
+  const remember = id => { acceptedId = id; submission = null; persist(); };
+  const controls = () => onCancelable?.(cancelable && acceptedId !== null);
+  const submit = async (request, signal) => {
+    if (acceptedId !== null) return;
+    submission ??= { key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''), request };
     persist();
+    const response = await fetch('/maps/jobs', { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders(),
+    }, body: JSON.stringify(submission.request), signal });
+    // A lost acknowledgement or a 5xx is ambiguous. Only a definitive refusal
+    // permits a fresh key; reloading must never manufacture a second job.
+    if (response.status >= 400 && response.status < 500) remember(null);
+    const job = await readJson(response);
+    if (!Number.isSafeInteger(job.id) || job.id < 0) throw new Error('Invalid map job identifier.');
+    remember(job.id);
   };
-  const newSubmission = request => ({
-    key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''),
-    request,
-  });
-  const originalRequest = job => ({ ...job.request, preparation: job.preparation.mode === 'procedural_fallback' ? 'automatic' : job.preparation.mode, hydrology_mode: job.preparation.mode === 'detailed' ? 'vectors' : job.preparation.hydrology_mode ?? 'none' });
-  const controls = () => {
-    generate.disabled = busy || acceptedId !== null || submission !== null;
-    retry.disabled = busy || (acceptedId === null && retryRequest === null);
-    retry.textContent = acceptedId !== null ? 'Resume job' : submission !== null ? 'Recover request' : 'Retry';
-    cancel.disabled = acceptedId === null;
-    onCancelable?.(!cancel.disabled);
-    historyRetry.disabled = busy || acceptedId !== null || submission !== null || !historySelect.value;
-    const selected = previousJobs.find(job => String(job.id) === historySelect.value);
-    historyRetry.textContent = selected && !['failed', 'cancelled'].includes(selected.state) ? 'Resume selected job' : 'Retry selected request';
-  };
-  const refreshHistory = async () => {
-    previousJobs = await readJson(await fetch('/maps/jobs'));
-    historySelect.replaceChildren(new Option('No previous request selected', ''));
-    for (const job of previousJobs.slice().reverse()) {
-      const r = job.request;
-      historySelect.add(new Option(`#${job.id}: ${job.state} · ${r.center_latitude_e7 / 1e7}, ${r.center_longitude_e7 / 1e7} · ${r.requested_side_meters / 1000} km`, String(job.id)));
+  const readJob = async signal => {
+    const response = await fetch(`/maps/jobs/${acceptedId}`, { signal });
+    if (response.status >= 400 && response.status < 500) {
+      remember(null);
+      throw new Error('This preparation is no longer available. Start a new game.');
     }
+    const job = await readJson(response);
+    cancelable = !['completed', 'failed', 'cancelled', 'cancel_requested'].includes(job.state);
     controls();
+    onProgress?.(job);
+    return job;
   };
-  const waitForJob = async id => {
+  const waitForJob = async () => {
     for (;;) {
-      const response = await fetch(`/maps/jobs/${id}`);
-      if (response.status === 404) {
-        remember(null);
-        throw new Error('This job is no longer retained. Select a saved map or retry the request.');
-      }
-      const job = await readJson(response);
-      retryRequest = originalRequest(job);
-      onProgress?.(job);
+      const job = await readJob();
       if (job.state === 'completed') return job;
       if (job.state === 'failed' || job.state === 'cancelled') {
         remember(null);
-        if (job.state === 'cancelled') onCancelled?.();
-        throw new Error(job.error || 'Map creation cancelled.');
+        if (job.state === 'cancelled') { onCancelled?.(); return null; }
+        throw new Error(job.error || 'Map preparation failed.');
       }
-      const progress = job.progress;
-      const phase = progress?.phase || job.stage;
-      const count = progress && Number.isSafeInteger(progress.completed) && Number.isSafeInteger(progress.total)
-        ? ` · ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} ${progress.unit}` : '';
-      const scope = phase === 'downloading_source' ? ' (current source)' : '';
-      estimate.className = '';
-      estimate.textContent = `${phase.replaceAll('_', ' ')}${scope}${count}\n${preparationSummary(job.preparation)}`;
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   };
-  const run = async (request, existingId = acceptedId) => {
+  const run = async request => {
     if (busy) return;
     busy = true;
-    controls();
     try {
       onStart?.();
-      if (existingId === null) {
-        submission ??= newSubmission(request);
-        retryRequest = submission.request;
-        persist();
-        const response = await fetch('/maps/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders() }, body: JSON.stringify(submission.request) });
-        // These replies explicitly reject acceptance; transport/5xx uncertainty
-        // retains the key so recovery cannot submit a second retained job.
-        if ([400, 409, 429].includes(response.status)) { submission = null; persist(); }
-        const job = await readJson(response);
-        if (!Number.isSafeInteger(job.id) || job.id < 0) throw new Error('Invalid map job identifier.');
-        remember(job.id);
-      } else {
-        remember(existingId);
-      }
-      controls();
-      const completed = await waitForJob(acceptedId);
-      const activation = await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() });
-      // A completed package explicitly rejected as unplayable must not trap
-      // setup in resuming that same package when the player chooses a new map.
-      if (activation.status === 400) remember(null);
-      const value = await readJson(activation);
+      await submit(request);
+      const completed = await waitForJob();
+      if (!completed) return;
+      const response = await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() });
+      if (response.status >= 400 && response.status < 500) remember(null);
+      const value = await readJson(response);
       remember(null);
-      retryRequest = null;
-      await refreshPackages();
-      estimate.className = '';
-      const source = value.uses_fallback_data ? 'Fallback' : 'Source-backed';
-      estimate.textContent = value.start_available
-        ? `${source} package active: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\nPackage ${value.content_hash.slice(0, 12)}… · ${value.source_lock_count} verified sources\nReconnect to join the activated world.`
-        : `${source} package available for preview: ${value.tiles_per_side.toLocaleString()} × ${value.tiles_per_side.toLocaleString()} tiles\n${value.message || 'No suitable land start.'} Open its terrain preview; gameplay was not replaced.`;
-      if (completed.preparation_notes?.includes('outside_river_coverage')) {
-        estimate.textContent += '\nThis area is outside river coverage; the map uses overview water without rivers.';
-      }
       onActivated?.(value);
-      retryRequest = null;
     } catch (error) {
-      estimate.className = 'error';
-      const resume = acceptedId !== null ? ' Resume this job to check its status; no new job will be submitted.' : submission !== null ? ' Recover this request using its saved submission key.' : '';
-      estimate.textContent = (error.message || 'Unable to complete map creation.') + resume;
-      onError?.(error.message || 'Unable to complete map creation.', acceptedId !== null || submission !== null);
+      onError?.(error.message || 'Unable to prepare this map.', pending());
     } finally {
-      busy = false;
-      controls();
-      onSettled?.();
-      refreshHistory().catch(() => { historyRetry.disabled = true; });
+      busy = false; controls(); onSettled?.();
     }
   };
-  generate.addEventListener('click', () => {
-    try { run(mapRequest()); }
-    catch (error) { estimate.className = 'error'; estimate.textContent = error.message; }
-  });
-  retry.addEventListener('click', () => run(retryRequest));
-  historySelect.addEventListener('change', controls);
-  historyRetry.addEventListener('click', () => {
-    const job = previousJobs.find(value => String(value.id) === historySelect.value);
-    if (!job) return;
-    retryRequest = originalRequest(job);
-    run(retryRequest, ['failed', 'cancelled'].includes(job.state) ? null : job.id);
-  });
-  const cancelJob = async () => {
-    if (acceptedId === null || cancel.disabled) return;
-    cancel.disabled = true;
-    onCancelable?.(false);
+  const recover = async () => {
+    if (recovered || busy) return;
+    recovered = true;
+    if (!pending()) return;
+    busy = true;
+    onRecovering?.(true);
+    // A timeout is "retry later": the saved key or accepted ID is kept, and
+    // only a definitive 4xx refusal (handled in submit/readJob) clears it.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, RECOVERY_TIMEOUT_MS);
+    try {
+      // Probe exactly once after acquiring the controller. Adopt acceptance,
+      // but let Start/Resume own loading and activation, including Cancel.
+      await submit(null, controller.signal);
+      const job = await readJob(controller.signal);
+      if (['failed', 'cancelled'].includes(job.state)) remember(null);
+    } catch (error) {
+      onError?.(timedOut ? 'Map recovery timed out. Your saved request is kept; try again.' : error.message || 'Unable to recover this map request.', pending());
+    } finally {
+      clearTimeout(timer);
+      busy = false; controls(); onRecovering?.(false); onSettled?.();
+    }
+  };
+  const cancel = async () => {
+    if (acceptedId === null || !cancelable) return;
+    cancelable = false; controls();
     try {
       await readJson(await fetch(`/maps/jobs/${acceptedId}/cancel`, { method: 'POST', headers: controllerHeaders() }));
       if (!busy) run(null);
-    } catch (error) {
-      estimate.className = 'error';
-      estimate.textContent = error.message || 'Unable to cancel map creation.';
-      controls();
-      throw error;
-    }
+    } catch (error) { cancelable = true; controls(); throw error; }
   };
-  cancel.addEventListener('click', () => { cancelJob().catch(() => {}); });
   controls();
-  if (acceptedId !== null) run(null);
-  return { refreshHistory, start: run, cancel: cancelJob, pending: () => acceptedId !== null || submission !== null };
+  return { start: run, cancel, recover, pending };
 }

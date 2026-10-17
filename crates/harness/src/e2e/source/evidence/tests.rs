@@ -3,9 +3,7 @@ use aoe_map::{FieldPyramid, PreparedEnvironment, PyramidLevel};
 use serde_json::{Value, json};
 
 // Synthetic metadata contracts only. No source qualification report is written.
-fn fixture(profile: &str) -> MapPackage {
-    let axis: u16 = if profile == "detailed" { 1024 } else { 128 };
-    let request = MapRequest::default();
+fn pyramid(axis: u16) -> FieldPyramid {
     let mut samples = axis;
     let mut levels = Vec::new();
     loop {
@@ -18,11 +16,28 @@ fn fixture(profile: &str) -> MapPackage {
         }
         samples = samples.div_ceil(2);
     }
+    FieldPyramid { levels }
+}
+fn fixture(profile: &str) -> MapPackage {
+    let axes = if profile == "detailed" {
+        let axis = aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS;
+        aoe_map::OverviewFieldAxes::coupled(axis, axis)
+    } else {
+        aoe_map::OverviewFieldAxes::LANDSCAPE
+    };
+    fixture_axes(profile, axes)
+}
+fn fixture_axes(profile: &str, axes: aoe_map::OverviewFieldAxes) -> MapPackage {
+    let axis = axes.elevation;
+    let request = MapRequest::default();
     let mut environment = PreparedEnvironment {
         samples_per_axis: axis,
         geographic_millimeters_per_sample: 1000,
         page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
-        elevation: FieldPyramid { levels },
+        elevation: pyramid(axis),
+        water: Some(pyramid(axes.water)),
+        vegetation: Some(pyramid(axes.vegetation)),
+        historical_land_use: Some(pyramid(axes.historical)),
         ..Default::default()
     };
     if profile == "detailed" {
@@ -143,4 +158,62 @@ fn offline_reopen_requires_same_package_and_genuinely_separate_chunk() {
     ] {
         assert!(!valid_chunk_path(path, &hash));
     }
+}
+
+#[test]
+fn qualification_rejects_coarse_and_misaligned_current_landscape_axes() {
+    use aoe_map::OverviewFieldAxes;
+    for axes in [
+        OverviewFieldAxes::coupled(128, 128),
+        OverviewFieldAxes {
+            water: 64,
+            ..OverviewFieldAxes::LANDSCAPE
+        },
+        OverviewFieldAxes {
+            vegetation: 64,
+            ..OverviewFieldAxes::LANDSCAPE
+        },
+        OverviewFieldAxes {
+            historical: 512,
+            ..OverviewFieldAxes::LANDSCAPE
+        },
+    ] {
+        let package = fixture_axes("overview", axes);
+        package.validate().expect("valid adversarial metadata");
+        assert!(
+            created_record(
+                "overview",
+                &package,
+                &created(&package, "overview"),
+                package.request
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn detailed_qualification_rejects_overview_categorical_axes() {
+    // Overview categorical fields were sampled at 128 per axis before dev
+    // raised them to the fine grid; detailed qualification must reject them.
+    let package = fixture_axes(
+        "detailed",
+        aoe_map::OverviewFieldAxes {
+            vegetation: 128,
+            water: 128,
+            ..aoe_map::OverviewFieldAxes::LANDSCAPE
+        },
+    );
+    package
+        .validate()
+        .expect("valid adversarial detailed metadata");
+    assert!(
+        created_record(
+            "detailed",
+            &package,
+            &created(&package, "detailed"),
+            package.request
+        )
+        .is_err()
+    );
 }

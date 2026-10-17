@@ -19,7 +19,8 @@ export function initInterface() {
     menu.showModal();
   });
   byId('resume-game').addEventListener('click', () => { menu.close(); scene().focus(); });
-  byId('reconnect').addEventListener('click', () => { menu.close(); byId('map-creator').hidden=true; });
+  byId('quit-game').addEventListener('click', () => { menu.close(); window.aoeStart.menu(); });
+  byId('reconnect').addEventListener('click', () => menu.close());
   let drag = null;
   const box = byId('drag-box');
   document.addEventListener('pointerdown', event => { if (event.target===scene() && event.button===0) drag=[event.clientX,event.clientY]; });
@@ -85,7 +86,7 @@ export function initInterface() {
       byId('carried-loads').innerHTML=loads.map(actor=>`<span class="load-badge" style="left:${actor.x+12}px;top:${actor.y-36}px">${icon(actor.load[0])}${actor.load[1]}</span>`).join('');previousLoads=signature;
     }
   };
-  window.aoeInterface = { numeric(values,status) {
+  window.aoeInterface = { connection(value) { scene().dataset.connected=String(value); }, numeric(values,status) {
     const kinds=['Scout','Villager','TownCenter'], names=['Scout','Villager','Town Center'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Ready to train','Training Villager'];
     const resources=['food','wood','gold','stone',''];

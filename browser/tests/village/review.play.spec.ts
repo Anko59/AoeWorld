@@ -101,7 +101,7 @@ test("Escape disarms Move before the next selection click", async ({
   );
 });
 
-test("the HUD retains the dev creator outside Menu and leaves quitting to setup-only maps", async ({
+test("setup-only maps owns quitting and exposes no in-game creator", async ({
   page,
 }) => {
   await gameAssets(page);
@@ -110,13 +110,9 @@ test("the HUD retains the dev creator outside Menu and leaves quitting to setup-
   await expect(page.locator("#population")).toHaveText("6/10");
   await expect(
     page.getByRole("button", { name: "Open map creator" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await expect(page.locator("#map-creator")).toBeVisible();
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await expect(page.locator("#map-creator")).toBeHidden();
-  await page.locator("#menu-toggle").click();
-  await expect(
-    page.getByRole("button", { name: /Quit to Main Menu/i }),
   ).toHaveCount(0);
+  await page.locator("#menu-toggle").click();
+  await page.getByRole("button", { name: "Quit to Main Menu" }).click();
+  await expect(page.locator("#main-menu")).toBeVisible();
+  await expect(page).not.toHaveURL(/play=1|#/);
 });

@@ -462,7 +462,7 @@ test("new terrain failure replaces an old rejection and recovery stays connected
     const side = Math.min(box.width, box.height);
     await page.mouse.click(
       box.x + (box.width - side) / 2 + side * 0.75,
-      box.y + (box.height - side) / 2 + side * 0.25,
+      box.y + (box.height - side) / 2 + side * 0.5,
     );
     await page.getByRole("button", { name: "Close map overview" }).click();
     await expect(page.locator("#connection")).toHaveText(

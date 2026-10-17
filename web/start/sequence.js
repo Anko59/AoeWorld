@@ -20,7 +20,7 @@ const phaseNames = {
 const getSaved = key => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const save = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* Memory remains usable. */ } };
 
-export function initStartSequence({ mapRequest, readJson, start, cancel }) {
+export function initStartSequence({ readJson, start, cancel }) {
   const root = document.getElementById('start-sequence');
   const direct = new URLSearchParams(location.search).get('play') === '1'
     || /(?:^#|&)\s*(?:x|y|zoom|renderer)=/.test(location.hash);
@@ -40,7 +40,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     el('playground').inert = false;
     gameColour(getSaved(colourKey));
     const idle = () => {};
-    return { begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle, cancelable: idle, cancelled: idle };
+    return { menu() { location.assign('/?skipIntro=1'); }, begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle, cancelable: idle, cancelled: idle };
   }
   root.innerHTML = views();
   let state = 'intro';
@@ -56,7 +56,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   let skirmishJob = false;
   let canCancel = false;
   const fields = ['start-latitude', 'start-longitude', 'start-size', 'start-scale'];
-  const creatorFields = ['map-latitude', 'map-longitude', 'map-side-km', 'map-compression'];
+
 
   function show(next) {
     state = next;
@@ -91,21 +91,13 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
 
   function syncRequest() {
     if (!el('skirmish-form').checkValidity()) throw new Error('Choose valid coordinates, a square size and a scale.');
-    fields.forEach((id, index) => { el(creatorFields[index]).value = el(id).value; });
-    // Skirmish exposes colour and geography only. Source detail, rivers and
-    // deterministic generation use the creator's current automatic policy.
-    el('map-preparation').value = 'automatic';
-    el('map-preparation').dispatchEvent(new Event('change', { bubbles: true }));
-    el('map-hydrology').value = 'automatic';
-    el('map-seed').value = '1';
-    const preset = presets.find(([, , , latitude, longitude]) =>
-      Number(el(fields[0]).value) === latitude && Number(el(fields[1]).value) === longitude);
-    const region = el('map-region');
-    region.value = preset && Array.from(region.options).some(option => option.value === preset[0])
-      ? preset[0] : 'custom';
-    region.dispatchEvent(new Event('change', { bubbles: true }));
-    return mapRequest();
+    const [latitude, longitude, size, scale] = fields.map(id => Number(el(id).value));
+    return { schema_version: 1, center_latitude_e7: Math.round(latitude * 1e7),
+      center_longitude_e7: Math.round(longitude * 1e7), requested_side_meters: Math.round(size * 1000),
+      compression: { numerator: Number.isInteger(scale) ? scale : Math.round(scale * 1000), denominator: Number.isInteger(scale) ? 1 : 1000 },
+      year_ce: 600, seed: 1, reconstruction_profile: 'circa600_v1', preparation: 'automatic', hydrology_mode: 'automatic' };
   }
+
   function locationName() {
     const match = presets.find(([, , , latitude, longitude]) =>
       Number(el(fields[0]).value) === latitude && Number(el(fields[1]).value) === longitude);
@@ -155,8 +147,8 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   el('single-player').addEventListener('click', () => { show('setup'); estimateMap(); });
   el('setup-back').addEventListener('click', () => show('menu'));
   function controllerReady() {
-    const connected = el('connection').textContent === 'connected';
-    const controller = /^[0-9a-f]{48}$/i.test(getSaved('aoeworld.resume-token') || '');
+    const connected = el('scene').dataset.connected === 'true' || el('connection').textContent === 'connected';
+    const controller = /^[0-9a-f]{48}$/i.test(getSaved('aoeworld.resume-token') || '') && el('observer-label').hidden;
     el('start-game').disabled = !connected || !controller || jobRunning;
     el('start-game').firstChild.textContent = recovery ? 'Resume map preparation ' : 'Start Game ';
     el('setup-status').textContent = connected
@@ -190,7 +182,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     el('loading-phase').textContent = label;
   }
   function begin() {
-    // Only setup starts the entry flow. The in-game creator keeps its own UI.
+    // Only setup starts map preparation.
     if (state !== 'setup') return;
     skirmishJob = true;
     jobRunning = true;
@@ -213,10 +205,10 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     tipTimer = setInterval(() => { el('loading-tip').textContent = tips[++tip % tips.length]; }, 6000);
   }
   function error(message, resumable = false) {
-    if (!skirmishJob) return;
+    recovery = resumable;
+    if (!skirmishJob) { controllerReady(); return; }
     waiting = null;
     jobRunning = false;
-    recovery = resumable;
     clearTimeout(terrainTimer);
     clearInterval(tipTimer);
     show('loading');
@@ -273,7 +265,7 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
     }
   }
   const observer = new MutationObserver(checkTerrain);
-  observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-chunks-pending', 'data-chunks-failed', 'data-frame'] });
+  observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-connected', 'data-chunks-pending', 'data-chunks-failed', 'data-frame'] });
   observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-raster', 'data-map-hash'] });
   observer.observe(el('connection'), { childList: true, subtree: true, characterData: true });
   function returnToSetup() {
@@ -321,8 +313,9 @@ export function initStartSequence({ mapRequest, readJson, start, cancel }) {
   locationName();
   controllerReady();
   return {
+    menu() { show('menu'); },
     begin,
-    recover(value) { recovery = value; controllerReady(); },
+    recover(value, active = false) { recovery = value; jobRunning = active; controllerReady(); },
     progress(job) {
       if (!skirmishJob) return;
       const request = job.request;

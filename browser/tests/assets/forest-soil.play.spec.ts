@@ -1,3 +1,4 @@
+import { activatePackage } from "../start/package.js";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -319,13 +320,7 @@ test("explicit original forest soil appears on actual source terrain across thre
         .locator("#minimap")
         .getAttribute("data-map-hash");
       if (!resume && activeHash !== hash) {
-        await page.getByRole("button", { name: "Open map creator" }).click();
-        await page.getByLabel("Saved maps").selectOption(hash);
-        await page.getByRole("button", { name: "Open saved" }).click();
-        await expect(page.locator("#map-estimate")).toContainText(
-          `Saved map active: ${hash.slice(0, 12)}`,
-          { timeout: 60_000 },
-        );
+        expect((await activatePackage(page, hash)).start_available).toBe(true);
         await expect(page.locator("#connection")).toHaveText(/reconnect/);
         await page.getByRole("button", { name: "Menu", exact: true }).click();
         await page.getByRole("button", { name: "Reconnect to server" }).click();

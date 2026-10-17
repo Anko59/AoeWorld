@@ -179,8 +179,11 @@ test("whole-map navigation jumps locally, returns home, and held keys release", 
   await expect(page.locator("#minimap")).not.toHaveClass(/expanded/);
   await page.keyboard.press("Home");
   await expect.poll(() => position(page)).toEqual(start);
-  await page.getByRole("button", { name: "Open map creator" }).click();
-  await page.locator("#map-seed").focus();
+  await page.evaluate(() => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+  });
   const typingStart = await position(page);
   await page.keyboard.press("ArrowRight");
   await page.waitForTimeout(150);
