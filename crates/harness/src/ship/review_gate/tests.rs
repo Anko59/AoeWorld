@@ -9,6 +9,7 @@ mod publish;
 pub(in crate::ship) use publish::publish_calls;
 mod after_approval;
 mod ahead;
+mod lock_during_review;
 mod patch_reuse;
 mod reuse;
 mod reuse_policy;
