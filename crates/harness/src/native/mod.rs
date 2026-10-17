@@ -4,6 +4,7 @@ use std::{path::Path, time::Duration};
 
 pub(crate) mod affected;
 pub(crate) mod part;
+pub(crate) mod tiers;
 
 const ARGS: &[&str] = &[
     "nextest",
@@ -23,7 +24,19 @@ const BUDGET: Duration = Duration::from_secs(600);
 /// Git environment clearing belongs to process::run_in; other credentials and
 /// PATH are not isolated by this helper.
 pub(crate) fn run_in(root: &Path, environment: &[(&str, &str)]) -> Result<(), ProcessError> {
-    process::run_in(root, "cargo", ARGS, environment, BUDGET)
+    let exclude = tiers::exclude();
+    let args = [ARGS, &["-E", exclude.as_str()]].concat();
+    process::run_in(root, "cargo", &args, environment, BUDGET)
+}
+
+/// Budget of the source-qualification tier, which `test_unit` excludes.
+const SOURCE_BUDGET: Duration = Duration::from_secs(1800);
+
+/// Run exactly the tests of [`tiers::SOURCE_QUALIFICATION`]; fail when none match.
+pub(crate) fn test_source_qualification() -> Result<(), ProcessError> {
+    let include = tiers::include();
+    let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
+    process::run("cargo", &args, SOURCE_BUDGET)
 }
 
 pub(crate) fn lint() -> Result<(), ProcessError> {
@@ -84,12 +97,14 @@ fn run_scope(packages: Option<&[String]>) -> Result<(), ProcessError> {
     if packages.is_none() {
         run_in(Path::new("."), &[])?;
     } else {
+        let exclude = tiers::exclude();
         let nextest: Vec<&str> = ARGS
             .iter()
             .flat_map(|arg| match *arg {
                 "--workspace" => scope.clone(),
                 other => vec![other],
             })
+            .chain(["-E", exclude.as_str()])
             .collect();
         process::run("cargo", &nextest, BUDGET)?;
     }

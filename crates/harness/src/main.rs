@@ -94,6 +94,8 @@ enum Command {
     FmtCheck,
     Lint,
     TestUnit,
+    /// The slow source-qualification tests that `test-unit` excludes.
+    TestSourceQualification,
     LoadStatus,
     /// Run `argv` holding the heavy slot of gate `gate` (the registry decides whether it is heavy).
     Slot {
@@ -266,6 +268,7 @@ fn run(
         Command::FmtCheck => format_commands(true)?,
         Command::Lint => native::lint()?,
         Command::TestUnit => native::test_unit(native::affected::requested())?,
+        Command::TestSourceQualification => native::test_source_qualification()?,
         Command::LoadStatus => slots::print_status(Path::new("."), slots)?,
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
         Command::TestWasm => wasm_test::run()?,

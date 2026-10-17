@@ -71,7 +71,7 @@ test-e2e-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
-.PHONY: test-harness test-harness-steps test-unit-steps test-wasm-steps
+.PHONY: test-harness test-harness-steps test-unit-steps test-wasm-steps test-source-qualification test-source-qualification-steps
 test-harness: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-harness -- make --no-print-directory test-harness-steps
 
@@ -80,6 +80,12 @@ test-harness-steps:
 
 test-unit-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
+
+test-source-qualification: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) test-source-qualification -- make --no-print-directory test-source-qualification-steps
+
+test-source-qualification-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-source-qualification
 
 test-wasm-steps:
 	@docker run --rm --init $(HEAVY_ENV) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
