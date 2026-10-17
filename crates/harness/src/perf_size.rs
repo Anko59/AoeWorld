@@ -1,5 +1,5 @@
 //! Optimized, reproducibly compressed WASM bundle size governance.
-use crate::perf::{Comparison, compare};
+use crate::perf::{Comparison, Verdict, compare, regression_floor};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs, path::Path};
 
@@ -70,15 +70,41 @@ pub fn comparison() -> Result<Comparison, Box<dyn Error>> {
     )
 }
 
-fn comparison_at(baseline: &Path, artifact: &Path) -> Result<Comparison, Box<dyn Error>> {
+pub(crate) fn comparison_at(
+    baseline: &Path,
+    artifact: &Path,
+) -> Result<Comparison, Box<dyn Error>> {
     let baseline: Baseline = serde_json::from_slice(&fs::read(baseline)?)?;
     compare_observed(baseline, observed_at(artifact)?)
+}
+
+/// `make perf-wasm-size`: the optimized gzip bundle against the baseline, with
+/// the comparison `perf-ci` makes in CI (same cap), so `make ship` fails on an
+/// overage before CI does.
+pub fn check() -> Result<(), Box<dyn Error>> {
+    verdict(&comparison()?)
+}
+
+pub(crate) fn verdict(result: &Comparison) -> Result<(), Box<dyn Error>> {
+    let (Some(observed), Some(baseline)) = (result.observed, result.baseline) else {
+        return Err("optimized WASM gzip size or baseline is missing".into());
+    };
+    if result.verdict != Verdict::Pass {
+        let cap = regression_floor(baseline) - 1;
+        return Err(format!(
+            "optimized WASM gzip is {observed} bytes: {:?} against baseline {baseline} (cap {cap}, {} bytes over)",
+            result.verdict,
+            observed.saturating_sub(cap)
+        )
+        .into());
+    }
+    println!("optimized WASM gzip: {observed} bytes, baseline {baseline}: Pass");
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::perf::Verdict;
 
     #[test]
     fn size_baseline_rejects_wrong_identity_and_five_percent_regression() {

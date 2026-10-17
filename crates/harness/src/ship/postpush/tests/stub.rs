@@ -42,6 +42,12 @@ case "$all" in
   */compare/*)
     oid=$(printf '%s\n' "$@" | sed -n 's|.*/compare/dev\.\.\.||p')
     cat "$GH_DIR/compare-$oid.json" ;;
+  */commits/*/status*)
+    sha=$(printf '%s\n' "$@" | sed -n 's|.*/commits/\([^/]*\)/status.*|\1|p')
+    if [ -f "$GH_DIR/status-$sha.json" ]; then cat "$GH_DIR/status-$sha.json"; else echo '{"statuses":[]}'; fi ;;
+  */workflows/ci.yml/runs*)
+    sha=$(printf '%s\n' "$@" | sed -n 's|.*head_sha=\([^&]*\).*|\1|p')
+    if [ -f "$GH_DIR/runs-$sha.json" ]; then cat "$GH_DIR/runs-$sha.json"; else echo '{"workflow_runs":[]}'; fi ;;
   *"/pulls?"*) cat "$GH_DIR/pulls.json" ;;
   *"/issues?"*) cat "$GH_DIR/issues.json" ;;
   */pulls/*)

@@ -18,7 +18,7 @@ pub(super) fn listing(world: &World, nodes: &[serde_json::Value]) {
     world.answer("list.json", &data.to_string());
 }
 
-fn behind(world: &World, number: u64, by: u64) {
+pub(super) fn behind(world: &World, number: u64, by: u64) {
     world.answer(
         &format!("compare-head{number}.json"),
         &format!("{{\"behind_by\": {by}}}"),
@@ -35,7 +35,7 @@ fn behind(world: &World, number: u64, by: u64) {
     );
 }
 
-fn rebased(world: &World) -> Vec<String> {
+pub(super) fn rebased(world: &World) -> Vec<String> {
     world
         .calls()
         .lines()

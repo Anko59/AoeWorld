@@ -352,7 +352,13 @@ impl Registry {
             .iter()
             .filter(|g| g.cadences.contains(&cadence))
             .filter(|g| {
-                cadence == Cadence::Preflight || g.suites.iter().any(|s| suites.contains(s))
+                let selected = g.suites.iter().any(|s| suites.contains(s));
+                // Preflight runs its gates whatever changed, except a gate of
+                // the performance suite alone, which runs when the change
+                // selects performance (a client change, not a docs change).
+                selected
+                    || (cadence == Cadence::Preflight
+                        && g.suites.iter().any(|s| s != "performance"))
             })
             .map(|g| g.id.clone())
             .collect();

@@ -7,6 +7,9 @@
 //! An update that conflicts leaves the pull
 //! request untouched and adds one comment naming the files. At most
 //! `UPDATE_MAX_PRS` pull requests are handled per run, the oldest first.
+//! A pull request whose current head has a CI run in progress or queued is
+//! skipped: an update would cancel that run and start it again from zero; the
+//! next push to `dev`, or the end of that run (`workflow_run`), updates it.
 use super::{BASE, Result, api, carry, comments, post_comment, require_main_session, short};
 use crate::ship::{git, github::gh};
 use std::{
@@ -100,6 +103,37 @@ fn behind(root: &Path, repository: &str, pr: &Waiting) -> Result<bool> {
     Ok(compare["behind_by"].as_u64().unwrap_or(0) > 0)
 }
 
+/// Run states of `ci.yml` that still hold a head's result back.
+const ACTIVE_RUN: [&str; 5] = ["in_progress", "queued", "waiting", "pending", "requested"];
+
+/// Whether CI is running or queued on the pull request's current head: its
+/// latest `required` status is pending, or a `ci.yml` run for the head has not
+/// finished. A finished run, failed or not, does not count.
+fn ci_in_progress(root: &Path, repository: &str, pr: &Waiting) -> Result<bool> {
+    let status = api(
+        root,
+        &[&format!("repos/{repository}/commits/{}/status", pr.head)],
+    )?;
+    let pending = status["statuses"].as_array().is_some_and(|all| {
+        all.iter()
+            .any(|s| s["context"] == "required" && s["state"] == "pending")
+    });
+    if pending {
+        return Ok(true);
+    }
+    let runs = api(
+        root,
+        &[&format!(
+            "repos/{repository}/actions/workflows/ci.yml/runs?head_sha={}&per_page=30",
+            pr.head
+        )],
+    )?;
+    Ok(runs["workflow_runs"].as_array().is_some_and(|all| {
+        all.iter()
+            .any(|run| ACTIVE_RUN.iter().any(|state| run["status"] == *state))
+    }))
+}
+
 pub(super) fn update(root: &Path, max: usize) -> Result<()> {
     update_within(root, max, HEAD_TIMEOUT, POLL_INTERVAL)
 }
@@ -122,6 +156,14 @@ pub(super) fn update_within(
             break;
         }
         if !behind(root, &repository, &pr)? {
+            continue;
+        }
+        if ci_in_progress(root, &repository, &pr)? {
+            println!(
+                "update-prs: #{} skipped: CI in progress on {}",
+                pr.number,
+                short(&pr.head)
+            );
             continue;
         }
         handled += 1;

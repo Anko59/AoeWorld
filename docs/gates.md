@@ -45,6 +45,7 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | build-wasm | `make build-wasm` | — | browser | [Stop, Pr, Ci, Nightly, Preflight] | 900 | yes | wasm-release client and wasm-bindgen web package |
 | perf-instructions | `make perf-instructions` | — | performance | [Pr, Ci, Nightly] | 1800 | yes | pinned Gungraun/Callgrind kernel NDJSON |
 | perf-wasm-size | `make perf-wasm-size` | build-wasm | performance | [Pr, Ci, Nightly] | 300 | — | optimized and deterministic gzip WASM artifacts |
+| perf-wasm-cap | `make perf-wasm-cap` | perf-wasm-size | performance | [Preflight] | 60 | — | optimized gzip WASM within the cap of baselines/perf/wasm.json |
 | perf-full | `make perf-full` | perf-instructions, perf-wasm-size, perf-smoke | performance | [Nightly] | 3600 | yes | population and sparse-world scaling counts and existing comparisons |
 | test-memory-source | `make test-memory-source` | build-wasm, browser-check | browser, assets | [Qualification] | 3600 | — | activated real-pack source map shared-surface browser route |
 | test-creator-source | `make test-creator-source` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | overview and detailed source maps across restart |
