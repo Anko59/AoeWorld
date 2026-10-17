@@ -28,7 +28,12 @@ fn user() -> String {
     format!("{}:{}", nix::unistd::getuid(), nix::unistd::getgid())
 }
 
-fn docker_tools(tree: &Path, target: &Path, cargo_home: &Path, args: &[&str]) -> Result<()> {
+pub(crate) fn docker_tools(
+    tree: &Path,
+    target: &Path,
+    cargo_home: &Path,
+    args: &[&str],
+) -> Result<()> {
     let mut all: Vec<String> = ["run", "--rm", "--init", "--user"]
         .map(String::from)
         .to_vec();
@@ -68,7 +73,7 @@ fn docker_tools(tree: &Path, target: &Path, cargo_home: &Path, args: &[&str]) ->
 
 /// The wasm client into `web/pkg` and the release server into `target/release`
 /// of `target`, as `make build-wasm` and `make dev` do.
-fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result<()> {
+pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result<()> {
     fs::create_dir_all(target)?;
     let wasm = target.join("wasm32-unknown-unknown/wasm-release/aoe_client.wasm");
     let wasm = wasm.display().to_string();

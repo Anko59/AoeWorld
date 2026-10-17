@@ -3,21 +3,21 @@
 //! (docs/showcase.md, "Compare"). A viewer, not a gate: it exits 0 whatever
 //! the differences and fails only when a view could not be captured.
 pub(super) mod bookmarks;
-mod build;
+pub(crate) mod build;
 pub(super) mod capture;
-pub(super) mod config;
+pub(crate) mod config;
 mod pixels;
 pub(super) mod report;
-pub(super) mod server;
+pub(crate) mod server;
 pub(super) mod settle;
 mod side;
 #[cfg(test)]
 mod tests;
 mod view;
 
-pub(super) use bookmarks::Bookmarks;
+pub(crate) use bookmarks::Bookmarks;
 use capture::Shot;
-pub(super) use config::DEFAULT_BOOKMARKS;
+pub(crate) use config::DEFAULT_BOOKMARKS;
 use config::{Config, Source};
 use report::{Report, Status};
 use side::capture_side;

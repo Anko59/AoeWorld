@@ -5,7 +5,7 @@
 //! and, only on PASS, pushes the branch and creates or updates its pull request.
 //! The agent policy denies `git push` and `gh pr create` to every role.
 mod check;
-mod compare;
+pub(crate) mod compare;
 mod describe;
 mod duel;
 pub(crate) use duel::output::JsonOutput;
@@ -67,6 +67,12 @@ pub(crate) enum Commands {
     LevelStats,
     /// Screenshot bookmarked cameras on the build before and after the change (COMPARE_*).
     Compare,
+    /// Build, start or keep current the shared dev server (docs/dev-server.md).
+    DevServer,
+    /// Print the shared dev server's revision, port, uptime and prepared maps.
+    DevServerStatus,
+    /// Stop the shared dev server and its compare view servers.
+    DevServerStop,
     /// Record the showcase video of SHOWCASE_STORYBOARD (docs/showcase.md).
     Showcase,
     /// Validate a showcase storyboard without starting Docker or speech requests.
@@ -192,6 +198,9 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
             check::publish(&root, &options)
         }
         Commands::Compare => compare::execute(&root),
+        Commands::DevServer => crate::devserver::start(&root),
+        Commands::DevServerStatus => crate::devserver::status(&root),
+        Commands::DevServerStop => crate::devserver::stop(&root),
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
         Commands::ShowcaseSession => {

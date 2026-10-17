@@ -62,6 +62,21 @@ impl Config {
         Ok(config)
     }
 
+    /// `AOE_PRESET_MAPS`: a JSON file of creation requests the server prepares
+    /// at boot and whose stored packages it reuses (see `map_jobs::presets`).
+    pub fn preset_maps_from_env() -> Result<Option<PathBuf>, String> {
+        let Some(path) = env::var_os("AOE_PRESET_MAPS").filter(|value| !value.is_empty()) else {
+            return Ok(None);
+        };
+        let file = PathBuf::from(path)
+            .canonicalize()
+            .map_err(|e| format!("invalid AOE_PRESET_MAPS: {e}"))?;
+        if !file.is_file() {
+            return Err("AOE_PRESET_MAPS must name a file".to_owned());
+        }
+        Ok(Some(file))
+    }
+
     fn parse(bind: &str, name: &str, tick_hz: &str) -> Result<Self, String> {
         let bind = bind.parse().map_err(|e| format!("invalid AOE_BIND: {e}"))?;
         let scenario = named(name).ok_or_else(|| format!("unknown AOE_SCENARIO: {name}"))?;

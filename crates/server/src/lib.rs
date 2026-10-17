@@ -46,7 +46,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -69,6 +69,7 @@ pub struct AppState {
     map_worker: Option<PathBuf>,
     geodata_cache_directory: PathBuf,
     map_packages: Arc<RwLock<BTreeMap<String, MapPackage>>>,
+    reuse_prepared_maps: Arc<AtomicBool>,
     page_residencies: Arc<RwLock<page_residency::Registry>>,
     terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
     minimaps: Arc<Mutex<maps::MinimapCache>>,
@@ -98,6 +99,7 @@ impl AppState {
             map_worker: config.map_worker.clone(),
             geodata_cache_directory: config.geodata_cache_directory.clone(),
             map_packages: Arc::new(RwLock::new(map_packages)),
+            reuse_prepared_maps: Arc::new(AtomicBool::new(false)),
             page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
             terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
             minimaps: Arc::new(Mutex::new(maps::MinimapCache::default())),
