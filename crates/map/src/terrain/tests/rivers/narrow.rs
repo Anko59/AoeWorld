@@ -114,17 +114,17 @@ fn a_one_tile_stream_is_wadeable_shallows_that_units_path_through() {
 }
 
 #[test]
-fn a_stream_wider_than_the_shallows_limit_still_blocks_straight_and_diagonal() {
+fn a_river_wider_than_the_shallows_limit_still_blocks_straight_and_diagonal() {
     for (name, segments, from, to) in [
         (
             "straight",
-            channel(130, -1, 130, 258, 640),
+            channel(130, -1, 130, 258, 4 * 256),
             (100, 128),
             (160, 128),
         ),
         (
             "diagonal",
-            channel(-1, -1, 258, 258, 640),
+            channel(-1, -1, 258, 258, 4 * 256),
             (60, 200),
             (200, 60),
         ),
@@ -162,5 +162,57 @@ fn a_stream_joining_a_wide_river_stops_being_shallows_inside_the_wide_channel() 
             "row {y}"
         );
         assert!(!tile(130, y).terrain.passable, "row {y}");
+    }
+}
+
+#[test]
+fn a_narrow_stream_on_sloping_terrain_is_ford_on_every_tile() {
+    // Ratio one: 240 cm over eight tiles is about the traversable grade, so
+    // the land under and beside the stream is steep enough to be cliff-graded.
+    let generator = crossing_with_height(
+        false,
+        Some(&|x, y| (32 - x) * 240 + (y % 7) * 60),
+        stream(130, -1, 130, 258),
+    );
+    let tiles = composed(&generator);
+    let mut river = 0;
+    for point in tiles.iter().filter(|p| p.terrain.water == WaterKind::River) {
+        river += 1;
+        assert_eq!(
+            point.terrain.material,
+            GroundMaterial::Ford,
+            "{:?}",
+            point.tile
+        );
+        assert!(point.terrain.passable, "{:?}", point.tile);
+    }
+    assert!(river > 250, "the stream is long: {river} tiles");
+}
+
+#[test]
+fn a_stream_up_to_two_and_a_half_tiles_is_one_continuous_ford() {
+    // 2.5 tiles is 1 m3/s: the streams above it are rivers. Without a single
+    // width limit a stream would alternate between wading and blocking stretches.
+    for (name, width) in [
+        ("one and a half", 384),
+        ("two", 512),
+        ("two and a half", 640),
+    ] {
+        let generator = crossing_with_geometry(false, false, channel(130, -1, 130, 258, width));
+        let tiles = composed(&generator);
+        let river = tiles
+            .iter()
+            .filter(|p| p.terrain.water == WaterKind::River)
+            .collect::<Vec<_>>();
+        assert!(river.len() > 250, "{name}");
+        for point in river {
+            assert_eq!(
+                point.terrain.material,
+                GroundMaterial::Ford,
+                "{name} {:?}",
+                point.tile
+            );
+            assert!(point.terrain.passable, "{name} {:?}", point.tile);
+        }
     }
 }
