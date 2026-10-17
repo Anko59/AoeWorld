@@ -495,3 +495,6 @@ mod decoy;
 #[path = "sampler/lake_raster.rs"]
 mod lake_raster;
 use decoy::{assert_worldcover_decoy_survives, write_worldcover_decoy};
+
+#[path = "sampler/width.rs"]
+mod width;

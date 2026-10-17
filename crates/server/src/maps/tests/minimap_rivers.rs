@@ -2,6 +2,10 @@ use super::*;
 use aoe_map::{Provenance, WaterKind};
 
 fn river_fixture(corrected: bool) -> MapChunkGenerator {
+    river_network_fixture(corrected, Vec::new())
+}
+
+fn river_network_fixture(corrected: bool, extra: Vec<aoe_map::RiverSegment>) -> MapChunkGenerator {
     use aoe_map::{
         HydrologyEvidenceIndex, HydrologyEvidencePage, HydrologyWaterPolicy, ModernLandCoverPage,
         RiverSegment,
@@ -108,7 +112,7 @@ fn river_fixture(corrected: bool) -> MapChunkGenerator {
             kind: vec![aoe_map::HydrologyKind::NoEvidence as u8; 4],
             method: vec![0; 4],
             water_model: model,
-            river_segments: vec![RiverSegment {
+            river_segments: std::iter::once(RiverSegment {
                 start: [64 * 256, 0],
                 end: [64 * 256, 2048 * 256],
                 width_units: 3 * 256,
@@ -116,7 +120,9 @@ fn river_fixture(corrected: bool) -> MapChunkGenerator {
                 station_end: 2048 * 256,
                 source_delta: [0, 524288],
                 source_station_delta: 524288,
-            }],
+            })
+            .chain(extra)
+            .collect(),
         }),
         EnvironmentPage::ModernLandCover(ModernLandCoverPage {
             level: 0,
@@ -194,4 +200,45 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
         MinimapClass::River as u8,
         "the uncorrected subpixel reach must remain visible"
     );
+}
+
+fn vertical(tile_x: i64, width_tiles: i64) -> aoe_map::RiverSegment {
+    aoe_map::RiverSegment {
+        start: [tile_x * 256, 0],
+        end: [tile_x * 256, 2048 * 256],
+        width_units: (width_tiles * 256) as u16,
+        station_start: 0,
+        station_end: 2048 * 256,
+        source_delta: [0, 524288],
+        source_station_delta: 524288,
+    }
+}
+
+#[test]
+fn minimap_draws_rivers_by_importance_not_every_stream() {
+    // The fixture's own three-tile stream at x = 64, sixty more three-tile
+    // streams, and one main river eight tiles wide.
+    let mut network = (0..60)
+        .map(|i| vertical(140 + 30 * i, 3))
+        .collect::<Vec<_>>();
+    network.push(vertical(1000, 8));
+    let generator = river_network_fixture(false, network);
+    let raster = minimap_raster(&generator, 2048, 60000, 4, &|| false).expect("network raster");
+    let pixels = &raster[MINIMAP_HEADER_BYTES..];
+    let water = pixels
+        .iter()
+        .filter(|p| **p & 15 == MinimapClass::River as u8)
+        .count();
+    assert!(
+        water * 100 < pixels.len() * 5,
+        "{water} of {} pixels are water: small streams must not flood the map",
+        pixels.len()
+    );
+    for row in 0..512 {
+        assert_eq!(
+            pixels[row * 512 + 250] & 15,
+            MinimapClass::River as u8,
+            "main river, row {row}"
+        );
+    }
 }

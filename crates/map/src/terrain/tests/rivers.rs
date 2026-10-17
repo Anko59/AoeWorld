@@ -369,3 +369,6 @@ fn ground_variety_preserves_textured_dirt_river_banks() {
 
 #[path = "rivers/cliffs.rs"]
 mod cliffs;
+
+#[path = "rivers/narrow.rs"]
+mod narrow;

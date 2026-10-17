@@ -4,7 +4,10 @@ use super::super::super::hydrology_sampling::VectorFeature;
 use super::super::channels::{MAX_PAGE_SEGMENT_BYTES, minimum_discharge, segments};
 use super::*;
 
-fn river_features(directory: &TestDirectory, reaches: &[(i64, f64, f64)]) -> Vec<VectorFeature> {
+pub(super) fn river_features(
+    directory: &TestDirectory,
+    reaches: &[(i64, f64, f64)],
+) -> Vec<VectorFeature> {
     let path = directory.path("cutoff-rivers.gpkg");
     let dataset = vector_dataset(&path, "rivers", OGRwkbGeometryType::wkbLineString);
     {
