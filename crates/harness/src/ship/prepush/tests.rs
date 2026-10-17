@@ -96,6 +96,7 @@ fn gate(verdict: GateVerdict) -> GateResult {
         seconds: 1.0,
         summary: String::new(),
         tail: String::new(),
+        attempts: Vec::new(),
     }
 }
 

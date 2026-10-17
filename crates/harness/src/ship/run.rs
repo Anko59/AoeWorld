@@ -28,6 +28,56 @@ pub(crate) struct GateResult {
     pub(crate) summary: String,
     /// The last 40 lines of output when the gate did not pass.
     pub(crate) tail: String,
+    /// Every run, only when a timeout on an overloaded machine was retried (then two).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) attempts: Vec<Attempt>,
+}
+
+/// One run of a gate that was retried after its deadline expired on an overloaded machine.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct Attempt {
+    pub(crate) seconds: f32,
+    pub(crate) verdict: GateVerdict,
+    /// Whether this run hit its budget.
+    pub(crate) timed_out: bool,
+    /// The machine load at the deadline (empty when it did not time out, or could not be read).
+    pub(crate) load: String,
+}
+
+/// What a local gate that times out on an overloaded machine gets: one more run after the load
+/// falls. CI never retries, and nothing else is retried.
+#[expect(dead_code, reason = "the retry itself is wired in the next commit")]
+pub(crate) struct Retry {
+    /// False in CI.
+    local: bool,
+    /// The load now, read at each deadline.
+    load: Box<load::Reader<'static>>,
+    /// Waits, bounded, until the 1-minute load is at or below the core count.
+    wait: Box<dyn Fn() -> Result<(), String>>,
+}
+
+impl Retry {
+    pub(crate) fn new(
+        local: bool,
+        load: Box<load::Reader<'static>>,
+        wait: Box<dyn Fn() -> Result<(), String>>,
+    ) -> Self {
+        Self { local, load, wait }
+    }
+
+    /// The policy of this process: local runs retry, CI never does.
+    pub(crate) fn here() -> Self {
+        Self::new(true, Box::new(load::read), Box::new(|| Ok(())))
+    }
+}
+
+/// Whether `get` reports CI (`GITHUB_ACTIONS` or `CI` set to a non-empty value).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the retry itself is wired in the next commit")
+)]
+pub(crate) fn in_ci(_get: impl Fn(&str) -> Option<String>) -> bool {
+    false
 }
 
 impl GateResult {
@@ -64,6 +114,17 @@ pub(crate) fn run_gates_selecting(
     run_gates_scoped(root, gates, slots, crate::slots::hold, select)
 }
 
+/// `run_gates` with the retry policy injected for fixtures.
+pub(crate) fn run_gates_retrying(
+    root: &Path,
+    gates: &[&Gate],
+    slots: &SlotEnv,
+    take: TakeSlot,
+    _retry: &Retry,
+) -> Vec<GateResult> {
+    run_gates_scoped(root, gates, slots, take, None)
+}
+
 /// The same gate path with acquisition injected for queue/load fixtures.
 pub(crate) fn run_gates_with(
     root: &Path,
@@ -71,7 +132,7 @@ pub(crate) fn run_gates_with(
     slots: &SlotEnv,
     take: TakeSlot,
 ) -> Vec<GateResult> {
-    run_gates_scoped(root, gates, slots, take, None)
+    run_gates_retrying(root, gates, slots, take, &Retry::here())
 }
 
 fn run_gates_scoped(
@@ -94,6 +155,7 @@ fn run_gates_scoped(
                     seconds: 0.0,
                     summary: "Docker is not reachable".into(),
                     tail: String::new(),
+                    attempts: Vec::new(),
                 };
             }
             run_one(root, gate, slots, take, select)
@@ -118,6 +180,7 @@ fn run_one(
                 seconds: 0.0,
                 summary: error.to_string(),
                 tail: String::new(),
+                attempts: Vec::new(),
             };
         }
     };
@@ -162,6 +225,7 @@ fn run_one(
         seconds: captured.duration.as_secs_f32(),
         summary,
         tail,
+        attempts: Vec::new(),
     }
 }
 
@@ -202,3 +266,6 @@ pub(crate) fn strip_ansi(text: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;
