@@ -17,6 +17,7 @@ mod output;
 mod preparation;
 mod scenes;
 pub(crate) mod session;
+mod steps;
 mod timing;
 mod workdir;
 
@@ -45,6 +46,8 @@ pub(crate) use scenes::{Compare, Figure, Reply, SessionStep, Unit};
 #[cfg(test)]
 pub(crate) use scenes::{Role, Verdict};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+pub(crate) use steps::resolve_bookmarks;
 pub(crate) use timing::{Segment, Timings, check_duration, durations, measured_duration, track};
 #[cfg(test)]
 pub(crate) use workdir::{create_work_dir, write_recorder};

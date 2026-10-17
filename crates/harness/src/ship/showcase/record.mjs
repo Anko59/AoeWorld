@@ -17,6 +17,7 @@ import { chromium } from "playwright";
 import { constants, copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { SCENE_STYLE, agentSession, api, compare, timing } from "./scenes.mjs";
+import { runScript } from "./steps.mjs";
 
 const plan = JSON.parse(readFileSync("plan.json", "utf8"));
 const origins = plan.origins;
@@ -149,8 +150,10 @@ async function open(page, scene) {
 }
 
 async function steps(page, scene) {
-  for (const step of scene.steps ?? []) {
-    if ("click" in step) await page.click(step.click, { timeout: 10_000 });
+  for (const [index, step] of (scene.steps ?? []).entries()) {
+    const script = scene.scripts?.[index];
+    if (script) await runScript(page, script, index + 1);
+    else if ("click" in step) await page.click(step.click, { timeout: 10_000 });
     else if ("click_at" in step) {
       const { selector, x, y, button } = step.click_at;
       await page.click(selector, { position: { x, y }, button, timeout: 10_000 });
