@@ -1,10 +1,11 @@
 //! The `docker run` command line of the pinned browser container.
 use super::shard::Shard;
-use std::{net::SocketAddr, path::Path};
+use std::path::Path;
 
 pub(super) struct Run<'a> {
     pub root: &'a Path,
-    pub address: SocketAddr,
+    /// `AOE_BASE_URLS`: one game server per Playwright worker.
+    pub base_urls: String,
     pub container: String,
     pub landscape_hash: &'a str,
     pub specs: &'a [String],
@@ -54,7 +55,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
     args.extend([
         format!("HOME={}/.cache/browser-home", root.display()),
         "-e".to_owned(),
-        format!("AOE_BASE_URL=http://{}", run.address),
+        format!("AOE_BASE_URLS={}", run.base_urls),
         "-e".to_owned(),
         format!("AOE_E2E_LANDSCAPE_HASH={}", run.landscape_hash),
         "-v".to_owned(),

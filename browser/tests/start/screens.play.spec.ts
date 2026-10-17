@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../../server.js";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { gameAssets } from "../game-assets.js";

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 
 test.beforeEach(async ({ page, request }) => {

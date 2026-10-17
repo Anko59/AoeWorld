@@ -121,6 +121,21 @@ the tests, not the projects, so the shards together run every test once.
 `pass.json` (the dev release job and `make coverage` use it); a shard together
 with `AOE_E2E_COVERAGE` is refused. `AOE_E2E_SHARD` must be `i/n` with
 `1 <= i <= n <= 16`; it does not apply to the duel's focused specs.
+
+**One server per worker (#388).** `make test-e2e` starts `AOE_E2E_WORKERS`
+disposable game servers (`1..=8`, default 3), each on its own free port and
+with its own copy of the map store, and gives the browser container their URLs
+in `AOE_BASE_URLS`. Playwright runs that many workers; the fixture in
+`browser/server.ts` points a test at the server of its `parallelIndex`, so no
+two workers share a controller lease or server-wide state. Every spec imports
+`test` from that file, not from `@playwright/test`. `--shard` and workers
+combine: each shard runs its tests on all workers. The coverage run keeps one
+instrumented server and one worker (`AOE_E2E_WORKERS` above 1 is refused with
+it), and the duel's focused specs run on one. Each worker also runs a software
+WebGPU browser, so a loaded host can push a heavy test past its 30 s timeout;
+lower `AOE_E2E_WORKERS` there. CI sets it to 1: on GitHub's 4-core runner three
+servers per shard timed out heavy rendering and memory specs (#457's first run), so
+the parallel workers serve local machines with more cores.
 Do not claim a complete gate until they exist and pass at the exact revision.
 
 ## Failure output

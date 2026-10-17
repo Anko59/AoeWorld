@@ -83,12 +83,14 @@ fn the_wait_is_bounded_and_repeats_a_line_while_waiting() {
     let _first = take(&path, "first", Duration::ZERO).expect("free lock");
     let mut lines = Vec::new();
     let begun = Instant::now();
+    // Windows wide enough for a loaded machine: the ticket setup alone can
+    // take a few hundred milliseconds there, before the first line is printed.
     let result = lock::acquire_at(
         &path,
         &holder("second"),
-        Duration::from_millis(400),
+        Duration::from_secs(2),
         POLL,
-        Duration::from_millis(100),
+        Duration::from_millis(300),
         &mut |line| lines.push(line.to_owned()),
     );
     assert!(result.is_err());
@@ -296,7 +298,7 @@ fn progress_lines_give_the_position_in_the_queue() {
     let error = lock::acquire_at(
         &path,
         &holder("third"),
-        Duration::from_millis(200),
+        Duration::from_secs(2),
         POLL,
         NEVER,
         &mut |line| lines.push(line.to_owned()),

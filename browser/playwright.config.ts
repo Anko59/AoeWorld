@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { serverUrls } from "./server.js";
 
 // Projects differ only in how the browser draws the canvas. `webgpu` runs every
 // spec. `browser-defaults` and `canvas` run only the renderer-dependent specs
@@ -21,11 +22,14 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 10_000 },
   retries: 0,
-  workers: 1,
+  // One worker per game server: the harness starts AOE_E2E_WORKERS servers and
+  // lists them in AOE_BASE_URLS (see server.ts), so no two workers share a
+  // controller lease or the server-wide map and unit state (#388).
+  workers: serverUrls().length,
   reporter: [["list"]],
   use: {
     ...devices["Desktop Chrome"],
-    baseURL: process.env["AOE_BASE_URL"] ?? "http://127.0.0.1:8080",
+    baseURL: serverUrls()[0],
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

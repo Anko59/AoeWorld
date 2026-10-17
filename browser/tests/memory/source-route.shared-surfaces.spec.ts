@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../../server.js";
 import { writeFile } from "node:fs/promises";
 import { processMemory, type ProcessMemory } from "./process.js";
 import { forceCanvas } from "../rendering/backends.js";

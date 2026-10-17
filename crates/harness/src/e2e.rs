@@ -4,13 +4,14 @@ mod command;
 mod country;
 mod landscape;
 mod matrix;
+mod servers;
 mod shard;
 mod source;
 pub(crate) mod stale;
 mod visual;
 use std::{
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpStream},
     process::{Child, Command, Stdio},
     sync::mpsc,
     thread,
@@ -49,13 +50,14 @@ impl Drop for Server {
 
 struct BrowserContainer(String);
 
-/// Whole-suite bounds for one serial Playwright worker; each test keeps its own
+/// Whole-suite bounds for one run of the suite; each test keeps its own
 /// 30 s timeout, so a hang still fails fast. The suite outgrew two bounds: 282 s
 /// of a former 300 s (2026-10-10), then 102 passing tests took 588 s of 600 s in
 /// CI (2026-10-13) and the run was cut off with no failing test; on 2026-10-16
 /// the suite took 19.5 min of 20 on the 4-core runner and a PR adding tests
 /// (#434) was cut off again. The run now gets the gate registry's own budget for
-/// this suite, 2400 s, in both modes; sharding the suite is the speed fix (#388).
+/// this suite, 2400 s, in both modes; sharding the suite and one server per
+/// Playwright worker are the speed fix (#388).
 /// Coverage runs the same suite against an instrumented debug server.
 fn browser_run_deadline(_coverage: Option<&str>) -> Duration {
     Duration::from_secs(2400)
@@ -144,9 +146,6 @@ fn run_specs(
     shard: Option<shard::Shard>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    let address = listener.local_addr()?;
-    drop(listener);
     let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
     let relative_binary = server_binary(coverage.as_deref())?;
     let run_deadline = browser_run_deadline(coverage.as_deref());
@@ -159,35 +158,17 @@ fn run_specs(
             Some(path) => std::path::PathBuf::from(path).canonicalize()?,
             None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
         };
-    let fixture = landscape::prepare(&root, Some(&existing_maps))
-        .map_err(|error| stale::annotate(error, &existing_maps))?;
-    let server = Command::new(binary)
-        .current_dir(&root)
-        .env("AOE_BIND", address.to_string())
-        .env("AOE_SCENARIO", "smoke")
-        .env("AOE_MAP_PACKAGE_DIRECTORY", fixture.directory.path())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::inherit())
-        .spawn()?;
-    let mut server = Server(server);
-    let deadline = Instant::now() + Duration::from_secs(20);
-    while !ready(address) {
-        if let Some(status) = server.0.try_wait()? {
-            return Err(format!("test server exited early: {status}").into());
-        }
-        if Instant::now() >= deadline {
-            return Err("test server did not become healthy within 20s".into());
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let workers = servers::worker_count(coverage.as_deref(), !specs.is_empty())?;
+    let mut server = servers::Fleet::start(&root, &binary, &existing_maps, workers)?;
+    let fixture_hash = server.hash.clone();
+    let address = server.addresses[0];
     let name = command::container_name(std::process::id(), address.port(), shard);
     let _cleanup = BrowserContainer(name.clone());
     let args = command::docker_args(&command::Run {
         root: &root,
-        address,
+        base_urls: servers::base_urls(&server.addresses),
         container: name,
-        landscape_hash: &fixture.hash,
+        landscape_hash: &fixture_hash,
         specs,
         shard,
     })?;
@@ -235,11 +216,9 @@ fn run_specs(
                     return Err("browser test worker disconnected".into());
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if let Some(status) = server.0.try_wait()? {
+                    if let Err(error) = server.check_alive() {
                         cancellation.cancel();
-                        return Err(
-                            format!("test server exited during browser run: {status}").into()
-                        );
+                        return Err(error);
                     }
                 }
             }
@@ -254,7 +233,7 @@ fn run_specs(
     if let Some(shard) = shard {
         // One shard runs a part of the suite: the release evidence below needs
         // the whole run, so the shard records its own passing result instead.
-        return shard.write_pass(&fixture.hash);
+        return shard.write_pass(&fixture_hash);
     }
     let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if !revision.status.success() {
@@ -273,7 +252,7 @@ fn run_specs(
         "renderer_evidence": renderer_evidence,
         "landscape_fixture": {
             "kind": "synthetic-prepared-flat-temperate",
-            "content_hash": fixture.hash,
+            "content_hash": fixture_hash,
             "schema_version": aoe_map::MAP_SCHEMA_VERSION,
             "generation_recipe_version": aoe_map::GENERATION_RECIPE_VERSION,
             "real_source_qualification": false
