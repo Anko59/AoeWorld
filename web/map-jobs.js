@@ -1,4 +1,6 @@
 // Setup owns map preparation. Uncertain acceptance keeps the ORIGINAL key.
+// The stated recovery bound (web/start/README.md): a stalled probe releases setup.
+const RECOVERY_TIMEOUT_MS = 10_000;
 export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
   const storageKey = 'aoeworld.map-creation-job';
   let acceptedId = null, submission = null, busy = false, cancelable = false, recovered = false;
@@ -17,13 +19,13 @@ export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, 
   };
   const remember = id => { acceptedId = id; submission = null; persist(); };
   const controls = () => onCancelable?.(cancelable && acceptedId !== null);
-  const submit = async request => {
+  const submit = async (request, signal) => {
     if (acceptedId !== null) return;
     submission ??= { key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''), request };
     persist();
     const response = await fetch('/maps/jobs', { method: 'POST', headers: {
       'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders(),
-    }, body: JSON.stringify(submission.request) });
+    }, body: JSON.stringify(submission.request), signal });
     // A lost acknowledgement or a 5xx is ambiguous. Only a definitive refusal
     // permits a fresh key; reloading must never manufacture a second job.
     if (response.status >= 400 && response.status < 500) remember(null);
@@ -31,8 +33,8 @@ export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, 
     if (!Number.isSafeInteger(job.id) || job.id < 0) throw new Error('Invalid map job identifier.');
     remember(job.id);
   };
-  const readJob = async () => {
-    const response = await fetch(`/maps/jobs/${acceptedId}`);
+  const readJob = async signal => {
+    const response = await fetch(`/maps/jobs/${acceptedId}`, { signal });
     if (response.status >= 400 && response.status < 500) {
       remember(null);
       throw new Error('This preparation is no longer available. Start a new game.');
@@ -80,15 +82,21 @@ export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, 
     if (!pending()) return;
     busy = true;
     onRecovering?.(true);
+    // A timeout is "retry later": the saved key or accepted ID is kept, and
+    // only a definitive 4xx refusal (handled in submit/readJob) clears it.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, RECOVERY_TIMEOUT_MS);
     try {
       // Probe exactly once after acquiring the controller. Adopt acceptance,
       // but let Start/Resume own loading and activation, including Cancel.
-      await submit(null);
-      const job = await readJob();
+      await submit(null, controller.signal);
+      const job = await readJob(controller.signal);
       if (['failed', 'cancelled'].includes(job.state)) remember(null);
     } catch (error) {
-      onError?.(error.message || 'Unable to recover this map request.', pending());
+      onError?.(timedOut ? 'Map recovery timed out. Your saved request is kept; try again.' : error.message || 'Unable to recover this map request.', pending());
     } finally {
+      clearTimeout(timer);
       busy = false; controls(); onRecovering?.(false); onSettled?.();
     }
   };
