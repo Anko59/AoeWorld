@@ -53,8 +53,10 @@ fn start_driver(port: u16) -> Result<Driver> {
         nix::unistd::Gid::current()
     );
     let port_arg = format!("--port={port}");
-    docker(&[
-        "run",
+    let cap = crate::slots::cap_args();
+    let mut args = vec!["run"];
+    args.extend(cap.iter().map(String::as_str));
+    args.extend([
         "--rm",
         "-d",
         "--init",
@@ -72,7 +74,8 @@ fn start_driver(port: u16) -> Result<Driver> {
         "chromedriver",
         &port_arg,
         "--allowed-ips=127.0.0.1",
-    ])?;
+    ]);
+    docker(&args)?;
     let driver = Driver { name };
     let address: SocketAddr = format!("127.0.0.1:{port}").parse()?;
     let deadline = Instant::now() + Duration::from_secs(10);

@@ -27,7 +27,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) use guard::{hold, hold_snapshot, run_forced};
+pub(crate) use guard::{cap_args, hold, hold_snapshot, run_forced};
 
 /// `run_forced` for the checkout the process runs in.
 pub(crate) fn run_here(gate: &str, argv: &[String], slots: &SlotEnv) -> queue::Result<i32> {
@@ -39,6 +39,10 @@ pub(crate) use status::print_status;
 pub(crate) const TOKEN_VAR: &str = "AOE_HEAVY_SLOT";
 /// The shared slot directory a holder names for its children (a snapshot's own Git directory is not it).
 pub(crate) const DIR_VAR: &str = "AOE_HEAVY_DIR";
+/// The CPUs each container started under the held slot may use: set by the holder next to
+/// `AOE_HEAVY_SLOT`, so it exists exactly where a slot does. The Makefile and the harness's own
+/// `docker run` lines read it; unset means no slot and no cap.
+pub(crate) const CPUS_VAR: &str = "AOE_SLOT_CPUS";
 /// Environment variables forwarded into Docker by the Makefile.
 pub(crate) const SLOTS_VAR: &str = "AOE_HEAVY_SLOTS";
 pub(crate) const WAIT_VAR: &str = "AOE_HEAVY_WAIT_MINUTES";

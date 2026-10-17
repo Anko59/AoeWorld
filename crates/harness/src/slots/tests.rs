@@ -319,7 +319,13 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let slots = dir(&root).unwrap();
     let outer = hold(&root, "slow", &SlotEnv::default()).expect("the only slot is free");
     let env = outer.env();
-    assert_eq!(env.len(), 2);
+    assert_eq!(env.len(), 3);
+    assert_eq!(env[2].0, crate::slots::CPUS_VAR, "children get the CPU cap");
+    assert!(
+        env[2].1.parse::<usize>().is_ok_and(|cpus| cpus >= 1),
+        "the cap is a CPU count: {}",
+        env[2].1
+    );
     assert!(verify(&slots, &env[0].1), "children inherit a live slot");
     assert_eq!(env[0].0, TOKEN_VAR);
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
@@ -386,7 +392,7 @@ fn a_slot_command_takes_a_slot_for_a_target_the_registry_does_not_list() {
     assert!(light.env().is_empty());
     let forced =
         hold_forced(&root, "build", &SlotEnv::default()).expect("the slot command queues for it");
-    assert_eq!(forced.env().len(), 2);
+    assert_eq!(forced.env().len(), 3);
     assert_eq!(tickets(&slots), 1);
     drop((light, forced));
     assert_eq!(tickets(&slots), 0);
@@ -446,6 +452,7 @@ fn status_lists_running_holders_then_the_queue() {
         ["heavy slots: 0 of 2 in use (AOE_HEAVY_SLOTS to change)"]
     );
 }
+mod cap;
 mod config;
 mod environment;
 mod makefile;

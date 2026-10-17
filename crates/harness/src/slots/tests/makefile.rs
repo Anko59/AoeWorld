@@ -10,12 +10,12 @@ use std::{
 
 const FORWARDS: &str = "$(HEAVY_ENV)";
 
-fn repository() -> std::path::PathBuf {
+pub(super) fn repository() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// The Makefile and every make/*.mk, by repository-relative name and text.
-fn make_files(root: &Path) -> Vec<(String, String)> {
+pub(super) fn make_files(root: &Path) -> Vec<(String, String)> {
     let mut names = vec!["Makefile".to_owned()];
     for entry in fs::read_dir(root.join("make")).expect("make/") {
         let name = entry.expect("entry").file_name();
@@ -104,7 +104,7 @@ fn unforwarded(files: &[(String, String)]) -> Vec<String> {
 }
 
 /// The recipe lines of `target`: the tab-indented lines after its rule, in the first file that has it.
-fn recipe<'a>(files: &'a [(String, String)], target: &str) -> Option<Vec<&'a str>> {
+pub(super) fn recipe<'a>(files: &'a [(String, String)], target: &str) -> Option<Vec<&'a str>> {
     for (_, text) in files {
         let lines: Vec<&str> = text.lines().collect();
         let Some(at) = lines.iter().position(|line| is_rule_for(line, target)) else {
@@ -192,7 +192,7 @@ fn a_gate_that_runs_containers_outside_a_harness_command_runs_under_the_slot() {
 }
 
 /// Each variable's definition line, by name (the first definition wins).
-fn definitions(files: &[(String, String)]) -> BTreeMap<String, String> {
+pub(super) fn definitions(files: &[(String, String)]) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
     for (_, text) in files {
         for line in text.lines() {
@@ -370,126 +370,4 @@ fn the_e2e_variables_the_harness_reads_reach_both_containers() {
             "test-e2e-steps lacks {flag}: {steps}"
         );
     }
-}
-
-/// Whether a recipe line compiles, tests or drives a browser in a container: the work a slot is for.
-fn heavy_work(line: &str) -> bool {
-    let cargo = [
-        "cargo build",
-        "cargo test",
-        "cargo llvm-cov",
-        "cargo nextest",
-        "cargo bench",
-    ]
-    .iter()
-    .any(|command| line.contains(command));
-    let browser = line.contains("npx ")
-        || line.contains("npm run ")
-        || line.contains("playwright test")
-        || (line.contains("cargo run")
-            && line.split(" -- ").nth(1).is_some_and(|rest| {
-                rest.split_whitespace()
-                    .next()
-                    .is_some_and(|command| command.contains("browser"))
-            }));
-    cargo || browser
-}
-
-/// Targets whose heavy work is allowed without a slot wrapper. `agent-hook-build` builds the judge
-/// the agent hooks run, which must never queue behind gates; `agent-smoke` only drives the runtimes'
-/// CLIs against the harness binary that `slot-bootstrap` already built.
-const SLOT_EXEMPT: &[&str] = &["agent-hook-build", "agent-smoke"];
-
-/// Whether `target` runs its heavy work under the slot wrapper: its own recipe runs `$(SLOT_RUN)`,
-/// or a wrapper names it as the `-steps` target it runs.
-fn slot_wrapped(files: &[(String, String)], target: &str) -> bool {
-    let own = recipe(files, target).is_some_and(|lines| {
-        lines
-            .iter()
-            .any(|line| line.contains(&format!("$(SLOT_RUN) {target} -- ")))
-    });
-    own || files.iter().flat_map(|(_, text)| text.lines()).any(|line| {
-        let words: Vec<&str> = line.split_whitespace().collect();
-        line.contains("$(SLOT_RUN) ")
-            && words
-                .windows(3)
-                .any(|run| run == ["make", "--no-print-directory", target])
-    })
-}
-
-#[test]
-fn every_target_that_compiles_or_tests_takes_a_slot() {
-    let root = repository();
-    let registry = Registry::load(&root).expect("the committed registry");
-    let files = make_files(&root);
-    let light: BTreeSet<String> = registry
-        .gates
-        .iter()
-        .filter(|gate| !gate.heavy)
-        .filter_map(|gate| gate.command.strip_prefix("make ").map(str::to_owned))
-        .collect();
-    let mut gaps = Vec::new();
-    for target in all_targets(&files) {
-        let Some(lines) = recipe(&files, &target) else {
-            continue;
-        };
-        if !lines.iter().any(|line| heavy_work(line))
-            || light.contains(&target)
-            || SLOT_EXEMPT.contains(&target.as_str())
-            || slot_wrapped(&files, &target)
-        {
-            continue;
-        }
-        gaps.push(format!(
-            "{target}: compiles or tests without a slot; wrap it as `$(SLOT_RUN) {target} -- make --no-print-directory {target}-steps`"
-        ));
-    }
-    assert!(gaps.is_empty(), "{gaps:#?}");
-}
-
-/// Every rule name in the makefiles, in order, without duplicates.
-fn all_targets(files: &[(String, String)]) -> Vec<String> {
-    let mut targets: Vec<String> = files
-        .iter()
-        .flat_map(|(_, text)| text.lines())
-        .filter(|line| !line.starts_with(['\t', '#', '.']) && !line.contains(":="))
-        .filter_map(|line| line.split_once(':').map(|(name, _)| name.trim().to_owned()))
-        .filter(|name| !name.contains('$') && !name.contains('%'))
-        .collect();
-    targets.sort();
-    targets.dedup();
-    targets
-}
-
-#[test]
-fn every_container_a_slot_starts_is_capped_to_the_slot_cpus() {
-    let files = make_files(&repository());
-    let mut gaps = Vec::new();
-    for (name, text) in &files {
-        for (number, line) in text.lines().enumerate() {
-            if line.trim_start().starts_with('#') {
-                continue;
-            }
-            if line.contains("docker run")
-                && line.contains("$(HEAVY_ENV)")
-                && !line.contains("$(SLOT_CAP)")
-                && !line.contains("--cpus=")
-            {
-                gaps.push(format!("{name}:{}: {}", number + 1, line.trim()));
-            }
-        }
-    }
-    assert!(
-        gaps.is_empty(),
-        "these containers are not capped:\n{gaps:#?}"
-    );
-    let definitions = definitions(&files);
-    let cap = &definitions["SLOT_CAP"];
-    assert!(cap.contains("--cpus=$(SLOT_CPUS)"), "{cap}");
-    assert!(cap.contains("CARGO_BUILD_JOBS=$(SLOT_CPUS)"), "{cap}");
-    assert!(
-        definitions["SLOT_RUN"].contains("--cpus=$(SLOT_CPUS)"),
-        "the wrapper container is capped too: {}",
-        definitions["SLOT_RUN"]
-    );
 }

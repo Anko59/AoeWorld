@@ -25,12 +25,13 @@ GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT
 HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo)) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
-# The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots
-# (`aoe-harness slot-cpus`). A container started under a slot takes `--cpus`, and cargo the same
-# count as its job limit. Empty outside a slot, so static gates keep the whole machine.
-SLOT_CPUS = $(shell target/debug/aoe-harness slot-cpus 2>/dev/null)
-SLOT_CAP = $(if $(AOE_HEAVY_SLOT),--cpus=$(SLOT_CPUS) -e CARGO_BUILD_JOBS=$(SLOT_CPUS))
+HEAVY_ENV := -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+# The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
+# harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
+# AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container
+# started under a slot takes `--cpus` and cargo the same count as its job limit. With no slot the
+# variable is unset and SLOT_CAP is empty (never an empty flag), so static gates keep the machine.
+SLOT_CAP = $(if $(and $(AOE_HEAVY_SLOT),$(AOE_SLOT_CPUS)),--cpus=$(AOE_SLOT_CPUS) -e CARGO_BUILD_JOBS=$(AOE_SLOT_CPUS))
 # A snapshot's slot directory is the real repository's Git directory: mount it unless a mount covers it.
 HEAVY_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
 HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(AOE_HEAVY_DIR)))
@@ -268,39 +269,10 @@ geodata-verify:
 map-estimate:
 	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-estimate
 
-map-generate:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
-
-map-generate-detailed:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
-
-map-verify:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
-
-map-source-qualify:
-	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_GEOGRAPHIC_ARGS) $(SOURCE_QUAL_SCALE_ARGS)
-
-map-source-scale-qualify:
-	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)
-
-
 .PHONY: geodata-test
-
-map-perf:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
 
 test-wasm: browser-tools orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-wasm -- make --no-print-directory test-wasm-steps
-
-fuzz-smoke: fuzz-tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
-
-fuzz-nightly: fuzz-tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
-
-mutation-nightly: mutation-tools
-	@mkdir -p reports/mutation
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e CARGO_HOME=$(ROOT)/.cache/cargo -e CARGO_TARGET_DIR=$(ROOT)/.cache/mutation/driver-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
 
 coverage-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- coverage-check
@@ -313,27 +285,6 @@ ci-dispatch-status: orchestrator-tools
 
 ci-check:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-check
-
-perf-smoke:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-smoke
-
-perf-ci: perf-instructions perf-wasm-size
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-ci
-
-perf-full: perf-instructions perf-wasm-size
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-full
-
-perf-pressure:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-pressure
-
-perf-stress:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-stress
-
-perf-soak-10:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-10
-
-perf-soak-30:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-30
 
 perf-baseline-propose: perf-instructions perf-wasm-size
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-baseline-propose
@@ -372,14 +323,12 @@ preflight-unit:
 pre-push:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- prepush-evidence || $(MAKE) --no-print-directory preflight
 
-
 .PHONY: test-memory-source
 test-memory-source: build-wasm browser-deps slot-bootstrap
 	@$(SLOT_RUN) test-memory-source -- make --no-print-directory test-memory-source-steps
 
 test-memory-source-steps:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e AOE_POLISH_SOURCE_REQUIRED=1 $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) xvfb-run -a npx playwright test tests/memory/source-route.shared-surfaces.spec.ts
-
 
 test-creator-source: build-wasm browser-deps orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-creator-source -- make --no-print-directory test-creator-source-steps
@@ -404,7 +353,6 @@ test-geographic-visuals-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-visuals
 
-
 dev: build-wasm orchestrator-tools dev-build
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
 
@@ -426,8 +374,6 @@ assets-import:
 assets-verify:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets verify
 
-release-build: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-build
 
 release-publish: orchestrator-tools
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish

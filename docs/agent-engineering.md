@@ -71,11 +71,16 @@ the parent's slot or hold an admitted fixture ticket in a private queue. Load ri
 after start never pauses or aborts running gates. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
 the slot before compiling their test steps. So do the make targets that compile or test without
 being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`, `test-placement-coverage`,
-`test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`): each runs
+`test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`, the single-command
+gates `fuzz-smoke`, `fuzz-nightly`, `mutation-nightly`, `perf-smoke`, `perf-ci`, `perf-full`,
+`perf-pressure`, `perf-stress`, `perf-soak-*`, and the release `map-*` targets): each runs
 `$(SLOT_RUN) <target> -- make <target>-steps`, and `aoe-harness slot` queues it whatever the registry
 says. Each slot's containers take `cores / slots` CPUs (2 slots in `gates/heavy.json` on 12 cores, so
-6 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`), and the wrapper
-container is capped too. Cores are counted from the process's CPU affinity list, not from
+6 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`). The holder
+computes the count and exports it as `AOE_SLOT_CPUS` beside `AOE_HEAVY_SLOT`; Make only expands it
+(unset: no slot, no flag), and the containers the harness starts itself (Playwright, chromedriver)
+take `--cpus` from the same value (`slots::cap_args`). The wrapper container only waits and
+orchestrates, so it carries no cap of its own. Cores are counted from the process's CPU affinity list, not from
 `available_parallelism`, so a container's quota does not shrink the machine that the load check sees.
 The command-only bootstrap before
 admission is static work, serialized across worktrees by flock, with hard

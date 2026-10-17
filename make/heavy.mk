@@ -2,8 +2,8 @@
 # (docs/gates.md "Heavy slots"). Each target runs its `-steps` target in the orchestrator container
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
-SLOT_ENV := -e HARNESS_TEST_FILTER -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_CONTENT_HASH -e AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
-SLOT_RUN = docker run --rm --init --cpus=$(SLOT_CPUS) $(HEAVY_ENV) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
+SLOT_ENV := -e HARNESS_TEST_FILTER -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_CONTENT_HASH -e AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH -e AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_512_CONTENT_HASH -e AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_16384_CONTENT_HASH -e AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_262144_CONTENT_HASH -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
+SLOT_RUN = docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
 
 # The command bootstrap is static work: one build at a time across worktrees,
 # bounded to one CPU and 2 GiB including swap. Gate steps still require a slot.
@@ -153,3 +153,108 @@ dev-build: slot-bootstrap
 dev-build-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+
+# Single-command and release-compile targets: the slot is taken before the first container, so
+# every container they start is capped (the audit in slots/tests/makefile.rs lists the exemptions).
+fuzz-smoke: fuzz-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) fuzz-smoke -- make --no-print-directory fuzz-smoke-steps
+
+fuzz-smoke-steps:
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-smoke
+
+fuzz-nightly: fuzz-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) fuzz-nightly -- make --no-print-directory fuzz-nightly-steps
+
+fuzz-nightly-steps:
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
+
+mutation-nightly: mutation-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) mutation-nightly -- make --no-print-directory mutation-nightly-steps
+
+mutation-nightly-steps:
+	@mkdir -p reports/mutation
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e CARGO_HOME=$(ROOT)/.cache/cargo -e CARGO_TARGET_DIR=$(ROOT)/.cache/mutation/driver-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
+
+perf-smoke: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-smoke -- make --no-print-directory perf-smoke-steps
+
+perf-smoke-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-smoke
+
+perf-ci: perf-instructions perf-wasm-size orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-ci -- make --no-print-directory perf-ci-steps
+
+perf-ci-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-ci
+
+perf-full: perf-instructions perf-wasm-size orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-full -- make --no-print-directory perf-full-steps
+
+perf-full-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-full
+
+perf-pressure: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-pressure -- make --no-print-directory perf-pressure-steps
+
+perf-pressure-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-pressure
+
+perf-stress: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-stress -- make --no-print-directory perf-stress-steps
+
+perf-stress-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-stress
+
+perf-soak-10: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-soak-10 -- make --no-print-directory perf-soak-10-steps
+
+perf-soak-10-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-10
+
+perf-soak-30: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-soak-30 -- make --no-print-directory perf-soak-30-steps
+
+perf-soak-30-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-30
+
+map-generate: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-generate -- make --no-print-directory map-generate-steps
+
+map-generate-steps:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
+
+map-generate-detailed: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-generate-detailed -- make --no-print-directory map-generate-detailed-steps
+
+map-generate-detailed-steps:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
+
+map-verify: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-verify -- make --no-print-directory map-verify-steps
+
+map-verify-steps:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
+
+map-perf: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-perf -- make --no-print-directory map-perf-steps
+
+map-perf-steps:
+	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
+
+map-source-qualify: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-source-qualify -- make --no-print-directory map-source-qualify-steps
+
+map-source-qualify-steps:
+	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_GEOGRAPHIC_ARGS) $(SOURCE_QUAL_SCALE_ARGS)
+
+map-source-scale-qualify: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) map-source-scale-qualify -- make --no-print-directory map-source-scale-qualify-steps
+
+map-source-scale-qualify-steps:
+	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)
+
+release-build: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) release-build -- make --no-print-directory release-build-steps
+
+release-build-steps:
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-build

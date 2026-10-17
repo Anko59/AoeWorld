@@ -52,6 +52,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
     ]
     .map(str::to_owned)
     .into();
+    args.splice(1..1, crate::slots::cap_args());
     args.extend([
         format!("HOME={}/.cache/browser-home", root.display()),
         "-e".to_owned(),

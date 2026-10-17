@@ -1,6 +1,6 @@
 //! The process-level view of the heavy slots: which gates take one, and holding it.
 use super::{
-    Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    CPUS_VAR, Config, DIR_VAR, Holder, POLL, REPORT_EVERY, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     queue::Result,
 };
 use crate::{
@@ -27,6 +27,20 @@ pub(crate) fn child_env() -> Env {
     HELD.lock()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
+        .unwrap_or_default()
+}
+
+/// The `docker run` arguments that cap a container to the held slot's CPUs: `--cpus N` when this
+/// process holds or inherited a slot, nothing otherwise. The containers the harness starts itself
+/// (browsers, chromedriver) take it right after `run`.
+pub(crate) fn cap_args() -> Vec<String> {
+    cap_args_for(&child_env())
+}
+
+pub(super) fn cap_args_for(env: &Env) -> Vec<String> {
+    env.iter()
+        .find(|(name, _)| *name == CPUS_VAR)
+        .map(|(_, cpus)| vec!["--cpus".to_owned(), cpus.clone()])
         .unwrap_or_default()
 }
 
@@ -248,6 +262,7 @@ pub(super) fn acquire_in(
     let env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
+        (CPUS_VAR, config.cpus_per_slot().to_string()),
     ];
     *held = Some(env.clone());
     Ok(Guard {
