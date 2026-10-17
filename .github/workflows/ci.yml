@@ -119,6 +119,9 @@ jobs:
       - run: make test-e2e
         env:
           AOE_E2E_SHARD: ${{ matrix.shard }}/3
+          # One worker on the 4-core runner: software (SwiftShader) rendering is
+          # CPU-bound, and three servers per shard timed out heavy specs (#457).
+          AOE_E2E_WORKERS: '1'
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

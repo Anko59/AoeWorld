@@ -133,7 +133,9 @@ combine: each shard runs its tests on all workers. The coverage run keeps one
 instrumented server and one worker (`AOE_E2E_WORKERS` above 1 is refused with
 it), and the duel's focused specs run on one. Each worker also runs a software
 WebGPU browser, so a loaded host can push a heavy test past its 30 s timeout;
-lower `AOE_E2E_WORKERS` there.
+lower `AOE_E2E_WORKERS` there. CI sets it to 1: on GitHub's 4-core runner three
+servers per shard timed out heavy rendering and memory specs (#457's first run), so
+the parallel workers serve local machines with more cores.
 Do not claim a complete gate until they exist and pass at the exact revision.
 
 ## Failure output
