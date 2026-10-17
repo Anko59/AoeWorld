@@ -38,7 +38,7 @@ fn repeated_channel_queries_share_verified_page_work_and_observe_cancellation() 
     for y in 0..256 {
         assert!(
             generator
-                .river_within_with_cancel(TileCoord::new(133, y), 4, &|| false)
+                .river_within_with_cancel(TileCoord::new(133, y), 4, 0, &|| false)
                 .unwrap()
         );
     }
@@ -48,7 +48,7 @@ fn repeated_channel_queries_share_verified_page_work_and_observe_cancellation() 
         "one immutable page index, not a provider lookup per physical/footprint sample"
     );
     assert_eq!(
-        generator.river_within_with_cancel(TileCoord::new(133, 31), 4, &|| true),
+        generator.river_within_with_cancel(TileCoord::new(133, 31), 4, 0, &|| true),
         Err(EnvironmentPageError::Cancelled)
     );
     assert_eq!(provider.reads.load(Ordering::Relaxed), 1);
@@ -59,13 +59,13 @@ fn failed_channel_page_loads_are_retried_and_rebinding_drops_cached_geometry() {
     let tile = TileCoord::new(133, 31);
     provider.fail.store(true, Ordering::Relaxed);
     assert_eq!(
-        generator.river_within_with_cancel(tile, 4, &|| false),
+        generator.river_within_with_cancel(tile, 4, 0, &|| false),
         Err(EnvironmentPageError::Missing)
     );
     provider.fail.store(false, Ordering::Relaxed);
     assert!(
         generator
-            .river_within_with_cancel(tile, 4, &|| false)
+            .river_within_with_cancel(tile, 4, 0, &|| false)
             .unwrap()
     );
     assert_eq!(provider.reads.load(Ordering::Relaxed), 2);
@@ -81,7 +81,7 @@ fn failed_channel_page_loads_are_retried_and_rebinding_drops_cached_geometry() {
         .with_page_provider(compression, environment, provider)
         .unwrap();
     assert_eq!(
-        rebound.river_within_with_cancel(tile, 4, &|| false),
+        rebound.river_within_with_cancel(tile, 4, 0, &|| false),
         Err(EnvironmentPageError::Missing)
     );
 }
@@ -115,7 +115,7 @@ fn channel_footprints_match_exact_lines_for_small_and_page_sized_radii() {
                     .any(|segment| segment.sample(point, i64::from(radius) * 256).is_some());
                 assert_eq!(
                     generator
-                        .river_within_with_cancel(TileCoord::new(x, y), radius, &|| false)
+                        .river_within_with_cancel(TileCoord::new(x, y), radius, 0, &|| false)
                         .unwrap(),
                     expected,
                     "tile ({x},{y}), footprint {radius}"

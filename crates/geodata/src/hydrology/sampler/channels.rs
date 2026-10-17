@@ -13,6 +13,23 @@ pub(super) fn minimum_discharge() -> f64 {
     MINIMUM_DISCHARGE_CMS
 }
 
+/// Tiles of channel width gained per decade of discharge above the floor.
+/// Rivers are drawn by importance: 0.1 m³/s is a one-tile stream, 1 m³/s 2.5
+/// tiles, 10 m³/s 4, 100 m³/s 5.5, 1,000 m³/s 7 and the ten-tile ceiling
+/// is reached at 100,000 m³/s. The mapping depends on discharge alone, never on
+/// the metres per tile, so a river keeps its rank at every map size.
+const TILES_PER_DISCHARGE_DECADE: f64 = 1.5;
+
+/// Gameplay channel width in 1/256 tile units for a mean discharge in m³/s.
+pub(super) fn width_units(discharge: f64) -> u16 {
+    let decades = (discharge / MINIMUM_DISCHARGE_CMS).max(1.0).log10();
+    let tiles = 1.0 + TILES_PER_DISCHARGE_DECADE * decades;
+    (tiles * 256.0).round().clamp(
+        f64::from(aoe_map::MIN_RIVER_WIDTH_UNITS),
+        f64::from(aoe_map::MAX_RIVER_WIDTH_UNITS),
+    ) as u16
+}
+
 /// Serialized size reserved for segments in one page. A page file is at most
 /// 128 KiB and its evidence and water-model arrays take up to about 64 KiB, so
 /// this keeps a dense page inside the directory page limit.
@@ -98,9 +115,7 @@ fn reach_segments(
     } else {
         sink
     };
-    let width_units = ((10.0 * reach.discharge.sqrt()).clamp(5.0, 600.0) * units)
-        .round()
-        .clamp(3.0 * 256.0, 10.0 * 256.0) as u16;
+    let width_units = width_units(reach.discharge);
     let mut station = end_station + length_units;
     for pair in points.windows(2) {
         let segment_length = distance(pair[0], pair[1]);

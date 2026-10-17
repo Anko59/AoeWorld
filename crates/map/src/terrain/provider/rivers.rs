@@ -7,20 +7,29 @@ use std::sync::Arc;
 mod index;
 pub(in crate::terrain) use index::Cache;
 
+/// What a river query measures.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Mode {
+    /// The warped, noise-varied channel that becomes water tiles.
+    Physical,
+    /// The nominal centreline footprint of channels at least this wide.
+    Footprint { min_width_units: u16 },
+}
+
 pub(super) fn sample(
     generator: &super::MapChunkGenerator,
     tile: TileCoord,
     radius: i32,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<bool>, EnvironmentPageError> {
-    query(generator, tile, radius, true, cancelled)
+    query(generator, tile, radius, Mode::Physical, cancelled)
 }
 
 fn query(
     generator: &super::MapChunkGenerator,
     tile: TileCoord,
     radius: i32,
-    physical: bool,
+    mode: Mode,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Option<bool>, EnvironmentPageError> {
     if cancelled() {
@@ -46,6 +55,7 @@ fn query(
     let radius = i64::from(radius.max(0));
     // Read neighboring pages when the channel's half width crosses a page
     // edge. The expanded query still samples the original physical width.
+    let physical = mode == Mode::Physical;
     let query_radius = if physical { radius * 2 } else { radius };
     let discovery = query_radius + 10;
     let point = [i64::from(tile.x) * 256 + 128, i64::from(tile.y) * 256 + 128];
@@ -103,7 +113,10 @@ fn query(
                 });
                 indexed.physical(point, query_radius * 256, width_noise)
             } else {
-                indexed.sample(point, radius * 256)
+                let Mode::Footprint { min_width_units } = mode else {
+                    unreachable!("physical queries returned above");
+                };
+                indexed.sample(point, radius * 256, min_width_units)
             };
             if let Some(hit) = hit
                 && best.is_none_or(|(distance, _)| hit.0 < distance)
@@ -118,12 +131,16 @@ fn query(
 impl super::MapChunkGenerator {
     /// Conservative footprint query for strategic rasterization. It reads
     /// persisted centreline geometry, never expands the physical channel.
+    /// Only channels at least `min_width_units` wide count, so a minimap can
+    /// show rivers by importance.
     pub fn river_within_with_cancel(
         &self,
         tile: TileCoord,
         radius: i32,
+        min_width_units: u16,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        query(self, tile, radius, false, cancelled).map(|hit| hit.is_some())
+        let mode = Mode::Footprint { min_width_units };
+        query(self, tile, radius, mode, cancelled).map(|hit| hit.is_some())
     }
 }

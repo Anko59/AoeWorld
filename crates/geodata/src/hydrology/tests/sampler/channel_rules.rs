@@ -2,7 +2,7 @@ use super::super::channels::segments;
 use super::*;
 
 #[test]
-fn channel_width_uses_discharge_and_scale_and_short_reaches_have_a_ford() {
+fn channel_width_uses_discharge_and_short_reaches_have_a_ford() {
     let directory = TestDirectory::new();
     let mut rivers = river_dataset(&directory);
     let definition =
@@ -12,16 +12,19 @@ fn channel_width_uses_discharge_and_scale_and_short_reaches_have_a_ford() {
             .expect("source lines");
     let bounds = [-15000.0, -15000.0, 15000.0, 15000.0];
     let ordinary = segments(&features, 30000.0, 500, bounds).expect("ordinary scale");
-    assert!(
-        ordinary
-            .iter()
-            .all(|s| (8 * 256..9 * 256).contains(&s.width_units))
-    );
+    assert!(!ordinary.is_empty());
     let compressed = segments(&features, 30000.0, 50, bounds).expect("compressed scale");
-    assert!(compressed.iter().all(|s| s.width_units == 3 * 256));
+    let widths = |segments: &[aoe_map::RiverSegment]| {
+        segments.iter().map(|s| s.width_units).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        widths(&ordinary),
+        widths(&compressed),
+        "width follows discharge, not the metres per tile"
+    );
     for feature in &mut features {
         let reach = feature.river_reach.as_mut().expect("reach");
-        reach.discharge = 3600.0;
+        reach.discharge = 100_000.0;
     }
     let large = segments(&features, 30000.0, 500, bounds).expect("large river");
     assert!(large.iter().all(|s| s.width_units == 10 * 256));

@@ -33,6 +33,15 @@ pub(crate) const MAX_CACHED_MINIMAPS: usize = 4;
 pub(crate) const MINIMAP_TIME_BUDGET: Duration = Duration::from_secs(30);
 /// Shade nibble of level ground; 0 is fully shaded and 15 fully lit.
 pub(crate) const FLAT_SHADE: u8 = 8;
+/// Narrowest river the minimap draws, in 1/256 tiles: 3.5 tiles, the rivers a
+/// 4.7 m³/s cutoff kept before small rivers returned at every map size. Narrower
+/// streams are real water on the map but would turn the strategic raster
+/// into a haze of single pixels, so they are omitted there.
+pub(crate) const MINIMAP_MIN_RIVER_WIDTH_UNITS: u16 = 896;
+/// Tiles of slack when proving a water sample belongs to no drawn river:
+/// the physical channel is warped by up to one and a half tiles and varies by
+/// half a tile around the nominal centreline footprint.
+const MINIMAP_WARP_MARGIN_TILES: i32 = 3;
 /// Summed per-axis rise, in per-mille, that changes the shade by one step.
 const SHADE_STEP_PER_MILLE: i64 = 25;
 
@@ -141,6 +150,15 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
     }
 }
 
+/// Class of a sample that is not a drawn river: the dry land it stands on.
+fn dry_class(point: &LandscapePoint) -> MinimapClass {
+    if point.tile.appearance.canopy_strength > 0 {
+        MinimapClass::Forest
+    } else {
+        MinimapClass::Grass
+    }
+}
+
 /// Deterministic raster of the composed landscape: `MINIMAP_HEADER_BYTES`
 /// then row-major bytes, class in the low nibble and relief shade in the high
 /// nibble. Performs exactly `samples²` point queries and allocates at most
@@ -174,15 +192,29 @@ pub(crate) fn minimap_raster(
             let corrected_land = point.tile.terrain.water == WaterKind::None
                 && point.tile.terrain.water_provenance
                     == aoe_map::Provenance::HistoricallyCorrected;
-            if !corrected_land
-                && !matches!(
-                    class,
-                    MinimapClass::Ocean | MinimapClass::Lake | MinimapClass::River
-                )
+            let footprint =
+                (tiles_per_side.div_ceil(u64::from(samples)) * 181).div_ceil(256) as i32;
+            let tile = TileCoord::new(tile_x, tile_y);
+            if class == MinimapClass::River {
+                // Physical water counts only where a drawn river is nearby.
+                if !generator
+                    .river_within_with_cancel(
+                        tile,
+                        footprint + MINIMAP_WARP_MARGIN_TILES,
+                        MINIMAP_MIN_RIVER_WIDTH_UNITS,
+                        cancelled,
+                    )
+                    .map_err(MinimapError::Page)?
+                {
+                    class = dry_class(&point);
+                }
+            } else if !corrected_land
+                && !matches!(class, MinimapClass::Ocean | MinimapClass::Lake)
                 && generator
                     .river_within_with_cancel(
-                        TileCoord::new(tile_x, tile_y),
-                        (tiles_per_side.div_ceil(u64::from(samples)) * 181).div_ceil(256) as i32,
+                        tile,
+                        footprint,
+                        MINIMAP_MIN_RIVER_WIDTH_UNITS,
                         cancelled,
                     )
                     .map_err(MinimapError::Page)?

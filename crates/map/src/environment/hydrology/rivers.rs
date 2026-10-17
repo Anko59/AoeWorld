@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 pub const FORD_SPACING_UNITS: i64 = 40 * 256;
 pub const FORD_HALF_LENGTH_UNITS: i64 = 5 * 256 / 2;
 pub const MAX_RIVER_SEGMENTS_PER_PAGE: usize = 1024;
+/// Narrowest drawn channel: a one-tile stream, the smallest kept discharge.
+pub const MIN_RIVER_WIDTH_UNITS: u16 = 256;
+/// Widest drawn channel, kept for playability.
+pub const MAX_RIVER_WIDTH_UNITS: u16 = 10 * 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "[i64; 10]", into = "[i64; 10]")]
@@ -71,7 +75,7 @@ impl RiverSegment {
             || cross.abs() > i128::from(length) * 4 + 2
             || self.source_station_delta.unsigned_abs() > (1 << 49)
             || self.start == self.end
-            || !(3 * 256..=10 * 256).contains(&self.width_units)
+            || !(MIN_RIVER_WIDTH_UNITS..=MAX_RIVER_WIDTH_UNITS).contains(&self.width_units)
             || self
                 .start
                 .iter()

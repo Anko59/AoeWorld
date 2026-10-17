@@ -68,7 +68,7 @@ fn every_map_size_keeps_the_same_small_rivers_over_the_same_area() {
         discharges.iter().filter(|d| **d >= 0.1).count()
     );
     assert!(
-        kept.iter().any(|s| s.width_units == 3 * 256),
+        kept.iter().any(|s| s.width_units == 256),
         "0.1 m³/s is kept"
     );
 }

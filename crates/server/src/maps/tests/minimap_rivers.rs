@@ -1,3 +1,4 @@
+use super::super::super::minimap::MINIMAP_MIN_RIVER_WIDTH_UNITS;
 use super::*;
 use aoe_map::{Provenance, WaterKind};
 
@@ -115,7 +116,7 @@ fn river_network_fixture(corrected: bool, extra: Vec<aoe_map::RiverSegment>) -> 
             river_segments: std::iter::once(RiverSegment {
                 start: [64 * 256, 0],
                 end: [64 * 256, 2048 * 256],
-                width_units: 3 * 256,
+                width_units: MINIMAP_MIN_RIVER_WIDTH_UNITS,
                 station_start: 0,
                 station_end: 2048 * 256,
                 source_delta: [0, 524288],
@@ -176,7 +177,7 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
         let position = TileCoord::new(66, row * 4 + 2);
         assert!(
             generator
-                .river_within_with_cancel(position, 3, &|| false)
+                .river_within_with_cancel(position, 3, 0, &|| false)
                 .unwrap()
         );
         let point = generator
@@ -202,11 +203,11 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
     );
 }
 
-fn vertical(tile_x: i64, width_tiles: i64) -> aoe_map::RiverSegment {
+fn vertical(tile_x: i32, width_tiles: u16) -> aoe_map::RiverSegment {
     aoe_map::RiverSegment {
         start: [tile_x * 256, 0],
         end: [tile_x * 256, 2048 * 256],
-        width_units: (width_tiles * 256) as u16,
+        width_units: width_tiles * 256,
         station_start: 0,
         station_end: 2048 * 256,
         source_delta: [0, 524288],
@@ -216,8 +217,8 @@ fn vertical(tile_x: i64, width_tiles: i64) -> aoe_map::RiverSegment {
 
 #[test]
 fn minimap_draws_rivers_by_importance_not_every_stream() {
-    // The fixture's own three-tile stream at x = 64, sixty more three-tile
-    // streams, and one main river eight tiles wide.
+    // The fixture's own river at x = 64 is the narrowest drawn width; sixty
+    // three-tile streams are omitted and one main river is eight tiles wide.
     let mut network = (0..60)
         .map(|i| vertical(140 + 30 * i, 3))
         .collect::<Vec<_>>();
