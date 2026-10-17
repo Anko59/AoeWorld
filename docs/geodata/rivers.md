@@ -81,11 +81,11 @@ stream, 1 m³/s 2.5 tiles, 10 m³/s 4, 100 m³/s 5.5, 1,000 m³/s 7, and the ten
 ceiling needs 100,000 m³/s. HydroRIVERS carries discharge but no Strahler order, so
 discharge is the only rank. A real width (`10 * sqrt(discharge)` metres) would give a
 Paris Large tile of 60 m nothing wider than three tiles, hiding the hierarchy.
-Streams up to 1.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, under 0.22 m³/s, about 30%
+Streams up to 2.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, up to 1 m³/s, about 70%
 of the river length on Paris Large) are wadeable shallows: their tiles are `Ford`
 material, drawn with the light shallow sheet, and passable wherever the surface is
 walkable (a steep ford stays blocking water). Where a wider channel also covers a
-tile, it stays blocking river water. Rivers wider than 1.5 tiles block movement. Source bends survive
+tile, it stays blocking river water. Rivers wider than 2.5 tiles block movement. Source bends survive
 sampling and tile/chunk boundaries. The narrowest river is a one-tile stream; the
 width bounds are `MIN_RIVER_WIDTH_UNITS` and `MAX_RIVER_WIDTH_UNITS`. Runtime queries round
 unambiguous connected vertices with quadratic cuts of at most six tiles or a

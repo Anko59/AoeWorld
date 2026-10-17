@@ -8,10 +8,12 @@ pub const FORD_HALF_LENGTH_UNITS: i64 = 5 * 256 / 2;
 pub const MAX_RIVER_SEGMENTS_PER_PAGE: usize = 1024;
 /// Narrowest drawn channel: a one-tile stream, the smallest kept discharge.
 pub const MIN_RIVER_WIDTH_UNITS: u16 = 256;
-/// Widest stream that is wadeable shallows rather than blocking water: 1.5
-/// tiles, which is under 0.22 m³/s of discharge and about 30% of the length of
-/// the river kept on Paris Large.
-pub const MAX_WADEABLE_WIDTH_UNITS: u16 = 384;
+/// Widest stream that is wadeable shallows rather than blocking water: 2.5
+/// tiles, which is 1 m³/s of discharge. Reach widths step at confluences, so a
+/// limit inside a stream's own range would alternate wading and blocking
+/// stretches; discharge only grows downstream, so a stream stops being wadeable
+/// once, where it becomes a river.
+pub const MAX_WADEABLE_WIDTH_UNITS: u16 = 640;
 /// Widest drawn channel, kept for playability.
 pub const MAX_RIVER_WIDTH_UNITS: u16 = 10 * 256;
 
