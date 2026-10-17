@@ -71,3 +71,48 @@ for (const { saved, status } of cases) {
     }
   });
 }
+
+test("stalled startup recovery releases setup after ten seconds and keeps the original key", async ({
+  page,
+  request,
+}) => {
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page);
+  const key = "b".repeat(32);
+  await page.addInitScript(
+    (saved) =>
+      localStorage.setItem("aoeworld.map-creation-job", JSON.stringify(saved)),
+    { submission: { key, request: { schema_version: 1 } } },
+  );
+  const keys: (string | undefined)[] = [];
+  const stalled: unknown[] = [];
+  await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() !== "POST") return route.fulfill({ json: [] });
+    keys.push(route.request().headers()["idempotency-key"]);
+    // The first probe is held open and never answered, so only the client's
+    // recovery timeout can release setup. The retry receives a retryable 500.
+    if (keys.length === 1) return void stalled.push(route);
+    await route.fulfill({ status: 500, body: "Retry later" });
+  });
+  await page.goto("/?skipIntro=1");
+  await page
+    .getByRole("button", { name: "Single Player", exact: true })
+    .click();
+  const start = page.getByRole("button", {
+    name: /^(Start Game|Resume map preparation)/,
+  });
+  await expect.poll(() => keys.length, { timeout: 30_000 }).toBe(1);
+  await expect(start).toBeDisabled();
+  // Recovery gives up after the stated ten seconds; allow two seconds of slack.
+  await expect(start).toBeEnabled({ timeout: 12_000 });
+  expect(keys).toEqual([key]);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aoeworld.map-creation-job"),
+    ),
+  ).toContain(key);
+  await start.click();
+  await expect.poll(() => keys.length).toBe(2);
+  expect(keys[1]).toBe(key);
+  await expect(page.locator("#loading-error")).toBeVisible();
+});
