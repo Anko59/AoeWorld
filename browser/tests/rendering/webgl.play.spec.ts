@@ -368,9 +368,13 @@ test("WebGL2 restores textured idle-world pixels without camera or unit cache in
 test("WebGL2 context restoration retains scout input, moving pixels and camera controls", async ({
   page,
 }) => {
-  // Throttled SwiftShader captures took 12–19 s despite passing pixel assertions.
-  // Bound that measured runner delay without replaying input or the whole test.
-  test.setTimeout(60_000);
+  // Measured on a 0.75-CPU browser container (docker --cpus=0.75, Playwright
+  // --repeat-each 20): 11/20 failed with "Test timeout of 60000ms exceeded".
+  // In the inspected failing trace, every readiness step after restore took
+  // under 0.5 s; the test-wide budget ran out inside the 30 s movement poll,
+  // whose #scene screenshots took 4–22 s each under throttling. Only this
+  // test's budget grows; assertions, polls and readiness waits are unchanged.
+  test.setTimeout(120_000);
   await gameAssets(page, true);
   await forceWebGl(page);
   await page.goto("/?play=1");
