@@ -27,6 +27,11 @@ mod tests;
 #[path = "surface_mesh/tests/water_fixture.rs"]
 pub(crate) mod water_fixture;
 
+/// Quantization of footprint wear shared by the packets, shaders and Canvas.
+pub(crate) const WEAR_LEVELS: u8 = 15;
+/// Per-channel darkening at full wear (red, green, blue).
+pub(crate) const WEAR_DARKEN: [f32; 3] = [0.20, 0.32, 0.38];
+
 pub const MAX_SURFACE_TILES: usize = 4_096;
 pub const MAX_SURFACE_TRIANGLES: usize = MAX_SURFACE_TILES * 6;
 #[cfg(test)]
@@ -51,6 +56,8 @@ pub struct ProjectedSurfaceTriangle {
     pub(crate) floor_strengths: Option<[u8; 3]>,
     /// Overlay then middle shares per corner (`mix`); all zero means unmixed.
     pub(crate) mix: [u8; 6],
+    /// Bits 0-2 pick the texture mode; bits 3-6 hold footprint wear (`wear`). Read
+    /// them through `mode`/`wear`: the packed size is pinned, so no spare byte exists.
     pub(crate) texture_mode: u8,
     pub(crate) tint: u8,
     pub(crate) texture_uv: Option<AtlasAddress>,
@@ -64,6 +71,19 @@ pub struct ProjectedSurfaceTriangle {
 }
 
 impl ProjectedSurfaceTriangle {
+    pub(crate) fn mode(&self) -> u8 {
+        self.texture_mode & 7
+    }
+
+    /// Building footprint wear, 0..=`WEAR_LEVELS`; textured ground ignores `color`.
+    pub(crate) fn wear(&self) -> u8 {
+        (self.texture_mode >> 3) & WEAR_LEVELS
+    }
+
+    pub(crate) fn set_wear(&mut self, wear: u8) {
+        self.texture_mode = self.mode() | wear.min(WEAR_LEVELS) << 3;
+    }
+
     pub(crate) fn draw_order(&self) -> u8 {
         if self.order & SCULPTED_ORDER != 0 {
             self.order & 1
@@ -167,7 +187,7 @@ pub(crate) fn draw_surface_triangle(
     atlases: &[web_sys::HtmlCanvasElement; 5],
     triangle: &ProjectedSurfaceTriangle,
 ) -> Result<(), String> {
-    let uv = triangle_texture_coordinates(triangle.texture_mode);
+    let uv = triangle_texture_coordinates(triangle.mode());
     context.save();
     context.begin_path();
     context.move_to(triangle.points[0].screen.x, triangle.points[0].screen.y);

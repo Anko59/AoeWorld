@@ -42,6 +42,7 @@ pub(super) fn plan(
     grid: CellGrid,
     divisions: i32,
     cells: &[Option<CellSample>],
+    base: usize,
 ) -> Patches {
     let patch_grid = CellGrid {
         min: grid.min,
@@ -87,8 +88,6 @@ pub(super) fn plan(
             marked += 1;
         }
     }
-    let base = cells.iter().flatten().count() * (divisions * divisions) as usize * 2
-        + budget::skirt_reserve(cells, grid);
     let mut refinement = patch_grid.size;
     let extra = |refinement: i32| {
         (refinement as usize)

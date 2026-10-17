@@ -373,7 +373,7 @@ fn coarse_art_patches_reduce_stretch_without_changing_the_contact_planes_or_budg
         })
         .collect::<Vec<_>>();
     let triangles =
-        projected_surface_triangles(&terrain, camera([128.0, 128.0], 0.25, [1280.0, 720.0]));
+        projected_surface_triangles(&terrain, camera([128.0, 128.0], 0.25, [4096.0, 2160.0]));
     assert!(triangles.len() <= MAX_SURFACE_TRIANGLES);
     let mut cells = BTreeMap::<_, Vec<_>>::new();
     let mut shared_heights = BTreeMap::new();
