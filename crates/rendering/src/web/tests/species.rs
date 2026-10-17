@@ -42,7 +42,8 @@ async fn webgpu_dressing_anchor_pixels() {
         b: clear[2],
         a: clear[3],
     };
-    for kind in [18, 19, 20] {
+    assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(19)]).is_empty());
+    for kind in [18, 20] {
         let sprites = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)])
             .into_iter()
             .map(|(s, _, _, _)| s)

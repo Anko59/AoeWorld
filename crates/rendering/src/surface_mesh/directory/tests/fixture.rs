@@ -183,7 +183,19 @@ pub(crate) fn scene(case: usize) -> Vec<ProjectedSurfaceTriangle> {
         })
         .collect::<Vec<_>>();
     let camera = camera(case);
-    let mut faces = projected_surface_triangles(&terrain, camera);
+    // Select a genuinely budget-limited mesh, then project its center into the
+    // compact pixel target. Desktop views can now retain their source cells.
+    let mut mesh_camera = camera;
+    if matches!(case, 1 | 3 | 4) {
+        mesh_camera.viewport = [512.0; 2];
+    }
+    let mut faces = projected_surface_triangles(&terrain, mesh_camera);
+    for face in &mut faces {
+        for point in &mut face.points {
+            point.screen.x -= (mesh_camera.viewport[0] - camera.viewport[0]) / 2.0;
+            point.screen.y -= (mesh_camera.viewport[1] - camera.viewport[1]) / 2.0;
+        }
+    }
     let coarse = faces.iter().any(|face| {
         let xs = face.points.map(|point| point.world[0]);
         xs.iter().fold(f64::MIN, |a, b| a.max(*b)) - xs.iter().fold(f64::MAX, |a, b| a.min(*b))

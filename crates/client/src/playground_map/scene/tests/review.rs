@@ -187,11 +187,53 @@ async fn a_lumberjack_keeps_chopping_with_a_partial_load_until_returning() {
     client.units.get_mut(&id).unwrap().gathering = Some(ResourceKind::Wood);
     assert_eq!(
         units(&client, &scene)[0].kind,
-        aoe_rendering::SceneUnitKind::VillagerWorking
+        aoe_rendering::SceneUnitKind::VillagerChopping
     );
     client.units.get_mut(&id).unwrap().task = UnitTask::Returning;
     assert_eq!(
         units(&client, &scene)[0].kind,
-        aoe_rendering::SceneUnitKind::VillagerCarrying
+        aoe_rendering::SceneUnitKind::VillagerCarryingWood
     );
+}
+
+#[wasm_bindgen_test]
+async fn every_authoritative_resource_task_has_work_and_carry_art() {
+    use aoe_protocol::{CarriedResource, ResourceKind, UnitKind, UnitTask};
+    let scene = contact_scene();
+    let mut client = client(&scene).await;
+    let id = EntityId(1);
+    for kind in [
+        ResourceKind::Food,
+        ResourceKind::Wood,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let worker = client.units.get_mut(&id).unwrap();
+        worker.kind = UnitKind::Villager;
+        worker.task = UnitTask::Gathering;
+        worker.gathering = Some(kind);
+        worker.carried = Some(CarriedResource { kind, amount: 1 });
+        let working = units(&client, &scene)[0].kind;
+        assert_ne!(
+            working,
+            aoe_rendering::SceneUnitKind::Villager,
+            "work: {kind:?}"
+        );
+        client.units.get_mut(&id).unwrap().task = UnitTask::Returning;
+        let carrying = units(&client, &scene)[0].kind;
+        assert_ne!(
+            carrying,
+            aoe_rendering::SceneUnitKind::Villager,
+            "carry: {kind:?}"
+        );
+        assert_ne!(
+            working, carrying,
+            "partial load must keep working: {kind:?}"
+        );
+        client.units.get_mut(&id).unwrap().task = UnitTask::Idle;
+        assert_eq!(
+            units(&client, &scene)[0].kind,
+            aoe_rendering::SceneUnitKind::Villager
+        );
+    }
 }

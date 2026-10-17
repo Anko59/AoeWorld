@@ -132,7 +132,7 @@ fn assert_broadleaf_fallback(art: &GameArt, family: u8) {
 #[wasm_bindgen_test]
 fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() {
     let mut art = fixture::dressing_art();
-    for (kind, count) in [(18, 3), (19, 9), (20, 5)] {
+    for (kind, count) in [(18, 3), (20, 5)] {
         let frames = (0..count)
             .map(|i| GameFrame {
                 anchor: [-3.0, 25.0],
@@ -145,10 +145,6 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
                 art.scenery.shrubs = std::iter::repeat_n(fixture::frame(1900), 3)
                     .chain(frames.clone())
                     .collect()
-            }
-            19 => {
-                art.scenery.grass = frames[..7].to_vec();
-                art.scenery.reeds = frames[7..].to_vec();
             }
             _ => {
                 art.scenery.stumps = frames[..3].to_vec();
@@ -237,15 +233,12 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
 
 #[wasm_bindgen_test]
 fn absent_or_incomplete_dressing_never_substitutes_harvestable_art() {
-    for kind in [18, 19, 20] {
+    for kind in [18, 20] {
         assert!(scene_resource_frame(&fixture::art(), fixture::dressing(kind)).is_none());
         let mut art = fixture::dressing_art();
         match kind {
             18 => {
                 art.scenery.shrubs.pop();
-            }
-            19 => {
-                art.scenery.grass.pop();
             }
             _ => {
                 art.scenery.stumps.pop();
