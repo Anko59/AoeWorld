@@ -15,6 +15,9 @@ pub(crate) mod support;
 #[path = "mix/tests/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod fixture;
+#[path = "mix/tests/narrow_stream.rs"]
+#[cfg(test)]
+mod narrow_stream_tests;
 
 const MISSING: u8 = u8::MAX;
 const DEEP: u8 = 5;
