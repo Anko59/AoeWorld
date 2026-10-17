@@ -15,6 +15,7 @@ const rendererDependent = [
   /[\\/]camera[\\/](?:hooks|navigation)\.play\.spec\.ts$/,
   /[\\/](?:rendering|assets)[\\/][^\\/]+\.play\.spec\.ts$/,
   /[\\/]landscape[\\/]forest\.play\.spec\.ts$/,
+  /[\\/]village[\\/]selection\.play\.spec\.ts$/,
 ];
 
 export default defineConfig({
@@ -54,7 +55,8 @@ export default defineConfig({
     },
     {
       name: "canvas",
-      testMatch: /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
+      testMatch:
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/]selection\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {

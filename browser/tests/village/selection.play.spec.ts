@@ -2,6 +2,7 @@ import { PNG } from "pngjs";
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
+import { forceCanvas } from "../rendering/backends.js";
 import { fiveVillagerFixture } from "./fixture.js";
 import { freshHud } from "./resources.js";
 
@@ -55,6 +56,7 @@ test("selection ellipse remains visible through the complete zoom range", async 
   page,
 }, info) => {
   await gameAssets(page);
+  if (info.project.name === "canvas") await forceCanvas(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1");
   await expect(page.locator("#population")).toHaveText("6/10");
