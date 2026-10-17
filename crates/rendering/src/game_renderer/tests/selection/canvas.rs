@@ -58,10 +58,16 @@ fn town_center_ellipse_lower_arc_is_drawn_over_flat_ground_on_canvas() {
         let offset = (y as usize * width as usize + x as usize) * 4;
         presentation.color_buffer[offset..offset + 4].to_vec()
     };
-    // Radii are [128, 64] pixels at zoom one; the arc crosses each column of
-    // the lower half once, so one pixel in that stretch carries the colour.
+    // Tiles are 128 by 64 pixels, so the Town Center's radii are [256, 128]; the
+    // arc crosses each column of the lower half once.
     let (cx, cy) = (width / 2, height / 2);
-    for (dx, below) in [(0_i32, 64_u32), (60, 56), (-60, 56), (90, 45), (-90, 45)] {
+    for (dx, below) in [
+        (0_i32, 128_u32),
+        (120, 113),
+        (-120, 113),
+        (180, 91),
+        (-180, 91),
+    ] {
         let x = (cx as i32 + dx) as u32;
         let found = (cy + below - 3..=cy + below + 3).any(|y| at(x, y) == RING);
         assert!(found, "lower arc missing in column offset {dx}");

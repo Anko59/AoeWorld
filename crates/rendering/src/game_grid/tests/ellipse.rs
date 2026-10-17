@@ -37,8 +37,12 @@ fn gpu_ellipse_depth_grows_downward_to_clear_flat_ground_under_the_lower_arc() {
     let (sprite, depth) = ellipse[0];
     let origin = surface_depth([0.5, 0.5, 0.0]);
     let [top, bottom, ..] = selection_instance_depths(&sprite, depth, origin);
-    // One depth unit is 16 pixels at zoom one; the stroke reaches 65 below.
-    assert!(f64::from(bottom) >= 65.0 / 16.0, "{bottom}");
-    assert!(top < bottom);
-    assert!(f64::from(top) <= -63.0 / 16.0 + 1.4 + 1e-3);
+    // Tiles are 128 by 64 pixels: one depth unit spans 32 pixels at zoom one,
+    // and the stroke reaches 129 pixels either side of the centre.
+    let reach = 129.0 / 32.0;
+    assert!(
+        (f64::from(bottom - top) - 2.0 * reach).abs() < 1e-3,
+        "{top} {bottom}"
+    );
+    assert!(f64::from(bottom) >= reach, "{bottom}");
 }
