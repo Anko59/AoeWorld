@@ -1,6 +1,7 @@
 use super::*;
 use crate::gates::{scopes::Kind, worker};
-use std::process::Command;
+use crate::process::{self, CaptureExit};
+use std::{process::Command, time::Duration};
 fn git(root: &Path, args: &[&str]) -> String {
     let result = Command::new("git")
         .env_clear()
@@ -149,4 +150,78 @@ fn safe_worker_summary_keeps_original_failure_and_independent_planes_without_pat
     assert_eq!(worker["container_exit_code"], 7);
     assert_eq!(worker["cleanup"], "INCOMPLETE");
     assert_eq!(worker["independent_judge"], "UNAVAILABLE");
+}
+
+fn captured(exit: CaptureExit) -> process::Captured {
+    process::Captured {
+        exit,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+        truncated: false,
+        duration: Duration::ZERO,
+    }
+}
+
+fn suspended() -> CaptureExit {
+    CaptureExit::Suspended {
+        at: "2026-10-17 07:10:00Z".into(),
+    }
+}
+
+#[test]
+fn a_gate_interrupted_by_a_suspend_runs_once_more_after_its_containers_stop() {
+    let runs = std::cell::Cell::new(0);
+    let stops = std::cell::Cell::new(0);
+    let result = retry_once_after_suspend(
+        "test-unit",
+        || {
+            runs.set(runs.get() + 1);
+            captured(if runs.get() == 1 {
+                suspended()
+            } else {
+                CaptureExit::Success
+            })
+        },
+        || stops.set(stops.get() + 1),
+    );
+    assert!(
+        matches!(result.exit, CaptureExit::Success),
+        "{:?}",
+        result.exit
+    );
+    assert_eq!((runs.get(), stops.get()), (2, 1));
+}
+
+#[test]
+fn a_second_suspend_stands_and_is_not_retried_again() {
+    let runs = std::cell::Cell::new(0);
+    let result = retry_once_after_suspend(
+        "test-unit",
+        || {
+            runs.set(runs.get() + 1);
+            captured(suspended())
+        },
+        || {},
+    );
+    assert!(
+        matches!(result.exit, CaptureExit::Suspended { .. }),
+        "{:?}",
+        result.exit
+    );
+    assert_eq!(runs.get(), 2);
+}
+
+#[test]
+fn an_ordinary_failure_is_never_retried() {
+    let runs = std::cell::Cell::new(0);
+    let result = retry_once_after_suspend(
+        "test-unit",
+        || {
+            runs.set(runs.get() + 1);
+            captured(CaptureExit::Failed(Some(1)))
+        },
+        || panic!("no containers to stop without a suspend"),
+    );
+    assert!(matches!(result.exit, CaptureExit::Failed(Some(1))));
+    assert_eq!(runs.get(), 1);
 }

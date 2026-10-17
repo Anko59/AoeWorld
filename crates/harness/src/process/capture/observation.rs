@@ -125,6 +125,10 @@ pub(crate) fn safe_observation(captured: &Captured) -> SafeObservation {
         },
         CaptureExit::Deadline => Outcome::Deadline,
         CaptureExit::Cancelled => Outcome::Cancelled,
+        // A suspend reaches the typed record as an interrupted supervisor, not a new outcome.
+        CaptureExit::Suspended { .. } => Outcome::Monitor {
+            io_kind: std::io::ErrorKind::Interrupted.into(),
+        },
         CaptureExit::Start(error) => Outcome::Start {
             io_kind: error.kind().into(),
         },

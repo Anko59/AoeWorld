@@ -54,6 +54,8 @@ enum Command {
         command: assets::AssetCommand,
     },
     Doctor,
+    /// Stop the harness containers that a host suspend left running.
+    Recover,
     Dev {
         #[command(subcommand)]
         command: DevCommand,
@@ -228,6 +230,7 @@ fn run(
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
             }
         }
+        Command::Recover => process::suspend::containers::recover()?,
         Command::Dev { command } => match command {
             DevCommand::Start => dev::start()?,
             DevCommand::Down => dev::down()?,

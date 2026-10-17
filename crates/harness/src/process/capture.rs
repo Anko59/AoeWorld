@@ -9,6 +9,10 @@ pub(crate) enum CaptureExit {
     Failed(Option<i32>),
     Deadline,
     Cancelled,
+    /// The machine slept while the child ran; `at` is the wall time it was noticed.
+    Suspended {
+        at: String,
+    },
     Start(io::Error),
     Monitor(io::Error),
 }
@@ -134,7 +138,23 @@ pub(crate) fn capture_command(
     deadline: Duration,
     cancellation: &Cancellation,
 ) -> Captured {
-    capture_with_stdout(command, deadline, cancellation, None::<&mut fs::File>)
+    capture_command_at(command, deadline, cancellation, &suspend::read)
+}
+
+/// [`capture_command`] against an injected clock, so tests can simulate a host suspend.
+pub(crate) fn capture_command_at(
+    command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+    clock: &suspend::Clock<'_>,
+) -> Captured {
+    capture_with_stdout(
+        command,
+        deadline,
+        cancellation,
+        None::<&mut fs::File>,
+        clock,
+    )
 }
 
 /// Retain stdout in a caller-owned writer, alongside the bounded tails.
@@ -146,7 +166,13 @@ pub(crate) fn capture_command_retaining_stdout(
     cancellation: &Cancellation,
     stdout: &mut impl Write,
 ) -> Captured {
-    capture_with_stdout(command, deadline, cancellation, Some(stdout))
+    capture_with_stdout(
+        command,
+        deadline,
+        cancellation,
+        Some(stdout),
+        &suspend::read,
+    )
 }
 
 fn capture_with_stdout<W: Write>(
@@ -154,8 +180,14 @@ fn capture_with_stdout<W: Write>(
     deadline: Duration,
     cancellation: &Cancellation,
     mut retained: Option<&mut W>,
+    clock: &suspend::Clock<'_>,
 ) -> Captured {
     let started = Instant::now();
+    // Deadlines count monotonic time, which stops during a suspend; the gap does not.
+    let watch = suspend::Watch::start(clock);
+    if let Some(gap) = watch.gap_seconds() {
+        command.env(suspend::GAP_VARIABLE, gap.to_string());
+    }
     command.envs(crate::slots::guard::child_env());
     let empty = |exit| Captured {
         exit,
@@ -169,6 +201,10 @@ fn capture_with_stdout<W: Write>(
             Some(CaptureExit::Cancelled)
         } else if started.elapsed() >= deadline {
             Some(CaptureExit::Deadline)
+        } else if watch.interrupted(clock) {
+            Some(CaptureExit::Suspended {
+                at: suspend::wall_time(),
+            })
         } else {
             None
         }
