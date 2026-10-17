@@ -33,10 +33,16 @@ fn shader_source(template: &str, mixed: bool) -> String {
                 assert!(branch.is_some(), "shader end without section");
                 branch = None;
             }
-            _ if branch.is_none_or(|selected| selected == mixed) && !line.trim().is_empty() => {
+            _ if branch.is_none_or(|selected| selected == mixed)
+                && !line.trim().is_empty()
+                && !line.trim().starts_with("//") =>
+            {
                 // Formatting stays in the editable template, not each embedded module.
-                source.push_str(line.trim());
-                source.push('\n');
+                let compact = line.trim().replace(", ", ",").replace(": ", ":");
+                source.push_str(&compact);
+                if compact == "@vertex" || compact == "@fragment" {
+                    source.push(' ');
+                }
             }
             _ => {}
         }

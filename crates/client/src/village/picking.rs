@@ -18,6 +18,8 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         })
     {
         client.selected.building(building.id);
+    } else if let Some((id, _)) = resource(client, point) {
+        client.selected.resource(id);
     } else {
         client.selected = Default::default();
     }
@@ -47,10 +49,32 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
     client.selected.same_kind(candidates, owner(client), kind);
 }
 
+/// The resource under the pointer, unless a nearer cliff face hides it. The
+/// same frontmost-surface test as `passable` keeps gather feedback and orders
+/// from reaching a resource behind an occluding cliff.
 pub(in super::super) fn resource(
     client: &Client,
     point: ScreenPoint,
 ) -> Option<(u64, ResourceKind)> {
+    let (id, kind, world) = resource_unchecked(client, point)?;
+    if client.map_content_hash.is_some() {
+        let scene = map::scene::prepare(client);
+        let height = scene.height(world).unwrap_or(0.0);
+        if aoe_rendering::cliff_face_in_front(
+            &scene.triangles,
+            point,
+            world[0] + world[1] + 2.0 * height,
+        ) {
+            return None;
+        }
+    }
+    Some((id, kind))
+}
+
+fn resource_unchecked(
+    client: &Client,
+    point: ScreenPoint,
+) -> Option<(u64, ResourceKind, [f64; 2])> {
     let camera = SceneCamera {
         center: client.camera.center,
         zoom: client.camera.zoom,
@@ -60,11 +84,13 @@ pub(in super::super) fn resource(
     let world = map::world_at_screen(client, point);
     if let Some(point) = world {
         let tile = aoe_core::TileCoord::new(point[0].floor() as i32, point[1].floor() as i32);
-        if let Some((node, _)) = client
+        let starting: Vec<_> = client.resources.starting_nodes().collect();
+        if let Some(node) = client
             .terrain_chunks
             .values()
-            .flat_map(|chunk| chunk.resources())
-            .find(|(node, _)| node.tile == tile && client.resources.visible(node.id))
+            .flat_map(|chunk| chunk.resources().map(|(node, _)| node))
+            .chain(starting.iter())
+            .find(|node| node.tile == tile && client.resources.visible(node.id))
         {
             let kind = match node.kind as u8 {
                 0 => ResourceKind::Food,
@@ -72,7 +98,11 @@ pub(in super::super) fn resource(
                 2 => ResourceKind::Gold,
                 _ => ResourceKind::Stone,
             };
-            return Some((node.id, kind));
+            return Some((
+                node.id,
+                kind,
+                [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5],
+            ));
         }
     }
     // Use the same reviewed body rectangle as rendering: clicking a tree's crown
@@ -93,10 +123,11 @@ pub(in super::super) fn resource(
                 r.position[0] + r.position[1] + r.elevation_meters * 2.0,
                 r.id,
                 r.kind,
+                r.position,
             ))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
-        .map(|(_, id, kind)| {
+        .map(|(_, id, kind, position)| {
             (
                 id,
                 match kind {
@@ -105,6 +136,7 @@ pub(in super::super) fn resource(
                     2 => ResourceKind::Gold,
                     _ => ResourceKind::Stone,
                 },
+                position,
             )
         })
 }

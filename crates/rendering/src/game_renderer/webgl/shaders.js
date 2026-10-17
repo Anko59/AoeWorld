@@ -115,11 +115,13 @@ void main() {
         }
     } else {
         vec2 corner = corners[vertex];
+        float quadDepth = pages.w == 2u && corner.y < 0.0 ? depths.y : depths.x;
         gl_Position = vec4(positionRadius.xy + corner * positionRadius.zw,
-                           2.0 * depths.x - 1.0, 1);
+                           2.0 * quadDepth - 1.0, 1);
         vUv = uv.xy + vec2((corner.x + 1.0) * .5, (1.0 - corner.y) * .5) * uv.zw;
         vColor = color;
         vSolid = 0u;
+        if (pages.w == 2u) { vSolid = 64u; vUv = corner * (uv.xy + vec2(1)); }
         vTint = 0u;
     }
 }`;
@@ -304,6 +306,12 @@ void main() {
     vec2 dx = dFdx(vUv), dy = dFdy(vUv);
     vec2 dx2 = dFdx(vUv2), dy2 = dFdy(vUv2);
     vec2 dx3 = dFdx(vUv3), dy3 = dFdy(vUv3);
+    if (vSolid == 64u) {
+        vec2 q = vUv / vRect.xy;
+        float distance = abs(dot(q, q) - 1.0) / max(.0001, 2.0 * length(vUv / (vRect.xy * vRect.xy)));
+        if (distance > vRect.z * .5) discard;
+        result = vColor; return;
+    }
     if (vSolid == 0u) {
         vec4 texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.

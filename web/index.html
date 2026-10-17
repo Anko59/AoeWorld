@@ -13,7 +13,7 @@
   <div id="start-sequence" aria-label="AoeWorld start sequence"></div>
   <main id="playground">
     <canvas id="scene" tabindex="0" aria-label="AoeWorld isometric map. Select villagers and right-click a resource to gather, or ground to move."></canvas>
-    <div id="drag-box" hidden></div><div id="carried-loads" aria-hidden="true"></div>
+    <svg id="resource-highlight" aria-hidden="true" hidden><ellipse/></svg><div id="drag-box" hidden></div><div id="carried-loads" aria-hidden="true"></div>
     <header id="top-bar" aria-label="Village economy">
       <div class="stockpiles"><div class="counter" title="Wood"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#wood"></use></svg><span><b id="stockpile-wood">—</b><small>Wood</small></span><span class="worker-count" title="Villagers working wood"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><span id="workers-wood">0</span></span></div>
 <div class="counter" title="Food"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#food"></use></svg><span><b id="stockpile-food">—</b><small>Food</small></span><span class="worker-count" title="Villagers working food"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><span id="workers-food">0</span></span></div>
@@ -41,11 +41,13 @@
       <p id="minimap-title">Minimap · schematic</p>
       <button id="minimap-close" type="button" aria-label="Close map overview">Close</button>
       <svg id="minimap-map" viewBox="0 0 256 256" role="img" tabindex="0" aria-label="Whole map navigation. Click or drag to move the view; arrow keys jump across the map.">
+        <g id="minimap-frame" transform="translate(128 128) rotate(45) scale(.7071067811865476) translate(-128 -128)">
         <rect width="256" height="256" fill="#253c2c"></rect>
         <image id="minimap-terrain" width="256" height="256" preserveAspectRatio="none" pointer-events="none"></image>
         <polygon id="minimap-viewport" fill="#f4d57744" stroke="#f4d577" stroke-width="1" pointer-events="none"></polygon>
         <circle id="minimap-primary" r="3" fill="#61c8ff" stroke="#102c39" pointer-events="none"></circle>
         <circle id="minimap-camera" r="2" fill="#ffe58d" pointer-events="none"></circle>
+        <g id="minimap-resources"></g><g id="minimap-entities"></g></g>
       </svg>
       <nav id="map-navigation" aria-label="Map controls">
         <button id="town-center" type="button" aria-label="Center on Town Center" title="Town Center (H)"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#towncenter"></use></svg></button>

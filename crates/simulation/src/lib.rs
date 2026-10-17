@@ -23,7 +23,7 @@ pub use game_world::{
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};
-pub use terrain::{StartSearchResult, Terrain, UniformGrass};
+pub use terrain::{StartSearchResult, Terrain, UniformGrass, destination_passable};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entity {

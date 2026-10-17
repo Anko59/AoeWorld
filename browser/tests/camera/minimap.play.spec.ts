@@ -111,7 +111,7 @@ test("strategic raster is one bounded request per map and never loads the world"
   const side = Math.min(bounds.width, bounds.height);
   await page.mouse.click(
     bounds.x + (bounds.width - side) / 2 + side * 0.75,
-    bounds.y + (bounds.height - side) / 2 + side * 0.25,
+    bounds.y + (bounds.height - side) / 2 + side * 0.5,
   );
   await expect
     .poll(async () => {
@@ -244,7 +244,7 @@ test("minimap raster decoding is bounded and keeps forest apart from open land",
   expect(result.landIsNotBlue).toBe(true);
 });
 
-test("minimap pointer mapping spans the whole world inside the letterboxed square", async ({
+test("minimap pointer mapping inverts the diamond rotation inside the letterboxed square", async ({
   page,
 }) => {
   await page.goto("/diagnostics.html");
@@ -275,15 +275,23 @@ test("minimap pointer mapping spans the whole world inside the letterboxed squar
       module.minimapWorldPoint({ ...square, width: 0 }, 120, 60, world),
     ];
   });
-  expect(points).toEqual([
-    [15_000, 5_000],
-    [0, 0],
-    [0, 0],
-    [19_999, 19_999],
-    [10_000, 2_000],
-    [0, 125],
+  const expected = [
+    [10_000, 0],
+    [0, 10_000],
+    [0, 15882.35294117647],
+    [19_999, 15882.35294117647],
+    [1999.9999999999995, 1999.9999999999995],
+    [0, 249],
     null,
-  ]);
+  ];
+  points.forEach((point, index) => {
+    const target = expected[index];
+    if (!point || !target) expect(point).toBeNull();
+    else {
+      expect(point[0]).toBeCloseTo(target[0] ?? 0);
+      expect(point[1]).toBeCloseTo(target[1] ?? 0);
+    }
+  });
 });
 
 test("blur releases held camera keys without stale impulse movement", async ({

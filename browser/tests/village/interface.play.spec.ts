@@ -51,6 +51,18 @@ test("server stockpile and population; Q queues and cancels a villager", async (
   await expect(
     page.getByRole("button", { name: /Train Villager/ }),
   ).toContainText("50");
+  await page.evaluate(() => {
+    const input = document.createElement("input");
+    input.id = "command-text-input";
+    document.body.append(input);
+    input.focus();
+  });
+  await page.keyboard.press("q");
+  await expect(page.locator("#stockpile-food")).toHaveText("200");
+  await page.evaluate(() =>
+    document.getElementById("command-text-input")?.remove(),
+  );
+  await page.locator("#grid").focus();
   await page.keyboard.press("q");
   await expect(page.locator("#stockpile-food")).toHaveText("150");
   await expect(page.locator("#training-progress")).toBeVisible();

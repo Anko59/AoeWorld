@@ -4,16 +4,24 @@ use aoe_protocol::UnitKind;
 #[derive(Default)]
 pub(crate) struct Selection {
     pub units: Vec<EntityId>,
+    pub resource_id: Option<u64>,
     pub building_id: Option<EntityId>,
 }
 impl Selection {
     pub fn building(&mut self, id: EntityId) {
+        self.resource_id = None;
         self.units.clear();
         self.building_id = Some(id);
     }
     pub fn units(&mut self, units: Vec<EntityId>) {
+        self.resource_id = None;
         self.units = units;
         self.building_id = None;
+    }
+    pub fn resource(&mut self, id: u64) {
+        self.units.clear();
+        self.building_id = None;
+        self.resource_id = Some(id);
     }
     pub fn same_kind(
         &mut self,

@@ -1,5 +1,5 @@
 use crate::{
-    GAME_ATLAS_SIDE, SceneCamera,
+    SceneCamera,
     surface_mesh::{ProjectedSurfaceTriangle, surface_depth},
     web::Sprite,
 };
@@ -10,7 +10,7 @@ use web_sys::CanvasRenderingContext2d;
 const GRID_COLOR: [f32; 4] = [0.05, 0.08, 0.03, 0.6];
 /// Screen pixels kept between neighbouring parallel lines.
 const GRID_MIN_SPACING: f64 = 16.0;
-pub(crate) const SELECTION_RING_SPRITES: usize = 32;
+pub(crate) const SELECTION_RING_SPRITES: usize = 1;
 
 pub(crate) fn selection_ring(
     camera: SceneCamera,
@@ -27,29 +27,67 @@ pub(crate) fn selection_ellipse(
     radius: [f64; 2],
 ) -> Vec<(Sprite, f64)> {
     let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
-    let radius_x = radius[0] * camera.zoom;
-    let radius_y = radius[1] * camera.zoom;
-    let mut sprites = Vec::with_capacity(SELECTION_RING_SPRITES);
-    for [cos, sin] in RING_POINTS {
-        let point = ScreenPoint {
-            x: screen.x + cos * radius_x,
-            y: screen.y + sin * radius_y,
-        };
-        let world = camera_projection(camera).screen_to_world_at_height(point, elevation_meters);
-        sprites.push((
-            Sprite {
-                position: to_clip(point, camera.viewport),
-                radius: pixel_radius(camera.viewport, 1.5),
-                color: [0.95, 0.85, 0.35, 1.0],
-                uv: solid_uv(),
-                depths: [0.0; 4],
-                terrain_blend: [[0.0; 4]; 2],
-                pages: [2, 0, 0, 0],
-            },
-            surface_depth([world[0], world[1], elevation_meters]),
-        ));
-    }
-    sprites
+    // One analytic ellipse, with a constant two-pixel stroke. It clears its
+    // ground surface but stays below the unit body in world depth order.
+    let radii = [
+        (radius[0] * camera.zoom).max(5.0),
+        (radius[1] * camera.zoom).max(3.0),
+    ];
+    // Flat ground at this elevation is nearer the viewer by `slope` depth units
+    // per pixel below the centre, so the stroke's depth must grow downward with
+    // it or the ground covers the front arc. Renderers read `depths[0]` for the
+    // top edge and `depths[1]` for the bottom edge, as offsets from the layer
+    // depth, and interpolate between them.
+    let below = camera_projection(camera)
+        .world_to_screen_at_height([position[0] + 1.0, position[1] + 1.0], elevation_meters);
+    let slope = if (below.y - screen.y).abs() > f64::EPSILON {
+        2.0 / (below.y - screen.y)
+    } else {
+        0.0
+    };
+    let half = ((radii[1] + 1.0) * slope) as f32;
+    vec![(
+        Sprite {
+            position: to_clip(screen, camera.viewport),
+            radius: [
+                (2.0 * (radii[0] + 1.0) / camera.viewport[0]) as f32,
+                (2.0 * (radii[1] + 1.0) / camera.viewport[1]) as f32,
+            ],
+            color: [0.95, 0.85, 0.35, 1.0],
+            uv: [radii[0] as f32, radii[1] as f32, 2.0, 0.0],
+            depths: [-half, half, half, -half],
+            terrain_blend: [[0.0; 4]; 2],
+            pages: [2, 0, 0, 2],
+        },
+        surface_depth([position[0], position[1], elevation_meters]) + 1.4,
+    )]
+}
+
+/// GPU instance depths for a selection ellipse: the stroke's top and bottom
+/// edge depths relative to the camera origin, kept in the first three slots so
+/// depth normalization sees both.
+pub(crate) fn selection_instance_depths(
+    sprite: &Sprite,
+    layer_depth: f64,
+    origin: f64,
+) -> [f32; 4] {
+    let top = (layer_depth - origin) as f32 + sprite.depths[0];
+    let bottom = (layer_depth - origin) as f32 + sprite.depths[1];
+    [top, bottom, bottom, top]
+}
+
+/// Canvas fragment depth of a selection ellipse at a pixel row.
+pub(crate) fn selection_depth_at(
+    sprite: &Sprite,
+    layer_depth: f64,
+    row: f64,
+    viewport_height: f64,
+) -> f64 {
+    let center = (1.0 - f64::from(sprite.position[1])) * viewport_height * 0.5;
+    let half_height = f64::from(sprite.radius[1]) * viewport_height * 0.5;
+    let t = ((row - center) / half_height).clamp(-1.0, 1.0);
+    let (top, bottom) = (f64::from(sprite.depths[0]), f64::from(sprite.depths[1]));
+    layer_depth + top + (bottom - top) * (t + 1.0) * 0.5
 }
 
 /// Borders of the drawn terrain cells, so the overlay follows the mesh's
@@ -146,64 +184,6 @@ fn to_clip(point: ScreenPoint, viewport: [f64; 2]) -> [f32; 2] {
     ]
 }
 
-fn pixel_radius(viewport: [f64; 2], pixels: f64) -> [f32; 2] {
-    [
-        (pixels / viewport[0].max(1.0)) as f32,
-        (pixels / viewport[1].max(1.0)) as f32,
-    ]
-}
-
-fn solid_uv() -> [f32; 4] {
-    [
-        0.0,
-        0.0,
-        1.0 / GAME_ATLAS_SIDE as f32,
-        1.0 / GAME_ATLAS_SIDE as f32,
-    ]
-}
-
-// Pinned Rust 1.93.1 wasm32 sin/cos at the fixed ring angles.
-const RING_POINTS: [[f64; 2]; 32] = [
-    [1.0, 0.0],
-    [0.9807852804032304, 0.19509032201612825],
-    [0.9238795325112867, 0.3826834323650898],
-    [0.8314696123025452, 0.5555702330196022],
-    [0.7071067811865476, 0.7071067811865475],
-    [0.5555702330196023, 0.8314696123025452],
-    [0.38268343236508984, 0.9238795325112867],
-    [0.19509032201612833, 0.9807852804032304],
-    [6.123233995736766e-17, 1.0],
-    [-0.1950903220161282, 0.9807852804032304],
-    [-0.3826834323650897, 0.9238795325112867],
-    [-0.555570233019602, 0.8314696123025453],
-    [-0.7071067811865475, 0.7071067811865476],
-    [-0.8314696123025453, 0.5555702330196022],
-    [-0.9238795325112867, 0.3826834323650899],
-    [-0.9807852804032304, 0.1950903220161286],
-    [-1.0, 1.2246467991473532e-16],
-    [-0.9807852804032304, -0.19509032201612836],
-    [-0.9238795325112868, -0.38268343236508967],
-    [-0.8314696123025455, -0.555570233019602],
-    [-0.7071067811865477, -0.7071067811865475],
-    [-0.5555702330196022, -0.8314696123025452],
-    [-0.38268343236509034, -0.9238795325112865],
-    [-0.19509032201612866, -0.9807852804032303],
-    [-1.8369701987210297e-16, -1.0],
-    [0.1950903220161283, -0.9807852804032304],
-    [0.38268343236509, -0.9238795325112866],
-    [0.5555702330196018, -0.8314696123025455],
-    [0.7071067811865474, -0.7071067811865477],
-    [0.8314696123025452, -0.5555702330196022],
-    [0.9238795325112865, -0.3826834323650904],
-    [0.9807852804032303, -0.19509032201612872],
-];
-
+#[path = "game_grid/tests/ellipse.rs"]
 #[cfg(test)]
-#[wasm_bindgen_test::wasm_bindgen_test]
-fn fixed_ring_points_match_original_trigonometry_bits() {
-    for (index, [cos, sin]) in RING_POINTS.into_iter().enumerate() {
-        let angle = index as f64 * std::f64::consts::TAU / 32.0;
-        assert_eq!(cos.to_bits(), angle.cos().to_bits());
-        assert_eq!(sin.to_bits(), angle.sin().to_bits());
-    }
-}
+mod tests;

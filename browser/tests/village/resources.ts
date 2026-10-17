@@ -53,7 +53,9 @@ export async function frameResource(
   page: Page,
   kind: number,
   zoom = 0.35,
+  centered = false,
 ): Promise<Target> {
+  if (centered) return centerVisibleResource(page, kind, zoom);
   await expect
     .poll(async () =>
       (await resourceTargets(page)).some((r) => r.kind === kind),
@@ -102,4 +104,52 @@ export async function frameResource(
   );
   if (!target) throw new Error("Framed resource missing");
   return target;
+}
+
+/** Follow the displayed terrain projection, including changing focus height.
+ * Flat-world inversion alone cannot frame an elevated deposit reliably. */
+async function centerVisibleResource(
+  page: Page,
+  kind: number,
+  zoom: number,
+): Promise<Target> {
+  const size = page.viewportSize();
+  if (!size) throw new Error("Viewport missing");
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await freshHud(page);
+    const node = (await resourceTargets(page)).find(
+      (node) => node.kind === kind,
+    );
+    if (!node) throw new Error("Resident resource missing");
+    if (
+      node.x > 40 &&
+      node.x < size.width - 40 &&
+      node.y > 80 &&
+      node.y < size.height - 240
+    )
+      return node;
+    const camera = await page.locator("#minimap").evaluate((element) => ({
+      x: Number(element.dataset["cameraX"]),
+      y: Number(element.dataset["cameraY"]),
+      zoom: Number(element.dataset["zoom"]),
+    }));
+    const dx = (node.x - size.width / 2) / (64 * camera.zoom);
+    const dy = (node.y - size.height / 2) / (32 * camera.zoom);
+    const x = camera.x + (dx + dy) / 2,
+      y = camera.y + (dy - dx) / 2;
+    await page.evaluate(
+      ([x, y, zoom]) => {
+        location.hash = `x=${x}&y=${y}&zoom=${zoom}`;
+      },
+      [x, y, zoom],
+    );
+    await expect
+      .poll(async () =>
+        Number(await page.locator("#minimap").getAttribute("data-camera-x")),
+      )
+      .toBeCloseTo(x);
+  }
+  throw new Error(
+    "The requested resource did not enter the visible battlefield",
+  );
 }

@@ -172,6 +172,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let ondown = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         event.prevent_default();
         let mut client = down.borrow_mut();
+        let _ = client.canvas.focus();
         let target = point(&client, &event);
         if event.button() == 2 {
             send_order(&mut client, target);

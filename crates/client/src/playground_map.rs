@@ -291,7 +291,7 @@ fn surface_elevation(tile: &Tile, x: f64, y: f64) -> f64 {
     )
 }
 
-fn terrain_tile(client: &Client, x: i32, y: i32) -> Option<&Tile> {
+pub(super) fn terrain_tile(client: &Client, x: i32, y: i32) -> Option<&Tile> {
     if x < 0 || y < 0 || x >= client.config.width_tiles || y >= client.config.height_tiles {
         return None;
     }

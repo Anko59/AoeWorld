@@ -74,3 +74,22 @@ fn fixed_height_conversion_preserves_old_array_map_bits() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn frontmost_cliff_blocks_command_feedback_while_ground_picking_sees_behind_it() {
+    let ground = projected_surface_triangles(&map(2), camera([0.5, 0.5], 1.0, [256.0, 128.0]))[0];
+    let point = ScreenPoint {
+        x: ground.points.iter().map(|p| p.screen.x).sum::<f64>() / 3.0,
+        y: ground.points.iter().map(|p| p.screen.y).sum::<f64>() / 3.0,
+    };
+    let mut cliff = ground;
+    cliff.pickable = false;
+    for p in &mut cliff.points {
+        p.world[2] += 2.0;
+    }
+    assert!(pick_surface_point(&[ground, cliff], point).is_some());
+    let hit = surface_hit_at(&[ground, cliff], point).unwrap();
+    assert!(!hit.1);
+    assert_eq!(surface_depth_at(&[ground, cliff], point), Some(hit.0));
+    assert!(surface_hit_at(&[ground], point).unwrap().1);
+}

@@ -144,7 +144,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
     const side = Math.min(bounds.width, bounds.height);
     await page.mouse.click(
       bounds.x + (bounds.width - side) / 2 + side * 0.75,
-      bounds.y + (bounds.height - side) / 2 + side * 0.25,
+      bounds.y + (bounds.height - side) / 2 + side * 0.5,
     );
     // Crucially, old requests stay unreleased while the new camera gets terrain.
     await expect.poll(() => served).toBeGreaterThan(0);

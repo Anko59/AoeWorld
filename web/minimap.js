@@ -55,8 +55,9 @@ export function minimapWorldPoint(rect, clientX, clientY, world) {
   if (!(side > 0)) return null;
   const left = rect.left + (rect.width - side) / 2;
   const top = rect.top + (rect.height - side) / 2;
-  return [
-    Math.max(0, Math.min(world[0] - 1, (clientX - left) / side * world[0])),
-    Math.max(0, Math.min(world[1] - 1, (clientY - top) / side * world[1])),
-  ];
+  // Invert the same translate/rotate/scale used by #minimap-frame.
+  const x = (clientX - left) / side - 0.5;
+  const y = (clientY - top) / side - 0.5;
+  return [Math.max(0, Math.min(world[0] - 1, (x + y + 0.5) * world[0])),
+    Math.max(0, Math.min(world[1] - 1, (y - x + 0.5) * world[1]))];
 }

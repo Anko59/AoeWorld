@@ -20,13 +20,14 @@ impl ResourceStateCache {
         self.revision = None;
         self.amounts.clear();
     }
+    #[inline(never)]
+    pub fn remaining(&self, id: u64, initial: u16) -> u16 {
+        self.amounts
+            .binary_search_by_key(&id, |value| value.id)
+            .map_or(initial, |index| self.amounts[index].remaining)
+    }
     pub fn visible(&self, id: u64) -> bool {
-        self.revision.is_some()
-            && self
-                .amounts
-                .binary_search_by_key(&id, |value| value.id)
-                .ok()
-                .is_none_or(|index| self.amounts[index].remaining > 0)
+        self.revision.is_some() && self.remaining(id, 1) > 0
     }
     pub fn apply(&mut self, state: ResourceState) -> bool {
         if !state.valid()
