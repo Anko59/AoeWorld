@@ -3,6 +3,7 @@ use crate::process::{self, ProcessError};
 use std::{path::Path, time::Duration};
 
 pub(crate) mod affected;
+pub(crate) mod part;
 
 const ARGS: &[&str] = &[
     "nextest",

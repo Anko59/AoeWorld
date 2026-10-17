@@ -70,7 +70,7 @@ define HARNESS_VALIDATE_EVIDENCE_PATH
 $(if $(strip $(HARNESS_EVIDENCE_REAL)),,$(error HARNESS_EVIDENCE_DIR must resolve to an existing directory))$(if $(strip $(DOCKER_HOST)),$(if $(filter unix://%,$(DOCKER_HOST)),,$(error harness evidence mounts require a local Unix Docker endpoint)),)$(if $(strip $(HARNESS_DOCKER_CONTEXT_ENDPOINT)),$(if $(filter unix://%,$(HARNESS_DOCKER_CONTEXT_ENDPOINT)),,$(error harness evidence mounts require a local Unix Docker context)),)$(if $(filter /,$(HARNESS_EVIDENCE_REAL)),$(error HARNESS_EVIDENCE_DIR must not be the host filesystem root))$(if $(filter $(HARNESS_ROOT_REAL) $(HARNESS_ROOT_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_ROOT_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from the checkout))$(if $(HARNESS_GIT_EXTERNAL_REAL),$(if $(filter $(HARNESS_GIT_EXTERNAL_REAL) $(HARNESS_GIT_EXTERNAL_REAL)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(HARNESS_GIT_EXTERNAL_REAL)),$(error HARNESS_EVIDENCE_DIR must be disjoint from external Git metadata)),)$(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),$(if $(strip $(HARNESS_CARGO_CACHE_REAL)),,$(error custom HARNESS_CARGO_CACHE mounts must resolve to an existing path)),)$(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),$(if $(strip $(HARNESS_TARGET_CACHE_REAL)),,$(error custom HARNESS_TARGET_CACHE mounts must resolve to an existing path)),)$(foreach cache,$(HARNESS_CACHE_MOUNT_SOURCES_REAL),$(if $(strip $(cache)),$(if $(filter $(cache) $(cache)/%,$(HARNESS_EVIDENCE_REAL))$(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(cache)),$(error HARNESS_EVIDENCE_DIR must be disjoint from writable cache mounts)),))$(foreach runtime,$(HARNESS_RUNTIME_DIRS_REAL),$(if $(strip $(runtime)),$(if $(filter $(runtime) $(runtime)/%,$(HARNESS_EVIDENCE_REAL)),$(error HARNESS_EVIDENCE_DIR must not expose host runtime paths)),))$(foreach socket,$(HARNESS_DOCKER_SOCKET_PATHS_REAL),$(if $(strip $(socket)),$(if $(filter $(HARNESS_EVIDENCE_REAL) $(HARNESS_EVIDENCE_REAL)/%,$(socket)),$(error HARNESS_EVIDENCE_DIR must not contain a Docker socket)),))
 endef
 
-.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check ci-dispatch-status pre-commit pre-push preflight build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-comment perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
+.PHONY: help bootstrap tools analysis-tools policy-tools coverage-tools fuzz-tools mutation-tools browser-tools orchestrator-tools browser-deps browser-check test-wasm test-e2e test-creator-source test-geographic-matrix fuzz-smoke fuzz-nightly mutation-nightly doctor hooks-install hooks-check test-placement structure-check architecture-check docs-check fmt fmt-check lint deny test-unit geodata-bootstrap geodata-verify map-estimate map-generate map-generate-detailed map-verify map-test map-perf map-source-qualify coverage coverage-check ci-select ci-check ci-dispatch-status pre-commit pre-push preflight preflight-checks preflight-unit build build-wasm dev down status logs assets-inspect assets-import assets-verify perf-smoke perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30 perf-instructions perf-timing perf-wasm-size perf-baseline-propose perf-comment perf-hardware-check qa-validate qa-serve release-build release-publish release-source-check release-main-source-check release-verify-published release-rehearse release-smoke-published release-verify repo-policy-check map-source-scale-qualify release-rehearse-published test-geographic-visuals test-geographic-visuals-unit
 
 help:
 	@echo 'AoeWorld'
@@ -102,6 +102,7 @@ help:
 	@echo '  .agents/hooks/harness.sh build  Build the agent hook judge (docs/agent-runtimes.md)'
 	@echo '  make pre-commit      Local static gate'
 	@echo '  make preflight       Static gate plus native tests'
+	@echo '  make preflight-checks / preflight-unit  The two halves of preflight (CI runs them in parallel)'
 	@echo '  make ci-select       Emit revision-bound selected CI jobs'
 	@echo '  make ci-dispatch-status Report a dispatch aggregate as a commit status'
 	@echo '  make ci-check        Validate selection manifest and job outcomes'
@@ -355,6 +356,13 @@ pre-commit:
 
 preflight: deny build-wasm
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight
+
+# The two halves of preflight: CI's static job runs them as parallel legs.
+preflight-checks: deny build-wasm
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part checks
+
+preflight-unit:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part unit
 
 # The pre-push hook: skip the preflight `make ship` just passed at this exact
 # commit (AOE_SHIP_EVIDENCE, checked in Rust), otherwise run it.

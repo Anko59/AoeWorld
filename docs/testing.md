@@ -18,6 +18,15 @@ tests and says so. The first and last lines of the run, and so the gate
 evidence, show `test-unit: N of M crates (changed: a, b; dependents: c, d)`.
 CI (`GITHUB_ACTIONS=true`), nightly, a plain `make test-unit` and `AOE_TEST_ALL=1`
 always run the full suite.
+
+CI runs `make preflight` as two parallel legs of its `static` job (#388):
+`make preflight-checks` (`deny`, `build-wasm`, the static checks and clippy) and
+`make preflight-unit` (`test-unit`, then the smoke workload), the harness's
+`preflight --part checks|unit`; together they run every gate `make preflight`
+runs, and the job is green only when both legs are. Each leg restores the cargo
+registry and `target/` cache that the last push to `dev` saved (key: leg,
+`Cargo.lock`, toolchain pin and tools Dockerfile; restore-key: the leg alone);
+pull requests only read it, so they cannot evict it from the repository's 10 GB.
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
