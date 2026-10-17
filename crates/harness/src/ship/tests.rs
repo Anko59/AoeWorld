@@ -303,6 +303,7 @@ mod showcase_builds;
 mod showcase_pipeline;
 mod showcase_scenes;
 mod showcase_security;
+mod showcase_steps;
 pub(super) mod stack;
 mod transport;
 
