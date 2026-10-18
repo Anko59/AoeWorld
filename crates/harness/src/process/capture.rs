@@ -226,6 +226,8 @@ fn capture_once<W: Write>(
         } else if started.elapsed() >= deadline {
             Some(CaptureExit::Deadline)
         } else if watch.interrupted(clock) {
+            // First, so a ship that holds the lock is not ended as frozen while it recovers.
+            crate::ship::lock::refresh_held();
             Some(CaptureExit::Suspended {
                 at: suspend::wall_time(),
             })

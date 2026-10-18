@@ -243,7 +243,22 @@ fn run_one(
             };
         }
     };
-    let first = run_once(root, gate, &slot, select, &retry.load, observe);
+    let mut first = run_once(root, gate, &slot, select, &retry.load, observe);
+    // A host suspend killed the run: stop the containers it left and run it once more. A
+    // second suspend stands as the gate's result.
+    if let Some(at) = first.suspended.take() {
+        eprintln!(
+            "{}: interrupted by a host suspend at {at}; retrying once",
+            gate.id
+        );
+        if let Err(error) = crate::process::suspend::containers::stop_interrupted() {
+            eprintln!(
+                "{}: could not stop the containers a suspend left: {error}",
+                gate.id
+            );
+        }
+        first = run_once(root, gate, &slot, select, &retry.load, observe);
+    }
     if !(retry.local && first.overloaded) {
         return first.result;
     }
@@ -277,6 +292,8 @@ struct Run {
     attempt: Attempt,
     /// The load at the deadline said the machine was overloaded (only ever set on a timeout).
     overloaded: bool,
+    /// The wall time a host suspend interrupted this run.
+    suspended: Option<String>,
 }
 
 fn run_once(
@@ -323,8 +340,15 @@ fn run_once(
         .trim();
     let passed = matches!(captured.exit, CaptureExit::Success);
     let timed_out = matches!(captured.exit, CaptureExit::Deadline);
+    let suspended = match &captured.exit {
+        CaptureExit::Suspended { at } => Some(at.clone()),
+        _ => None,
+    };
     let load = if timed_out { reader() } else { None };
     let mut summary: String = last.chars().take(120).collect();
+    if let Some(at) = &suspended {
+        summary = format!("interrupted by a host suspend at {at}; {summary}");
+    }
     if timed_out {
         summary = over_budget(gate.budget_s, &summary, &|| load);
     }
@@ -356,6 +380,7 @@ fn run_once(
             load: load.as_ref().map(load::Load::note).unwrap_or_default(),
         },
         overloaded: load.is_some_and(|load| load.overloaded()),
+        suspended,
     }
 }
 

@@ -105,7 +105,10 @@ frees it. The file also names the holder (worktree, branch, command, start time)
 
 Waiters are served in arrival order, except that a ship back from its review (`make ship`
 queues again for the push) goes before every plain waiter, in arrival order among such ships.
-Priority only picks who is admitted next; the holder is never interrupted. Each waiter keeps an
+Priority only picks who is admitted next. A holder is interrupted only when a host suspend
+froze it: the holder records its boot-time gap, supervised children refresh it when they notice
+a suspend, and a waiter that reads the same stale record twice SIGKILLs that exact pid (pid and
+start time match) and says `taking over` ([troubleshooting](troubleshooting.md)). Each waiter keeps an
 OS lock on a ticket in `aoe-ship/ship.lock.queue/` (arrival time, pid, counter; a returning
 ship's ticket is marked) while it waits and runs, and takes the main lock only when no ticket
 ahead of it in that order is still locked. A ticket whose lock can be taken belongs to a dead
