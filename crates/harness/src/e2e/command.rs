@@ -51,6 +51,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
     ]
     .map(str::to_owned)
     .into();
+    args.splice(1..1, crate::slots::cap_args());
     // The gap at start lets `aoe-harness recover` find this container after a host suspend.
     let gap = crate::process::suspend::Watch::start(&crate::process::suspend::read)
         .gap_seconds()

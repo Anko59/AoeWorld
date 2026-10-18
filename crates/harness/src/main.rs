@@ -102,7 +102,9 @@ enum Command {
     /// The seed sweeps and full-axis geodata round-trips that `test-unit` excludes.
     TestExhaustive,
     LoadStatus,
-    /// Run `argv` holding the heavy slot of gate `gate` (the registry decides whether it is heavy).
+    /// Print the CPUs each heavy slot gives its containers (gates/heavy.json cores shared among its slots).
+    SlotCpus,
+    /// Run `argv` holding a heavy slot named `gate`: the make wrapper's steps always queue.
     Slot {
         gate: String,
         #[arg(last = true, required = true)]
@@ -281,6 +283,10 @@ fn run(
             slots::print_status(Path::new("."), slots)?
         }
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
+        Command::SlotCpus => println!(
+            "{}",
+            slots::Config::load(Path::new("."), slots)?.cpus_per_slot()
+        ),
         Command::TestWasm => wasm_test::run()?,
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,

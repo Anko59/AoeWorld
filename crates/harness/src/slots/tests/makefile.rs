@@ -10,12 +10,12 @@ use std::{
 
 const FORWARDS: &str = "$(HEAVY_ENV)";
 
-fn repository() -> std::path::PathBuf {
+pub(super) fn repository() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// The Makefile and every make/*.mk, by repository-relative name and text.
-fn make_files(root: &Path) -> Vec<(String, String)> {
+pub(super) fn make_files(root: &Path) -> Vec<(String, String)> {
     let mut names = vec!["Makefile".to_owned()];
     for entry in fs::read_dir(root.join("make")).expect("make/") {
         let name = entry.expect("entry").file_name();
@@ -104,7 +104,7 @@ fn unforwarded(files: &[(String, String)]) -> Vec<String> {
 }
 
 /// The recipe lines of `target`: the tab-indented lines after its rule, in the first file that has it.
-fn recipe<'a>(files: &'a [(String, String)], target: &str) -> Option<Vec<&'a str>> {
+pub(super) fn recipe<'a>(files: &'a [(String, String)], target: &str) -> Option<Vec<&'a str>> {
     for (_, text) in files {
         let lines: Vec<&str> = text.lines().collect();
         let Some(at) = lines.iter().position(|line| is_rule_for(line, target)) else {
@@ -192,7 +192,7 @@ fn a_gate_that_runs_containers_outside_a_harness_command_runs_under_the_slot() {
 }
 
 /// Each variable's definition line, by name (the first definition wins).
-fn definitions(files: &[(String, String)]) -> BTreeMap<String, String> {
+pub(super) fn definitions(files: &[(String, String)]) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
     for (_, text) in files {
         for line in text.lines() {

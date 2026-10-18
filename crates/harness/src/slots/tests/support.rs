@@ -13,6 +13,11 @@ pub(super) fn hold(from: &Path, gate: &str, env: &SlotEnv) -> Result<Guard> {
     }
 }
 
+pub(super) fn hold_forced(from: &Path, gate: &str, env: &SlotEnv) -> Result<Guard> {
+    let root = guard::checkout_of(from)?.expect("a checkout with a registry");
+    guard::acquire_in(&root, gate, env, || guard::slot_dir(&root, env), || Ok(()))
+}
+
 pub(super) fn hold_snapshot(
     root: &Path,
     source: &Path,

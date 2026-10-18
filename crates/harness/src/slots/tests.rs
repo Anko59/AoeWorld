@@ -1,5 +1,5 @@
 use super::{
-    Config, DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
+    DIR_VAR, Holder, Slot, SlotEnv, TOKEN_VAR, acquire_at,
     guard::{dir, is_heavy, nonce},
     status::render,
     verify,
@@ -319,9 +319,32 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     let slots = dir(&root).unwrap();
     let outer = hold(&root, "slow", &SlotEnv::default()).expect("the only slot is free");
     let env = outer.env();
-    assert_eq!(env.len(), 2);
+    assert_eq!(env.len(), 3);
+    assert_eq!(env[2].0, crate::slots::CPUS_VAR, "children get the CPU cap");
+    assert!(
+        env[2].1.parse::<usize>().is_ok_and(|cpus| cpus >= 1),
+        "the cap is a CPU count: {}",
+        env[2].1
+    );
     assert!(verify(&slots, &env[0].1), "children inherit a live slot");
     assert_eq!(env[0].0, TOKEN_VAR);
+    drop(outer);
+    let ci = SlotEnv {
+        ci: true,
+        ..SlotEnv::default()
+    };
+    let in_ci = hold(&root, "slow", &ci).expect("the slot is free again");
+    assert!(
+        in_ci
+            .env()
+            .iter()
+            .all(|(name, _)| *name != crate::slots::CPUS_VAR),
+        "a CI slot exports no CPU cap: {:?}",
+        in_ci.env()
+    );
+    drop(in_ci);
+    let outer = hold(&root, "slow", &SlotEnv::default()).expect("the slot is free again");
+    let env = outer.env();
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
     let begun = Instant::now();
@@ -378,33 +401,18 @@ fn a_gate_that_waited_longer_than_its_budget_still_gets_its_whole_budget() {
 }
 
 #[test]
-fn config_defaults_overrides_and_limits() {
-    let config = |slots, wait| Config::from_values(2, slots, wait);
-    assert_eq!(
-        config(None, None).unwrap(),
-        Config {
-            slots: 2,
-            wait: Duration::from_secs(90 * 60)
-        }
-    );
-    assert_eq!(
-        config(Some("5"), Some("0")).unwrap(),
-        Config {
-            slots: 5,
-            wait: Duration::ZERO
-        }
-    );
-    assert_eq!(config(Some(""), Some("")).unwrap().slots, 2);
-    for bad in ["0", "9", "-1", "two"] {
-        assert!(config(Some(bad), None).is_err(), "{bad}");
-    }
-    assert!(config(None, Some("soon")).is_err());
-    assert!(Config::from_values(0, None, None).is_err());
-    let committed = Config::load(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        &SlotEnv::default(),
-    );
-    assert!(committed.is_ok_and(|c| (1..=8).contains(&c.slots)));
+fn a_slot_command_takes_a_slot_for_a_target_the_registry_does_not_list() {
+    let _turn = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (_temp, root) = checkout();
+    let slots = dir(&root).unwrap();
+    let light = hold(&root, "build", &SlotEnv::default()).expect("not a gate: takes nothing");
+    assert!(light.env().is_empty());
+    let forced =
+        hold_forced(&root, "build", &SlotEnv::default()).expect("the slot command queues for it");
+    assert_eq!(forced.env().len(), 3);
+    assert_eq!(tickets(&slots), 1);
+    drop((light, forced));
+    assert_eq!(tickets(&slots), 0);
 }
 
 #[test]
@@ -461,6 +469,8 @@ fn status_lists_running_holders_then_the_queue() {
         ["heavy slots: 0 of 2 in use (AOE_HEAVY_SLOTS to change)"]
     );
 }
+mod cap;
+mod config;
 mod environment;
 mod makefile;
 mod roots;
@@ -468,4 +478,4 @@ mod roots;
 mod load;
 
 mod support;
-use support::hold;
+use support::{hold, hold_forced};
