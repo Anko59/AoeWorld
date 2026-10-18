@@ -390,3 +390,11 @@ pub(crate) fn barycentric(points: [SurfacePoint; 3], screen: ScreenPoint) -> Opt
     let third = 1.0 - first - second;
     (first >= -1e-7 && second >= -1e-7 && third >= -1e-7).then_some([first, second, third])
 }
+
+#[cfg(test)]
+impl ProjectedSurfaceTriangle {
+    /// Test-first stub: no vertex shade yet, so the relief tests fail by assertion.
+    pub(crate) fn relief(&self) -> [i8; 3] {
+        [0; 3]
+    }
+}

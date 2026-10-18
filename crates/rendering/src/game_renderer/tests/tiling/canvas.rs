@@ -271,3 +271,89 @@ fn canvas_building_wear_darkens_native_textured_terrain() {
     }
     wear::assert_worn(&probes[0], &probes[1]);
 }
+
+#[wasm_bindgen_test]
+fn canvas_slope_shading_is_directional_and_zoom_consistent() {
+    use crate::game_renderer::relief_fixture as relief;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = relief::atlas();
+    let mut ratios = Vec::new();
+    for far in [false, true] {
+        let mut probes = Vec::new();
+        for rise in [0, 1, -1] {
+            let layers = relief::faces(far, rise)
+                .into_iter()
+                .map(WorldLayer::Surface)
+                .collect::<Vec<_>>();
+            canvas_depth::render_canvas_world(
+                &canvas,
+                &context,
+                &atlas,
+                &mut presentation,
+                &layers,
+                relief::camera(far),
+                false,
+            )
+            .unwrap();
+            probes.push(relief::PROBES.map(|[x, y]| pixel(&presentation.color_buffer, x, y)));
+        }
+        ratios.push(relief::assert_directional(
+            far, &probes[0], &probes[1], &probes[2],
+        ));
+    }
+    relief::assert_zoom_agreement(ratios[0], ratios[1]);
+}
+
+#[wasm_bindgen_test]
+fn canvas_slope_shade_is_continuous_across_shared_edges() {
+    use crate::game_renderer::relief_fixture as relief;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = relief::atlas();
+    for (far, textured) in [(false, true), (true, true), (false, false), (true, false)] {
+        let (faces, probes, gap) = relief::seam(far, textured);
+        let layers = faces
+            .into_iter()
+            .map(WorldLayer::Surface)
+            .collect::<Vec<_>>();
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &layers,
+            relief::camera(far),
+            false,
+        )
+        .unwrap();
+        relief::assert_continuous(
+            far,
+            gap,
+            &probes.map(|[x, y]| pixel(&presentation.color_buffer, x, y)),
+        );
+    }
+}
+
+#[wasm_bindgen_test]
+fn canvas_slope_beside_missing_terrain_still_renders_brighter_than_flat() {
+    use crate::game_renderer::relief_fixture as relief;
+    let (canvas, context) = target_canvas().expect("browser Canvas target");
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let (faces, probes) = relief::clipped_slope();
+    let layers = faces
+        .into_iter()
+        .map(WorldLayer::Surface)
+        .collect::<Vec<_>>();
+    canvas_depth::render_canvas_world(
+        &canvas,
+        &context,
+        &relief::atlas(),
+        &mut presentation,
+        &layers,
+        relief::camera(false),
+        false,
+    )
+    .unwrap();
+    relief::assert_clipped_lit(&probes.map(|[x, y]| pixel(&presentation.color_buffer, x, y)));
+}

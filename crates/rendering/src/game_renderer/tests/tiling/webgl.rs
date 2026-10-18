@@ -220,3 +220,47 @@ fn webgl_building_wear_darkens_native_textured_terrain() {
     }
     wear::assert_worn(&probes[0], &probes[1]);
 }
+
+#[wasm_bindgen_test]
+fn webgl_slope_shading_is_directional_and_zoom_consistent() {
+    use crate::game_renderer::relief_fixture as relief;
+    let mut ratios = Vec::new();
+    for far in [false, true] {
+        let mut probes = Vec::new();
+        for rise in [0, 1, -1] {
+            let (canvas, mut renderer) = target(&relief::atlas());
+            let mut packets = relief::faces(far, rise)
+                .iter()
+                .map(instance)
+                .collect::<Vec<_>>();
+            render(&mut renderer, &mut packets);
+            probes.push(relief::PROBES.map(|[x, y]| pixel(&canvas, x, y)));
+        }
+        ratios.push(relief::assert_directional(
+            far, &probes[0], &probes[1], &probes[2],
+        ));
+    }
+    relief::assert_zoom_agreement(ratios[0], ratios[1]);
+}
+
+#[wasm_bindgen_test]
+fn webgl_slope_shade_is_continuous_across_shared_edges() {
+    use crate::game_renderer::relief_fixture as relief;
+    for (far, textured) in [(false, true), (true, true), (false, false), (true, false)] {
+        let (canvas, mut renderer) = target(&relief::atlas());
+        let (faces, probes, gap) = relief::seam(far, textured);
+        let mut packets = faces.iter().map(instance).collect::<Vec<_>>();
+        render(&mut renderer, &mut packets);
+        relief::assert_continuous(far, gap, &probes.map(|[x, y]| pixel(&canvas, x, y)));
+    }
+}
+
+#[wasm_bindgen_test]
+fn webgl_slope_beside_missing_terrain_still_renders_brighter_than_flat() {
+    use crate::game_renderer::relief_fixture as relief;
+    let (canvas, mut renderer) = target(&relief::atlas());
+    let (faces, probes) = relief::clipped_slope();
+    let mut packets = faces.iter().map(instance).collect::<Vec<_>>();
+    render(&mut renderer, &mut packets);
+    relief::assert_clipped_lit(&probes.map(|[x, y]| pixel(&canvas, x, y)));
+}
