@@ -4,17 +4,19 @@
 //! when the holder exits however it exits, so a dead holder never leaves a stale
 //! lock. The holder written into the file is for messages only.
 //!
-//! Waiters are served in arrival order through the ticket queue in `ship.lock.queue/`
-//! (`slots::queue`, shared with the heavy slots): a waiter may take the main lock only
-//! when no older ticket is still locked. Tickets are removed on release and on drop.
+//! Waiters are served through the ticket queue in `ship.lock.queue/` (`slots::queue`,
+//! shared with the heavy slots): a waiter may take the main lock only when no ticket ahead
+//! of it is still locked. Ships back from review go ahead of plain waiters (`handoff`).
+//! Tickets are removed on release and on drop.
 use super::{Result, git};
+mod handoff;
 use crate::slots::queue::{self, Ticket, read_json, write_json};
+pub(crate) use handoff::Handoff;
 use nix::fcntl::{Flock, FlockArg};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -23,12 +25,16 @@ const DEFAULT_WAIT_MINUTES: u64 = 120;
 const POLL: Duration = Duration::from_secs(1);
 const REPORT_EVERY: Duration = Duration::from_secs(300);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Holder {
     pub(crate) worktree: String,
     pub(crate) branch: String,
     pub(crate) command: String,
     pub(crate) started: u64,
+    /// Set for a ship that already held the lock and queues again after its review. It is
+    /// admitted before every plain waiter (see [`Handoff::reacquire`]).
+    #[serde(default)]
+    pub(crate) returning: bool,
 }
 
 impl Holder {
@@ -47,51 +53,6 @@ impl Holder {
 pub(crate) struct ShipLock {
     _flock: Flock<File>,
     _ticket: Ticket<Holder>,
-}
-
-/// The ship lock as `ship_with` shares it: let go for the review (remote calls, idle CPU)
-/// and taken again, in the same queue, before the re-check and the push. The default
-/// holds nothing, so releasing and reacquiring are then no-ops (tests, `review-pr`).
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Handoff(Arc<Mutex<Held>>);
-
-#[derive(Debug, Default)]
-struct Held {
-    lock: Option<ShipLock>,
-    released: bool,
-}
-
-impl Handoff {
-    pub(crate) fn holding(lock: ShipLock) -> Self {
-        Self(Arc::new(Mutex::new(Held {
-            lock: Some(lock),
-            released: false,
-        })))
-    }
-
-    /// Drop the lock and its ticket; false (and silent) when this ship holds none.
-    pub(crate) fn release(&self) -> bool {
-        let mut held = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        let had = held.lock.take().is_some();
-        held.released |= had;
-        had
-    }
-
-    /// Queue for the lock again, only if `release` gave it up. A failed wait leaves it released.
-    pub(crate) fn reacquire(&self, root: &Path, command: &str) -> Result<()> {
-        let mut held = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if !held.released {
-            return Ok(());
-        }
-        let begun = Instant::now();
-        held.lock = Some(acquire(root, command)?);
-        held.released = false;
-        eprintln!(
-            "ship: lock reacquired for the push (waited {}s)",
-            begun.elapsed().as_secs()
-        );
-        Ok(())
-    }
 }
 
 fn queue_dir(lock_path: &Path) -> PathBuf {
@@ -124,11 +85,17 @@ pub(crate) fn wait_from_env() -> Result<Duration> {
 
 /// Take the machine-wide lock for `command`, queueing for at most the environment's wait.
 pub(crate) fn acquire(root: &Path, command: &str) -> Result<ShipLock> {
+    acquire_as(root, command, false)
+}
+
+/// [`acquire`] for a ship that is `returning` from its review (see [`Handoff::reacquire`]).
+fn acquire_as(root: &Path, command: &str, returning: bool) -> Result<ShipLock> {
     let holder = Holder {
         worktree: root.display().to_string(),
         branch: git::branch(root).unwrap_or_else(|_| "(detached)".into()),
         command: command.into(),
         started: now(),
+        returning,
     };
     acquire_at(
         &path(root)?,
@@ -154,7 +121,7 @@ pub(crate) fn acquire_at(
     let mut last_position = 0;
     let mut last_report = started;
     loop {
-        let ahead = ticket.ahead()?;
+        let ahead = ticket.ahead_ranked(holder.rank(), Holder::rank)?;
         if ahead.is_empty() {
             let file = open(path)?;
             match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
@@ -175,11 +142,12 @@ pub(crate) fn acquire_at(
             }
         }
         let position = ahead.len() + 1;
-        let current = ahead
-            .into_iter()
-            .next()
-            .flatten()
-            .or_else(|| read_json(path))
+        // The lock file names the holder only while that ship's ticket is live (the file keeps
+        // its last content after a release); otherwise name the first live ticket ahead.
+        let live = queue(path)?;
+        let current = read_json::<Holder>(path)
+            .filter(|named| live.contains(named))
+            .or_else(|| ahead.into_iter().next().flatten())
             .map_or("another ship".into(), |h| h.describe());
         if started.elapsed() >= wait {
             return Err(format!(
@@ -190,13 +158,21 @@ pub(crate) fn acquire_at(
             )
             .into());
         }
+        let line = format!(
+            "ship: position {position} in the queue{}",
+            if holder.returning {
+                " (returning from review)"
+            } else {
+                ""
+            }
+        );
         if !announced {
             say(&format!("ship: waiting for {current}"));
-            say(&format!("ship: position {position} in the queue"));
+            say(&line);
             announced = true;
             last_position = position;
         } else if position != last_position {
-            say(&format!("ship: position {position} in the queue"));
+            say(&line);
             last_position = position;
         } else if last_report.elapsed() >= report_every {
             say(&format!(
@@ -238,16 +214,12 @@ fn unknown() -> Holder {
         branch: "unknown".into(),
         command: "unknown".into(),
         started: 0,
+        returning: false,
     }
 }
 
 pub(crate) fn print_status(root: &Path) -> Result<()> {
-    let lock_path = path(root)?;
-    let held = status(&lock_path)?;
-    let mut waiting = queue(&lock_path)?;
-    if held.is_some() && !waiting.is_empty() {
-        waiting.remove(0);
-    }
+    let held = status(&path(root)?)?;
     match held {
         Some(holder) => println!(
             "ship lock: held by `{}` on {} (started {})",
@@ -257,24 +229,57 @@ pub(crate) fn print_status(root: &Path) -> Result<()> {
         ),
         None => println!("ship lock: free"),
     }
+    print_queue(root)
+}
+
+/// The queued ships in admission order; the running ship (the lock holder) is not listed.
+fn print_queue(root: &Path) -> Result<()> {
+    let lock_path = path(root)?;
+    for line in queue_lines(status(&lock_path)?.as_ref(), queue(&lock_path)?) {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// The waiting ships in the order they will be admitted: returning ships first, then plain
+/// waiters, each by arrival. The holder is removed by identity, not by position, because a
+/// returning ship can hold the lock with a newer ticket than the plain waiters.
+pub(crate) fn queue_lines(held: Option<&Holder>, mut waiting: Vec<Holder>) -> Vec<String> {
+    if let Some(index) = held.and_then(|holder| waiting.iter().position(|w| w == holder)) {
+        waiting.remove(index);
+    }
+    waiting.sort_by_key(|holder| std::cmp::Reverse(holder.rank()));
+    let mut lines = Vec::new();
     if !waiting.is_empty() {
-        println!("ship queue (first come, first served):");
+        lines.push(
+            "ship queue (admission order: returning from review first, then arrival):".into(),
+        );
     }
     for (index, holder) in waiting.iter().enumerate() {
-        println!(
+        lines.push(format!(
             "  {}. `{}` on {} (queued {})",
             index + 1,
             holder.command,
             holder.describe_place(),
             utc(holder.started)
-        );
+        ));
     }
-    Ok(())
+    lines
 }
 
 impl Holder {
-    fn describe_place(&self) -> String {
-        format!("{} in {}", self.branch, self.worktree)
+    pub(crate) fn describe_place(&self) -> String {
+        let place = format!("{} in {}", self.branch, self.worktree);
+        if self.returning {
+            format!("{place} (returning from review)")
+        } else {
+            place
+        }
+    }
+
+    /// Higher goes first: a returning ship before every plain waiter.
+    fn rank(&self) -> u8 {
+        u8::from(self.returning)
     }
 }
 
