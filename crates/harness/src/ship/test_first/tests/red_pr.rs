@@ -225,6 +225,9 @@ fn a_test_against_an_api_the_pr_adds_is_compile_red_and_names_it() {
     assert_eq!(record.ran, [NAME]);
     let text = red::require(root, &base, &head).unwrap();
     assert!(text.contains("missing: new_api"), "{text}");
+    // The review's facts ask for `HEAD`: the record is still found.
+    let by_ref = red::require(root, &base, "HEAD").unwrap_or_else(|e| panic!("{e}"));
+    assert!(by_ref.contains("PASS"), "{by_ref}");
 }
 
 #[test]

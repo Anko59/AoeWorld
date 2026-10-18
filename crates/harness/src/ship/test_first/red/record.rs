@@ -30,6 +30,13 @@ pub(super) fn write(root: &Path, record: &Record) -> git::Result<()> {
 }
 
 pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String> {
+    // Records are keyed by the full commit id; callers may pass a revision such as `HEAD`
+    // (the review's deterministic facts do).
+    let resolved = git::git(
+        root,
+        &["rev-parse", "--verify", &format!("{head}^{{commit}}")],
+    )?;
+    let head = resolved.as_str();
     let report = super::super::report(root, base, head)?;
     if let Some((commit, reason)) = &report.exemption {
         return Ok(format!(
