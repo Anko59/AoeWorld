@@ -174,6 +174,11 @@ pub(crate) fn next(history: &[Report], head: &str, now: u64) -> Next {
         let mut carried = finding.clone();
         carried.id = format!("P{}", prior.len() + 1);
         carried.reporter = CARRIED;
+        // Reviewer indices belong to the earlier review: in the closing review nobody
+        // reported the carried defect, so every reviewer may vote on it.
+        for member in &mut carried.members {
+            member.reporter = CARRIED;
+        }
         carried.round = 0;
         carried.votes.clear();
         carried.status = Status::Disputed;

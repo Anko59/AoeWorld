@@ -7,6 +7,7 @@ mod arbiter;
 pub(crate) mod base;
 mod calibrate;
 pub(crate) mod closing;
+mod cluster;
 pub(crate) mod config;
 mod entry;
 pub(crate) mod increment;
@@ -251,6 +252,7 @@ fn review_with_branch(
             &mut failures,
             &mut filter,
         )?;
+        cluster::merge(&mut findings);
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
@@ -293,7 +295,7 @@ fn review_with_branch(
         let shown: Vec<(usize, Vec<String>)> = asked
             .iter()
             .map(|r| {
-                let ids = findings.iter().filter(|f| f.reporter != *r);
+                let ids = findings.iter().filter(|f| !f.reported_by(*r));
                 (*r, ids.map(|f| f.id.clone()).collect())
             })
             .collect();
@@ -323,7 +325,7 @@ fn review_with_branch(
                     }
                     for verdict in answer.verdicts {
                         if let Some(finding) = findings.iter_mut().find(|f| {
-                            f.id == verdict.id && ids.contains(&f.id) && f.reporter != reviewer
+                            f.id == verdict.id && ids.contains(&f.id) && !f.reported_by(reviewer)
                         }) {
                             finding.votes.push(Cast {
                                 reviewer,
@@ -346,6 +348,7 @@ fn review_with_branch(
                 }
             }
         }
+        cluster::merge(&mut findings);
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
@@ -454,6 +457,18 @@ fn blind_round(
     Ok(())
 }
 
+/// One past the highest `F<n>` in use, members included: `cluster::merge` removes
+/// merged findings from the list, so its length no longer gives a free number.
+pub(crate) fn next_number(findings: &[Finding]) -> usize {
+    findings
+        .iter()
+        .flat_map(|f| std::iter::once(&f.id).chain(f.members.iter().map(|m| &m.id)))
+        .filter_map(|id| id.strip_prefix('F')?.parse::<usize>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1
+}
+
 fn add_findings(
     findings: &mut Vec<Finding>,
     reviewer: usize,
@@ -461,7 +476,7 @@ fn add_findings(
     reported: Vec<protocol::Reported>,
 ) {
     for reported in reported {
-        let id = format!("F{}", findings.len() + 1);
+        let id = format!("F{}", next_number(findings));
         findings.push(Finding {
             id,
             reporter: reviewer,
@@ -469,6 +484,7 @@ fn add_findings(
             reported,
             votes: Vec::new(),
             status: Status::Disputed,
+            members: Vec::new(),
         });
     }
 }
