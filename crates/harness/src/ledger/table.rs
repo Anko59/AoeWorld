@@ -3,7 +3,6 @@ use super::record::Pr;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The grade at which a review lets a pull request merge.
-pub(super) const PASS_GRADE: u8 = 8;
 const UNATTRIBUTED: &str = "(unattributed)";
 
 #[derive(Debug, Default, PartialEq)]
@@ -22,15 +21,12 @@ pub(super) struct Row {
     pub(super) reverted: u32,
 }
 
-/// Whether the first review of a pull request passed: a closing review means
-/// it was approved first (that is what a closing review follows); a full review passed the first time when it took
-/// one round and graded at least [`PASS_GRADE`].
+/// Whether the first review of a pull request passed: a full review in a merged
+/// description passed first time; a closing review did only when it followed an
+/// approval (it names the approved grade), not when it followed a failed review.
 fn first_pass(pr: &Pr) -> Option<bool> {
     let review = pr.review.as_ref()?;
-    Some(match review.rounds {
-        None => true,
-        Some(rounds) => rounds == 1 && review.final_grade >= PASS_GRADE,
-    })
+    Some(!review.closing || review.first_grade.is_some())
 }
 
 fn add(row: &mut Row, pr: &Pr, reverted: &BTreeSet<u64>) {

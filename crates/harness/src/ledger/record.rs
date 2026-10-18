@@ -85,15 +85,14 @@ impl Pr {
 fn review(body: &str) -> Option<Review> {
     let badges = parse::badges(body);
     let last = badges.first()?;
+    // The badge's rounds are cross-examination rounds inside one review run, not reviews
+    // of the branch. A full review in a merged description is the review that passed, and
+    // the first one: a failed full review is always followed by a closing review. A
+    // closing review names the approved grade only when it followed an approval.
     let (first_grade, rounds, confirmed) = if last.closing {
         (parse::approved_grade(body), None, None)
     } else {
-        let once = last.rounds == 1;
-        (
-            once.then_some(last.grade),
-            Some(last.rounds),
-            Some(last.confirmed),
-        )
+        (Some(last.grade), Some(last.rounds), Some(last.confirmed))
     };
     Some(Review {
         tier: last.tier.clone(),

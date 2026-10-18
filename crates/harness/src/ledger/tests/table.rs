@@ -1,4 +1,4 @@
-use super::{CLOSING, FULL, ONCE, pr};
+use super::{AFTER_FAILURE, CLOSING, FULL, ONCE, pr};
 use crate::ledger::table::*;
 use std::collections::BTreeSet;
 
@@ -8,7 +8,8 @@ fn fixture() -> Vec<crate::ledger::record::Pr> {
         pr(2, ONCE, &[]),    // GPT, 9/10 once
         pr(3, CLOSING, &[]), // Sonnet, approved 8 then closing
         pr(4, "No review here.\n- Written by Claude Haiku 5.5.", &[]),
-        pr(5, "Bare.", &[]), // unattributed
+        pr(5, "Bare.", &[]),       // unattributed
+        pr(6, AFTER_FAILURE, &[]), // GLM, closing review after a failed one
     ]
 }
 
@@ -20,7 +21,14 @@ fn rows_aggregate_per_implementer_model() {
     let haiku = &rows["Claude Haiku 5.5"];
     assert_eq!(
         (haiku.prs, haiku.reviewed, haiku.graded, haiku.first_pass),
-        (2, 1, 0, 0)
+        (2, 1, 1, 1),
+        "a full review in a merged description passed first time, whatever its rounds"
+    );
+    let glm = &rows["GLM 5.3 flash"];
+    assert_eq!(
+        (glm.reviewed, glm.graded, glm.first_pass, glm.closing),
+        (1, 0, 0, 1),
+        "a closing review after a failure is not a first pass"
     );
     assert_eq!(rows["Claude Opus 5.5"].prs, 1);
     let gpt = &rows["GPT-6.1 Sol"];
@@ -53,7 +61,10 @@ fn rows_aggregate_per_reviewer_model() {
     let refs: Vec<_> = prs.iter().collect();
     let rows = by_reviewer(&refs, &BTreeSet::new());
     assert_eq!(rows["Claude Sonnet 5.5"].prs, 1);
-    assert_eq!(rows["Claude Opus 5.5"].prs, 1);
+    assert_eq!(
+        rows["Claude Opus 5.5"].prs, 2,
+        "the full review and the closing review after a failure"
+    );
     assert_eq!(rows["GPT-6.1 Sol"].prs, 1);
 }
 
@@ -62,11 +73,11 @@ fn means_that_have_no_data_say_unknown() {
     let prs = fixture();
     let refs: Vec<_> = prs.iter().collect();
     let text = render("T", "implementer", &by_implementer(&refs, &BTreeSet::new()));
-    let haiku = text
+    let glm = text
         .lines()
-        .find(|l| l.starts_with("Claude Haiku 5.5"))
+        .find(|l| l.starts_with("GLM 5.3 flash"))
         .unwrap();
-    assert!(haiku.contains("unknown"), "{haiku}");
+    assert!(glm.contains("unknown"), "{glm}");
     let gpt = text.lines().find(|l| l.starts_with("GPT-6.1 Sol")).unwrap();
     assert!(gpt.contains("9.0") && gpt.contains("100%"), "{gpt}");
     assert!(render("T", "x", &Default::default()).contains("(no pull requests)"));

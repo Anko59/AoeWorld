@@ -17,6 +17,9 @@ pub(super) const ONCE: &str = "### ✅ How\n\n🟢 **Review: 9/10** (medium tier
 /// A closing review after an approved first review.
 pub(super) const CLOSING: &str = "### ✅ How\n\n🟡 **Closing review: 9/10** (high tier · 5 reviewers · 1 round · claude-opus-5-5 high): 0 confirmed · 0 disputed · 0 refuted · closing review of 9 lines in 1 file(s) that differ from the approved patch of `7719ec5af59c`, approved 8/10\n\nreview: closing review of 9 lines in 1 file(s) that differ from the approved patch of `7719ec5af59c`, approved 8/10\n\n- Written by Claude Sonnet 5.5 from a brief.\n";
 
+/// A closing review after a failed full review: the first grade is not in the description.
+pub(super) const AFTER_FAILURE: &str = "### ✅ How\n\n🟢 **Closing review: 9/10** (high tier · 5 reviewers · 1 round · claude-opus-5-5 high): 0 confirmed · 0 disputed · 0 refuted · closing review of the fixes since `6c09a777adcf` against 5 carried finding(s)\n\n- Written by GLM 5.3 flash from a brief.\n";
+
 pub(super) fn raw(number: u64, title: &str, body: &str, trailers: &[&str]) -> RawPr {
     RawPr {
         number,

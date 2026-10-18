@@ -140,6 +140,21 @@ pub(super) fn model_names(text: &str) -> Vec<String> {
                 }
             }),
             "DeepSeek" => next.map(|v| format!("DeepSeek {v}")),
+            // Codex's trailer spells it `GPT 6.1 sol`: the same model as `GPT-6.1 Sol`.
+            "GPT" => next.filter(|v| is_version(v)).map(|v| {
+                let tier = words
+                    .get(i + 2)
+                    .filter(|t| t.chars().all(char::is_alphabetic))
+                    .map(|t| {
+                        let mut chars = t.chars();
+                        chars.next().map_or_else(String::new, |c| {
+                            c.to_uppercase()
+                                .chain(chars.map(|c| c.to_ascii_lowercase()))
+                                .collect()
+                        })
+                    });
+                tier.map_or_else(|| format!("GPT-{v}"), |t| format!("GPT-{v} {t}"))
+            }),
             w if w.starts_with("GPT-") => {
                 let tier = next.filter(|n| {
                     n.chars().next().is_some_and(char::is_uppercase)
@@ -201,6 +216,9 @@ pub(super) fn reverted_numbers(subjects: &str) -> BTreeSet<u64> {
         .lines()
         .filter_map(|line| line.strip_prefix("Revert \""))
         .filter_map(|quoted| {
+            // Only inside the quoted original subject: a squash-merged revert PR appends its
+            // own `(#N)` after the closing quote.
+            let quoted = quoted.rsplit_once('"').map_or(quoted, |(inner, _)| inner);
             let after = quoted.rsplit_once("(#")?.1;
             after.split_once(')')?.0.parse().ok()
         })
