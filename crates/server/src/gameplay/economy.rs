@@ -1,10 +1,9 @@
 use super::GameplayService;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
-    HitState,
     BuildingKind, CarriedResource, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-    GameplayUnitState, MAX_SUBSCRIBED_UNITS, ResourceKind, Stockpile, TrainingState, UnitKind,
-    UnitTask,
+    GameplayUnitState, HitState, MAX_SUBSCRIBED_UNITS, ResourceKind, Stockpile, TrainingState,
+    UnitKind, UnitTask,
 };
 use aoe_simulation::{GameUnit, GameWorld};
 use std::collections::BTreeMap;

@@ -63,6 +63,22 @@ impl GameWorld {
         Some(*food)
     }
 
+    /// End `id`'s gather job. A farm whose last food is already on the farmer
+    /// would otherwise linger empty and unworkable, so it is removed here.
+    pub(crate) fn stop_gathering(&mut self, id: EntityId) {
+        if let Some(task) = self.economy.gatherers.remove(&id)
+            && let Some(farm) = task.farm
+        {
+            self.remove_spent_farm(farm);
+        }
+    }
+
+    pub(super) fn remove_spent_farm(&mut self, farm: EntityId) {
+        if self.farm_remaining(farm) == Some(0) {
+            self.remove_building(farm);
+        }
+    }
+
     pub(super) fn farm_remaining(&self, farm: EntityId) -> Option<u16> {
         self.building(farm)?.food_remaining
     }

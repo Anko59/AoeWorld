@@ -180,7 +180,7 @@ impl GameWorld {
         let mut any = false;
         for &builder in builders {
             let building = target(builder);
-            self.economy.gatherers.remove(&builder);
+            self.stop_gathering(builder);
             self.economy.builders.remove(&builder);
             let Some(footprint) = self.building(building).map(|b| b.footprint) else {
                 continue;

@@ -97,7 +97,7 @@ impl GameWorld {
         } else {
             return Err(EconomyError::InvalidTarget);
         }
-        self.economy.gatherers.remove(&id);
+        self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.begin_attack(id, target);
         Ok(())

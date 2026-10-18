@@ -139,6 +139,7 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         self.approach_resource(id, tile)?;
         self.cancel_attack(id);
+        let previous_farm = self.economy.gatherers.get(&id).and_then(|task| task.farm);
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
         };
@@ -175,6 +176,11 @@ impl GameWorld {
             self.economy.gatherers.insert(id, task);
         } else {
             self.economy.gatherers.remove(&id);
+        }
+        if let Some(old) = previous_farm
+            && Some(old) != farm
+        {
+            self.remove_spent_farm(old);
         }
         Ok(())
     }

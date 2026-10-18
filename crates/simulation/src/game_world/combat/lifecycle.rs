@@ -23,7 +23,7 @@ impl GameWorld {
         state.task = UnitTask::Dying;
         state.attack_target = None;
         self.combat.attackers.remove(&id);
-        self.economy.gatherers.remove(&id);
+        self.stop_gathering(id);
         self.economy.builders.remove(&id);
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
@@ -58,7 +58,7 @@ impl GameWorld {
             self.active_movers.remove(position);
         }
         self.combat.attackers.remove(&id);
-        self.economy.gatherers.remove(&id);
+        self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.lookup.remove(&id);
         self.units.swap_remove(index);

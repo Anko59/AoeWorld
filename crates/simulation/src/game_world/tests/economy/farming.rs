@@ -80,3 +80,40 @@ fn a_farm_takes_one_farmer_depletes_and_is_removed_when_exhausted() {
         Err(EconomyError::UnknownEntity)
     );
 }
+
+#[test]
+fn a_spent_farm_is_removed_when_its_farmer_is_ordered_away_before_delivering() {
+    let (mut world, worker, _, farm) = mill_and_farm();
+    finish(&mut world, farm, 700);
+    world
+        .economy
+        .buildings
+        .get_mut(&farm)
+        .unwrap()
+        .food_remaining = Some(1);
+    let mut guard = 0;
+    while world.building(farm).unwrap().food_remaining != Some(0) {
+        world.advance();
+        guard += 1;
+        assert!(guard < 2000, "the farmer should take the last unit");
+    }
+    // The last food is on the farmer, who has not delivered it yet.
+    assert_eq!(
+        world.unit(worker).unwrap().carried.map(|l| l.amount),
+        Some(1)
+    );
+    world
+        .issue_move(
+            worker,
+            WorldPosition::from_tile_center(at(110, 110)).unwrap(),
+        )
+        .unwrap();
+    assert!(
+        world.building(farm).is_none(),
+        "a farm with no food left must not linger once nobody works it"
+    );
+    assert_eq!(
+        world.unit(worker).unwrap().carried.map(|l| l.amount),
+        Some(1)
+    );
+}

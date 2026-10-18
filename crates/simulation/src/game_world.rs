@@ -284,7 +284,7 @@ impl GameWorld {
         destination: WorldPosition,
     ) -> Result<bool, GameWorldError> {
         let result = self.issue_task_move(id, destination)?;
-        self.economy.gatherers.remove(&id);
+        self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
         if let Some(&index) = self.lookup.get(&id) {

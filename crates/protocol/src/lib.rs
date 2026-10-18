@@ -4,9 +4,8 @@ mod gameplay;
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{
     BuildingKind, CarriedResource, ClientMessage as GameplayClientMessage, CommandResult,
-    HitState,
     ConstructionState, Error as GameplayError, GameplayBuildingState, GameplayPlayerState,
-    MAX_ACK_HISTORY, MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
+    HitState, MAX_ACK_HISTORY, MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
     MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
     MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_POPULATION, MAX_RESOURCE_CHANGES,
     MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE, MapMetadata, ResourceAmount,
