@@ -280,13 +280,26 @@ fn make_fixed(
         ("HARNESS_TARGET_CACHE", target),
     ];
     environment.extend(slot_env.iter().map(|(name, value)| (*name, value.as_str())));
-    let captured: process::Captured = process::capture_in(
-        root.path(),
-        "make",
-        &["--", gate.as_str()],
-        &environment,
-        deadline,
-        cancellation,
+    let captured: process::Captured = retry_once_after_suspend(
+        gate.as_str(),
+        || {
+            process::capture_in(
+                root.path(),
+                "make",
+                &["--", gate.as_str()],
+                &environment,
+                deadline,
+                cancellation,
+            )
+        },
+        || {
+            if let Err(error) = process::suspend::containers::stop_interrupted() {
+                eprintln!(
+                    "{}: could not stop the containers a suspend left: {error}",
+                    gate.as_str()
+                );
+            }
+        },
     );
     let capture = process::safe_observation(&captured);
     let mut bytes = b"--- stdout ---\n".to_vec();
@@ -314,6 +327,11 @@ fn make_fixed(
         CaptureExit::Failed(code) => (Exit::Failed, format!("exit {code:?}")),
         CaptureExit::Deadline => (Exit::Deadline, "wall deadline exceeded".into()),
         CaptureExit::Cancelled => (Exit::Cancelled, "human cancellation".into()),
+        // Reported as a monitor failure: the gate's own result is unknown, not failed.
+        CaptureExit::Suspended { at } => (
+            Exit::MonitorError,
+            format!("interrupted by a host suspend at {at}"),
+        ),
         CaptureExit::Start(error) => (Exit::StartError, format!("start: {error}")),
         CaptureExit::Monitor(error) => (Exit::MonitorError, format!("monitor: {error}")),
     };
@@ -323,6 +341,22 @@ fn make_fixed(
         log,
         triage: Some(triage::CommandObservation::Measured { capture, retention }),
     }
+}
+
+/// Run `run`; if a host suspend interrupts it, stop the containers it left and run it once
+/// more. A second suspend stands as the result: the gate is interrupted, not retried again.
+fn retry_once_after_suspend(
+    gate: &str,
+    run: impl Fn() -> process::Captured,
+    stop_containers: impl FnOnce(),
+) -> process::Captured {
+    let captured = run();
+    if let CaptureExit::Suspended { at } = &captured.exit {
+        eprintln!("{gate}: interrupted by a host suspend at {at}; retrying once");
+        stop_containers();
+        return run();
+    }
+    captured
 }
 
 #[cfg(test)]

@@ -2,8 +2,8 @@
 # (docs/gates.md "Heavy slots"). Each target runs its `-steps` target in the orchestrator container
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
-SLOT_ENV := -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
-SLOT_RUN = docker run --rm --init $(HEAVY_ENV) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
+SLOT_ENV := -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e AOE_HARNESS_BOOT_GAP -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
+SLOT_RUN = docker run --rm --init --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) $(HEAVY_ENV) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
 
 # The command bootstrap is static work: one build at a time across worktrees,
 # bounded to one CPU and 2 GiB including swap. Gate steps still require a slot.

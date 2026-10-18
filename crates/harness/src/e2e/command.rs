@@ -48,11 +48,17 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
         &user,
         "--name",
         &run.container,
-        "-e",
     ]
     .map(str::to_owned)
     .into();
+    // The gap at start lets `aoe-harness recover` find this container after a host suspend.
+    let gap = crate::process::suspend::Watch::start(&crate::process::suspend::read)
+        .gap_seconds()
+        .map_or_else(String::new, |gap| gap.to_string());
     args.extend([
+        "--label".to_owned(),
+        format!("{}={gap}", crate::process::suspend::LABEL),
+        "-e".to_owned(),
         format!("HOME={}/.cache/browser-home", root.display()),
         "-e".to_owned(),
         format!("AOE_BASE_URLS={}", run.base_urls),

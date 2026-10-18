@@ -23,6 +23,37 @@ fn tail(args: &[String], count: usize) -> Vec<&str> {
 }
 
 #[test]
+fn the_container_carries_the_boot_gap_it_started_at() {
+    let args = args(&[], None);
+    let label = args
+        .windows(2)
+        .find(|pair| pair[0] == "--label")
+        .map(|pair| pair[1].as_str())
+        .expect("a label");
+    assert!(label.starts_with("aoe.harness-boot-gap="), "{label}");
+}
+
+#[test]
+fn every_option_keeps_its_own_value_and_the_image_follows_them() {
+    let args = args(&[], None);
+    for (index, arg) in args.iter().enumerate() {
+        if arg == "-e" {
+            let value = args.get(index + 1).map_or("", String::as_str);
+            assert!(
+                value.contains('='),
+                "-e takes NAME=value, not {value:?}: {args:?}"
+            );
+        }
+    }
+    let image = args
+        .iter()
+        .position(|arg| arg == "xvfb-run")
+        .expect("the command");
+    assert_eq!(args[image - 1], "aoeworld/browser-tools:1.63.0", "{args:?}");
+    assert_eq!(args[image - 3], "-w", "{args:?}");
+}
+
+#[test]
 fn a_shard_reaches_playwright_after_the_npm_separator() {
     let shard = Some(Shard { index: 2, count: 3 });
     assert_eq!(
