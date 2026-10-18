@@ -60,8 +60,25 @@ frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
 | Shallows 15014 (optional) | Green marsh with lilies | — | Imported, not selected for Ford crossings |
 
 Generated river fords use the light shallow Water 15002 sheet where local
-slopes permit crossing; marsh flecks no longer obscure the crossing.
+slopes permit crossing; marsh flecks no longer obscure the crossing. A ford
+draws that sheet at 85% coverage (shore share 150/255, capped in the shared mix
+assignment, thin-stream raises included) over dirt, the bank ground: an all-ford
+interior quad uses the same dirt substrate as the boundary quads, so there is no
+substrate or coverage seam. Ford faces never use the junction (four-material)
+path, whose observations cannot be capped; their extra land materials fold into
+the nearest of the two retained ones. It reads as lighter wadeable water, not as
+the shoreline shallows.
 Ordinary shallow water and river margins stay impassable.
+
+A water tile that belongs to no 2x2 block of water is thin. Every displayed
+vertex of a thin tile has its overlay share raised to 160/255 (full coverage;
+ford vertices stay at the 85% ford cap), decided from the source tiles and not
+the displayed vertices. A one- or two-tile stream stays a continuous solid band
+along its line, about a sixth of a tile wider on each bank, instead of faded
+necks between full pools. Land observations are never converted, so a land tile
+beside a bend cannot become a pure water quad. At a thin vertex, a thin
+medium-water tile starts from the shallow sheet, so it cannot draw as an isolated
+medium-blue triangle inside a ford.
 
 Faces between two classes blend their sheets through the same per-vertex
 splat as land materials; water never blends with land across the shore. No

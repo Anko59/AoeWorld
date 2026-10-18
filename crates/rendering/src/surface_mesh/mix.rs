@@ -11,10 +11,17 @@
 //! Displayed vertices only: no resident-world material map is built.
 use super::*;
 pub(crate) mod support;
+mod thin;
 
 #[path = "mix/tests/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod fixture;
+#[path = "mix/tests/ford_junction.rs"]
+#[cfg(test)]
+mod ford_junction_tests;
+#[path = "mix/tests/narrow_stream.rs"]
+#[cfg(test)]
+mod narrow_stream_tests;
 
 const MISSING: u8 = u8::MAX;
 const DEEP: u8 = 5;
@@ -144,6 +151,12 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             }
         }
     }
+    let thin = if water_visible {
+        thin::thin_vertices(&keys, support.len(), terrain)
+    } else {
+        Vec::new()
+    };
+    let thin_at = |point: SurfacePoint| thin.get(keys.get(vertex(point)).unwrap_or(0)).copied();
     for triangle in triangles.iter_mut().filter(|triangle| eligible(triangle)) {
         let mut cells = triangle
             .points
@@ -169,6 +182,28 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 cell.0 = if shallow { 10 } else { MISSING };
             }
         }
+        // A ford face never takes the junction path: its observations cannot be
+        // capped at the ford coverage. Keep the lowest and highest land sheets
+        // of the quad and fold the others into the lowest.
+        if quad.iter().flatten().any(|cell| cell.0 == 12) {
+            let land = |material: u8| !matches!(material, MISSING | 10 | 12);
+            let lands = || {
+                quad.iter()
+                    .flatten()
+                    .map(|cell| cell.0)
+                    .filter(|material| land(*material))
+            };
+            if let (Some(low), Some(high)) = (
+                lands().min_by_key(|m| rank(*m)),
+                lands().max_by_key(|m| rank(*m)),
+            ) {
+                for cell in quad.iter_mut().flatten().chain(cells.iter_mut().flatten()) {
+                    if land(cell.0) && cell.0 != high {
+                        cell.0 = low;
+                    }
+                }
+            }
+        }
         let seen = || {
             quad.iter()
                 .flatten()
@@ -181,6 +216,14 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
         ) else {
             continue;
         };
+        if base == over && base == 12 && quad.iter().flatten().all(|cell| cell.0 == 12) {
+            // A ford interior is a light shallow over the bank dirt, like its boundary quads.
+            let share = thin::FORD_SHARE;
+            triangle.texture_materials = Some([2, 2, 12]);
+            triangle.mix = [share, share, share, 0, 0, 0];
+            triangle.floor_strengths = Some([0; 3]);
+            continue;
+        }
         if base == over {
             // Coverage owns pure quads too. The older single-owner splat can
             // disagree with this support, especially on a coarse patch.
@@ -208,9 +251,9 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             .filter(|material| *material != base && *material != over)
             .max_by_key(|material| rank(*material))
             .unwrap_or(base);
-        let full = seen()
-            .any(|material| material != base && material != middle && material != over)
-            || (middle != base && quad.iter().flatten().any(|cell| cell.1 != 0));
+        let full = over != 12
+            && (seen().any(|material| material != base && material != middle && material != over)
+                || (middle != base && quad.iter().flatten().any(|cell| cell.1 != 0)));
         let mut floors = [0; 3];
         for (corner, cell) in cells.iter().enumerate() {
             let present = cell.iter().filter(|cell| cell.0 != MISSING).count() as u32;
@@ -220,7 +263,15 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                     .checked_div(present)
                     .unwrap_or(0) as u8
             };
-            triangle.mix[corner] = share(over);
+            let mut over_share = share(over);
+            if thin_at(triangle.points[corner]) == Some(true) && matches!(over, 10 | 12) {
+                over_share = over_share.max(thin::THIN_SHARE);
+            }
+            triangle.mix[corner] = if over == 12 {
+                over_share.min(thin::FORD_SHARE)
+            } else {
+                over_share
+            };
             triangle.mix[3 + corner] = if middle == base { 0 } else { share(middle) };
             let floor = cell.iter().map(|cell| u32::from(cell.1)).sum::<u32>();
             floors[corner] = landscape::quantized_floor(
@@ -228,6 +279,13 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             );
         }
         if full {
+            if over == 10 {
+                for (corner, cell) in cells.iter_mut().enumerate() {
+                    if thin_at(triangle.points[corner]) == Some(true) {
+                        thin::fill(cell);
+                    }
+                }
+            }
             support::retain(triangle, cells);
         }
         // A quad can see an overlay only at the corner opposite this triangle.
@@ -246,11 +304,19 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 && appearance::water_material(face.material)
                 && face.floor_strengths.is_none()
         }) {
+            let ford = triangle.material == 12;
             if let Some(materials) = triangle.texture_materials.as_mut() {
                 for (corner, point) in triangle.points.iter().enumerate() {
                     if let Some(index) = keys.get(vertex(*point)) {
-                        if shore_depths[index] != MISSING {
-                            materials[corner] = shore_depths[index];
+                        // A thin reach of deeper water inside a ford would draw
+                        // as isolated medium-blue triangles: it starts from the
+                        // shallow sheet at its thin vertices.
+                        let depth = match shore_depths[index] {
+                            MISSING if !ford && thin[index] => 10,
+                            depth => depth,
+                        };
+                        if depth != MISSING {
+                            materials[corner] = depth;
                         }
                     }
                 }
