@@ -99,3 +99,20 @@ fn the_container_gets_every_server_url_and_no_single_base_url() {
     assert!(args.contains(&"AOE_BASE_URLS=http://127.0.0.1:4000".to_owned()));
     assert!(args.iter().all(|arg| !arg.starts_with("AOE_BASE_URL=")));
 }
+
+#[test]
+fn a_filtered_run_passes_its_resolved_specs_after_the_json_reporter() {
+    let specs = ["tests/village/selection-density.play.spec.ts".to_owned()];
+    assert_eq!(
+        tail(&args(&specs, None), 7),
+        [
+            "npm",
+            "--silent",
+            "run",
+            "test:e2e",
+            "--",
+            "--reporter=json",
+            "tests/village/selection-density.play.spec.ts"
+        ]
+    );
+}
