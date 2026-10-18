@@ -245,6 +245,7 @@ pub(crate) fn surface_instance(
             ],
         )
     });
+    let relief = triangle.relief();
     match triangle.texture_uv {
         Some(uv) => Sprite {
             position: points[0],
@@ -254,7 +255,9 @@ pub(crate) fn surface_instance(
                 third[1],
                 f32::from(triangle.tint) * 8.0
                     + f32::from(triangle.mode())
-                    + f32::from(triangle.wear()) * 256.0,
+                    + f32::from(triangle.wear()) * 256.0
+                    + crate::surface_mesh::relief::packed(relief) as f32
+                        * crate::surface_mesh::relief::PACKET_SCALE,
                 if blend.is_some() { -3.0 } else { -1.0 },
             ],
             uv: tiled.map_or(uv.uv, |packet| packet.0),
@@ -289,7 +292,14 @@ pub(crate) fn surface_instance(
         None => Sprite {
             position: points[0],
             radius: second,
-            color: [third[0], third[1], 0.0, -2.0],
+            // The vertex shade codes ride color.z as for textured ground.
+            color: [
+                third[0],
+                third[1],
+                crate::surface_mesh::relief::packed(relief) as f32
+                    * crate::surface_mesh::relief::PACKET_SCALE,
+                -2.0,
+            ],
             uv: [triangle.color[0], triangle.color[1], triangle.color[2], 1.0],
             depths: [depths[0], depths[1], depths[2], 0.0],
             terrain_blend: [[0.0; 4]; 2],

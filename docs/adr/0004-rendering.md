@@ -374,6 +374,21 @@ Town-center wings draw behind the core; reviewed roof/post attachments join the
 native parts without changing their shared ground origin. Footprint wear shades
 existing face colors, retaining geometry, material selection and picking.
 
+Slope shading makes terrain relief read (#428). Each ground vertex brightens or
+darkens by the slope of the displayed heights around it toward a north-west
+light (the top of the isometric screen, the minimap's convention): 4 % per step,
+-8 to 7 steps, zero on flat ground, water, cliffs and native cliff art. A cell's
+shade is a local plane fit (5 tiles) minus 80 % of a broad one (20 tiles), so a
+whole hillside keeps its average brightness while hills and valleys keep their
+contrast on maps whose slopes are tiny at their scale. A lattice corner takes
+the mean of the cells around it, so faces sharing it agree, and the shaders and
+the Canvas raster interpolate the three vertex codes across each face (no
+facets). The codes live in the low mantissa bits of the face's colour channels,
+flagged in its draw order, and travel above the footprint wear in the packet, so
+the packed triangle stays 240 bytes; the three renderers share one kernel
+(`surface_mesh::relief`). The gradient is in height levels per tile, so averaged
+far-zoom cells and near-zoom ramps agree.
+
 Minimum zoom first budgets the actual visible source cells and their closing
 edges rather than treating every cell of their rectangular index as drawable.
 When they fit the unchanged 24,576-triangle cap, source shores, materials and

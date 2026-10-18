@@ -9,6 +9,11 @@
    "center_latitude_e7": 615000000,
    "center_longitude_e7": 255000000,
    "requested_side_meters": 30000
+  },
+  "paris-large": {
+   "center_latitude_e7": 488500000,
+   "center_longitude_e7": 23500000,
+   "requested_side_meters": 480000
   }
  },
  "bookmarks": [
@@ -67,16 +72,16 @@
    "note": "The same forest through the WebGL2 renderer.",
    "verified": true
   },
-   {
-    "name": "finland-conifer-forest-webgl2-zoom-out",
-    "map": "finland",
-    "x": 100,
-    "y": 100,
-    "zoom": 0.25,
-    "renderer": "webgl2",
-    "note": "Conifer canopy at quarter zoom through the WebGL2 path",
-    "verified": false
-   },
+  {
+   "name": "finland-conifer-forest-webgl2-zoom-out",
+   "map": "finland",
+   "x": 100,
+   "y": 100,
+   "zoom": 0.25,
+   "renderer": "webgl2",
+   "note": "Conifer canopy at quarter zoom through the WebGL2 path",
+   "verified": false
+  },
   {
    "name": "finland-lakeshore",
    "map": "finland",
@@ -210,6 +215,60 @@
    "y": 9473,
    "zoom": 1,
    "note": "Lake Geneva shore region.",
+   "verified": false
+  },
+  {
+   "name": "paris-large-rouen-near",
+   "map": "paris-large",
+   "x": 2500,
+   "y": 2905,
+   "zoom": 1,
+   "note": "Seine meanders and valleys near Rouen on Paris Large (issue #428).",
+   "verified": false
+  },
+  {
+   "name": "paris-large-rouen-mid",
+   "map": "paris-large",
+   "x": 2500,
+   "y": 2905,
+   "zoom": 0.5,
+   "note": "Seine meanders and valleys near Rouen on Paris Large (issue #428).",
+   "verified": false
+  },
+  {
+   "name": "paris-large-rouen-far",
+   "map": "paris-large",
+   "x": 2500,
+   "y": 2905,
+   "zoom": 0.25,
+   "note": "Seine meanders and valleys near Rouen on Paris Large (issue #428).",
+   "verified": false
+  },
+  {
+   "name": "paris-large-morvan-near",
+   "map": "paris-large",
+   "x": 6140,
+   "y": 7490,
+   "zoom": 1,
+   "note": "Morvan massif (up to 885 m) on Paris Large (issue #428).",
+   "verified": false
+  },
+  {
+   "name": "paris-large-morvan-mid",
+   "map": "paris-large",
+   "x": 6140,
+   "y": 7490,
+   "zoom": 0.5,
+   "note": "Morvan massif (up to 885 m) on Paris Large (issue #428).",
+   "verified": false
+  },
+  {
+   "name": "paris-large-morvan-far",
+   "map": "paris-large",
+   "x": 6140,
+   "y": 7490,
+   "zoom": 0.25,
+   "note": "Morvan massif (up to 885 m) on Paris Large (issue #428).",
    "verified": false
   }
  ]
