@@ -17,6 +17,7 @@ use std::{
 mod capture;
 pub(crate) mod excerpt;
 pub(crate) mod load;
+pub(crate) mod suspend;
 pub(crate) use capture::{
     CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command,
     capture_command_retaining_stdout, capture_in, safe_observation,
@@ -60,6 +61,12 @@ pub enum ProcessError {
     },
     #[error("{program} was cancelled; log: {log}")]
     Cancelled { program: String, log: String },
+    #[error("{program} was interrupted by a host suspend at {at}; log: {log}")]
+    Suspended {
+        program: String,
+        at: String,
+        log: String,
+    },
     #[error("could not supervise {program}: {source}")]
     Monitor {
         program: String,
@@ -308,6 +315,11 @@ fn report_captured_reading(
         }),
         CaptureExit::Cancelled => Err(ProcessError::Cancelled {
             program: program.into(),
+            log,
+        }),
+        CaptureExit::Suspended { at } => Err(ProcessError::Suspended {
+            program: program.into(),
+            at,
             log,
         }),
         CaptureExit::Start(source) => Err(ProcessError::Start {

@@ -53,6 +53,13 @@ fn start_driver(port: u16) -> Result<Driver> {
         nix::unistd::Gid::current()
     );
     let port_arg = format!("--port={port}");
+    let label = format!(
+        "{}={}",
+        crate::process::suspend::LABEL,
+        crate::process::suspend::Watch::start(&crate::process::suspend::read)
+            .gap_seconds()
+            .map_or_else(String::new, |gap| gap.to_string())
+    );
     let cap = crate::slots::cap_args();
     let mut args = vec!["run"];
     args.extend(cap.iter().map(String::as_str));
@@ -66,6 +73,8 @@ fn start_driver(port: u16) -> Result<Driver> {
         &user,
         "--name",
         &name,
+        "--label",
+        &label,
         "-e",
         "HOME=/tmp",
         "--tmpfs",

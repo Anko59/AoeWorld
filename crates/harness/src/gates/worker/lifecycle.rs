@@ -361,6 +361,7 @@ fn capture_status(capture: &Captured) -> Status {
         CaptureExit::Cancelled => Status::Cancelled,
         CaptureExit::Success
         | CaptureExit::Failed(_)
+        | CaptureExit::Suspended { .. }
         | CaptureExit::Start(_)
         | CaptureExit::Monitor(_) => Status::Incomplete,
     }
