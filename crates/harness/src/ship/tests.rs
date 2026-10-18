@@ -228,6 +228,7 @@ fn incomplete_gates_never_count_as_a_pass() {
         seconds: 0.0,
         summary: String::new(),
         tail: String::new(),
+        attempts: Vec::new(),
     };
     assert_eq!(evidence::verdict(&[]), Verdict::Incomplete);
     assert_eq!(
