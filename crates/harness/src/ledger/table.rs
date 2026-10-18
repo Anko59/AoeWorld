@@ -2,7 +2,6 @@
 use super::record::Pr;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The grade at which a review lets a pull request merge.
 const UNATTRIBUTED: &str = "(unattributed)";
 
 #[derive(Debug, Default, PartialEq)]
