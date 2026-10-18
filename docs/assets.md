@@ -109,3 +109,22 @@ Synthetic diagnostics are at `/diagnostics.html`. Stop an existing
 server with `make down` before changing the selected pack. Public builds do not
 contain trial files or local packs. Fixture tests run in public CI; actual trial
 import and visual inspection are reported separately.
+
+## Definitive Edition buildings
+
+The trial's `graphics.drs` lacks the Farm (SLP 417-419), the Lumber Camp
+(3500-3503) and the Mining Camp (3488-3491). `make assets-import-de` fills them,
+and the other Dark Age buildings, from an owner-licensed Age of Empires II:
+Definitive Edition install (`DE_DIR`, default
+`~/.steam/steam/steamapps/common/AoE2DE`, mounted read-only into the container).
+It decodes `resources/_common/drs/graphics/<stem>_x1.sld` with the bounded SLD
+decoder (`crates/assets/src/sld.rs`: BC1 colour, BC4 shadow and player-mask
+layers, skip-previous-frame reuse) and writes a separate pack below
+`local-assets/packs/`, previews to `local-assets/de-preview/` and the building to
+pack-source mapping to `local-assets/de-table.md`. Nothing derived from the
+install is committed. Sources are listed in `crates/assets/src/de/select.rs`
+(West European camps, since no Dark Age camp exists). Frames are cropped to the
+drawn layers and anchors move with the crop; the player plane stores a 0-7 ramp
+from the colour layer's luma where the mask is set, like the trial's player pixels.
+DE draws farms with terrain textures (`g_fm1`, `g_fm2`), imported at x1 scale as
+opaque 1024x1024 frames. `AOE_DE_DIR` enables a real-file decoder test.

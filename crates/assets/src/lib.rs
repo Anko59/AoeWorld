@@ -1,9 +1,12 @@
 //! Local-only, bounded classic asset conversion.
 pub mod catalog;
 pub mod dat;
+pub mod dds;
+pub mod de;
 pub mod drs;
 pub mod pack;
 pub mod palette;
+pub mod sld;
 pub mod slp;
 
 #[derive(Debug, thiserror::Error)]
