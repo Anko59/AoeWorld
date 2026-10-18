@@ -489,8 +489,8 @@ Proving in CI that the tests ran red then green remains
   commit snapshot: ignored files and caches take part, and an edit reverted
   between the before and after checks is not seen.
 - `dev` moving while CI runs after the push is covered by up-to-date branches
-  and the PR updater ([after the push](post-push.md)). A gate over its
-  deadline reports the machine load, and says so when it exceeds the cores.
+  and the PR updater ([after the push](post-push.md)). A gate over its deadline
+  reports the machine load; an overloaded local timeout reruns once ([gates](gates.md)).
 - `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the

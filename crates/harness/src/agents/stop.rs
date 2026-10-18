@@ -342,7 +342,7 @@ fn execute(root: &Path, scope: Scope, fingerprint: String, slots: &SlotEnv) -> R
         .filter_map(|id| registry.gates.iter().find(|g| &g.id == id))
         .filter(|g| g.r#static && (scope == Scope::Full || g.cadences.contains(&Cadence::Edit)))
         .collect();
-    let results = crate::ship::run::run_gates(root, &gates, slots);
+    let results = crate::ship::run::run_gates_once(root, &gates, slots);
     let verdict = if results.iter().any(|r| r.verdict == GateVerdict::Fail) {
         Verdict::Fail
     } else if results
