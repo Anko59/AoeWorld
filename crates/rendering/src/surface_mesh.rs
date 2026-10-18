@@ -15,9 +15,12 @@ mod lod;
 mod picking;
 pub use picking::pick_surface_point;
 const SCULPTED_ORDER: u8 = 128;
+/// Ground order bit: the colour channels carry `relief` codes.
+const RELIEF_FLAG: u8 = 64;
 mod skirts;
 use skirts::{Edge, SkirtSurface, append_edge_skirt};
 pub(crate) mod mix;
+pub(crate) mod relief;
 pub use directory::write_terrain_directory;
 pub use lod::projected_surface_triangles;
 
@@ -87,9 +90,44 @@ impl ProjectedSurfaceTriangle {
     pub(crate) fn draw_order(&self) -> u8 {
         if self.order & SCULPTED_ORDER != 0 {
             self.order & 1
-        } else {
+        } else if self.skirt {
             self.order
+        } else {
+            self.order & 3
         }
+    }
+
+    /// Per-vertex slope shade codes (`relief`): the low four mantissa bits of
+    /// the three `color` channels (invisible in an untextured fill, ignored by
+    /// textured ground), valid only while `order` carries `RELIEF_FLAG`, so the
+    /// packed size stays 240 bytes. Sculpted cliff pieces and skirts have none.
+    pub(crate) fn relief(&self) -> [i8; 3] {
+        if self.skirt || self.order & (SCULPTED_ORDER | RELIEF_FLAG) != RELIEF_FLAG {
+            return [0; 3];
+        }
+        self.color.map(|c| (((c.to_bits() as u8) << 4) as i8) >> 4)
+    }
+
+    /// Multiplies the fill colour, keeping the slope shade codes it carries.
+    pub(crate) fn scale_color(&mut self, factors: [f32; 3]) {
+        let relief = self.relief();
+        let shaded = self.order & (SCULPTED_ORDER | RELIEF_FLAG) == RELIEF_FLAG;
+        for (channel, factor) in self.color.iter_mut().zip(factors) {
+            *channel *= factor;
+        }
+        if shaded && !self.skirt {
+            self.set_relief(relief);
+        }
+    }
+
+    pub(crate) fn set_relief(&mut self, codes: [i8; 3]) {
+        if self.skirt || self.order & SCULPTED_ORDER != 0 {
+            return;
+        }
+        for (channel, code) in self.color.iter_mut().zip(codes) {
+            *channel = f32::from_bits((channel.to_bits() & !15) | u32::from(code as u8 & 15));
+        }
+        self.order |= RELIEF_FLAG;
     }
 }
 

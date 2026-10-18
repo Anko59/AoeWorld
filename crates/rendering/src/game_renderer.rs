@@ -59,6 +59,10 @@ pub(crate) mod species_fixture;
 #[cfg(test)]
 pub(crate) mod wear_fixture;
 
+#[path = "game_renderer/tests/tiling/relief.rs"]
+#[cfg(test)]
+pub(crate) mod relief_fixture;
+
 #[cfg(test)]
 mod tests;
 

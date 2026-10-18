@@ -7,6 +7,7 @@ mod grid;
 use grid::*;
 mod landscape;
 mod mountains;
+mod shade;
 
 #[cfg(test)]
 #[path = "lod_tests.rs"]
@@ -83,6 +84,37 @@ pub fn projected_surface_triangles(
         &cells,
         tops * (divisions * divisions) as usize + skirts,
     );
+    // Directional slope shade per cell, from the heights the mesh displays.
+    let ground = cells
+        .iter()
+        .enumerate()
+        .map(|(slot_index, cell)| match cell {
+            None => shade::Ground::Absent,
+            Some(cell) if cell.sample.surface.is_cliff() => shade::Ground::Cliff,
+            Some(cell) => {
+                let corners = displayed_heights(
+                    cell.sample,
+                    grid_cell(grid, slot_index),
+                    grid,
+                    coarse_heights.as_ref(),
+                );
+                shade::Ground::Height(corners.iter().sum::<f64>() / 4.0)
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut shades = shade::cell_shades(&ground, grid);
+    // Water, cliffs and their native art keep their own look.
+    let unshaded = |sample: &SceneTerrain| {
+        sample.surface.water != 0
+            || sample.surface.is_cliff()
+            || appearance::water_material(sample.material)
+    };
+    for (shade, cell) in shades.iter_mut().zip(&cells) {
+        if cell.as_ref().is_some_and(|cell| unshaded(&cell.sample)) {
+            *shade = 0.0;
+        }
+    }
+    let corner_shades = shade::vertex_shades(&ground, &shades, grid);
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
             continue;
@@ -92,6 +124,13 @@ pub fn projected_surface_triangles(
         let appearance = super::landscape::pack(sample.appearance);
         let heights = displayed_heights(sample, tile, grid, coarse_heights.as_ref());
         let color = surface_color(sample);
+        let lattice = {
+            let stride = grid.width + 1;
+            let (x, y) = (slot_index % grid.width, slot_index / grid.width);
+            let at = |dx: usize, dy: usize| corner_shades[(y + dy) * stride + x + dx];
+            [at(0, 0), at(1, 0), at(1, 1), at(0, 1)]
+        };
+        let shaded = !unshaded(&sample);
         let indices = if sample.surface.triangulation == 1 {
             [[0, 1, 3], [1, 2, 3]]
         } else {
@@ -112,8 +151,20 @@ pub fn projected_surface_triangles(
                 );
             }
             let corners = projected_corners(&camera, texture_tile, step, patch_heights);
+            // Bilinear in the cell, so subdivided patches and neighbouring
+            // cells compute the same value on every shared corner or edge.
+            let mut codes = [0_i8; 4];
+            for (code, [x, y]) in codes.iter_mut().zip(local_corners) {
+                let (fx, fy) = (
+                    f64::from(x) as f32 / size as f32,
+                    f64::from(y) as f32 / size as f32,
+                );
+                let top = (1.0 - fx) * lattice[0] + fx * lattice[1];
+                let bottom = (1.0 - fx) * lattice[3] + fx * lattice[2];
+                *code = relief::quantize((1.0 - fy) * top + fy * bottom);
+            }
             for (order, indices) in indices.into_iter().enumerate() {
-                result.push(ProjectedSurfaceTriangle {
+                let mut face = ProjectedSurfaceTriangle {
                     points: [
                         corners[indices[0]],
                         corners[indices[1]],
@@ -150,7 +201,13 @@ pub fn projected_surface_triangles(
                     .then_some([sample.material; 3]),
                     pickable: !sample.surface.is_cliff(),
                     order: order as u8,
-                });
+                };
+                let relief = indices.map(|index| codes[index]);
+                // Flat ground keeps its colour bits and order untouched.
+                if shaded && relief != [0; 3] {
+                    face.set_relief(relief);
+                }
+                result.push(face);
             }
         }
         for (edge, offset) in [(Edge::East, [size, 0]), (Edge::South, [0, size])] {

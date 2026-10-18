@@ -1,7 +1,7 @@
 use crate::{
     GAME_ATLAS_SIDE,
     surface_mesh::{
-        ProjectedSurfaceTriangle, SurfacePoint, directory, mix, surface_render_depth,
+        ProjectedSurfaceTriangle, SurfacePoint, directory, mix, relief, surface_render_depth,
         triangle_texture_coordinates,
     },
 };
@@ -73,6 +73,7 @@ pub(super) fn raster_surface(
     } else {
         None
     };
+    let shade = triangle.relief();
     let mut vertex_depths = [0.0; 3];
     for index in 0..3 {
         vertex_depths[index] = surface_render_depth(triangle.points[index].world, triangle.skirt);
@@ -99,7 +100,7 @@ pub(super) fn raster_surface(
                 second += plane.x[1];
                 continue;
             }
-            let source = if let (Some(_), Some((packed, palette))) = (texture, full) {
+            let unlit = if let (Some(_), Some((packed, palette))) = (texture, full) {
                 junction::sample(
                     triangle,
                     atlas,
@@ -201,6 +202,10 @@ pub(super) fn raster_surface(
                     u8::MAX,
                 ]
             };
+            let vertex_shade = weights[0] * f64::from(shade[0])
+                + weights[1] * f64::from(shade[1])
+                + weights[2] * f64::from(shade[2]);
+            let source = relief::shade_sample(unlit, vertex_shade as f32);
             write_fragment(x, y, width, fragment_depth, source, color, depth);
             first += plane.x[0];
             second += plane.x[1];

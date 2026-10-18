@@ -23,6 +23,7 @@ struct VertexOutput {
     @location(8) @interpolate(flat) rect: vec4<f32>,
     @location(9) @interpolate(flat) rect2: vec4<f32>,
     @location(10) @interpolate(flat) rect3: vec4<f32>,
+    @location(11) shade: f32,
 };
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
     switch mode {
@@ -106,6 +107,8 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             out.uv = vec2<f32>(0.0);
             out.solid = 2u;
             out.tint_kind = 0u;
+            let vertex_code = (u32(sprite.color.z) >> (12u + 4u * corner)) & 15u;
+            out.shade = f32(vertex_code) - select(0.0, 16.0, vertex_code >= 8u);
         } else {
             let code = u32(sprite.color.z);
             let atlas_uv = terrain_uv(code % 8u, corner);
@@ -114,6 +117,8 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
             out.color = vec4<f32>(terrain_tint((code / 8u) % 32u), 1.0);
             out.solid = 1u;
             out.tint_kind = code / 8u;
+            let vertex_code = (code >> (12u + 4u * corner)) & 15u;
+            out.shade = f32(vertex_code) - select(0.0, 16.0, vertex_code >= 8u);
             if tiled {
                 let locals = array<vec2<f32>, 3>(sprite.uv.xy, sprite.uv.zw, sprite.terrain_blend[0].xy);
                 out.uv = locals[corner];
@@ -319,7 +324,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if texel.a <= 0.0 { discard; }
         return texel * in.color;
     }
-    if in.solid == 2u { return in.color; }
+    if in.solid == 2u { return vec4<f32>(in.color.rgb * (1.0 + in.shade * 0.04), in.color.a); }
     let blend = (in.solid & 3u) == 3u;
     let landscape = (in.pages.w & 1u) != 0u;
     // #if mixing
@@ -452,10 +457,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // #endif
         if single { texel = sample; } else { texel += sample * weight; }
     }
-    // Packet tint_kind carries the footprint wear above its five tint bits.
+    // Packet tint_kind carries wear and slope shade above its five tint bits.
     let worn = shaded(texel, in.color, in.tint_kind % 32u, in.pages.w);
-    let darken = vec3<f32>(0.20, 0.32, 0.38) * (f32(in.tint_kind / 32u) / 15.0);
-    return vec4<f32>(worn.rgb * (vec3<f32>(1.0) - darken), worn.a);
+    let darken = vec3<f32>(0.20, 0.32, 0.38) * (f32((in.tint_kind / 32u) % 16u) / 15.0);
+    // Slope shade: a signed four-bit code per vertex, interpolated, 4 % a step.
+    let lit = 1.0 + in.shade * 0.04;
+    return vec4<f32>(worn.rgb * (vec3<f32>(1.0) - darken) * lit, worn.a);
 }
 
 fn shaded(texel: vec4<f32>, color: vec4<f32>, tint: u32, appearance: u32) -> vec4<f32> {

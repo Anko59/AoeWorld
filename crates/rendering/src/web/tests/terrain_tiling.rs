@@ -161,3 +161,60 @@ async fn webgpu_building_wear_darkens_native_textured_terrain() {
     renderer.device.destroy();
     wear::assert_worn(&probes[0], &probes[1]);
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_slope_shading_is_directional_and_zoom_consistent() {
+    use crate::game_renderer::relief_fixture as relief;
+    let mut renderer = surface_renderer_with_atlas(&relief::atlas()).await;
+    let mut ratios = Vec::new();
+    for far in [false, true] {
+        let mut probes = Vec::new();
+        for rise in [0, 1, -1] {
+            let faces = relief::faces(far, rise);
+            renderer
+                .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+                .unwrap();
+            probes.push(read_pixels(&renderer, faces.len() as u32, relief::PROBES).await);
+        }
+        ratios.push(relief::assert_directional(
+            far, &probes[0], &probes[1], &probes[2],
+        ));
+    }
+    renderer.device.destroy();
+    relief::assert_zoom_agreement(ratios[0], ratios[1]);
+}
+
+#[wasm_bindgen_test]
+async fn webgpu_slope_shade_is_continuous_across_shared_edges() {
+    use crate::game_renderer::relief_fixture as relief;
+    let mut renderer = surface_renderer_with_atlas(&relief::atlas()).await;
+    let mut results = Vec::new();
+    for (far, textured) in [(false, true), (true, true), (false, false), (true, false)] {
+        let (faces, probes, gap) = relief::seam(far, textured);
+        renderer
+            .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        results.push((
+            far,
+            gap,
+            read_pixels(&renderer, faces.len() as u32, probes).await,
+        ));
+    }
+    renderer.device.destroy();
+    for (far, gap, probes) in results {
+        relief::assert_continuous(far, gap, &probes);
+    }
+}
+
+#[wasm_bindgen_test]
+async fn webgpu_slope_beside_missing_terrain_still_renders_brighter_than_flat() {
+    use crate::game_renderer::relief_fixture as relief;
+    let mut renderer = surface_renderer_with_atlas(&relief::atlas()).await;
+    let (faces, probes) = relief::clipped_slope();
+    renderer
+        .render_world_layers(&faces, &[], [0.0, 0.0, 0.0, 1.0])
+        .unwrap();
+    let pixels = read_pixels(&renderer, faces.len() as u32, probes).await;
+    renderer.device.destroy();
+    relief::assert_clipped_lit(&pixels);
+}

@@ -23,6 +23,7 @@ flat out uvec4 vPages;
 flat out vec4 vRect;
 flat out vec4 vRect2;
 flat out vec4 vRect3;
+out float vShade;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -60,6 +61,7 @@ void main() {
     vUv2 = vec2(0);
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
+    vShade = 0.0;
     if (color.w < 0.0) {
         uint corner = min(vertex, 2u);
         vec2 points[3] = vec2[3](positionRadius.xy, positionRadius.zw, color.xy);
@@ -69,6 +71,8 @@ void main() {
             vUv = vec2(0);
             vSolid = 2u;
             vTint = 0u;
+            uint vertexCode = (uint(color.z) >> (12u + 4u * corner)) & 15u;
+            vShade = float(vertexCode) - (vertexCode >= 8u ? 16.0 : 0.0);
         } else {
             uint code = uint(color.z);
             vec2 local = terrainUv(code % 8u, corner);
@@ -77,6 +81,8 @@ void main() {
             vColor = vec4(terrainTint((code / 8u) % 32u), 1);
             vSolid = 1u;
             vTint = code / 8u;
+            uint vertexCode = (code >> (12u + 4u * corner)) & 15u;
+            vShade = float(vertexCode) - (vertexCode >= 8u ? 16.0 : 0.0);
             if (tiled) {
                 vec2 locals[3] = vec2[3](uv.xy, uv.zw, terrainBlend0.xy);
                 vUv = locals[corner];
@@ -142,6 +148,7 @@ flat in uvec4 vPages;
 flat in vec4 vRect;
 flat in vec4 vRect2;
 flat in vec4 vRect3;
+in float vShade;
 out vec4 result;
 vec4 boxAverage(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     vec2 size = vec2(textureSize(atlas, 0).xy);
@@ -323,7 +330,7 @@ void main() {
         result = texel * vColor;
         return;
     }
-    if (vSolid == 2u) { result = vColor; return; }
+    if (vSolid == 2u) { result = vec4(vColor.rgb * (1.0 + vShade * .04), vColor.a); return; }
     bool blend = (vSolid & 3u) == 3u;
     bool landscape = (vPages.w & 1u) != 0u, mixing = groundMixing && vSolid >= 8u, junction = groundMixing && vSolid >= 24u;
     bool tiled = (vSolid & 4u) != 0u;
@@ -406,9 +413,10 @@ void main() {
         if (mixing) sampled = mixed(sampled, material, vPages.w, vTint % 32u);
         if (single) texel = sampled; else texel += sampled * weight;
     }
-    // vTint carries the footprint wear above its five tint bits.
+    // vTint carries wear and slope shade above its five tint bits.
     vec4 worn = shaded(texel, vColor, vTint % 32u, vPages.w);
-    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float(vTint / 32u) / 15.0)), worn.a);
+    float lit = 1.0 + vShade * .04;
+    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float((vTint / 32u) % 16u) / 15.0)) * lit, worn.a);
 }`;
 
 // Registered directly with wasm-bindgen so both local modules are packaged.
