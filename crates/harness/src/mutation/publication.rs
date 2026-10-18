@@ -32,6 +32,7 @@ impl CommandObservation {
                 Some(process::ProcessError::Deadline { .. }) => ("DEADLINE", None),
                 Some(process::ProcessError::Cancelled { .. }) => ("CANCELLED", None),
                 Some(process::ProcessError::Start { .. }) => ("START_UNAVAILABLE", None),
+                Some(process::ProcessError::Suspended { .. }) => ("INTERRUPTED", None),
                 Some(process::ProcessError::Monitor { .. }) => ("MONITOR_UNAVAILABLE", None),
                 None => ("FAILED_UNCLASSIFIED", None),
             },
@@ -290,6 +291,7 @@ pub(super) fn observe_execution(
                     process::ProcessError::Deadline { .. } => ("DEADLINE", None),
                     process::ProcessError::Cancelled { .. } => ("CANCELLED", None),
                     process::ProcessError::Start { .. } => ("START_UNAVAILABLE", None),
+                    process::ProcessError::Suspended { .. } => ("INTERRUPTED", None),
                     process::ProcessError::Monitor { .. } => ("MONITOR_UNAVAILABLE", None),
                 };
                 CommandObservation {
