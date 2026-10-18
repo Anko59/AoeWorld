@@ -201,6 +201,10 @@ const OWN_DOCKER_RUN_EXEMPT: &[(&str, &str)] = &[
         "the release rehearsal stack, a release workflow",
     ),
     (
+        "devserver/process.rs",
+        "the shared dev server: a detached, long-running server of an already built binary, never inside a gate slot",
+    ),
+    (
         "ship/compare/capture.rs",
         "`make ship` screenshots run by the ship process, never inside a gate slot",
     ),
