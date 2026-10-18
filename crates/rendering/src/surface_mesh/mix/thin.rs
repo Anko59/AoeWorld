@@ -1,15 +1,14 @@
 //! Streams one or two tiles wide. Shore mixing gives a vertex the water share
 //! of its four incident tiles, so a channel without a 2x2 block of water never
 //! passes half coverage: it draws as faded necks between full pools. A vertex
-//! that touches such a thin tile counts three of its four tiles as water, which
-//! keeps the channel solid along its line and widens it by about a third of a
-//! tile. Thickness is read from the source tiles, never from the displayed
+//! that touches such a thin tile is raised to a water share of 0.63, which keeps
+//! the channel solid along its line and widens it by about a sixth of a tile. Thickness is read from the source tiles, never from the displayed
 //! vertices, so it cannot depend on zoom, camera or chunk order.
 use super::*;
 
 /// Water coverage of a Ford: a light, sandy-looking shallow, never opaque.
-/// This is the water share whose shore coverage is about 0.7.
-pub(super) const FORD_SHARE: u8 = 140;
+/// This is the water share whose shore coverage is about 0.85.
+pub(super) const FORD_SHARE: u8 = 150;
 
 fn water(material: u8) -> bool {
     matches!(material, 5 | 10 | 12)
@@ -22,12 +21,18 @@ fn interior(wet: &crate::WorldKeyIndex, vertex: [i32; 2]) -> bool {
         .all(|d| wet.get([vertex[0] + d[0], vertex[1] + d[1]]).is_some())
 }
 
-/// Raise the water share of every displayed vertex of a thin water tile.
-pub(super) fn widen(
-    support: &mut [[(u8, u16); 4]],
+/// Overlay share (of 255) of a vertex of a thin water tile: coverage 1.
+pub(super) const THIN_SHARE: u8 = 160;
+
+/// The displayed vertices of every thin water tile. Cells keep their source
+/// materials, so a land tile beside a stream never turns into a pure water
+/// quad; only the share (and, on junctions, the observations) are raised.
+pub(super) fn thin_vertices(
     keys: &crate::WorldKeyIndex,
+    count: usize,
     terrain: &[SceneTerrain],
-) {
+) -> Vec<bool> {
+    let mut thin = vec![false; count];
     let mut wet = crate::WorldKeyIndex::default();
     let mut tiles = Vec::new();
     for sample in terrain {
@@ -46,14 +51,15 @@ pub(super) fn widen(
         }
         for corner in corners {
             if let Some(index) = keys.get(corner) {
-                fill(&mut support[index]);
+                thin[index] = true;
             }
         }
     }
+    thin
 }
 
 /// Make three of four cells water, converting land cells in slot order.
-fn fill(cells: &mut [(u8, u16); 4]) {
+pub(super) fn fill(cells: &mut [(u8, u16); 4]) {
     if cells.iter().any(|cell| cell.0 == MISSING) {
         return;
     }

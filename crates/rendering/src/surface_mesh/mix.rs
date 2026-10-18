@@ -148,9 +148,12 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             }
         }
     }
-    if water_visible {
-        thin::widen(&mut support, &keys, terrain);
-    }
+    let thin = if water_visible {
+        thin::thin_vertices(&keys, support.len(), terrain)
+    } else {
+        Vec::new()
+    };
+    let thin_at = |point: SurfacePoint| thin.get(keys.get(vertex(point)).unwrap_or(0)).copied();
     for triangle in triangles.iter_mut().filter(|triangle| eligible(triangle)) {
         let mut cells = triangle
             .points
@@ -235,10 +238,14 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                     .checked_div(present)
                     .unwrap_or(0) as u8
             };
+            let mut over_share = share(over);
+            if thin_at(triangle.points[corner]) == Some(true) && matches!(over, 10 | 12) {
+                over_share = over_share.max(thin::THIN_SHARE);
+            }
             triangle.mix[corner] = if over == 12 {
-                share(over).min(thin::FORD_SHARE)
+                over_share.min(thin::FORD_SHARE)
             } else {
-                share(over)
+                over_share
             };
             triangle.mix[3 + corner] = if middle == base { 0 } else { share(middle) };
             let floor = cell.iter().map(|cell| u32::from(cell.1)).sum::<u32>();
@@ -247,6 +254,13 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             );
         }
         if full {
+            if matches!(over, 10 | 12) {
+                for (corner, cell) in cells.iter_mut().enumerate() {
+                    if thin_at(triangle.points[corner]) == Some(true) {
+                        thin::fill(cell);
+                    }
+                }
+            }
             support::retain(triangle, cells);
         }
         // A quad can see an overlay only at the corner opposite this triangle.
@@ -265,11 +279,19 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 && appearance::water_material(face.material)
                 && face.floor_strengths.is_none()
         }) {
+            let ford = triangle.material == 12;
             if let Some(materials) = triangle.texture_materials.as_mut() {
                 for (corner, point) in triangle.points.iter().enumerate() {
                     if let Some(index) = keys.get(vertex(*point)) {
-                        if shore_depths[index] != MISSING {
-                            materials[corner] = shore_depths[index];
+                        // A thin reach of deeper water inside a ford would draw
+                        // as isolated medium-blue triangles: it starts from the
+                        // shallow sheet at its thin vertices.
+                        let depth = match shore_depths[index] {
+                            MISSING if !ford && thin[index] => 10,
+                            depth => depth,
+                        };
+                        if depth != MISSING {
+                            materials[corner] = depth;
                         }
                     }
                 }
