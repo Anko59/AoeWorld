@@ -51,6 +51,15 @@ impl Environment {
             .prefix(prefix)
             .tempdir_in(root)
             .unwrap();
+        // Its own repository: under `.cache/tmp` it would otherwise resolve to the real
+        // checkout's Git directory and find a live shared dev server (`devserver::play_url`),
+        // so a test of "no usable before URL" would pass or fail with the machine's state.
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(temp.path())
+            .status()
+            .unwrap();
+        assert!(init.success(), "git init in the showcase temp dir");
         let saved = ENV
             .iter()
             .map(|name| (*name, std::env::var_os(name)))
