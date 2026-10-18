@@ -165,3 +165,52 @@ fn a_deleted_test_file_is_unmounted_with_the_line_the_pr_removed() {
     .unwrap_err();
     assert!(seen && error == "stop", "{error}");
 }
+
+#[test]
+fn a_test_module_moved_out_of_its_inline_block_replaces_it_at_red() {
+    let (temp, _) = repo();
+    let root = temp.path();
+    commit(
+        root,
+        &[(
+            LIB,
+            "pub fn f() {}\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn old() {}\n}\n",
+        )],
+        "inline tests",
+    );
+    let base = tip(root);
+    let test = "crates/sim/src/tests.rs";
+    commit(
+        root,
+        &[
+            (test, "#[test]\nfn old() {}\n#[test]\nfn feature() {}\n"),
+            (
+                LIB,
+                "pub fn f() {}\npub fn fixed() {}\n#[cfg(test)]\nmod tests;\n",
+            ),
+        ],
+        "tests moved to their own file, and a feature",
+    );
+    let head = tip(root);
+    let mut calls = 0;
+    let record = red::run_with(root, &base, &head, &mut |snapshot, _| {
+        calls += 1;
+        if calls == 1 {
+            let lib = read(snapshot, LIB);
+            assert!(
+                !lib.contains("mod tests {"),
+                "the inline block is gone: {lib}"
+            );
+            assert_eq!(
+                lib.matches("mod tests").count(),
+                1,
+                "one tests module: {lib}"
+            );
+            assert!(lib.contains("pub fn f()"), "product code stays: {lib}");
+            assert!(!lib.contains("fixed"), "no other product line: {lib}");
+        }
+        Ok(runner(snapshot, test, "sim$tests::feature"))
+    })
+    .expect("the moved module builds once, and its new test is red by name");
+    assert_eq!(record.failed, ["sim$tests::feature"]);
+}

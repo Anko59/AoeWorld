@@ -29,8 +29,11 @@ looks only at the merge base with the selected base and at HEAD.
   child, itself mounted in turn, so the tests of a new module fail to compile
   against the missing item (compile-red). For a test file the PR deletes, the
   declaration the product parent dropped is removed from the red tree, so the
-  build does not stop at E0583. Declarations inside inline `mod x { .. }` blocks
-  are not followed (limit).
+  build does not stop at E0583. When the PR moved an inline `#[cfg(test)] mod
+  name { .. }` into its own file (the test-placement hook forces that move), the
+  base's inline block of that name is removed from the red tree, so the module is
+  defined once (no E0428); only a `cfg(test)` block is removed. Declarations inside
+  inline `mod x { .. }` blocks are not followed (limit).
 - **Pre-existing failures never count**: the old test files are run at the merge
   base too, and any name failing there is removed from the evidence. Changed
   tests that all pass at the merge base, or already fail there, are refused.
