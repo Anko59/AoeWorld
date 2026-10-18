@@ -57,6 +57,12 @@ Browser checks use `aoeworld/browser-tools:1.63.0`, the same
 image as `make test-e2e`, with the normal configured projects and disposable
 server. Browser fixture changes without a spec select the existing broader
 focused fixture scope. There is no `DUEL_CHECK` override for red records.
+A `make red` does up to three runs (red, the old tests on the merge base, green), each
+from a fresh export with its own cold Cargo target: sharing one target between trees
+is unsafe because archived timestamps can make Cargo reuse another tree's test binary
+(the reason for the separate outputs above). Measured once on a small crate
+(`crates/core`, 6 CPUs per container): all three runs took 19 s. Large packages are
+unmeasured, and a run past the deadline below is "red runner unavailable", never a record.
 Each red or green Docker run, including its builds, has a 30-minute deadline;
 Playwright retains its 20-minute suite and per-test bounds. Checks run serially
 under the ship lock and one heavy slot. Output remains bounded by the focused
