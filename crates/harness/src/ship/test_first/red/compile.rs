@@ -75,3 +75,35 @@ fn added_identifiers(root: &Path, base: &str, head: &str) -> git::Result<BTreeSe
     }
     Ok(identifiers)
 }
+
+/// The changed tests that ran and passed at head, at least one in each file that did not compile
+/// at red: a file whose tests are filtered, ignored or unmounted at head proves nothing.
+pub(super) fn ran(
+    green_tree: &Path,
+    base_tree: &Path,
+    red: &CheckReport,
+    green: &CheckReport,
+) -> git::Result<Vec<String>> {
+    let files: BTreeSet<&str> = red.compile_errors.iter().map(|e| e.path.as_str()).collect();
+    let mut ran = BTreeSet::new();
+    for file in files {
+        let mut found = false;
+        for name in green.tests.iter().filter(|n| !green.failed.contains(n)) {
+            if crate::ship::duel::authored::changed_failure(
+                green_tree,
+                base_tree,
+                &[file.to_owned()],
+                name,
+            )? {
+                ran.insert(name.clone());
+                found = true;
+            }
+        }
+        if !found {
+            return Err(format!(
+                "red: no changed test of {file} ran and passed at HEAD (filtered, ignored or not mounted?)"
+            ));
+        }
+    }
+    Ok(ran.into_iter().collect())
+}

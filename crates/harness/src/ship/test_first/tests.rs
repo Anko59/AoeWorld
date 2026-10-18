@@ -2,6 +2,7 @@ mod history;
 mod history_cli;
 mod red;
 mod red_findings;
+mod red_mounts;
 mod red_pr;
 
 use super::{Kind, build_keys, exemption, report, summary, test_marker};

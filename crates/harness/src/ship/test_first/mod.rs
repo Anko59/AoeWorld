@@ -433,12 +433,17 @@ impl Report {
     }
 }
 
-/// The report as Markdown; an unreadable history is reported, never fatal.
-pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
-    let mut text = report(root, base, head).map_or_else(
+/// The commit-history report as Markdown; an unreadable history is reported, never fatal.
+pub(crate) fn history_summary(root: &Path, base: &str, head: &str) -> String {
+    report(root, base, head).map_or_else(
         |error| format!("- test-first report unavailable: {error}\n"),
         |report| report.markdown(),
-    );
+    )
+}
+
+/// The history report followed by the red decision, for the review facts and the description.
+pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
+    let mut text = history_summary(root, base, head);
     text.push_str(
         &red::require(root, base, head)
             .unwrap_or_else(|error| format!("- test-first red: {error}\n")),

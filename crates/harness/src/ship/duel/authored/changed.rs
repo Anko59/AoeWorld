@@ -17,7 +17,7 @@ pub(in crate::ship) fn changed_failure(
             continue;
         };
         let before = fs::read_to_string(old.join(path)).ok();
-        let added = added_functions(&source, before.as_deref())?;
+        let added = changed_functions(&source, before.as_deref())?;
         let functions = functions(&source)?;
         // Prefer nested::case over case; matching only a leaf launders an
         // unchanged nested test beside a changed top-level test of that name.

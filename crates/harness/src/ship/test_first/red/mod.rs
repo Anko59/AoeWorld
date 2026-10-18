@@ -1,6 +1,7 @@
 //! Harness-owned proof from fresh runs, never from an agent's evidence files.
 mod attribution;
 mod compile;
+mod mounts;
 mod record;
 pub(crate) mod runner;
 mod snapshot;
@@ -28,6 +29,8 @@ pub(crate) struct Record {
     pub(crate) failed: Vec<String>,
     /// API items the PR adds that a changed test calls, when the red was a compile failure.
     pub(crate) missing: Vec<String>,
+    /// Changed tests of the files that failed to compile at red, seen running and passing at head.
+    pub(crate) ran: Vec<String>,
     /// Failures already present at the merge base with the old test files (never evidence).
     pub(crate) base_failed: Vec<String>,
 }
@@ -99,6 +102,7 @@ pub(crate) fn run_with(
     // The red tree is the merge base's product code plus ONLY the PR's test files.
     let red_source = baseline::export_in(root, base, &cache)?;
     snapshot::overlay(root, head, red_source.path(), &paths)?;
+    mounts::apply(root, base, head, red_source.path(), &paths)?;
     let base_source = baseline::export_in(root, base, &cache)?;
     println!(
         "red: the PR's tests on merge base {base}; {}",
@@ -160,7 +164,20 @@ pub(crate) fn run_with(
     let green_source = baseline::export_in(root, head, &cache)?;
     let green = run(green_source.path(), &paths)?;
     validate_green(&failed, &green)?;
-    println!("green: PASS at {head}: {}", failed.join(", "));
+    let ran = if missing.is_empty() {
+        Vec::new()
+    } else {
+        compile::ran(green_source.path(), base_source.path(), &red, &green)?
+    };
+    println!(
+        "green: PASS at {head}: {}",
+        failed
+            .iter()
+            .chain(&ran)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let record = Record {
         head: head.into(),
         base: base.into(),
@@ -168,6 +185,7 @@ pub(crate) fn run_with(
         paths,
         failed,
         missing,
+        ran,
         base_failed: before.failed,
     };
     record::write(root, &record)?;

@@ -222,8 +222,52 @@ fn a_test_against_an_api_the_pr_adds_is_compile_red_and_names_it() {
     let record = record.unwrap_or_else(|e| panic!("{e}"));
     assert!(record.failed.is_empty());
     assert_eq!(record.missing, ["new_api"]);
+    assert_eq!(record.ran, [NAME]);
     let text = red::require(root, &base, &head).unwrap();
     assert!(text.contains("missing: new_api"), "{text}");
+}
+
+#[test]
+fn a_compile_red_whose_tests_do_not_run_at_head_is_refused() {
+    let (temp, base, head) = new_api(true);
+    let root = temp.path();
+    // Filtered, ignored or cfg-gated: head is green but names no test of the file, or only a
+    // test of another file, or a failing one.
+    for tests in [vec![], vec!["sim$other::elsewhere".to_owned()]] {
+        let error = red::run_with(root, &base, &head, &mut |snapshot, _| {
+            Ok(CheckReport {
+                tests: tests.clone(),
+                ..green(snapshot)
+            })
+        })
+        .unwrap_err();
+        assert!(error.contains("ran and passed at HEAD"), "{error}");
+        assert!(red::require(root, &base, &head).is_err());
+    }
+    let error = red::run_with(root, &base, &head, &mut |snapshot, _| {
+        let mut report = green(snapshot);
+        if report.passed {
+            report.passed = false;
+            report.failed = vec![NAME.into()];
+        }
+        Ok(report)
+    })
+    .unwrap_err();
+    assert!(error.contains("green"), "{error}");
+}
+
+#[test]
+fn a_compile_red_record_without_ran_tests_does_not_satisfy_ship() {
+    let (temp, base, head) = new_api(true);
+    let root = temp.path();
+    red::run_with(root, &base, &head, &mut |snapshot, _| Ok(green(snapshot))).unwrap();
+    assert!(red::require(root, &base, &head).unwrap().contains(NAME));
+    let path = git::git(root, &["rev-parse", "--git-path", "aoe-ship/red"]).unwrap();
+    let file = root.join(path).join(format!("{head}.json"));
+    let mut record: serde_json::Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+    record["ran"] = serde_json::json!([]);
+    fs::write(&file, serde_json::to_vec(&record).unwrap()).unwrap();
+    assert!(red::require(root, &base, &head).is_err());
 }
 
 #[test]

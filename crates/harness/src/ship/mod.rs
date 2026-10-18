@@ -347,7 +347,7 @@ pub(crate) fn ship_with(
     let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
     eprint!(
         "ship: test-first report\n{}",
-        test_first::summary(root, &merge_base, &subject.head)
+        test_first::history_summary(root, &merge_base, &subject.head)
     );
     eprint!(
         "{}",
@@ -396,11 +396,15 @@ pub(crate) fn ship_with(
     }
     options.lock.reacquire(root, "make ship")?;
     let rebased = recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)?;
+    // The red decision was made for the identities above; only a catch-up rebase changes them.
+    let rebased_again = rebased.is_some();
     let (evidence, review, lease, _recheck_anchor) = match rebased {
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),
     };
-    test_first::red::require(root, &evidence.merge_base, &evidence.head)?;
+    if rebased_again {
+        test_first::red::require(root, &evidence.merge_base, &evidence.head)?;
+    }
     let lease = if evidence.head != started_head && lease.is_none() {
         recheck::lease(root, options, &git::subject(root)?, &started_head)?
     } else {

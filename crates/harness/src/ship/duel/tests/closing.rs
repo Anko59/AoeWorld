@@ -258,7 +258,7 @@ fn changed_attribute_stacks_preserve_test_names_and_authorship() {
                 fs::remove_file(old.path().join(path)).unwrap();
             }
             assert_eq!(
-                authored::added_functions(&source, before.as_deref()).unwrap(),
+                authored::changed_functions(&source, before.as_deref()).unwrap(),
                 ["red_case"],
                 "{attributes}"
             );
@@ -274,7 +274,7 @@ fn changed_attribute_stacks_preserve_test_names_and_authorship() {
             );
         }
         assert!(
-            authored::added_functions(&source, Some(&source))
+            authored::changed_functions(&source, Some(&source))
                 .unwrap()
                 .is_empty()
         );
@@ -293,22 +293,30 @@ fn changed_attribute_stack_in_nested_module_excludes_cfg_test_helpers() {
         #[test] #[should_panic] fn red_case() { assert_eq!(super::f(), 1); }\n}\n";
     assert_eq!(authored::functions(source).unwrap(), ["nested::red_case"]);
     assert_eq!(
-        authored::added_functions(source, None).unwrap(),
+        authored::changed_functions(source, None).unwrap(),
         ["nested::red_case"]
     );
     let helper = "#[cfg(test)] fn helper() { assert_eq!(super::f(), 1); }";
     assert!(authored::functions(helper).unwrap().is_empty());
-    assert!(authored::added_functions(helper, None).unwrap().is_empty());
+    assert!(
+        authored::changed_functions(helper, None)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
-fn changed_attribute_stack_never_exempts_missing_or_ignored_tests_from_green() {
+fn duel_green_still_exempts_ignored_and_cfg_gated_tests() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     let path = "crates/x/tests/check.rs";
     write(root, "crates/x/Cargo.toml", "[package]\nname='aoe-x'\n");
-    for attrs in ["#[cfg(unix)] #[test]", "#[test] #[ignore]"] {
-        write(root, path, &format!("{attrs} fn red_case() {{}}\n"));
+    for gated in ["#[cfg(unix)] #[test]", "#[test] #[ignore]"] {
+        write(
+            root,
+            path,
+            &format!("#[test] fn plain() {{}}\n{gated} fn gated() {{}}\n"),
+        );
         let red = focus::CheckReport {
             build_failed: true,
             ..Default::default()
@@ -318,8 +326,9 @@ fn changed_attribute_stack_never_exempts_missing_or_ignored_tests_from_green() {
             ..Default::default()
         };
         let error = green::validate(root, &[path.into()], None, &red, &green).unwrap_err();
-        assert!(error.contains("check.rs::red_case"), "{error}");
-        green.tests.push("aoe-x::check$red_case".into());
+        assert!(error.contains("check.rs::plain"), "{error}");
+        assert!(!error.contains("gated"), "{error}");
+        green.tests.push("aoe-x::check$plain".into());
         assert!(green::validate(root, &[path.into()], None, &red, &green).is_ok());
     }
 }

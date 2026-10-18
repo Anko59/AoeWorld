@@ -15,15 +15,32 @@ looks only at the merge base with the selected base and at HEAD.
   specs by title and location, and specs importing a changed helper (including
   transitive static relative imports).
 - **Red**: the runner exports the merge base, lays ONLY the PR's test-file
-  changes over it (product code exactly as before the PR) and runs the selected
+  changes over it (product code exactly as before the PR, except the `mod`
+  lines below) and runs the selected
   packages/specs in that snapshot. It is red when at least one changed test
   fails by name, or when the changed Rust test target fails to compile because
   a test names an item the PR adds (see below).
+- **Mount lines**: a Rust test file is compiled only where a `mod` item loads it,
+  and that item usually lives in a product file. For each changed Rust test file
+  that `head` mounts from a product file the merge base does not declare it in,
+  the red tree gets that one declaration (`#[cfg(test)] mod tests;` or the
+  `#[path]` form) appended to the base's file, nothing else of the product. A
+  parent module the base lacks becomes a stub holding only the declaration of its
+  child, itself mounted in turn, so the tests of a new module fail to compile
+  against the missing item (compile-red). For a test file the PR deletes, the
+  declaration the product parent dropped is removed from the red tree, so the
+  build does not stop at E0583. Declarations inside inline `mod x { .. }` blocks
+  are not followed (limit).
 - **Pre-existing failures never count**: the old test files are run at the merge
   base too, and any name failing there is removed from the evidence. Changed
   tests that all pass at the merge base, or already fail there, are refused.
 - **Green**: the same selection passes at HEAD, every red failure having run
-  and passed there.
+  and passed there. After a compile-red, at least one changed test of every file
+  that failed to compile must have run and passed at HEAD (a filtered, ignored,
+  cfg-gated or unmounted file is refused), and the record's `ran` names them.
+- **Attributes**: red counts a test as changed whatever its `#[ignore]`/`cfg`
+  stack, because only a test that ran can fail by name and green shows what ran.
+  The duel's own green keeps its exemption for ignored and cfg-gated tests.
 
 A Rust test that calls an API the PR adds cannot compile at the merge base. That
 is accepted as red only when every compiler error is a "cannot find" kind
@@ -51,7 +68,7 @@ fresh captured JSON live under `.cache/agent-hook/red/`, which the existing
 policy forbids agents from editing. A record is written only after both actual
 runs succeed in proving red then green, using an atomic rename under
 `<git common dir>/aoe-ship/red/<head>.json`. Its `head`, `base`, changed test
-`paths` with their blob ids, named `failed` tests and `missing` API items are
+`paths` with their blob ids, named `failed` tests, `missing` API items and the `ran` tests of a compile-red are
 recomputed or checked by shipping. `RED_RECORD <json>` prints the record for a report.
 
 `make ship` blocks product/build changes without the matching record before

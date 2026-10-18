@@ -52,6 +52,7 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
         || record.paths != paths
         || record.blobs != blobs(root, head, &paths)?
         || (record.failed.is_empty() && record.missing.is_empty())
+        || (!record.missing.is_empty() && record.ran.is_empty())
         || record
             .failed
             .iter()
@@ -63,8 +64,9 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
         format!("failed by name: {}", record.failed.join(", "))
     } else {
         format!(
-            "failed to compile, missing: {}{}",
+            "failed to compile, missing: {}; ran and passed at head: {}{}",
             record.missing.join(", "),
+            record.ran.join(", "),
             if record.failed.is_empty() {
                 String::new()
             } else {
