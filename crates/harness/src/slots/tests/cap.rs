@@ -246,3 +246,17 @@ fn every_container_the_harness_starts_itself_takes_the_slot_cap() {
     }
     assert!(gaps.is_empty(), "uncapped `docker run` argv: {gaps:?}");
 }
+
+#[test]
+fn ci_slots_export_no_cpu_cap() {
+    let config = crate::slots::Config::from_values(2, 12, None, None).unwrap();
+    assert_eq!(
+        crate::slots::guard::cap_for(&config, false).as_deref(),
+        Some("6")
+    );
+    assert_eq!(
+        crate::slots::guard::cap_for(&config, true),
+        None,
+        "a CI job has its runner to itself"
+    );
+}

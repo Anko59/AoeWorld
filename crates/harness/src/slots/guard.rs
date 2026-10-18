@@ -252,24 +252,40 @@ pub(super) fn acquire_in(
     )?;
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
+    let cap = cap_for(
+        &config,
+        crate::ship::run::in_ci(|name| std::env::var(name).ok()),
+    );
     if matches!(slot, Slot::Owned { .. }) {
-        eprintln!(
-            "heavy slot: {gate} holds a slot; its containers get {} CPUs each",
-            config.cpus_per_slot()
-        );
+        match &cap {
+            Some(cpus) => {
+                eprintln!("heavy slot: {gate} holds a slot; its containers get {cpus} CPUs each")
+            }
+            None => eprintln!(
+                "heavy slot: {gate} holds a slot; CI runs one job per runner, so no CPU cap"
+            ),
+        }
         wait_load()?;
     }
-    let env = vec![
+    let mut env = vec![
         (TOKEN_VAR, slot.token().to_owned()),
         (DIR_VAR, queue.display().to_string()),
-        (CPUS_VAR, config.cpus_per_slot().to_string()),
     ];
+    if let Some(cpus) = cap {
+        env.push((CPUS_VAR, cpus));
+    }
     *held = Some(env.clone());
     Ok(Guard {
         _slot: Some(slot),
         env,
         outermost: true,
     })
+}
+
+/// The CPU cap a slot exports: none in CI, where each job has a runner to itself and a
+/// cap of `cores / slots` only slows timing-sensitive browser tests (#474's e2e runs).
+pub(crate) fn cap_for(config: &Config, ci: bool) -> Option<String> {
+    (!ci).then(|| config.cpus_per_slot().to_string())
 }
 
 /// Run `argv` as gate `gate` holding its slot, and return its exit code. The orchestrator
