@@ -251,3 +251,29 @@ fn a_wall_makes_the_route_longer_but_not_impossible() {
     }
     assert!(travel(true) > travel(false) + 40);
 }
+
+#[test]
+fn coordinates_at_the_integer_limit_are_rejected_without_panicking() {
+    let (mut world, _, _) = village();
+    let builder = villager_at(&mut world, 99, 100);
+    let before = world.canonical_hash();
+    for (from, to) in [
+        (at(i32::MAX, 10), at(i32::MAX, 12)),
+        (at(10, i32::MAX), at(12, i32::MAX)),
+        (at(i32::MAX - 1, i32::MAX), at(i32::MAX, i32::MAX)),
+        (at(i32::MIN, i32::MIN), at(i32::MIN, i32::MIN + 2)),
+    ] {
+        assert_eq!(
+            world.issue_build_wall(PlayerId(0), &[builder], from, to),
+            Err(EconomyError::InvalidFootprint),
+            "{from:?} to {to:?}"
+        );
+    }
+    for origin in [at(i32::MAX, i32::MAX), at(i32::MAX, 5), at(i32::MIN, 5)] {
+        assert_eq!(
+            world.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin),
+            Err(EconomyError::InvalidFootprint)
+        );
+    }
+    assert_eq!(world.canonical_hash(), before);
+}

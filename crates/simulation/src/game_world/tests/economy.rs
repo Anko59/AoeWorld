@@ -7,6 +7,7 @@ mod construction;
 mod farming;
 pub(crate) mod fixture;
 mod gathering;
+mod rejections;
 mod resource_collision;
 mod training;
 mod village_routes;

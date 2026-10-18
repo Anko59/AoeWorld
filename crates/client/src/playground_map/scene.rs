@@ -5,6 +5,9 @@ use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 #[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
+#[cfg(test)]
+#[path = "scene/tests/worker.rs"]
+mod worker_tests;
 
 pub(crate) struct PreparedScene {
     camera: Camera,
