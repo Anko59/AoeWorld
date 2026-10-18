@@ -81,7 +81,25 @@ detail placement without moving source-backed relief.
 
 The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
-locks and reproducible reductions, but it is an overview-quality stack. The
+locks and reproducible reductions, but it is an overview-quality stack.
+
+Landscape overviews refine elevation with Copernicus GLO-90 (3 arc-second,
+about 90 m) whenever the footprint needs at most 96 one-degree tiles (a Large
+map to about 70 degrees latitude) and does not touch a pole or the antimeridian.
+ETOPO's 60 arc-second cells are 1.85 km, so point-sampling it onto a Large
+map's 469 m samples gave runs of identical heights over 1 km long; each sample
+is now the area mean of the GLO-90 pixels inside its cell (box weights by
+overlap, no point read). Where GLO-90 has no tile (open ocean) or no valid
+pixel, the uncovered part of the cell takes the ETOPO value at its center, so
+bathymetry still comes from ETOPO. Each tile is a package source lock
+(`copernicus-glo90-area-mean-gdal-0.19`) and ETOPO is recorded as the fill
+(`etopo-overview-gdal-0.19-glo90-fill`). Larger footprints (Giant) keep the
+ETOPO-only overview, whose samples are about as coarse as its cells. Tiles use
+the cache first and need the network only for a tile that is not cached (and
+for the existence check of a tile the provider does not publish); a Large Paris
+map reads 48 tiles, 204 MB. The detailed path's 64-tile limit and 4096-sample
+cap are unchanged; the overview axis stays 1024 because hydrology, water,
+vegetation and history are bound to it. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
 Copernicus elevation and samples modern WorldCover, HydroLAKES, and the pinned
 Europe/Middle East HydroRIVERS dataset while retaining the overview's coarse
@@ -237,6 +255,8 @@ checks river coverage before acquisition. Covered footprints add vector hydrolog
 uncovered ones keep the global overview and record `outside_river_coverage` in
 package and job preparation notes, displayed by the creator. Explicit With rivers
 rejects uncovered footprints; Without rivers requests the overview directly.
+Overview elevation uses area-averaged GLO-90 as described above, so the
+creator's `Landscape overview` explanation names it.
 
 Detailed regional elevation is an explicit choice and includes rivers. It
 supports squares up to 120 km with centers within 75 degrees latitude and 170
