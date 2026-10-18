@@ -371,3 +371,20 @@ fn the_e2e_variables_the_harness_reads_reach_both_containers() {
         );
     }
 }
+
+/// `make help` echoes each line inside single quotes, so an apostrophe in the text ends the
+/// string and the shell fails with "Unterminated quoted string". Every echo must close its quote.
+#[test]
+fn help_lines_close_their_single_quoted_echo() {
+    let text = fs::read_to_string(repository().join("Makefile")).expect("Makefile");
+    for (number, line) in text.lines().enumerate() {
+        if let Some(echoed) = line.trim_start().strip_prefix("@echo '") {
+            let echoed = echoed.trim_end();
+            assert!(
+                echoed.ends_with('\'') && !echoed[..echoed.len() - 1].contains('\''),
+                "Makefile:{}: an apostrophe inside a single-quoted echo breaks `make help`: {line}",
+                number + 1
+            );
+        }
+    }
+}

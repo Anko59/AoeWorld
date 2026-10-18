@@ -1,6 +1,6 @@
 use super::{
     authored,
-    focus::{CheckReport, Panic},
+    focus::{CheckReport, CompileError, Panic},
     panic_only_refusal, runner, wasm,
 };
 use crate::{process::CaptureExit, wasm_test::SuiteRun};
@@ -23,6 +23,11 @@ fn full(tag: &str) -> CheckReport {
             message: format!("{tag} boom"),
             test: Some(format!("{tag}$failed")),
         }],
+        compile_errors: vec![CompileError {
+            path: format!("{tag}.rs"),
+            code: Some("E0425".into()),
+            items: vec![format!("{tag}_item")],
+        }],
     }
 }
 
@@ -42,6 +47,12 @@ fn merge_combines_every_field() {
     assert_eq!(merged.locations.len(), 2);
     let locations: Vec<_> = merged.panics.iter().map(|p| p.location.as_str()).collect();
     assert_eq!(locations, ["a.rs:1:1", "b.rs:1:1"]);
+    let items: Vec<_> = merged
+        .compile_errors
+        .iter()
+        .map(|e| e.items[0].as_str())
+        .collect();
+    assert_eq!(items, ["a_item", "b_item"]);
     // The first unavailable reason stands, and a passing report keeps a passing one passing.
     let mut first = CheckReport {
         passed: true,

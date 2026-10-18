@@ -1,8 +1,10 @@
 //! Red requires a failure identified in a file changed by this round's tester.
+mod changed;
 mod modules;
 use self::modules::{crate_roots, module_path, unit_target};
 use super::focus::CheckReport;
 use crate::ship::git;
+pub(in crate::ship) use changed::changed_failure;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -331,6 +333,16 @@ pub(super) fn functions(source: &str) -> git::Result<Vec<String>> {
 /// Tests this round added or changed that a focused run executes: no `#[ignore]`
 /// and no `cfg` other than `test`. `old` is the file at the round's base.
 pub(super) fn added_functions(source: &str, old: Option<&str>) -> git::Result<Vec<String>> {
+    changed_tests(source, old, false)
+}
+
+/// Tests the PR added or changed, whatever their attribute stack: a red name must come from a
+/// test that ran, and the proof's green run, not the source, shows an ignored test never did.
+pub(super) fn changed_functions(source: &str, old: Option<&str>) -> git::Result<Vec<String>> {
+    changed_tests(source, old, true)
+}
+
+fn changed_tests(source: &str, old: Option<&str>, gated_too: bool) -> git::Result<Vec<String>> {
     let parsed = syn::parse_file(source).map_err(|e| e.to_string())?;
     let before: Vec<(String, String)> = old
         .and_then(|old| {
@@ -343,7 +355,7 @@ pub(super) fn added_functions(source: &str, old: Option<&str>) -> git::Result<Ve
         .into_iter()
         .zip(&current)
         .filter(|((name, body), test)| {
-            !test.skipped && !before.contains(&(name.clone(), body.clone()))
+            (gated_too || !test.skipped) && !before.contains(&(name.clone(), body.clone()))
         })
         .map(|((name, _), _)| name)
         .collect())

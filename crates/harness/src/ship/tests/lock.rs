@@ -201,10 +201,10 @@ fn read_only_status_neither_blocks_nor_takes_the_lock() {
 }
 
 #[test]
-fn only_ship_and_duel_ask_for_the_lock() {
+fn only_ship_duel_and_red_ask_for_the_lock() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut users = Vec::new();
-    let mut stack = vec![src];
+    let mut stack = vec![src.clone()];
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(dir).unwrap().flatten() {
             let path = entry.path();
@@ -218,15 +218,24 @@ fn only_ship_and_duel_ask_for_the_lock() {
                     .unwrap()
                     .contains("lock::acquire(")
             {
-                users.push(path.file_name().unwrap().to_string_lossy().into_owned());
+                users.push(
+                    path.strip_prefix(&src)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
             }
         }
     }
     users.sort();
     assert_eq!(
         users,
-        ["mod.rs", "mod.rs"],
-        "ship/mod.rs and duel/mod.rs only"
+        [
+            "ship/check/mod.rs",
+            "ship/duel/mod.rs",
+            "ship/test_first/red/mod.rs"
+        ],
+        "only the three serialized main-session commands acquire the ship lock"
     );
 }
 
