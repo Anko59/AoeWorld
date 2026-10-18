@@ -92,6 +92,13 @@ impl Retry {
     }
 }
 
+impl Retry {
+    /// No retry and no load wait: for the agent stop check, which must answer at once.
+    pub(crate) fn never() -> Self {
+        Self::new(false, Box::new(load::read), Box::new(|| Ok(())))
+    }
+}
+
 /// Whether `get` reports CI (`GITHUB_ACTIONS` or `CI` set to a non-empty value).
 pub(crate) fn in_ci(get: impl Fn(&str) -> Option<String>) -> bool {
     ["GITHUB_ACTIONS", "CI"]
@@ -124,6 +131,12 @@ type TakeSlot =
 
 pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
     run_gates_with(root, gates, slots, crate::slots::hold)
+}
+
+/// `run_gates` without the overload retry: the agent stop check runs inside a hook and must
+/// never block for a load wait, so a timeout there fails at once as before.
+pub(crate) fn run_gates_once(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
+    run_gates_retrying(root, gates, slots, crate::slots::hold, &Retry::never())
 }
 
 /// `run_gates` for a local preflight: `test-unit` tests only the crates the

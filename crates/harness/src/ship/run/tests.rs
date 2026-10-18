@@ -208,3 +208,13 @@ fn a_refused_load_wait_keeps_the_first_timeout_and_says_why() {
     );
     assert_eq!(result.attempts.len(), 1, "the first attempt is recorded");
 }
+
+#[test]
+fn the_stop_check_policy_never_waits_or_retries() {
+    let dir = tempfile::tempdir().unwrap();
+    let command = format!("echo run >> count; {SLEEP}");
+    let result = run_one(dir.path(), &command, &Retry::never());
+    assert_eq!(result.verdict, GateVerdict::Fail, "{}", result.line());
+    assert_eq!(runs(dir.path()), 1, "the stop check runs a gate once");
+    assert!(result.attempts.is_empty(), "no retry is recorded");
+}
