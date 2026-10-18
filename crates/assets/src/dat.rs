@@ -16,6 +16,7 @@ mod units;
 
 use crate::Error;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::io::Read;
 
 /// Versions whose section sizes have been measured on real data.
@@ -102,15 +103,19 @@ pub struct DatFile {
     pub graphics: Vec<Graphic>,
     pub units: Vec<Unit>,
     pub report: Report,
+    #[serde(skip)]
+    graphic_index: HashMap<i32, usize>,
+    #[serde(skip)]
+    unit_index: HashMap<i32, usize>,
 }
 
 impl DatFile {
     pub fn graphic(&self, id: i32) -> Option<&Graphic> {
-        self.graphics.iter().find(|graphic| graphic.id == id)
+        self.graphic_index.get(&id).map(|at| &self.graphics[*at])
     }
 
     pub fn unit(&self, id: i32) -> Option<&Unit> {
-        self.units.iter().find(|unit| unit.id == id)
+        self.unit_index.get(&id).map(|at| &self.units[*at])
     }
 }
 
@@ -152,10 +157,18 @@ pub fn parse(bytes: &[u8]) -> Result<DatFile, Error> {
             Vec::new()
         }
     };
+    let graphic_index = graphics
+        .iter()
+        .enumerate()
+        .map(|(at, g)| (g.id, at))
+        .collect();
+    let unit_index = units.iter().enumerate().map(|(at, u)| (u.id, at)).collect();
     Ok(DatFile {
         version,
         graphics,
         units,
         report,
+        graphic_index,
+        unit_index,
     })
 }

@@ -48,7 +48,14 @@ the Gaia set has none.
   carry 2117. 1490/1493 are `VMBLD_DN`/`VMBLD_FN` (builder dying and standing),
   not berry foraging; the forager is `VMFOR_*` with tasks 2589/2592.
 - Farm, Lumber Camp and Mining Camp art is partly or wholly absent from the
-  trial `graphics.drs`; the table's `pack` column says which.
+  trial `graphics.drs`; the table's `pack` column says which. Completeness
+  counts gameplay graphics only: the snow variant (the Palisade Wall's is a
+  placeholder arrow sprite) is listed but never makes a row partial.
+
+A stage that cannot be validated (for example unit headers that no offset
+reaches) sets `report.stopped`; the command still writes the table, marked
+`INCOMPLETE` in `table.md` and `status` in `table.json`, and exits non-zero.
+Only a missing `graphics.drs` means "no pack"; any other read error fails.
 
 Limits: only Gaia is decoded (other civilisations choose architecture sets);
 display names come from a fixed id list because the language DLLs are not read;

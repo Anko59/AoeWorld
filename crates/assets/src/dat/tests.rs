@@ -124,6 +124,12 @@ fn task(out: &mut Vec<u8>, graphics: [i16; 4]) {
 }
 
 fn fixture(terrain_filler: usize) -> Vec<u8> {
+    fixture_with(terrain_filler, 2)
+}
+
+/// The villager occupies unit slot `slot` (at least 2); other slots are empty.
+fn fixture_with(terrain_filler: usize, slot: usize) -> Vec<u8> {
+    let slots = slot + 1;
     let mut out = b"VER 5.7\0".to_vec();
     out.extend_from_slice(&[1, 0, 2, 0]); // one restriction, two terrains
     out.extend_from_slice(&[0; 8]);
@@ -143,12 +149,12 @@ fn fixture(terrain_filler: usize) -> Vec<u8> {
     graphic(&mut out, 3, "HOUS1N0G", 2221, 1, 1, &[2]);
     graphic(&mut out, 4, "VMBAS_FN", 1479, 15, 8, &[]);
     out.extend_from_slice(&vec![0xAA; terrain_filler]);
-    out.extend_from_slice(&3u32.to_le_bytes()); // unit headers
+    out.extend_from_slice(&u32::try_from(slots).unwrap().to_le_bytes()); // unit headers
     out.push(1);
     out.extend_from_slice(&2u16.to_le_bytes());
     task(&mut out, [-1, 4, -1, 3]);
     task(&mut out, [-1, -1, -1, -1]);
-    out.push(0);
+    out.extend_from_slice(&vec![0; slot - 1]);
     out.push(1);
     out.extend_from_slice(&0u16.to_le_bytes());
     out.extend_from_slice(&[1, 0, 1]); // civilisation block
@@ -157,8 +163,9 @@ fn fixture(terrain_filler: usize) -> Vec<u8> {
     out.extend_from_slice(&[0; 4]);
     out.extend_from_slice(&[0; 8]);
     out.push(0);
-    out.extend_from_slice(&3u16.to_le_bytes());
-    for present in [1i32, 0, 1] {
+    out.extend_from_slice(&u16::try_from(slots).unwrap().to_le_bytes());
+    for at in 0..slots {
+        let present = i32::from(at == 0 || at == slot);
         out.extend_from_slice(&present.to_le_bytes());
     }
     let house = Spec {
@@ -174,7 +181,7 @@ fn fixture(terrain_filler: usize) -> Vec<u8> {
     unit(&mut out, &house);
     let villager = Spec {
         kind: 70,
-        id: 2,
+        id: i16::try_from(slot).unwrap(),
         name: "VMBAS",
         stand: 4,
         walk: 4,
@@ -367,9 +374,86 @@ fn real_trial_file_matches_the_reviewed_ids() {
     assert_eq!(status("Villager walk"), "match");
     assert_eq!(status("Stone mining"), "match");
     assert_eq!(status("Gold mining"), "mismatch");
+    assert_eq!(status("Wood chopping"), "match");
+    assert_eq!(status("Wood carrying"), "match");
     let lumberjack = file.unit(123).unwrap();
     assert_eq!(
         lumberjack.tasks[0].graphics.map(|g| g > 0),
         [false, true, true, true]
     );
+    if let Ok(drs) = std::fs::read("../../local-assets/trial/Data/graphics.drs") {
+        let pack = table::slp_ids(&drs).unwrap();
+        let table = table::build(&file, Some(&pack));
+        let pack_of = |label: &str| {
+            table
+                .rows
+                .iter()
+                .find(|r| r.label == label)
+                .unwrap()
+                .pack
+                .clone()
+        };
+        assert_eq!(pack_of("Palisade Wall"), "complete");
+        assert_eq!(pack_of("Farm"), "absent");
+        assert_eq!(pack_of("Lumber Camp"), "partial");
+    }
+}
+
+#[test]
+fn a_matching_graphic_is_reported_as_a_match_and_a_wrong_role_is_not() {
+    let file = parse(&fixture_with(3, 83)).unwrap();
+    assert_eq!(file.report.stopped, None);
+    let table = table::build(&file, None);
+    let status = |label: &str| table.checks.iter().find(|c| c.label == label).unwrap();
+    // The fixture villager (unit 83) stands on SLP 1479 and walks on the same
+    // sprite, so only the idle check can match; walk expects SLP 1484.
+    assert_eq!(status("Villager idle").status, "match");
+    assert!(
+        status("Villager idle")
+            .dat_says
+            .iter()
+            .any(|line| line.contains("unit 83 VMBAS stand"))
+    );
+    assert_eq!(status("Villager walk").status, "mismatch");
+    assert_eq!(status("Town Center (Dark Age main)").status, "mismatch");
+    let row = table.rows.iter().find(|r| r.unit == 83).unwrap();
+    assert_eq!(row.graphics[0].slp, 1479);
+}
+
+#[test]
+fn missing_unit_headers_are_a_stop_reason_not_silence() {
+    let good = fixture(0);
+    let offset = parse(&good).unwrap().report.unit_headers_offset.unwrap();
+    let mut shifted = good.clone();
+    shifted[offset + 5] = 3; // first header claims three tasks instead of two
+    let file = parse(&shifted).unwrap();
+    let reason = file.report.stopped.as_deref().unwrap();
+    assert!(reason.contains("unit headers not found"), "{reason}");
+    assert_eq!(file.report.unit_headers_offset, None);
+    assert_eq!(file.units.len(), 2, "units still decode without tasks");
+    assert!(file.unit(0).unwrap().tasks.is_empty());
+    let table = table::build(&file, None);
+    assert!(table.status.starts_with("INCOMPLETE"));
+    assert!(table::markdown(&table).contains("INCOMPLETE"));
+}
+
+#[test]
+fn snow_variants_do_not_make_a_unit_partial() {
+    let mut file = parse(&fixture_with(0, 83)).unwrap();
+    let pack: std::collections::BTreeSet<i32> = [1479].into();
+    let pack_of = |f: &DatFile| {
+        let table = table::build(f, Some(&pack));
+        let row = table.rows.iter().find(|r| r.unit == 83).unwrap();
+        (row.pack.clone(), row.graphics.len())
+    };
+    file.units[1].attack_graphic = Some(4);
+    assert_eq!(pack_of(&file).0, "complete");
+    // Graphic 3 is SLP 2221, absent from the pack: listed, but not required.
+    file.units[1].snow_graphic = Some(3);
+    let (state, listed) = pack_of(&file);
+    assert_eq!(state, "complete");
+    assert!(listed >= 4, "the snow graphic stays in the listing");
+    // The same graphic as a gameplay role does make it partial.
+    file.units[1].attack_graphic = Some(3);
+    assert_eq!(pack_of(&file).0, "partial");
 }

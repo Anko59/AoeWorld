@@ -3,7 +3,7 @@
 use super::{DatFile, Graphic, Unit};
 use crate::{Error, drs};
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Write as _;
 
 /// Display name and Gaia unit id of the Dark Age units the client renders.
@@ -91,6 +91,8 @@ pub struct Check {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Table {
+    /// `complete`, or `INCOMPLETE: <stop reason>` when a decode stage stopped.
+    pub status: String,
     pub version: String,
     pub report: super::Report,
     pub rows: Vec<Row>,
@@ -169,7 +171,10 @@ fn family(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> Vec<Grap
         .collect()
 }
 
-fn row(file: &DatFile, label: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Row {
+/// Each unit's graphics, computed once and shared by rows and checks.
+type Cache = HashMap<i32, Vec<GraphicRef>>;
+
+fn row(file: &DatFile, cache: &Cache, label: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Row {
     let Some(unit) = file.unit(id) else {
         return Row {
             label: label.to_owned(),
@@ -186,12 +191,15 @@ fn row(file: &DatFile, label: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Ro
             pack: "absent".into(),
         };
     };
-    let graphics = unit_graphics(file, unit, pack);
-    let present = graphics.iter().filter(|g| g.in_pack == Some(true)).count();
+    let graphics = cache.get(&id).cloned().unwrap_or_default();
+    // Completeness covers gameplay graphics only; the snow variant is listed
+    // but not required (docs/assets/game-data.md).
+    let needed: Vec<&GraphicRef> = graphics.iter().filter(|g| g.role != "snow").collect();
+    let present = needed.iter().filter(|g| g.in_pack == Some(true)).count();
     let pack_state = match pack {
         None => "unchecked",
         Some(_) if present == 0 => "absent",
-        Some(_) if graphics.iter().all(|g| g.in_pack == Some(true)) => "complete",
+        Some(_) if needed.iter().all(|g| g.in_pack == Some(true)) => "complete",
         Some(_) => "partial",
     };
     Row {
@@ -221,10 +229,10 @@ fn row(file: &DatFile, label: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Ro
 }
 
 /// Where a SLP id is referenced: `unit <id> <name> <role>`.
-fn references(file: &DatFile, slp: i32) -> Vec<String> {
+fn references(file: &DatFile, cache: &Cache, slp: i32) -> Vec<String> {
     let mut out = Vec::new();
     for unit in &file.units {
-        for graphic in unit_graphics(file, unit, None) {
+        for graphic in cache.get(&unit.id).into_iter().flatten() {
             if graphic.slp == slp {
                 let role = if graphic.role.starts_with("task") {
                     "task"
@@ -264,8 +272,8 @@ const CHECKS: &[(&str, i32, Expect)] = &[
     ("Stone mining", 1560, Expect::Role(124, "task")),
 ];
 
-fn check(file: &DatFile, label: &str, slp: i32, expect: &Expect) -> Check {
-    let refs = references(file, slp);
+fn check(file: &DatFile, cache: &Cache, label: &str, slp: i32, expect: &Expect) -> Check {
+    let refs = references(file, cache, slp);
     let (expected, ok, family_ok) = match expect {
         Expect::Role(unit, role) => {
             let prefix = format!("unit {unit} ");
@@ -307,9 +315,14 @@ fn check(file: &DatFile, label: &str, slp: i32, expect: &Expect) -> Check {
 }
 
 pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
+    let cache: Cache = file
+        .units
+        .iter()
+        .map(|unit| (unit.id, unit_graphics(file, unit, pack)))
+        .collect();
     let mut rows: Vec<Row> = DARK_AGE
         .iter()
-        .map(|(label, id)| row(file, label, *id, pack))
+        .map(|(label, id)| row(file, &cache, label, *id, pack))
         .collect();
     for unit in file.units.iter().filter(|u| u.kind == 70) {
         let stem = unit.name.get(..2).unwrap_or("");
@@ -321,22 +334,35 @@ pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
             && rows.iter().all(|r| r.unit != unit.id)
         {
             let sex = if stem == "VM" { "male" } else { "female" };
-            rows.push(row(file, &format!("Villager {job} ({sex})"), unit.id, pack));
+            rows.push(row(
+                file,
+                &cache,
+                &format!("Villager {job} ({sex})"),
+                unit.id,
+                pack,
+            ));
         }
     }
     Table {
+        status: file.report.stopped.as_ref().map_or_else(
+            || "complete".to_owned(),
+            |reason| format!("INCOMPLETE: {reason}"),
+        ),
         version: file.version.clone(),
         report: file.report.clone(),
         rows,
         checks: CHECKS
             .iter()
-            .map(|(l, s, e)| check(file, l, *s, e))
+            .map(|(l, s, e)| check(file, &cache, l, *s, e))
             .collect(),
     }
 }
 
 pub fn markdown(table: &Table) -> String {
     let mut out = format!("# empires2.dat table ({}), LOCAL ONLY\n\n", table.version);
+    if let Some(reason) = &table.report.stopped {
+        let _ = writeln!(out, "**INCOMPLETE: {reason}**\n");
+    }
     for row in &table.rows {
         let _ = writeln!(
             out,
@@ -375,7 +401,12 @@ pub fn markdown(table: &Table) -> String {
 /// Compact terminal view: ids and counts only, no imagery.
 pub fn summary(table: &Table) -> String {
     let r = &table.report;
-    let mut out = format!(
+    let mut out = String::new();
+    if let Some(reason) = &r.stopped {
+        let _ = writeln!(out, "INCOMPLETE: {reason}\n");
+    }
+    let _ = write!(
+        out,
         "{}: {} sounds, graphics at byte {}..{}, civilisation {:?} at {:?}, unit headers at {:?}, {} of {} unit slots parsed, stopped: {:?}\n\n",
         table.version,
         r.sounds,

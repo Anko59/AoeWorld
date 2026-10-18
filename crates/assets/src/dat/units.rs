@@ -37,6 +37,12 @@ pub(super) fn decode(bytes: &[u8], from: usize, report: &mut Report) -> Result<V
     report.unit_slots = anchor.slots;
     let tasks = find_headers(bytes, from, &anchor);
     report.unit_headers_offset = tasks.as_ref().map(|found| found.0);
+    if tasks.is_none() {
+        report.stopped = Some(format!(
+            "unit headers not found: no offset in {from}..{} walks exactly to the civilisation block, so no task graphics were decoded",
+            anchor.offset
+        ));
+    }
     let mut tasks = tasks.map(|found| found.1).unwrap_or_default();
     let mut r = Reader::new(bytes, anchor.units_at);
     let mut units = Vec::new();
