@@ -3,12 +3,13 @@
 //! code, how many test functions came before the first product commit,
 //! which product files carry inline `#[cfg(test)]` changes, which
 //! build-time files changed, and any `Harness-Test-First: exempt —
-//! <reason>` trailer. It informs the reviewers and the description; it never
-//! refuses a ship.
+//! <reason>` trailer. Reviewers and the description get the history alongside
+//! the required harness-owned red/green record for product changes.
 mod history;
 pub(crate) mod inline;
 #[cfg(test)]
 mod inline_tests;
+pub(crate) mod red;
 #[cfg(test)]
 mod tests;
 
@@ -80,7 +81,9 @@ pub(crate) struct Report {
 
 /// Under the product crates: `crates/` except `crates/harness/`.
 fn in_scope(path: &str) -> bool {
-    path.starts_with("crates/") && !path.starts_with("crates/harness/")
+    (path.starts_with("crates/") && !path.starts_with("crates/harness/"))
+        || path.starts_with("web/")
+        || path.starts_with("browser/")
 }
 
 fn is_test(path: &str) -> bool {
@@ -269,7 +272,14 @@ fn classify(root: &Path, sha: &str, parent: Option<&str>) -> git::Result<(Base, 
         Some(parent) => args.push(parent),
         None => args.push("--root"),
     }
-    args.extend([sha, "--", "crates/", ":(exclude)crates/harness/"]);
+    args.extend([
+        sha,
+        "--",
+        "crates/",
+        ":(exclude)crates/harness/",
+        "web/",
+        "browser/",
+    ]);
     let patch = git::git(root, &args)?;
     let mut lines: BTreeMap<String, inline::Changes> =
         inline::changes(&patch).into_iter().collect();
@@ -423,10 +433,20 @@ impl Report {
     }
 }
 
-/// The report as Markdown; an unreadable history is reported, never fatal.
-pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
+/// The commit-history report as Markdown; an unreadable history is reported, never fatal.
+pub(crate) fn history_summary(root: &Path, base: &str, head: &str) -> String {
     report(root, base, head).map_or_else(
         |error| format!("- test-first report unavailable: {error}\n"),
         |report| report.markdown(),
     )
+}
+
+/// The history report followed by the red decision, for the review facts and the description.
+pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
+    let mut text = history_summary(root, base, head);
+    text.push_str(
+        &red::require(root, base, head)
+            .unwrap_or_else(|error| format!("- test-first red: {error}\n")),
+    );
+    text
 }

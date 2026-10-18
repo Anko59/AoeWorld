@@ -1,0 +1,123 @@
+# Test-first red proof
+
+Product changes require tests that fail without them. At the final commit run
+`make red`, then `make ship`. The red runner uses the same protected judge launcher as ship.
+Before the command exists on `origin/dev`, `make red-checkout` explicitly builds
+and runs the checkout's binary in the pinned Docker tool image for development;
+that is a non-authoritative rehearsal, not the protected dev judge.
+
+The proof is of the whole pull request, not of its commits. Commit however you
+like (tests first, mixed product and test commits, one commit): the harness
+looks only at the merge base with the selected base and at HEAD.
+
+- **Changed tests** are the tests the PR's whole diff adds or changes: Rust test
+  functions by qualified name (bodies compared, any attribute stack), Playwright
+  specs by title and location, and specs importing a changed helper (including
+  transitive static relative imports).
+- **Red**: the runner exports the merge base, lays ONLY the PR's test-file
+  changes over it (product code exactly as before the PR, except the `mod`
+  lines below) and runs the selected
+  packages/specs in that snapshot. It is red when at least one changed test
+  fails by name, or when the changed Rust test target fails to compile because
+  a test names an item the PR adds (see below).
+- **Mount lines**: a Rust test file is compiled only where a `mod` item loads it,
+  and that item usually lives in a product file. For each changed Rust test file
+  that `head` mounts from a product file the merge base does not declare it in,
+  the red tree gets that one declaration (`#[cfg(test)] mod tests;` or the
+  `#[path]` form) appended to the base's file, nothing else of the product. A
+  parent module the base lacks becomes a stub holding only the declaration of its
+  child, itself mounted in turn, so the tests of a new module fail to compile
+  against the missing item (compile-red). For a test file the PR deletes, the
+  declaration the product parent dropped is removed from the red tree, so the
+  build does not stop at E0583. Declarations inside inline `mod x { .. }` blocks
+  are not followed (limit).
+- **Pre-existing failures never count**: the old test files are run at the merge
+  base too, and any name failing there is removed from the evidence. Changed
+  tests that all pass at the merge base, or already fail there, are refused.
+- **Green**: the same selection passes at HEAD, every red failure having run
+  and passed there. After a compile-red, at least one changed test of every file
+  that failed to compile must have run and passed at HEAD (a filtered, ignored,
+  cfg-gated or unmounted file is refused), and the record's `ran` names them.
+- **Attributes**: red counts a test as changed whatever its `#[ignore]`/`cfg`
+  stack, because only a test that ran can fail by name and green shows what ran.
+  The duel's own green keeps its exemption for ignored and cfg-gated tests.
+
+A Rust test that calls an API the PR adds cannot compile at the merge base. That
+is accepted as red only when every compiler error is a "cannot find" kind
+(`E0405 E0412 E0422 E0423 E0425 E0432 E0433 E0531 E0560 E0599 E0609`) located in a
+changed test file and names an identifier that occurs on a line the PR adds to
+non-test code. The record names those missing items. Any other build error, a
+truncated build log, an error outside the changed tests, a timeout, a
+cancellation or a nameless crash is not red.
+
+Rust packages, WASM suites and exact Playwright spec filters reuse the duel's
+focused tooling. Each exported snapshot uses separate Cargo build output and
+browser dependencies so archived timestamps cannot reuse another tree's tests.
+Browser checks use `aoeworld/browser-tools:1.63.0`, the same
+image as `make test-e2e`, with the normal configured projects and disposable
+server. Browser fixture changes without a spec select the existing broader
+focused fixture scope. There is no `DUEL_CHECK` override for red records.
+A `make red` does up to three runs (red, the old tests on the merge base, green), each
+from a fresh export with its own cold Cargo target: sharing one target between trees
+is unsafe because archived timestamps can make Cargo reuse another tree's test binary
+(the reason for the separate outputs above). Measured once on a small crate
+(`crates/core`, 6 CPUs per container): all three runs took 19 s. Large packages are
+unmeasured, and a run past the deadline below is "red runner unavailable", never a record.
+Each red or green Docker run, including its builds, has a 30-minute deadline;
+Playwright retains its 20-minute suite and per-test bounds. Checks run serially
+under the ship lock and one heavy slot. Output remains bounded by the focused
+runner's 16 MiB total / 1 MiB line JSON limits.
+
+The harness takes fresh runner output, never `.cache/duel/check.json`, a saved
+`scope.json`, an agent's report or an uploaded evidence file. Exported inputs and
+fresh captured JSON live under `.cache/agent-hook/red/`, which the existing
+policy forbids agents from editing. A record is written only after both actual
+runs succeed in proving red then green, using an atomic rename under
+`<git common dir>/aoe-ship/red/<head>.json`. Its `head`, `base`, changed test
+`paths` with their blob ids, named `failed` tests, `missing` API items and the `ran` tests of a compile-red are
+recomputed or checked by shipping. `RED_RECORD <json>` prints the record for a report.
+
+`make ship` blocks product/build changes without the matching record before
+gates/review/publication, and checks again after the final catch-up rebase.
+Records are never carried across amendments or rebases, even for the same patch:
+rerun `make red` for those exact new identities. Test-first history and red
+evidence are included in reviewer facts and the PR description.
+
+Product scope is non-test code under `crates/` except `crates/harness/`, plus
+`web/` and `browser/`. Build-time inputs retain the shipping classifier's
+Cargo/build-script rules. Harness, gates, documentation and CI alone are not
+applicable. Docs, config and pure refactors can declare an exemption with a
+commit trailer:
+
+```text
+Harness-Test-First: exempt — pure refactor: extract an unchanged helper
+```
+
+The exemption is allowed and reported with its commit and reason; reviewers
+still reject an exemption whose reason does not hold. It is not a way to call
+a behavior change a refactor.
+
+For a local rehearsal, the CLI accepts `red --root <checkout> --base <ref>
+--head <ref>`. Make forwards `HARNESS_RED_ROOT`, `HARNESS_RED_BASE` and
+`HARNESS_RED_HEAD` for the same purpose. Roots and refs are resolved to exact
+commits; working product/test edits do not participate.
+For a stacked branch, select the same parent with `HARNESS_RED_BASE` that
+shipping selects with `SHIP_BASE`.
+
+## Threat model and limits
+
+Tester/implementer subagents are in scope: they cannot create records by writing
+evidence files, edit Git metadata or protected captured output, run `make red`
+or `make red-checkout`, commit, edit harness/Make policy, or change each other's
+file classes. The actual runner emits fresh observations to its supervising
+harness over a captured process pipe. No command imports caller-supplied
+observations into the record store.
+
+A deliberately forging main session is out of scope. This is local workflow
+enforcement, not hostile same-UID isolation or cryptographic remote attestation.
+Candidate tests/build scripts execute code, caches are mutable, and contrived
+interpreter attacks remain the general runtime-policy limit. Review must judge
+whether a failing test establishes the intended behavior; CI reruns current
+gates but does not independently reproduce historical red. Synthetic browser
+fixtures do not qualify original assets, finished RTS performance or dedicated
+hardware.

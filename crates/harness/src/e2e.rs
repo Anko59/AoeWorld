@@ -189,7 +189,8 @@ fn run_specs(
     let mut server = servers::Fleet::start(&root, &binary, &existing_maps, workers)?;
     let fixture_hash = server.hash.clone();
     let address = server.addresses[0];
-    let name = command::container_name(std::process::id(), address.port(), shard);
+    let name = std::env::var("AOE_RED_BROWSER_CONTAINER")
+        .unwrap_or_else(|_| command::container_name(std::process::id(), address.port(), shard));
     let _cleanup = BrowserContainer(name.clone());
     let args = command::docker_args(&command::Run {
         root: &root,

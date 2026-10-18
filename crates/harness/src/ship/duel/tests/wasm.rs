@@ -359,3 +359,75 @@ fn green_after_a_panic_only_red_still_requires_the_testers_tests_to_run_and_pass
             .contains("did not run")
     );
 }
+#[test]
+fn red_proof_accepts_real_wasm_named_assertion_output() {
+    use crate::ship::{git, test_first::red, tests::run};
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    run(root, &["init", "-q", "-b", "feature"]);
+    let path = "crates/rendering/src/game_renderer/tests/webgl.rs";
+    for (path, text) in [
+        (
+            "crates/rendering/Cargo.toml",
+            "[package]\nname = 'aoe-rendering'\nversion = '0.1.0'\n",
+        ),
+        ("crates/rendering/src/lib.rs", "mod game_renderer;\n"),
+        (
+            "crates/rendering/src/game_renderer/mod.rs",
+            "#[path = \"tests/webgl.rs\"] mod webgl_tests;\n",
+        ),
+        (path, "// no tests yet\n"),
+    ] {
+        fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+        fs::write(root.join(path), text).unwrap();
+    }
+    run(root, &["add", "-A"]);
+    run(root, &["commit", "-qm", "base"]);
+    let base = git::git(root, &["rev-parse", "HEAD"]).unwrap();
+    let function = "webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad";
+    fs::write(
+        root.join(path),
+        format!("#[wasm_bindgen_test]\nfn {function}() {{ assert!(false); }}\n"),
+    )
+    .unwrap();
+    run(root, &["add", "-A"]);
+    run(root, &["commit", "-qm", "tests"]);
+    fs::create_dir(root.join("web")).unwrap();
+    fs::write(root.join("web/index.html"), "fixed").unwrap();
+    run(root, &["add", "-A"]);
+    run(root, &["commit", "-qm", "fix"]);
+    let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
+    let name = format!("aoe-rendering$game_renderer::webgl_tests::{function}");
+    let fixture = include_str!("../../../wasm_test/tests/fixtures/pixel-38603174196.txt");
+    let record = red::run_with(root, &base, &head, &mut |snapshot, _| {
+        if snapshot.join("web/index.html").exists() {
+            Ok(CheckReport {
+                passed: true,
+                tests: vec![name.clone()],
+                ..Default::default()
+            })
+        } else if fs::read_to_string(snapshot.join(path))
+            .unwrap()
+            .contains(function)
+        {
+            let report = wasm::results(&[SuiteRun {
+                package: "aoe-rendering",
+                binary: "lib",
+                exit: CaptureExit::Failed(Some(1)),
+                output: fixture.into(),
+            }])
+            .unwrap();
+            assert_eq!(report.failed.as_slice(), std::slice::from_ref(&name));
+            assert!(!report.panics.is_empty());
+            assert!(report.panics.iter().all(|p| p.test.as_ref() == Some(&name)));
+            Ok(report)
+        } else {
+            Ok(CheckReport {
+                passed: true,
+                ..Default::default()
+            })
+        }
+    })
+    .unwrap();
+    assert_eq!(record.failed, [name]);
+}

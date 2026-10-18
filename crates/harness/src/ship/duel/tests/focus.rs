@@ -459,3 +459,29 @@ fn green_ignores_unrelated_tests_that_already_failed_at_red() {
     );
     assert!(super::green::validate(root, &paths, None, &red, &green).is_err());
 }
+#[test]
+fn only_a_normal_playwright_test_failure_can_supply_red_evidence() {
+    use super::focus;
+    assert!(focus::browser_exit(&Ok(())).is_ok());
+    assert!(
+        focus::browser_exit(&Err(
+            "focused Playwright check unavailable: Failed(Some(1))\nassertion".into()
+        ))
+        .is_ok()
+    );
+    for reason in [
+        "Deadline",
+        "Cancelled",
+        "Start(no docker)",
+        "Failed(Some(137))",
+        "Monitor(retention limit)",
+    ] {
+        assert!(
+            focus::browser_exit(&Err(format!(
+                "focused Playwright check unavailable: {reason}"
+            )))
+            .is_err()
+        );
+    }
+    assert!(focus::browser_exit(&Err("test server exited during browser run".into())).is_err());
+}
