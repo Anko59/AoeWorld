@@ -133,11 +133,11 @@ impl PreparationPlan {
             explanation: if detailed {
                 "Regional elevation: modern Copernicus GLO30, with GLO90 only where GLO30 is absent. Modern WorldCover and European/Middle Eastern hydrography are stored as observations; mapped river corridors and lake extents only refine existing inland overview water. Vegetation and year-600 land use retain overview grids. Reservoirs and uncertain water remain evidence, not historical water. Source errors fail the job."
             } else if input.hydrology_mode == HydrologyMode::Automatic {
-                "Automatic landscape overview: include rivers where the whole footprint is covered. Else use global overview water and record that the area is outside river coverage. Coverage is decided before acquiring inputs; source errors fail the job."
+                "Automatic landscape overview: include rivers where the whole footprint is covered. Else use global overview water and record that the area is outside river coverage. Coverage is decided before acquiring inputs; source errors fail the job. Elevation is Copernicus GLO-90 averaged into each sample where the footprint needs at most 96 one-degree tiles, and the 1.85 km ETOPO overview elsewhere."
             } else if input.hydrology_mode == HydrologyMode::Vectors {
-                "Landscape overview plus pinned HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Ocean and vegetation context use the same 1024 axis; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. The footprint is verified against the pinned source coverage before acquisition; source errors fail the job."
+                "Landscape overview plus pinned HydroLAKES/HydroRIVERS evidence and modeled water on a 1024-sample axis. Elevation is Copernicus GLO-90 averaged into each sample where the footprint needs at most 96 one-degree tiles, and the 1.85 km ETOPO overview elsewhere. Ocean and vegetation context use the same 1024 axis; modern land cover is unobserved class-0 nodata, not WorldCover acquisition or year-600 observations. The footprint is verified against the pinned source coverage before acquisition; source errors fail the job."
             } else {
-                "Landscape overview: elevation, modeled year-600 land use, potential vegetation and water each on independent 1024-sample grids. Fine vectors and real-source qualification are separate; source errors fail the job."
+                "Landscape overview: elevation, modeled year-600 land use, potential vegetation and water each on independent 1024-sample grids. Elevation is Copernicus GLO-90 averaged into each sample where the footprint needs at most 96 one-degree tiles, and the 1.85 km ETOPO overview elsewhere. Fine vectors and real-source qualification are separate; source errors fail the job."
             },
         })
     }

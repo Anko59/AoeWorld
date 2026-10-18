@@ -229,6 +229,12 @@ fn geographic_extent(request: MapRequest, side: u64, pad_e7: i32) -> Result<Boun
 }
 
 impl Bounds {
+    pub(crate) fn tile_count(&self) -> usize {
+        let rows = i64::from(self.max_latitude) - i64::from(self.min_latitude) + 1;
+        let columns = i64::from(self.max_longitude) - i64::from(self.min_longitude) + 1;
+        usize::try_from(rows.saturating_mul(columns)).unwrap_or(usize::MAX)
+    }
+
     fn contains(&self, latitude: i32, longitude: i32) -> bool {
         (self.min_latitude..=self.max_latitude).contains(&latitude)
             && (self.min_longitude..=self.max_longitude).contains(&longitude)

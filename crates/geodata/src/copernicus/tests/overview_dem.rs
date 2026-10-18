@@ -40,6 +40,17 @@ fn write_tile(
     longitude: i32,
     height: impl Fn(usize, usize) -> f32,
 ) -> Tile {
+    write_shifted_tile(root, latitude, longitude, 0.0, height)
+}
+
+/// As [`write_tile`], with the grid moved by `shift` pixels east.
+fn write_shifted_tile(
+    root: &Path,
+    latitude: i32,
+    longitude: i32,
+    shift: f64,
+    height: impl Fn(usize, usize) -> f32,
+) -> Tile {
     let path = root.join(format!("tile-{latitude}-{longitude}.tif"));
     let driver = DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
     let mut dataset = driver
@@ -48,7 +59,7 @@ fn write_tile(
     let step = 1.0 / AXIS as f64;
     dataset
         .set_geo_transform(&[
-            f64::from(longitude),
+            f64::from(longitude) + shift * step,
             step,
             0.0,
             f64::from(latitude + 1),
@@ -141,8 +152,7 @@ fn level_zero(elevation: &PreparedElevation) -> Vec<i32> {
 }
 
 fn tile_count(bounds: Bounds) -> usize {
-    ((bounds.max_latitude - bounds.min_latitude + 1)
-        * (bounds.max_longitude - bounds.min_longitude + 1)) as usize
+    bounds.tile_count()
 }
 
 fn paris(side_meters: u64, compression: u32) -> MapRequest {
@@ -167,6 +177,17 @@ fn overview_dem_plan_covers_large_but_not_giant_footprints() {
         .expect("tiny plan")
         .expect("a Tiny map fits the tile budget");
     assert!(tile_count(tiny) <= 4);
+    // Meridians converge toward the pole: Large still fits at 65 degrees
+    // north, but not at 80, where it would need over 150 tiles.
+    for (latitude_e7, fits) in [(650_000_000, true), (800_000_000, false)] {
+        let plan = plan_overview_tiles(MapRequest {
+            center_latitude_e7: latitude_e7,
+            center_longitude_e7: 250_000_000,
+            ..paris(480_000, 30)
+        })
+        .expect("high latitude plan");
+        assert_eq!(plan.is_some(), fits, "latitude {latitude_e7}");
+    }
     assert!(
         plan_overview_tiles(paris(1_920_000, 30))
             .expect("giant plan")
@@ -244,4 +265,31 @@ fn overview_elevation_takes_uncovered_area_from_the_coarse_source() {
         assert!(row[..3].iter().all(|height| *height == 30_000), "{row:?}");
         assert!(row[5..].iter().all(|height| *height == 70_000), "{row:?}");
     }
+}
+
+#[test]
+fn overview_elevation_accepts_a_half_pixel_registration_and_rejects_a_misnamed_tile() {
+    let scratch = Scratch::new();
+    let coarse = write_coarse(&scratch.0, 700.0);
+    let side = request(5_000_000, 5_000_000, 20_000);
+    let point = write_shifted_tile(&scratch.0, 0, 0, -0.5, |_, _| 300.0);
+    let elevation =
+        prepare_area_averaged_elevation(&coarse, side, 8, &[point]).expect("point registration");
+    assert!(
+        level_zero(&elevation)
+            .iter()
+            .all(|height| *height == 30_000)
+    );
+    // A tile filed under the wrong degree is refused rather than misplaced.
+    let mut misnamed = write_tile(&scratch.0, 0, 0, |_, _| 300.0);
+    misnamed.longitude = 1;
+    assert!(
+        prepare_area_averaged_elevation(
+            &coarse,
+            request(5_000_000, 15_000_000, 20_000),
+            8,
+            &[misnamed]
+        )
+        .is_err()
+    );
 }

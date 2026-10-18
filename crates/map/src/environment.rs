@@ -6,7 +6,7 @@ mod pages;
 mod preparation;
 pub use preparation::{
     LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS, LANDSCAPE_OVERVIEW_SOURCE_LOCKS, OverviewFieldAxes,
-    OverviewHydrologyMode, VECTOR_HYDROLOGY_SOURCE_LOCKS,
+    OverviewHydrologyMode, VECTOR_HYDROLOGY_SOURCE_LOCKS, overview_base_lock_count,
 };
 mod provider;
 pub use hydrology::{
