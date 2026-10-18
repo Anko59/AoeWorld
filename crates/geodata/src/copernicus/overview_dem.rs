@@ -41,6 +41,12 @@ const FOOTPRINT_PAD_E7: i32 = 100_000;
 const RESIDENT_TILES: usize = 8;
 /// A GLO-90 tile is 1,200 by 1,200 pixels; refuse far larger rasters.
 const MAX_TILE_PIXELS: usize = 4 * 1024 * 1024;
+/// GLO-90 tiles are point-registered: GDAL places them half a pixel west and
+/// north of their named degree, so a cell near a degree line can belong to
+/// the neighbouring key. Keys are searched this far (0.01 degree, more than
+/// the widest GLO-90 pixel) beyond the cell; each tile clips to its own
+/// extent, so a key with no overlap contributes nothing.
+const REGISTRATION_MARGIN: f64 = 0.01;
 const PAGE: usize = ENVIRONMENT_PAGE_SAMPLES as usize;
 
 /// The tiles a request needs, or `None` when the footprint is unsupported or
@@ -241,27 +247,39 @@ impl<'a> AreaSampler<'a> {
     ) -> Result<f64, GeodataError> {
         let (west, east) = (longitude - half_longitude, longitude + half_longitude);
         let (south, north) = (latitude - half_latitude, latitude + half_latitude);
-        let (mut weighted, mut covered) = (0.0, 0.0);
-        for tile_latitude in south.floor() as i32..=north.floor() as i32 {
-            for tile_longitude in west.floor() as i32..=east.floor() as i32 {
+        let (mut weighted, mut covered, mut sea_level) = (0.0, 0.0, 0.0);
+        let latitudes = (south - REGISTRATION_MARGIN).floor() as i32
+            ..=(north + REGISTRATION_MARGIN).floor() as i32;
+        let longitudes = (west - REGISTRATION_MARGIN).floor() as i32
+            ..=(east + REGISTRATION_MARGIN).floor() as i32;
+        for tile_latitude in latitudes {
+            for tile_longitude in longitudes.clone() {
                 let Some(&position) = self.index.get(&(tile_latitude, tile_longitude)) else {
                     continue;
                 };
                 self.tile(position)?.accumulate(
-                    west,
-                    east,
-                    south,
-                    north,
-                    &mut weighted,
-                    &mut covered,
+                    (west, east, south, north),
+                    (&mut weighted, &mut covered, &mut sea_level),
                 );
             }
         }
         let total = (east - west) * (north - south);
-        let uncovered = (total - covered).max(0.0);
-        if uncovered > total * 1e-9 {
-            weighted += self.coarse.value(longitude, latitude)? * uncovered;
-            covered += uncovered;
+        let mut fill_area = (total - covered - sea_level).max(0.0);
+        if fill_area > total * 1e-9 || sea_level > 0.0 {
+            let coarse = self.coarse.value(longitude, latitude)?;
+            // GLO-90 writes the sea surface as exactly 0 m, where ETOPO knows
+            // the depth. Zero pixels are sea (and take ETOPO's value) when the
+            // ETOPO cell is below sea level, and real 0 m land otherwise.
+            // Land pixels at any other height always stay.
+            if coarse < 0.0 {
+                fill_area += sea_level;
+            } else {
+                covered += sea_level;
+            }
+            if fill_area > total * 1e-9 {
+                weighted += coarse * fill_area;
+                covered += fill_area;
+            }
         }
         Ok(weighted / covered)
     }
@@ -343,15 +361,12 @@ impl LoadedTile {
         })
     }
 
-    /// Adds the area-weighted heights of the box's overlap with this tile.
+    /// Adds the area-weighted heights of the box's overlap with this tile;
+    /// pixels of exactly 0 m are only counted in `sea_level`.
     fn accumulate(
         &self,
-        west: f64,
-        east: f64,
-        south: f64,
-        north: f64,
-        weighted: &mut f64,
-        covered: &mut f64,
+        (west, east, south, north): (f64, f64, f64, f64),
+        (weighted, covered, sea_level): (&mut f64, &mut f64, &mut f64),
     ) {
         let left = ((west - self.west) / self.pixel_width).max(0.0);
         let right = ((east - self.west) / self.pixel_width).min(self.width as f64);
@@ -375,8 +390,12 @@ impl LoadedTile {
                 let weight = row_weight
                     * (right.min(column as f64 + 1.0) - left.max(column as f64))
                     * pixel_area;
-                *weighted += weight * f64::from(*value);
-                *covered += weight;
+                if *value == 0.0 {
+                    *sea_level += weight;
+                } else {
+                    *weighted += weight * f64::from(*value);
+                    *covered += weight;
+                }
             }
         }
     }

@@ -186,13 +186,7 @@ fn prepare_overview_axes(
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
     // Field-local landscape maps average Copernicus GLO-90 into each sample
     // when the footprint fits the tile budget; ETOPO alone covers the rest.
-    let elevation_tiles = if explicit {
-        crate::copernicus::plan_overview_tiles(request)?
-            .map(|bounds| crate::copernicus::acquire_overview_tiles(&cache, bounds, &cancelled))
-            .transpose()?
-    } else {
-        None
-    };
+    let elevation_tiles = acquire_elevation_tiles(&cache, request, explicit, &cancelled)?;
     prepare_overview_fields_from_verified_sources(
         request,
         axes,
@@ -225,6 +219,23 @@ fn prepare_overview_axes(
             elevation_tiles,
         },
     )
+}
+
+/// The GLO-90 tiles for a field-local landscape overview, or `None` when the
+/// ETOPO-only overview applies (coupled detailed context, or a footprint that
+/// is too large or touches a pole or the antimeridian).
+fn acquire_elevation_tiles(
+    cache: &SourceCache,
+    request: MapRequest,
+    explicit: bool,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Option<Vec<crate::copernicus::Tile>>, GeodataError> {
+    if !explicit {
+        return Ok(None);
+    }
+    crate::copernicus::plan_overview_tiles(request)?
+        .map(|bounds| crate::copernicus::acquire_overview_tiles(cache, bounds, cancelled))
+        .transpose()
 }
 
 #[derive(Clone)]
