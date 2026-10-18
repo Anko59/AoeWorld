@@ -2,6 +2,7 @@
 use crate::process;
 mod command;
 mod country;
+mod filter;
 mod landscape;
 mod matrix;
 mod servers;
@@ -126,8 +127,32 @@ pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
+    let specs = filter::parse_specs(&std::env::var("AOE_E2E_SPECS").unwrap_or_default());
+    filter::refuse_in_ci(
+        &specs,
+        std::env::var("GITHUB_ACTIONS").ok().as_deref(),
+        std::env::var("CI").ok().as_deref(),
+    )?;
     let shard = shard::Shard::from_env(coverage.as_deref())?;
-    run_specs(&[], None, shard)
+    if specs.is_empty() {
+        return run_specs(&[], None, shard);
+    }
+    if shard.is_some() {
+        return Err("AOE_E2E_SPECS selects part of the suite; unset AOE_E2E_SHARD".into());
+    }
+    let root = std::env::current_dir()?.canonicalize()?;
+    let selected = filter::resolve(&filter::candidates(&root.join("browser"))?, &specs)?;
+    // The JSON reporter creates its file exclusively, so a stale report goes first.
+    let _ = std::fs::remove_file(filter::FILTERED_REPORT);
+    run_specs(
+        &selected,
+        Some(std::path::Path::new(filter::FILTERED_REPORT)),
+        None,
+    )?;
+    if let Some(report) = filter::expected_report(&selected) {
+        filter::check_report(&root, report)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn run_focused(
@@ -146,6 +171,8 @@ fn run_specs(
     shard: Option<shard::Shard>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
+    // The browser specs write their evidence here; the harness makes the directory first.
+    std::fs::create_dir_all("reports/e2e")?;
     let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
     let relative_binary = server_binary(coverage.as_deref())?;
     let run_deadline = browser_run_deadline(coverage.as_deref());

@@ -359,7 +359,7 @@ fn the_e2e_variables_the_harness_reads_reach_both_containers() {
     let steps = recipe(&files, "test-e2e-steps")
         .expect("test-e2e-steps recipe")
         .join("\n");
-    for variable in ["AOE_E2E_SHARD", "AOE_E2E_WORKERS"] {
+    for variable in ["AOE_E2E_SHARD", "AOE_E2E_WORKERS", "AOE_E2E_SPECS"] {
         let flag = format!("-e {variable}");
         assert!(
             slot_env.contains(&flag),
