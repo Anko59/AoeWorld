@@ -268,6 +268,7 @@ impl GameWorld {
             && matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
             && !self.combat.attackers.contains_key(&unit.id)
             && !self.economy.gatherers.contains_key(&unit.id)
+            && !self.economy.builders.contains_key(&unit.id)
             && unit_combat(unit.kind).attack > 0
     }
 }

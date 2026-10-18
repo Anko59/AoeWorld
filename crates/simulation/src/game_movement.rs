@@ -205,6 +205,7 @@ impl GameWorld {
             }
             self.plan_route_ahead(index, &mut planner_allowance);
             if !self.economy.gatherers.contains_key(&id) && !self.combat.attackers.contains_key(&id)
+                && !self.economy.builders.contains_key(&id)
             {
                 let unit = &mut self.units[index].state;
                 unit.task = if unit.moving || unit.planning {

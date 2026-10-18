@@ -1,5 +1,5 @@
 //! Death, removal and building destruction.
-use crate::{GameWorld, Terrain, UnitTask};
+use crate::{GameWorld, UnitTask};
 use aoe_core::EntityId;
 
 impl GameWorld {
@@ -24,6 +24,7 @@ impl GameWorld {
         state.attack_target = None;
         self.combat.attackers.remove(&id);
         self.economy.gatherers.remove(&id);
+        self.economy.builders.remove(&id);
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
@@ -58,6 +59,7 @@ impl GameWorld {
         }
         self.combat.attackers.remove(&id);
         self.economy.gatherers.remove(&id);
+        self.economy.builders.remove(&id);
         self.lookup.remove(&id);
         self.units.swap_remove(index);
         if let Some(moved) = self.units.get(index) {
@@ -68,25 +70,6 @@ impl GameWorld {
     /// A building at 0 HP disappears; its tiles become walkable and the
     /// population it supported goes away. Queued training is lost unrefunded.
     pub(crate) fn destroy_building(&mut self, id: EntityId) {
-        let Some(building) = self.economy.buildings.remove(&id) else {
-            return;
-        };
-        let footprint = building.footprint;
-        for y in footprint.min.y..footprint.max.y {
-            for x in footprint.min.x..footprint.max.x {
-                self.economy
-                    .blocked_tiles
-                    .remove(&aoe_core::TileCoord::new(x, y));
-            }
-        }
-        if let Terrain::Map { overlay, .. } = &mut self.terrain {
-            overlay.remove_footprint(footprint);
-        }
-        if let Some(player) = self.economy.players.get_mut(&building.player) {
-            player.population_cap = player
-                .population_cap
-                .saturating_sub(crate::VILLAGE_RULES.population_support);
-        }
-        self.resource_collision_changed();
+        self.remove_building(id);
     }
 }

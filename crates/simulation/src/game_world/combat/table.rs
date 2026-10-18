@@ -92,18 +92,27 @@ pub const UNIT_COMBAT: [UnitCombat; 3] = [
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingCombat {
     pub kind: BuildingKind,
-    pub hp: u16,
     pub melee_armour: u16,
     pub pierce_armour: u16,
 }
 
-/// Indexed by `BuildingKind as usize`; a test pins the order.
-pub const BUILDING_COMBAT: [BuildingCombat; 1] = [BuildingCombat {
-    kind: BuildingKind::TownCenter,
-    hp: 2400,
-    melee_armour: 3,
-    pierce_armour: 5,
-}];
+const fn armour(kind: BuildingKind, melee_armour: u16, pierce_armour: u16) -> BuildingCombat {
+    BuildingCombat { kind, melee_armour, pierce_armour }
+}
+
+/// Indexed by `BuildingKind as usize`. `BUILDING_RULES` owns hit points.
+/// Only Town Center armour is specified; other kinds currently use 0/0.
+pub const BUILDING_COMBAT: [BuildingCombat; 9] = [
+    armour(BuildingKind::TownCenter, 3, 5),
+    armour(BuildingKind::House, 0, 0),
+    armour(BuildingKind::LumberCamp, 0, 0),
+    armour(BuildingKind::MiningCamp, 0, 0),
+    armour(BuildingKind::Mill, 0, 0),
+    armour(BuildingKind::Farm, 0, 0),
+    armour(BuildingKind::Barracks, 0, 0),
+    armour(BuildingKind::PalisadeWall, 0, 0),
+    armour(BuildingKind::Outpost, 0, 0),
+];
 
 pub const fn unit_combat(kind: UnitKind) -> &'static UnitCombat {
     &UNIT_COMBAT[kind as usize]

@@ -146,6 +146,13 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedInvalidTarget => "Cannot attack: that target is unavailable or friendly.",
         RejectedInsufficientResources => "Cannot train: not enough resources.",
         RejectedResourceUnavailable => "Cannot give orders: resource terrain is unavailable.",
+        RejectedInsufficientResources => "Cannot build: not enough resources.",
+        RejectedNotBuildable => "Cannot build: that building cannot be constructed.",
+        RejectedRequirementMissing => "Cannot build: a required building is missing.",
+        RejectedInvalidPlacement => "Cannot build there: the site is blocked or outside the map.",
+        RejectedUnderConstruction => "That building is still under construction.",
+        RejectedAlreadyComplete => "That building is already complete.",
+        RejectedFarmUnavailable => "That farm is exhausted or already being worked.",
         RejectedInvalidDestination => match blocker {
             Some(ObjectKind::Tree) => "Cannot move there: a tree is in the way.",
             Some(ObjectKind::ForageBush) => "Cannot move there: a forage bush is in the way.",

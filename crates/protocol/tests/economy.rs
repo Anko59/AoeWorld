@@ -20,13 +20,17 @@ fn building() -> GameplayBuildingState {
         player: PlayerId(0),
         kind: BuildingKind::TownCenter,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(9, 9)),
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        hp: 2400,
+        max_hp: 2400,
+        los: 8,
+        food_remaining: None,
         training_queue: vec![TrainingState {
             kind: UnitKind::Villager,
             progress_ticks: 3,
             total_ticks: 500,
         }],
-        hp: 2400,
-        max_hp: 2400,
         last_hit: None,
     }
 }
@@ -72,6 +76,39 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             vec![6, 8, 5],
         ),
         (
+            GameplayClientMessage::BuildOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3), EntityId(4)],
+                kind: BuildingKind::House,
+                origin: TileCoord::new(5, 6),
+            },
+            vec![7, 8, 2, 3, 4, 1, 10, 12],
+        ),
+        (
+            GameplayClientMessage::BuildWallOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3)],
+                from: TileCoord::new(5, 6),
+                to: TileCoord::new(5, 9),
+            },
+            vec![8, 8, 1, 3, 10, 12, 10, 18],
+        ),
+        (
+            GameplayClientMessage::CancelConstructionOrder {
+                sequence: 8,
+                building_id: EntityId(5),
+            },
+            vec![9, 8, 5],
+        ),
+        (
+            GameplayClientMessage::FarmOrder {
+                sequence: 9,
+                entity_id: EntityId(3),
+                farm_id: EntityId(7),
+            },
+            vec![10, 9, 3, 7],
+        ),
+        (
             GameplayClientMessage::GatherOrder {
                 sequence: 9,
                 entity_id: EntityId(3),
@@ -93,6 +130,14 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
     }
     assert!(decode_gameplay_client(&[5, 9, 3, 3]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
+    // A build order may name at most MAX_BUILD_GROUP villagers.
+    let crowd = GameplayClientMessage::BuildOrder {
+        sequence: 1,
+        builder_ids: (0..=MAX_BUILD_GROUP as u32).map(EntityId).collect(),
+        kind: BuildingKind::House,
+        origin: TileCoord::new(1, 1),
+    };
+    assert!(decode_gameplay_client(&postcard::to_allocvec(&crowd).unwrap()).is_err());
 }
 
 #[test]

@@ -8,6 +8,8 @@ pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOver
 
 /// Logical entry limit; allocator overhead is not included in this count.
 pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 65_536;
+/// Building collision tiles the overlay holds at once (towns, houses, walls).
+pub const MAX_OBSTACLE_TILES: u64 = 4_096;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ResourceOverlay {
@@ -51,8 +53,8 @@ impl ResourceOverlay {
         if rect.min.x < 0
             || rect.min.y < 0
             || area == 0
-            || area > 256
-            || (self.obstacles.len() as u64).saturating_add(area) > 256
+            || area > MAX_OBSTACLE_TILES
+            || (self.obstacles.len() as u64).saturating_add(area) > MAX_OBSTACLE_TILES
         {
             return Err(ResourceOverlayError::Capacity);
         }
@@ -64,7 +66,7 @@ impl ResourceOverlay {
         Ok(())
     }
 
-    /// Removes a destroyed building's transient collision again.
+    /// Remove collision when a building is cancelled or destroyed.
     pub fn remove_footprint(&mut self, rect: TileRect) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {

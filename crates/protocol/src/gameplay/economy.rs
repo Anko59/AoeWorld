@@ -7,7 +7,11 @@ use serde::{
 use std::fmt;
 
 pub const MAX_ECONOMY_PLAYERS: usize = 16;
-pub const MAX_ECONOMY_BUILDINGS: usize = 16;
+pub const MAX_ECONOMY_BUILDINGS: usize = 256;
+/// Villagers one build order may name.
+pub const MAX_BUILD_GROUP: usize = 32;
+/// The population ceiling, however many houses stand.
+pub const MAX_POPULATION: u16 = 200;
 pub const MAX_TRAINING_QUEUE: usize = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -19,6 +23,31 @@ pub enum UnitKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BuildingKind {
     TownCenter,
+    House,
+    LumberCamp,
+    MiningCamp,
+    Mill,
+    Farm,
+    Barracks,
+    PalisadeWall,
+    Outpost,
+}
+impl BuildingKind {
+    /// Footprint side in tiles; the single wire-level size table.
+    pub const fn side(self) -> i32 {
+        match self {
+            Self::TownCenter => 4,
+            Self::House | Self::LumberCamp | Self::MiningCamp | Self::Mill => 2,
+            Self::Farm | Self::Barracks => 3,
+            Self::PalisadeWall | Self::Outpost => 1,
+        }
+    }
+}
+/// A foundation is built by villagers; only a complete building works.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ConstructionState {
+    UnderConstruction,
+    Complete,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UnitTask {
@@ -31,6 +60,10 @@ pub enum UnitTask {
     Attacking,
     /// 0 HP. The body is kept about a second so a client can animate the death.
     Dying,
+    /// Adding construction progress to a foundation.
+    Building,
+    /// Standing on a farm and working it.
+    Farming,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResourceKind {
@@ -77,11 +110,19 @@ pub struct GameplayBuildingState {
     pub player: PlayerId,
     pub kind: BuildingKind,
     pub footprint: TileRect,
+    pub construction: ConstructionState,
+    /// Construction progress in thousandths; 1000 once complete.
+    pub progress_permille: u16,
+    /// Authoritative hit points; combat reads and writes these.
+    pub hp: u16,
+    pub max_hp: u16,
+    /// Line of sight in tiles.
+    pub los: u8,
+    /// Food left on a farm (`Some(0)` is exhausted); `None` for other kinds.
+    pub food_remaining: Option<u16>,
     #[serde(deserialize_with = "bounded_training")]
     pub training_queue: Vec<TrainingState>,
     /// A building at 0 HP is destroyed and reported in `building_removals`.
-    pub hp: u16,
-    pub max_hp: u16,
     pub last_hit: Option<HitState>,
 }
 
@@ -89,7 +130,7 @@ pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
     players.len() <= MAX_ECONOMY_PLAYERS
         && players
             .iter()
-            .all(|player| player.population_cap <= (MAX_ECONOMY_BUILDINGS * 5) as u16)
+            .all(|player| player.population_cap <= MAX_POPULATION)
         && players
             .windows(2)
             .all(|pair| pair[0].player < pair[1].player)
@@ -99,10 +140,17 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
         && buildings.iter().all(|building| {
             building.footprint.min.x >= 0
                 && building.footprint.min.y >= 0
-                && building.footprint.width() == 4
-                && building.footprint.height() == 4
                 && building.hp > 0
+                && building.footprint.width() == building.kind.side()
+                && building.footprint.height() == building.kind.side()
+                && building.progress_permille <= 1000
+                && (building.construction == ConstructionState::Complete)
+                    == (building.progress_permille == 1000)
+                && building.max_hp > 0
                 && building.hp <= building.max_hp
+                && (building.kind == BuildingKind::Farm) == building.food_remaining.is_some()
+                && (building.construction == ConstructionState::Complete
+                    || building.training_queue.is_empty())
                 && building.training_queue.len() <= MAX_TRAINING_QUEUE
                 && building.training_queue.iter().all(|entry| {
                     entry.kind == UnitKind::Villager
@@ -165,6 +213,9 @@ pub(super) fn bounded_buildings<'de, D: Deserializer<'de>>(
     d: D,
 ) -> Result<Vec<GameplayBuildingState>, D::Error> {
     bounded::<D, _, MAX_ECONOMY_BUILDINGS>(d)
+}
+pub(super) fn bounded_builders<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
+    bounded::<D, _, MAX_BUILD_GROUP>(d)
 }
 pub(super) fn bounded_building_removals<'de, D: Deserializer<'de>>(
     d: D,

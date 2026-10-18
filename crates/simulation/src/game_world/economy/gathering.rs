@@ -124,7 +124,20 @@ impl GameWorld {
             .map_err(GameWorldError::Environment)?
             .filter(|node| overlay.blocks_node(*node))
             .ok_or(EconomyError::InvalidResource)?;
-        self.approach_resource(id, node.tile)?;
+        self.economy.builders.remove(&id);
+        self.begin_gather(id, node.id, node.tile, node.kind, None)
+    }
+
+    /// Start a gather job on a map node or, with `farm`, on a farm building.
+    pub(super) fn begin_gather(
+        &mut self,
+        id: EntityId,
+        node: u64,
+        tile: TileCoord,
+        kind: ResourceKind,
+        farm: Option<EntityId>,
+    ) -> Result<(), EconomyError> {
+        self.approach_resource(id, tile)?;
         self.cancel_attack(id);
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
@@ -132,14 +145,15 @@ impl GameWorld {
         if self.units[index]
             .state
             .carried
-            .is_some_and(|load| load.kind != node.kind)
+            .is_some_and(|load| load.kind != kind)
         {
             self.units[index].state.carried = None;
         }
         let mut task = GatherTask {
-            node: node.id,
-            tile: node.tile,
-            kind: node.kind,
+            node,
+            farm,
+            tile,
+            kind,
             phase: GatherPhase::Approaching,
             credits: 0,
             dropoff: None,
@@ -165,7 +179,11 @@ impl GameWorld {
         Ok(())
     }
 
-    fn approach_resource(&mut self, id: EntityId, target: TileCoord) -> Result<(), EconomyError> {
+    pub(super) fn approach_resource(
+        &mut self,
+        id: EntityId,
+        target: TileCoord,
+    ) -> Result<(), EconomyError> {
         let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
         let mut candidates = perimeter(aoe_core::TileRect::new(
             target,
@@ -203,7 +221,11 @@ impl GameWorld {
         };
         let mut candidates = self
             .buildings()
-            .filter(|building| building.player == unit.player)
+            .filter(|building| {
+                building.player == unit.player
+                    && building.is_complete()
+                    && building.kind.accepts(task.kind)
+            })
             .flat_map(|building| {
                 perimeter(building.footprint)
                     .into_iter()
@@ -258,7 +280,23 @@ impl GameWorld {
                 .any(|(_, tile)| !task.failed_dropoffs.contains(tile))
     }
 
+    fn task_remaining(&self, task: &GatherTask) -> Option<u16> {
+        match task.farm {
+            Some(farm) => self.farm_remaining(farm),
+            None => self.resource_remaining(task.node),
+        }
+    }
+
     fn resume_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
+        if let Some(farm) = task.farm {
+            // A spent farm is removed once its farmer has delivered; farms are
+            // not replaced by a neighbour because they are worked by choice.
+            if self.farm_remaining(farm).is_some_and(|food| food > 0) {
+                return self.restart_approach(id, task);
+            }
+            self.remove_building(farm);
+            return false;
+        }
         if self.resource_remaining(task.node) == Some(0) {
             let Some(next) = self.nearest_resource(
                 task.tile,
@@ -271,6 +309,10 @@ impl GameWorld {
             task.node = next.id;
             task.tile = next.tile;
         }
+        self.restart_approach(id, task)
+    }
+
+    fn restart_approach(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
         if self.approach_resource(id, task.tile).is_err() {
             return false;
         }
@@ -364,8 +406,12 @@ impl GameWorld {
             return self.resume_resource(id, task);
         }
         task.phase = GatherPhase::Gathering;
-        self.units[index].state.task = UnitTask::Gathering;
-        let Some(remaining) = self.resource_remaining(task.node) else {
+        self.units[index].state.task = if task.farm.is_some() {
+            UnitTask::Farming
+        } else {
+            UnitTask::Gathering
+        };
+        let Some(remaining) = self.task_remaining(task) else {
             return false;
         };
         if remaining == 0
@@ -388,6 +434,22 @@ impl GameWorld {
             return true;
         }
         task.credits -= threshold;
+        if let Some(farm) = task.farm {
+            let left = self.deplete_farm(farm).unwrap_or(0);
+            let amount = self.units[index]
+                .state
+                .carried
+                .map_or(0, |load| load.amount)
+                + 1;
+            self.units[index].state.carried = Some(CarriedResource {
+                kind: task.kind,
+                amount,
+            });
+            if amount == VILLAGE_RULES.villager_capacity || left == 0 {
+                return self.begin_return(id, task);
+            }
+            return true;
+        }
         let depletion = match self.prepare_resource_depletion(task.node, 1) {
             Ok(mutation) if sink(&mutation) => mutation.commit(),
             _ => {

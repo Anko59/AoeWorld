@@ -11,28 +11,20 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 mod combat;
 mod economy;
+mod facing;
 mod hash;
 mod resources;
 mod spawning;
 pub use combat::*;
 pub use economy::{
-    BuildingKind, CarriedResource, EconomyError, GameBuilding, PlayerEconomy, Stockpile,
-    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
+    BUILDING_RULES, BuildingKind, BuildingRules, CarriedResource, ConstructionState, EconomyError,
+    GameBuilding, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, PlayerEconomy, Stockpile,
+    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules, trainable_units,
 };
 pub use resources::PreparedResourceDepletion;
+pub use facing::Facing;
+pub(crate) use facing::facing_for;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum Facing {
-    South = 0,
-    SouthEast = 1,
-    East = 2,
-    NorthEast = 3,
-    North = 4,
-    NorthWest = 5,
-    West = 6,
-    SouthWest = 7,
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameUnit {
     pub id: EntityId,
@@ -294,6 +286,7 @@ impl GameWorld {
         let result = self.issue_task_move(id, destination)?;
         self.economy.gatherers.remove(&id);
         self.cancel_attack(id);
+        self.economy.builders.remove(&id);
         if let Some(&index) = self.lookup.get(&id) {
             self.units[index].state.task = if result {
                 UnitTask::Moving
@@ -471,29 +464,6 @@ fn next_random(state: &mut u64) -> u64 {
     *state ^= *state >> 7;
     *state ^= *state << 17;
     *state
-}
-
-pub(crate) fn facing_for(dx: i64, dy: i64, current: Facing) -> Facing {
-    let sx = dx - dy;
-    let sy = dx + dy;
-    if sx == 0 && sy == 0 {
-        return current;
-    }
-    let ax = sx.unsigned_abs();
-    let ay = sy.unsigned_abs();
-    if ax > ay.saturating_mul(2) {
-        if sx > 0 { Facing::East } else { Facing::West }
-    } else if ay > ax.saturating_mul(2) {
-        if sy > 0 { Facing::South } else { Facing::North }
-    } else if sx >= 0 && sy >= 0 {
-        Facing::SouthEast
-    } else if sx >= 0 {
-        Facing::NorthEast
-    } else if sy >= 0 {
-        Facing::SouthWest
-    } else {
-        Facing::NorthWest
-    }
 }
 
 #[cfg(test)]

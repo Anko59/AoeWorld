@@ -3,6 +3,10 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+mod buildings;
+mod construction;
+mod dropoff;
+mod farm;
 mod gathering;
 mod hash;
 mod movement;
@@ -12,9 +16,17 @@ mod start_site;
 mod starting_kit;
 mod tick;
 mod training;
+mod wall;
+
+pub use buildings::{
+    BUILDING_RULES, BuildingRules, MAX_POPULATION, MAX_WALL_SEGMENTS, trainable_units,
+};
 
 pub const MAX_ECONOMY_PLAYERS: usize = 16;
-pub const MAX_ECONOMY_BUILDINGS: usize = 16;
+pub const MAX_ECONOMY_BUILDINGS: usize = 256;
+/// Villagers one build order or one world may assign to construction.
+pub const MAX_BUILD_GROUP: usize = 32;
+pub const MAX_BUILDERS: usize = 80;
 pub const MAX_GATHERERS: usize = 80;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,6 +40,20 @@ pub enum UnitKind {
 #[repr(u8)]
 pub enum BuildingKind {
     TownCenter,
+    House,
+    LumberCamp,
+    MiningCamp,
+    Mill,
+    Farm,
+    Barracks,
+    PalisadeWall,
+    Outpost,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ConstructionState {
+    UnderConstruction,
+    Complete,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -41,6 +67,8 @@ pub enum UnitTask {
     Attacking,
     /// 0 HP; the body is kept briefly so a client can animate the death.
     Dying,
+    Building,
+    Farming,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CarriedResource {
@@ -86,9 +114,28 @@ pub struct GameBuilding {
     pub kind: BuildingKind,
     pub footprint: TileRect,
     pub training_queue: VecDeque<TrainingEntry>,
+    pub last_hit: Option<super::HitRecord>,
+    pub state: ConstructionState,
+    /// Work done and work needed; one builder adds 3 per tick, n add n + 2.
+    pub work_done: u64,
+    pub work_total: u64,
     pub hp: u16,
     pub max_hp: u16,
-    pub last_hit: Option<super::HitRecord>,
+    pub los: u8,
+    /// Food left on a farm; `Some(0)` is an exhausted farm.
+    pub food_remaining: Option<u16>,
+}
+impl GameBuilding {
+    /// Construction progress in thousandths, 1000 once complete.
+    pub fn progress_permille(&self) -> u16 {
+        if self.state == ConstructionState::Complete || self.work_total == 0 {
+            return 1000;
+        }
+        (self.work_done.saturating_mul(1000) / self.work_total).min(1000) as u16
+    }
+    pub fn is_complete(&self) -> bool {
+        self.state == ConstructionState::Complete
+    }
 }
 
 /// The single current rules table. Rates are hundredths of a resource / second;
@@ -149,10 +196,20 @@ pub enum EconomyError {
     TrainingQueueFull,
     #[error("attack target is unknown, dead or belongs to the same player")]
     InvalidTarget,
-    #[error("not enough resources to train this unit")]
+    #[error("not enough resources")]
     InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]
     InvalidFootprint,
+    #[error("the building is already complete")]
+    AlreadyComplete,
+    #[error("that building kind cannot be constructed")]
+    NotBuildable,
+    #[error("a required completed building is missing")]
+    RequirementMissing,
+    #[error("the building is still under construction")]
+    UnderConstruction,
+    #[error("the farm is exhausted or already worked")]
+    FarmUnavailable,
     #[error("bounded village state is full")]
     Capacity,
     #[error("player already has a starting village")]
@@ -167,6 +224,7 @@ pub(crate) struct Economy {
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
+    pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -179,6 +237,8 @@ pub(crate) enum GatherPhase {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GatherTask {
     node: u64,
+    /// Set for a farmer: the farm building worked instead of a map node.
+    farm: Option<EntityId>,
     tile: TileCoord,
     kind: ResourceKind,
     phase: GatherPhase,
@@ -187,6 +247,13 @@ pub(crate) struct GatherTask {
     return_target: Option<TileCoord>,
     failed_dropoffs: BTreeSet<TileCoord>,
     retry_tick: u64,
+}
+
+/// A villager assigned to a foundation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BuildTask {
+    pub(crate) building: EntityId,
+    pub(crate) attempts: u8,
 }
 
 impl super::GameWorld {
