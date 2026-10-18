@@ -182,6 +182,28 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
                 cell.0 = if shallow { 10 } else { MISSING };
             }
         }
+        // A ford face never takes the junction path: its observations cannot be
+        // capped at the ford coverage. Keep the lowest and highest land sheets
+        // of the quad and fold the others into the lowest.
+        if quad.iter().flatten().any(|cell| cell.0 == 12) {
+            let land = |material: u8| !matches!(material, MISSING | 10 | 12);
+            let lands = || {
+                quad.iter()
+                    .flatten()
+                    .map(|cell| cell.0)
+                    .filter(|material| land(*material))
+            };
+            if let (Some(low), Some(high)) = (
+                lands().min_by_key(|m| rank(*m)),
+                lands().max_by_key(|m| rank(*m)),
+            ) {
+                for cell in quad.iter_mut().flatten().chain(cells.iter_mut().flatten()) {
+                    if land(cell.0) && cell.0 != high {
+                        cell.0 = low;
+                    }
+                }
+            }
+        }
         let seen = || {
             quad.iter()
                 .flatten()
@@ -195,9 +217,9 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             continue;
         };
         if base == over && base == 12 && quad.iter().flatten().all(|cell| cell.0 == 12) {
-            // A ford interior is a light shallow over sand, as its banks are.
+            // A ford interior is a light shallow over the bank dirt, like its boundary quads.
             let share = thin::FORD_SHARE;
-            triangle.texture_materials = Some([3, 3, 12]);
+            triangle.texture_materials = Some([2, 2, 12]);
             triangle.mix = [share, share, share, 0, 0, 0];
             triangle.floor_strengths = Some([0; 3]);
             continue;
@@ -229,9 +251,9 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             .filter(|material| *material != base && *material != over)
             .max_by_key(|material| rank(*material))
             .unwrap_or(base);
-        let full = seen()
-            .any(|material| material != base && material != middle && material != over)
-            || (middle != base && quad.iter().flatten().any(|cell| cell.1 != 0));
+        let full = over != 12
+            && (seen().any(|material| material != base && material != middle && material != over)
+                || (middle != base && quad.iter().flatten().any(|cell| cell.1 != 0)));
         let mut floors = [0; 3];
         for (corner, cell) in cells.iter().enumerate() {
             let present = cell.iter().filter(|cell| cell.0 != MISSING).count() as u32;
@@ -257,7 +279,7 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             );
         }
         if full {
-            if matches!(over, 10 | 12) {
+            if over == 10 {
                 for (corner, cell) in cells.iter_mut().enumerate() {
                     if thin_at(triangle.points[corner]) == Some(true) {
                         thin::fill(cell);

@@ -35,7 +35,7 @@ dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
 neighboring source edges meet. Water 15002 is the light shallow sheet; optional
 periodic sheets add medium water 15016, deep water 15015 and marsh shallows
 15014. Generated river `Ford` crossings draw with the light shallow 15002
-sheet at partial coverage over sand or the bank ground (docs/assets/landscape.md); the marsh sheet stays imported but is not selected for fords. Ordinary
+sheet at 85% coverage over the bank dirt (docs/assets/landscape.md); the marsh sheet stays imported but is not selected for fords. Ordinary
 shallow water remains impassable. A pack without an optional sheet draws the
 shallow sheet in its place. Catalog v12 selects natural rock ground 15033 and soft snow ground 15026,
 with distinct authored sheets and colours. Paved 15018 and gravel 15017 are
