@@ -95,6 +95,8 @@ help:
 	@echo '  make test-source-qualification  Run the slow source-qualification tests test-unit excludes'
 	@echo '  make test-exhaustive  Run the 16-seed sweeps and full-axis geodata round-trips test-unit excludes'
 	@echo '  make load-status     Show the heavy slot holders and queue'
+	@echo '  make ledger          Which model did what with measured results (docs/models.md)'
+	@echo '  make usage           What is left of each provider, and the last 7 days of the ledger'
 	@echo '  make geodata-bootstrap Acquire the configured overview source stack'
 	@echo '  make geodata-verify  Verify cached overview inputs without network access'
 	@echo '  AOE_MAP_REQUEST=... make map-estimate  Estimate a map request'

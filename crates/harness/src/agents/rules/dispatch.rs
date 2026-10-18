@@ -33,6 +33,10 @@ const PERSON_TARGETS: &[&str] = &[
     // They post a status, comment on and rebase pull requests: CI and the main session.
     "carry-review",
     "update-prs",
+    // They read pull requests through gh and the providers' usage endpoints (usage
+    // takes the OpenRouter key from the keyring): the main session only.
+    "ledger",
+    "usage",
 ];
 pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
     let spec = Spec {

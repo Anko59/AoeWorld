@@ -16,7 +16,7 @@ export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS CARRY_PR UPDATE_MAX_PRS METRICS_REV
 export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
+.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions ledger usage carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -68,6 +68,14 @@ nightly-triage:
 # The nightly workflow's metric comparison (docs/issues.md): one bot-owned issue.
 metric-regressions:
 	@.agents/hooks/harness.sh exec metric-regressions
+
+# Which model did what, with measured results (docs/models.md); cached in .cache/ledger.
+ledger:
+	@.agents/hooks/harness.sh exec ledger
+
+# What is left of each provider's allowance, then the last 7 days of the ledger.
+usage:
+	@.agents/hooks/harness.sh exec usage
 
 # The post-push workflow (docs/post-push.md): CARRY_PR names the pull request,
 # UPDATE_MAX_PRS bounds one update run; both reach the harness through the environment.
