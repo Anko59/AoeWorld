@@ -143,6 +143,8 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedInsufficientFood => "Cannot train: not enough food.",
         RejectedPopulationCap => "Cannot train: the population limit is reached or reserved.",
         RejectedTrainingQueueFull => "Cannot train: the training queue is full.",
+        RejectedInvalidTarget => "Cannot attack: that target is unavailable or friendly.",
+        RejectedInsufficientResources => "Cannot train: not enough resources.",
         RejectedResourceUnavailable => "Cannot give orders: resource terrain is unavailable.",
         RejectedInvalidDestination => match blocker {
             Some(ObjectKind::Tree) => "Cannot move there: a tree is in the way.",

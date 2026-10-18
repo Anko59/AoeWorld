@@ -15,15 +15,20 @@ impl GameWorld {
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
-        if self.economy.gatherers.is_empty() && self.economy.buildings.is_empty() {
+        if self.economy.gatherers.is_empty()
+            && self.economy.buildings.is_empty()
+            && self.combat.is_idle()
+        {
             self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
             return changed;
         }
+        self.advance_combat(&mut changed);
         self.advance_gathering(sink, &mut changed);
         self.advance_training(&mut changed);
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
         changed.sort_by_key(|unit| unit.id);
         changed.dedup_by_key(|unit| unit.id);
+        changed.retain(|unit| self.unit_exists(unit.id));
         // Economy may alter a mover a second time in the same tick. Return its
         // final state, not the earlier movement interpolation state.
         for unit in &mut changed {

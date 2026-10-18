@@ -14,6 +14,7 @@ pub const MAX_TRAINING_QUEUE: usize = 5;
 pub enum UnitKind {
     Villager,
     Scout,
+    Militia,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BuildingKind {
@@ -26,6 +27,10 @@ pub enum UnitTask {
     Gathering,
     Carrying,
     Returning,
+    /// Walking to, or hitting, `UnitState::attack_target`.
+    Attacking,
+    /// 0 HP. The body is kept about a second so a client can animate the death.
+    Dying,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResourceKind {
@@ -53,6 +58,13 @@ pub struct GameplayPlayerState {
     pub population_used: u16,
     pub population_cap: u16,
 }
+/// The most recent damage taken. A client plays a hit reaction when `tick`
+/// is newer than the one it last saw, and a swing for `attacker`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct HitState {
+    pub attacker: EntityId,
+    pub tick: aoe_core::Tick,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TrainingState {
     pub kind: UnitKind,
@@ -67,14 +79,17 @@ pub struct GameplayBuildingState {
     pub footprint: TileRect,
     #[serde(deserialize_with = "bounded_training")]
     pub training_queue: Vec<TrainingState>,
+    /// A building at 0 HP is destroyed and reported in `building_removals`.
+    pub hp: u16,
+    pub max_hp: u16,
+    pub last_hit: Option<HitState>,
 }
 
 pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
     players.len() <= MAX_ECONOMY_PLAYERS
-        && players.iter().all(|player| {
-            player.population_used <= player.population_cap
-                && player.population_cap <= (MAX_ECONOMY_BUILDINGS * 5) as u16
-        })
+        && players
+            .iter()
+            .all(|player| player.population_cap <= (MAX_ECONOMY_BUILDINGS * 5) as u16)
         && players
             .windows(2)
             .all(|pair| pair[0].player < pair[1].player)
@@ -86,6 +101,8 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && building.footprint.min.y >= 0
                 && building.footprint.width() == 4
                 && building.footprint.height() == 4
+                && building.hp > 0
+                && building.hp <= building.max_hp
                 && building.training_queue.len() <= MAX_TRAINING_QUEUE
                 && building.training_queue.iter().all(|entry| {
                     entry.kind == UnitKind::Villager
@@ -98,6 +115,10 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
         unit.facing < 8
+            && unit.max_hp > 0
+            && unit.hp <= unit.max_hp
+            && (unit.hp == 0) == (unit.task == UnitTask::Dying)
+            && (unit.hp > 0 || unit.attack_target.is_none())
             && unit
                 .gathering
                 .is_none_or(|_| unit.kind == UnitKind::Villager)

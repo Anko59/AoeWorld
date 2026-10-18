@@ -40,6 +40,11 @@ pub struct UnitState {
     pub carried: Option<CarriedResource>,
     /// Assigned resource from the authoritative job, independent of carried load.
     pub gathering: Option<ResourceKind>,
+    pub hp: u16,
+    pub max_hp: u16,
+    /// The unit or building this unit is attacking or walking to attack.
+    pub attack_target: Option<EntityId>,
+    pub last_hit: Option<HitState>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -74,6 +79,13 @@ pub enum ClientMessage {
         sequence: u64,
         building_id: EntityId,
     },
+    /// Attack another player's unit or building: walk into melee range, then
+    /// hit until the target dies. Cancelled by a later move or gather order.
+    AttackOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        target_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -94,6 +106,9 @@ pub enum CommandResult {
     RejectedPopulationCap,
     RejectedTrainingQueueFull,
     RejectedResourceUnavailable,
+    /// The attack target is unknown, already dead, or the sender's own.
+    RejectedInvalidTarget,
+    RejectedInsufficientResources,
 }
 
 /// Immutable physical properties of the active geographic map. The package

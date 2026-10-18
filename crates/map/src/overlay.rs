@@ -64,6 +64,15 @@ impl ResourceOverlay {
         Ok(())
     }
 
+    /// Removes a destroyed building's transient collision again.
+    pub fn remove_footprint(&mut self, rect: TileRect) {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                self.obstacles.remove(&TileCoord::new(x, y));
+            }
+        }
+    }
+
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
         self.obstacles.contains(&tile)
             || (!self.remaining.is_empty()

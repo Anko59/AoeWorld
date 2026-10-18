@@ -13,6 +13,9 @@ fn building(id: usize) -> GameplayBuildingState {
             max: TileCoord::new(4, 4),
         },
         training_queue: vec![],
+        hp: 2400,
+        max_hp: 2400,
+        last_hit: None,
     }
 }
 

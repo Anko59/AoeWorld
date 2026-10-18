@@ -17,9 +17,11 @@ use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;
 pub use game_world::{
-    BuildingKind, CarriedResource, EconomyError, Facing, GameBuilding, GameUnit, GameWorld,
-    GameWorldError, MovementOrder, PlayerEconomy, PreparedResourceDepletion, Stockpile,
-    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
+    BUILDING_COMBAT, BuildingCombat, BuildingKind, CarriedResource, CombatStats, DamageKind,
+    EconomyError, Facing, GameBuilding, GameUnit, GameWorld, GameWorldError, HitRecord,
+    MovementOrder, PlayerEconomy, PreparedResourceDepletion, Stockpile, TrainingEntry, UNIT_COMBAT,
+    UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES, VillageRules,
+    building_combat, damage_dealt, unit_combat,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};

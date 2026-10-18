@@ -2,6 +2,7 @@ use super::{
     BuildingKind, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
     PlayerEconomy, Stockpile, VILLAGE_RULES,
 };
+use crate::game_world::combat::building_combat;
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 use std::collections::{BTreeSet, VecDeque};
@@ -104,6 +105,9 @@ impl GameWorld {
                 kind: BuildingKind::TownCenter,
                 footprint,
                 training_queue: VecDeque::new(),
+                hp: building_combat(BuildingKind::TownCenter).hp,
+                max_hp: building_combat(BuildingKind::TownCenter).hp,
+                last_hit: None,
             },
         );
         self.resource_collision_changed();

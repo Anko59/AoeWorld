@@ -7,7 +7,7 @@ mod gathering;
 mod hash;
 mod movement;
 mod navigation;
-mod placement;
+pub(crate) mod placement;
 mod start_site;
 mod starting_kit;
 mod tick;
@@ -22,6 +22,7 @@ pub const MAX_GATHERERS: usize = 80;
 pub enum UnitKind {
     Villager,
     Scout,
+    Militia,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -36,6 +37,10 @@ pub enum UnitTask {
     Gathering,
     Carrying,
     Returning,
+    /// Walking to or hitting an attack target.
+    Attacking,
+    /// 0 HP; the body is kept briefly so a client can animate the death.
+    Dying,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CarriedResource {
@@ -81,6 +86,9 @@ pub struct GameBuilding {
     pub kind: BuildingKind,
     pub footprint: TileRect,
     pub training_queue: VecDeque<TrainingEntry>,
+    pub hp: u16,
+    pub max_hp: u16,
+    pub last_hit: Option<super::HitRecord>,
 }
 
 /// The single current rules table. Rates are hundredths of a resource / second;
@@ -139,6 +147,10 @@ pub enum EconomyError {
     PopulationCap,
     #[error("town center training queue is full")]
     TrainingQueueFull,
+    #[error("attack target is unknown, dead or belongs to the same player")]
+    InvalidTarget,
+    #[error("not enough resources to train this unit")]
+    InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]
     InvalidFootprint,
     #[error("bounded village state is full")]

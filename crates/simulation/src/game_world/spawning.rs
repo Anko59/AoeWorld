@@ -1,4 +1,6 @@
-use super::{Facing, GameUnit, GameWorld, GameWorldError, StoredUnit, UnitKind, UnitTask};
+use super::{
+    Facing, GameUnit, GameWorld, GameWorldError, StoredUnit, UnitKind, UnitTask, unit_combat,
+};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 use std::collections::VecDeque;
 
@@ -70,6 +72,10 @@ impl GameWorld {
                 kind,
                 task: UnitTask::Idle,
                 carried: None,
+                hp: unit_combat(kind).hp,
+                max_hp: unit_combat(kind).hp,
+                attack_target: None,
+                last_hit: None,
             },
             order: None,
             bucket,

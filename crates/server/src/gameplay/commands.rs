@@ -41,6 +41,23 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_attack(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        target_id: EntityId,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Attack {
+                entity_id,
+                target_id,
+            },
+        )
+        .await;
+    }
     pub async fn queue_train(
         &self,
         session_id: u64,
@@ -149,6 +166,10 @@ pub(super) fn apply(
             entity_id,
             resource_id,
         } => world.issue_gather(player, entity_id, resource_id),
+        PendingAction::Attack {
+            entity_id,
+            target_id,
+        } => world.issue_attack(player, entity_id, target_id),
         PendingAction::CancelTraining { building_id } => {
             world.issue_cancel_training(player, building_id)
         }
@@ -162,6 +183,8 @@ pub(super) fn apply(
         Err(E::UnknownEntity | E::Movement(W::UnknownEntity)) => {
             CommandResult::RejectedUnknownEntity
         }
+        Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
+        Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,
         Err(E::NotOwner) => CommandResult::RejectedNotOwner,
         Err(E::WrongUnitKind) => CommandResult::RejectedWrongUnitKind,
         Err(E::InvalidResource) => CommandResult::RejectedInvalidResource,

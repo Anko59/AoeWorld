@@ -125,6 +125,7 @@ impl GameWorld {
             .filter(|node| overlay.blocks_node(*node))
             .ok_or(EconomyError::InvalidResource)?;
         self.approach_resource(id, node.tile)?;
+        self.cancel_attack(id);
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
         };

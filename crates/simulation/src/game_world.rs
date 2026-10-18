@@ -9,11 +9,13 @@ use aoe_core::{
 use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+mod combat;
 mod economy;
 #[path = "game_world/hash.rs"]
 mod hash;
 mod resources;
 mod spawning;
+pub use combat::*;
 pub use economy::{
     BuildingKind, CarriedResource, EconomyError, GameBuilding, PlayerEconomy, Stockpile,
     TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
@@ -44,6 +46,10 @@ pub struct GameUnit {
     pub kind: UnitKind,
     pub task: UnitTask,
     pub carried: Option<CarriedResource>,
+    pub hp: u16,
+    pub max_hp: u16,
+    pub attack_target: Option<EntityId>,
+    pub last_hit: Option<HitRecord>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {
@@ -94,6 +100,7 @@ pub struct GameWorld {
     pub(crate) config: WorldConfig,
     pub(crate) next_entity_id: u64,
     pub(crate) economy: economy::Economy,
+    pub(crate) combat: combat::Combat,
     pub(crate) tick: Tick,
     pub(crate) units: Vec<StoredUnit>,
     pub(crate) lookup: BTreeMap<EntityId, usize>,
@@ -119,6 +126,7 @@ impl GameWorld {
             tick: Tick(0),
             next_entity_id: 0,
             economy: economy::Economy::default(),
+            combat: Default::default(),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
@@ -285,6 +293,7 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let result = self.issue_task_move(id, destination)?;
         self.economy.gatherers.remove(&id);
+        self.cancel_attack(id);
         if let Some(&index) = self.lookup.get(&id) {
             self.units[index].state.task = if result {
                 UnitTask::Moving
@@ -303,6 +312,9 @@ impl GameWorld {
         destination: WorldPosition,
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
+        if self.units[index].state.hp == 0 {
+            return Err(GameWorldError::UnknownEntity);
+        }
         let destination = self.config.snap_ground_position(destination);
         let passable = self
             .terrain

@@ -2,7 +2,7 @@ use super::GameplayService;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
     BuildingKind, CarriedResource, GameplayBuildingState, GameplayPlayerState, GameplayUnitState,
-    MAX_SUBSCRIBED_UNITS, ResourceKind, Stockpile, TrainingState, UnitKind, UnitTask,
+    HitState, MAX_SUBSCRIBED_UNITS, ResourceKind, Stockpile, TrainingState, UnitKind, UnitTask,
 };
 use aoe_simulation::{GameUnit, GameWorld};
 use std::collections::BTreeMap;
@@ -37,12 +37,20 @@ pub(super) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKind {
     match kind {
         UnitKind::Villager => aoe_simulation::UnitKind::Villager,
         UnitKind::Scout => aoe_simulation::UnitKind::Scout,
+        UnitKind::Militia => aoe_simulation::UnitKind::Militia,
     }
 }
 fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
     match kind {
         aoe_simulation::UnitKind::Villager => UnitKind::Villager,
         aoe_simulation::UnitKind::Scout => UnitKind::Scout,
+        aoe_simulation::UnitKind::Militia => UnitKind::Militia,
+    }
+}
+fn wire_hit(hit: aoe_simulation::HitRecord) -> HitState {
+    HitState {
+        attacker: hit.attacker,
+        tick: hit.tick,
     }
 }
 fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
@@ -68,8 +76,14 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
             aoe_simulation::UnitTask::Gathering => UnitTask::Gathering,
             aoe_simulation::UnitTask::Carrying => UnitTask::Carrying,
             aoe_simulation::UnitTask::Returning => UnitTask::Returning,
+            aoe_simulation::UnitTask::Attacking => UnitTask::Attacking,
+            aoe_simulation::UnitTask::Dying => UnitTask::Dying,
         },
         gathering: world.gathering_kind(unit.id).map(wire_resource),
+        hp: unit.hp,
+        max_hp: unit.max_hp,
+        attack_target: unit.attack_target,
+        last_hit: unit.last_hit.map(wire_hit),
         carried: unit.carried.map(|load| CarriedResource {
             kind: wire_resource(load.kind),
             amount: load.amount,
@@ -110,6 +124,9 @@ pub(super) fn buildings(world: &GameWorld) -> BTreeMap<EntityId, GameplayBuildin
                         aoe_simulation::BuildingKind::TownCenter => BuildingKind::TownCenter,
                     },
                     footprint: state.footprint,
+                    hp: state.hp,
+                    max_hp: state.max_hp,
+                    last_hit: state.last_hit.map(wire_hit),
                     training_queue: state
                         .training_queue
                         .iter()

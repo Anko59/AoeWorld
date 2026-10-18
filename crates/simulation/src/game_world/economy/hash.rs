@@ -29,6 +29,9 @@ impl Economy {
             ] {
                 hash.update(&coord.to_le_bytes());
             }
+            hash.update(&building.hp.to_le_bytes());
+            hash.update(&building.max_hp.to_le_bytes());
+            crate::game_world::combat::hash_hit(hash, building.last_hit);
             hash.update(&(building.training_queue.len() as u64).to_le_bytes());
             for entry in &building.training_queue {
                 hash.update(&[entry.kind as u8]);
