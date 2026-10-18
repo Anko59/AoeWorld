@@ -167,7 +167,8 @@ impl GeneratedMap {
             || hydrology.evidence_index.water_model.is_none()
             || hydrology.modern_land_cover_preprocessing().is_none()
             || hydrology.source_locks.len() != VECTOR_HYDROLOGY_SOURCE_LOCKS
-            || self.package.source_locks.len() != LANDSCAPE_OVERVIEW_SOURCE_LOCKS
+            || aoe_map::overview_base_lock_count(&self.package.source_locks)
+                != LANDSCAPE_OVERVIEW_SOURCE_LOCKS
         {
             return Err(GeodataError::Preparation(
                 "invalid overview vector composition",

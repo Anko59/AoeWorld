@@ -38,7 +38,7 @@ pub use environment::{
     WaterCorrectionDocument, WaterCorrectionOperation, WaterCorrectionProjection,
     WaterCorrectionVertex, WaterFlowDirection, WaterModelProvenance, WaterPage,
     ordered_biome_page_root, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
-    ordered_page_root, ordered_water_page_root,
+    ordered_page_root, ordered_water_page_root, overview_base_lock_count,
 };
 pub use land_use::{
     HistoricalCoverage, HistoricalLandUseObservation, HistoricalLandUsePage,

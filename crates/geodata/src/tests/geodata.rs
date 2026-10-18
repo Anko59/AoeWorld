@@ -134,6 +134,7 @@ fn overview_response_keeps_its_bounded_protocol_shape_when_boxed() {
             "https://example.invalid/readme.txt",
             "text",
         ),
+        elevation_tile_source_locks: Vec::new(),
         projection: ProjectionMetadata::default(),
         provenance: EnvironmentalProvenance::default(),
         environment: PreparedEnvironment::default(),

@@ -133,6 +133,16 @@ fn prepare_elevation_dataset_bounded(
         }
         heights.push(centimeters as i32);
     }
+    pyramid_from_heights(estimate.effective_side_meters, samples_per_axis, heights)
+}
+
+/// Builds the canonical page pyramid for a complete row-major height grid in
+/// centimeters. Both the nearest-sampled and the area-averaged paths end here.
+pub(crate) fn pyramid_from_heights(
+    effective_side_meters: u64,
+    samples_per_axis: u16,
+    heights: Vec<i32>,
+) -> Result<PreparedElevation, GeodataError> {
     let mut pages = Vec::new();
     let mut levels = Vec::new();
     let mut axis = samples_per_axis;
@@ -151,8 +161,7 @@ fn prepare_elevation_dataset_bounded(
         values = reduce_elevation(axis, &values)?;
         axis = axis.div_ceil(2);
     }
-    let geographic_millimeters_per_sample = estimate
-        .effective_side_meters
+    let geographic_millimeters_per_sample = effective_side_meters
         .checked_mul(1_000)
         .ok_or(GeodataError::Preparation("sample spacing overflows"))?
         .div_ceil(u64::from(samples_per_axis));

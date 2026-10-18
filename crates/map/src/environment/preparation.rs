@@ -60,6 +60,18 @@ pub const LANDSCAPE_OVERVIEW_SOURCE_LOCKS: usize = 7;
 /// Locks added by vector hydrology: HydroLAKES and HydroRIVERS.
 pub const VECTOR_HYDROLOGY_SOURCE_LOCKS: usize = 2;
 
+/// Locks of one-degree Copernicus DEM tiles start with this identifier prefix.
+const ELEVATION_TILE_LOCK_PREFIX: &str = "copernicus-dem-";
+
+/// Source locks of an overview package without the Copernicus GLO-90 tiles
+/// averaged into its elevation, whose number follows the footprint.
+pub fn overview_base_lock_count(locks: &[crate::SourceLock]) -> usize {
+    locks
+        .iter()
+        .filter(|lock| !lock.id.starts_with(ELEVATION_TILE_LOCK_PREFIX))
+        .count()
+}
+
 #[cfg(test)]
 #[path = "tests/preparation.rs"]
 mod tests;
