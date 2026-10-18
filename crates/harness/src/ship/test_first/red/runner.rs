@@ -116,6 +116,7 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
         "--group-add",
         &group,
     ]);
+    command.args(crate::slots::cap_args());
     command.args([
         "--name",
         &outer,

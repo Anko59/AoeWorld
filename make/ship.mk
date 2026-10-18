@@ -17,12 +17,15 @@ export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOC
 export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
 export HARNESS_RED_ROOT HARNESS_RED_BASE HARNESS_RED_HEAD
-.PHONY: red red-checkout
+.PHONY: red red-checkout red-checkout-steps
 red:
 	@.agents/hooks/harness.sh exec red
 
 # Explicit branch runner for developing the command before it exists on dev.
-red-checkout:
+red-checkout: slot-bootstrap
+	@$(SLOT_RUN) red-checkout -- make --no-print-directory red-checkout-steps
+
+red-checkout-steps:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' red
 
