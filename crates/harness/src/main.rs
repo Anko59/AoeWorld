@@ -278,7 +278,10 @@ fn run(
         Command::TestUnit => native::test_unit(native::affected::requested())?,
         Command::TestSourceQualification => native::test_source_qualification()?,
         Command::TestExhaustive => native::test_exhaustive()?,
-        Command::LoadStatus => slots::print_status(Path::new("."), slots)?,
+        Command::LoadStatus => {
+            ship::lock::print_status(Path::new("."))?;
+            slots::print_status(Path::new("."), slots)?
+        }
         Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
         Command::SlotCpus => println!(
             "{}",

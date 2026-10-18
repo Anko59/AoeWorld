@@ -68,11 +68,15 @@ impl<T: Serialize + DeserializeOwned> Ticket<T> {
     /// The payloads of the tickets older than ours that are still alive, oldest first
     /// (`None` when unreadable). Tickets left by dead processes are removed on the way.
     pub(crate) fn ahead(&self) -> Result<Vec<Option<T>>> {
-        let mut alive = Vec::new();
+        self.ahead_ranked(0, |_| 0)
+    }
+
+    /// The payloads of the live tickets that go before ours, in queue order: those with a
+    /// higher `rank` than `own`, then those of equal rank that are older. An unreadable
+    /// payload ranks 0. Tickets left by dead processes are removed on the way.
+    pub(crate) fn ahead_ranked(&self, own: u8, rank: impl Fn(&T) -> u8) -> Result<Vec<Option<T>>> {
+        let mut ahead = Vec::new();
         for name in ticket_names(&self.dir)? {
-            if name >= self.name {
-                break;
-            }
             let path = self.dir.join(&name);
             let Ok(file) = File::open(&path) else {
                 continue;
@@ -81,13 +85,19 @@ impl<T: Serialize + DeserializeOwned> Ticket<T> {
                 Ok(_dead) => {
                     let _ = fs::remove_file(&path);
                 }
-                Err((_, nix::errno::Errno::EWOULDBLOCK)) => alive.push(read_json(&path)),
+                Err((_, nix::errno::Errno::EWOULDBLOCK)) => {
+                    let payload = read_json::<T>(&path);
+                    let theirs = payload.as_ref().map_or(0, &rank);
+                    if theirs > own || (theirs == own && name < self.name) {
+                        ahead.push(payload);
+                    }
+                }
                 Err((_, errno)) => {
                     return Err(format!("queue {}: {errno}", path.display()).into());
                 }
             }
         }
-        Ok(alive)
+        Ok(ahead)
     }
 }
 
