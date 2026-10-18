@@ -28,6 +28,8 @@ use std::{
 };
 
 pub(crate) use guard::{cap_args, hold, hold_snapshot, run_forced};
+/// Waits, bounded, until the 1-minute load is at or below the core count (no slot is taken).
+pub(crate) use load::wait as wait_for_load;
 
 /// `run_forced` for the checkout the process runs in.
 pub(crate) fn run_here(gate: &str, argv: &[String], slots: &SlotEnv) -> queue::Result<i32> {
