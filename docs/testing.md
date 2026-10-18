@@ -176,6 +176,19 @@ the tests, not the projects, so the shards together run every test once.
 with `AOE_E2E_COVERAGE` is refused. `AOE_E2E_SHARD` must be `i/n` with
 `1 <= i <= n <= 16`; it does not apply to the duel's focused specs.
 
+**Focused runs (`AOE_E2E_SPECS`).** To reproduce one spec through the
+slot-managed command, name it: `make test-e2e AOE_E2E_SPECS=tests/village/selection-density.play.spec.ts`.
+The value is a space- or comma-separated list of paths or globs under
+`browser/tests` (`*` stays in one directory, `**` crosses directories); each
+must select at least one `*.spec.ts`, or the run fails at once and names the
+pattern. The harness passes the resolved specs to Playwright on one worker and
+writes its JSON report to `reports/e2e/filtered.json` (recreated each run). A filtered run exits with Playwright's status, so a failing
+selected test fails it; it expects no release evidence (`pass.json`) and no
+renderer evidence, which only the whole suite writes. The harness creates
+`reports/e2e/` itself. `AOE_E2E_SPECS` is refused when `GITHUB_ACTIONS` or `CI`
+is set, so a filtered run can never count as the CI e2e, and it cannot be
+combined with `AOE_E2E_SHARD`.
+
 **One server per worker (#388).** `make test-e2e` starts `AOE_E2E_WORKERS`
 disposable game servers (`1..=8`, default 3), each on its own free port and
 with its own copy of the map store, and gives the browser container their URLs
