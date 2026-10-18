@@ -117,6 +117,16 @@ impl Finding {
         self.reporter == reviewer || self.members.iter().any(|m| m.reporter == reviewer)
     }
 
+    /// How many distinct reviewers reported this defect, as the finding or a member.
+    pub(crate) fn reporters(&self) -> usize {
+        let mut reporters: Vec<usize> = std::iter::once(self.reporter)
+            .chain(self.members.iter().map(|m| m.reporter))
+            .collect();
+        reporters.sort_unstable();
+        reporters.dedup();
+        reporters.len()
+    }
+
     fn categories(&self) -> impl Iterator<Item = &str> {
         std::iter::once(self.reported.category.as_str())
             .chain(self.members.iter().map(|m| m.reported.category.as_str()))
@@ -222,6 +232,11 @@ pub(crate) fn status(finding: &Finding, reviewers: usize) -> Status {
         return Status::Confirmed;
     }
     let votes = latest(finding);
+    // Every reviewer reported the defect independently, so nobody is left to vote:
+    // the blind round already agrees, and it stands.
+    if votes.is_empty() && ruling(finding).is_none() && finding.reporters() >= reviewers.min(2) {
+        return Status::Confirmed;
+    }
     let upheld = count(&votes, Vote::Upheld) + count(&votes, Vote::Partial);
     let refuted = count(&votes, Vote::Refuted);
     if upheld > refuted {

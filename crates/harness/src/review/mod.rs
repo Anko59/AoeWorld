@@ -457,6 +457,18 @@ fn blind_round(
     Ok(())
 }
 
+/// One past the highest `F<n>` in use, members included: `cluster::merge` removes
+/// merged findings from the list, so its length no longer gives a free number.
+pub(crate) fn next_number(findings: &[Finding]) -> usize {
+    findings
+        .iter()
+        .flat_map(|f| std::iter::once(&f.id).chain(f.members.iter().map(|m| &m.id)))
+        .filter_map(|id| id.strip_prefix('F')?.parse::<usize>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1
+}
+
 fn add_findings(
     findings: &mut Vec<Finding>,
     reviewer: usize,
@@ -464,7 +476,7 @@ fn add_findings(
     reported: Vec<protocol::Reported>,
 ) {
     for reported in reported {
-        let id = format!("F{}", findings.len() + 1);
+        let id = format!("F{}", next_number(findings));
         findings.push(Finding {
             id,
             reporter: reviewer,

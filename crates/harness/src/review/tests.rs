@@ -377,6 +377,7 @@ mod after_approval;
 mod arbiter;
 mod closing;
 mod cluster;
+mod cluster_fixes;
 mod cumulative;
 mod flow;
 mod limits;

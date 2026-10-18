@@ -127,7 +127,7 @@ impl Outcome {
             let hits = count(
                 standing
                     .iter()
-                    .filter(|f| f.reporter == index)
+                    .filter(|f| f.reported_by(index))
                     .map(|f| &f.reported)
                     .collect(),
             );
