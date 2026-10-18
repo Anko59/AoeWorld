@@ -220,3 +220,42 @@ fn units_attack_only_other_players_living_targets() {
     assert!(invalid(world.issue_attack(PlayerId(0), friend, villager)));
     assert!(world.issue_move(villager, at(120, 100)).is_err());
 }
+
+#[test]
+fn re_ordering_attacks_never_strikes_faster_than_one_hit_per_period() {
+    // Alternating between two adjacent enemies, every tick, for five periods.
+    let mut world = world();
+    let militia = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+    let b = world.spawn_militia(PlayerId(1), at(101, 100)).unwrap();
+    let c = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    for tick in 0..200 {
+        let target = if tick % 2 == 0 { b } else { c };
+        world.issue_attack(PlayerId(0), militia, target).unwrap();
+        world.advance();
+    }
+    let lost = |id| 40 - world.unit(id).unwrap().hp;
+    assert_eq!(lost(b) + lost(c), 5 * 4);
+
+    // A move to the spot it stands on, then an attack, every tick.
+    let (mut world, militia, villager) = duel();
+    for _ in 0..200 {
+        world.issue_move(militia, at(100, 100)).unwrap();
+        world.issue_attack(PlayerId(0), militia, villager).unwrap();
+        world.advance();
+    }
+    assert_eq!(world.unit(villager).unwrap().hp, 25 - 5 * 4);
+}
+
+#[test]
+fn a_stale_movement_error_does_not_make_the_attacker_give_up_the_chase() {
+    let (mut world, militia, villager) = duel();
+    let index = world.lookup[&militia];
+    world.units[index].last_movement_error = Some(GameWorldError::Unreachable);
+    world.issue_attack(PlayerId(0), militia, villager).unwrap();
+    world.issue_move(villager, at(108, 100)).unwrap();
+    advance(&mut world, 1);
+    let first = world.unit(villager).unwrap().hp;
+    assert_eq!(first, 21);
+    ticks_until(&mut world, 1_200, |w| w.unit(villager).unwrap().hp < first);
+    assert_eq!(world.unit(militia).unwrap().attack_target, Some(villager));
+}
