@@ -11,7 +11,6 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 mod combat;
 mod economy;
-#[path = "game_world/hash.rs"]
 mod hash;
 mod resources;
 mod spawning;
@@ -94,6 +93,7 @@ pub(crate) struct StoredUnit {
     pub(crate) route: VecDeque<TileCoord>,
     pub(crate) planner: Option<RoutePlanner>,
     pub(crate) last_movement_error: Option<GameWorldError>,
+    pub(crate) next_hit_tick: u64, // no hit before this tick
 }
 #[derive(Debug)]
 pub struct GameWorld {

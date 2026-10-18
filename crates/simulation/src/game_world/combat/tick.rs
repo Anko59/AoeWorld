@@ -124,13 +124,9 @@ impl GameWorld {
             state.facing,
         );
         state.task = UnitTask::Attacking;
-        let mut cooldown = attacker.cooldown.saturating_sub(1);
-        if cooldown == 0 {
+        if now >= self.units[index].next_hit_tick {
+            self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
             self.strike(id, attacker.target, changed);
-            cooldown = self.attack_period_ticks(&before);
-        }
-        if let Some(entry) = self.combat.attackers.get_mut(&id) {
-            entry.cooldown = cooldown;
         }
         if let Some(&index) = self.lookup.get(&id)
             && self.units[index].state != before
@@ -154,32 +150,47 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
-        let destination = self.attack_destination(before.position, &goal);
-        let stale = match (order, destination) {
-            (None, _) => true,
-            (Some(order), Some(at)) => order.target_tile != at.tile_floor(),
-            (Some(_), None) => false,
-        };
-        if now >= attacker.repath_tick && stale {
-            let Some(at) = destination else {
-                self.end_attack(id, changed);
-                return;
+        // The perimeter search runs only when the repath timer has expired.
+        if now >= attacker.repath_tick {
+            let destination = self.attack_destination(before.position, &goal);
+            let stale = match (order, destination) {
+                (None, _) => true,
+                (Some(order), Some(at)) => order.target_tile != at.tile_floor(),
+                (Some(_), None) => false,
             };
-            let repath = now.saturating_add(self.repath_ticks());
-            if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                entry.repath_tick = repath;
-            }
-            if matches!(
-                self.issue_task_move(id, at),
-                Err(crate::GameWorldError::Unreachable | crate::GameWorldError::InvalidPosition)
-            ) {
-                self.end_attack(id, changed);
-                return;
+            if stale {
+                self.repath_attacker(id, destination, now, changed);
+                if !self.combat.attackers.contains_key(&id) {
+                    return;
+                }
             }
         }
         self.units[index].state.task = UnitTask::Attacking;
         if self.units[index].state != before {
             changed.push(self.units[index].state);
+        }
+    }
+
+    fn repath_attacker(
+        &mut self,
+        id: EntityId,
+        destination: Option<WorldPosition>,
+        now: u64,
+        changed: &mut Vec<GameUnit>,
+    ) {
+        let Some(at) = destination else {
+            self.end_attack(id, changed);
+            return;
+        };
+        let repath = now.saturating_add(self.repath_ticks());
+        if let Some(entry) = self.combat.attackers.get_mut(&id) {
+            entry.repath_tick = repath;
+        }
+        if matches!(
+            self.issue_task_move(id, at),
+            Err(crate::GameWorldError::Unreachable | crate::GameWorldError::InvalidPosition)
+        ) {
+            self.end_attack(id, changed);
         }
     }
 

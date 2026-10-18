@@ -45,8 +45,6 @@ pub struct CombatStats {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Attacker {
     pub(crate) target: EntityId,
-    /// Ticks until the next hit; 0 hits on the next in-range tick.
-    pub(crate) cooldown: u32,
     pub(crate) repath_tick: u64,
 }
 
@@ -104,23 +102,17 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Sets the attack target and the visible state; keeps a running cooldown
-    /// when the same target is ordered again, so re-ordering cannot hit faster.
+    /// Sets the attack target and the visible state. The hit rate belongs to
+    /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
-        let cooldown = self
-            .combat
-            .attackers
-            .get(&id)
-            .filter(|attacker| attacker.target == target)
-            .map_or(0, |attacker| attacker.cooldown);
+        self.units[index].last_movement_error = None;
         self.combat.attackers.insert(
             id,
             Attacker {
                 target,
-                cooldown,
                 repath_tick: self.tick.0.saturating_add(self.repath_ticks()),
             },
         );

@@ -19,7 +19,6 @@ impl Combat {
         for (id, attacker) in &self.attackers {
             hash.update(&id.0.to_le_bytes());
             hash.update(&attacker.target.0.to_le_bytes());
-            hash.update(&attacker.cooldown.to_le_bytes());
             hash.update(&attacker.repath_tick.to_le_bytes());
         }
         hash.update(&(self.dying.len() as u64).to_le_bytes());

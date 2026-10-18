@@ -83,6 +83,7 @@ impl GameWorld {
             route: VecDeque::new(),
             planner: None,
             last_movement_error: None,
+            next_hit_tick: 0,
         });
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);

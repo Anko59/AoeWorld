@@ -252,10 +252,10 @@ fn a_stale_movement_error_does_not_make_the_attacker_give_up_the_chase() {
     let index = world.lookup[&militia];
     world.units[index].last_movement_error = Some(GameWorldError::Unreachable);
     world.issue_attack(PlayerId(0), militia, villager).unwrap();
-    world.issue_move(villager, at(108, 100)).unwrap();
     advance(&mut world, 1);
     let first = world.unit(villager).unwrap().hp;
     assert_eq!(first, 21);
+    world.issue_move(villager, at(108, 100)).unwrap();
     ticks_until(&mut world, 1_200, |w| w.unit(villager).unwrap().hp < first);
     assert_eq!(world.unit(militia).unwrap().attack_target, Some(villager));
 }
