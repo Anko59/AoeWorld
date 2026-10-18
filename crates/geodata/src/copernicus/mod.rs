@@ -50,11 +50,12 @@ impl DemResolution {
     }
 }
 
-struct Tile {
-    latitude: i32,
-    longitude: i32,
-    path: PathBuf,
-    lock: SourceLock,
+#[derive(Clone)]
+pub(crate) struct Tile {
+    pub(crate) latitude: i32,
+    pub(crate) longitude: i32,
+    pub(crate) path: PathBuf,
+    pub(crate) lock: SourceLock,
 }
 
 struct TileCoverage {
@@ -148,8 +149,8 @@ pub(crate) fn prepare_with_staging_and_corrections(
     )
 }
 
-#[derive(Clone, Copy)]
-struct Bounds {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Bounds {
     min_latitude: i32,
     max_latitude: i32,
     min_longitude: i32,
@@ -157,6 +158,18 @@ struct Bounds {
 }
 
 fn geographic_bounds(request: MapRequest, side: u64) -> Result<Bounds, GeodataError> {
+    let extent = geographic_extent(request, side, 0)?;
+    Ok(Bounds {
+        min_latitude: extent.min_latitude.saturating_sub(1).max(-90),
+        max_latitude: extent.max_latitude.saturating_add(1).min(89),
+        min_longitude: extent.min_longitude.saturating_sub(1).max(-180),
+        max_longitude: extent.max_longitude.saturating_add(1).min(179),
+    })
+}
+
+/// The whole-degree tiles that the projected footprint, widened by
+/// `pad_e7` on every side, intersects.
+fn geographic_extent(request: MapRequest, side: u64, pad_e7: i32) -> Result<Bounds, GeodataError> {
     let center_latitude = f64::from(request.center_latitude_e7) / 10_000_000.0;
     let conservative_radius = side as f64 / 2.0 * 2.0_f64.sqrt();
     let pole_distance = (90.0 - center_latitude.abs()) * 110_000.0;
@@ -199,15 +212,19 @@ fn geographic_bounds(request: MapRequest, side: u64) -> Result<Bounds, GeodataEr
             "detailed footprint crosses an unsupported geographic boundary",
         ));
     }
-    let min_latitude = min_latitude_e7.div_euclid(10_000_000);
-    let max_latitude = max_latitude_e7.div_euclid(10_000_000);
-    let min_longitude = min_longitude_e7.div_euclid(10_000_000);
-    let max_longitude = max_longitude_e7.div_euclid(10_000_000);
     Ok(Bounds {
-        min_latitude: min_latitude.saturating_sub(1).max(-90),
-        max_latitude: max_latitude.saturating_add(1).min(89),
-        min_longitude: min_longitude.saturating_sub(1).max(-180),
-        max_longitude: max_longitude.saturating_add(1).min(179),
+        min_latitude: min_latitude_e7
+            .saturating_sub(pad_e7)
+            .div_euclid(10_000_000),
+        max_latitude: max_latitude_e7
+            .saturating_add(pad_e7)
+            .div_euclid(10_000_000),
+        min_longitude: min_longitude_e7
+            .saturating_sub(pad_e7)
+            .div_euclid(10_000_000),
+        max_longitude: max_longitude_e7
+            .saturating_add(pad_e7)
+            .div_euclid(10_000_000),
     })
 }
 
@@ -383,7 +400,7 @@ fn public_tile_source(
         })?;
     }
     Ok(Some(KnownSource {
-        id: format!("copernicus-dem-{}-{prefix}", resolution.native_resolution()),
+        id: tile_source_id(&prefix, resolution),
         provider: Provider::Copernicus,
         release: "Copernicus DEM 2021 public COG".to_owned(),
         url,
@@ -394,6 +411,10 @@ fn public_tile_source(
         vertical_datum: "EGM2008 orthometric".to_owned(),
         license_reference: "Copernicus DEM public COG licence".to_owned(),
     }))
+}
+
+fn tile_source_id(prefix: &str, resolution: DemResolution) -> String {
+    format!("copernicus-dem-{}-{prefix}", resolution.native_resolution())
 }
 
 fn tile_prefix(latitude: i32, longitude: i32, suffix: &str) -> String {
@@ -418,6 +439,15 @@ mod sampler;
 use sampler::Sampler;
 
 mod pyramid;
+
+mod overview_dem;
+pub(crate) use overview_dem::{
+    OVERVIEW_DEM_IDENTITY, OVERVIEW_ETOPO_FILL_IDENTITY, acquire_overview_tiles,
+    plan_overview_tiles, prepare_area_averaged_elevation,
+};
+#[cfg(test)]
+#[path = "tests/overview_dem.rs"]
+mod overview_dem_tests;
 
 #[cfg(test)]
 #[path = "tests/offline_detailed_pipeline.rs"]

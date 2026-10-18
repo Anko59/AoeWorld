@@ -77,6 +77,7 @@ pub(super) fn overview_fixture() -> PreparedOverview {
         hyde_baseline_source_lock: fixture_source_lock("baseline"),
         hyde_supplementary_source_lock: fixture_source_lock("supplementary"),
         hyde_readme_source_lock: fixture_source_lock("readme"),
+        elevation_tile_source_locks: Vec::new(),
         projection: ProjectionMetadata::default(),
         provenance: EnvironmentalProvenance::default(),
         environment: PreparedEnvironment {

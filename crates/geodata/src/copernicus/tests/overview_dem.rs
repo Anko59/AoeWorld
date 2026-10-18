@@ -1,0 +1,247 @@
+//! Landscape overview elevation averages Copernicus GLO-90 into each sample.
+use super::*;
+use crate::{Provider, SourceLock, elevation::PreparedElevation};
+use aoe_map::Ratio;
+use gdal::{DriverManager, raster::Buffer, spatial_ref::SpatialRef};
+use sha2::{Digest, Sha256};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+const AXIS: usize = 1_200;
+
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "aoe-overview-dem-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("scratch directory");
+        Self(root)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A 1 degree GLO-90 stand-in whose pixel (x, y) holds `height(x, y)` meters.
+fn write_tile(
+    root: &Path,
+    latitude: i32,
+    longitude: i32,
+    height: impl Fn(usize, usize) -> f32,
+) -> Tile {
+    let path = root.join(format!("tile-{latitude}-{longitude}.tif"));
+    let driver = DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
+    let mut dataset = driver
+        .create_with_band_type::<f32, _>(&path, AXIS, AXIS, 1)
+        .expect("tile raster");
+    let step = 1.0 / AXIS as f64;
+    dataset
+        .set_geo_transform(&[
+            f64::from(longitude),
+            step,
+            0.0,
+            f64::from(latitude + 1),
+            0.0,
+            -step,
+        ])
+        .expect("tile geotransform");
+    dataset
+        .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+        .expect("tile spatial reference");
+    let values = (0..AXIS * AXIS)
+        .map(|index| height(index % AXIS, index / AXIS))
+        .collect();
+    dataset
+        .rasterband(1)
+        .expect("tile band")
+        .write((0, 0), (AXIS, AXIS), &mut Buffer::new((AXIS, AXIS), values))
+        .expect("tile values");
+    dataset.flush_cache().expect("flush tile");
+    let bytes = fs::read(&path).expect("tile bytes");
+    Tile {
+        latitude,
+        longitude,
+        path,
+        lock: SourceLock {
+            id: format!("fixture-glo90-{latitude}-{longitude}"),
+            provider: Provider::Copernicus,
+            release: "synthetic GLO-90 tile".to_owned(),
+            url: "https://copernicus-dem-90m.s3.amazonaws.com/fixture/fixture.tif".to_owned(),
+            sha256: crate::source_cache::digest_hex(&Sha256::digest(&bytes)),
+            bytes: bytes.len() as u64,
+            native_resolution: "3 arc-seconds".to_owned(),
+            crs: "EPSG:4326".to_owned(),
+            vertical_datum: "EGM2008 orthometric".to_owned(),
+            license_reference: "test fixture".to_owned(),
+        },
+    }
+}
+
+/// A 1.85 km ETOPO stand-in holding one value over longitudes -2..3.
+fn write_coarse(root: &Path, meters: f64) -> PathBuf {
+    let path = root.join("etopo.tif");
+    let driver = DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
+    let mut dataset = driver
+        .create_with_band_type::<f64, _>(&path, 300, 300, 1)
+        .expect("coarse raster");
+    dataset
+        .set_geo_transform(&[-2.0, 5.0 / 300.0, 0.0, 3.0, 0.0, -5.0 / 300.0])
+        .expect("coarse geotransform");
+    dataset
+        .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+        .expect("coarse spatial reference");
+    dataset
+        .rasterband(1)
+        .expect("coarse band")
+        .write(
+            (0, 0),
+            (300, 300),
+            &mut Buffer::new((300, 300), vec![meters; 300 * 300]),
+        )
+        .expect("coarse values");
+    dataset.flush_cache().expect("flush coarse");
+    path
+}
+
+fn request(latitude_e7: i32, longitude_e7: i32, side_meters: u64) -> MapRequest {
+    MapRequest {
+        center_latitude_e7: latitude_e7,
+        center_longitude_e7: longitude_e7,
+        requested_side_meters: side_meters,
+        compression: Ratio::new(1, 1).expect("ratio"),
+        ..MapRequest::default()
+    }
+}
+
+fn level_zero(elevation: &PreparedElevation) -> Vec<i32> {
+    let axis = usize::from(elevation.environment.samples_per_axis);
+    let mut grid = vec![0; axis * axis];
+    for page in elevation.pages.iter().filter(|page| page.level == 0) {
+        for row in 0..usize::from(page.height) {
+            for column in 0..usize::from(page.width) {
+                let y = usize::from(page.y) * 64 + row;
+                let x = usize::from(page.x) * 64 + column;
+                grid[y * axis + x] =
+                    page.geographic_height_centimeters[row * usize::from(page.width) + column];
+            }
+        }
+    }
+    grid
+}
+
+fn tile_count(bounds: Bounds) -> usize {
+    ((bounds.max_latitude - bounds.min_latitude + 1)
+        * (bounds.max_longitude - bounds.min_longitude + 1)) as usize
+}
+
+fn paris(side_meters: u64, compression: u32) -> MapRequest {
+    MapRequest {
+        requested_side_meters: side_meters,
+        compression: Ratio::new(compression, 1).expect("ratio"),
+        ..MapRequest::default()
+    }
+}
+
+#[test]
+fn overview_dem_plan_covers_large_but_not_giant_footprints() {
+    let large = plan_overview_tiles(paris(480_000, 30))
+        .expect("large plan")
+        .expect("a Large map fits the tile budget");
+    assert!(
+        (30..=64).contains(&tile_count(large)),
+        "Large Paris needs {} tiles",
+        tile_count(large)
+    );
+    let tiny = plan_overview_tiles(paris(30_000, 30))
+        .expect("tiny plan")
+        .expect("a Tiny map fits the tile budget");
+    assert!(tile_count(tiny) <= 4);
+    assert!(
+        plan_overview_tiles(paris(1_920_000, 30))
+            .expect("giant plan")
+            .is_none(),
+        "Giant keeps the ETOPO overview"
+    );
+    assert!(
+        plan_overview_tiles(request(899_000_000, 0, 120_000))
+            .expect("polar plan")
+            .is_none(),
+        "a footprint at the pole keeps the ETOPO overview"
+    );
+}
+
+#[test]
+fn overview_elevation_averages_subsample_relief_instead_of_point_sampling() {
+    let scratch = Scratch::new();
+    // Alternating 0 m and 100 m pixels: a point sample reads one of the two,
+    // the area mean of each 2.5 km cell is 50 m.
+    let tile = write_tile(
+        &scratch.0,
+        0,
+        0,
+        |x, y| {
+            if (x + y) % 2 == 0 { 0.0 } else { 100.0 }
+        },
+    );
+    let coarse = write_coarse(&scratch.0, 700.0);
+    let elevation =
+        prepare_area_averaged_elevation(&coarse, request(5_000_000, 5_000_000, 20_000), 8, &[tile])
+            .expect("area-averaged elevation");
+    let grid = level_zero(&elevation);
+    assert_eq!(grid.len(), 64);
+    for (index, height) in grid.iter().enumerate() {
+        assert!(
+            (4_900..=5_100).contains(height),
+            "sample {index} is {height} cm, not the 5000 cm cell mean"
+        );
+    }
+}
+
+#[test]
+fn overview_elevation_tracks_a_gradient_at_sample_scale() {
+    let scratch = Scratch::new();
+    // Height equals the pixel column in meters (one pixel is 92.8 m wide).
+    let tile = write_tile(&scratch.0, 0, 0, |x, _| x as f32);
+    let coarse = write_coarse(&scratch.0, 700.0);
+    let elevation =
+        prepare_area_averaged_elevation(&coarse, request(5_000_000, 5_000_000, 20_000), 8, &[tile])
+            .expect("gradient elevation");
+    let grid = level_zero(&elevation);
+    let first_row = &grid[..8];
+    assert!(first_row.windows(2).all(|pair| pair[1] > pair[0]));
+    // Seven cell widths of 2.5 km span 17.5 km, or 188.6 pixels.
+    let rise = f64::from(first_row[7] - first_row[0]) / 100.0;
+    assert!((rise - 188.6).abs() < 2.0, "the gradient rises {rise} m");
+    // The centre of the grid sits at pixel column 600, mean height 599.5 m.
+    let middle = f64::from(first_row[3] + first_row[4]) / 200.0;
+    assert!((middle - 599.5).abs() < 2.0, "the middle reads {middle} m");
+}
+
+#[test]
+fn overview_elevation_takes_uncovered_area_from_the_coarse_source() {
+    let scratch = Scratch::new();
+    let coarse = write_coarse(&scratch.0, 700.0);
+    let side = request(5_000_000, 10_000_000, 20_000);
+    // No tile at all: the coarse source supplies every sample.
+    let none = prepare_area_averaged_elevation(&coarse, side, 8, &[]).expect("coarse only");
+    assert!(level_zero(&none).iter().all(|height| *height == 70_000));
+    // A tile west of longitude 1 degree: the east half is uncovered.
+    let tile = write_tile(&scratch.0, 0, 0, |_, _| 300.0);
+    let mixed = prepare_area_averaged_elevation(&coarse, side, 8, &[tile]).expect("mixed");
+    let grid = level_zero(&mixed);
+    for row in grid.chunks(8) {
+        assert!(row[..3].iter().all(|height| *height == 30_000), "{row:?}");
+        assert!(row[5..].iter().all(|height| *height == 70_000), "{row:?}");
+    }
+}

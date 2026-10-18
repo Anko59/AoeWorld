@@ -113,6 +113,9 @@ pub struct PreparedOverview {
     pub hyde_baseline_source_lock: aoe_map::SourceLock,
     pub hyde_supplementary_source_lock: aoe_map::SourceLock,
     pub hyde_readme_source_lock: aoe_map::SourceLock,
+    /// Copernicus GLO-90 tiles averaged into the elevation field; empty when
+    /// the coarse ETOPO source alone supplies it.
+    pub elevation_tile_source_locks: Vec<aoe_map::SourceLock>,
     pub projection: ProjectionMetadata,
     pub provenance: EnvironmentalProvenance,
     pub environment: PreparedEnvironment,
@@ -140,18 +143,20 @@ impl GeneratedMap {
         request: MapRequest,
         prepared: PreparedOverview,
     ) -> Result<Self, GeodataError> {
+        let mut source_locks = vec![
+            prepared.source_lock,
+            prepared.water_source_lock,
+            prepared.vegetation_source_lock,
+            prepared.vegetation_classes_source_lock,
+            prepared.hyde_baseline_source_lock,
+            prepared.hyde_supplementary_source_lock,
+            prepared.hyde_readme_source_lock,
+        ];
+        source_locks.extend(prepared.elevation_tile_source_locks);
         let package = MapPackage::with_prepared_environment(
             MAP_SCHEMA_VERSION,
             request,
-            vec![
-                prepared.source_lock,
-                prepared.water_source_lock,
-                prepared.vegetation_source_lock,
-                prepared.vegetation_classes_source_lock,
-                prepared.hyde_baseline_source_lock,
-                prepared.hyde_supplementary_source_lock,
-                prepared.hyde_readme_source_lock,
-            ],
+            source_locks,
             prepared.projection,
             prepared.provenance,
             prepared.environment,

@@ -184,6 +184,15 @@ fn prepare_overview_axes(
         acquire_or_cached(&cache, hyde_sources.as_deref(), HYDE_README_ID, &cancelled)?;
     let hyde_baseline_path = cache.object_path(&hyde_baseline_lock)?;
     let hyde_supplementary_path = cache.object_path(&hyde_supplementary_lock)?;
+    // Field-local landscape maps average Copernicus GLO-90 into each sample
+    // when the footprint fits the tile budget; ETOPO alone covers the rest.
+    let elevation_tiles = if explicit {
+        crate::copernicus::plan_overview_tiles(request)?
+            .map(|bounds| crate::copernicus::acquire_overview_tiles(&cache, bounds, &cancelled))
+            .transpose()?
+    } else {
+        None
+    };
     prepare_overview_fields_from_verified_sources(
         request,
         axes,
@@ -213,6 +222,7 @@ fn prepare_overview_axes(
                 path: hyde_supplementary_path,
             },
             hyde_readme: hyde_readme_lock,
+            elevation_tiles,
         },
     )
 }
@@ -232,6 +242,9 @@ struct VerifiedOverviewSources {
     hyde_baseline: VerifiedOverviewSource,
     hyde_supplementary: VerifiedOverviewSource,
     hyde_readme: SourceLock,
+    /// Present when the area-averaged GLO-90 elevation is selected; the tiles
+    /// that exist for the footprint (possibly none over open ocean).
+    elevation_tiles: Option<Vec<crate::copernicus::Tile>>,
 }
 
 /// Samples cache-verified overview inputs without performing source discovery
@@ -276,7 +289,14 @@ fn prepare_overview_fields_from_verified_sources(
         .sum();
     let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = if explicit {
+    let mut prepared = if let Some(tiles) = &sources.elevation_tiles {
+        crate::copernicus::prepare_area_averaged_elevation(
+            &sources.elevation.path,
+            request,
+            axes.elevation,
+            tiles,
+        )?
+    } else if explicit {
         elevation::prepare_landscape_elevation(&sources.elevation.path, request, axes.elevation)?
     } else {
         prepare_elevation(&sources.elevation.path, request, axes.elevation)?
@@ -346,8 +366,32 @@ fn prepare_overview_fields_from_verified_sources(
     Ok(PreparedOverview {
         source_lock: sources.elevation.lock.to_map_source_lock(
             acquisition_marker(),
-            preprocessing_identity("etopo-overview-gdal-0.19".to_owned(), axes, explicit),
+            preprocessing_identity(
+                if sources.elevation_tiles.is_some() {
+                    crate::copernicus::OVERVIEW_ETOPO_FILL_IDENTITY
+                } else {
+                    "etopo-overview-gdal-0.19"
+                }
+                .to_owned(),
+                axes,
+                explicit,
+            ),
         )?,
+        elevation_tile_source_locks: sources
+            .elevation_tiles
+            .iter()
+            .flatten()
+            .map(|tile| {
+                tile.lock.to_map_source_lock(
+                    acquisition_marker(),
+                    preprocessing_identity(
+                        crate::copernicus::OVERVIEW_DEM_IDENTITY.to_owned(),
+                        axes,
+                        explicit,
+                    ),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         water_source_lock: sources.water.lock.to_map_source_lock(
             acquisition_marker(),
             preprocessing_identity(

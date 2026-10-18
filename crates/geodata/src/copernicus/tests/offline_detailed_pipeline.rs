@@ -137,6 +137,7 @@ fn overview_fixture() -> crate::PreparedOverview {
         hyde_baseline_source_lock: map_source_lock("hyde-baseline"),
         hyde_supplementary_source_lock: map_source_lock("hyde-supplementary"),
         hyde_readme_source_lock: map_source_lock("hyde-readme"),
+        elevation_tile_source_locks: Vec::new(),
         projection: ProjectionMetadata::default(),
         provenance: EnvironmentalProvenance {
             elevation: LayerProvenance::SourceDerived,

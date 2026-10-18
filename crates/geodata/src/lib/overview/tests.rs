@@ -202,6 +202,7 @@ impl OverviewFixture {
                 Provider::Dans,
                 "archaeology.datastations.nl",
             ),
+            elevation_tiles: None,
         };
         Self { root, sources }
     }
@@ -324,6 +325,8 @@ fn compatible_legend() -> &'static str {
      tropical savanna\nsteppe\ndesert\ngraminoid and forb tundra\n"
 }
 
+#[path = "tests/dem_elevation.rs"]
+mod dem_elevation_tests;
 #[path = "tests/field_axes.rs"]
 mod field_axes_tests;
 #[path = "tests/vector_compose.rs"]
