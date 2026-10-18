@@ -328,6 +328,23 @@ fn static_gates_never_queue_and_a_nested_heavy_gate_takes_no_second_slot() {
     );
     assert!(verify(&slots, &env[0].1), "children inherit a live slot");
     assert_eq!(env[0].0, TOKEN_VAR);
+    drop(outer);
+    let ci = SlotEnv {
+        ci: true,
+        ..SlotEnv::default()
+    };
+    let in_ci = hold(&root, "slow", &ci).expect("the slot is free again");
+    assert!(
+        in_ci
+            .env()
+            .iter()
+            .all(|(name, _)| *name != crate::slots::CPUS_VAR),
+        "a CI slot exports no CPU cap: {:?}",
+        in_ci.env()
+    );
+    drop(in_ci);
+    let outer = hold(&root, "slow", &SlotEnv::default()).expect("the slot is free again");
+    let env = outer.env();
     assert_eq!(env[1].0, DIR_VAR, "children find the same queue");
     assert_eq!(tickets(&slots), 1);
     let begun = Instant::now();

@@ -252,10 +252,7 @@ pub(super) fn acquire_in(
     )?;
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
-    let cap = cap_for(
-        &config,
-        crate::ship::run::in_ci(|name| std::env::var(name).ok()),
-    );
+    let cap = cap_for(&config, env.ci);
     if matches!(slot, Slot::Owned { .. }) {
         match &cap {
             Some(cpus) => {

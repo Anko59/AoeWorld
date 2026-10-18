@@ -66,6 +66,8 @@ pub(crate) struct SlotEnv {
     pub(crate) slots: Option<String>,
     /// `AOE_HEAVY_WAIT_MINUTES`: the wait override.
     pub(crate) wait: Option<String>,
+    /// `GITHUB_ACTIONS` or `CI` is set: each job has its runner, so slots export no CPU cap.
+    pub(crate) ci: bool,
 }
 
 impl SlotEnv {
@@ -75,6 +77,7 @@ impl SlotEnv {
             dir: std::env::var_os(DIR_VAR),
             slots: std::env::var(SLOTS_VAR).ok(),
             wait: std::env::var(WAIT_VAR).ok(),
+            ci: crate::ship::run::in_ci(|name| std::env::var(name).ok()),
         }
     }
 }
