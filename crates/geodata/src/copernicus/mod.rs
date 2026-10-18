@@ -447,6 +447,8 @@ use sampler::Sampler;
 mod pyramid;
 
 mod overview_dem;
+#[cfg(test)]
+use overview_dem::AreaSampler;
 pub(crate) use overview_dem::{
     OVERVIEW_DEM_IDENTITY, OVERVIEW_ETOPO_FILL_IDENTITY, acquire_overview_tiles,
     plan_overview_tiles, prepare_area_averaged_elevation,

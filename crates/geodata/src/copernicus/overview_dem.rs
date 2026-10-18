@@ -140,7 +140,7 @@ pub(crate) fn prepare_area_averaged_elevation(
     crate::elevation::pyramid_from_heights(side, samples_per_axis, heights)
 }
 
-struct AreaSampler<'a> {
+pub(super) struct AreaSampler<'a> {
     to_wgs84: CoordTransform,
     side: f64,
     tiles: &'a [Tile],
@@ -150,7 +150,7 @@ struct AreaSampler<'a> {
 }
 
 impl<'a> AreaSampler<'a> {
-    fn new(
+    pub(super) fn new(
         coarse: &Path,
         request: MapRequest,
         side: f64,
@@ -232,7 +232,7 @@ impl<'a> AreaSampler<'a> {
     }
 
     /// Area mean, in meters, of the cell centered on `(longitude, latitude)`.
-    fn mean(
+    pub(super) fn mean(
         &mut self,
         longitude: f64,
         latitude: f64,

@@ -40,15 +40,17 @@ fn write_tile(
     longitude: i32,
     height: impl Fn(usize, usize) -> f32,
 ) -> Tile {
-    write_shifted_tile(root, latitude, longitude, 0.0, height)
+    write_shifted_tile(root, latitude, longitude, (0.0, 0.0), height)
 }
 
-/// As [`write_tile`], with the grid moved by `shift` pixels east.
+/// As [`write_tile`], with the grid moved by `(east, north)` pixels. Real
+/// GLO-90 tiles are point-registered: GDAL reports them half a pixel west and
+/// north of their named degree, i.e. `(-0.5, 0.5)`.
 fn write_shifted_tile(
     root: &Path,
     latitude: i32,
     longitude: i32,
-    shift: f64,
+    shift: (f64, f64),
     height: impl Fn(usize, usize) -> f32,
 ) -> Tile {
     let path = root.join(format!("tile-{latitude}-{longitude}.tif"));
@@ -59,10 +61,10 @@ fn write_shifted_tile(
     let step = 1.0 / AXIS as f64;
     dataset
         .set_geo_transform(&[
-            f64::from(longitude) + shift * step,
+            f64::from(longitude) + shift.0 * step,
             step,
             0.0,
-            f64::from(latitude + 1),
+            f64::from(latitude + 1) + shift.1 * step,
             0.0,
             -step,
         ])
@@ -119,6 +121,32 @@ fn write_coarse(root: &Path, meters: f64) -> PathBuf {
             (0, 0),
             (300, 300),
             &mut Buffer::new((300, 300), vec![meters; 300 * 300]),
+        )
+        .expect("coarse values");
+    dataset.flush_cache().expect("flush coarse");
+    path
+}
+
+/// An ETOPO stand-in over longitudes 0..6 and latitudes 47..53.
+fn write_coarse_north(root: &Path, meters: f64) -> PathBuf {
+    let path = root.join("etopo-north.tif");
+    let driver = DriverManager::get_driver_by_name("GTiff").expect("GTiff driver");
+    let mut dataset = driver
+        .create_with_band_type::<f64, _>(&path, 360, 360, 1)
+        .expect("coarse raster");
+    dataset
+        .set_geo_transform(&[0.0, 6.0 / 360.0, 0.0, 53.0, 0.0, -6.0 / 360.0])
+        .expect("coarse geotransform");
+    dataset
+        .set_spatial_ref(&SpatialRef::from_epsg(4326).expect("WGS84"))
+        .expect("coarse spatial reference");
+    dataset
+        .rasterband(1)
+        .expect("coarse band")
+        .write(
+            (0, 0),
+            (360, 360),
+            &mut Buffer::new((360, 360), vec![meters; 360 * 360]),
         )
         .expect("coarse values");
     dataset.flush_cache().expect("flush coarse");
@@ -272,7 +300,7 @@ fn overview_elevation_accepts_a_half_pixel_registration_and_rejects_a_misnamed_t
     let scratch = Scratch::new();
     let coarse = write_coarse(&scratch.0, 700.0);
     let side = request(5_000_000, 5_000_000, 20_000);
-    let point = write_shifted_tile(&scratch.0, 0, 0, -0.5, |_, _| 300.0);
+    let point = write_shifted_tile(&scratch.0, 0, 0, (-0.5, 0.0), |_, _| 300.0);
     let elevation =
         prepare_area_averaged_elevation(&coarse, side, 8, &[point]).expect("point registration");
     assert!(
@@ -291,5 +319,83 @@ fn overview_elevation_accepts_a_half_pixel_registration_and_rejects_a_misnamed_t
             &[misnamed]
         )
         .is_err()
+    );
+}
+
+fn seam_sampler<'a>(coarse: &Path, tiles: &'a [Tile]) -> AreaSampler<'a> {
+    AreaSampler::new(
+        coarse,
+        request(500_000_000, 25_000_000, 20_000),
+        20_000.0,
+        tiles,
+    )
+    .expect("sampler")
+}
+
+#[test]
+fn overview_cell_across_a_degree_line_takes_both_point_registered_tiles() {
+    let scratch = Scratch::new();
+    let coarse = write_coarse_north(&scratch.0, 700.0);
+    let shift = (-0.5, 0.5);
+    let tiles = [
+        write_shifted_tile(&scratch.0, 50, 2, shift, |_, _| 300.0),
+        write_shifted_tile(&scratch.0, 50, 3, shift, |_, _| 300.0),
+    ];
+    let mut sampler = seam_sampler(&coarse, &tiles);
+    // E003 starts half a pixel west of longitude 3: this cell lies across
+    // that seam while its box still ends before the whole degree.
+    let mean = sampler
+        .mean(2.9995, 50.5, 0.0001, 0.0001)
+        .expect("seam mean");
+    assert!((mean - 300.0).abs() < 1e-6, "longitude seam reads {mean} m");
+}
+
+#[test]
+fn overview_cell_across_a_latitude_degree_takes_both_point_registered_tiles() {
+    let scratch = Scratch::new();
+    let coarse = write_coarse_north(&scratch.0, 700.0);
+    let shift = (-0.5, 0.5);
+    let tiles = [
+        write_shifted_tile(&scratch.0, 49, 2, shift, |_, _| 300.0),
+        write_shifted_tile(&scratch.0, 50, 2, shift, |_, _| 300.0),
+    ];
+    let mut sampler = seam_sampler(&coarse, &tiles);
+    // N49 ends half a pixel north of latitude 50.
+    let mean = sampler
+        .mean(2.5, 50.0004, 0.0001, 0.0001)
+        .expect("seam mean");
+    assert!((mean - 300.0).abs() < 1e-6, "latitude seam reads {mean} m");
+    let inside = sampler
+        .mean(2.5, 50.0002, 0.00005, 0.00005)
+        .expect("inside N49");
+    assert!(
+        (inside - 300.0).abs() < 1e-6,
+        "N49 interior reads {inside} m"
+    );
+}
+
+#[test]
+fn overview_sea_surface_zeros_keep_the_coarse_bathymetry_and_low_land_stays() {
+    let side = request(5_000_000, 5_000_000, 20_000);
+    let read = |coarse_meters: f64, height: &dyn Fn(usize, usize) -> f32| {
+        let scratch = Scratch::new();
+        let tile = write_tile(&scratch.0, 0, 0, height);
+        let coarse = write_coarse(&scratch.0, coarse_meters);
+        level_zero(&prepare_area_averaged_elevation(&coarse, side, 8, &[tile]).expect("coastal"))
+    };
+    // GLO-90 writes the sea as 0 m where ETOPO knows the depth.
+    let sea = read(-50.0, &|_, _| 0.0);
+    assert!(sea.iter().all(|height| *height == -5_000), "{sea:?}");
+    // Low-lying land that really is 0 m, with ETOPO above the sea.
+    let marsh = read(2.0, &|_, _| 0.0);
+    assert!(marsh.iter().all(|height| *height == 0), "{marsh:?}");
+    // Land at 1.5 m beside sea zeros under a negative ETOPO cell: the land
+    // pixels stay, the zeros take the depth, so the cell mean is between.
+    let shore = read(-40.0, &|x, y| if (x + y) % 2 == 0 { 0.0 } else { 1.5 });
+    assert!(
+        shore
+            .iter()
+            .all(|height| (-1_990..=-1_860).contains(height)),
+        "{shore:?}"
     );
 }
