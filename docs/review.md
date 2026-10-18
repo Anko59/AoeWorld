@@ -120,6 +120,18 @@ and effort (`crates/harness/src/review/`).
    one severity lower, so a single dissenting reviewer cannot erase a critical
    one.
 
+**One finding per defect.** After the blind round and after every later round,
+findings that describe the same defect are folded into the earliest of them
+(`review/cluster`): same file, lines within 3 of each other, and claims sharing
+at least half the shorter claim's words (or 30% plus the same identifier, such
+as an environment variable). It is a plain text comparison; no model is asked,
+and findings on different files or far-apart lines never merge. The cluster
+counts at the highest severity of its members and keeps the test-integrity
+category of any member, so the grade caps mean what they did. Its reporters
+never vote on it, later votes apply to the cluster, and the report, the
+caps and the follow-up issues count clusters. Nothing is dropped: the report
+lists each merged report under its cluster as "also reported as".
+
 A full review **passes** when every session answered and the capped grade is at
 least `merge_grade` (8). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);

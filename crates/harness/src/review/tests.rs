@@ -37,6 +37,7 @@ fn finding(
             })
             .collect(),
         status: Status::Disputed,
+        members: vec![],
     }
 }
 
@@ -321,9 +322,8 @@ fn only_the_low_tiers_reviewers_run_on_the_light_model() {
     );
 }
 
-#[test]
-fn a_review_passes_only_complete_and_at_the_merge_grade() {
-    let mut report = Report {
+pub(super) fn sample_report() -> Report {
+    Report {
         version: 1,
         head: "a".repeat(40),
         branch: "feature".into(),
@@ -353,7 +353,12 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
         note: None,
         decision: None,
         base_branch: "dev".into(),
-    };
+    }
+}
+
+#[test]
+fn a_review_passes_only_complete_and_at_the_merge_grade() {
+    let mut report = sample_report();
     assert!(report.passes());
     assert!(
         report
@@ -371,6 +376,8 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
 mod after_approval;
 mod arbiter;
 mod closing;
+mod cluster;
+mod cluster_fixes;
 mod cumulative;
 mod flow;
 mod limits;

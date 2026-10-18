@@ -50,6 +50,7 @@ fn closing_source_report(root: &Path) -> Report {
         },
         votes: vec![],
         status: Status::Refuted,
+        members: vec![],
     });
     assert!(report.passes());
     report.store(root).unwrap();

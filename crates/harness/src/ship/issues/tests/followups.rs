@@ -34,6 +34,7 @@ fn finding(file: &str, line: Option<u32>, severity: Severity, status: Status) ->
         },
         votes: vec![],
         status,
+        members: vec![],
     }
 }
 

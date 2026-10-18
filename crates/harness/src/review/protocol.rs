@@ -94,12 +94,49 @@ pub(crate) struct Finding {
     pub(crate) reported: Reported,
     pub(crate) votes: Vec<Cast>,
     pub(crate) status: Status,
+    /// Other reports of the same defect merged into this one (`cluster`):
+    /// kept as reported, so nothing a reviewer said is dropped.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) members: Vec<Member>,
+}
+
+/// A finding folded into the cluster of another one.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub(crate) struct Member {
+    pub(crate) id: String,
+    pub(crate) reporter: usize,
+    pub(crate) round: u32,
+    #[serde(flatten)]
+    pub(crate) reported: Reported,
 }
 
 impl Finding {
+    /// Whether `reviewer` reported this defect (as the finding or a member):
+    /// nobody votes on a defect they reported.
+    pub(crate) fn reported_by(&self, reviewer: usize) -> bool {
+        self.reporter == reviewer || self.members.iter().any(|m| m.reporter == reviewer)
+    }
+
+    /// How many distinct reviewers reported this defect, as the finding or a member.
+    pub(crate) fn reporters(&self) -> usize {
+        let mut reporters: Vec<usize> = std::iter::once(self.reporter)
+            .chain(self.members.iter().map(|m| m.reporter))
+            .collect();
+        reporters.sort_unstable();
+        reporters.dedup();
+        reporters.len()
+    }
+
+    fn categories(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.reported.category.as_str())
+            .chain(self.members.iter().map(|m| m.reported.category.as_str()))
+    }
+
     pub(crate) fn test_integrity(&self) -> bool {
-        let category = self.reported.category.to_ascii_lowercase();
-        category.contains("test") && category.contains("integrity")
+        self.categories().any(|category| {
+            let category = category.to_ascii_lowercase();
+            category.contains("test") && category.contains("integrity")
+        })
     }
 }
 
@@ -171,7 +208,7 @@ pub(crate) fn ruling(finding: &Finding) -> Option<&Cast> {
 fn latest(finding: &Finding) -> Vec<&Cast> {
     let mut latest: Vec<&Cast> = Vec::new();
     for cast in &finding.votes {
-        if cast.reviewer == finding.reporter || cast.reviewer == ARBITER {
+        if finding.reported_by(cast.reviewer) || cast.reviewer == ARBITER {
             continue;
         }
         match latest.iter_mut().find(|c| c.reviewer == cast.reviewer) {
@@ -195,6 +232,11 @@ pub(crate) fn status(finding: &Finding, reviewers: usize) -> Status {
         return Status::Confirmed;
     }
     let votes = latest(finding);
+    // Every reviewer reported the defect independently, so nobody is left to vote:
+    // the blind round already agrees, and it stands.
+    if votes.is_empty() && ruling(finding).is_none() && finding.reporters() >= reviewers.min(2) {
+        return Status::Confirmed;
+    }
     let upheld = count(&votes, Vote::Upheld) + count(&votes, Vote::Partial);
     let refuted = count(&votes, Vote::Refuted);
     if upheld > refuted {

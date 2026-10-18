@@ -130,14 +130,17 @@ pub(crate) fn first_round(root: &Path, persona: &str, subject: &Subject) -> Resu
 
 /// A deterministic shuffle of the findings this reviewer did not report.
 fn others(findings: &[Finding], reviewer: usize, round: u32) -> Vec<&Finding> {
-    let mut list: Vec<&Finding> = findings.iter().filter(|f| f.reporter != reviewer).collect();
+    let mut list: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| !f.reported_by(reviewer))
+        .collect();
     let key = |f: &&Finding| blake3::hash(format!("{}:{reviewer}:{round}", f.id).as_bytes());
     list.sort_by_key(|f| *key(f).as_bytes());
     list
 }
 
 pub(crate) fn has_work(findings: &[Finding], reviewer: usize) -> bool {
-    findings.iter().any(|f| f.reporter != reviewer)
+    findings.iter().any(|f| !f.reported_by(reviewer))
 }
 
 /// Which cross-examination round: its number, whether it is the last one
