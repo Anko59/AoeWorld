@@ -13,7 +13,7 @@ const DIRT: u8 = 2;
 const SHALLOW: u8 = 10;
 const FORD: u8 = 12;
 
-fn tile(x: i32, y: i32, material: u8) -> SceneTerrain {
+pub(super) fn tile(x: i32, y: i32, material: u8) -> SceneTerrain {
     let mut surface = SceneTerrainSurface::flat(0.0);
     surface.water = u8::from(material == SHALLOW) * 3;
     SceneTerrain {

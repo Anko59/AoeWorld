@@ -16,6 +16,9 @@ mod thin;
 #[path = "mix/tests/fixture.rs"]
 #[cfg(test)]
 pub(crate) mod fixture;
+#[path = "mix/tests/ford_junction.rs"]
+#[cfg(test)]
+mod ford_junction_tests;
 #[path = "mix/tests/narrow_stream.rs"]
 #[cfg(test)]
 mod narrow_stream_tests;
