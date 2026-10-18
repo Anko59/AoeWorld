@@ -1,0 +1,434 @@
+//! Name to graphic to SLP table built from a decoded [`DatFile`], with
+//! cross-checks against sprite ids reviewed by eye. Local-only output.
+use super::{DatFile, Graphic, Unit};
+use crate::{Error, drs};
+use serde::Serialize;
+use std::collections::BTreeSet;
+use std::fmt::Write as _;
+
+/// Display name and Gaia unit id of the Dark Age units the client renders.
+pub const DARK_AGE: &[(&str, i32)] = &[
+    ("Villager (male)", 83),
+    ("Villager (female)", 293),
+    ("Militia", 74),
+    ("Archer", 4),
+    ("Scout Cavalry", 448),
+    ("Town Center", 109),
+    ("Town Center (Dark Age unit)", 618),
+    ("House", 70),
+    ("Mill", 68),
+    ("Lumber Camp", 562),
+    ("Mining Camp", 584),
+    ("Farm", 50),
+    ("Barracks", 12),
+    ("Palisade Wall", 72),
+    ("Outpost", 598),
+    ("Dock", 45),
+    ("Deer", 65),
+    ("Boar", 48),
+    ("Sheep", 594),
+    ("Wolf", 126),
+    ("Forage bush", 59),
+    ("Gold mine", 66),
+    ("Stone mine", 102),
+];
+
+/// Villager variants share an internal-name stem; the suffix names the job.
+const JOBS: &[(&str, &str)] = &[
+    ("BAS", "base"),
+    ("BLD", "builder"),
+    ("FOR", "forager"),
+    ("HUN", "hunter"),
+    ("LUM", "lumberjack"),
+    ("MIN", "stone miner"),
+    ("GLD", "gold miner"),
+    ("FAR", "farmer"),
+    ("REP", "repairer"),
+    ("FIS", "fisher"),
+    ("SHE", "shepherd"),
+];
+
+const RESOURCES: [&str; 5] = ["food", "wood", "stone", "gold", "population"];
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GraphicRef {
+    pub role: String,
+    pub graphic: i32,
+    pub name: String,
+    pub slp: i32,
+    pub frames: u16,
+    pub angles: u16,
+    pub frame_rate: f32,
+    pub in_pack: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Row {
+    pub label: String,
+    pub unit: i32,
+    pub internal_name: Option<String>,
+    pub kind: Option<u8>,
+    pub hit_points: Option<i16>,
+    pub train_time: Option<i16>,
+    pub cost: Vec<String>,
+    pub attacks: Vec<(i16, i16)>,
+    pub armours: Vec<(i16, i16)>,
+    pub graphics: Vec<GraphicRef>,
+    /// Sibling graphics of a building sharing its name stem (age and part variants).
+    pub family: Vec<GraphicRef>,
+    /// `complete`, `partial` or `absent` against the supplied graphics.drs.
+    pub pack: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Check {
+    pub label: String,
+    pub slp: i32,
+    pub expected: String,
+    pub status: String,
+    pub dat_says: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Table {
+    pub version: String,
+    pub report: super::Report,
+    pub rows: Vec<Row>,
+    pub checks: Vec<Check>,
+}
+
+/// SLP resource ids of a classic DRS archive (graphics.drs).
+pub fn slp_ids(drs_bytes: &[u8]) -> Result<BTreeSet<i32>, Error> {
+    Ok(drs::parse(drs_bytes)?
+        .iter()
+        .filter(|entry| entry.kind == *b" pls")
+        .filter_map(|entry| i32::try_from(entry.id).ok())
+        .collect())
+}
+
+fn gref(file: &DatFile, role: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Option<GraphicRef> {
+    let graphic = file.graphic(id).filter(|g| g.slp_id > 0)?;
+    Some(from_graphic(role, graphic, pack))
+}
+
+fn from_graphic(role: &str, graphic: &Graphic, pack: Option<&BTreeSet<i32>>) -> GraphicRef {
+    GraphicRef {
+        role: role.to_owned(),
+        graphic: graphic.id,
+        name: graphic.name.clone(),
+        slp: graphic.slp_id,
+        frames: graphic.frame_count,
+        angles: graphic.angle_count,
+        frame_rate: graphic.frame_rate,
+        in_pack: pack.map(|set| set.contains(&graphic.slp_id)),
+    }
+}
+
+/// Every graphic the unit uses, tagged by role (tasks as `task<n>.<slot>`).
+fn unit_graphics(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> Vec<GraphicRef> {
+    let mut wanted: Vec<(String, i32)> = vec![
+        ("stand".into(), unit.standing[0].into()),
+        ("dying".into(), unit.dying.into()),
+    ];
+    wanted.extend(unit.walking.map(|w| ("walk".into(), w[0].into())));
+    wanted.extend(unit.attack_graphic.map(|a| ("attack".into(), a.into())));
+    wanted.extend(
+        unit.construction_graphic
+            .map(|c| ("construction".into(), c.into())),
+    );
+    wanted.extend(unit.snow_graphic.map(|s| ("snow".into(), s.into())));
+    const SLOTS: [&str; 4] = ["moving", "proceeding", "working", "carrying"];
+    for task in &unit.tasks {
+        for (slot, graphic) in task.graphics.iter().enumerate() {
+            wanted.push((
+                format!("task{}.{}", task.id, SLOTS[slot]),
+                (*graphic).into(),
+            ));
+        }
+    }
+    wanted
+        .into_iter()
+        .filter_map(|(role, id)| gref(file, &role, id, pack))
+        .collect()
+}
+
+fn family(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> Vec<GraphicRef> {
+    let Some(stand) = file.graphic(unit.standing[0].into()) else {
+        return Vec::new();
+    };
+    let Some(stem) = stand.name.get(..stand.name.len().saturating_sub(2)) else {
+        return Vec::new();
+    };
+    if unit.kind != 80 || stem.len() < 4 {
+        return Vec::new();
+    }
+    file.graphics
+        .iter()
+        .filter(|g| g.slp_id > 0 && g.name.starts_with(stem) && g.name.len() == stand.name.len())
+        .map(|g| from_graphic("family", g, pack))
+        .collect()
+}
+
+fn row(file: &DatFile, label: &str, id: i32, pack: Option<&BTreeSet<i32>>) -> Row {
+    let Some(unit) = file.unit(id) else {
+        return Row {
+            label: label.to_owned(),
+            unit: id,
+            internal_name: None,
+            kind: None,
+            hit_points: None,
+            train_time: None,
+            cost: Vec::new(),
+            attacks: Vec::new(),
+            armours: Vec::new(),
+            graphics: Vec::new(),
+            family: Vec::new(),
+            pack: "absent".into(),
+        };
+    };
+    let graphics = unit_graphics(file, unit, pack);
+    let present = graphics.iter().filter(|g| g.in_pack == Some(true)).count();
+    let pack_state = match pack {
+        None => "unchecked",
+        Some(_) if present == 0 => "absent",
+        Some(_) if graphics.iter().all(|g| g.in_pack == Some(true)) => "complete",
+        Some(_) => "partial",
+    };
+    Row {
+        label: label.to_owned(),
+        unit: id,
+        internal_name: Some(unit.name.clone()),
+        kind: Some(unit.kind),
+        hit_points: Some(unit.hit_points),
+        train_time: unit.train_time.filter(|t| *t > 0),
+        cost: unit
+            .costs
+            .iter()
+            .filter(|c| c.enabled != 0 && c.amount > 0)
+            .map(|c| {
+                let name = usize::try_from(c.resource)
+                    .ok()
+                    .and_then(|i| RESOURCES.get(i));
+                format!("{} {}", c.amount, name.copied().unwrap_or("?"))
+            })
+            .collect(),
+        attacks: unit.attacks.clone(),
+        armours: unit.armours.clone(),
+        family: family(file, unit, pack),
+        graphics,
+        pack: pack_state.into(),
+    }
+}
+
+/// Where a SLP id is referenced: `unit <id> <name> <role>`.
+fn references(file: &DatFile, slp: i32) -> Vec<String> {
+    let mut out = Vec::new();
+    for unit in &file.units {
+        for graphic in unit_graphics(file, unit, None) {
+            if graphic.slp == slp {
+                let role = if graphic.role.starts_with("task") {
+                    "task"
+                } else {
+                    graphic.role.as_str()
+                };
+                out.push(format!(
+                    "unit {} {} {} ({})",
+                    unit.id, unit.name, role, graphic.name
+                ));
+            }
+        }
+    }
+    out
+}
+
+enum Expect {
+    Role(i32, &'static str),
+    Family(i32),
+}
+
+/// Sprite ids the existing catalog uses, with the DAT unit and role they
+/// should belong to. A `mismatch` is a finding about the catalog label, not a
+/// decoder failure: the DAT names are authoritative for what a sprite is.
+const CHECKS: &[(&str, i32, Expect)] = &[
+    ("Town Center (Dark Age main)", 891, Expect::Family(109)),
+    ("Villager idle", 1479, Expect::Role(83, "stand")),
+    ("Villager walk", 1484, Expect::Role(83, "walk")),
+    ("Scout idle", 3004, Expect::Role(448, "stand")),
+    ("Scout walk", 3008, Expect::Role(448, "walk")),
+    ("Wood chopping", 1535, Expect::Role(123, "task")),
+    ("Wood carrying", 1536, Expect::Role(123, "task")),
+    ("Berry foraging", 1490, Expect::Role(120, "task")),
+    ("Food carrying", 1493, Expect::Role(120, "task")),
+    ("Gold mining", 1545, Expect::Role(579, "task")),
+    ("Ore carrying", 1552, Expect::Role(124, "task")),
+    ("Stone mining", 1560, Expect::Role(124, "task")),
+];
+
+fn check(file: &DatFile, label: &str, slp: i32, expect: &Expect) -> Check {
+    let refs = references(file, slp);
+    let (expected, ok, family_ok) = match expect {
+        Expect::Role(unit, role) => {
+            let prefix = format!("unit {unit} ");
+            let hit = refs
+                .iter()
+                .any(|r| r.starts_with(&prefix) && r.contains(&format!(" {role} (")));
+            (format!("unit {unit} {role}"), hit, false)
+        }
+        Expect::Family(unit) => {
+            let hit = file
+                .unit(*unit)
+                .is_some_and(|u| family(file, u, None).iter().any(|g| g.slp == slp));
+            (format!("unit {unit} graphic family"), false, hit)
+        }
+    };
+    let status = if ok {
+        "match"
+    } else if family_ok {
+        "family"
+    } else {
+        "mismatch"
+    };
+    let mut dat_says = refs;
+    if dat_says.is_empty() {
+        dat_says = file
+            .graphics
+            .iter()
+            .filter(|g| g.slp_id == slp)
+            .map(|g| format!("graphic {} {} (no unit uses it directly)", g.id, g.name))
+            .collect();
+    }
+    Check {
+        label: label.to_owned(),
+        slp,
+        expected,
+        status: status.into(),
+        dat_says,
+    }
+}
+
+pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
+    let mut rows: Vec<Row> = DARK_AGE
+        .iter()
+        .map(|(label, id)| row(file, label, *id, pack))
+        .collect();
+    for unit in file.units.iter().filter(|u| u.kind == 70) {
+        let stem = unit.name.get(..2).unwrap_or("");
+        let job = JOBS
+            .iter()
+            .find(|(suffix, _)| unit.name.get(2..) == Some(*suffix));
+        if (stem == "VM" || stem == "VF")
+            && let Some((_, job)) = job
+            && rows.iter().all(|r| r.unit != unit.id)
+        {
+            let sex = if stem == "VM" { "male" } else { "female" };
+            rows.push(row(file, &format!("Villager {job} ({sex})"), unit.id, pack));
+        }
+    }
+    Table {
+        version: file.version.clone(),
+        report: file.report.clone(),
+        rows,
+        checks: CHECKS
+            .iter()
+            .map(|(l, s, e)| check(file, l, *s, e))
+            .collect(),
+    }
+}
+
+pub fn markdown(table: &Table) -> String {
+    let mut out = format!("# empires2.dat table ({}), LOCAL ONLY\n\n", table.version);
+    for row in &table.rows {
+        let _ = writeln!(
+            out,
+            "## {} (unit {}, {}) pack: {}\n",
+            row.label,
+            row.unit,
+            row.internal_name
+                .as_deref()
+                .unwrap_or("missing from this dat"),
+            row.pack
+        );
+        for g in row.graphics.iter().chain(row.family.iter()) {
+            let _ = writeln!(
+                out,
+                "- {} graphic {} {} SLP {} frames {} angles {} in pack {:?}",
+                g.role, g.graphic, g.name, g.slp, g.frames, g.angles, g.in_pack
+            );
+        }
+        out.push('\n');
+    }
+    out.push_str("## Cross-checks\n\n");
+    for c in &table.checks {
+        let _ = writeln!(
+            out,
+            "- {} {}: {} (expected {}); dat: {}",
+            c.status,
+            c.label,
+            c.slp,
+            c.expected,
+            c.dat_says.join("; ")
+        );
+    }
+    out
+}
+
+/// Compact terminal view: ids and counts only, no imagery.
+pub fn summary(table: &Table) -> String {
+    let r = &table.report;
+    let mut out = format!(
+        "{}: {} sounds, graphics at byte {}..{}, civilisation {:?} at {:?}, unit headers at {:?}, {} of {} unit slots parsed, stopped: {:?}\n\n",
+        table.version,
+        r.sounds,
+        r.graphics_offset,
+        r.graphics_end,
+        r.civilisation_name,
+        r.civilisation_offset,
+        r.unit_headers_offset,
+        r.units_parsed,
+        r.unit_slots,
+        r.stopped
+    );
+    for row in &table.rows {
+        let Some(name) = &row.internal_name else {
+            let _ = writeln!(
+                out,
+                "{:<24} unit {:>3} not in this dat",
+                row.label, row.unit
+            );
+            continue;
+        };
+        let _ = writeln!(
+            out,
+            "{:<24} unit {:>3} {:<7} hp {:>4} pack {}",
+            row.label,
+            row.unit,
+            name,
+            row.hit_points.unwrap_or(0),
+            row.pack
+        );
+        for g in row
+            .graphics
+            .iter()
+            .filter(|g| !g.role.starts_with("task") || g.in_pack.is_some())
+        {
+            let _ = writeln!(
+                out,
+                "    {:<22} graphic {:>5} {:<9} SLP {:>5} {:>3}f x {}a  in pack {:?}",
+                g.role, g.graphic, g.name, g.slp, g.frames, g.angles, g.in_pack
+            );
+        }
+    }
+    out.push_str("\nCross-checks against the existing catalog\n");
+    for c in &table.checks {
+        let _ = writeln!(
+            out,
+            "  {:<8} {:<28} SLP {:>5}  expected {}  dat: {}",
+            c.status,
+            c.label,
+            c.slp,
+            c.expected,
+            c.dat_says.join("; ")
+        );
+    }
+    out
+}
