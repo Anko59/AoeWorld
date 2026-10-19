@@ -17,9 +17,13 @@ fn seed(root: &Path) {
 }
 
 fn present(root: &Path, expected: bool) {
-    for dir in OUTPUT {
-        assert_eq!(root.join(dir).join("object").exists(), expected, "{dir}");
-    }
+    assert_eq!(
+        root.join("target/debug/incremental/object").exists(),
+        expected,
+        "incremental"
+    );
+    // Snapshots may belong to a concurrent check of this checkout: never removed by ship.
+    assert!(root.join(".cache/harness/snapshots/object").is_file());
     assert!(root.join("target/debug/deps/keep").is_file());
 }
 
