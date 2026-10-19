@@ -28,7 +28,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-1";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -115,6 +115,13 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         hasher.update(file.as_bytes());
         hasher.update(hash.as_bytes());
         let frames = sld::parse(&bytes)?;
+        if frames.is_empty() {
+            return Err(crate::invalid(
+                "DE",
+                6,
+                format!("{} has zero frames", path.display()),
+            ));
+        }
         loaded.push(Loaded {
             item,
             source: format!("de/{file}"),

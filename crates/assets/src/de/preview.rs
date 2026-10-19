@@ -1,6 +1,10 @@
 //! PNG previews of the imported sprites for visual review (local only).
 use super::{compose, farm::Sheet};
-use crate::{Error, pack::atlas::Planes, sld::Frame};
+use crate::{
+    Error,
+    pack::{atlas::Planes, blend_player},
+    sld::Frame,
+};
 use std::{fs, io::BufWriter, path::Path};
 
 const GROUND: [u8; 3] = [58, 92, 50];
@@ -8,18 +12,8 @@ const COLUMNS: usize = 4;
 const MAX_CELLS: usize = 12;
 const PAD: usize = 6;
 
-/// Player colour as the client draws it: the blue ramp scaled by the ramp value.
-fn player_rgb(ramp: u8) -> [u8; 3] {
-    let shade = 0.65 + f32::from(ramp.min(7)) / 7.0 * 0.35;
-    [
-        (65.0 * shade) as u8,
-        (145.0 * shade) as u8,
-        (245.0 * shade) as u8,
-    ]
-}
-
-/// Composites planes over the ground colour in the client's precedence: player
-/// colour, then colour, then shadow. Returns RGB and marks the anchor.
+/// Blends player colour over the body, with shadow on exposed ground, using
+/// the client's player-plane composition. Returns RGB.
 fn render(planes: &Planes) -> Vec<u8> {
     let mut rgb = Vec::with_capacity(usize::from(planes.width) * usize::from(planes.height) * 3);
     for at in 0..usize::from(planes.width) * usize::from(planes.height) {
@@ -28,14 +22,14 @@ fn render(planes: &Planes) -> Vec<u8> {
             &planes.color[at * 4..at * 4 + 4],
             &planes.shadow[at * 4..at * 4 + 4],
         );
-        if p[3] > 0 {
-            rgb.extend_from_slice(&player_rgb(p[0]));
-        } else if c[3] > 0 {
-            rgb.extend_from_slice(&c[..3]);
+        let base = if c[3] > 0 {
+            [c[0], c[1], c[2]]
         } else {
             let a = u32::from(s[3]);
-            rgb.extend(GROUND.map(|v| (u32::from(v) * (255 - a) / 255) as u8));
-        }
+            GROUND.map(|v| (u32::from(v) * (255 - a) / 255) as u8)
+        };
+        let blended = blend_player([base[0], base[1], base[2], 255], p[0], p[3]);
+        rgb.extend_from_slice(&blended[..3]);
     }
     rgb
 }
@@ -111,3 +105,7 @@ fn save(path: &Path, width: u32, height: u32, rgb: &[u8]) -> Result<(), Error> {
     encoder.write_header()?.write_image_data(rgb)?;
     Ok(())
 }
+
+#[path = "preview/tests.rs"]
+#[cfg(test)]
+mod tests;

@@ -253,6 +253,8 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
 }
 
 pub(crate) mod atlas;
+mod player;
+pub use player::blend_player;
 mod verify;
 pub use verify::{parse_manifest, verify};
 

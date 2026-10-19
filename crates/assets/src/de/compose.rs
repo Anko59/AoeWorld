@@ -5,8 +5,6 @@ use crate::{
     sld::{Frame, Layer},
 };
 
-/// Player-mask intensity from which a texel counts as player colour.
-const PLAYER_THRESHOLD: u8 = 128;
 /// Shadow intensity below which a texel is left clear.
 const SHADOW_FLOOR: u8 = 16;
 
@@ -79,17 +77,18 @@ pub(super) fn planes(frame: &Frame) -> Planes {
             }
         });
         // The player mask shares the colour layer's rectangle. The ramp value
-        // keeps the colour layer's own relief so team-coloured roofs stay shaded.
+        // keeps the colour layer's own relief so team-coloured roofs stay shaded;
+        // alpha retains DE's blend weight, including values below 128.
         if let Some(mask) = &frame.player {
             each(mask, (x0, y0), stride, |at, pixel| {
                 let base = &planes.color[at * 4..at * 4 + 4];
-                if pixel[0] >= PLAYER_THRESHOLD && base[3] > 0 {
+                if pixel[0] > 0 && base[3] > 0 {
                     let ramp = (luma([base[0], base[1], base[2], 255]) * 7 + 127) / 255;
                     planes.player[at * 4..at * 4 + 4].copy_from_slice(&[
                         ramp.min(7) as u8,
                         0,
                         0,
-                        255,
+                        pixel[0],
                     ]);
                 }
             });
@@ -105,3 +104,7 @@ pub(super) fn planes(frame: &Frame) -> Planes {
     }
     planes
 }
+
+#[path = "compose/tests.rs"]
+#[cfg(test)]
+mod tests;

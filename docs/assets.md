@@ -23,8 +23,10 @@ validates every local pack. `make assets-dat-table` decodes `empires2.dat` into 
 local unit and building to sprite table ([game data](assets/game-data.md)). The Rust importer bounds DRS, palette, and SLP
 decoding, creates deterministic padded PNG atlas pages with separate player,
 shadow, and outline masks, and writes a versioned manifest.
-Importer-generated pages use RGBA8 with transparent black, opaque color and
-player pixels, and black shadows at alpha 128. The browser client reconstructs
+Trial-imported pages use RGBA8 with transparent black, opaque color and
+player pixels, and black shadows at alpha 128. DE player pixels retain their
+mask intensity as alpha, blending the team shade over the colour plane.
+The browser client reconstructs
 PNG samples directly, preserving the full RGBA values allowed by manifest
 version 1, including arbitrary partial alpha in externally produced packs.
 
@@ -125,6 +127,15 @@ pack-source mapping to `local-assets/de-table.md`. Nothing derived from the
 install is committed. Sources are listed in `crates/assets/src/de/select.rs`
 (West European camps, since no Dark Age camp exists). Frames are cropped to the
 drawn layers and anchors move with the crop; the player plane stores a 0-7 ramp
-from the colour layer's luma where the mask is set, like the trial's player pixels.
+from the colour layer's luma for every nonzero mask, with the mask value as alpha
+to weight the blend. The trial's player plane uses the same ramp with alpha 255;
+the client and DE previews share the blend calculation.
 DE draws farms with terrain textures (`g_fm1`, `g_fm2`), imported at x1 scale as
-opaque 1024x1024 frames. `AOE_DE_DIR` enables a real-file decoder test.
+opaque 1024x1024 frames.
+
+Run `make test-assets-de` (or `make test-assets-de DE_DIR=/path/to/AoE2DE`)
+for the real-house decoder and player-plane checks. This dedicated target takes
+a heavy slot, mounts `DE_DIR` read-only at `/de-install`, and sets `AOE_DE_DIR`
+inside the test container. It fails if the install is missing or no tests match.
+Setting `AOE_DE_DIR` on the host for `make test-unit` does not forward it or mount
+the install; ordinary unit tests use synthetic fixtures and skip real-file checks.

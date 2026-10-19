@@ -128,6 +128,7 @@ help:
 	@echo '  make assets-inspect  Inspect ignored local-assets/trial'
 	@echo '  make assets-import   Import ignored local-assets/trial'
 	@echo '  make assets-import-de  Import Dark Age buildings from a Definitive Edition install (DE_DIR)'
+	@echo '  make test-assets-de  Test real DE house decoding and player masks (DE_DIR, read-only)'
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make assets-dat-table  Decode empires2.dat into local-assets/dat-table (unit to sprite ids)'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
@@ -385,6 +386,7 @@ assets-import:
 
 # The owner's licensed install is mounted read-only; the pack, previews and table go to local-assets/.
 DE_DIR ?= $(HOME)/.steam/steam/steamapps/common/AoE2DE
+export DE_DIR
 assets-import-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets import-de /de-install
 

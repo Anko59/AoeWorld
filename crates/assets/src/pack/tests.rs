@@ -55,3 +55,35 @@ fn invalid_output_path_is_rejected() {
     assert!(output_path(Path::new("../outside")).is_err());
     assert!(output_path(Path::new("local-assets/packs")).is_ok());
 }
+
+#[test]
+fn player_blending_preserves_partial_alpha_and_opaque_trial_shades() {
+    assert_eq!(blend_player([200, 0, 200, 0], 7, 119), [65, 145, 245, 119]);
+    assert_eq!(
+        blend_player([117, 120, 115, 128], 7, 119),
+        [84, 136, 198, 187]
+    );
+    assert_eq!(blend_player([99, 99, 99, 99], 7, 1), [99, 99, 100, 100]);
+    assert_eq!(blend_player([12, 34, 56, 78], 7, 0), [12, 34, 56, 78]);
+    for (ramp, expected) in [
+        [42, 94, 159, 255],
+        [45, 101, 171, 255],
+        [48, 108, 183, 255],
+        [51, 115, 195, 255],
+        [55, 123, 208, 255],
+        [58, 130, 220, 255],
+        [61, 137, 232, 255],
+        [65, 145, 245, 255],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for base in [[0; 4], [117, 120, 115, 255]] {
+            assert_eq!(
+                blend_player(base, ramp as u8, 255),
+                expected,
+                "trial ramp {ramp}"
+            );
+        }
+    }
+}

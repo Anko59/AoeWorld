@@ -58,10 +58,13 @@ const LAYERS: [Kind; 5] = [
 ];
 
 fn rgb565(value: u16) -> [u8; 4] {
+    let red = ((value >> 11) & 31) as u8;
+    let green = ((value >> 5) & 63) as u8;
+    let blue = (value & 31) as u8;
     [
-        ((value >> 11) & 31) as u8 * 8,
-        ((value >> 5) & 63) as u8 * 4,
-        (value & 31) as u8 * 8,
+        (red << 3) | (red >> 2),
+        (green << 2) | (green >> 4),
+        (blue << 3) | (blue >> 2),
         255,
     ]
 }

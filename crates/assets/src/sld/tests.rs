@@ -78,8 +78,8 @@ fn decodes_blocks_layers_anchors_and_skip_reuse() {
     assert_eq!((first.width, first.anchor_x, first.anchor_y), (8, 2, 3));
     let main = first.main.as_ref().expect("main");
     assert_eq!((main.x, main.y, main.width, main.height), (4, 4, 4, 4));
-    assert_eq!(main.pixels[0], [0, 0, 248, 255]);
-    assert_eq!(main.pixels[1], [248, 0, 0, 255]);
+    assert_eq!(main.pixels[0], [0, 0, 255, 255]);
+    assert_eq!(main.pixels[1], [255, 0, 0, 255]);
     let shadow = first.shadow.as_ref().expect("shadow");
     assert_eq!((shadow.pixels[0][0], shadow.pixels[1][0]), (0, 200));
     assert!(first.player.is_none());
@@ -90,6 +90,32 @@ fn decodes_blocks_layers_anchors_and_skip_reuse() {
     let player = second.player.as_ref().expect("player");
     assert_eq!((player.x, player.width), (4, 4));
     assert_eq!(player.pixels[0][0], 255);
+}
+
+#[test]
+fn rgb565_replicates_low_bits_for_endpoints_and_interpolants() {
+    for (word, expected) in [
+        (0xF800u16, [255, 0, 0, 255]),
+        (0x07E0, [0, 255, 0, 255]),
+        (0x001F, [0, 0, 255, 255]),
+        (0xFFFF, [255; 4]),
+        (0x8C51, [140, 138, 140, 255]),
+    ] {
+        let [lo, hi] = word.to_le_bytes();
+        let pixels = bc1_block([lo, hi, 0, 0, 0b11_10_01_00, 0, 0, 0]);
+        assert_eq!(pixels[0], expected);
+        assert_eq!(pixels[1], [0, 0, 0, 255]);
+        for channel in 0..3 {
+            assert_eq!(
+                pixels[2][channel],
+                ((2 * u16::from(expected[channel]) + 1) / 3) as u8
+            );
+            assert_eq!(
+                pixels[3][channel],
+                ((u16::from(expected[channel]) + 1) / 3) as u8
+            );
+        }
+    }
 }
 
 #[test]

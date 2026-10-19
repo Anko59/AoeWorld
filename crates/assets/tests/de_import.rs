@@ -32,7 +32,7 @@ fn sld() -> Vec<u8> {
         file.push(0);
     }
     let mut mask = vec![0, 0, 1, 0, 0, 1];
-    mask.extend_from_slice(&[255, 0, 0, 0, 0, 0, 0, 0]);
+    mask.extend_from_slice(&[119, 0, 0, 0, 0, 0, 0, 0]);
     file.extend_from_slice(&((mask.len() + 4) as u32).to_le_bytes());
     file.extend(mask);
     while !(file.len() - 16).is_multiple_of(4) {
@@ -77,6 +77,20 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     // Cropped to the 4x4 layer at (4,4); the anchor (2,3) moves by the crop.
     assert_eq!((house.width, house.height), (4, 4));
     assert_eq!((house.anchor_x, house.anchor_y), (-2, -1));
+    let page = &manifest.pages[usize::from(house.page)];
+    let mut decoder = png::Decoder::new(std::io::BufReader::new(
+        fs::File::open(report.pack.join(&page.player)).unwrap(),
+    ))
+    .read_info()
+    .unwrap();
+    let mut pixels = vec![0; decoder.output_buffer_size()];
+    decoder.next_frame(&mut pixels).unwrap();
+    let at = (usize::from(house.y) * usize::from(page.width) + usize::from(house.x)) * 4;
+    assert_eq!(
+        &pixels[at..at + 4],
+        &[1, 0, 0, 119],
+        "low player mask survives atlas serialization"
+    );
     let farm = manifest
         .frames
         .iter()
@@ -110,7 +124,33 @@ fn a_directory_that_is_not_an_install_is_rejected() {
     assert!(de::import(Path::new("empty"), Path::new("local-assets/packs")).is_err());
 }
 
-/// Needs the owner's install: `AOE_DE_DIR=<AoE2DE root>`. Skipped otherwise.
+#[test]
+fn zero_frame_sprite_is_rejected_before_pack_or_table_creation() {
+    let temporary = tempfile::tempdir().expect("tempdir");
+    let original = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(temporary.path()).expect("enter tempdir");
+    let _restore = CurrentDirectory(original);
+    let graphics = Path::new("install/resources/_common/drs/graphics");
+    fs::create_dir_all(graphics).unwrap();
+    fs::write(
+        graphics.join("b_dark_house_age1_x1.sld"),
+        [
+            0x53, 0x4c, 0x44, 0x58, 4, 0, 0, 0, 0, 0, 0x10, 0, 0xff, 0, 0, 0,
+        ],
+    )
+    .unwrap();
+    let error = de::import(Path::new("install"), Path::new("local-assets/packs"))
+        .expect_err("zero-frame sprite must be rejected");
+    let message = error.to_string();
+    assert!(
+        message.contains("b_dark_house_age1_x1.sld") && message.contains("zero frames"),
+        "{message}"
+    );
+    assert!(!Path::new("local-assets/packs").exists());
+    assert!(!Path::new("local-assets/de-table.md").exists());
+}
+
+/// Run with `make test-assets-de [DE_DIR=<AoE2DE root>]`. Skipped in ordinary unit tests.
 #[test]
 fn real_house_decodes_with_plausible_dimensions() {
     let Some(root) = std::env::var_os("AOE_DE_DIR") else {
