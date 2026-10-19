@@ -286,7 +286,10 @@ fn rebase(
         .into());
     }
     let base = &options.base;
-    if !files.is_empty() && merge::clean(root, latest, round_head)? {
+    if !files.is_empty()
+        && merge::allowed(root, merge_base, latest, round_head)
+        && merge::clean(root, latest, round_head)?
+    {
         eprintln!(
             "ship: {base} {when}; the rebase conflicted in {} but a merge of {} is clean, merged instead",
             files.lines().collect::<Vec<_>>().join(", "),

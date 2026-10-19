@@ -30,3 +30,16 @@ pub(super) fn clean(root: &Path, latest: &str, round_head: &str) -> Result<bool>
     }
     Ok(false)
 }
+
+/// Whether a merge may stand in for the rebase: only when the rebase's lower bound is the
+/// natural merge base of the branch and the new base, as when dev simply moved ahead. A
+/// rewritten stacked parent puts the recorded fork point elsewhere; a merge would then use an
+/// older base and bring back parent changes the rewrite removed, so the conflict stops.
+pub(super) fn allowed(root: &Path, fork_point: &str, latest: &str, head: &str) -> bool {
+    let natural = git::git(root, &["merge-base", head, latest]);
+    let fork = git::git(
+        root,
+        &["rev-parse", "--verify", &format!("{fork_point}^{{commit}}")],
+    );
+    matches!((natural, fork), (Ok(natural), Ok(fork)) if natural == fork)
+}

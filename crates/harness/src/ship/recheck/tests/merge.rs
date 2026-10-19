@@ -75,3 +75,40 @@ fn a_real_conflict_in_both_still_stops_with_the_files() {
     let merging = git(&root, &["rev-parse", "--git-path", "MERGE_HEAD"]);
     assert!(!root.join(merging).exists(), "no merge left half-done");
 }
+
+#[test]
+fn a_rewritten_stacked_parent_never_takes_the_merge_fallback() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    run(root, &["init", "-q", "-b", "dev"]);
+    run(root, &["config", "user.name", "t"]);
+    run(root, &["config", "user.email", "t@example.com"]);
+    let commit = |path: &str, text: Option<&str>, message: &str| {
+        match text {
+            Some(text) => {
+                fs::write(root.join(path), text).unwrap();
+                run(root, &["add", path]);
+            }
+            None => run(root, &["rm", "-q", path]),
+        }
+        run(root, &["commit", "-q", "-m", message]);
+        git(root, &["rev-parse", "HEAD"])
+    };
+    let a = commit("README.md", Some("a\n"), "A");
+    // Parent P adds obsolete.txt; the child forks from P.
+    run(root, &["checkout", "-q", "-b", "parent"]);
+    let p = commit("obsolete.txt", Some("old\n"), "P");
+    run(root, &["checkout", "-q", "-b", "feature"]);
+    commit("child.txt", Some("child\n"), "child");
+    let head = commit("list.txt", Some("a\n"), "add list");
+    // The parent is rewritten: Q (from A) drops obsolete.txt and adds its own list.txt.
+    run(root, &["checkout", "-q", "-B", "rewritten", &a]);
+    commit("replacement.txt", Some("new\n"), "Q");
+    let q = commit("list.txt", Some("d\n"), "Q list");
+    // The rebase's lower bound is the old parent P; the natural merge base is A.
+    assert!(!super::super::merge::allowed(root, &p, &q, &head));
+    // Dev simply moving ahead keeps the fork point as the natural merge base.
+    run(root, &["checkout", "-q", "dev"]);
+    let moved = commit("other.txt", Some("x\n"), "dev moves");
+    assert!(super::super::merge::allowed(root, &a, &moved, &head));
+}
