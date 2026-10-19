@@ -1,6 +1,8 @@
 mod history;
 mod history_cli;
 mod red;
+mod red_carry;
+mod red_carry_cli;
 mod red_findings;
 mod red_mounts;
 mod red_pr;

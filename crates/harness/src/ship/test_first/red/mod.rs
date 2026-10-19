@@ -22,6 +22,8 @@ use std::{
 pub(crate) struct Record {
     pub(crate) head: String,
     pub(crate) base: String,
+    /// Review's canonical patch fingerprint against the merge base.
+    pub(crate) change_fingerprint: String,
     /// The test files the PR changes (merge base → head), and their blob ids at head.
     pub(crate) paths: Vec<String>,
     pub(crate) blobs: Vec<String>,
@@ -197,6 +199,7 @@ pub(crate) fn run_with(
     let record = Record {
         head: head.into(),
         base: base.into(),
+        change_fingerprint: git::change_fingerprint_from(root, base, head)?.1,
         blobs: blobs(root, head, &paths)?,
         paths,
         failed,

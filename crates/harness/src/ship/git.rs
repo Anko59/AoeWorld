@@ -183,7 +183,16 @@ pub(crate) fn change_fingerprint(
     base: &str,
     commit: &str,
 ) -> Result<(String, String)> {
-    let (merge_base, raw) = change_identity(root, base, commit)?;
+    change_fingerprint_from(root, &crate::review::base::reference(base), commit)
+}
+
+/// The same fingerprint against a recorded base commit, independent of moving refs.
+pub(crate) fn change_fingerprint_from(
+    root: &Path,
+    base: &str,
+    commit: &str,
+) -> Result<(String, String)> {
+    let (merge_base, raw) = change_identity_from(root, base, commit)?;
     use sha2::Digest as _;
     let fingerprint = sha2::Sha256::digest(&raw)
         .iter()
