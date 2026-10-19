@@ -9,6 +9,7 @@ mod fuzz;
 mod gates;
 mod hooks;
 mod input_json;
+mod ledger;
 mod mutation;
 mod native;
 mod perf;
@@ -163,6 +164,8 @@ enum Command {
     Ship(ship::Commands),
     #[command(flatten)]
     Review(review::Commands),
+    #[command(flatten)]
+    Ledger(ledger::Commands),
     ReleaseBuild,
     ReleasePublish,
     ReleaseSourceCheck,
@@ -339,6 +342,7 @@ fn run(
         Command::HooksCheck => hooks::check(Path::new("."))?,
         Command::Agents(command) => agents::execute(command, slots)?,
         Command::Ship(command) => ship::execute(command, slots)?,
+        Command::Ledger(command) => ledger::execute(command)?,
         Command::Review(command) => review::execute(command, slots)?,
         Command::ReleaseBuild => release::build()?,
         Command::ReleasePublish => release_publish::publish()?,

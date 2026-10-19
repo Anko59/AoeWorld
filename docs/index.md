@@ -7,6 +7,7 @@
 - [Adversarial review](review.md)
 - [Credentials (keyring)](credentials.md)
 - [Issues](issues.md)
+- [Model ledger and usage](models.md)
 - [Showcase videos](showcase.md)
 - [Shared dev server](dev-server.md)
 - [Architecture](architecture.md)
