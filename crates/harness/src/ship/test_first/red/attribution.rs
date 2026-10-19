@@ -31,7 +31,7 @@ pub(super) fn changed(
     authored::changed_failure(root, old, paths, name)
 }
 
-fn imports_changed(
+pub(super) fn imports_changed(
     root: &Path,
     path: &str,
     changed: &[String],

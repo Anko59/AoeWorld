@@ -1,13 +1,13 @@
-//! Compile errors read from cargo's human output: where each is and which items it names.
+//! Compile errors and normalized load diagnostics: where each is and which items it names.
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct CompileError {
     /// The file the error points at, as cargo prints it (workspace-relative); empty when none follows.
     pub(crate) path: String,
-    /// `E0425`; none for an error without a code.
+    /// A Rust code such as `E0425`, or `JS_MODULE`/`JS_EXPORT` for red collection errors.
     pub(crate) code: Option<String>,
-    /// Every backticked name in the message: the items the code asked for.
+    /// Rust's backticked names, or the normalized missing module path/export name.
     pub(crate) items: Vec<String>,
 }
 

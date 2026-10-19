@@ -2,6 +2,7 @@
 mod attribution;
 mod compile;
 mod fingerprint;
+mod javascript;
 mod mounts;
 mod record;
 pub(crate) mod runner;
@@ -133,7 +134,7 @@ pub(crate) fn run_with(
     let (mut failed, missing) = if red.build_failed {
         (
             Vec::new(),
-            compile::missing(root, base, head, &paths, &red)?,
+            compile::missing(root, base, head, red_source.path(), &paths, &red)?,
         )
     } else {
         (
@@ -188,7 +189,13 @@ pub(crate) fn run_with(
     let ran = if missing.is_empty() {
         Vec::new()
     } else {
-        compile::ran(green_source.path(), base_source.path(), &red, &green)?
+        compile::ran(
+            green_source.path(),
+            base_source.path(),
+            &paths,
+            &red,
+            &green,
+        )?
     };
     println!(
         "green: PASS at {head}: {}",

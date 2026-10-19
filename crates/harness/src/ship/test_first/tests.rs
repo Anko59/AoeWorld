@@ -4,6 +4,8 @@ mod red;
 mod red_carry;
 mod red_carry_cli;
 mod red_findings;
+mod red_js;
+mod red_js_findings;
 mod red_mounts;
 mod red_pr;
 

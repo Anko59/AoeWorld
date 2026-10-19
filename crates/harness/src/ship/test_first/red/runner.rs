@@ -70,6 +70,7 @@ pub(crate) fn execute(options: &Options) -> git::Result<()> {
         &cache,
         &retention,
         &wasm::run_suites,
+        true,
     )?;
     println!(
         "{PREFIX}{}",

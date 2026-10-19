@@ -13,9 +13,11 @@ use std::{
 };
 
 mod compile;
+mod playwright;
 mod report;
-#[cfg(test)]
 pub(crate) use compile::CompileError;
+pub(in crate::ship) use playwright::browser_results;
+pub(in crate::ship) use playwright::browser_results_red;
 pub(crate) use report::{CheckReport, Panic};
 
 pub(crate) use super::scope::Scope;
@@ -165,7 +167,7 @@ pub(super) fn run_scope(
     cache: &Path,
     wasm_runner: super::wasm::Runner,
 ) -> git::Result<CheckReport> {
-    run_retained(root, scope, cache, cache, wasm_runner)
+    run_retained(root, scope, cache, cache, wasm_runner, false)
 }
 
 pub(in crate::ship) fn run_retained(
@@ -174,6 +176,7 @@ pub(in crate::ship) fn run_retained(
     cache: &Path,
     retention: &Path,
     wasm_runner: super::wasm::Runner,
+    compile_red: bool,
 ) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
@@ -258,17 +261,22 @@ pub(in crate::ship) fn run_retained(
             .collect();
         let checked = crate::e2e::run_focused(&filters, &report_path).map_err(|e| e.to_string());
         std::env::set_current_dir(previous).map_err(|e| e.to_string())?;
-        let browser = match browser_results(&report_path) {
+        let parsed = if compile_red {
+            browser_results_red(&report_path, root)
+        } else {
+            browser_results(&report_path)
+        };
+        let browser = match parsed {
             Ok(browser) => browser,
             Err(read) => return Err(missing_report(&report_path, checked, read)),
         };
         browser_exit(&checked)?;
         report.merge(CheckReport {
-            passed: browser.failed.is_empty(),
+            passed: browser.failed.is_empty() && !browser.build_failed,
             ..browser
         });
         if let Err(error) = checked {
-            if report.failed.is_empty() {
+            if report.failed.is_empty() && !report.build_failed {
                 return Err(error);
             }
             report.passed = false;
@@ -332,61 +340,6 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
             let name = name.split(['@', ' ']).next().unwrap_or(name);
             packages.iter().any(|p| p == name)
         })
-}
-
-pub(in crate::ship) fn browser_results(path: &Path) -> git::Result<CheckReport> {
-    let value: serde_json::Value =
-        serde_json::from_slice(&output::read(path, "Playwright")?).map_err(|e| e.to_string())?;
-    fn walk(v: &serde_json::Value, parents: &str, report: &mut CheckReport) {
-        if let Some(specs) = v["specs"].as_array() {
-            for spec in specs {
-                let file = spec["file"].as_str().unwrap_or("unknown");
-                let title = spec["title"].as_str().unwrap_or("unknown");
-                if let Some(tests) = spec["tests"].as_array() {
-                    for test in tests {
-                        let name = format!(
-                            "{file}::{parents}{title} [{}]",
-                            test["projectName"].as_str().unwrap_or("unknown")
-                        );
-                        if test["status"] != "skipped" {
-                            report.tests.push(name.clone());
-                        }
-                        report.locations.insert(
-                            name.clone(),
-                            (
-                                if file.starts_with("tests/") {
-                                    format!("browser/{file}")
-                                } else {
-                                    format!("browser/tests/{file}")
-                                },
-                                spec["line"].as_u64().unwrap_or(0) as usize,
-                            ),
-                        );
-                        if !matches!(test["status"].as_str(), Some("expected" | "skipped")) {
-                            report.failed.push(name);
-                        }
-                    }
-                }
-            }
-        }
-        if let Some(suites) = v["suites"].as_array() {
-            for suite in suites {
-                let title = suite["title"].as_str().unwrap_or("");
-                let parents = if title == suite["file"].as_str().unwrap_or("") {
-                    parents.to_owned()
-                } else {
-                    format!("{parents}{title}::")
-                };
-                walk(suite, &parents, report);
-            }
-        }
-    }
-    let mut report = CheckReport::default();
-    walk(&value, "", &mut report);
-    if value["errors"].as_array().is_some_and(|a| !a.is_empty()) || report.locations.is_empty() {
-        return Err("Playwright errors or no focused tests".into());
-    }
-    Ok(report)
 }
 
 fn browser_build(root: &Path) -> git::Result<()> {
