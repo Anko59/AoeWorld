@@ -97,7 +97,11 @@ pub struct BuildingCombat {
 }
 
 const fn armour(kind: BuildingKind, melee_armour: u16, pierce_armour: u16) -> BuildingCombat {
-    BuildingCombat { kind, melee_armour, pierce_armour }
+    BuildingCombat {
+        kind,
+        melee_armour,
+        pierce_armour,
+    }
 }
 
 /// Indexed by `BuildingKind as usize`. `BUILDING_RULES` owns hit points.

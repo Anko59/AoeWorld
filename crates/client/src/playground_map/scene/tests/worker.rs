@@ -16,6 +16,10 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
         task,
         carried: None,
         gathering,
+        hp: 25,
+        max_hp: 25,
+        attack_target: None,
+        last_hit: None,
     }
 }
 

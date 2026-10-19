@@ -167,3 +167,33 @@ fn a_farmers_return_trip_goes_to_the_dropoff_the_shared_rule_names() {
         "delivered at {tile:?}, not beside the nearest mill"
     );
 }
+
+#[test]
+fn attacking_cancels_farming_and_removes_a_spent_farm() {
+    let (mut world, worker, _, farm) = mill_and_farm();
+    finish(&mut world, farm, 700);
+    world
+        .economy
+        .buildings
+        .get_mut(&farm)
+        .unwrap()
+        .food_remaining = Some(1);
+    for _ in 0..2000 {
+        if world.building(farm).unwrap().food_remaining == Some(0) {
+            break;
+        }
+        world.advance();
+    }
+    assert_eq!(world.building(farm).unwrap().food_remaining, Some(0));
+    let enemy = world
+        .spawn_militia(PlayerId(1), world.unit(worker).unwrap().position)
+        .unwrap();
+    world.issue_attack(PlayerId(0), worker, enemy).unwrap();
+    assert!(world.building(farm).is_none());
+    assert_eq!(world.gathering_kind(worker), None);
+    assert_eq!(
+        world.unit(worker).unwrap().carried.map(|load| load.amount),
+        Some(1)
+    );
+    assert_eq!(world.unit(worker).unwrap().task, UnitTask::Attacking);
+}

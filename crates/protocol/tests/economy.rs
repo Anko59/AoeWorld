@@ -82,7 +82,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 kind: BuildingKind::House,
                 origin: TileCoord::new(5, 6),
             },
-            vec![7, 8, 2, 3, 4, 1, 10, 12],
+            vec![8, 8, 2, 3, 4, 1, 10, 12],
         ),
         (
             GameplayClientMessage::BuildWallOrder {
@@ -91,14 +91,14 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 from: TileCoord::new(5, 6),
                 to: TileCoord::new(5, 9),
             },
-            vec![8, 8, 1, 3, 10, 12, 10, 18],
+            vec![9, 8, 1, 3, 10, 12, 10, 18],
         ),
         (
             GameplayClientMessage::CancelConstructionOrder {
                 sequence: 8,
                 building_id: EntityId(5),
             },
-            vec![9, 8, 5],
+            vec![10, 8, 5],
         ),
         (
             GameplayClientMessage::FarmOrder {
@@ -106,7 +106,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 entity_id: EntityId(3),
                 farm_id: EntityId(7),
             },
-            vec![10, 9, 3, 7],
+            vec![11, 9, 3, 7],
         ),
         (
             GameplayClientMessage::ConstructOrder {
@@ -114,7 +114,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 builder_ids: vec![EntityId(3)],
                 building_id: EntityId(7),
             },
-            vec![11, 8, 1, 3, 7],
+            vec![12, 8, 1, 3, 7],
         ),
         (
             GameplayClientMessage::GatherOrder {
@@ -156,8 +156,8 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         bytes,
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 1, 0,
-            200, 1, 200, 1, 100, 200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 0, 3, 244, 3, 224,
-            18, 224, 18, 0
+            200, 1, 200, 1, 100, 200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224,
+            18, 8, 0, 1, 0, 3, 244, 3, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -243,7 +243,7 @@ fn invalid_load_progress_footprint_and_population_are_rejected() {
     let mut footprint = building();
     footprint.footprint.max.x -= 1;
     let mut population = player();
-    population.population_cap = 81;
+    population.population_cap = MAX_POPULATION + 1;
     for message in [
         GameplayServerMessage::Snapshot {
             revision: 1,

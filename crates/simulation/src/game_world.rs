@@ -21,9 +21,9 @@ pub use economy::{
     GameBuilding, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, PlayerEconomy, Stockpile,
     TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules, trainable_units,
 };
-pub use resources::PreparedResourceDepletion;
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
+pub use resources::PreparedResourceDepletion;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameUnit {
