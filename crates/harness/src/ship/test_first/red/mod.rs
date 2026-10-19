@@ -4,6 +4,7 @@ mod compile;
 mod fingerprint;
 mod javascript;
 mod mounts;
+pub(crate) mod progress;
 mod record;
 pub(crate) mod runner;
 mod snapshot;

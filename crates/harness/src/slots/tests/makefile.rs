@@ -412,6 +412,17 @@ fn help_lines_close_their_single_quoted_echo() {
 }
 
 #[test]
+fn red_checkout_keeps_the_selected_rehearsal_repository_and_revisions() {
+    let files = make_files(&repository());
+    let definitions = definitions(&files);
+    let wrapper = definitions.get("SLOT_RUN").unwrap();
+    let (provided, _) = environment_read(&[wrapper.as_str()], &definitions);
+    for name in ["HARNESS_RED_ROOT", "HARNESS_RED_BASE", "HARNESS_RED_HEAD"] {
+        assert!(provided.contains(name), "red-checkout drops {name}");
+    }
+}
+
+#[test]
 fn dedicated_de_test_mounts_the_install_read_only_and_runs_real_file_tests() {
     let files = make_files(&repository());
     let wrapper = recipe(&files, "test-assets-de").expect("dedicated real-file Make target");
