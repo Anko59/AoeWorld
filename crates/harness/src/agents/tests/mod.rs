@@ -1,4 +1,5 @@
 mod bash;
+mod disk;
 mod dispatch;
 mod hooks;
 mod parse_failures;

@@ -29,13 +29,14 @@ pub(super) fn check(
     root: &Path,
     wasm: &[String],
     cache: &Path,
+    retention: &Path,
     runner: Runner,
 ) -> git::Result<CheckReport> {
     let target = (root != cache.parent().and_then(Path::parent).unwrap_or(root))
         .then(|| cache.join("baseline-target"));
     let runs = runner(root, wasm, target.as_deref())
         .map_err(|e| format!("wasm check unavailable: {e}"))?;
-    let log = output::run_directory(cache)
+    let log = output::run_directory(retention)
         .map_err(|e| e.to_string())?
         .join("wasm.log");
     let text: Vec<_> = runs.iter().map(|r| r.output.as_str()).collect();

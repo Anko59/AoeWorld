@@ -32,6 +32,89 @@ fn result(green: bool) -> CheckReport {
 }
 
 #[test]
+fn disk_hygiene_red_cleans_its_private_run_on_every_outcome() {
+    for outcome in [
+        "success",
+        "already green",
+        "runner error",
+        "green failure",
+        "panic",
+    ] {
+        let (temp, base, _) = history();
+        let root = temp.path();
+        let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
+        let mut snapshots = Vec::new();
+        let mut calls = 0;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            red::run_with(root, &base, &head, &mut |snapshot, _| {
+                calls += 1;
+                snapshots.push(snapshot.to_owned());
+                let owner = snapshot.parent().unwrap();
+                assert_ne!(owner, root.join(".cache/agent-hook/red"));
+                let build = snapshot.join("target/debug/incremental");
+                fs::create_dir_all(&build).unwrap();
+                fs::write(build.join("object"), "build output").unwrap();
+                // Logs are retained outside the run owner, even on failure.
+                let logs = root.join(".cache/agent-hook/red/output");
+                fs::create_dir_all(&logs).unwrap();
+                fs::write(logs.join("bounded.log"), "runner log").unwrap();
+                match outcome {
+                    "runner error" => Err("runner unavailable".into()),
+                    "panic" => panic!("runner panic"),
+                    "already green" => Ok(result(true)),
+                    "green failure" => Ok(result(false)),
+                    _ => Ok(result(calls == 2)),
+                }
+            })
+        }));
+        match outcome {
+            "success" => assert!(result.unwrap().is_ok()),
+            "panic" => assert!(result.is_err()),
+            _ => assert!(result.unwrap().is_err()),
+        }
+        for snapshot in snapshots {
+            assert!(!snapshot.exists(), "{outcome}: {}", snapshot.display());
+            assert!(!snapshot.parent().unwrap().exists(), "run owner removed");
+        }
+        assert!(
+            root.join(".cache/agent-hook/red/output/bounded.log")
+                .is_file()
+        );
+        assert_eq!(
+            red::require(root, &base, &head).is_ok(),
+            outcome == "success"
+        );
+    }
+}
+
+#[test]
+fn disk_hygiene_overlapping_reds_leave_the_active_runs_builds_alone() {
+    let (temp, base, _) = history();
+    let root = temp.path();
+    let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
+    let mut calls = 0;
+    red::run_with(root, &base, &head, &mut |outer, _| {
+        calls += 1;
+        let build = outer.join("target/active");
+        fs::create_dir_all(build.parent().unwrap()).unwrap();
+        fs::write(&build, "active").unwrap();
+        let mut inner_calls = 0;
+        red::run_with(root, &base, &head, &mut |inner, _| {
+            assert_ne!(inner.parent(), outer.parent(), "each run owns its exports");
+            inner_calls += 1;
+            assert!(build.is_file());
+            Ok(result(inner_calls == 2))
+        })?;
+        assert!(
+            build.is_file(),
+            "finishing another red must not touch this run"
+        );
+        Ok(result(calls == 2))
+    })
+    .unwrap();
+}
+
+#[test]
 fn browser_red_runs_parent_with_tests_then_head_and_records_exact_commits() {
     let (temp, base, _) = history();
     let root = temp.path();

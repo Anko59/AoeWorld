@@ -442,7 +442,8 @@ pub(crate) fn ship_with(
             )?;
         }
         if let Some(report) = &review {
-            review_gate::publish(root, &url, report, &evidence.base_branch)?;
+            let publish = || review_gate::publish(root, &url, report, &evidence.base_branch);
+            postpush::cleanup::after_publication(root, &evidence.base_branch, publish)?;
             // The review passed: a leftover that cannot be filed is reported, not fatal.
             for problem in issues::followups::file(root, &url, report) {
                 eprintln!(

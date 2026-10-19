@@ -41,6 +41,44 @@ fn rendering(root: &Path, shore: &str) -> Vec<String> {
 const WASM_TEST: &str =
     "use wasm_bindgen_test::wasm_bindgen_test;\n#[wasm_bindgen_test]\nfn shore_is_wet() {}\n";
 
+#[test]
+fn disk_hygiene_wasm_logs_survive_snapshot_cleanup_without_retaining_builds() {
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot = tempfile::tempdir_in(temp.path()).unwrap();
+    let root = snapshot.path();
+    let paths = rendering(root, WASM_TEST);
+    let scope = Scope::from_paths(root, &paths).unwrap();
+    let cache = root.join(".cache/duel");
+    let retention = temp.path().join("output");
+    let runner = |root: &Path, _: &[String], target: Option<&Path>| {
+        let target = target
+            .map(Path::to_owned)
+            .unwrap_or_else(|| root.join("target"));
+        write(&target, "object", "compiled output");
+        Ok(vec![run(
+            "aoe-rendering",
+            "lib",
+            CaptureExit::Success,
+            "test shore_is_wet ... ok\n",
+        )])
+    };
+    let report = super::focus::run_retained(root, &scope, &cache, &retention, &runner).unwrap();
+    assert!(report.passed);
+    let source = root.to_owned();
+    drop(snapshot);
+    assert!(!source.exists(), "build output is disposable");
+    let logs: Vec<_> = fs::read_dir(&retention)
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("wasm.log"))
+        .collect();
+    assert_eq!(logs.len(), 1);
+    assert!(
+        fs::read_to_string(&logs[0])
+            .unwrap()
+            .contains("test shore_is_wet ... ok")
+    );
+}
+
 fn run(package: &'static str, binary: &'static str, exit: CaptureExit, output: &str) -> SuiteRun {
     SuiteRun {
         package,

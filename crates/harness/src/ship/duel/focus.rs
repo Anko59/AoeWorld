@@ -275,7 +275,13 @@ pub(in crate::ship) fn run_retained(
         }
     }
     if !scope.wasm.is_empty() {
-        report.merge(super::wasm::check(root, &scope.wasm, cache, wasm_runner)?);
+        report.merge(super::wasm::check(
+            root,
+            &scope.wasm,
+            cache,
+            retention,
+            wasm_runner,
+        )?);
     }
     report.tests.sort();
     report.tests.dedup();
