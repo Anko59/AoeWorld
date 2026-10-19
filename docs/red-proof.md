@@ -85,13 +85,17 @@ recomputed or checked by shipping. `RED_RECORD <json>` prints the record for a r
 
 `make ship` blocks product/build changes without the matching record before
 gates/review/publication, and checks again after the final catch-up rebase.
-Each record stores the same merge-base patch fingerprint used for review reuse.
-When the current head has no record, shipping checks a fingerprint index (at most
-128 candidates for that patch), recomputes each source's fingerprint against its
-recorded base, and carries a proof only when the entire patch and the changed test
-paths and head blobs match. A clean rebase can therefore retain its red proof;
-changed product bytes or test blobs require `make red` again. A carried PASS names
-the original head and is included in reviewer facts and the PR description.
+Each record stores the review's merge-base patch fingerprint and a separate,
+stronger red-carry fingerprint of a diff with 50 surrounding lines. Red ignores
+hunk offsets and text blob IDs, preserving exact changed bytes,
+function headers, context, paths, modes and binary identities. When the current
+head has no record, shipping checks the red-carry index (at most 128 candidates),
+recomputes both source identities against the recorded base, and carries only
+when both match, along with changed test paths and head blobs. Distant upstream
+insertions can shift line numbers without losing proof; moving an identical edit
+to another function or changing its context requires `make red` again. Missing or
+unreadable identities refuse carry. A carried PASS names the original head and
+is included in reviewer facts and the PR description.
 
 Product scope is non-test code under `crates/` except `crates/harness/`, plus
 `web/` and `browser/`. Build-time inputs retain the shipping classifier's

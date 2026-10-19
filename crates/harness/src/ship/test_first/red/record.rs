@@ -1,4 +1,4 @@
-use super::{Record, blobs, changed_tests, git};
+use super::{Record, blobs, changed_tests, fingerprint, git};
 use std::{
     fs,
     io::{ErrorKind, Write},
@@ -40,7 +40,7 @@ pub(super) fn write(root: &Path, record: &Record) -> git::Result<()> {
         .map_err(|e| e.to_string())?;
     file.as_file().sync_all().map_err(|e| e.to_string())?;
     file.persist(&path).map_err(|e| e.to_string())?;
-    let index = index(root, &record.change_fingerprint)?;
+    let index = index(root, &record.carry_fingerprint)?;
     fs::create_dir_all(&index).map_err(|e| e.to_string())?;
     // Only the filename matters. Readers load and validate the authoritative head record;
     // a stale index entry (or an interrupted write before indexing) never grants a PASS.
@@ -62,10 +62,11 @@ fn valid(record: &Record, paths: &[String], blobs: &[String]) -> bool {
 fn carried(
     root: &Path,
     fingerprint: &str,
+    carry_fingerprint: &str,
     paths: &[String],
     blobs: &[String],
 ) -> git::Result<Option<Record>> {
-    let entries = match fs::read_dir(index(root, fingerprint)?) {
+    let entries = match fs::read_dir(index(root, carry_fingerprint)?) {
         Ok(entries) => entries,
         Err(_) => return Ok(None),
     };
@@ -87,11 +88,12 @@ fn carried(
         if record.head == head
             && full_id(&record.base)
             && record.change_fingerprint == fingerprint
+            && record.carry_fingerprint == carry_fingerprint
             && valid(&record, paths, blobs)
-            // Like review reuse, recompute the source against its recorded base, not a ref
-            // that may have moved. The index and stored hash are only lookup hints.
-            && git::change_fingerprint_from(root, &record.base, head)
-                .is_ok_and(|(_, source)| source == fingerprint)
+            // Recompute both identities against the recorded base, not a moving ref.
+            // The index and stored hashes are only lookup hints.
+            && fingerprint::compute(root, &record.base, head)
+                .is_ok_and(|(change, carry)| change == fingerprint && carry == carry_fingerprint)
         {
             return Ok(Some(record));
         }
@@ -123,11 +125,12 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
     };
     let paths = changed_tests(root, base, head)?;
     let blobs = blobs(root, head, &paths)?;
-    let fingerprint = git::change_fingerprint_from(root, base, head)?.1;
+    let (fingerprint, carry_fingerprint) = fingerprint::compute(root, base, head)?;
     let record: Record = match fs::read(path(root, head)?) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| missing())?,
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            let source = carried(root, &fingerprint, &paths, &blobs)?.ok_or_else(missing)?;
+            let source = carried(root, &fingerprint, &carry_fingerprint, &paths, &blobs)?
+                .ok_or_else(missing)?;
             return Ok(format!(
                 "- test-first red: PASS (carried from {}; patch unchanged after rebase)\n",
                 source.head
@@ -138,6 +141,7 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
     if record.head != head
         || record.base != base
         || record.change_fingerprint != fingerprint
+        || record.carry_fingerprint != carry_fingerprint
         || !valid(&record, &paths, &blobs)
     {
         return Err(missing());
