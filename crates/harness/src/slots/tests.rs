@@ -473,6 +473,7 @@ mod cap;
 mod config;
 mod environment;
 mod makefile;
+mod merge_lists;
 mod roots;
 
 mod load;

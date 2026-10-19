@@ -187,6 +187,7 @@ fn workspace_named(prefix: &str) -> tempfile::TempDir {
             include_str!("../../../make/qualification.mk"),
         ),
         ("make/heavy.mk", include_str!("../../../make/heavy.mk")),
+        ("make/phony.mk", include_str!("../../../make/phony.mk")),
     ] {
         fs::write(workspace.path().join(included.0), included.1).unwrap();
     }

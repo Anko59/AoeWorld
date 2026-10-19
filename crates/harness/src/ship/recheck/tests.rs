@@ -12,6 +12,7 @@ use std::{fs, path::PathBuf};
 
 mod fork_point;
 mod fork_point_cli;
+mod merge;
 mod pinned;
 mod restack;
 mod start;
