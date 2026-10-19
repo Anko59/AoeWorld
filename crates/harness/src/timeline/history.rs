@@ -67,23 +67,25 @@ pub(super) fn load(root: &Path) -> Result<Data> {
                                     && seconds.is_finite()
                                     && seconds >= 0.
                                 {
-                                    let attempts: Vec<f64> = gate["attempts"]
+                                    let attempts: Vec<(f64, Value)> = gate["attempts"]
                                         .as_array()
                                         .into_iter()
                                         .flatten()
-                                        .filter_map(|a| a["seconds"].as_f64())
-                                        .filter(|s| s.is_finite() && *s >= 0.)
+                                        .filter_map(|a| {
+                                            Some((a["seconds"].as_f64()?, a["verdict"].clone()))
+                                        })
+                                        .filter(|(s, _)| s.is_finite() && *s >= 0.)
                                         .collect();
                                     let durations = if attempts.is_empty() {
-                                        vec![seconds]
+                                        vec![(seconds, gate["verdict"].clone())]
                                     } else {
                                         attempts
                                     };
-                                    for duration in durations {
+                                    for (duration, verdict) in durations {
                                         let gate_sample = Sample {
                                             stage: format!("gate/{id}"),
                                             duration,
-                                            detail: json!({"verdict":gate["verdict"]}),
+                                            detail: json!({"verdict":verdict}),
                                             ..sample.clone()
                                         };
                                         if !observed(&data.samples, &gate_sample) {

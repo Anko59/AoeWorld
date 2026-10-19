@@ -222,3 +222,148 @@ fn history_counts_each_recorded_retry_without_counting_final_result_twice() {
     );
     assert!(text.contains("gates | 1 | 60.0s | 60.0s | 0.017"), "{text}");
 }
+
+#[test]
+fn window_joins_retained_final_push_before_filtering_completed_intervals() {
+    // Hours since October 17 00:00: push Oct 17 23:00, merge Oct 19 10:00.
+    let (samples, _) = pair(vec![
+        event(22. * 3600., "push", "start", "a", "final"),
+        event(23. * 3600., "push", "end", "a", "final"),
+        event(57. * 3600., "red", "start", "a", "final"),
+        event(58. * 3600., "red", "end", "a", "final"),
+    ]);
+    let data = history::Data {
+        samples,
+        ..Default::default()
+    };
+    let prs: Vec<github::Pr> = serde_json::from_value(json!([{
+        "number":42,"headRefName":"topic/nested","headRefOid":"final",
+        "createdAt":22. * 3600.,"mergedAt":58. * 3600.
+    }]))
+    .unwrap();
+    let text = report::render(&data, &prs, 36. * 3600., 60. * 3600.);
+    assert!(text.contains("push-to-merge 126000.0s"), "{text}");
+    assert!(
+        text.contains("push-to-merge | 1 | 126000.0s | 126000.0s | 35.000"),
+        "{text}"
+    );
+    assert!(!text.contains("push unavailable"), "{text}");
+    assert!(
+        !text.contains("push |"),
+        "old local stage stays outside aggregate: {text}"
+    );
+    assert!(
+        !text
+            .split("Local stages not joined")
+            .nth(1)
+            .unwrap()
+            .contains("red 3600.0s"),
+        "{text}"
+    );
+    assert!(!report::render(&data, &prs, 59. * 3600., 60. * 3600.).contains("push-to-merge |"));
+}
+
+#[test]
+fn history_retry_rows_keep_each_attempts_own_verdict() {
+    let root = temp();
+    write_json(
+        root.path(),
+        "evidence/retry.json",
+        json!({
+            "head":"retry", "branch":"topic/nested", "started":1, "finished":61,
+            "cadence":"preflight", "verdict":"PASS", "gates":[{
+                "gate":"lint", "seconds":30., "verdict":"PASS", "attempts":[
+                    {"seconds":10.,"verdict":"FAIL"},{"seconds":30.,"verdict":"PASS"}
+                ]
+            }, {"gate":"fmt-check","seconds":1.,"verdict":"PASS"}]
+        }),
+    );
+    let text = report::render(&history::load(root.path()).unwrap(), &[], 0., 100.);
+    assert!(
+        text.contains("gate/lint 10.0s [retry; history, verdict=\"FAIL\"]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("gate/lint 30.0s [retry; history, verdict=\"PASS\"]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("gate/fmt-check 1.0s [retry; history, verdict=\"PASS\"]"),
+        "{text}"
+    );
+}
+
+#[test]
+fn github_query_keeps_ci_created_before_the_completion_window() {
+    let root = repository();
+    assert!(
+        Command::new("git")
+            .current_dir(root.path())
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/repository.git"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    // Window Oct 12 00:05 .. Oct 19 00:05; CI Oct 11 23:50 .. Oct 12 00:10.
+    let since = 1_791_763_500.;
+    let (prs, warnings) = github::read_with(root.path(), since, &|args| {
+        Ok(if args[..2] == ["pr", "list"] {
+            json!([{"number":42,"headRefName":"topic/nested","headRefOid":"h",
+                "createdAt":since-1800.,"mergedAt":since+360.}])
+            .to_string()
+        } else {
+            assert_eq!(&args[..2], ["run", "list"]);
+            // GitHub's creation-date filter would discard this completed run.
+            if args.contains(&"--created") {
+                "[]".into()
+            } else {
+                json!([{"databaseId":1,"name":"CI","headSha":"h",
+                    "startedAt":since-900.,"updatedAt":since+300.,
+                    "status":"completed","conclusion":"success"}])
+                .to_string()
+            }
+        })
+    });
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let text = report::render(&history::Data::default(), &prs, since, since + 7. * 86400.);
+    assert!(
+        text.contains("CI | 1 | 1200.0s | 1200.0s | 0.333"),
+        "{text}"
+    );
+}
+
+#[test]
+fn pairing_keeps_incomplete_review_rounds_separate_and_displays_round_metadata() {
+    let mut entries = vec![
+        event(1., "review-round", "start", "a", "h"),
+        event(5., "review-round", "start", "a", "h"),
+        event(8., "review-round", "end", "a", "h"),
+        event(10., "review-round", "end", "a", "h"),
+    ];
+    for (e, round) in entries.iter_mut().zip([1, 2, 2, 1]) {
+        e.detail["round"] = json!(round);
+        e.detail["kind"] = json!(if round == 1 { "blind" } else { "cross" });
+        e.detail["tier"] = json!("high");
+    }
+    let (samples, unpaired) = pair(entries);
+    assert_eq!(unpaired, 0);
+    assert_eq!(samples.len(), 2);
+    assert_eq!(samples[0].seconds(), 9.);
+    assert_eq!(samples[1].seconds(), 3.);
+    let text = report::render(
+        &history::Data {
+            samples,
+            ..Default::default()
+        },
+        &[],
+        0.,
+        20.,
+    );
+    assert!(text.contains("round=1, kind=\"blind\""), "{text}");
+    assert!(text.contains("round=2, kind=\"cross\""), "{text}");
+}

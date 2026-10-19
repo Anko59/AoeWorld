@@ -26,38 +26,43 @@ pub(super) struct Run {
     pub(super) conclusion: String,
 }
 
-fn query<T: serde::de::DeserializeOwned>(root: &Path, args: &[&str]) -> Result<Vec<T>> {
-    Ok(serde_json::from_str(&crate::ship::gh(root, args)?)?)
+fn query<T: serde::de::DeserializeOwned>(reply: Result<String>) -> Result<Vec<T>> {
+    Ok(serde_json::from_str(&reply?)?)
 }
 
 /// Two bounded, read-only queries rather than an API call for every PR/run.
 /// Query failures preserve local measurements and name the missing evidence.
 pub(super) fn read(root: &Path, since: f64) -> (Vec<Pr>, Vec<String>) {
+    read_with(root, since, &|args| crate::ship::gh(root, args))
+}
+
+pub(super) fn read_with(
+    root: &Path,
+    since: f64,
+    request: &dyn Fn(&[&str]) -> Result<String>,
+) -> (Vec<Pr>, Vec<String>) {
     let mut warnings = Vec::new();
     let repository = match crate::ship::git::origin_repository(root) {
         Ok(repository) => repository,
         Err(e) => return (Vec::new(), vec![format!("GitHub unavailable: {e}")]),
     };
     let date = crate::ship::lock::utc(since as u64)[..10].to_owned();
-    let mut prs = match query::<Pr>(
-        root,
-        &[
-            "pr",
-            "list",
-            "--repo",
-            &repository,
-            "--state",
-            "merged",
-            "--search",
-            &format!("merged:>={date}"),
-            "--limit",
-            "500",
-            "--json",
-            "number,headRefName,headRefOid,createdAt,mergedAt",
-            "--jq",
-            "map(.createdAt |= fromdateiso8601 | .mergedAt |= fromdateiso8601)",
-        ],
-    ) {
+    let mut prs = match query::<Pr>(request(&[
+        "pr",
+        "list",
+        "--repo",
+        &repository,
+        "--state",
+        "merged",
+        "--search",
+        &format!("merged:>={date}"),
+        "--limit",
+        "500",
+        "--json",
+        "number,headRefName,headRefOid,createdAt,mergedAt",
+        "--jq",
+        "map(.createdAt |= fromdateiso8601 | .mergedAt |= fromdateiso8601)",
+    ])) {
         Ok(prs) => prs,
         Err(e) => return (Vec::new(), vec![format!("merged PRs unavailable: {e}")]),
     };
@@ -67,23 +72,18 @@ pub(super) fn read(root: &Path, since: f64) -> (Vec<Pr>, Vec<String>) {
     if prs.is_empty() {
         return (prs, warnings);
     }
-    let runs = match query::<Run>(
-        root,
-        &[
-            "run",
-            "list",
-            "--repo",
-            &repository,
-            "--created",
-            &format!(">={date}"),
-            "--limit",
-            "2000",
-            "--json",
-            "databaseId,name,headSha,startedAt,updatedAt,status,conclusion",
-            "--jq",
-            "map(.startedAt |= (if . == null or . == \"\" then null else fromdateiso8601 end) | .updatedAt |= (if . == null or . == \"\" then null else fromdateiso8601 end))",
-        ],
-    ) {
+    let runs = match query::<Run>(request(&[
+        "run",
+        "list",
+        "--repo",
+        &repository,
+        "--limit",
+        "2000",
+        "--json",
+        "databaseId,name,headSha,startedAt,updatedAt,status,conclusion",
+        "--jq",
+        "map(.startedAt |= (if . == null or . == \"\" then null else fromdateiso8601 end) | .updatedAt |= (if . == null or . == \"\" then null else fromdateiso8601 end))",
+    ])) {
         Ok(runs) => runs,
         Err(e) => {
             warnings.push(format!("CI runs unavailable: {e}"));

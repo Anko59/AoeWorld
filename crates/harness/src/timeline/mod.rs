@@ -57,6 +57,8 @@ fn pair(entries: Vec<Entry>) -> (Vec<Sample>, usize) {
             entry.stage.clone(),
             entry.detail["run"].to_string(),
             entry.detail["gate"].to_string(),
+            entry.detail["tier"].to_string(),
+            entry.detail["round"].to_string(),
         );
         match entry.event.as_str() {
             "start" => unpaired += usize::from(open.insert(key, entry).is_some()),

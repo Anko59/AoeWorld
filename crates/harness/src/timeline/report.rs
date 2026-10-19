@@ -28,7 +28,7 @@ fn stats(values: &[f64]) -> (f64, f64, f64) {
 
 fn note(sample: &Sample) -> String {
     let fields: Vec<String> = [
-        "gate", "tier", "grade", "rounds", "closing", "ok", "verdict", "error",
+        "gate", "tier", "grade", "round", "kind", "rounds", "closing", "ok", "verdict", "error",
     ]
     .into_iter()
     .filter_map(|key| {
@@ -74,7 +74,10 @@ pub(super) fn render(data: &Data, prs: &[Pr], since: f64, until: f64) -> String 
             .map(|p| p.merged_at)
             .max_by(f64::total_cmp)
             .unwrap_or(0.);
-        let local: Vec<_> = samples
+        // Join retained history first: the final push can precede the window
+        // even though the derived push-to-merge interval completes inside it.
+        let local: Vec<_> = data
+            .samples
             .iter()
             .enumerate()
             .filter(|(_, s)| {
@@ -222,8 +225,8 @@ pub(super) fn render(data: &Data, prs: &[Pr], since: f64, until: f64) -> String 
     for (i, s) in data
         .samples
         .iter()
-        .filter(|s| in_window(s, since, until))
         .enumerate()
+        .filter(|(_, s)| in_window(s, since, until))
     {
         if !assigned.contains(&i) {
             out.push_str(&format!(

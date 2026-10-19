@@ -1,7 +1,8 @@
 //! Reviewer sessions: the real runner or scripted answers in tests, and the
 //! one retry an answered-but-unreadable session gets.
 use super::{
-    config,
+    Result, add_findings, config, increment, prompt,
+    protocol::Finding,
     protocol::{Answer, Grade},
     runner,
 };
@@ -102,4 +103,35 @@ impl Ask for Live<'_> {
     fn strong(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>> {
         runner::ask_all(self.runtime, self.root, &self.strong, prompts)
     }
+}
+
+/// Round 1: every persona reviews the change blind.
+pub(super) fn blind_round(
+    root: &Path,
+    personas: &[String],
+    subject: &prompt::Subject,
+    ask: &dyn Ask,
+    findings: &mut Vec<Finding>,
+    failures: &mut Vec<String>,
+    filter: &mut increment::Filter,
+) -> Result<()> {
+    let prompts = personas
+        .iter()
+        .map(|p| prompt::first_round(root, p, subject))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    for (reviewer, answer) in ask_checked(ask, prompts, readable_answer)
+        .into_iter()
+        .enumerate()
+    {
+        match answer
+            .and_then(|text| serde_json::from_str::<Answer>(&text).map_err(|e| e.to_string()))
+        {
+            Ok(answer) => {
+                let inside = filter.admit(answer.findings);
+                add_findings(findings, reviewer, 1, inside)
+            }
+            Err(error) => failures.push(format!("round 1, {}: {error}", personas[reviewer])),
+        }
+    }
+    Ok(())
 }

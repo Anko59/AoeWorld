@@ -130,13 +130,21 @@ type TakeSlot =
     fn(&Path, &str, &SlotEnv) -> crate::slots::queue::Result<crate::slots::guard::Guard>;
 
 pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
-    run_gates_with(root, gates, slots, crate::slots::hold)
+    run_gates_with(root, gates, slots, crate::slots::guard::hold_timed)
 }
 
 /// `run_gates` without the overload retry: the agent stop check runs inside a hook and must
 /// never block for a load wait, so a timeout there fails at once as before.
 pub(crate) fn run_gates_once(root: &Path, gates: &[&Gate], slots: &SlotEnv) -> Vec<GateResult> {
-    run_gates_retrying(root, gates, slots, crate::slots::hold, &Retry::never())
+    run_gates_scoped(
+        root,
+        gates,
+        slots,
+        crate::slots::hold,
+        None,
+        &Retry::never(),
+        false,
+    )
 }
 
 /// `run_gates` for a local preflight: `test-unit` tests only the crates the
@@ -168,7 +176,7 @@ pub(crate) fn run_gates_retrying(
     take: TakeSlot,
     retry: &Retry,
 ) -> Vec<GateResult> {
-    run_gates_scoped(root, gates, slots, take, None, retry, false)
+    run_gates_scoped(root, gates, slots, take, None, retry, true)
 }
 
 /// The same gate path with acquisition injected for queue/load fixtures.

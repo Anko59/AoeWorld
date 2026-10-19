@@ -221,6 +221,31 @@ fn the_recheck_runs_after_reacquiring_when_dev_moved_during_the_review() {
     })
     .expect("ship");
     assert!(shipped.recheck.is_some(), "rebased and re-checked");
+    let text = std::fs::read_to_string(root.join(".git/aoe-ship/timeline/feature.jsonl")).unwrap();
+    let entries: Vec<serde_json::Value> = text
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    let recheck = entries
+        .iter()
+        .position(|e| e["stage"] == "recheck" && e["event"] == "start")
+        .unwrap();
+    let end = entries
+        .iter()
+        .position(|e| e["stage"] == "recheck" && e["event"] == "end")
+        .unwrap();
+    let gates: Vec<_> = entries[recheck + 1..end]
+        .iter()
+        .filter(|e| e["stage"] == "gate/fmt-check")
+        .collect();
+    assert_eq!(
+        gates.len(),
+        2,
+        "recheck observes its own gate attempt: {text}"
+    );
+    assert_eq!(gates[0]["event"], "start");
+    assert_eq!(gates[1]["event"], "end");
+    assert_eq!(gates[1]["detail"]["ok"], true);
     assert_eq!(remote_tip(&root, "feature"), shipped.head);
     assert!(
         lock::status(&path).unwrap().is_some(),
