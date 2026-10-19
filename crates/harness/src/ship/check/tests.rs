@@ -140,8 +140,8 @@ fn a_video_is_checked_against_the_level() {
     let voiced = "Input #0, x:\n  Duration: 00:00:30.00\n  Stream #0:0: Video: vp8\n  Stream #0:1: Audio: opus\n";
     fs::write(root.join("probe.txt"), voiced).unwrap();
     assert!(run(&root, &with_video).is_ok());
-    let message = problems(&root, &request(&body));
-    assert!(message.contains("needs a showcase video"), "{message}");
+    // The fixture changes only `gates/`: nothing a player sees, so no video is required.
+    assert!(run(&root, &request(&body)).is_ok());
 }
 
 #[test]

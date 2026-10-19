@@ -14,7 +14,7 @@ anything is pushed.
 
 `make review-floor` prints the lowest tier the change allows. The agent picks the
 tier (never below the floor) and says why in the description. A full review passes at
-8/10 or more.
+7/10 or more with no major or critical finding standing (7 since 2026-10-19).
 
 ## Tiers
 
@@ -133,7 +133,7 @@ caps and the follow-up issues count clusters. Nothing is dropped: the report
 lists each merged report under its cluster as "also reported as".
 
 A full review **passes** when every session answered and the capped grade is at
-least `merge_grade` (8). Every report is stored, keyed by commit, tier and
+least `merge_grade` (7) and no confirmed or disputed major or critical finding stands. Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
 

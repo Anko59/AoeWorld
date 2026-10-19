@@ -45,7 +45,7 @@ agent policy refuses `$` in agent-set Make values.
    another. The agent policy refuses every write into the Git common directory.
 6. **Reviews** the commit, with the ship lock released (`ship: lock released for the review`; no heavy slot is held either) so the next ship's gates run meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
-   family). A full review below 8/10, an incomplete review, or a closing review
+   family). A full review below 7/10 or with a standing major or critical finding, an incomplete review, or a closing review
    with a blocking finding or an undecided carried finding pushes nothing.
    A branch gets one full blind review; a non-severe failure leads to up to
    three closing reviews of the fixes and carried findings. Severe findings
@@ -248,8 +248,10 @@ distribution against the target; pull requests without a marker are counted
 apart. `make ship` adds one line with the same distribution to the "For AI"
 part; a `gh` failure there only says the line is unavailable.
 
-The agent picks the level. Not being a frontend change is never a reason for no
-video: film a terminal or agent session, a before/after timing or an API diff.
+The agent picks the level. A video is required only when a player would see the change:
+a non-test file under the client, rendering, simulation, map, assets or scenario crates,
+`web/` or `browser/` (`Change::visible`; since 2026-10-19). Other PRs may add one: film a
+terminal or agent session, a before/after timing or an API diff.
 Record it with `make showcase` ([showcase videos](showcase.md)). Duration and
 audio-stream presence are checked with ffmpeg from the pinned browser image. High and max levels require an audio stream; reviewers decide
 whether that track contains speech.

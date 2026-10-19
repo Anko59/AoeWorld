@@ -67,4 +67,6 @@ jobs:
       - run: make update-prs
         env:
           UPDATE_MAX_PRS: '5'
+          # dev no longer requires up-to-date branches (2026-10-19): green PRs merge as they are.
+          UPDATE_PRS: 'off'
           GH_TOKEN: ${{ github.token }}
