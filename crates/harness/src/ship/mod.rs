@@ -28,7 +28,6 @@ pub(crate) mod test_first;
 #[cfg(test)]
 mod tests;
 
-use crate::gates::registry::{Cadence, Registry};
 use evidence::{Evidence, Verdict};
 use git::publish::push;
 #[cfg(test)]
@@ -246,52 +245,7 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Gates at the exact commit, then evidence; a moved HEAD or tree leaves none.
-pub(crate) fn judge(root: &Path, options: &Options) -> Result<Evidence> {
-    let subject = git::subject(root)?;
-    stack::refuse_base(&options.base, &subject.branch)?;
-    let (base, merge_base) = git::base(root, &options.base, !options.no_fetch)?;
-    let changed = git::changed(root, &merge_base)?;
-    let registry = Registry::load(root)?;
-    let suites = registry.classify(&changed).suites;
-    let plan = registry.plan(Cadence::Preflight, &suites)?;
-    let gates: Vec<_> = plan
-        .gates
-        .iter()
-        .filter_map(|id| registry.gates.iter().find(|gate| &gate.id == id))
-        .collect();
-    let started = now();
-    eprintln!(
-        "ship: {} preflight gate(s) at {} on {}",
-        gates.len(),
-        &subject.head[..12],
-        subject.branch
-    );
-    let results = run::run_gates_selecting(root, &gates, &options.slots, &merge_base);
-    if git::subject(root).ok().as_ref() != Some(&subject) {
-        return Err("HEAD, the tree or the branch changed while the gates ran; no evidence written. Commit, then ship again".into());
-    }
-    let evidence = Evidence {
-        version: 1,
-        cadence: "preflight".into(),
-        verdict: evidence::verdict(&results),
-        head: subject.head,
-        tree: subject.tree,
-        branch: subject.branch,
-        base,
-        base_branch: options.base.clone(),
-        merge_base,
-        changed,
-        gates: results,
-        level: options.level.as_deref().cloned(),
-        recheck: None,
-        started,
-        finished: now(),
-    };
-    let path = evidence::write(root, &evidence)?;
-    eprintln!("ship: evidence {}", path.display());
-    Ok(evidence)
-}
+pub(crate) use evidence::judge;
 
 pub(crate) fn ship(root: &Path, options: &Options) -> Result<Evidence> {
     ship_with(root, options, &crate::review::review)
@@ -341,7 +295,9 @@ pub(crate) fn ship_with(
     } else {
         crate::review::base::scope(&options.base)
     };
-    let base = recheck::start::prepare(root, options)?;
+    let base = crate::timeline::stage(root, "rebase", serde_json::json!({}), || {
+        recheck::start::prepare(root, options)
+    })?;
     // The start-of-ship rebase is done. The gates take heavy slots, which serialize the heavy
     // work, and their evidence is keyed by the exact commit, so the next ship may take the lock
     // and start meanwhile. The lock is taken again for the re-check and the push.
@@ -395,7 +351,9 @@ pub(crate) fn ship_with(
         return Ok(evidence);
     }
     options.lock.reacquire(root, "make ship")?;
-    let rebased = recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)?;
+    let rebased = crate::timeline::stage(root, "recheck", serde_json::json!({}), || {
+        recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)
+    })?;
     // The red decision was made for the identities above; only a catch-up rebase changes them.
     let rebased_again = rebased.is_some();
     let (evidence, review, lease, _recheck_anchor) = match rebased {
@@ -424,7 +382,9 @@ pub(crate) fn ship_with(
         ),
     }
     .map_err(|error| format!("git push failed: {error}"))?;
-    push(root, &evidence, Some(&refreshed))?;
+    crate::timeline::stage(root, "push", serde_json::json!({}), || {
+        push(root, &evidence, Some(&refreshed))
+    })?;
     if !options.no_pr {
         let mut options = options.clone();
         if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {

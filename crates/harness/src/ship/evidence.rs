@@ -96,3 +96,57 @@ pub(crate) fn read(root: &Path, head: &str) -> Result<Option<Evidence>> {
         Err(error) => Err(error.to_string()),
     }
 }
+
+/// Gates at the exact commit, then evidence; a moved HEAD or tree leaves none.
+pub(crate) fn judge(root: &Path, options: &super::Options) -> super::Result<Evidence> {
+    let subject = git::subject(root)?;
+    super::stack::refuse_base(&options.base, &subject.branch)?;
+    let (base, merge_base) = git::base(root, &options.base, !options.no_fetch)?;
+    let changed = git::changed(root, &merge_base)?;
+    let registry = crate::gates::registry::Registry::load(root)?;
+    let suites = registry.classify(&changed).suites;
+    let plan = registry.plan(crate::gates::registry::Cadence::Preflight, &suites)?;
+    let gates: Vec<_> = plan
+        .gates
+        .iter()
+        .filter_map(|id| registry.gates.iter().find(|gate| &gate.id == id))
+        .collect();
+    let started = super::now();
+    eprintln!(
+        "ship: {} preflight gate(s) at {} on {}",
+        gates.len(),
+        &subject.head[..12],
+        subject.branch
+    );
+    crate::timeline::mark(root, "gates", "start", serde_json::json!({}));
+    let results = super::run::run_gates_selecting(root, &gates, &options.slots, &merge_base);
+    crate::timeline::mark(
+        root,
+        "gates",
+        "end",
+        serde_json::json!({"verdict":verdict(&results)}),
+    );
+    if git::subject(root).ok().as_ref() != Some(&subject) {
+        return Err("HEAD, the tree or the branch changed while the gates ran; no evidence written. Commit, then ship again".into());
+    }
+    let evidence = Evidence {
+        version: 1,
+        cadence: "preflight".into(),
+        verdict: verdict(&results),
+        head: subject.head,
+        tree: subject.tree,
+        branch: subject.branch,
+        base,
+        base_branch: options.base.clone(),
+        merge_base,
+        changed,
+        gates: results,
+        level: options.level.as_deref().cloned(),
+        recheck: None,
+        started,
+        finished: super::now(),
+    };
+    let path = write(root, &evidence)?;
+    eprintln!("ship: evidence {}", path.display());
+    Ok(evidence)
+}

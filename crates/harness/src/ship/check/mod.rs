@@ -60,6 +60,12 @@ impl std::error::Error for Problems {}
 /// `make ship`: every description problem first (before the lock wait, the
 /// gates and the review), then the lock, then the ship.
 pub(super) fn publish(root: &Path, options: &Options) -> super::Result<()> {
+    crate::timeline::stage(root, "ship", serde_json::json!({}), || {
+        publish_inner(root, options)
+    })
+}
+
+fn publish_inner(root: &Path, options: &Options) -> super::Result<()> {
     if let Some(body) = &options.body_file {
         super::stack::refuse_base(&options.base, &git::branch(root)?)?;
         let situation = github::situation(root, &options.base).ok();

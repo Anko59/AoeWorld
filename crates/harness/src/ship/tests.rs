@@ -356,3 +356,69 @@ fn the_push_names_the_evidenced_commit_for_the_pre_push_hook() {
     let recipe = &recipe[..=recipe[1..].find("\n\n").unwrap()];
     assert!(recipe.contains("-- prepush-evidence || $(MAKE) --no-print-directory preflight"));
 }
+
+#[test]
+fn timeline_records_real_ship_stage_boundaries_and_failures() {
+    for (gate, passed) in [("true", true), ("false", false)] {
+        let (_temp, root) = fixture(gate);
+        assert_eq!(ship(&root, &offline()).is_ok(), passed);
+        let path = root.join(".git/aoe-ship/timeline/feature.jsonl");
+        let lines = fs::read_to_string(path).unwrap();
+        let entries: Vec<serde_json::Value> = lines
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        for stage in ["rebase", "gates"] {
+            assert!(
+                entries
+                    .iter()
+                    .any(|e| e["stage"] == stage && e["event"] == "start")
+            );
+            assert!(
+                entries
+                    .iter()
+                    .any(|e| e["stage"] == stage && e["event"] == "end")
+            );
+        }
+        assert_eq!(entries.iter().any(|e| e["stage"] == "push"), passed);
+    }
+}
+
+#[test]
+fn timeline_observes_review_grade_and_only_reacquires_after_a_pass() {
+    for grade in [7, 9] {
+        let (_temp, root) = fixture("true");
+        let options = Options {
+            no_review: false,
+            lock: super::lock::Handoff::holding(super::lock::acquire(&root, "make ship").unwrap()),
+            ..offline()
+        };
+        let result = super::ship_with(&root, &options, &|root, tier, _, _, _| {
+            Ok(super::review_gate::graded(root, tier, grade))
+        });
+        assert_eq!(result.is_ok(), grade == 9);
+        let text = fs::read_to_string(root.join(".git/aoe-ship/timeline/feature.jsonl")).unwrap();
+        let entries: Vec<serde_json::Value> = text
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let reviews: Vec<_> = entries.iter().filter(|e| e["stage"] == "review").collect();
+        assert_eq!(reviews.len(), 2);
+        assert_eq!(reviews[0]["event"], "start");
+        assert_eq!(reviews[1]["event"], "end");
+        assert_eq!(reviews[1]["detail"]["tier"], "low");
+        assert_eq!(reviews[1]["detail"]["grade"], grade);
+        assert_eq!(reviews[1]["detail"]["ok"], grade == 9);
+        assert_eq!(
+            entries.iter().filter(|e| e["stage"] == "lock-wait").count(),
+            2
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e["stage"] == "lock-reacquire")
+                .count(),
+            if grade == 9 { 2 } else { 0 }
+        );
+    }
+}

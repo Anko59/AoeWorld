@@ -90,21 +90,28 @@ pub(crate) fn acquire(root: &Path, command: &str) -> Result<ShipLock> {
 
 /// [`acquire`] for a ship that is `returning` from its review (see [`Handoff::reacquire`]).
 fn acquire_as(root: &Path, command: &str, returning: bool) -> Result<ShipLock> {
-    let holder = Holder {
-        worktree: root.display().to_string(),
-        branch: git::branch(root).unwrap_or_else(|_| "(detached)".into()),
-        command: command.into(),
-        started: now(),
-        returning,
+    let stage = if returning {
+        "lock-reacquire"
+    } else {
+        "lock-wait"
     };
-    acquire_at(
-        &path(root)?,
-        &holder,
-        wait_from_env()?,
-        POLL,
-        REPORT_EVERY,
-        &mut |line| eprintln!("{line}"),
-    )
+    crate::timeline::stage(root, stage, serde_json::json!({"command":command}), || {
+        let holder = Holder {
+            worktree: root.display().to_string(),
+            branch: git::branch(root).unwrap_or_else(|_| "(detached)".into()),
+            command: command.into(),
+            started: now(),
+            returning,
+        };
+        acquire_at(
+            &path(root)?,
+            &holder,
+            wait_from_env()?,
+            POLL,
+            REPORT_EVERY,
+            &mut |line| eprintln!("{line}"),
+        )
+    })
 }
 
 pub(crate) fn acquire_at(

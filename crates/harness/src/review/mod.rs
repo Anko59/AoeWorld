@@ -33,7 +33,7 @@ pub(crate) use increment::Increment;
 use protocol::{Answer, Cast, Finding, Grade, Status};
 pub(crate) use report::{Report, history};
 pub(crate) use session::Ask;
-use session::{Live, ask_checked, readable_answer, readable_grade};
+use session::{Live, ask_checked, blind_round, readable_answer, readable_grade};
 use std::{
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -243,6 +243,9 @@ fn review_with_branch(
         }
         1
     } else {
+        let detail =
+            serde_json::json!({"tier":tier.name(), "round":1, "kind":"blind", "closing":false});
+        crate::timeline::mark(root, "review-round", "start", detail.clone());
         blind_round(
             root,
             &personas,
@@ -256,6 +259,7 @@ fn review_with_branch(
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
+        crate::timeline::mark(root, "review-round", "end", detail);
         2
     };
     let mut rounds = 1;
@@ -269,6 +273,8 @@ fn review_with_branch(
         if (reviewers < 2 || findings.is_empty()) && !(closing && round == 1) {
             break;
         }
+        let detail = serde_json::json!({"tier":tier.name(), "round":round, "kind":"cross", "closing":closing});
+        crate::timeline::mark(root, "review-round", "start", detail.clone());
         let before: Vec<(String, Status)> =
             findings.iter().map(|f| (f.id.clone(), f.status)).collect();
         // A finding added in the last round could never be cross-examined.
@@ -352,6 +358,7 @@ fn review_with_branch(
         for finding in &mut findings {
             finding.status = protocol::status(finding, reviewers);
         }
+        crate::timeline::mark(root, "review-round", "end", detail);
         rounds = round;
         // Without new findings, a round where every finding is settled would
         // only be asked again verbatim.
@@ -424,37 +431,6 @@ fn review_with_branch(
     };
     report.store(root)?;
     Ok(report)
-}
-
-/// Round 1: every persona reviews the change blind.
-fn blind_round(
-    root: &Path,
-    personas: &[String],
-    subject: &prompt::Subject,
-    ask: &dyn Ask,
-    findings: &mut Vec<Finding>,
-    failures: &mut Vec<String>,
-    filter: &mut increment::Filter,
-) -> Result<()> {
-    let prompts = personas
-        .iter()
-        .map(|p| prompt::first_round(root, p, subject))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    for (reviewer, answer) in ask_checked(ask, prompts, readable_answer)
-        .into_iter()
-        .enumerate()
-    {
-        match answer
-            .and_then(|text| serde_json::from_str::<Answer>(&text).map_err(|e| e.to_string()))
-        {
-            Ok(answer) => {
-                let inside = filter.admit(answer.findings);
-                add_findings(findings, reviewer, 1, inside)
-            }
-            Err(error) => failures.push(format!("round 1, {}: {error}", personas[reviewer])),
-        }
-    }
-    Ok(())
 }
 
 /// One past the highest `F<n>` in use, members included: `cluster::merge` removes
