@@ -65,6 +65,12 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
             hash.update(&task.node.to_le_bytes());
             hash.update(&task.farm.map_or(u32::MAX, |farm| farm.0).to_le_bytes());
+            hash.update(
+                &task
+                    .animal
+                    .map_or(u64::MAX, |animal| u64::from(animal.0))
+                    .to_le_bytes(),
+            );
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
             hash.update(&[task.kind as u8, task.phase as u8]);

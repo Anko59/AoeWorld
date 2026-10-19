@@ -181,6 +181,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     );
                 }
             }
+            // Animal rendering and hunt controls are a separate UI task.
+            Ok(GameplayServerMessage::WildlifeState { .. }) => {}
             Ok(GameplayServerMessage::RoleChange {
                 role, resume_token, ..
             }) => {

@@ -25,6 +25,10 @@ pub use game_world::{
     TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
     VILLAGE_RULES, VillageRules, building_combat, damage_dealt, trainable_units, unit_combat,
 };
+pub use game_world::{
+    AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MAX_HUNTERS, WILDLIFE_RULES, WildlifeRules,
+    WildlifeStats,
+};
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};
 pub use terrain::{StartSearchResult, Terrain, UniformGrass, destination_passable};
