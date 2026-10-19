@@ -94,6 +94,26 @@ fn a_move_order_abandons_construction_and_the_foundation_stays() {
 }
 
 #[test]
+fn construction_adds_hit_points_without_healing_combat_damage() {
+    let (mut world, _, _) = village();
+    let builder = villager_at(&mut world, 99, 100);
+    let id = world
+        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .unwrap();
+    advance(&mut world, 250);
+    let before = world.building(id).unwrap().hp;
+    world.economy.buildings.get_mut(&id).unwrap().hp = before - 100;
+    world.advance();
+    let after = world.building(id).unwrap().hp;
+    assert!(after < before, "damage stays: {after} vs {before}");
+    finish(&mut world, id, 700);
+    let house = world.building(id).unwrap();
+    assert!(house.is_complete());
+    // A foundation starts at 1 HP, so full work ends at max - 100 + 1.
+    assert_eq!(house.hp, house.max_hp - 99, "completion does not heal");
+}
+
+#[test]
 fn construct_orders_reject_complete_foreign_and_missing_buildings() {
     let (mut world, _, center) = village();
     let builder = villager_at(&mut world, 99, 100);

@@ -340,14 +340,17 @@ impl GameWorld {
     /// time). Returns the released builders when the building completes.
     fn add_work(&mut self, id: EntityId, builders: u64) -> Option<Vec<EntityId>> {
         let building = self.economy.buildings.get_mut(&id)?;
+        let total = building.work_total.max(1);
+        let max_hp = u64::from(building.max_hp);
+        let earned_before = max_hp * building.work_done / total;
         building.work_done = (building.work_done + builders + 2).min(building.work_total);
-        let grown = u64::from(building.max_hp) * building.work_done / building.work_total.max(1);
-        building.hp = grown.clamp(1, u64::from(building.max_hp)) as u16;
+        // Work adds only the hit points it earns, so combat damage persists.
+        let earned = max_hp * building.work_done / total - earned_before;
+        building.hp = (u64::from(building.hp) + earned).clamp(1, max_hp) as u16;
         if building.work_done < building.work_total {
             return None;
         }
         building.state = ConstructionState::Complete;
-        building.hp = building.max_hp;
         let (kind, player, footprint) = (building.kind, building.player, building.footprint);
         self.refresh_population_cap(player);
         let finished = self
