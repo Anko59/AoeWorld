@@ -60,7 +60,8 @@ timeout, a cancellation or a nameless crash is not red.
 
 Playwright collection/load errors count only when every error belongs to a
 changed spec or a changed helper statically imported by a selected spec
-(including transitive relative imports). The fresh JSON report's top-level and
+(including transitive relative imports and `.js`/`.mjs`/`.cjs` specifiers resolving
+to `.ts`/`.mts`/`.cts` helpers). The fresh JSON report's top-level and
 suite errors must identify a missing module (`Cannot find module`,
 `Failed to load url`, `ERR_MODULE_NOT_FOUND`, or a missing `copyfile` source),
 or an export (`does not provide an export named`). Each missing module must
@@ -73,8 +74,11 @@ Playwright's `<anonymous>` ESM eval location needs a named source/importer in
 the message or stack. A real file location remains authoritative, including
 when it points outside the changed scope.
 At green, every affected spec must have at least one changed test that ran and
-passed; helper failures require this of each importing spec. Skipped or filtered
-specs cannot earn proof. These test names are recorded in `ran`, as for Rust.
+passed; helper failures require this of each importing spec. Passing evidence
+requires Playwright's `expected` outcome, `expectedStatus: passed`, and a final
+result with `status: passed`. Expected failures (`test.fail()`), fixme, skipped,
+filtered or unobserved tests cannot earn proof. These test names are recorded
+in `ran`, as for Rust.
 
 ## Runs and records
 

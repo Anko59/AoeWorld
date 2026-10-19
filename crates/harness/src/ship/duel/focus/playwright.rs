@@ -25,7 +25,17 @@ fn results(path: &Path, red_root: Option<&Path>) -> git::Result<CheckReport> {
                             "{file}::{parents}{title} [{}]",
                             test["projectName"].as_str().unwrap_or("unknown")
                         );
-                        if test["status"] != "skipped" {
+                        // `expected` is an outcome, not a pass: test.fail() also earns it.
+                        // Only an observed pass with a passing expectation is green evidence.
+                        let passed = test["status"] == "expected"
+                            && test["expectedStatus"] == "passed"
+                            && test["results"]
+                                .as_array()
+                                .and_then(|results| results.last())
+                                .is_some_and(|result| result["status"] == "passed");
+                        let failed =
+                            !matches!(test["status"].as_str(), Some("expected" | "skipped"));
+                        if passed || failed {
                             report.tests.push(name.clone());
                         }
                         report.locations.insert(
@@ -39,7 +49,7 @@ fn results(path: &Path, red_root: Option<&Path>) -> git::Result<CheckReport> {
                                 spec["line"].as_u64().unwrap_or(0) as usize,
                             ),
                         );
-                        if !matches!(test["status"].as_str(), Some("expected" | "skipped")) {
+                        if failed {
                             report.failed.push(name);
                         }
                     }

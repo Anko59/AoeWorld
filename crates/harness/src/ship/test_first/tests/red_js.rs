@@ -38,7 +38,9 @@ pub(super) fn passing(snapshot: &Path, runs: bool) -> git::Result<focus::CheckRe
         json!({"errors": [], "suites": [{
             "file": "new.spec.ts", "title": "new.spec.ts", "specs": [{
                 "file": "new.spec.ts", "title": "works", "line": 2,
-                "tests": [{"projectName": "webgpu", "status": status}]
+                "tests": [{"projectName": "webgpu", "status": status,
+                    "expectedStatus": "passed",
+                    "results": [{"status": if runs { "passed" } else { "skipped" }}]}]
             }]
         }]}),
     )

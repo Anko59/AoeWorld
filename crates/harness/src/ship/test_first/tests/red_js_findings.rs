@@ -5,6 +5,153 @@ use serde_json::json;
 use std::fs;
 
 #[test]
+fn js_compile_red_green_requires_an_actual_passing_test() {
+    let cases = [
+        json!({"status": "expected", "expectedStatus": "failed", "results": [{"status": "failed"}]}),
+        json!({"status": "expected", "expectedStatus": "skipped", "annotations": [{"type": "fixme"}], "results": [{"status": "skipped"}]}),
+        json!({"status": "skipped", "expectedStatus": "passed", "results": [{"status": "skipped"}]}),
+        json!({"status": "expected", "expectedStatus": "passed", "results": [{"status": "failed"}]}),
+        json!({"status": "expected", "expectedStatus": "passed", "results": []}),
+        json!({"status": "expected", "results": [{"status": "passed"}]}),
+    ];
+    for test in cases {
+        let (temp, base, head) = branch(true);
+        let result = red::run_with(temp.path(), &base, &head, &mut |snapshot, _| {
+            if snapshot.join(MODULE).exists() {
+                let mut test = test.clone();
+                test["projectName"] = json!("webgpu");
+                return parse(
+                    snapshot,
+                    json!({"errors": [], "suites": [{"specs": [{
+                        "file": "new.spec.ts", "title": "works", "line": 2, "tests": [test]
+                    }]}]}),
+                );
+            }
+            parse(
+                snapshot,
+                fixture(
+                    snapshot,
+                    "Cannot find module '../../web/new.mjs'".into(),
+                    SPEC,
+                    false,
+                ),
+            )
+        });
+        let error = result.expect_err(&format!("non-passing test earned proof: {test}"));
+        assert!(error.contains("ran and passed at HEAD"), "{test}: {error}");
+        assert!(red::require(temp.path(), &base, &head).is_err());
+    }
+}
+
+#[test]
+fn js_compile_red_only_actual_passes_are_recorded_in_a_mixed_spec() {
+    let (temp, base, _) = branch(true);
+    commit(
+        temp.path(),
+        &[(
+            SPEC,
+            &format!(
+                "{SOURCE}test('expected failure', () => {{ test.fail(); throw new Error('expected'); }});\n"
+            ),
+        )],
+        "also an expected failure",
+    );
+    let head = tip(temp.path());
+    let record = red::run_with(temp.path(), &base, &head, &mut |snapshot, _| {
+        if snapshot.join(MODULE).exists() {
+            return parse(
+                snapshot,
+                json!({"errors": [], "suites": [{"specs": [
+                    {"file": "new.spec.ts", "title": "works", "line": 2, "tests": [{
+                        "projectName": "webgpu", "status": "expected", "expectedStatus": "passed",
+                        "results": [{"status": "passed"}]
+                    }]},
+                    {"file": "new.spec.ts", "title": "expected failure", "line": 3, "tests": [{
+                        "projectName": "webgpu", "status": "expected", "expectedStatus": "failed",
+                        "results": [{"status": "failed"}]
+                    }]}
+                ]}]}),
+            );
+        }
+        parse(
+            snapshot,
+            fixture(
+                snapshot,
+                "Cannot find module '../../web/new.mjs'".into(),
+                SPEC,
+                false,
+            ),
+        )
+    })
+    .unwrap();
+    assert_eq!(record.ran, ["new.spec.ts::works [webgpu]"]);
+    assert!(red::require(temp.path(), &base, &head).is_ok());
+}
+
+#[test]
+fn js_compile_red_typescript_helpers_resolve_javascript_specifiers() {
+    for (specifier, extension) in [("js", "ts"), ("mjs", "mts"), ("cjs", "cts")] {
+        for transitive in [false, true] {
+            let (temp, _) = repo();
+            let root = temp.path();
+            let helper = format!("browser/tests/helper.{extension}");
+            let import = format!("import './helper.{specifier}';\n");
+            let spec = format!(
+                "{}test('works', () => {{}});\n",
+                if transitive {
+                    "import './bridge.js';\n"
+                } else {
+                    &import
+                }
+            );
+            commit(
+                root,
+                &[
+                    (SPEC, &spec),
+                    (&helper, "// old helper\n"),
+                    ("browser/tests/bridge.ts", &import),
+                ],
+                "spec imports TS helper",
+            );
+            let base = tip(root);
+            commit(
+                root,
+                &[
+                    (&helper, "import '../../web/new.mjs';\n"),
+                    (MODULE, "export const fresh = 1;\n"),
+                ],
+                "helper needs added module",
+            );
+            let head = tip(root);
+            let result = red::run_with(root, &base, &head, &mut |snapshot, _| {
+                if snapshot.join(MODULE).exists()
+                    || !fs::read_to_string(snapshot.join(&helper))
+                        .unwrap()
+                        .contains("import")
+                {
+                    return passing(snapshot, true);
+                }
+                parse(
+                    snapshot,
+                    fixture(
+                        snapshot,
+                        "Cannot find module '../../web/new.mjs'".into(),
+                        &helper,
+                        false,
+                    ),
+                )
+            });
+            let record = result.unwrap_or_else(|error| {
+                panic!(".{specifier} -> .{extension}, transitive={transitive}: {error}")
+            });
+            assert_eq!(record.missing, [MODULE]);
+            assert_eq!(record.ran, ["new.spec.ts::works [webgpu]"]);
+            assert!(red::require(root, &base, &head).is_ok());
+        }
+    }
+}
+
+#[test]
 fn js_compile_red_playwright_anonymous_eval_uses_the_named_importer() {
     let (temp, base, head) = branch(true);
     let result = red::run_with(temp.path(), &base, &head, &mut |snapshot, _| {

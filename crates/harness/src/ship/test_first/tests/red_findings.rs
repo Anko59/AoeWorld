@@ -11,7 +11,8 @@ fn browser(names: &[&str], failed: &[&str]) -> CheckReport {
     let json = serde_json::json!({"suites": [{"title": "smoke.spec.ts", "file": "smoke.spec.ts",
         "specs": names.iter().enumerate().map(|(i, n)| serde_json::json!({
             "title": n, "file": "smoke.spec.ts", "line": i + 1,
-            "tests": [{"projectName": "webgpu", "status": if failed.contains(n) { "unexpected" } else { "expected" }}]
+            "tests": [{"projectName": "webgpu", "status": if failed.contains(n) { "unexpected" } else { "expected" },
+                "expectedStatus": "passed", "results": [{"status": if failed.contains(n) { "failed" } else { "passed" }}]}]
         })).collect::<Vec<_>>()
     }], "errors": []});
     let file = tempfile::NamedTempFile::new().unwrap();

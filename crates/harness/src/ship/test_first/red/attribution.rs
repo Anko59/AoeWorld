@@ -51,12 +51,23 @@ pub(super) fn imports_changed(
             continue;
         };
         let dependency = wasm::normalize(&directory.join(import).to_string_lossy());
+        let source = Path::new(&dependency).extension().and_then(|extension| {
+            let extension = match extension.to_str()? {
+                "js" => "ts",
+                "mjs" => "mts",
+                "cjs" => "cts",
+                _ => return None,
+            };
+            Some(Path::new(&dependency).with_extension(extension))
+        });
         let dependency = [
-            dependency.clone(),
-            format!("{dependency}.ts"),
-            format!("{dependency}/index.ts"),
+            Some(dependency.clone()),
+            source.map(|path| path.to_string_lossy().into_owned()),
+            Some(format!("{dependency}.ts")),
+            Some(format!("{dependency}/index.ts")),
         ]
         .into_iter()
+        .flatten()
         .find(|p| root.join(p).is_file());
         if let Some(dependency) = dependency
             && (changed.iter().any(|p| p == &dependency && !is_spec(p))
