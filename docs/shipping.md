@@ -45,7 +45,8 @@ agent policy refuses `$` in agent-set Make values.
    another. The agent policy refuses every write into the Git common directory.
 6. **Reviews** the commit, with the ship lock released (`ship: lock released for the review`; no heavy slot is held either) so the next ship's gates run meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
-   family). A full review below 7/10 or with a standing major or critical finding, an incomplete review, or a closing review
+   family). A full review below 7/10 or with a blocking finding (confirmed major or critical, disputed
+critical), an incomplete review, or a closing review
    with a blocking finding or an undecided carried finding pushes nothing.
    A branch gets one full blind review; a non-severe failure leads to up to
    three closing reviews of the fixes and carried findings. Severe findings
