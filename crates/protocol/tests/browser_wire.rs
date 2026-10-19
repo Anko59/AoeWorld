@@ -26,7 +26,8 @@ fn combat_snapshot(
 }
 
 fn assert_wire(message: GameplayServerMessage, expected: Vec<u8>) {
-    assert_eq!(encode_gameplay_server(&message).unwrap(), expected);
+    let bytes = encode_gameplay_server(&message).unwrap();
+    assert_eq!(bytes, expected, "current codec bytes: {bytes:?}");
     assert_eq!(decode_gameplay_server(&expected).unwrap(), message);
 }
 
@@ -161,4 +162,25 @@ fn browser_building_fixture_matches_current_decoder() {
         decode_gameplay_server(&browser_bytes()).unwrap(),
         snapshot()
     );
+}
+
+#[test]
+fn browser_wildlife_fixture_matches_the_current_codec() {
+    let message = GameplayServerMessage::WildlifeState {
+        revision: 300,
+        tick: Tick(0),
+        animals: vec![aoe_protocol::AnimalState {
+            id: EntityId(7),
+            kind: aoe_protocol::AnimalKind::Sheep,
+            owner: Some(PlayerId(0)),
+            hp: 7,
+            position: WorldPosition::from_tile_center(TileCoord::new(8194, 8190)).unwrap(),
+            task: aoe_protocol::AnimalTask::Idle,
+            food_remaining: 100,
+            target: None,
+        }],
+    };
+    let mut expected = vec![8, 172, 2, 0, 1];
+    expected.extend(hex(include_str!("../../../browser/tests/wire/sheep.hex")));
+    assert_wire(message, expected);
 }

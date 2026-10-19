@@ -49,7 +49,6 @@ struct StoredAnimal {
 #[derive(Clone, Copy, Debug)]
 struct HuntJob {
     animal: EntityId,
-    cooldown: u32,
     repath_tick: u64,
 }
 

@@ -315,3 +315,22 @@ fn animal_targets_and_fleeing_clear_when_the_last_unit_disappears() {
     w.advance();
     assert_eq!(w.wildlife_stats().animal_steps, 0);
 }
+
+#[test]
+fn switching_between_hunting_and_combat_keeps_the_units_hit_timer() {
+    let mut w = world();
+    let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    let enemy = w.spawn_villager(PlayerId(1), at(100, 101)).unwrap();
+    let sheep = w.spawn_animal(AnimalKind::Sheep, at(101, 100)).unwrap();
+    w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
+    w.advance();
+    assert_eq!(w.animal(sheep).unwrap().hp, 4);
+    w.issue_attack(PlayerId(0), worker, enemy).unwrap();
+    w.advance();
+    assert_eq!(w.unit(enemy).unwrap().hp, 25);
+    w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
+    w.advance();
+    assert_eq!(w.animal(sheep).unwrap().hp, 4);
+    run(&mut w, 38);
+    assert_eq!(w.animal(sheep).unwrap().hp, 1);
+}

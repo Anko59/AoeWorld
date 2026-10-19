@@ -22,7 +22,7 @@ fn wildlife_wire_golden_and_roundtrip() {
         animal_id: EntityId(7),
     };
     let bytes = encode_gameplay_client(&order).unwrap();
-    assert_eq!(bytes, vec![14, 3, 1, 2, 7], "HuntOrder bytes: {bytes:?}");
+    assert_eq!(bytes, vec![15, 3, 1, 2, 7], "HuntOrder bytes: {bytes:?}");
     assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
     let state = GameplayServerMessage::WildlifeState {
         revision: 1,
@@ -95,7 +95,8 @@ fn wildlife_validates_collections_life_food_owner_and_hunt_group() {
 
 #[test]
 fn hunting_tasks_are_appended_and_animal_lifecycle_is_validated() {
-    assert_eq!(postcard::to_allocvec(&UnitTask::Dying).unwrap(), [8]);
+    assert_eq!(postcard::to_allocvec(&UnitTask::Dying).unwrap(), [6]);
+    assert_eq!(postcard::to_allocvec(&UnitTask::Farming).unwrap(), [8]);
     assert_eq!(postcard::to_allocvec(&UnitTask::Hunting).unwrap(), [9]);
     assert_eq!(postcard::to_allocvec(&UnitTask::Shepherding).unwrap(), [10]);
     let a = animal();

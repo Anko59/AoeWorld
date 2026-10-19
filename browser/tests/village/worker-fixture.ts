@@ -1,6 +1,7 @@
 import { darkAgeState } from "../wire/buildings.js";
 import type { Page } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
+import { wildlifeState } from "../wire/wildlife.js";
 function uint(value: number): number[] {
   const bytes: number[] = [];
   do {
@@ -81,6 +82,7 @@ export async function workerFixture(page: Page) {
           0,
         ]),
       );
+      socket.send(wildlifeState(revision));
     });
   });
 }

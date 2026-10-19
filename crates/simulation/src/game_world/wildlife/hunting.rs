@@ -79,7 +79,6 @@ impl GameWorld {
                 id,
                 HuntJob {
                     animal,
-                    cooldown: 0,
                     repath_tick: self.tick.0,
                 },
             );
@@ -124,7 +123,6 @@ impl GameWorld {
         let Ok(a) = self.huntable(u.player, job.animal) else {
             return false;
         };
-        job.cooldown = job.cooldown.saturating_sub(1);
         if a.hp == 0 {
             if a.task != AnimalTask::Carcass {
                 return true;
@@ -155,7 +153,7 @@ impl GameWorld {
         } else {
             UnitTask::Hunting
         };
-        if job.cooldown > 0 {
+        if self.tick.0 < self.units[index].next_hit_tick {
             return true;
         }
         let Some(target) = self.wildlife.animals.get_mut(&job.animal) else {
@@ -169,7 +167,10 @@ impl GameWorld {
         if target.state.hp == 0 {
             self.kill_animal(job.animal);
         }
-        job.cooldown = self.attack_period_ticks(&u);
+        self.units[index].next_hit_tick = self
+            .tick
+            .0
+            .saturating_add(u64::from(self.attack_period_ticks(&u)));
         true
     }
 }

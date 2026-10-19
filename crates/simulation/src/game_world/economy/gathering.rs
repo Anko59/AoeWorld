@@ -162,9 +162,9 @@ impl GameWorld {
         kind: ResourceKind,
         farm: Option<EntityId>,
     ) -> Result<(), EconomyError> {
+        self.approach_resource(id, tile)?;
         self.cancel_hunt(id);
         self.cancel_attack(id);
-        self.approach_resource(id, tile)?;
         let previous_farm = self.economy.gatherers.get(&id).and_then(|task| task.farm);
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);

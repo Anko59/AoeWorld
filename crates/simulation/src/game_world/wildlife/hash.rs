@@ -28,7 +28,6 @@ impl Wildlife {
         for (id, job) in &self.hunts {
             hash.update(&id.0.to_le_bytes());
             hash.update(&job.animal.0.to_le_bytes());
-            hash.update(&job.cooldown.to_le_bytes());
             hash.update(&job.repath_tick.to_le_bytes());
         }
         hash.update(&(self.due.len() as u64).to_le_bytes());
