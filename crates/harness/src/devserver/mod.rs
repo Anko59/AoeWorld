@@ -13,6 +13,7 @@ mod revision;
 mod state;
 #[cfg(test)]
 mod tests;
+mod warm;
 
 use ensure::{PLAY, Settings, short};
 use layout::Layout;
@@ -122,6 +123,22 @@ fn duration(seconds: u64) -> String {
         120..=7199 => format!("{}m{:02}s", seconds / 60, seconds % 60),
         _ => format!("{}h{:02}m", seconds / 3600, seconds % 3600 / 60),
     }
+}
+
+/// The map request the setup form submits for a preset (`finland`) at a side
+/// in kilometres, or `None` for a preset the form does not have.
+pub(crate) fn skirmish_request(preset: &str, kilometres: u64) -> Option<serde_json::Value> {
+    presets::named_request(preset, kilometres)
+}
+
+/// Make every completed map of `wanted` on `port` ready to start: serve its
+/// minimap raster (warm.rs). Returns what was warmed, each with the time its
+/// first request took.
+pub(crate) fn warm_maps(
+    port: u16,
+    wanted: &[serde_json::Value],
+) -> std::result::Result<Vec<(String, std::time::Duration)>, String> {
+    warm::maps(port, wanted, warm::BUDGET)
 }
 
 /// Showcase's `before` side: the play server's URL when it is healthy and at

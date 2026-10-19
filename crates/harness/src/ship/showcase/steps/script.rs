@@ -3,8 +3,8 @@
 //! every wait carries the step's timeout and a plain description, so a
 //! timeout names the step and what it was waiting for.
 use super::{
-    Action, Camera, Colour, Command, Kind, OpenPanel, Panel, Preset, Resource, START_TIMEOUT_MS,
-    STEP_TIMEOUT_MS, SelectEntity, Size, StartSkirmish, State, WaitFor, offset,
+    Action, Camera, Colour, Command, Kind, OpenPanel, Panel, Resource, START_TIMEOUT_MS,
+    STEP_TIMEOUT_MS, SelectEntity, StartSkirmish, State, WaitFor, offset,
 };
 use crate::ship::showcase::browser::Step;
 use serde::Serialize;
@@ -174,7 +174,7 @@ impl Builder {
                 &format!("the {name} colour"),
             );
         }
-        let preset = preset_id(start.preset);
+        let preset = start.preset.id();
         self.on(
             Verb::Click,
             &format!("[data-preset=\"{preset}\"]"),
@@ -182,22 +182,13 @@ impl Builder {
         );
         if let Some(size) = start.size {
             self.on(Verb::SelectOption, "#start-size", "the map size");
-            self.tweak(|op| op.value = Some(size_km(size).to_owned()));
+            self.tweak(|op| op.value = Some(size.km().to_string()));
         }
         self.wait("#start-game:not([disabled])", "Start Game enabled");
         self.on(Verb::Click, "#start-game", "the Start Game button");
         self.in_game();
         self.chunks_ready();
         self.settle();
-    }
-}
-
-fn preset_id(preset: Preset) -> &'static str {
-    match preset {
-        Preset::Paris => "paris",
-        Preset::Alps => "alps",
-        Preset::Brittany => "brittany",
-        Preset::Finland => "finland",
     }
 }
 
@@ -211,15 +202,6 @@ fn colour_label(colour: Colour) -> &'static str {
         Colour::Purple => "Purple",
         Colour::Grey => "Grey",
         Colour::Orange => "Orange",
-    }
-}
-
-fn size_km(size: Size) -> &'static str {
-    match size {
-        Size::Tiny => "30",
-        Size::Small => "120",
-        Size::Large => "480",
-        Size::Giant => "1920",
     }
 }
 

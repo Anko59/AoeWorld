@@ -18,6 +18,7 @@ mod lock;
 mod presets;
 mod processes;
 mod usage;
+mod warm;
 
 pub(super) fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")

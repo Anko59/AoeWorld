@@ -3,6 +3,8 @@
 use super::super::showcase::{Origins, Storyboard, plan};
 use serde_json::{Value, json};
 
+mod warm;
+
 fn board(steps: Value, path: &str) -> String {
     json!({"title": "t", "scenes": [{
         "kind": "browser", "path": path, "caption": "c", "seconds": 1, "steps": steps}]})
@@ -259,34 +261,44 @@ fn scripts_of(parsed: &Storyboard) -> Value {
         .clone()
 }
 
-#[test]
-fn a_timeout_names_the_step_and_what_it_waited_for() {
-    // The recorder runs under node in the browser image; the harness test
-    // image has none, so this check runs wherever node is installed.
+/// Runs `runScript` under node (the harness test image has none, so these
+/// checks run wherever node is installed) against a scripted page, and
+/// returns what the thrown error said, or `None` without node.
+fn run_step(step: Value, page: &str, number: u32) -> Option<String> {
     if std::process::Command::new("node")
         .arg("--version")
         .output()
         .is_err()
     {
         eprintln!("skipped: node is not installed in this image");
-        return;
+        return None;
     }
     let dir = tempfile::tempdir().unwrap();
-    let module = dir.path().join("steps.mjs");
-    std::fs::write(&module, include_str!("../../showcase/steps/steps.mjs")).unwrap();
-    std::fs::write(
-        dir.path().join("readiness.mjs"),
-        include_str!("../../compare/capture/readiness.mjs"),
-    )
-    .unwrap();
-    let value = scripts(json!([{"wait_for": {"selector": "#never", "timeout_ms": 50}}]));
+    for (name, text) in [
+        ("steps.mjs", include_str!("../../showcase/steps/steps.mjs")),
+        (
+            "pagestate.mjs",
+            include_str!("../../showcase/steps/pagestate.mjs"),
+        ),
+        (
+            "framing.mjs",
+            include_str!("../../showcase/steps/framing.mjs"),
+        ),
+        (
+            "readiness.mjs",
+            include_str!("../../compare/capture/readiness.mjs"),
+        ),
+    ] {
+        std::fs::write(dir.path().join(name), text).unwrap();
+    }
+    let value = scripts(json!([step]));
     let runner = dir.path().join("run.mjs");
     std::fs::write(
         &runner,
         format!(
             r#"import {{ runScript }} from "./steps.mjs";
-const page = {{ waitForSelector: async () => {{ const e = new Error("locator timed out\nlong log"); e.name = "TimeoutError"; throw e; }} }};
-try {{ await runScript(page, {script}, 4); }} catch (e) {{ console.log(e.message); }}"#,
+const page = {page};
+try {{ await runScript(page, {script}, {number}); console.log("no error"); }} catch (e) {{ console.log(e.message); }}"#,
             script = value[0]
         ),
     )
@@ -295,11 +307,61 @@ try {{ await runScript(page, {script}, 4); }} catch (e) {{ console.log(e.message
         .arg(&runner)
         .output()
         .unwrap();
-    let message = String::from_utf8_lossy(&out.stdout);
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// A page whose waits time out and whose DOM reads as `state`.
+fn stuck_page(state: &str) -> String {
+    format!(
+        r#"{{ on() {{}}, evaluate: async () => ({state}),
+  waitForSelector: async () => {{ const e = new Error("locator timed out\nlong log"); e.name = "TimeoutError"; throw e; }} }}"#
+    )
+}
+
+#[test]
+fn a_timeout_names_the_step_and_what_it_waited_for() {
+    let page = stuck_page("({})");
+    let step = json!({"wait_for": {"selector": "#never", "timeout_ms": 50}});
+    let Some(message) = run_step(step, &page, 4) else {
+        return;
+    };
     assert!(message.contains("showcase step 4 `wait_for"), "{message}");
     assert!(message.contains("#never"), "{message}");
     assert!(message.contains("timed out after"), "{message}");
     assert!(message.contains("limit 50 ms"), "{message}");
+}
+
+#[test]
+fn a_timeout_says_which_state_the_page_was_stuck_in() {
+    let page = stuck_page(
+        r#"{ start_state: "loading", connection: "connected", loading_title: "Opening your world", loading_phase: "Opening terrain", raster: "pending", chunks_pending: "3" }"#,
+    );
+    let step = json!({"wait_for": {"state": "game", "timeout_ms": 50}});
+    let Some(message) = run_step(step, &page, 2) else {
+        return;
+    };
+    assert!(message.contains("start_state=\"loading\""), "{message}");
+    assert!(
+        message.contains("loading_title=\"Opening your world\""),
+        "{message}"
+    );
+    assert!(message.contains("raster=\"pending\""), "{message}");
+}
+
+#[test]
+fn a_page_that_failed_for_good_fails_the_step_without_waiting_for_the_limit() {
+    // The wait never returns; only the page's own failure can end it.
+    let page = r#"{ on() {}, evaluate: async () => ({ unsupported: "Unable to start AoeWorld: AoE II assets are unavailable.", start_state: "menu" }),
+  waitForSelector: () => new Promise(() => {}) }"#;
+    let step = json!({"wait_for": {"state": "game", "timeout_ms": 60000}});
+    let started = std::time::Instant::now();
+    let Some(message) = run_step(step, page, 1) else {
+        return;
+    };
+    assert!(started.elapsed().as_secs() < 20, "{message}");
+    assert!(message.contains("the page failed after"), "{message}");
+    assert!(message.contains("assets are unavailable"), "{message}");
+    assert!(!message.contains("timed out"), "{message}");
 }
 
 #[test]
@@ -319,4 +381,25 @@ fn every_state_and_panel_the_docs_name_is_accepted() {
     for name in line("{\"name\": \"").split('|') {
         parse(json!([{"open_panel": {"name": name}}])).unwrap_or_else(|e| panic!("{name}: {e}"));
     }
+}
+
+#[test]
+fn every_module_the_recorder_imports_is_shipped_to_the_work_directory() {
+    let work = tempfile::tempdir().unwrap();
+    crate::ship::showcase::write_recorder(work.path()).unwrap();
+    let mut checked = 0;
+    for entry in std::fs::read_dir(work.path()).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for import in text.split("from \"./").skip(1) {
+            let name = import.split('"').next().unwrap();
+            assert!(
+                work.path().join(name).is_file(),
+                "{} imports ./{name}, which write_recorder does not ship",
+                path.display()
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 6, "only {checked} imports found");
 }

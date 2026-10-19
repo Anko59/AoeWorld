@@ -84,6 +84,8 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         )
         .into());
     }
+    // A skirmish start needs its map's raster served: do it before filming.
+    super::steps::warm::prepare(plan)?;
     create_new(&work.join("plan.json"))?.write_all(&serde_json::to_vec(plan)?)?;
     write_recorder(work)?;
     let mut bridges = Vec::with_capacity(plan.origins.len());

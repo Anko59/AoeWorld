@@ -16,6 +16,8 @@ type Result<T> = std::result::Result<T, String>;
 const HTTP_TIMEOUT: Duration = Duration::from_millis(1500);
 const STOP_GRACE: Duration = Duration::from_secs(8);
 const MAX_BODY: u64 = 1 << 20;
+/// A map's raster is read to its end but never kept; this bounds the read.
+const MAX_REPLY: u64 = 256 << 20;
 
 /// `GET path` on loopback `port`; the body of a 200, nothing otherwise.
 pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
@@ -33,6 +35,45 @@ pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
     let text = String::from_utf8_lossy(&reply);
     let (head, body) = text.split_once("\r\n\r\n")?;
     head.starts_with("HTTP/1.1 200").then(|| body.to_owned())
+}
+
+/// The status code of `GET path` on loopback `port`, reading the whole reply
+/// (a server that sees the client leave abandons what it was computing) for at
+/// most `patience`; `None` when nothing answered in time.
+pub(crate) fn http_status(port: u16, path: &str, patience: Duration) -> Option<u16> {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let started = Instant::now();
+    let mut stream = TcpStream::connect_timeout(&address, HTTP_TIMEOUT).ok()?;
+    stream
+        .write_all(
+            format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
+        )
+        .ok()?;
+    let mut head = Vec::new();
+    let mut chunk = [0_u8; 16 * 1024];
+    let mut seen = 0_u64;
+    loop {
+        let left = patience.checked_sub(started.elapsed())?;
+        stream
+            .set_read_timeout(Some(left.max(Duration::from_millis(1))))
+            .ok()?;
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(count) => {
+                if head.len() < 64 {
+                    head.extend_from_slice(&chunk[..count.min(64)]);
+                }
+                seen += count as u64;
+                if seen > MAX_REPLY {
+                    break;
+                }
+            }
+            Err(_) => return None,
+        }
+    }
+    let line = String::from_utf8_lossy(&head);
+    line.strip_prefix("HTTP/1.1 ")?.get(..3)?.parse().ok()
 }
 
 /// The build a healthy server on `port` reports (`AOE_BUILD_SHA`).

@@ -58,7 +58,11 @@ the map and geodata crates, `crates/core`, the worker and plan code of the
 server, `Cargo.lock` and the toolchain. A dev change outside that code keeps
 the maps (the server restarts, the maps are reused); a change inside it starts
 an empty directory and removes the old one. Preparing needs the geodata cache
-and takes minutes the first time; `maps ready n/m` counts completed presets.
+and takes minutes the first time; `maps ready n/m` counts completed presets,
+and `make dev-server` serves each completed map's minimap raster before it
+returns (the server computes it on the first request within 30 s and answers
+503 past that, which a client never retries; `warm.rs`), so "ready" means a
+skirmish can start.
 
 ## Who uses it
 

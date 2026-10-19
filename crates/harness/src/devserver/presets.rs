@@ -41,6 +41,16 @@ pub(crate) fn request(latitude_e7: i64, longitude_e7: i64, side_meters: u64) -> 
     })
 }
 
+/// The request the form submits for a preset at `kilometres` per side.
+pub(crate) fn named_request(preset: &str, kilometres: u64) -> Option<Value> {
+    let (_, latitude, longitude) = PRESETS.iter().find(|(id, ..)| *id == preset)?;
+    Some(request(
+        degrees_e7(*latitude),
+        degrees_e7(*longitude),
+        kilometres * 1000,
+    ))
+}
+
 fn degrees_e7(degrees: f64) -> i64 {
     (degrees * 1e7).round() as i64
 }

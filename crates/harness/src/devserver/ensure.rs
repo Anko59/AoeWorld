@@ -5,6 +5,7 @@ use super::{
     layout::Layout,
     presets, process, revision,
     state::{Instance, State, now},
+    warm,
 };
 use nix::fcntl::{Flock, FlockArg};
 use std::{
@@ -339,7 +340,46 @@ pub(crate) fn ensure_play(root: &Path, settings: &Settings) -> Result<bool> {
         }
     }
     retire(&layout, &mut state, &fingerprint);
+    warm_presets(settings.port, &wanted);
     Ok(kept)
+}
+
+/// "Maps ready" means a start can use them: wait for the presets the server
+/// prepares at boot (bounded) and serve each one's minimap raster, so the first
+/// skirmish does not pay for it under the server's 30 s budget (warm.rs). A
+/// failure is reported, not fatal: the server itself is up.
+fn warm_presets(port: u16, wanted: &[serde_json::Value]) {
+    let deadline = Instant::now() + warm::BUDGET;
+    let mut said = Vec::new();
+    loop {
+        match warm::maps(port, wanted, warm::BUDGET) {
+            Ok(warmed) => {
+                for (hash, took) in warmed {
+                    if !said.contains(&hash) {
+                        eprintln!(
+                            "dev-server: map {} ready ({} ms)",
+                            &hash[..12.min(hash.len())],
+                            took.as_millis()
+                        );
+                        said.push(hash);
+                    }
+                }
+            }
+            Err(why) => {
+                eprintln!("dev-server: warning: {why}");
+                return;
+            }
+        }
+        let (ready, total) = presets::ready(port, wanted);
+        if ready >= total {
+            return;
+        }
+        if Instant::now() >= deadline {
+            eprintln!("dev-server: maps ready {ready}/{total}; the rest are still being prepared");
+            return;
+        }
+        thread::sleep(Duration::from_secs(5));
+    }
 }
 
 /// Drop what nothing uses any more: trees of revisions no instance serves
