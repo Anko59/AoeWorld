@@ -73,7 +73,8 @@ pub(crate) fn execute(options: &Options, slots: &crate::slots::SlotEnv) -> git::
     )?;
     let base = env("HARNESS_RED_BASE").unwrap_or_else(|| options.base.clone());
     let base = git::git(&root, &["merge-base", &resolve(&root, &base)?, &head])?;
-    let _lock = crate::ship::lock::acquire(&root, "make red").map_err(|e| e.to_string())?;
+    // No ship lock: the red runs build and test under a heavy slot, which serializes the heavy
+    // work, and the record is keyed by the exact head. Ships waiting to push never wait on it.
     crate::timeline::stage(
         &root,
         "red",

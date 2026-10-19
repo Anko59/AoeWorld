@@ -298,6 +298,12 @@ pub(crate) fn ship_with(
     let base = crate::timeline::stage(root, "rebase", serde_json::json!({}), || {
         recheck::start::prepare(root, options)
     })?;
+    // The start-of-ship rebase is done. The gates take heavy slots, which serialize the heavy
+    // work, and their evidence is keyed by the exact commit, so the next ship may take the lock
+    // and start meanwhile. The lock is taken again for the re-check and the push.
+    if options.lock.release() {
+        eprintln!("ship: lock released for the gates and the review");
+    }
     let _anchor = crate::review::base::scope_at(&options.base, &base);
     let subject = git::subject(root)?;
     let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
@@ -335,12 +341,6 @@ pub(crate) fn ship_with(
     let review = if options.no_review {
         None
     } else {
-        // The gates are done and their evidence is written; no heavy slot is held (each
-        // gate drops its own). The review only waits on remote calls, so the next ship
-        // may take the lock and run its gates meanwhile.
-        if options.lock.release() {
-            eprintln!("ship: lock released for the review");
-        }
         Some(review_gate::require(root, &evidence, options, reviewer)?)
     };
     if options.review_ahead {
