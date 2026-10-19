@@ -229,3 +229,61 @@ fn the_recheck_runs_after_reacquiring_when_dev_moved_during_the_review() {
     drop(options);
     assert!(lock::status(&path).unwrap().is_none());
 }
+
+#[test]
+fn the_next_ship_runs_while_the_first_runs_its_gates() {
+    // The first ship's gate blocks until the test says go; the second's runs straight through
+    // (only the first to create `first` waits).
+    let flags = tempfile::tempdir().unwrap();
+    let dir = flags.path().display();
+    let gate = format!(
+        "if mkdir {dir}/first 2>/dev/null; then touch {dir}/started; \
+         while [ ! -f {dir}/go ]; do sleep 0.05; done; fi"
+    );
+    let (temp, root) = fixture(&gate);
+    run(&root, &["config", "user.name", "t"]);
+    run(&root, &["config", "user.email", "t@example.com"]);
+    let second = temp.path().join("second");
+    run(
+        &root,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feature2",
+            second.to_str().unwrap(),
+            "feature",
+        ],
+    );
+    std::fs::write(second.join("two.txt"), "2\n").unwrap();
+    run(&second, &["add", "-A"]);
+    run(&second, &["commit", "-q", "-m", "second"]);
+    thread::scope(|scope| {
+        let work = &root;
+        let first = scope.spawn(move || {
+            let options = with_lock(work, offline());
+            ship_with(work, &options, &|_, _, _, _, _| Err("no review".into()))
+                .map(|evidence| evidence.head)
+                .map_err(|error| error.to_string())
+        });
+        let begun = std::time::Instant::now();
+        while !flags.path().join("started").exists() {
+            assert!(
+                begun.elapsed() < WAIT,
+                "the first ship never reached its gate"
+            );
+            thread::sleep(POLL);
+        }
+        // The first ship is inside its gates: the lock is free, so the second takes it with no
+        // wait at all, runs its gates and pushes.
+        let options = with_lock(&second, offline());
+        let pushed = ship_with(&second, &options, &|_, _, _, _, _| Err("no review".into()))
+            .expect("the second ship, while the first runs its gates");
+        assert_eq!(remote_tip(&root, "feature2"), pushed.head);
+        drop(options);
+        std::fs::write(flags.path().join("go"), "").unwrap();
+        let head = first.join().unwrap().expect("the first ship");
+        assert_eq!(remote_tip(&root, "feature"), head);
+    });
+}
