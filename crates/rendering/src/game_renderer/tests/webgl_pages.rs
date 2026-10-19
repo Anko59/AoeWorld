@@ -106,13 +106,17 @@ fn insufficient_array_layers_or_integer_attribute_capacity_fail_initialization()
 }
 
 #[wasm_bindgen_test]
-fn dropping_webgl_renderer_retires_its_context_without_browser_gc() {
+fn dropping_webgl_renderer_retires_its_context_without_browser_gc() -> Result<(), JsValue> {
     let (canvas, renderer) = target(&page_atlas());
     // Hold the exact live context across Drop so GC cannot supply the retirement.
     let gl = webgl_test_context(&canvas).unwrap();
     assert!(!context_is_lost(&gl));
     drop(renderer);
-    assert!(context_is_lost(&gl), "Drop must retire the owned context");
+    // Return the failure without duplicate Rust panic stacks in runner output.
+    if !context_is_lost(&gl) {
+        return Err(JsValue::from_str("Drop must retire the owned context"));
+    }
+    Ok(())
 }
 
 #[wasm_bindgen_test]
