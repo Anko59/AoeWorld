@@ -139,6 +139,14 @@ fn gpu_depth_normalization_preserves_original_iterator_bits() {
 }
 
 #[wasm_bindgen(inline_js = "
+export function webgl_test_context(canvas) {
+    const gl = canvas.getContext('webgl2');
+    if (!gl || gl.isContextLost()) throw new Error('WebGL2 test context unavailable');
+    return gl;
+}
+export function context_is_lost(gl) {
+    return gl.isContextLost();
+}
 export function webgl_test_pixel(canvas, x, y, output) {
     const gl = canvas.getContext('webgl2');
     if (!gl || gl.isContextLost()) throw new Error('WebGL2 test context unavailable');
@@ -148,6 +156,9 @@ export function webgl_test_pixel(canvas, x, y, output) {
 }
 ")]
 extern "C" {
+    #[wasm_bindgen(catch)]
+    fn webgl_test_context(canvas: &HtmlCanvasElement) -> Result<JsValue, JsValue>;
+    fn context_is_lost(gl: &JsValue) -> bool;
     #[wasm_bindgen(catch)]
     fn webgl_test_pixel(
         canvas: &HtmlCanvasElement,
@@ -205,6 +216,34 @@ fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
         .upload(atlas)
         .expect("actual WebGL2 native atlas upload");
     (canvas, renderer)
+}
+
+// A macrotask lets WebDriver scrape output and the browser process context-loss
+// events; resolving a Promise immediately would only yield to microtasks.
+async fn browser_turn() {
+    use std::{cell::Cell, rc::Rc, task::Poll};
+    let done = Rc::new(Cell::new(false));
+    let mut scheduled = false;
+    std::future::poll_fn(|context| {
+        if done.get() {
+            return Poll::Ready(());
+        }
+        if !scheduled {
+            scheduled = true;
+            let done = done.clone();
+            let waker = context.waker().clone();
+            let callback = wasm_bindgen::closure::Closure::once_into_js(move || {
+                done.set(true);
+                waker.wake();
+            });
+            web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0)
+                .unwrap();
+        }
+        Poll::Pending
+    })
+    .await;
 }
 
 fn atlas(texels: &[[u8; 4]]) -> Vec<u8> {

@@ -81,9 +81,6 @@ export function restrict_array_limits(canvas, layers) {
     gl.getParameter = name => name === (layers ? gl.MAX_ARRAY_TEXTURE_LAYERS : gl.MAX_VERTEX_ATTRIBS)
         ? (layers ? 2 : 6) : original(name);
 }
-export function context_is_lost(canvas) {
-    return canvas.getContext('webgl2').isContextLost();
-}
 export function restore_owned_pages(bridge, fail) {
     const source = bridge.atlasPixels;
     if (source.byteLength !== 50331648) throw new Error('restoration owner size');
@@ -93,7 +90,6 @@ export function restore_owned_pages(bridge, fail) {
 }
 ")]
 extern "C" {
-    fn context_is_lost(canvas: &HtmlCanvasElement) -> bool;
     #[wasm_bindgen(catch)]
     fn restrict_array_limits(canvas: &HtmlCanvasElement, layers: bool) -> Result<(), JsValue>;
     #[wasm_bindgen(catch)]
@@ -112,12 +108,11 @@ fn insufficient_array_layers_or_integer_attribute_capacity_fail_initialization()
 #[wasm_bindgen_test]
 fn dropping_webgl_renderer_retires_its_context_without_browser_gc() {
     let (canvas, renderer) = target(&page_atlas());
-    assert!(!context_is_lost(&canvas));
+    // Hold the exact live context across Drop so GC cannot supply the retirement.
+    let gl = webgl_test_context(&canvas).unwrap();
+    assert!(!context_is_lost(&gl));
     drop(renderer);
-    assert!(
-        context_is_lost(&canvas),
-        "Drop must retire the owned context"
-    );
+    assert!(context_is_lost(&gl), "Drop must retire the owned context");
 }
 
 #[wasm_bindgen_test]

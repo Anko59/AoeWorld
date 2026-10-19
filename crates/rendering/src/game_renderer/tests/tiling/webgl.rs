@@ -266,10 +266,15 @@ fn webgl_slope_beside_missing_terrain_still_renders_brighter_than_flat() {
 }
 
 #[wasm_bindgen_test]
-fn webgl_pixels_survive_repeated_renderer_recreation() {
+async fn webgl_pixels_survive_repeated_renderer_recreation() {
     let pixels = atlas(&[[85, 90, 95, 255]]);
     for iteration in 0..96 {
         let (canvas, mut renderer) = target(&pixels);
+        let gl = webgl_test_context(&canvas).unwrap();
+        assert!(
+            !context_is_lost(&gl),
+            "renderer recreation {iteration}: live context"
+        );
         render(&mut renderer, &mut [sprite(0.0, 1.0)]);
         let actual = pixel(&canvas, 64, 64);
         assert!(
@@ -279,5 +284,13 @@ fn webgl_pixels_survive_repeated_renderer_recreation() {
                 .all(|(a, b)| a.abs_diff(b) <= 1),
             "renderer recreation {iteration}: {actual:?}"
         );
+        drop(renderer);
+        assert!(
+            context_is_lost(&gl),
+            "renderer recreation {iteration}: Drop must retire the owned context"
+        );
+        // Keep render/readback synchronous (preserveDrawingBuffer is false),
+        // then let WebDriver scrape progress between full-atlas recreations.
+        browser_turn().await;
     }
 }
