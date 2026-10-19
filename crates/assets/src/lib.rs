@@ -1,5 +1,6 @@
 //! Local-only, bounded classic asset conversion.
 pub mod catalog;
+pub mod dat;
 pub mod drs;
 pub mod pack;
 pub mod palette;
