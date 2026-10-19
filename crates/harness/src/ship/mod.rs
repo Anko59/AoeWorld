@@ -367,12 +367,16 @@ pub(crate) fn ship_with(
         None => (evidence, review, None, None),
     };
     if rebased_again {
-        test_first::red::check(
-            root,
-            &evidence.merge_base,
-            &evidence.head,
-            options.red_blocking,
-        )?;
+        // Print the decision for the rebased head: a catch-up can invalidate an earlier PASS.
+        eprint!(
+            "ship: after the catch-up rebase\n{}",
+            test_first::red::check(
+                root,
+                &evidence.merge_base,
+                &evidence.head,
+                options.red_blocking,
+            )?
+        );
     }
     let lease = if evidence.head != started_head && lease.is_none() {
         recheck::lease(root, options, &git::subject(root)?, &started_head)?
