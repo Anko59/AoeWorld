@@ -65,7 +65,7 @@ is unsafe because archived timestamps can make Cargo reuse another tree's test b
 unmeasured, and a run past the deadline below is "red runner unavailable", never a record.
 Each red or green Docker run, including its builds, has a 30-minute deadline;
 Playwright retains its 20-minute suite and per-test bounds. Checks run serially
-under the ship lock and one heavy slot. Output remains bounded by the focused
+under one heavy slot (not the ship lock). Output remains bounded by the focused
 runner's 16 MiB total / 1 MiB line JSON limits.
 
 The harness takes fresh runner output, never `.cache/duel/check.json`, a saved

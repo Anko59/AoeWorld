@@ -43,7 +43,7 @@ agent policy refuses `$` in agent-set Make values.
    `<git common dir>/aoe-ship/evidence/<sha>.json` (`make ship-status` prints it).
    A new commit has no evidence, so evidence for one commit never stands in for
    another. The agent policy refuses every write into the Git common directory.
-6. **Reviews** the commit, with the ship lock released (`ship: lock released for the review`; no heavy slot is held either) so the next ship's gates run meanwhile, with the tiered [adversarial review](review.md)
+6. **Reviews** the commit, with the ship lock still released (`ship: lock released for the gates and the review`, printed after the start-of-ship rebase; no heavy slot is held either) so the next ship runs meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
    family). A full review below 7/10 or with a blocking finding (confirmed major or critical, disputed
 critical), an incomplete review, or a closing review
@@ -102,7 +102,7 @@ catch-up rewrites the head, rerun `make red` and `make ship` for those identitie
 
 ## One ship at a time
 
-Sessions share one machine, so `make ship`, `make duel` and `make red` take a machine-wide
+Sessions share one machine, so `make ship` and `make duel` take a machine-wide
 lock before any heavy work and release it when they exit, by whatever route: an OS file lock on
 `<git common dir>/aoe-ship/ship.lock`, shared by every worktree, so a dead or killed holder
 frees it. The file also names the holder (worktree, branch, command, start time) for messages.
@@ -122,8 +122,9 @@ every 5 minutes and whenever its position changes, and gives up after `SHIP_LOCK
 and the queue in admission order without waiting. Read-only commands (`review-floor`,
 `showcase-check`, `ship-status`…) never take the lock. Never wait for another ship by scanning
 processes: a `pgrep -f` loop matches its own command line and waits on itself forever. `make
-ship` holds the lock for the gates and the push, not for the review; Ctrl-C while unlocked
-leaves no ticket.
+ship` holds the lock for the start-of-ship rebase and for the re-check and push, not for the
+gates or the review (heavy slots serialize the heavy work, and evidence is keyed by commit);
+`make red` takes only a heavy slot. Ctrl-C while unlocked leaves no ticket.
 
 ## Stacked pull requests
 
