@@ -101,6 +101,17 @@ fn every_role_reads_metrics_but_only_the_main_session_files_regressions() {
 }
 
 #[test]
+fn the_model_ledger_and_usage_are_main_session_only() {
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Implementer, Role::Reviewer, Role::Other] {
+        denied(&fixture, role, "make ledger");
+        denied(&fixture, role, "make usage");
+    }
+    allowed(&fixture, Role::Main, "make ledger");
+    allowed(&fixture, Role::Main, "make usage");
+}
+
+#[test]
 fn level_floor_is_read_only_for_every_role_and_level_stats_is_main_only() {
     let fixture = Fixture::new();
     for role in [

@@ -29,7 +29,7 @@ red-checkout-steps:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' red
 
-.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
+.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions ledger usage carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel
@@ -81,6 +81,14 @@ nightly-triage:
 # The nightly workflow's metric comparison (docs/issues.md): one bot-owned issue.
 metric-regressions:
 	@.agents/hooks/harness.sh exec metric-regressions
+
+# Which model did what, with measured results (docs/models.md); cached in .cache/ledger.
+ledger:
+	@.agents/hooks/harness.sh exec ledger
+
+# What is left of each provider's allowance, then the last 7 days of the ledger.
+usage:
+	@.agents/hooks/harness.sh exec usage
 
 # The post-push workflow (docs/post-push.md): CARRY_PR names the pull request,
 # UPDATE_MAX_PRS bounds one update run; both reach the harness through the environment.
