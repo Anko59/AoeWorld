@@ -264,3 +264,20 @@ fn webgl_slope_beside_missing_terrain_still_renders_brighter_than_flat() {
     render(&mut renderer, &mut packets);
     relief::assert_clipped_lit(&probes.map(|[x, y]| pixel(&canvas, x, y)));
 }
+
+#[wasm_bindgen_test]
+fn webgl_pixels_survive_repeated_renderer_recreation() {
+    let pixels = atlas(&[[85, 90, 95, 255]]);
+    for iteration in 0..96 {
+        let (canvas, mut renderer) = target(&pixels);
+        render(&mut renderer, &mut [sprite(0.0, 1.0)]);
+        let actual = pixel(&canvas, 64, 64);
+        assert!(
+            actual
+                .into_iter()
+                .zip([85, 90, 95, 255])
+                .all(|(a, b)| a.abs_diff(b) <= 1),
+            "renderer recreation {iteration}: {actual:?}"
+        );
+    }
+}

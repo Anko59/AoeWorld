@@ -183,7 +183,7 @@ fn webgl_procedural_materials_match_shared_canvas_kernel() {
     }
 }
 
-fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
+fn canvas() -> HtmlCanvasElement {
     let canvas = web_sys::window()
         .expect("browser window")
         .document()
@@ -194,6 +194,11 @@ fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
         .expect("canvas element");
     canvas.set_width(128);
     canvas.set_height(128);
+    canvas
+}
+
+fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
+    let canvas = canvas();
     let mut renderer =
         WebGlRenderer::new(&canvas).expect("actual WebGL2 context and linked shaders");
     renderer

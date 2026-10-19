@@ -236,6 +236,9 @@ export class AoeWebGl {
         this.atlasPixels = null;
         this.disposed = true;
         this.bufferBytes = 0;
+        // Deleting objects leaves the context and driver caches alive until GC.
+        // Retire this owner's context now, including after failed initialization.
+        if (!gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
 }
 
