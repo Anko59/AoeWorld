@@ -1,5 +1,9 @@
 # Test-first red proof
 
+**Advisory since 2026-10-19 (speed week):** `make ship` prints and records a missing or
+invalid red record in the review facts instead of refusing; `AOE_RED_BLOCKING=1` restores
+the refusal. `make red` and the carry-over work unchanged.
+
 Product changes require tests that fail without them. At the final commit run
 `make red`, then `make ship`. The red runner uses the same protected judge launcher as ship.
 Before the command exists on `origin/dev`, `make red-checkout` explicitly builds

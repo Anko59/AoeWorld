@@ -165,3 +165,15 @@ pub(crate) fn require(root: &Path, base: &str, head: &str) -> git::Result<String
         record.paths.join(", ")
     ))
 }
+
+/// The red decision as `make ship` applies it: blocking only with `AOE_RED_BLOCKING=1`;
+/// otherwise a missing or invalid record is printed (and in the review facts) but not fatal.
+pub(crate) fn check(root: &Path, base: &str, head: &str, blocking: bool) -> git::Result<String> {
+    match require(root, base, head) {
+        Ok(text) => Ok(text),
+        Err(error) if blocking => Err(error),
+        Err(error) => Ok(format!(
+            "- test-first red: ADVISORY, not blocking this week (AOE_RED_BLOCKING=1 restores it): {error}\n"
+        )),
+    }
+}

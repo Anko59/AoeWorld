@@ -11,7 +11,7 @@ mod snapshot;
 
 use super::{git, in_scope, is_test};
 use crate::ship::duel::{baseline, focus::CheckReport};
-pub(crate) use record::require;
+pub(crate) use record::{check, require};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,

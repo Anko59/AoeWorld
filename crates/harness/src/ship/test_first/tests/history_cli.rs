@@ -89,6 +89,7 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
             "PATH",
             format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
         )
+        .env("AOE_RED_BLOCKING", "1")
         .env_remove("AOE_JUDGE_REV")
         .env_remove("SHIP_BASE")
         .env_remove("SHIP_VIDEO")

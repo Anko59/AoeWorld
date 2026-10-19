@@ -184,9 +184,11 @@ fn writable_forged_evidence_is_ignored_and_ship_refuses_product_without_red() {
     }
     // Keep fake artifacts ignored, as they are in the real checkout.
     fs::write(root.join(".git/info/exclude"), ".cache/\nreports/\n").unwrap();
-    let error = crate::ship::ship(&root, &crate::ship::tests::offline())
-        .unwrap_err()
-        .to_string();
+    let blocking = crate::ship::Options {
+        red_blocking: true,
+        ..crate::ship::tests::offline()
+    };
+    let error = crate::ship::ship(&root, &blocking).unwrap_err().to_string();
     assert!(
         error.contains("red record") && error.contains("make red"),
         "{error}"
