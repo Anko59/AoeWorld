@@ -85,6 +85,68 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_build(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        builder_ids: Vec<EntityId>,
+        kind: aoe_protocol::BuildingKind,
+        origin: aoe_core::TileCoord,
+    ) {
+        let action = PendingAction::Build {
+            builder_ids,
+            kind,
+            origin,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_build_wall(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        builder_ids: Vec<EntityId>,
+        from: aoe_core::TileCoord,
+        to: aoe_core::TileCoord,
+    ) {
+        let action = PendingAction::BuildWall {
+            builder_ids,
+            from,
+            to,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_construct(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    ) {
+        let action = PendingAction::Construct {
+            builder_ids,
+            building_id,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_cancel_construction(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+    ) {
+        let action = PendingAction::CancelConstruction { building_id };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_farm(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        farm_id: EntityId,
+    ) {
+        let action = PendingAction::Farm { entity_id, farm_id };
+        self.queue_command(session_id, sequence, action).await;
+    }
     async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
         let now = Instant::now();
         let current_tick = self.world.read().await.tick();
@@ -176,6 +238,33 @@ pub(super) fn apply(
         PendingAction::Train { building_id, kind } => {
             world.issue_train(player, building_id, super::economy::native_kind(kind))
         }
+        PendingAction::Build {
+            builder_ids,
+            kind,
+            origin,
+        } => world
+            .issue_build(
+                player,
+                &builder_ids,
+                super::economy::native_building(kind),
+                origin,
+            )
+            .map(|_| ()),
+        PendingAction::BuildWall {
+            builder_ids,
+            from,
+            to,
+        } => world
+            .issue_build_wall(player, &builder_ids, from, to)
+            .map(|_| ()),
+        PendingAction::Construct {
+            builder_ids,
+            building_id,
+        } => world.issue_construct(player, &builder_ids, building_id),
+        PendingAction::CancelConstruction { building_id } => {
+            world.issue_cancel_construction(player, building_id)
+        }
+        PendingAction::Farm { entity_id, farm_id } => world.issue_farm(player, entity_id, farm_id),
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     match result {
@@ -191,6 +280,12 @@ pub(super) fn apply(
         Err(E::InsufficientFood) => CommandResult::RejectedInsufficientFood,
         Err(E::PopulationCap) => CommandResult::RejectedPopulationCap,
         Err(E::TrainingQueueFull) => CommandResult::RejectedTrainingQueueFull,
+        Err(E::NotBuildable) => CommandResult::RejectedNotBuildable,
+        Err(E::RequirementMissing) => CommandResult::RejectedRequirementMissing,
+        Err(E::InvalidFootprint) => CommandResult::RejectedInvalidPlacement,
+        Err(E::UnderConstruction) => CommandResult::RejectedUnderConstruction,
+        Err(E::AlreadyComplete) => CommandResult::RejectedAlreadyComplete,
+        Err(E::FarmUnavailable) => CommandResult::RejectedFarmUnavailable,
         Err(E::Capacity) => CommandResult::RejectedQueueFull,
         Err(E::Movement(W::Unreachable)) => CommandResult::RejectedUnreachable,
         Err(E::Movement(W::PathBudgetExceeded)) => CommandResult::RejectedPathBudgetExceeded,

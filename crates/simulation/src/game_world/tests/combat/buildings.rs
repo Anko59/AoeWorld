@@ -142,3 +142,107 @@ fn population_may_exceed_the_cap_after_a_town_center_falls_but_training_is_refus
         Err(EconomyError::PopulationCap)
     ));
 }
+
+#[test]
+fn attack_and_construct_orders_replace_each_other_without_resuming_old_work() {
+    let (mut world, _, _) = two_centers();
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .wood = 25;
+    let builder = world.spawn_villager(PlayerId(0), at(99, 100)).unwrap();
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            TileCoord::new(100, 100),
+        )
+        .unwrap();
+    advance(&mut world, 2);
+    assert_eq!(world.unit(builder).unwrap().task, UnitTask::Building);
+    let work = world.building(house).unwrap().work_done;
+    let enemy = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    world.issue_attack(PlayerId(0), builder, enemy).unwrap();
+    assert!(!world.economy.builders.contains_key(&builder));
+    advance(&mut world, 2);
+    assert_eq!(world.building(house).unwrap().work_done, work);
+    world
+        .issue_construct(PlayerId(0), &[builder], house)
+        .unwrap();
+    assert!(!world.combat.attackers.contains_key(&builder));
+    assert_eq!(world.unit(builder).unwrap().attack_target, None);
+    advance(&mut world, 2);
+    assert!(world.building(house).unwrap().work_done > work);
+}
+
+#[test]
+fn working_builders_do_not_retaliate_and_death_releases_their_job() {
+    let (mut world, _, _) = two_centers();
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .wood = 25;
+    let builder = world.spawn_villager(PlayerId(0), at(99, 100)).unwrap();
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            TileCoord::new(100, 100),
+        )
+        .unwrap();
+    advance(&mut world, 2);
+    let enemy = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    world.issue_attack(PlayerId(1), enemy, builder).unwrap();
+    world.advance();
+    assert_eq!(world.unit(builder).unwrap().task, UnitTask::Building);
+    assert_eq!(world.unit(builder).unwrap().attack_target, None);
+    assert_eq!(world.unit(enemy).unwrap().hp, 40);
+    ticks_until(&mut world, 400, |w| w.unit(builder).unwrap().hp == 0);
+    assert!(!world.economy.builders.contains_key(&builder));
+    let work = world.building(house).unwrap().work_done;
+    advance(&mut world, 2);
+    assert_eq!(world.building(house).unwrap().work_done, work);
+}
+
+#[test]
+fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
+    let (mut world, _, _) = two_centers();
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(1))
+        .unwrap()
+        .stockpile
+        .wood = 25;
+    let builder = world.spawn_villager(PlayerId(1), at(99, 100)).unwrap();
+    let house = world
+        .issue_build(
+            PlayerId(1),
+            &[builder],
+            BuildingKind::House,
+            TileCoord::new(100, 100),
+        )
+        .unwrap();
+    advance(&mut world, 600);
+    assert!(world.building(house).unwrap().is_complete());
+    assert_eq!(
+        world.player_economy(PlayerId(1)).unwrap().population_cap,
+        10
+    );
+    assert!(!world.tile_passable(TileCoord::new(100, 100)));
+    world.economy.buildings.get_mut(&house).unwrap().hp = 4;
+    let enemy = world.spawn_militia(PlayerId(0), at(99, 100)).unwrap();
+    world.issue_attack(PlayerId(0), enemy, house).unwrap();
+    world.advance();
+    assert!(world.building(house).is_none());
+    assert!(world.tile_passable(TileCoord::new(100, 100)));
+    assert_eq!(world.player_economy(PlayerId(1)).unwrap().population_cap, 5);
+}

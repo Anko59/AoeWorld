@@ -1,7 +1,8 @@
 //! Browser mocks share these current wire fragments with the Rust codec.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
-    GameplayBuildingState, GameplayServerMessage, GameplayUnitState, UnitKind, UnitTask,
+    BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
+    GameplayServerMessage, GameplayUnitState, Stockpile, UnitKind, UnitTask,
     decode_gameplay_server, encode_gameplay_server,
 };
 
@@ -11,7 +12,7 @@ fn hex(text: &str) -> Vec<u8> {
         .collect()
 }
 
-fn snapshot(
+fn combat_snapshot(
     units: Vec<GameplayUnitState>,
     buildings: Vec<GameplayBuildingState>,
 ) -> GameplayServerMessage {
@@ -64,7 +65,7 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
         ];
         expected.extend(hex(fragment));
         expected.extend([0, 0]); // Players and buildings.
-        assert_wire(snapshot(vec![unit], vec![]), expected);
+        assert_wire(combat_snapshot(vec![unit], vec![]), expected);
     }
 }
 
@@ -79,10 +80,78 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         hp: 2400,
         max_hp: 2400,
         last_hit: None,
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        los: 8,
+        food_remaining: None,
     };
-    let mut expected = vec![1, 1, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 0];
+    let mut expected = vec![1, 1, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18];
     expected.extend(hex(include_str!(
         "../../../browser/tests/wire/town-center.hex"
     )));
-    assert_wire(snapshot(vec![], vec![building]), expected);
+    assert_wire(combat_snapshot(vec![], vec![building]), expected);
+}
+
+fn snapshot() -> GameplayServerMessage {
+    GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![GameplayPlayerState {
+            player: PlayerId(0),
+            stockpile: Stockpile {
+                food: 200,
+                wood: 200,
+                gold: 100,
+                stone: 200,
+            },
+            population_used: 6,
+            population_cap: 10,
+        }],
+        buildings: vec![GameplayBuildingState {
+            id: EntityId(1),
+            player: PlayerId(0),
+            kind: BuildingKind::TownCenter,
+            footprint: TileRect::new(TileCoord::new(8190, 8190), TileCoord::new(8194, 8194)),
+            construction: ConstructionState::Complete,
+            progress_permille: 1000,
+            hp: 2400,
+            max_hp: 2400,
+            los: 8,
+            food_remaining: None,
+            training_queue: vec![],
+            last_hit: None,
+        }],
+    }
+}
+
+fn browser_bytes() -> Vec<u8> {
+    let mut bytes = vec![
+        1, 1, 0, 0, // Snapshot, revision, tick, units.
+        1, 0, 200, 1, 200, 1, 100, 200, 1, 6, 10, // Player and stockpile.
+        1, 1, 0, 0, // Building count, id, player, TownCenter.
+        252, 127, 252, 127, 132, 128, 1, 132, 128, 1, // Footprint.
+    ];
+    bytes.extend(
+        include_str!("../../../browser/tests/wire/town-center.hex")
+            .split_whitespace()
+            .map(|byte| u8::from_str_radix(byte, 16).unwrap()),
+    );
+    bytes
+}
+
+#[test]
+fn browser_building_fixture_matches_current_encoder() {
+    assert_eq!(
+        encode_gameplay_server(&snapshot()).unwrap(),
+        browser_bytes()
+    );
+}
+
+#[test]
+fn browser_building_fixture_matches_current_decoder() {
+    assert_eq!(
+        decode_gameplay_server(&browser_bytes()).unwrap(),
+        snapshot()
+    );
 }

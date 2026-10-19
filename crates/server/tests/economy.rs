@@ -166,6 +166,8 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
     assert!(messages.iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision: 2, units, players, buildings, .. } if units.len() == 5 && units.iter().find(|unit| unit.id == villager.id).unwrap().gathering == Some(aoe_protocol::ResourceKind::Wood) && players[0].stockpile.wood == wood && buildings[0].training_queue.is_empty())));
 }
 
+#[path = "economy/construction.rs"]
+mod construction;
 #[path = "economy/wire_tests.rs"]
 mod wire_tests;
 

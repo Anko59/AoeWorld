@@ -20,13 +20,17 @@ fn building() -> GameplayBuildingState {
         player: PlayerId(0),
         kind: BuildingKind::TownCenter,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(9, 9)),
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        hp: 2400,
+        max_hp: 2400,
+        los: 8,
+        food_remaining: None,
         training_queue: vec![TrainingState {
             kind: UnitKind::Villager,
             progress_ticks: 3,
             total_ticks: 500,
         }],
-        hp: 2400,
-        max_hp: 2400,
         last_hit: None,
     }
 }
@@ -72,6 +76,47 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             vec![6, 8, 5],
         ),
         (
+            GameplayClientMessage::BuildOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3), EntityId(4)],
+                kind: BuildingKind::House,
+                origin: TileCoord::new(5, 6),
+            },
+            vec![8, 8, 2, 3, 4, 1, 10, 12],
+        ),
+        (
+            GameplayClientMessage::BuildWallOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3)],
+                from: TileCoord::new(5, 6),
+                to: TileCoord::new(5, 9),
+            },
+            vec![9, 8, 1, 3, 10, 12, 10, 18],
+        ),
+        (
+            GameplayClientMessage::CancelConstructionOrder {
+                sequence: 8,
+                building_id: EntityId(5),
+            },
+            vec![10, 8, 5],
+        ),
+        (
+            GameplayClientMessage::FarmOrder {
+                sequence: 9,
+                entity_id: EntityId(3),
+                farm_id: EntityId(7),
+            },
+            vec![11, 9, 3, 7],
+        ),
+        (
+            GameplayClientMessage::ConstructOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3)],
+                building_id: EntityId(7),
+            },
+            vec![12, 8, 1, 3, 7],
+        ),
+        (
             GameplayClientMessage::GatherOrder {
                 sequence: 9,
                 entity_id: EntityId(3),
@@ -93,6 +138,14 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
     }
     assert!(decode_gameplay_client(&[5, 9, 3, 3]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
+    // A build order may name at most MAX_BUILD_GROUP villagers.
+    let crowd = GameplayClientMessage::BuildOrder {
+        sequence: 1,
+        builder_ids: (0..=MAX_BUILD_GROUP as u32).map(EntityId).collect(),
+        kind: BuildingKind::House,
+        origin: TileCoord::new(1, 1),
+    };
+    assert!(decode_gameplay_client(&postcard::to_allocvec(&crowd).unwrap()).is_err());
 }
 
 #[test]
@@ -103,8 +156,8 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         bytes,
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 1, 0,
-            200, 1, 200, 1, 100, 200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 0, 3, 244, 3, 224,
-            18, 224, 18, 0
+            200, 1, 200, 1, 100, 200, 1, 4, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224,
+            18, 8, 0, 1, 0, 3, 244, 3, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -190,7 +243,7 @@ fn invalid_load_progress_footprint_and_population_are_rejected() {
     let mut footprint = building();
     footprint.footprint.max.x -= 1;
     let mut population = player();
-    population.population_cap = 81;
+    population.population_cap = MAX_POPULATION + 1;
     for message in [
         GameplayServerMessage::Snapshot {
             revision: 1,

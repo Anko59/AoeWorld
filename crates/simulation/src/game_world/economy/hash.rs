@@ -29,9 +29,20 @@ impl Economy {
             ] {
                 hash.update(&coord.to_le_bytes());
             }
-            hash.update(&building.hp.to_le_bytes());
-            hash.update(&building.max_hp.to_le_bytes());
             crate::game_world::combat::hash_hit(hash, building.last_hit);
+            hash.update(&[building.state as u8, building.los]);
+            for value in [building.work_done, building.work_total] {
+                hash.update(&value.to_le_bytes());
+            }
+            for value in [building.hp, building.max_hp] {
+                hash.update(&value.to_le_bytes());
+            }
+            hash.update(
+                &building
+                    .food_remaining
+                    .map_or(u32::MAX, u32::from)
+                    .to_le_bytes(),
+            );
             hash.update(&(building.training_queue.len() as u64).to_le_bytes());
             for entry in &building.training_queue {
                 hash.update(&[entry.kind as u8]);
@@ -43,6 +54,7 @@ impl Economy {
         for (id, task) in &self.gatherers {
             hash.update(&id.0.to_le_bytes());
             hash.update(&task.node.to_le_bytes());
+            hash.update(&task.farm.map_or(u32::MAX, |farm| farm.0).to_le_bytes());
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
             hash.update(&[task.kind as u8, task.phase as u8]);
@@ -72,6 +84,12 @@ impl Economy {
                 hash.update(&tile.y.to_le_bytes());
             }
             hash.update(&task.retry_tick.to_le_bytes());
+        }
+        hash.update(&(self.builders.len() as u64).to_le_bytes());
+        for (id, task) in &self.builders {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&task.building.0.to_le_bytes());
+            hash.update(&[task.attempts]);
         }
         // Footprints are already hashed as buildings; depletion notifications
         // are a one-tick adapter outbox and do not affect authoritative rules.

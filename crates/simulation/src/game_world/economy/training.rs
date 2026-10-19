@@ -20,7 +20,10 @@ impl GameWorld {
         if building.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if kind != UnitKind::Villager {
+        if !building.is_complete() {
+            return Err(EconomyError::UnderConstruction);
+        }
+        if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
         if building.training_queue.len() >= VILLAGE_RULES.training_queue_limit {

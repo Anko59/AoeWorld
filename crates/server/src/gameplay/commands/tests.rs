@@ -106,3 +106,23 @@ fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
     let hit = victim.last_hit.expect("the hit is reported");
     assert_eq!((hit.attacker, hit.tick), (scout, world.tick()));
 }
+
+#[test]
+fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
+    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(1));
+    let villager = world
+        .units()
+        .find(|unit| unit.kind == aoe_simulation::UnitKind::Villager)
+        .unwrap()
+        .id;
+    let result = apply(
+        &mut world,
+        aoe_core::PlayerId(0),
+        PendingAction::BuildWall {
+            builder_ids: vec![villager],
+            from: aoe_core::TileCoord::new(i32::MAX, 3),
+            to: aoe_core::TileCoord::new(i32::MAX, 5),
+        },
+    );
+    assert_eq!(result, CommandResult::RejectedInvalidPlacement);
+}
