@@ -1,59 +1,101 @@
-//! Keeps the hook judge directory small. `.agents/hooks/harness.sh` builds one
-//! `<revision>/aoe-harness` (or `bootstrap-<tree>/aoe-harness`) per origin/dev
-//! revision under `<git common dir>/aoe-agent-hook/` and never deletes any; after
-//! it selects a judge it asks that judge to prune the rest here.
-use std::{
-    fs,
-    path::Path,
-    time::{Duration, SystemTime},
-};
+//! Post-build cleanup, called in the tool image while harness.sh holds build.lock.
+use crate::disk;
+use std::{fs, io, path::Path, process::Command, time::SystemTime};
 
-/// A judge younger than this may be mid-build or about to be executed by
-/// another session.
-pub(crate) const YOUNG: Duration = Duration::from_secs(10 * 60);
 const BINARY: &str = "aoe-harness";
-const HOME: &str = "aoe-agent-hook";
+const TARGET_LIMIT: u64 = 2 * 1024 * 1024 * 1024;
 
-/// The names `harness.sh` creates: a revision, or `bootstrap-` and a tree.
 fn judge_name(name: &str) -> bool {
     let hash = name.strip_prefix("bootstrap-").unwrap_or(name);
     hash.len() == 40 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// Removes judge directories under `home` except `keep` (the judge in use), the
-/// newest other judge, and any younger than [`YOUNG`]. Best effort: failures,
-/// including a concurrent pruner winning the race, are ignored. Returns how many
-/// directories this call removed. A `home` not named `aoe-agent-hook`, or a
-/// `keep` that is not a judge directory holding a binary, deletes nothing.
-pub(crate) fn prune(home: &Path, keep: &str, now: SystemTime) -> usize {
-    if home.file_name().is_none_or(|n| n != HOME)
+/// Keep the freshly installed judge and the newest other completed judge.
+/// An invalid home/keep, a symlink or an unrelated entry is never removed.
+pub(crate) fn built(home: &Path, keep: &str) -> io::Result<usize> {
+    if home.file_name().is_none_or(|n| n != "aoe-agent-hook")
         || !judge_name(keep)
         || !home.join(keep).join(BINARY).is_file()
+        || !fs::symlink_metadata(home).is_ok_and(|m| m.is_dir())
     {
-        return 0;
+        return Ok(0);
     }
-    let Ok(entries) = fs::read_dir(home) else {
-        return 0;
-    };
-    let mut others: Vec<(SystemTime, std::path::PathBuf)> = entries
-        .flatten()
-        .filter_map(|entry| {
-            let name = entry.file_name();
-            let name = name.to_str().filter(|n| judge_name(n) && *n != keep)?;
-            let dir = home.join(name);
-            // A symlink or stray file with a judge's name is not ours to remove.
-            fs::symlink_metadata(&dir).ok()?.is_dir().then_some(())?;
-            let built = fs::metadata(dir.join(BINARY))
-                .and_then(|m| m.modified())
-                .ok()?;
-            Some((built, dir))
-        })
-        .collect();
-    others.sort_by(|a, b| b.0.cmp(&a.0));
-    others
-        .into_iter()
-        .skip(1)
-        .filter(|(built, _)| now.duration_since(*built).is_ok_and(|age| age >= YOUNG))
-        .filter(|(_, dir)| fs::remove_dir_all(dir).is_ok())
-        .count()
+    let mut others: Vec<(SystemTime, std::path::PathBuf)> = Vec::new();
+    for entry in fs::read_dir(home)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str().filter(|n| judge_name(n) && *n != keep) else {
+            continue;
+        };
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let dir = home.join(name);
+        if let Ok(metadata) = fs::metadata(dir.join(BINARY)) {
+            others.push((metadata.modified()?, dir));
+        }
+    }
+    others.sort_by(|a, b| b.cmp(a));
+    let mut removed = 0;
+    for (_, dir) in others.into_iter().skip(1) {
+        fs::remove_dir_all(dir)?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+pub(crate) fn clean_target_with(
+    target: &Path,
+    limit: u64,
+    clean: &mut impl FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    if !fs::symlink_metadata(target).is_ok_and(|m| m.is_dir()) {
+        return Ok(());
+    }
+    for entry in fs::read_dir(target)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            disk::remove(target, &Path::new(&entry.file_name()).join("incremental"))?;
+        }
+    }
+    if disk::bytes(target)? > limit {
+        clean()?;
+        if disk::bytes(target)? > limit {
+            return Err(io::Error::other(
+                "hook target still exceeds its bound after cargo clean",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Dispatched after install, inside the launcher's flock and pinned tool image.
+pub(crate) fn execute(home: &Path, keep: &str) -> io::Result<()> {
+    if home.file_name().is_none_or(|n| n != "aoe-agent-hook")
+        || !judge_name(keep)
+        || !home.join(keep).join(BINARY).is_file()
+        || !fs::symlink_metadata(home).is_ok_and(|m| m.is_dir())
+    {
+        return Err(io::Error::other("invalid hook build output directory"));
+    }
+    built(home, keep)?;
+    let target = home.join("target");
+    let before = disk::bytes(&target)?;
+    clean_target_with(&target, TARGET_LIMIT, &mut || {
+        let status = Command::new("cargo")
+            .args(["clean", "--target-dir"])
+            .arg(&target)
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other("hook cargo clean failed"))
+        }
+    })?;
+    let after = disk::bytes(&target)?;
+    eprintln!(
+        "hook: target {before} -> {after} bytes; freed {} bytes (limit {TARGET_LIMIT})",
+        before.saturating_sub(after)
+    );
+    Ok(())
 }

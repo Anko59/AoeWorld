@@ -114,8 +114,7 @@ pub(crate) enum Commands {
         #[arg(value_enum)]
         event: Event,
     },
-    /// Remove old judge builds from the judge directory, keeping `--keep` and
-    /// the newest other (best effort; `harness.sh` calls this).
+    /// Post-build cleanup in Docker, with the launcher's build.lock held.
     #[command(name = "agent-prune")]
     Prune {
         #[arg(long)]
@@ -137,7 +136,7 @@ pub(crate) fn execute(
     match command {
         Commands::AgentHook { runtime, event } => run(runtime, event, slots),
         Commands::Prune { home, keep } => {
-            prune::prune(&home, &keep, std::time::SystemTime::now());
+            prune::execute(&home, &keep)?;
             Ok(())
         }
         Commands::AgentSmoke { runtime } => smoke::check(runtime, Path::new(".")),

@@ -108,11 +108,18 @@ pub(crate) fn run_with(
     }
     let cache = root.join(".cache/agent-hook/red");
     fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+    // Own the archive and every snapshot/build of this invocation, including errors.
+    // Another red may export and run concurrently in the same checkout.
+    let run_cache = tempfile::Builder::new()
+        .prefix("run-")
+        .tempdir_in(&cache)
+        .map_err(|e| e.to_string())?;
+    let cache = run_cache.path();
     // The red tree is the merge base's product code plus ONLY the PR's test files.
-    let red_source = baseline::export_in(root, base, &cache)?;
+    let red_source = baseline::export_in(root, base, cache)?;
     snapshot::overlay(root, head, red_source.path(), &paths)?;
     mounts::apply(root, base, head, red_source.path(), &paths)?;
-    let base_source = baseline::export_in(root, base, &cache)?;
+    let base_source = baseline::export_in(root, base, cache)?;
     println!(
         "red: the PR's tests on merge base {base}; {}",
         paths.join(", ")
@@ -170,7 +177,7 @@ pub(crate) fn run_with(
             missing.join(", ")
         );
     }
-    let green_source = baseline::export_in(root, head, &cache)?;
+    let green_source = baseline::export_in(root, head, cache)?;
     let green = run(green_source.path(), &paths)?;
     validate_green(&failed, &green)?;
     let ran = if missing.is_empty() {

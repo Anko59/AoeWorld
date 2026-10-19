@@ -135,7 +135,7 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
         .arg("-e")
         .arg(format!("CARGO_HOME={}/.cache/cargo", root.display()));
     command.args(["-e", "CARGO_BUILD_JOBS=2"]);
-    let temporary = root.join(".cache/agent-hook/red/tmp");
+    let temporary = unique.path().join("tmp");
     fs::create_dir_all(&temporary).map_err(|e| e.to_string())?;
     command
         .arg("-e")
