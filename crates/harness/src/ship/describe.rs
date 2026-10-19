@@ -258,7 +258,7 @@ pub(crate) fn level_problems(
             "{name} PRs have no video; use {} or higher",
             levels.lowest_with_video().name()
         )),
-        (Some(_), None) => problems.push(format!(
+        (Some(_), None) if change.visible() => problems.push(format!(
             "a {name} PR needs a showcase video (SHIP_VIDEO); show it working, before/after"
         )),
         (Some(limit), Some(Some((seconds, voiced)))) => {

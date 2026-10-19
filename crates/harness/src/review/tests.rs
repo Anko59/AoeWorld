@@ -375,6 +375,7 @@ fn a_review_passes_only_complete_and_at_the_merge_grade() {
 
 mod after_approval;
 mod arbiter;
+mod bar;
 mod closing;
 mod cluster;
 mod cluster_fixes;

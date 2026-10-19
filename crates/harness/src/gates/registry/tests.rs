@@ -374,10 +374,12 @@ fn preflight_remains_full_for_docs_and_source_checks_do_not_leak_into_pr() {
         "lint",
         "deny",
         "build-wasm",
-        "test-unit",
-        "perf-smoke",
     ] {
         assert!(plan.gates.contains(&gate.into()), "{gate}");
+    }
+    // Unit tests and the perf smoke run in CI, not in the ship's preflight (2026-10-19).
+    for gate in ["test-unit", "perf-smoke"] {
+        assert!(!plan.gates.contains(&gate.into()), "{gate}");
     }
     let everything = registry.classify(&[]);
     let pr = registry.plan(Cadence::Pr, &everything.suites).unwrap();

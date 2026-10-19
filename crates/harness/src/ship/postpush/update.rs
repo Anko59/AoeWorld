@@ -145,6 +145,12 @@ pub(super) fn update_within(
     timeout: Duration,
     interval: Duration,
 ) -> Result<()> {
+    // While dev does not require branches to be up to date, a green pull request merges as it
+    // is: updating it would only restart its CI. `UPDATE_PRS=off` (post-push.yml) says so.
+    if std::env::var("UPDATE_PRS").is_ok_and(|v| v == "off") {
+        println!("update-prs: off ({BASE} does not require up-to-date branches); nothing updated");
+        return Ok(());
+    }
     let repository = git::origin_repository(root)?;
     let mut handled = 0;
     let mut problems = Vec::new();

@@ -354,7 +354,7 @@ fn a_branch_cannot_lower_its_own_bar() {
     // The branch rewrites the review config and the grader prompt.
     let lowered = fs::read_to_string(root.join("gates/review.json"))
         .unwrap()
-        .replace("\"merge_grade\": 8", "\"merge_grade\": 1");
+        .replace("\"merge_grade\": 7", "\"merge_grade\": 1");
     assert!(lowered.contains("\"merge_grade\": 1"));
     fs::write(root.join("gates/review.json"), lowered).unwrap();
     fs::write(
@@ -370,7 +370,7 @@ fn a_branch_cannot_lower_its_own_bar() {
         sessions: Mutex::new(0),
     };
     let report = review_with(root, Tier::High, Runtime::Claude, "", &Plan::Full, &script).unwrap();
-    assert_eq!(report.merge_grade, 8, "origin/dev's merge grade applies");
+    assert_eq!(report.merge_grade, 7, "origin/dev's merge grade applies");
     assert!(!report.passes());
 }
 

@@ -53,6 +53,10 @@ write` and `pull-requests: write`.
 
 ## 3. Updating waiting pull requests (`make update-prs`)
 
+Off since 2026-10-19 (`UPDATE_PRS: 'off'` in post-push.yml): dev no longer requires
+branches to be up to date, so a green pull request merges as it is and updating it
+would only restart its CI. The rest of this section describes the updater when on.
+
 On every push to `dev`, and when a `ci.yml` run on a pull request branch
 completes (`workflow_run`; runs of `dev`/`main` are ignored, their push already
 triggers the updater): each open pull request into `dev` with auto-merge armed

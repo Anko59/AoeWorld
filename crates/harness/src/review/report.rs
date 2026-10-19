@@ -169,7 +169,11 @@ impl Report {
                         || (f.reporter == super::closing::CARRIED && f.status == Status::Disputed)
                 })
             } else {
-                self.grade >= self.merge_grade
+                // A grade at the merge bar is not enough while a blocking finding stands
+                // (`protocol::blocking`: a confirmed major or critical, or a disputed
+                // critical, since a disputed finding counts one severity lower). The bar may
+                // sit at 7, a confirmed major's cap.
+                self.grade >= self.merge_grade && !self.findings.iter().any(blocking)
             }
     }
 
