@@ -42,6 +42,91 @@ fn linked_worktree_red_mounts_external_common_git_metadata() {
 }
 
 #[test]
+fn red_browser_step_deadline_names_and_stops_the_stalled_step() {
+    use super::super::progress;
+    use std::time::{Duration, Instant};
+    let mut command = Command::new("sh");
+    command.args(["-c", "printf 'RED_STEP playwright-discovery\\n'; sleep 30"]);
+    let started = Instant::now();
+    let error = progress::capture_with(command, &|step| {
+        if step == "runner-start" {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_millis(100)
+        }
+    })
+    .unwrap_err();
+    assert!(error.contains("playwright-discovery"), "{error}");
+    assert!(error.contains("deadline"), "{error}");
+    assert!(started.elapsed() < Duration::from_secs(3));
+}
+
+#[test]
+fn red_browser_steps_have_independent_budgets_and_forward_live_progress() {
+    use super::super::progress;
+    use std::time::Duration;
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "printf 'RED_STEP server-build\\n'; sleep 0.2; printf 'RED_STEP wasm-build\\n'; sleep 0.2; printf 'RED_RUN_RESULT {}\\n'",
+    ]);
+    let captured = progress::capture_with(command, &|step| {
+        if step == "runner-start" {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_millis(350)
+        }
+    })
+    .unwrap();
+    assert!(matches!(
+        captured.exit,
+        crate::process::CaptureExit::Success
+    ));
+    assert!(captured.duration >= Duration::from_millis(400));
+    assert!(String::from_utf8_lossy(&captured.stdout).ends_with("RED_RUN_RESULT {}\n"));
+}
+
+#[test]
+fn ordinary_output_cannot_extend_a_red_browser_step_deadline() {
+    use super::super::progress;
+    use std::time::Duration;
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "printf 'RED_STEP playwright-discovery\\n'; while :; do printf 'still running\\n'; sleep 0.01; done",
+    ]);
+    let error = progress::capture_with(command, &|step| {
+        if step == "runner-start" {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_millis(100)
+        }
+    })
+    .unwrap_err();
+    assert!(error.contains("playwright-discovery"), "{error}");
+}
+
+#[test]
+fn repeated_step_announcements_cannot_keep_a_stalled_step_alive() {
+    use super::super::progress;
+    use std::time::Duration;
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "while :; do printf 'RED_STEP playwright-discovery\\n'; sleep 0.01; done",
+    ]);
+    let error = progress::capture_with(command, &|step| {
+        if step == "runner-start" {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_millis(100)
+        }
+    })
+    .unwrap_err();
+    assert!(error.contains("playwright-discovery"), "{error}");
+}
+
+#[test]
 fn red_runner_mounts_the_shared_cargo_home_read_write() {
     let (_owner, root) = crate::ship::tests::fixture("true");
     let common = git::git(

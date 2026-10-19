@@ -94,9 +94,17 @@ from a fresh export with its own cold Cargo target: sharing one target between t
 is unsafe because archived timestamps can make Cargo reuse another tree's test binary
 (the reason for the separate outputs above). Measured once on a small crate
 (`crates/core`, 6 CPUs per container): all three runs took 19 s. Large packages are
-unmeasured, and a run past the deadline below is "red runner unavailable", never a record.
-Each red or green Docker run, including its builds, has a 30-minute deadline;
-Playwright retains its 20-minute suite and per-test bounds. Checks run serially
+unmeasured. A step past its deadline is unavailable, never a red record.
+The runner prints each step live, including its budget and elapsed time. Each
+Cargo build, native check and WASM check has its own one-hour budget; browser
+dependencies retain their one-hour budget. Runner startup, fixture/server
+readiness and Playwright collection each get 60 seconds, WASM binding gets
+120 seconds, and server shutdown and result assembly each get 30 seconds.
+Collection runs first with `--list`, since imports can hang before any test
+timeout starts. Playwright execution keeps its 40-minute suite bound and
+configured per-test timeouts. These independent step budgets replace the
+competing 30-minute total that could kill a valid cold build plus browser run.
+A stalled step is named in the deadline diagnostic. Checks run serially
 under one heavy slot (not the ship lock). Output remains bounded by the focused
 runner's 16 MiB total / 1 MiB line JSON limits.
 

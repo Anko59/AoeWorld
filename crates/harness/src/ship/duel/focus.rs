@@ -2,7 +2,7 @@
 use super::{browser, output, runner, tree};
 use crate::{
     process::{Cancellation, CaptureExit, capture_command, capture_command_retaining_stdout},
-    ship::git,
+    ship::{git, test_first::red::progress},
 };
 use std::{
     fs,
@@ -183,6 +183,7 @@ pub(in crate::ship) fn run_retained(
         ..Default::default()
     };
     if !scope.packages.is_empty() {
+        progress::start("native-tests");
         let log = output::run_directory(retention)
             .map_err(|e| e.to_string())?
             .join("nextest.jsonl");
@@ -250,6 +251,7 @@ pub(in crate::ship) fn run_retained(
             .map_err(|e| e.to_string())?
             .join("playwright.json");
         println!("Retained Playwright output: {}", report_path.display());
+        progress::start("browser-dependencies");
         browser::dependencies(root, cache)?;
         browser_build(root)?;
         let previous = std::env::current_dir().map_err(|e| e.to_string())?;
@@ -283,6 +285,7 @@ pub(in crate::ship) fn run_retained(
         }
     }
     if !scope.wasm.is_empty() {
+        progress::start("wasm-tests");
         report.merge(super::wasm::check(
             root,
             &scope.wasm,
@@ -295,6 +298,7 @@ pub(in crate::ship) fn run_retained(
     report.tests.dedup();
     report.failed.sort();
     report.failed.dedup();
+    progress::start("runner-result");
     Ok(report)
 }
 
@@ -343,12 +347,14 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
 }
 
 fn browser_build(root: &Path) -> git::Result<()> {
-    for (program, args) in [
+    for (step, program, args) in [
         (
+            "server-build",
             "cargo",
             vec!["build", "--locked", "--release", "-p", "aoe-server"],
         ),
         (
+            "wasm-build",
             "cargo",
             vec![
                 "build",
@@ -363,6 +369,7 @@ fn browser_build(root: &Path) -> git::Result<()> {
         ),
         (
             "wasm-bindgen",
+            "wasm-bindgen",
             vec![
                 "--target",
                 "web",
@@ -374,6 +381,7 @@ fn browser_build(root: &Path) -> git::Result<()> {
             ],
         ),
     ] {
+        progress::start(step);
         let mut command = Command::new(program);
         command
             .args(args)
@@ -383,7 +391,7 @@ fn browser_build(root: &Path) -> git::Result<()> {
             capture_command(command, Duration::from_secs(3600), &Cancellation::default());
         if !matches!(captured.exit, CaptureExit::Success) {
             return Err(format!(
-                "{}browser prerequisite {program}: {:?}\n{}",
+                "{}browser prerequisite {step} ({program}): {:?}\n{}",
                 if matches!(captured.exit, CaptureExit::Failed(Some(_))) {
                     "build failed: "
                 } else {

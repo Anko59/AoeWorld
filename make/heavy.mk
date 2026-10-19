@@ -3,6 +3,9 @@
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
 SLOT_ENV := \
+  -e HARNESS_RED_ROOT \
+  -e HARNESS_RED_BASE \
+  -e HARNESS_RED_HEAD \
   -e HOME \
   -e DE_DIR \
   -e HARNESS_TEST_FILTER \

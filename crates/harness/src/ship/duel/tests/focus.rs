@@ -486,3 +486,9 @@ fn only_a_normal_playwright_test_failure_can_supply_red_evidence() {
     }
     assert!(focus::browser_exit(&Err("test server exited during browser run".into())).is_err());
 }
+
+#[test]
+fn discovery_failure_cannot_supply_red_evidence() {
+    let checked = Err("playwright-discovery unavailable: Failed(Some(1))".into());
+    assert!(focus::browser_exit(&checked).is_err());
+}
