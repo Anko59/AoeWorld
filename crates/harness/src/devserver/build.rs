@@ -47,8 +47,7 @@ pub(crate) fn ensure(layout: &Layout, root: &Path, revision: &str) -> Result<Bui
     fs::create_dir_all(&built.tree)?;
     export(root, revision, &built.tree)?;
     let target = layout.target();
-    let cargo_home = root.join(".cache/cargo");
-    fs::create_dir_all(&cargo_home)?;
+    let cargo_home = crate::process::cargo_cache::home(root)?;
     eprintln!(
         "dev-server: building {} (this takes minutes when cold)",
         &revision[..12]

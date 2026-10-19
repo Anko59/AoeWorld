@@ -131,9 +131,7 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
     command
         .arg("-v")
         .arg(format!("{}:/aoe-red-judge:ro", binary.display()));
-    command
-        .arg("-e")
-        .arg(format!("CARGO_HOME={}/.cache/cargo", root.display()));
+    mount_cargo(&mut command, root)?;
     command.args(["-e", "CARGO_BUILD_JOBS=2"]);
     let temporary = unique.path().join("tmp");
     fs::create_dir_all(&temporary).map_err(|e| e.to_string())?;
@@ -187,5 +185,14 @@ fn mount_git(command: &mut Command, root: &Path) -> git::Result<()> {
             .arg("-v")
             .arg(format!("{}:{}", common.display(), common.display()));
     }
+    Ok(())
+}
+
+fn mount_cargo(command: &mut Command, root: &Path) -> git::Result<()> {
+    let home = crate::process::cargo_cache::home(root).map_err(|e| e.to_string())?;
+    command.arg("-v").arg(format!("{0}:{0}", home.display()));
+    command
+        .arg("-e")
+        .arg(format!("CARGO_HOME={}", home.display()));
     Ok(())
 }

@@ -51,7 +51,7 @@ pub(crate) fn docker_tools(
     ];
     mounts.sort();
     mounts.dedup();
-    // A mount inside another is redundant (and the cargo cache lives in the checkout).
+    // A mount inside another is redundant.
     let outer: Vec<PathBuf> = mounts
         .iter()
         .filter(|m| !mounts.iter().any(|o| o != *m && m.starts_with(o)))
@@ -117,7 +117,7 @@ pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result
 /// The working tree as it is now, built into its own `target/`.
 pub(crate) fn working_tree(root: &Path) -> Result<Tree> {
     let target = root.join("target");
-    build_app(root, &target, &root.join(".cache/cargo"))?;
+    build_app(root, &target, &crate::process::cargo_cache::home(root)?)?;
     Ok(Tree {
         root: root.to_path_buf(),
         binary: target.join("release/aoe-server"),
@@ -181,7 +181,7 @@ pub(crate) fn base_tree(root: &Path, rev: &str) -> Result<Tree> {
             return Err(format!("could not export {rev} to {}", tree.display()).into());
         }
         let target = root.join(".cache/compare/target");
-        build_app(&tree, &target, &root.join(".cache/cargo"))?;
+        build_app(&tree, &target, &crate::process::cargo_cache::home(root)?)?;
         fs::copy(target.join("release/aoe-server"), &binary)?;
         prune(&bases, rev);
     }

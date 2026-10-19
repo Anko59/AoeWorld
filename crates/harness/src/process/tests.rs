@@ -1,5 +1,6 @@
 use super::*;
 mod capture;
+mod cargo_cache;
 mod excerpt;
 
 #[test]

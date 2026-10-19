@@ -46,13 +46,20 @@ fn slot_wrapper_forwards_external_caches_to_nested_make() {
     let external = tempfile::tempdir().unwrap();
     for target in ["test-unit", "test-harness", "test-wasm"] {
         let command = slot_dry_run(target, external.path());
+        assert!(
+            command.contains(&mount(
+                &external.path().join("cargo").display().to_string(),
+                &external.path().join("cargo").display().to_string(),
+            )),
+            "host cache path is needed by nested harness Docker argv: {command}"
+        );
         for (variable, directory) in [
             ("HARNESS_CARGO_CACHE", "cargo"),
             ("HARNESS_TARGET_CACHE", "target"),
         ] {
             let value = external.path().join(directory);
             assert!(
-                command.contains(&format!("-e {variable}={}", value.display())),
+                command.contains(&format!("-e '{variable}={}'", value.display())),
                 "nested Make loses {variable}: {command}"
             );
         }
@@ -183,6 +190,12 @@ fn workspace_named(prefix: &str) -> tempfile::TempDir {
     ] {
         fs::write(workspace.path().join(included.0), included.1).unwrap();
     }
+    let initialized = Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(workspace.path())
+        .output()
+        .unwrap();
+    assert!(initialized.status.success(), "{initialized:?}");
     workspace
 }
 
@@ -273,8 +286,7 @@ fn focused_test_filter_reaches_docker_as_literal_data() {
     fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
     let filter = "can't match $literal";
-    // The steps run the filter; the wrapper takes the slot first and needs a git checkout for the
-    // bootstrap lock, which this temporary workspace does not have (the audit checks the wrapper).
+    // Exercise the steps directly: the wrapper's slot admission is audited separately.
     let result = make(&workspace)
         .args([
             "test-harness-focused-steps",
@@ -300,4 +312,133 @@ fn focused_test_filter_reaches_docker_as_literal_data() {
             .unwrap()
             .contains(&format!("<{filter}>"))
     );
+}
+
+#[test]
+fn cargo_cache_default_is_the_repository_common_directory() {
+    let workspace = workspace();
+    let result = make(&workspace)
+        .args(["--dry-run", "ci-select"])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{result:?}");
+    let output = String::from_utf8(result.stdout).unwrap();
+    assert!(
+        output.contains(&mount(
+            &workspace
+                .path()
+                .join(".git/aoe-cargo")
+                .display()
+                .to_string(),
+            &workspace.path().join(".cache/cargo").display().to_string(),
+        )),
+        "{output}"
+    );
+}
+
+#[test]
+fn linked_worktrees_mount_the_same_read_write_cargo_cache_for_every_runner() {
+    let workspace = workspace();
+    for args in [vec!["add", "."], vec!["commit", "--quiet", "-m", "fixture"]] {
+        let result = Command::new("git")
+            .current_dir(workspace.path())
+            .env("GIT_AUTHOR_NAME", "Cache Fixture")
+            .env("GIT_AUTHOR_EMAIL", "cache@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Cache Fixture")
+            .env("GIT_COMMITTER_EMAIL", "cache@example.invalid")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+    }
+    let linked_parent = tempfile::tempdir().unwrap();
+    let linked = linked_parent.path().join("linked");
+    let result = Command::new("git")
+        .current_dir(workspace.path())
+        .args(["worktree", "add", "--quiet", "--detach"])
+        .arg(&linked)
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{result:?}");
+    let shared = workspace.path().join(".git/aoe-cargo");
+    for root in [workspace.path(), linked.as_path()] {
+        for target in [
+            "lint",
+            "deny",
+            "test-harness",
+            "map-source-qualify",
+            "dev",
+            "agent-hook-build",
+        ] {
+            let result = make(&workspace)
+                .current_dir(root)
+                .args(["--dry-run", target])
+                .output()
+                .unwrap();
+            assert!(result.status.success(), "{target}: {result:?}");
+            let output = String::from_utf8(result.stdout).unwrap();
+            assert!(
+                output.contains(&format!("CARGO_HOME={}", shared.display())),
+                "{target}: {output}"
+            );
+            assert!(
+                !output.contains(&format!("CARGO_HOME={}/.cache/cargo", root.display())),
+                "{target}: {output}"
+            );
+            assert!(
+                output.contains(&mount(
+                    &shared.display().to_string(),
+                    &root.join(".cache/cargo").display().to_string(),
+                )),
+                "{target}: {output}"
+            );
+            assert!(
+                !output.contains(&format!("source={}/.cache/cargo", root.display())),
+                "{output}"
+            );
+        }
+    }
+}
+
+#[test]
+fn cache_mount_options_keep_spaces_in_cargo_and_target_paths() {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = workspace();
+    let bin = workspace.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let docker = bin.join("docker");
+    fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
+    let cargo = workspace.path().join("cargo cache");
+    let target = workspace.path().join("target cache");
+    fs::create_dir(&cargo).unwrap();
+    fs::create_dir(&target).unwrap();
+    for recipe in ["ci-select", "slot-bootstrap", "test-harness-focused-steps"] {
+        let result = make(&workspace)
+            .arg(recipe)
+            .arg(format!("HARNESS_CARGO_CACHE={}", cargo.display()))
+            .arg(format!("HARNESS_TARGET_CACHE={}", target.display()))
+            .env("HARNESS_TEST_FILTER", "cache_mount")
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{recipe}: {result:?}");
+        let output = String::from_utf8(result.stdout).unwrap();
+        for variable in ["HARNESS_CARGO_CACHE", "CARGO_HOME"] {
+            assert!(
+                output.contains(&format!("<{variable}={}>", cargo.display())),
+                "{recipe}: {output}"
+            );
+        }
+        assert!(
+            output.contains(&format!(
+                "<type=bind,\"source={0}\",\"target={0}\">",
+                cargo.display()
+            )),
+            "{recipe}: {output}"
+        );
+    }
 }

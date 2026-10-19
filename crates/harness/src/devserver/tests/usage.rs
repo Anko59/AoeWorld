@@ -6,7 +6,7 @@ use crate::devserver::{
     play_url, process, serves_base,
     state::{Instance, State},
 };
-use std::{os::unix::fs::PermissionsExt, path::Path};
+use std::path::Path;
 
 /// A recorded play server whose process is `sleep` started as its binary and
 /// whose port is a stand-in answering `/health` with `build`.
@@ -26,8 +26,11 @@ fn record(root: &Path, revision: &str, served: &str, alive: bool) -> Recorded {
     let layout = Layout::resolve(root).expect("layout");
     let built = crate::devserver::build::Built::of(&layout, revision);
     std::fs::create_dir_all(&built.tree).expect("tree");
-    std::fs::copy("/bin/sleep", &built.server).expect("copy");
-    std::fs::set_permissions(&built.server, std::fs::Permissions::from_mode(0o755)).expect("mode");
+    // Keep argv unique without opening an executable for writing during parallel forks.
+    if built.server.exists() {
+        std::fs::remove_file(&built.server).expect("previous sleep fixture");
+    }
+    std::os::unix::fs::symlink("/bin/sleep", &built.server).expect("sleep fixture");
     let health = Health::serving(served, "[]");
     let pid = if alive {
         process::spawn(

@@ -115,7 +115,7 @@ impl StreamTail {
 pub(crate) fn safe_observation(captured: &Captured) -> SafeObservation {
     let outcome = match &captured.exit {
         CaptureExit::Success => Outcome::Success,
-        CaptureExit::Failed(code) => Outcome::Failed {
+        CaptureExit::Failed(code) | CaptureExit::CargoFetch(code) => Outcome::Failed {
             code: *code,
             termination: if code.is_some() {
                 Termination::ExitCode

@@ -36,7 +36,6 @@ mod ship;
 mod slots;
 mod timeline;
 mod wasm_test;
-
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::{
     path::{Path, PathBuf},
@@ -99,6 +98,7 @@ enum Command {
     Fmt,
     FmtCheck,
     Lint,
+    Deny,
     TestUnit,
     /// The slow source-qualification tests that `test-unit` excludes.
     TestSourceQualification,
@@ -213,7 +213,6 @@ enum Command {
         max_ticks: u64,
     },
 }
-
 #[derive(Subcommand)]
 enum DevCommand {
     Start,
@@ -282,6 +281,7 @@ fn run(
         Command::Fmt => format_commands(false)?,
         Command::FmtCheck => format_commands(true)?,
         Command::Lint => native::lint()?,
+        Command::Deny => native::deny()?,
         Command::TestUnit => native::test_unit(native::affected::requested())?,
         Command::TestSourceQualification => native::test_source_qualification()?,
         Command::TestExhaustive => native::test_exhaustive()?,

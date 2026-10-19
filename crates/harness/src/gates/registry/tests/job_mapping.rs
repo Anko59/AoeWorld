@@ -187,10 +187,15 @@ fn the_static_job_runs_both_preflight_halves_and_only_dev_pushes_save_the_cache(
     assert!(save.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
     assert!(save.contains("env.RUST_CACHE_EXACT != 'true'"));
     assert!(
-        restore.contains("actions/cache/restore@") && restore.contains("rust-${{ inputs.leg }}-")
+        restore.contains("actions/cache/restore@")
+            && restore.contains("rust-shared-${{ inputs.leg }}-")
     );
     for action in [&save, &restore] {
         assert!(!action.contains("uses: actions/cache@"));
+        assert!(action.contains("key: rust-shared-${{ inputs.leg }}-"));
+        assert!(action.contains(".git/aoe-cargo/registry"));
+        assert!(action.contains(".git/aoe-cargo/git"));
+        assert!(!action.contains(".cache/cargo"));
     }
     for name in ["rust-cache-restore", "rust-cache-save"] {
         assert!(block.contains(&format!("./.github/actions/{name}")));

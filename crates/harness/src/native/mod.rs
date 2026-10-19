@@ -49,6 +49,10 @@ pub(crate) fn test_exhaustive() -> Result<(), ProcessError> {
     process::run("cargo", &args, EXHAUSTIVE_BUDGET)
 }
 
+pub(crate) fn deny() -> Result<(), ProcessError> {
+    process::run("cargo", &["deny", "--locked", "check"], BUDGET)
+}
+
 pub(crate) fn lint() -> Result<(), ProcessError> {
     let args = ["clippy", "--workspace", "--all-targets", "--locked"];
     process::run(

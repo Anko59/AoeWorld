@@ -15,6 +15,7 @@ use std::{
 };
 
 mod capture;
+pub(crate) mod cargo_cache;
 pub(crate) mod excerpt;
 pub(crate) mod load;
 pub(crate) mod suspend;
@@ -45,6 +46,10 @@ pub enum ProcessError {
         #[source]
         source: io::Error,
     },
+    #[error(
+        "Cargo cache fetch failed (exit {code:?}); enable network access and run make cargo-fetch in the failing checkout, then rerun the gate; log: {log}"
+    )]
+    CargoFetch { code: Option<i32>, log: String },
     #[error("{program} exited with {code:?}; log: {log}")]
     Exit {
         program: String,
@@ -299,6 +304,7 @@ fn report_captured_reading(
     }
     match captured.exit {
         CaptureExit::Success => Ok(()),
+        CaptureExit::CargoFetch(code) => Err(ProcessError::CargoFetch { code, log }),
         CaptureExit::Failed(code) => Err(ProcessError::Exit {
             program: program.into(),
             code,

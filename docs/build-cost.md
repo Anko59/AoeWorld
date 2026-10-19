@@ -17,10 +17,30 @@ MemAvailable. Drop is start minus the minimum MemAvailable, sampled every
 2 seconds; size is allocated `du -sk` after completion. Wall time includes
 Docker startup and slot waits. No jobs, tests, assertions, or deadlines changed.
 
-The existing `DOCKER_RUN` sets `CARGO_HOME=$ROOT/.cache/cargo`, binds the
-checkout and external Git metadata, and defaults to `$ROOT/target`.
+The measured `DOCKER_RUN` set `CARGO_HOME=$ROOT/.cache/cargo`, bound the
+checkout and external Git metadata, and defaulted to `$ROOT/target`.
 `HARNESS_CARGO_CACHE` and `HARNESS_TARGET_CACHE` project external caches into
-those paths. The tools image and its Rust derivatives contain no sccache.
+those paths. Today the Cargo cache defaults to `<git common dir>/aoe-cargo`,
+used as `CARGO_HOME` and mounted read-write at its host path and the former
+`$ROOT/.cache/cargo` location in Make containers. Registry archives,
+sources, index and Git dependencies are shared across worktrees, gate snapshots,
+red trees and harness builds. Concurrent Cargo processes safely share this home:
+Cargo takes its own cache locks. Compiler targets remain per worktree.
+`HARNESS_CARGO_CACHE` can explicitly select another cache.
+
+All supervised Cargo captures (including WASM output retention, Nextest metadata
+exit 102, and Docker builds for compare/dev-server) share one recovery path. An
+offline missing dependency prints why, runs one online `cargo fetch --locked`,
+then retries the original command once within its original deadline. The fetch
+keeps the Cargo home, manifest, target, cwd and Docker image/mounts; only that
+attempt overrides offline mode and a Docker `none` network. Fetch output stays
+out of retained runner stdout and metadata JSON. Other failures do not retry. If the network is
+unavailable, connect it and run `make cargo-fetch` in the failing checkout, then
+rerun the gate. The restricted deployment worker retains its separate read-only
+image cache and network isolation ([worker contract](restricted-local-worker.md));
+prepare that image with its required dependencies.
+
+The tools image and its Rust derivatives contain no sccache.
 Measured image ID:
 `sha256:b3bd432f92a243c403cd7e6558b97dd9f3eb74ffb5c9847fe441b3e3c54c8c04`.
 Rust/Cargo 1.93.1, LLVM 21.1.8, GCC 12.2, nextest 0.9.144.

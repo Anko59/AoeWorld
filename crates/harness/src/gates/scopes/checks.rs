@@ -45,6 +45,8 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     let clippy = clippy_args(&kind, &staged);
     let comparison = crate::gates::placement::Comparison::prepare(&source, &kind)?;
     let snapshot = Snapshot::prepare(&source, kind)?;
+    let home = crate::process::cargo_cache::home(&source)?;
+    let home = home.to_str().ok_or("non-UTF-8 Cargo cache path")?;
     let target = source.join("target");
     let target = target.to_str().ok_or("non-UTF-8 Cargo target path")?;
     // Cache/outputs are outside the exported input; ignored evidence is not copied.
@@ -54,7 +56,7 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
                 root,
                 "cargo",
                 args,
-                &[("CARGO_TARGET_DIR", target)],
+                &[("CARGO_TARGET_DIR", target), ("CARGO_HOME", home)],
                 Duration::from_secs(budget),
             )?;
             Ok(())

@@ -22,10 +22,11 @@ GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/d
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERNAL)))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
-HARNESS_CARGO_CACHE ?= $(ROOT)/.cache/cargo
+HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
-CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo)) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+# Expose the cache at its host path too: harness commands start sibling containers.
+CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
+HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
 # harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
 # AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container
@@ -38,30 +39,30 @@ HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(
 HEAVY_DIR_MOUNT := $(if $(HEAVY_DIR_EXTERNAL),-v $(HEAVY_DIR_EXTERNAL):$(HEAVY_DIR_EXTERNAL))
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
 ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS)
-DOCKER_RUN := docker run --rm --init --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS $(TMP_MOUNT) -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+DOCKER_RUN := docker run --rm --init --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS $(TMP_MOUNT) -e AOE_SHIP_EVIDENCE $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 GEODATA_PATHS := $(AOE_GEODATA_CACHE) $(AOE_MAP_REQUEST) $(AOE_MAP_PACKAGE)
 GEODATA_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(GEODATA_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 GEODATA_MOUNTS := $(foreach directory,$(GEODATA_EXTERNAL_DIRS),-v $(directory):$(directory))
-GEODATA_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+GEODATA_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_PATHS := $(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY) $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)
 SOURCE_QUAL_EXTERNAL_DIRS := $(filter-out $(ROOT) $(ROOT)/%,$(sort $(foreach path,$(filter /%,$(SOURCE_QUAL_PATHS)),$(patsubst %/,%,$(dir $(path))))))
 SOURCE_QUAL_MOUNTS := $(foreach directory,$(SOURCE_QUAL_EXTERNAL_DIRS),-v $(directory):$(directory))
-SOURCE_QUAL_CARGO_HOME ?= $(ROOT)/.cache/cargo
-SOURCE_QUAL_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(SOURCE_QUAL_CARGO_HOME) $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
+SOURCE_QUAL_CARGO_HOME ?= $(HARNESS_CARGO_CACHE)
+SOURCE_QUAL_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(SOURCE_QUAL_CARGO_HOME)) $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -w $(ROOT) $(TOOL_IMAGE)
 SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
 SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
 BROWSER_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
-DEV_ORCH_BASE := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
+DEV_ORCH_BASE := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
 DEV_ORCH_RUN := $(DEV_ORCH_BASE) $(ORCH_IMAGE)
 HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
 HARNESS_SCOPE ?= working
-override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e CARGO_HOME=$(HARNESS_ROOT_REAL)/.cache/cargo -e AOE_SCENARIO -e AOE_ASSET_PACK $(HEAVY_DIR_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
+override HARNESS_LOCAL_RUN = docker run --rm --init $(HEAVY_ENV) -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE_REAL)) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE_REAL)) -e AOE_SCENARIO -e AOE_ASSET_PACK $(HEAVY_DIR_MOUNT) -v $(HARNESS_ROOT_REAL):$(HARNESS_ROOT_REAL) $(if $(HARNESS_GIT_EXTERNAL_REAL),-v $(HARNESS_GIT_EXTERNAL_REAL):$(HARNESS_GIT_EXTERNAL_REAL)) $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),-v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_ROOT_REAL)/.cache/cargo -v $(HARNESS_CARGO_CACHE_REAL):$(HARNESS_CARGO_CACHE_REAL)) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),-v $(HARNESS_TARGET_CACHE_REAL):$(HARNESS_ROOT_REAL)/target) -v $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL):/var/run/docker.sock -w $(HARNESS_ROOT_REAL) -v $(HARNESS_EVIDENCE_REAL):$(HARNESS_EVIDENCE_REAL) $(ORCH_IMAGE)
 override HARNESS_ROOT_REAL := $(realpath $(ROOT))
 override HARNESS_GIT_EXTERNAL_REAL := $(realpath $(GIT_EXTERNAL))
 override HARNESS_CARGO_CACHE_MOUNT_SOURCE := $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE))
 override HARNESS_TARGET_CACHE_MOUNT_SOURCE := $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE))
-override HARNESS_CARGO_CACHE_REAL := $(realpath $(HARNESS_CARGO_CACHE))
+override HARNESS_CARGO_CACHE_REAL = $(realpath $(HARNESS_CARGO_CACHE))
 override HARNESS_TARGET_CACHE_REAL := $(realpath $(HARNESS_TARGET_CACHE))
 override HARNESS_CACHE_MOUNT_SOURCES_REAL := $(if $(HARNESS_CARGO_CACHE_MOUNT_SOURCE),$(HARNESS_CARGO_CACHE_REAL)) $(if $(HARNESS_TARGET_CACHE_MOUNT_SOURCE),$(HARNESS_TARGET_CACHE_REAL))
 override HARNESS_RUNTIME_DIRS_REAL := $(realpath /run) $(realpath /proc) $(realpath /sys) $(realpath /dev)
@@ -92,6 +93,7 @@ help:
 	@echo '  make docs-check      Check gate table and local documentation links'
 	@echo '  make lint            Run strict Clippy'
 	@echo '  make deny            Audit Cargo advisories, licenses, bans, and sources'
+	@echo '  make cargo-fetch     Fetch locked dependencies online into the shared cache'
 	@echo '  make test-unit       Run native tests (except the post-merge tiers)'
 	@echo '  make test-source-qualification  Run the slow source-qualification tests test-unit excludes'
 	@echo '  make test-exhaustive  Run the 16-seed sweeps and full-axis geodata round-trips test-unit excludes'
@@ -208,7 +210,7 @@ doctor:
 
 # Stops the containers a host suspend left running (their gap no longer matches the machine's).
 recover:
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
 include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk
 
@@ -228,7 +230,7 @@ REVIEW_COMMA := ,
 MOUNT_QUOTE = '$(subst ','"'"',$(1))'
 MOUNT_FIELD = "$(subst ","",$(1))"
 BIND_MOUNT = --mount $(call MOUNT_QUOTE,type=bind$(COMMA)$(call MOUNT_FIELD,source=$(1))$(COMMA)$(call MOUNT_FIELD,target=$(2))$(if $(3),$(COMMA)readonly))
-REVIEW_RUN = docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
+REVIEW_RUN = docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GIT_INDEX_FILE $(ROOT_MOUNTS) --mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_OUTPUT)$(REVIEW_COMMA)target=$(REVIEW_OUTPUT)) $(if $(REVIEW_INPUT),--mount $(call REVIEW_QUOTE,type=bind$(REVIEW_COMMA)source=$(REVIEW_INPUT)$(REVIEW_COMMA)target=$(REVIEW_INPUT)$(REVIEW_COMMA)readonly)) -w $(ROOT) $(TOOL_IMAGE)
 review-subject: tools
 	@$(if $(filter undefined,$(origin GIT_INDEX_FILE)),:,$(error review-subject Make wrapper does not support defined GIT_INDEX_FILE; use the CLI with an explicitly mounted intentional index))
 	@$(if $(findstring $(REVIEW_COMMA),$(REVIEW_OUTPUT)$(REVIEW_INPUT)),$(error review-subject Docker mount paths must not contain CSV commas),:)
@@ -247,7 +249,7 @@ lint:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- lint
 
 deny: policy-tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo deny --locked check
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo run --locked -p aoe-harness -- deny
 
 test-unit: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
@@ -291,13 +293,13 @@ coverage-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- coverage-check
 
 ci-select:
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-select
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-select
 
 ci-dispatch-status: orchestrator-tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GH_TOKEN -e JOB_STATUS -e GITHUB_ACTIONS -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID -e GITHUB_SERVER_URL $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- ci-dispatch-status
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GH_TOKEN -e JOB_STATUS -e GITHUB_ACTIONS -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID -e GITHUB_SERVER_URL $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- ci-dispatch-status
 
 ci-check:
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-check
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- ci-check
 
 perf-baseline-propose: perf-instructions perf-wasm-size
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-baseline-propose
@@ -306,7 +308,7 @@ perf-baseline-propose: perf-instructions perf-wasm-size
 # PR and run arrive through the environment; GITHUB_TOKEN authorizes gh.
 # PERF_COMMENT_PRINT=1 prints the comment instead of posting it.
 perf-comment:
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e GITHUB_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- perf-comment
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e GITHUB_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- perf-comment
 
 perf-hardware-check: tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-hardware-check
@@ -316,7 +318,7 @@ qa-validate:
 
 qa-serve:
 	@$(MAKE) --no-print-directory orchestrator-tools browser-deps 1>&2
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) -i --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_QA_BASE_URL $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- qa-serve
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) -i --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_QA_BASE_URL $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- qa-serve
 
 pre-commit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- pre-commit
@@ -349,14 +351,14 @@ test-creator-source: build-wasm browser-deps orchestrator-tools slot-bootstrap
 test-creator-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-creator-source
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-creator-source
 
 test-geographic-matrix: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-geographic-matrix -- make --no-print-directory test-geographic-matrix-steps
 
 test-geographic-matrix-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-matrix
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-matrix
 
 test-geographic-visuals: build-wasm browser-deps orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-geographic-visuals -- make --no-print-directory test-geographic-visuals-steps
@@ -364,7 +366,7 @@ test-geographic-visuals: build-wasm browser-deps orchestrator-tools slot-bootstr
 test-geographic-visuals-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-visuals
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-geographic-visuals
 
 dev: build-wasm orchestrator-tools dev-build
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
@@ -398,28 +400,32 @@ assets-dat-table:
 
 
 release-publish: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish
 
 release-source-check: tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
 
 release-main-source-check: tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
 
 release-verify-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_RELEASE_SOURCE_SHA -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify-published
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_RELEASE_SOURCE_SHA -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify-published
 
 release-rehearse-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_PREVIOUS_MANIFEST -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse-published
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_PREVIOUS_MANIFEST -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse-published
 
 release-smoke-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-smoke-published
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-smoke-published
 
 release-verify: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_MANIFEST $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_MANIFEST $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify
 
 release-rehearse: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo -e AOE_RELEASE_CANDIDATE -e AOE_RELEASE_PREVIOUS $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_CANDIDATE -e AOE_RELEASE_PREVIOUS $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse
 
 repo-policy-check:
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e CARGO_HOME=$(ROOT)/.cache/cargo -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check
+
+.PHONY: cargo-fetch
+cargo-fetch:
+	@$(DOCKER_RUN) cargo fetch --locked --config net.offline=false

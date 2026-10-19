@@ -1,6 +1,6 @@
 use super::Health;
 use crate::devserver::process::{free_port, health_build, http_get, running, spawn, stop};
-use std::{os::unix::fs::PermissionsExt, thread, time::Duration};
+use std::{thread, time::Duration};
 
 #[test]
 fn health_reports_the_build_and_silence_reports_nothing() {
@@ -17,8 +17,9 @@ fn health_reports_the_build_and_silence_reports_nothing() {
 fn a_started_process_is_found_by_its_binary_and_stopped() {
     let directory = tempfile::tempdir().expect("directory");
     let binary = directory.path().join("aoe-server.built");
-    std::fs::copy("/bin/sleep", &binary).expect("copy sleep");
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).expect("mode");
+    // A concurrently forked child can briefly retain a copied executable's write FD.
+    // An immutable target keeps the unique argv path without that ETXTBSY race.
+    std::os::unix::fs::symlink("/bin/sleep", &binary).expect("sleep fixture");
     let log = directory.path().join("server.log");
     let pid = spawn(&binary, &["60"], directory.path(), &[], &log).expect("spawn");
     for _ in 0..40 {
