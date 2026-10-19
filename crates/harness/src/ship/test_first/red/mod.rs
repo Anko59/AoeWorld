@@ -1,6 +1,7 @@
 //! Harness-owned proof from fresh runs, never from an agent's evidence files.
 mod attribution;
 mod compile;
+mod fingerprint;
 mod mounts;
 mod record;
 pub(crate) mod runner;
@@ -22,6 +23,10 @@ use std::{
 pub(crate) struct Record {
     pub(crate) head: String,
     pub(crate) base: String,
+    /// Review's canonical patch fingerprint against the merge base.
+    pub(crate) change_fingerprint: String,
+    /// Red's stronger patch identity, including function and nearby context.
+    pub(crate) carry_fingerprint: String,
     /// The test files the PR changes (merge base → head), and their blob ids at head.
     pub(crate) paths: Vec<String>,
     pub(crate) blobs: Vec<String>,
@@ -194,9 +199,12 @@ pub(crate) fn run_with(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    let (change_fingerprint, carry_fingerprint) = fingerprint::compute(root, base, head)?;
     let record = Record {
         head: head.into(),
         base: base.into(),
+        change_fingerprint,
+        carry_fingerprint,
         blobs: blobs(root, head, &paths)?,
         paths,
         failed,
