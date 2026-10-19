@@ -23,7 +23,13 @@ pub(super) fn run(
     let mut retained = JsonOutput::create(report, "Playwright discovery")?;
     let captured =
         process::capture_command_retaining_stdout(command, deadline, cancellation, &mut retained);
-    if !matches!(captured.exit, CaptureExit::Success) {
+    // Collection that ends with an ordinary non-zero exit (a spec failed to load) is left
+    // to the main run: its JSON report carries the load errors, which the compile-red
+    // classifier judges. Only a hang, a crash or a cancellation fails here.
+    if !matches!(
+        captured.exit,
+        CaptureExit::Success | CaptureExit::Failed(Some(1))
+    ) {
         return Err(format!(
             "playwright-discovery unavailable: {:?} (deadline {}s)\n{}",
             captured.exit,
