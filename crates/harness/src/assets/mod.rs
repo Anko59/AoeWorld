@@ -19,6 +19,10 @@ pub(crate) enum AssetCommand {
     DatTable {
         input: Option<PathBuf>,
     },
+    /// Imports the Dark Age buildings from a Definitive Edition install.
+    ImportDe {
+        install: PathBuf,
+    },
 }
 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
@@ -44,6 +48,26 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
         AssetCommand::DatTable { input } => {
             let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial/Data"));
             dat_table::run(&input, Path::new("local-assets/dat-table"))?;
+        }
+        AssetCommand::ImportDe { install } => {
+            let report = aoe_assets::de::import(&install, Path::new("local-assets/packs"))?;
+            println!("{}", report.pack.display());
+            for entry in &report.entries {
+                let first = &entry.frames[0];
+                println!(
+                    "{:<24} {:<18} {:>3} frames  frame0 {}x{}  body {}x{}",
+                    entry.building,
+                    entry.role,
+                    entry.frames.len(),
+                    first.width,
+                    first.height,
+                    first.body.0,
+                    first.body.1
+                );
+            }
+            for (building, role, file) in &report.absent {
+                println!("absent: {building} {role} ({file})");
+            }
         }
         AssetCommand::Verify { pack } => {
             let packs = if let Some(pack) = pack {

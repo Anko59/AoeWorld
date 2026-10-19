@@ -388,3 +388,28 @@ fn help_lines_close_their_single_quoted_echo() {
         }
     }
 }
+
+#[test]
+fn dedicated_de_test_mounts_the_install_read_only_and_runs_real_file_tests() {
+    let files = make_files(&repository());
+    let wrapper = recipe(&files, "test-assets-de").expect("dedicated real-file Make target");
+    assert!(
+        wrapper
+            .iter()
+            .any(|line| line.contains("$(SLOT_RUN) test-assets-de -- "))
+    );
+    let steps = recipe(&files, "test-assets-de-steps")
+        .expect("real-file steps")
+        .join("\n");
+    assert!(
+        steps.contains("$(DE_DIR),/de-install,1)"),
+        "read-only install mount: {steps}"
+    );
+    assert!(steps.contains("-e AOE_DE_DIR=/de-install"));
+    assert!(steps.contains("-p aoe-assets") && steps.contains("test(real_house)"));
+    assert!(
+        steps.contains("--no-tests fail"),
+        "a missing test must fail"
+    );
+    assert!(definitions(&files)["SLOT_ENV"].contains("-e DE_DIR"));
+}

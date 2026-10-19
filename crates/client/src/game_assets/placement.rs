@@ -61,14 +61,14 @@ pub(super) fn record(frame: &FrameRecord, placed: Placement) -> GameFrame {
 pub(super) enum Plane {
     /// Copied unconditionally; transparent texels are replaced by `Shadow`.
     Color,
-    /// Overrides any texel whose player mask is visible.
+    /// Blends the team shade using player alpha as its weight.
     Player,
     /// Fills only texels that are still transparent after colour and player.
     Shadow,
 }
 
 /// Applies one plane. Running `Color`, `Player`, then `Shadow` reproduces the
-/// per-texel precedence player mask, visible colour, then shadow.
+/// player shade over visible colour, then fills transparent texels with shadow.
 pub(super) fn copy_plane(
     frame: &FrameRecord,
     placed: Placement,
@@ -117,13 +117,11 @@ pub(super) fn copy_plane(
                     }
                 }
                 Plane::Player if value[3] > 0 => {
-                    let shade = 0.65 + f32::from(value[0].min(7)) / 7.0 * 0.35;
-                    value = [
-                        (65.0 * shade) as u8,
-                        (145.0 * shade) as u8,
-                        (245.0 * shade) as u8,
-                        255,
-                    ];
+                    value = aoe_assets::pack::blend_player(
+                        [pixels[to], pixels[to + 1], pixels[to + 2], pixels[to + 3]],
+                        value[0],
+                        value[3],
+                    );
                 }
                 Plane::Shadow if pixels[to + 3] == 0 => {}
                 Plane::Player | Plane::Shadow => continue,

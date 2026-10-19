@@ -141,7 +141,7 @@ fn equal_uv_on_three_pages_copy_masks_alpha_and_keep_source_ids_separate() {
             usize::from(page) * GAME_ATLAS_PAGE_BYTES + (2 * GAME_ATLAS_SIDE as usize + 2) * 4;
         assert_eq!(
             &pixels[offset..offset + 12],
-            &[page as u8 + 10, 20, 30, 120, 65, 145, 245, 255, 1, 2, 3, 80]
+            &[page as u8 + 10, 20, 30, 120, 99, 99, 100, 100, 1, 2, 3, 80]
         );
         assert_eq!(
             &pixels[usize::from(page) * GAME_ATLAS_PAGE_BYTES..][..4],
@@ -261,21 +261,22 @@ fn sequential_plane_passes_match_single_pass_precedence_for_every_alpha_case() {
     let mut pixels = vec![77; GAME_ATLAS_BYTES];
     copy(frame, placed, &color, &player, &shadow, &mut pixels).unwrap();
     let origin = GAME_ATLAS_PAGE_BYTES + (7 * GAME_ATLAS_SIDE as usize + 5) * 4;
-    for case in 0..8_usize {
+    // Original alpha-1 cases now blend, preserving partial coverage and ignoring
+    // hidden RGB. Opaque trial masks are covered separately below.
+    for (case, expected) in [
+        [80, 81, 82, 0],
+        [45, 101, 171, 1],
+        [42, 41, 42, 1],
+        [47, 78, 119, 2],
+        [84, 81, 82, 90],
+        [58, 130, 220, 1],
+        [46, 41, 42, 1],
+        [56, 93, 144, 2],
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let at = case * 4;
-        let expected = if player[at + 3] > 0 {
-            let shade = 0.65 + f32::from(player[at].min(7)) / 7.0 * 0.35;
-            [
-                (65.0 * shade) as u8,
-                (145.0 * shade) as u8,
-                (245.0 * shade) as u8,
-                255,
-            ]
-        } else if color[at + 3] > 0 {
-            color[at..at + 4].try_into().unwrap()
-        } else {
-            shadow[at..at + 4].try_into().unwrap()
-        };
         assert_eq!(
             pixels[origin + at..origin + at + 4],
             expected,
@@ -283,6 +284,37 @@ fn sequential_plane_passes_match_single_pass_precedence_for_every_alpha_case() {
         );
     }
     assert_eq!(pixels[origin + 32..origin + 36], [77; 4]);
+}
+
+#[wasm_bindgen_test]
+fn de_player_mask_weights_blend_over_colour_while_trial_ramps_stay_opaque() {
+    let mut manifest = fixture();
+    let frame = &mut manifest.frames[0];
+    (frame.x, frame.y, frame.width, frame.height) = (0, 0, 6, 1);
+    let placed = Placement {
+        page: 2,
+        x: 0,
+        y: 0,
+        width: 6,
+        height: 1,
+    };
+    let mut color = vec![0; GAME_ATLAS_PAGE_BYTES];
+    let mut player = vec![0; GAME_ATLAS_PAGE_BYTES];
+    let shadow = vec![0; GAME_ATLAS_PAGE_BYTES];
+    for (i, weight) in [0, 1, 64, 119, 127, 255].into_iter().enumerate() {
+        color[i * 4..i * 4 + 4].copy_from_slice(&[117, 120, 115, 255]);
+        player[i * 4..i * 4 + 4].copy_from_slice(&[7, 0, 0, weight]);
+    }
+    let mut pixels = vec![0; GAME_ATLAS_BYTES];
+    copy(frame, placed, &color, &player, &shadow, &mut pixels).unwrap();
+    // Ramp 7 is [65,145,245]; mask 119 blends it over the neutral roof.
+    assert_eq!(
+        &pixels[2 * GAME_ATLAS_PAGE_BYTES..][..24],
+        &[
+            117, 120, 115, 255, 117, 120, 116, 255, 104, 126, 148, 255, 93, 132, 176, 255, 91, 132,
+            180, 255, 65, 145, 245, 255,
+        ]
+    );
 }
 
 #[wasm_bindgen_test]

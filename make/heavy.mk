@@ -2,7 +2,7 @@
 # (docs/gates.md "Heavy slots"). Each target runs its `-steps` target in the orchestrator container
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
-SLOT_ENV := -e HARNESS_TEST_FILTER -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_CONTENT_HASH -e AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH -e AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_512_CONTENT_HASH -e AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_16384_CONTENT_HASH -e AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_262144_CONTENT_HASH -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_SPECS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e AOE_HARNESS_BOOT_GAP -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
+SLOT_ENV := -e HOME -e DE_DIR -e HARNESS_TEST_FILTER -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_CONTENT_HASH -e AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH -e AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_512_CONTENT_HASH -e AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_16384_CONTENT_HASH -e AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY -e AOE_SOURCE_QUAL_262144_CONTENT_HASH -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_SPECS -e AOE_GEODATA_CACHE -e AOE_MAP_REQUEST -e AOE_MAP_PACKAGE -e AOE_MAP_SAMPLES -e AOE_MAP_DEM_RESOLUTION -e AOE_MAP_HYDROLOGY_MODE -e AOE_POLISH_SOURCE_URL -e AOE_POLISH_SOURCE_HASH -e GIT_INDEX_FILE -e RUST_TEST_THREADS -e NEXTEST_TEST_THREADS -e AOE_SHIP_EVIDENCE -e AOE_HARNESS_BOOT_GAP -e TMPDIR -e HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE) -e HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)
 SLOT_RUN = docker run --rm --init --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) $(HEAVY_ENV) $(SLOT_CAP) $(SLOT_ENV) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e CARGO_HOME=$(ROOT)/.cache/cargo $(ROOT_MOUNTS) $(if $(TMPDIR),-v $(TMPDIR):$(TMPDIR)) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) target/debug/aoe-harness slot
 
 # The command bootstrap is static work: one build at a time across worktrees,
@@ -80,6 +80,13 @@ test-harness-steps:
 
 test-unit-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
+
+.PHONY: test-assets-de test-assets-de-steps
+test-assets-de: slot-bootstrap
+	@$(SLOT_RUN) test-assets-de -- make --no-print-directory test-assets-de-steps
+
+test-assets-de-steps:
+	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)'
 
 test-source-qualification: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-source-qualification -- make --no-print-directory test-source-qualification-steps

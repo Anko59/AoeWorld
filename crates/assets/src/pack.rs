@@ -2,13 +2,13 @@
 use crate::{
     Error, drs, invalid,
     palette::{self, Palette},
-    slp::{self, Frame, Pixel},
+    slp::{self, Frame},
 };
+use atlas::{Planes, SpriteRef, write_pack};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     fs,
-    io::BufWriter,
     path::{Component, Path, PathBuf},
 };
 use walkdir::WalkDir;
@@ -72,77 +72,6 @@ struct SpriteSource {
     id: String,
     hash: String,
     frames: Vec<Frame>,
-}
-
-struct PageData {
-    color: Vec<u8>,
-    player: Vec<u8>,
-    shadow: Vec<u8>,
-    outline: Vec<u8>,
-    x: usize,
-    y: usize,
-    row_height: usize,
-}
-
-impl PageData {
-    fn new() -> Self {
-        let bytes = PAGE * PAGE * 4;
-        Self {
-            color: vec![0; bytes],
-            player: vec![0; bytes],
-            shadow: vec![0; bytes],
-            outline: vec![0; bytes],
-            x: 1,
-            y: 1,
-            row_height: 0,
-        }
-    }
-
-    fn place(&mut self, frame: &Frame, palette: &Palette) -> Result<Option<(usize, usize)>, Error> {
-        let width = frame.width as usize;
-        let height = frame.height as usize;
-        if width + 2 > PAGE || height + 2 > PAGE {
-            return Err(invalid("atlas", 0, "frame exceeds page size"));
-        }
-        if self.x + width + 1 > PAGE {
-            self.x = 1;
-            self.y += self.row_height + 1;
-            self.row_height = 0;
-        }
-        if self.y + height + 1 > PAGE {
-            return Ok(None);
-        }
-        let x = self.x;
-        let y = self.y;
-        for row in 0..height {
-            for col in 0..width {
-                let index = ((y + row) * PAGE + x + col) * 4;
-                match frame.pixels[row * width + col] {
-                    Pixel::Transparent => {}
-                    Pixel::Color(value) => {
-                        let color = palette.0.get(value as usize).ok_or_else(|| {
-                            invalid("atlas", 0, format!("palette index {value} missing"))
-                        })?;
-                        self.color[index..index + 4]
-                            .copy_from_slice(&[color[0], color[1], color[2], 255]);
-                    }
-                    Pixel::Player(value) => {
-                        self.player[index..index + 4].copy_from_slice(&[value, 0, 0, 255])
-                    }
-                    Pixel::Shadow => self.shadow[index..index + 4].copy_from_slice(&[0, 0, 0, 128]),
-                    Pixel::Outline1 => {
-                        self.outline[index..index + 4].copy_from_slice(&[1, 0, 0, 255])
-                    }
-                    Pixel::Outline2 => {
-                        self.outline[index..index + 4].copy_from_slice(&[2, 0, 0, 255])
-                    }
-                }
-            }
-        }
-        self.x += width + 1;
-        self.row_height = self.row_height.max(height);
-        Ok(Some((x, y)))
-    }
 }
 
 fn files(root: &Path) -> Result<Vec<Input>, Error> {
@@ -273,45 +202,7 @@ fn collect(inputs: &[Input]) -> Result<(Palette, Vec<SpriteSource>, String), Err
     Ok((palette, sprites, hasher.finalize().to_hex().to_string()))
 }
 
-fn write_png(path: &Path, pixels: &[u8]) -> Result<String, Error> {
-    let file = fs::File::create(path)?;
-    let mut encoder = png::Encoder::new(BufWriter::new(file), PAGE as u32, PAGE as u32);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header()?;
-    writer.write_image_data(pixels)?;
-    drop(writer);
-    Ok(blake3::hash(&fs::read(path)?).to_hex().to_string())
-}
-
-fn save_page(directory: &Path, index: usize, page: PageData) -> Result<AtlasPage, Error> {
-    let names = [
-        format!("color-{index:03}.png"),
-        format!("player-{index:03}.png"),
-        format!("shadow-{index:03}.png"),
-        format!("outline-{index:03}.png"),
-    ];
-    let hashes = [
-        write_png(&directory.join(&names[0]), &page.color)?,
-        write_png(&directory.join(&names[1]), &page.player)?,
-        write_png(&directory.join(&names[2]), &page.shadow)?,
-        write_png(&directory.join(&names[3]), &page.outline)?,
-    ];
-    Ok(AtlasPage {
-        color: names[0].clone(),
-        color_hash: hashes[0].clone(),
-        player: names[1].clone(),
-        player_hash: hashes[1].clone(),
-        shadow: names[2].clone(),
-        shadow_hash: hashes[2].clone(),
-        outline: names[3].clone(),
-        outline_hash: hashes[3].clone(),
-        width: PAGE as u16,
-        height: PAGE as u16,
-    })
-}
-
-fn output_path(root: &Path) -> Result<PathBuf, Error> {
+pub(crate) fn output_path(root: &Path) -> Result<PathBuf, Error> {
     let cwd = std::env::current_dir()?.canonicalize()?;
     let relative = if root.is_absolute() {
         root.strip_prefix(&cwd)
@@ -348,125 +239,25 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
     if sprites.is_empty() {
         return Err(invalid("assets", 0, "no supported sprites found"));
     }
-    fs::create_dir_all(&output_root)?;
-    let destination = output_root.join(&hash);
-    if destination.exists() {
-        verify(&destination)?;
-        return Ok(destination);
-    }
-    let temporary = output_root.join(format!(".tmp-{hash}-{}", std::process::id()));
-    fs::create_dir(&temporary)?;
-    let result = (|| {
-        let mut page = PageData::new();
-        let mut pages = Vec::new();
-        let mut frames = Vec::new();
-        for sprite in sprites {
-            for (frame_index, frame) in sprite.frames.iter().enumerate() {
-                let mut location = page.place(frame, &palette)?;
-                if location.is_none() {
-                    if pages.len() + 1 == MAX_PAGES {
-                        return Err(invalid("atlas", 0, "too many atlas pages"));
-                    }
-                    pages.push(save_page(&temporary, pages.len(), page)?);
-                    page = PageData::new();
-                    location = page.place(frame, &palette)?;
-                }
-                let (x, y) = location
-                    .ok_or_else(|| invalid("atlas", 0, "frame does not fit an empty page"))?;
-                frames.push(FrameRecord {
-                    source: sprite.id.clone(),
-                    source_hash: sprite.hash.clone(),
-                    frame: frame_index as u32,
-                    page: pages.len() as u16,
-                    x: x as u16,
-                    y: y as u16,
-                    width: frame.width,
-                    height: frame.height,
-                    anchor_x: frame.hotspot_x,
-                    anchor_y: frame.hotspot_y,
-                });
-            }
-        }
-        pages.push(save_page(&temporary, pages.len(), page)?);
-        let manifest = Manifest {
-            version: 1,
-            converter: env!("CARGO_PKG_VERSION").to_owned(),
-            input_hash: hash,
-            pages,
-            frames,
-        };
-        fs::write(
-            temporary.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest)?,
-        )?;
-        verify(&temporary)?;
-        fs::rename(&temporary, &destination)?;
-        Ok(destination)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_dir_all(&temporary);
-    }
-    result
+    let refs: Vec<SpriteRef> = sprites
+        .iter()
+        .map(|sprite| SpriteRef {
+            id: sprite.id.clone(),
+            hash: sprite.hash.clone(),
+            frames: sprite.frames.len(),
+        })
+        .collect();
+    write_pack(&output_root, hash, &refs, |sprite, frame| {
+        Planes::from_slp(&sprites[sprite].frames[frame], &palette)
+    })
 }
 
+pub(crate) mod atlas;
+mod player;
+pub use player::blend_player;
 mod verify;
 pub use verify::{parse_manifest, verify};
 
+#[path = "pack/tests.rs"]
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn atlas_masks_and_verifier_reject_tampering() {
-        let temp = tempfile::tempdir().unwrap();
-        let frame = Frame {
-            width: 3,
-            height: 1,
-            hotspot_x: -1,
-            hotspot_y: 0,
-            pixels: vec![Pixel::Color(0), Pixel::Player(7), Pixel::Outline1],
-        };
-        let mut page = PageData::new();
-        assert_eq!(
-            page.place(&frame, &Palette(vec![[12, 34, 56]])).unwrap(),
-            Some((1, 1))
-        );
-        let pixel = (PAGE + 1) * 4;
-        assert_eq!(&page.color[pixel..pixel + 4], &[12, 34, 56, 255]);
-        assert_eq!(&page.player[pixel + 4..pixel + 8], &[7, 0, 0, 255]);
-        assert_eq!(&page.outline[pixel + 8..pixel + 12], &[1, 0, 0, 255]);
-        let pages = vec![save_page(temp.path(), 0, page).unwrap()];
-        let manifest = Manifest {
-            version: 1,
-            converter: "test".to_owned(),
-            input_hash: "a".repeat(64),
-            pages,
-            frames: vec![FrameRecord {
-                source: "fixture.slp".to_owned(),
-                source_hash: "b".repeat(64),
-                frame: 0,
-                page: 0,
-                x: 1,
-                y: 1,
-                width: 3,
-                height: 1,
-                anchor_x: -1,
-                anchor_y: 0,
-            }],
-        };
-        fs::write(
-            temp.path().join("manifest.json"),
-            serde_json::to_vec(&manifest).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(verify(temp.path()).unwrap().frames.len(), 1);
-        fs::write(temp.path().join("color-000.png"), b"tampered").unwrap();
-        assert!(verify(temp.path()).is_err());
-    }
-
-    #[test]
-    fn invalid_output_path_is_rejected() {
-        assert!(output_path(Path::new("../outside")).is_err());
-        assert!(output_path(Path::new("local-assets/packs")).is_ok());
-    }
-}
+mod tests;
