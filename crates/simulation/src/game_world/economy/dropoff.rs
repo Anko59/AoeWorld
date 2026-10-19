@@ -23,9 +23,24 @@ impl GameWorld {
         from: TileCoord,
         kind: ResourceKind,
     ) -> Option<EntityId> {
-        self.buildings()
+        self.dropoff_order(player, from, kind).first().copied()
+    }
+
+    /// Every completed building of `player` that accepts `kind`, nearest first
+    /// (squared tile distance to its ring, ties by id). The one rule behind
+    /// `nearest_dropoff` and a returning villager's choice and its fallbacks.
+    pub(super) fn dropoff_order(
+        &self,
+        player: PlayerId,
+        from: TileCoord,
+        kind: ResourceKind,
+    ) -> Vec<EntityId> {
+        let mut found = self
+            .buildings()
             .filter(|b| b.player == player && b.is_complete() && b.kind.accepts(kind))
-            .min_by_key(|b| (ring_distance(b.footprint, from), b.id))
-            .map(|b| b.id)
+            .map(|b| (ring_distance(b.footprint, from), b.id))
+            .collect::<Vec<_>>();
+        found.sort_unstable();
+        found.into_iter().map(|(_, id)| id).collect()
     }
 }

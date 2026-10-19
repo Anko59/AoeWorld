@@ -180,14 +180,15 @@ impl GameWorld {
         let mut any = false;
         for &builder in builders {
             let building = target(builder);
-            self.stop_gathering(builder);
-            self.economy.builders.remove(&builder);
             let Some(footprint) = self.building(building).map(|b| b.footprint) else {
                 continue;
             };
+            // Only a builder that found a route changes jobs; a refusal
+            // leaves its current gather or build task as it was.
             if self.approach_building(builder, footprint, 0).is_ok() {
                 self.cancel_attack(builder);
                 any = true;
+                self.stop_gathering(builder);
                 self.economy.builders.insert(
                     builder,
                     BuildTask {

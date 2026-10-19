@@ -55,7 +55,12 @@ impl GameWorld {
         let cost = self.check_buildable(player, kind, tiles.len() as u32)?;
         let rects = tiles
             .iter()
-            .map(|tile| TileRect::new(*tile, TileCoord::new(tile.x + 1, tile.y + 1)))
+            .map(|tile| {
+                TileRect::new(
+                    *tile,
+                    TileCoord::new(tile.x.saturating_add(1), tile.y.saturating_add(1)),
+                )
+            })
             .collect::<Vec<_>>();
         // Validate every segment before placing any, so a refusal changes nothing.
         for rect in &rects {

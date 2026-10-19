@@ -191,6 +191,8 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
         return Art::Scout;
     }
     match (unit.task, unit.gathering, unit.carried) {
+        // The catalog has no farmer art: farming draws the foraging pose.
+        (UnitTask::Farming, _, _) => Art::VillagerForaging,
         (UnitTask::Gathering, Some(kind), _) => match kind {
             ResourceKind::Food => Art::VillagerForaging,
             ResourceKind::Wood => Art::VillagerChopping,

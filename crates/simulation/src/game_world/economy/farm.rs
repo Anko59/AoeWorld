@@ -47,8 +47,9 @@ impl GameWorld {
             building.footprint.min.x + building.footprint.width() / 2,
             building.footprint.min.y + building.footprint.height() / 2,
         );
+        self.begin_gather(id, 0, center, ResourceKind::Food, Some(farm))?;
         self.economy.builders.remove(&id);
-        self.begin_gather(id, 0, center, ResourceKind::Food, Some(farm))
+        Ok(())
     }
 
     /// Take one food from a farm, returning what is left.
