@@ -166,3 +166,9 @@ test-showcase: slot-bootstrap
 
 test-showcase-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness showcase
+
+# Read-only report using this checkout before the command reaches the dev judge.
+export TIMELINE_DAYS
+.PHONY: timeline
+timeline: slot-bootstrap
+	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' timeline

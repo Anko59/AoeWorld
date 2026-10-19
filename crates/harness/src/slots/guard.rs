@@ -150,6 +150,24 @@ pub(crate) fn hold(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
     }
 }
 
+/// Ship/red admission observations; ordinary checks do not populate the delivery journal.
+pub(crate) fn hold_timed(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
+    let Some(root) = checkout_of(from)? else {
+        return Ok(Guard::none());
+    };
+    if !is_heavy(&Registry::load(&root)?, gate) {
+        return Ok(Guard::none());
+    }
+    acquire_observing(
+        &root,
+        gate,
+        slots,
+        || slot_dir(&root, slots),
+        load_wait,
+        true,
+    )
+}
+
 /// Take a slot for `gate` whatever the registry says: the `slot` command runs make targets that
 /// compile or test without being gates (`build`, `duel-check`), and each of them queues like a gate.
 pub(crate) fn hold_forced(from: &Path, gate: &str, slots: &SlotEnv) -> Result<Guard> {
@@ -217,6 +235,17 @@ pub(super) fn acquire_in(
     queue: impl FnOnce() -> Result<PathBuf>,
     wait_load: impl FnOnce() -> Result<()>,
 ) -> Result<Guard> {
+    acquire_observing(root, gate, env, queue, wait_load, false)
+}
+
+fn acquire_observing(
+    root: &Path,
+    gate: &str,
+    env: &SlotEnv,
+    queue: impl FnOnce() -> Result<PathBuf>,
+    wait_load: impl FnOnce() -> Result<()>,
+    observe: bool,
+) -> Result<Guard> {
     let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(env) = held.as_ref() {
         return Ok(Guard {
@@ -240,16 +269,23 @@ pub(super) fn acquire_in(
             .map_or(0, |d| d.as_secs()),
         nonce: nonce(),
     };
-    let slot = acquire_at(
-        &queue,
-        config.slots,
-        &holder,
-        env.token.as_deref(),
-        config.wait,
-        POLL,
-        REPORT_EVERY,
-        &mut |line| eprintln!("{line}"),
-    )?;
+    let acquire = || {
+        acquire_at(
+            &queue,
+            config.slots,
+            &holder,
+            env.token.as_deref(),
+            config.wait,
+            POLL,
+            REPORT_EVERY,
+            &mut |line| eprintln!("{line}"),
+        )
+    };
+    let slot = if observe {
+        crate::timeline::stage(root, "slot-wait", serde_json::json!({"gate":gate}), acquire)
+    } else {
+        acquire()
+    }?;
     // An inherited slot is a child of a gate whose deadline has already started.
     // Its parent checked load before that deadline; never wait again inside it.
     let cap = cap_for(&config, env.ci);
@@ -262,7 +298,16 @@ pub(super) fn acquire_in(
                 "heavy slot: {gate} holds a slot; CI runs one job per runner, so no CPU cap"
             ),
         }
-        wait_load()?;
+        if observe {
+            crate::timeline::stage(
+                root,
+                "load-wait",
+                serde_json::json!({"gate":gate}),
+                wait_load,
+            )?;
+        } else {
+            wait_load()?;
+        }
     }
     let mut env = vec![
         (TOKEN_VAR, slot.token().to_owned()),

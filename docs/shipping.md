@@ -475,6 +475,9 @@ inline-test changes, build-time inputs, exemptions and failing names appear in
 the review facts and PR description. See [red proof](red-proof.md) for commands,
 budgets, storage, browser selection and the subagent threat model.
 
+## Delivery time
+See [delivery timeline](timeline.md) for `make timeline`, stage journals and historical limits.
+
 ## Limits
 
 - `ship` runs the `preflight` cadence (recorded as `cadence` in the evidence),

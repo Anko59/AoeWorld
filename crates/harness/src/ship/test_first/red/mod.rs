@@ -75,15 +75,23 @@ pub(crate) fn execute(options: &Options, slots: &crate::slots::SlotEnv) -> git::
     let base = git::git(&root, &["merge-base", &resolve(&root, &base)?, &head])?;
     // No ship lock: the red runs build and test under a heavy slot, which serializes the heavy
     // work, and the record is keyed by the exact head. Ships waiting to push never wait on it.
-    let _slot = crate::slots::hold(&root, "test-e2e", slots).map_err(|e| e.to_string())?;
-    let record = run_with(&root, &base, &head, &mut |snapshot, paths| {
-        runner::run(&root, snapshot, paths)
-    })?;
-    println!(
-        "RED_RECORD {}",
-        serde_json::to_string(&record).map_err(|e| e.to_string())?
-    );
-    Ok(())
+    crate::timeline::stage(
+        &root,
+        "red",
+        serde_json::json!({"proof_head":head,"base":base}),
+        || {
+            let _slot = crate::slots::guard::hold_timed(&root, "test-e2e", slots)
+                .map_err(|e| e.to_string())?;
+            let record = run_with(&root, &base, &head, &mut |snapshot, paths| {
+                runner::run(&root, snapshot, paths)
+            })?;
+            println!(
+                "RED_RECORD {}",
+                serde_json::to_string(&record).map_err(|e| e.to_string())?
+            );
+            Ok(())
+        },
+    )
 }
 
 pub(crate) fn run_with(

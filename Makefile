@@ -81,6 +81,7 @@ endef
 help:
 	@echo 'AoeWorld'
 	@echo '  make bootstrap       Build the pinned Rust tools image and install hooks'
+	@echo '  make timeline        Report PR delivery stages (last 7 days)'
 	@echo '  make doctor          Check toolchain availability'
 	@echo '  make recover         Stop harness containers a host suspend left running'
 	@echo '  make fmt-check       Check Rust formatting without changing files'

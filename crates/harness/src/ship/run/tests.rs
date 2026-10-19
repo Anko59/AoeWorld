@@ -218,3 +218,42 @@ fn the_stop_check_policy_never_waits_or_retries() {
     assert_eq!(runs(dir.path()), 1, "the stop check runs a gate once");
     assert!(result.attempts.is_empty(), "no retry is recorded");
 }
+
+#[test]
+fn timeline_journals_overload_wait_and_both_gate_attempts() {
+    let (_temp, root) = crate::ship::tests::fixture("true");
+    let (retry, waits) = policy(true, OVERLOADED);
+    let result = run_one(
+        &root,
+        &format!("echo run >> count; [ \"$(wc -l < count)\" -ge 2 ] || {SLEEP}"),
+        &retry,
+    );
+    assert_eq!(result.verdict, GateVerdict::Pass);
+    assert_eq!(waits.load(Ordering::SeqCst), 1);
+    let text =
+        fs::read_to_string(root.join(".git/aoe-ship/timeline/feature.jsonl")).unwrap_or_default();
+    let entries: Vec<serde_json::Value> = text
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    let stages: Vec<_> = entries
+        .iter()
+        .map(|e| (e["stage"].as_str().unwrap(), e["event"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        stages,
+        [
+            ("gate/slow", "start"),
+            ("gate/slow", "end"),
+            ("load-wait", "start"),
+            ("load-wait", "end"),
+            ("gate/slow", "start"),
+            ("gate/slow", "end")
+        ]
+    );
+    assert_eq!(entries[1]["detail"]["ok"], false);
+    assert_eq!(entries[1]["detail"]["timed_out"], true);
+    assert_eq!(entries[2]["detail"]["gate"], "slow");
+    assert_eq!(entries[2]["detail"]["retry"], true);
+    assert_eq!(entries[5]["detail"]["ok"], true);
+}
